@@ -1,0 +1,11 @@
+no-hooks=true
+no-tests=true
+output="kmedia"
+pkgname="kmedia"
+blacklist=["schema_migrations", "delayed_jobs", "container_creation_patterns"]
+[postgres]
+  dbname="kmedia"
+  host="localhost"
+  port=5432
+  user="edos"
+  sslmode="disable"

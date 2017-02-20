@@ -8,15 +8,18 @@ import (
 
 var outFile string
 
-const template = `# MDB generated config template
+const template = `# mdb2es generated config template
+[mdb]
+url="postgres://localhost/mdb?sslmode=disable"
+
+[kmedia]
+url="postgres://localhost/kmedia?sslmode=disable"
+
+[elasticsearch]
+url="http://127.0.0.1:9200"
+
 [server]
 bind-address=":8080"
-mode="debug"  # GIN mode. Either debug, release or test
-rollbar-token=""
-rollbar-environment="development"
-
-[mdb]
-url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 `
 
 var configCmd = &cobra.Command{
