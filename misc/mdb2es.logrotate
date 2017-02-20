@@ -1,0 +1,12 @@
+/sites/mdb2es/logs/nginx-*.log {
+    size 10M
+    missingok
+    rotate 10
+    compress
+    delaycompress
+    notifempty
+    sharedscripts
+    postrotate
+        [ ! -f /var/run/nginx.pid ] || kill -USR1 `cat /var/run/nginx.pid`
+    endscript
+}
