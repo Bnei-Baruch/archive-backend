@@ -44,3 +44,7 @@ To add a pre-release tag, add the relevant environment variable. For example,
 ```Shell
 PRE_RELEASE=rc.1 misc/release.sh
 ```
+
+
+## Elasticsearch related stuff
+http://mrzard.github.io/blog/2015/03/25/elasticsearch-enable-mlockall-in-centos-7/
