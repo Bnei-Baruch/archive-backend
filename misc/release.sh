@@ -21,6 +21,7 @@ git push origin "v$version"
 echo "Uploading executable to server"
 scp mdb2es root@app.archive.bbdomain.org:/sites/mdb2es/"mdb2es-$version"
 ssh root@app.archive.bbdomain.org "ln -sf /sites/mdb2es/mdb2es-$version /sites/mdb2es/mdb2es"
+ssh root@app.archive.bbdomain.org "chown -R archive:archive /sites/mdb2es/"
 
 echo "Restarting application"
 ssh root@app.archive.bbdomain.org "supervisorctl restart mdb2es_esplorer"
