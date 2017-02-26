@@ -67,8 +67,11 @@ func esplorerFn(cmd *cobra.Command, args []string) {
 		q := elastic.NewBoolQuery().Should(elastic.NewMatchQuery("containers.description", text),
 			elastic.NewMatchQuery("containers.full_description", text))
 
+		h := elastic.NewHighlight().Fields(elastic.NewHighlighterField("containers.description"),
+			elastic.NewHighlighterField("containers.full_description"))
+
 		//q := elastic.NewMatchQuery("containers.description", text)
-		res, err := es.Search().Index("mdb*").Query(q).Do(context.Background())
+		res, err := es.Search().Index("mdb*").Query(q).Highlight(h).Do(context.Background())
 		if err != nil {
 			log.Fatal(err)
 		}
