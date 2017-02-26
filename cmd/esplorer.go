@@ -10,6 +10,8 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/rs/cors"
+	"strconv"
+	"fmt"
 )
 
 var esplorerCmd = &cobra.Command{
@@ -59,19 +61,44 @@ func esplorerFn(cmd *cobra.Command, args []string) {
 	}
 	log.Infof("Elasticsearch version %s", esversion)
 
-
 	// Setup HTTP Handlers
 	mux := http.NewServeMux()
 	mux.HandleFunc("/query", func(w http.ResponseWriter, r *http.Request) {
 		text := r.URL.Query().Get("text")
-		q := elastic.NewBoolQuery().Should(elastic.NewMatchQuery("containers.description", text),
+		if text == "" {
+			w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+			fmt.Fprint(w, "{\"error\":\"can't search for an empty text\"}")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		page := 0
+		pageQ := r.URL.Query().Get("page")
+		if pageQ != "" {
+			page, err = strconv.Atoi(pageQ)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+				fmt.Fprintf(w, "{\"error\":\"Illegal value to page parameter: %s\"}", pageQ)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
+		q := elastic.NewBoolQuery().Should(
+			elastic.NewMatchQuery("containers.description", text),
 			elastic.NewMatchQuery("containers.full_description", text))
 
-		h := elastic.NewHighlight().Fields(elastic.NewHighlighterField("containers.description"),
+		h := elastic.NewHighlight().Fields(
+			elastic.NewHighlighterField("containers.description"),
 			elastic.NewHighlighterField("containers.full_description"))
 
 		//q := elastic.NewMatchQuery("containers.description", text)
-		res, err := es.Search().Index("mdb*").Query(q).Highlight(h).Do(context.Background())
+		res, err := es.Search().
+			Index("mdb*").
+			Query(q).
+			Highlight(h).
+			From(page).
+			Do(context.Background())
 		if err != nil {
 			log.Fatal(err)
 		}
