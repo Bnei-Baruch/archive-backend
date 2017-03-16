@@ -1,9 +1,10 @@
 package es
 
 import (
-	"time"
-	"github.com/Bnei-Baruch/mdb2es/mdb"
 	"strconv"
+	"time"
+
+	"github.com/Bnei-Baruch/archive-backend/mdb"
 )
 
 type Collection struct {

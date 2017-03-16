@@ -1,6 +1,6 @@
 package main
 
-import "github.com/Bnei-Baruch/mdb2es/cmd"
+import "github.com/Bnei-Baruch/archive-backend/cmd"
 
 func main() {
 	cmd.Execute()

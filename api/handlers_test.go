@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/olivere/elastic.v5"
 
-	"github.com/Bnei-Baruch/mdb2es/utils"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type HandlersSuite struct {

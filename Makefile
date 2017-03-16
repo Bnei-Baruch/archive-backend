@@ -7,7 +7,7 @@ build: clean test
 	@go build -ldflags '$(LDFLAGS)'
 
 clean:
-	@rm -f mdb2es
+	@rm -f archive-backend
 
 install:
 	@godep restore

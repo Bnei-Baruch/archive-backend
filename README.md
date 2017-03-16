@@ -1,37 +1,33 @@
-# MDB to Elasticsearch
+# Backend for new archive site
 
 ## Overview
 
-ETL from BB Metadata DB to Elasticsearch.
-
-
+Backend for new archive site including, ETLs from BB Metadata DB to Elasticsearch.
 
 ## Commands
-The MDB2ES is meant to be executed as command line.
-Type `mdb2es <command> -h` to see how to use each command.
+The archive-backend is meant to be executed as command line.
+Type `archive-backend <command> -h` to see how to use each command.
 
 
 ```Shell
-mdb2es esplorer
+archive-backend server
 ```
 
-Execute the backend api server for the MDB Elasticsearch Explorer tool.
+Execute the backend api server for the new archive site.
 
 
 ```Shell
-mdb2es config <path>
+archive-backend version
 ```
 
-Generate default configuration in the given path. If path is omitted STDOUT is used instead.
-**Note** that default value to config file is `config.toml` in project root directory.
+Print the version of archive-backend
 
 
-```Shell
-mdb2es version
-```
+## Configuration
 
-Print the version of MDB2ES
+The default config file is `config.toml` in your current work directory.
 
+See `config.sample.toml` for a sample config file.
 
 
 ## Release and Deployment
@@ -46,10 +42,6 @@ PRE_RELEASE=rc.1 misc/release.sh
 ```
 
 
-## Elasticsearch related stuff
-http://mrzard.github.io/blog/2015/03/25/elasticsearch-enable-mlockall-in-centos-7/
-
-
 ## MDB models
 
 When MDB schema is changed we need to update the `mdb` package. Run this script:
@@ -58,6 +50,8 @@ When MDB schema is changed we need to update the `mdb` package. Run this script:
 misc/update_mdb_models.sh
 ```
 
- * Copy the models package from the mdb repo to our `mdb` package
 
- *
+
+## Elasticsearch related stuff
+http://mrzard.github.io/blog/2015/03/25/elasticsearch-enable-mlockall-in-centos-7/
+

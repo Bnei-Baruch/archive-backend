@@ -18,9 +18,9 @@ import (
 	"github.com/vattle/sqlboiler/queries/qm"
 	elastic "gopkg.in/olivere/elastic.v5"
 
-	"github.com/Bnei-Baruch/mdb2es/mdb"
-	"github.com/Bnei-Baruch/mdb2es/mdb/models"
-	"github.com/Bnei-Baruch/mdb2es/utils"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 const INDEX_NAME = "mdb_collections"

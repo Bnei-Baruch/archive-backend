@@ -1,4 +1,4 @@
-/sites/mdb2es/logs/nginx-*.log {
+/sites/archive-backend/logs/nginx-*.log {
     size 10M
     missingok
     rotate 10

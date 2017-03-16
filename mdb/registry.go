@@ -6,8 +6,9 @@ This is a modified version of the github.com/Bnei-Baruch/mdb/api/registry.go
 */
 
 import (
-	"github.com/Bnei-Baruch/mdb2es/mdb/models"
 	"github.com/vattle/sqlboiler/boil"
+
+	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
 var (

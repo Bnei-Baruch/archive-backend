@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/Bnei-Baruch/mdb2es",
+	"ImportPath": "github.com/Bnei-Baruch/archive-backend",
 	"GoVersion": "go1.8",
 	"GodepVersion": "v79",
 	"Deps": [

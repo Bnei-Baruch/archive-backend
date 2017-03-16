@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/Bnei-Baruch/mdb2es/es"
+	"github.com/Bnei-Baruch/archive-backend/es"
 )
 
 var etlCmd = &cobra.Command{

@@ -4,17 +4,18 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/Bnei-Baruch/mdb2es/utils"
-	"github.com/pkg/errors"
+
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 var cfgFile string
 
 var RootCmd = &cobra.Command{
-	Use:   "mdb2es",
-	Short: "MDB to Elasticsearch tools belt",
+	Use:   "archive-backend",
+	Short: "Backend for new archive site",
 }
 
 func Execute() {

@@ -15,10 +15,10 @@ import (
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v5"
 
-	"github.com/Bnei-Baruch/mdb2es/api"
-	"github.com/Bnei-Baruch/mdb2es/mdb"
-	"github.com/Bnei-Baruch/mdb2es/utils"
-	"github.com/Bnei-Baruch/mdb2es/version"
+	"github.com/Bnei-Baruch/archive-backend/api"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/utils"
+	"github.com/Bnei-Baruch/archive-backend/version"
 )
 
 var serverCmd = &cobra.Command{
