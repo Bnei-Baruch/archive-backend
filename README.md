@@ -48,3 +48,16 @@ PRE_RELEASE=rc.1 misc/release.sh
 
 ## Elasticsearch related stuff
 http://mrzard.github.io/blog/2015/03/25/elasticsearch-enable-mlockall-in-centos-7/
+
+
+## MDB models
+
+When MDB schema is changed we need to update the `mdb` package. Run this script:
+
+```Shell
+misc/update_mdb_models.sh
+```
+
+ * Copy the models package from the mdb repo to our `mdb` package
+
+ *

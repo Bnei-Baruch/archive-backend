@@ -1,0 +1,11 @@
+[mdb]
+url="postgres://localhost/mdb?sslmode=disable&user=postgres"
+
+[elasticsearch]
+url="http://127.0.0.1:9200"
+
+[server]
+bind-address=":8080"
+mode="debug"  # GIN mode. Either debug, release or test
+rollbar-token=""
+rollbar-environment="development"

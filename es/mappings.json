@@ -1,0 +1,591 @@
+{
+  "mappings": {
+    "collection": {
+      "_all": {
+        "enabled": false
+      },
+      "properties": {
+        "mdb_uid": {
+          "type": "keyword"
+        },
+        "content_type": {
+          "type": "keyword"
+        },
+        "film_date": {
+          "type": "date",
+          "format": "date_time_no_millis"
+        },
+        "names": {
+          "properties": {
+            "en": {
+              "type": "text",
+              "analyzer": "english"
+            },
+            "he": {
+              "type": "text"
+            },
+            "ru": {
+              "type": "text",
+              "analyzer": "russian"
+            },
+            "es": {
+              "type": "text",
+              "analyzer": "spanish"
+            },
+            "it": {
+              "type": "text",
+              "analyzer": "italian"
+            },
+            "de": {
+              "type": "text",
+              "analyzer": "german"
+            },
+            "nl": {
+              "type": "text",
+              "analyzer": "dutch"
+            },
+            "fr": {
+              "type": "text",
+              "analyzer": "french"
+            },
+            "pt": {
+              "type": "text",
+              "analyzer": "portuguese"
+            },
+            "tr": {
+              "type": "text",
+              "analyzer": "turkish"
+            },
+            "pl": {
+              "type": "text"
+            },
+            "ar": {
+              "type": "text",
+              "analyzer": "arabic"
+            },
+            "hu": {
+              "type": "text",
+              "analyzer": "hungarian"
+            },
+            "fi": {
+              "type": "text",
+              "analyzer": "finnish"
+            },
+            "lt": {
+              "type": "text",
+              "analyzer": "lithuanian"
+            },
+            "ja": {
+              "type": "text",
+              "analyzer": "cjk"
+            },
+            "bg": {
+              "type": "text",
+              "analyzer": "bulgarian"
+            },
+            "ka": {
+              "type": "text"
+            },
+            "no": {
+              "type": "text",
+              "analyzer": "norwegian"
+            },
+            "sv": {
+              "type": "text",
+              "analyzer": "swedish"
+            },
+            "hr": {
+              "type": "text"
+            },
+            "zh": {
+              "type": "text",
+              "analyzer": "cjk"
+            },
+            "fa": {
+              "type": "text",
+              "analyzer": "persian"
+            },
+            "ro": {
+              "type": "text",
+              "analyzer": "romanian"
+            },
+            "hi": {
+              "type": "text",
+              "analyzer": "hindi"
+            },
+            "ua": {
+              "type": "text"
+            },
+            "mk": {
+              "type": "text"
+            },
+            "sl": {
+              "type": "text"
+            },
+            "lv": {
+              "type": "text",
+              "analyzer": "latvian"
+            },
+            "sk": {
+              "type": "text"
+            },
+            "cs": {
+              "type": "text",
+              "analyzer": "czech"
+            },
+            "zz": {
+              "type": "text"
+            },
+            "xx": {
+              "type": "text"
+            }
+          }
+        },
+        "descriptions": {
+          "properties": {
+            "en": {
+              "type": "text",
+              "analyzer": "english"
+            },
+            "he": {
+              "type": "text"
+            },
+            "ru": {
+              "type": "text",
+              "analyzer": "russian"
+            },
+            "es": {
+              "type": "text",
+              "analyzer": "spanish"
+            },
+            "it": {
+              "type": "text",
+              "analyzer": "italian"
+            },
+            "de": {
+              "type": "text",
+              "analyzer": "german"
+            },
+            "nl": {
+              "type": "text",
+              "analyzer": "dutch"
+            },
+            "fr": {
+              "type": "text",
+              "analyzer": "french"
+            },
+            "pt": {
+              "type": "text",
+              "analyzer": "portuguese"
+            },
+            "tr": {
+              "type": "text",
+              "analyzer": "turkish"
+            },
+            "pl": {
+              "type": "text"
+            },
+            "ar": {
+              "type": "text",
+              "analyzer": "arabic"
+            },
+            "hu": {
+              "type": "text",
+              "analyzer": "hungarian"
+            },
+            "fi": {
+              "type": "text",
+              "analyzer": "finnish"
+            },
+            "lt": {
+              "type": "text",
+              "analyzer": "lithuanian"
+            },
+            "ja": {
+              "type": "text",
+              "analyzer": "cjk"
+            },
+            "bg": {
+              "type": "text",
+              "analyzer": "bulgarian"
+            },
+            "ka": {
+              "type": "text"
+            },
+            "no": {
+              "type": "text",
+              "analyzer": "norwegian"
+            },
+            "sv": {
+              "type": "text",
+              "analyzer": "swedish"
+            },
+            "hr": {
+              "type": "text"
+            },
+            "zh": {
+              "type": "text",
+              "analyzer": "cjk"
+            },
+            "fa": {
+              "type": "text",
+              "analyzer": "persian"
+            },
+            "ro": {
+              "type": "text",
+              "analyzer": "romanian"
+            },
+            "hi": {
+              "type": "text",
+              "analyzer": "hindi"
+            },
+            "ua": {
+              "type": "text"
+            },
+            "mk": {
+              "type": "text"
+            },
+            "sl": {
+              "type": "text"
+            },
+            "lv": {
+              "type": "text",
+              "analyzer": "latvian"
+            },
+            "sk": {
+              "type": "text"
+            },
+            "cs": {
+              "type": "text",
+              "analyzer": "czech"
+            },
+            "zz": {
+              "type": "text"
+            },
+            "xx": {
+              "type": "text"
+            }
+          }
+        },
+        "content_units": {
+          "type": "nested",
+          "properties": {
+            "mdb_uid": {
+              "type": "keyword"
+            },
+            "content_type": {
+              "type": "keyword"
+            },
+            "name_in_collection": {
+              "type": "keyword"
+            },
+            "film_date": {
+              "type": "date",
+              "format": "date_time_no_millis"
+            },
+            "secure": {
+              "type": "byte"
+            },
+            "duration": {
+              "type": "integer"
+            },
+            "original_language": {
+              "type": "keyword"
+            },
+            "names": {
+              "properties": {
+                "en": {
+                  "type": "text",
+                  "analyzer": "english"
+                },
+                "he": {
+                  "type": "text"
+                },
+                "ru": {
+                  "type": "text",
+                  "analyzer": "russian"
+                },
+                "es": {
+                  "type": "text",
+                  "analyzer": "spanish"
+                },
+                "it": {
+                  "type": "text",
+                  "analyzer": "italian"
+                },
+                "de": {
+                  "type": "text",
+                  "analyzer": "german"
+                },
+                "nl": {
+                  "type": "text",
+                  "analyzer": "dutch"
+                },
+                "fr": {
+                  "type": "text",
+                  "analyzer": "french"
+                },
+                "pt": {
+                  "type": "text",
+                  "analyzer": "portuguese"
+                },
+                "tr": {
+                  "type": "text",
+                  "analyzer": "turkish"
+                },
+                "pl": {
+                  "type": "text"
+                },
+                "ar": {
+                  "type": "text",
+                  "analyzer": "arabic"
+                },
+                "hu": {
+                  "type": "text",
+                  "analyzer": "hungarian"
+                },
+                "fi": {
+                  "type": "text",
+                  "analyzer": "finnish"
+                },
+                "lt": {
+                  "type": "text",
+                  "analyzer": "lithuanian"
+                },
+                "ja": {
+                  "type": "text",
+                  "analyzer": "cjk"
+                },
+                "bg": {
+                  "type": "text",
+                  "analyzer": "bulgarian"
+                },
+                "ka": {
+                  "type": "text"
+                },
+                "no": {
+                  "type": "text",
+                  "analyzer": "norwegian"
+                },
+                "sv": {
+                  "type": "text",
+                  "analyzer": "swedish"
+                },
+                "hr": {
+                  "type": "text"
+                },
+                "zh": {
+                  "type": "text",
+                  "analyzer": "cjk"
+                },
+                "fa": {
+                  "type": "text",
+                  "analyzer": "persian"
+                },
+                "ro": {
+                  "type": "text",
+                  "analyzer": "romanian"
+                },
+                "hi": {
+                  "type": "text",
+                  "analyzer": "hindi"
+                },
+                "ua": {
+                  "type": "text"
+                },
+                "mk": {
+                  "type": "text"
+                },
+                "sl": {
+                  "type": "text"
+                },
+                "lv": {
+                  "type": "text",
+                  "analyzer": "latvian"
+                },
+                "sk": {
+                  "type": "text"
+                },
+                "cs": {
+                  "type": "text",
+                  "analyzer": "czech"
+                },
+                "zz": {
+                  "type": "text"
+                },
+                "xx": {
+                  "type": "text"
+                }
+              }
+            },
+            "descriptions": {
+              "properties": {
+                "en": {
+                  "type": "text",
+                  "analyzer": "english"
+                },
+                "he": {
+                  "type": "text"
+                },
+                "ru": {
+                  "type": "text",
+                  "analyzer": "russian"
+                },
+                "es": {
+                  "type": "text",
+                  "analyzer": "spanish"
+                },
+                "it": {
+                  "type": "text",
+                  "analyzer": "italian"
+                },
+                "de": {
+                  "type": "text",
+                  "analyzer": "german"
+                },
+                "nl": {
+                  "type": "text",
+                  "analyzer": "dutch"
+                },
+                "fr": {
+                  "type": "text",
+                  "analyzer": "french"
+                },
+                "pt": {
+                  "type": "text",
+                  "analyzer": "portuguese"
+                },
+                "tr": {
+                  "type": "text",
+                  "analyzer": "turkish"
+                },
+                "pl": {
+                  "type": "text"
+                },
+                "ar": {
+                  "type": "text",
+                  "analyzer": "arabic"
+                },
+                "hu": {
+                  "type": "text",
+                  "analyzer": "hungarian"
+                },
+                "fi": {
+                  "type": "text",
+                  "analyzer": "finnish"
+                },
+                "lt": {
+                  "type": "text",
+                  "analyzer": "lithuanian"
+                },
+                "ja": {
+                  "type": "text",
+                  "analyzer": "cjk"
+                },
+                "bg": {
+                  "type": "text",
+                  "analyzer": "bulgarian"
+                },
+                "ka": {
+                  "type": "text"
+                },
+                "no": {
+                  "type": "text",
+                  "analyzer": "norwegian"
+                },
+                "sv": {
+                  "type": "text",
+                  "analyzer": "swedish"
+                },
+                "hr": {
+                  "type": "text"
+                },
+                "zh": {
+                  "type": "text",
+                  "analyzer": "cjk"
+                },
+                "fa": {
+                  "type": "text",
+                  "analyzer": "persian"
+                },
+                "ro": {
+                  "type": "text",
+                  "analyzer": "romanian"
+                },
+                "hi": {
+                  "type": "text",
+                  "analyzer": "hindi"
+                },
+                "ua": {
+                  "type": "text"
+                },
+                "mk": {
+                  "type": "text"
+                },
+                "sl": {
+                  "type": "text"
+                },
+                "lv": {
+                  "type": "text",
+                  "analyzer": "latvian"
+                },
+                "sk": {
+                  "type": "text"
+                },
+                "cs": {
+                  "type": "text",
+                  "analyzer": "czech"
+                },
+                "zz": {
+                  "type": "text"
+                },
+                "xx": {
+                  "type": "text"
+                }
+              }
+            },
+            "files": {
+              "type": "nested",
+              "properties": {
+                "mdb_uid": {
+                  "type": "keyword"
+                },
+                "name": {
+                  "type": "keyword"
+                },
+                "size": {
+                  "type": "long"
+                },
+                "url": {
+                  "type": "keyword"
+                },
+                "secure": {
+                  "type": "byte"
+                },
+                "film_date": {
+                  "type": "date",
+                  "format": "date_time_no_millis"
+                },
+                "duration": {
+                  "type": "integer"
+                },
+                "language": {
+                  "type": "keyword"
+                },
+                "mimetype": {
+                  "type": "keyword"
+                },
+                "type": {
+                  "type": "keyword"
+                },
+                "subtype": {
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -6,6 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/Bnei-Baruch/mdb2es/utils"
+	"github.com/pkg/errors"
 )
 
 var cfgFile string
@@ -28,13 +30,7 @@ func init() {
 }
 
 func initConfig() {
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	}
-	viper.SetConfigName("config")
-	viper.AddConfigPath(".")
-	viper.AutomaticEnv()
-	if err := viper.ReadInConfig(); err != nil {
-		fmt.Println("Could not read config, using: ", viper.ConfigFileUsed(), err.Error())
+	if err := utils.InitConfig(cfgFile, ""); err != nil {
+		panic(errors.Wrapf(err, "Could not read config, using: %s", viper.ConfigFileUsed()))
 	}
 }
