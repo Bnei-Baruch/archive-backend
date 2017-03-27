@@ -120,8 +120,8 @@ func RollbarRecoveryMiddleware() gin.HandlerFunc {
 		c.Next()
 
 		// Log context errors
-		for _, err := range c.Errors.ByType(gin.ErrorTypePrivate) {
-			rollbar.RequestError(rollbar.CRIT, c.Request, err.Err)
+		for _, e := range c.Errors.ByType(gin.ErrorTypePrivate) {
+			rollbar.RequestError(rollbar.CRIT, c.Request, e.Err)
 		}
 	}
 }
@@ -129,6 +129,10 @@ func RollbarRecoveryMiddleware() gin.HandlerFunc {
 func ErrorHandlingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
+
+		for _, e := range c.Errors.ByType(gin.ErrorTypePrivate) {
+			log.Error(e.Err.Error())
+		}
 
 		if be := c.Errors.ByType(gin.ErrorTypeBind).Last(); be != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
