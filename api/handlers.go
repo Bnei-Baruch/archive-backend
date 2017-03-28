@@ -73,7 +73,7 @@ func CollectionsHandler(c *gin.Context) {
 	}
 	mods = append(mods, qm.Limit(pageSize))
 	if r.PageNumber > 1 {
-		offset := (r.PageNumber - 1)  * pageSize
+		offset := (r.PageNumber - 1) * pageSize
 		if total < int64(offset) {
 			c.JSON(http.StatusOK, NewCollectionsResponse())
 			return
@@ -155,14 +155,16 @@ func CollectionsHandler(c *gin.Context) {
 		}
 
 		// i18n - get from map by lang order
-		for _, l := range LANG_ORDER[r.Language] {
-			for _, i18n := range ci18ns {
-				if i18n.Language == l {
-					if cl.Name == "" && i18n.Name.Valid {
-						cl.Name = i18n.Name.String
+		i18ns, ok := ci18nsMap[x.ID]
+		if ok {
+			for _, l := range LANG_ORDER[r.Language] {
+				li18n, ok := i18ns[l]
+				if ok {
+					if cl.Name == "" && li18n.Name.Valid {
+						cl.Name = li18n.Name.String
 					}
-					if cl.Description == "" && i18n.Description.Valid {
-						cl.Description = i18n.Description.String
+					if cl.Description == "" && li18n.Description.Valid {
+						cl.Description = li18n.Description.String
 					}
 				}
 			}
@@ -189,14 +191,16 @@ func CollectionsHandler(c *gin.Context) {
 			}
 
 			// i18n - get from map by lang order
-			for _, l := range LANG_ORDER[r.Language] {
-				for _, i18n := range cui18ns {
-					if i18n.Language == l {
-						if u.Name == "" && i18n.Name.Valid {
-							u.Name = i18n.Name.String
+			i18ns, ok := cui18nsMap[cu.ID]
+			if ok {
+				for _, l := range LANG_ORDER[r.Language] {
+					li18n, ok := i18ns[l]
+					if ok {
+						if u.Name == "" && li18n.Name.Valid {
+							u.Name = li18n.Name.String
 						}
-						if u.Description == "" && i18n.Description.Valid {
-							u.Description = i18n.Description.String
+						if u.Description == "" && li18n.Description.Valid {
+							u.Description = li18n.Description.String
 						}
 					}
 				}
