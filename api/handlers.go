@@ -71,15 +71,15 @@ func CollectionsHandler(c *gin.Context) {
 	} else {
 		pageSize = utils.Min(r.PageSize, MAX_PAGE_SIZE)
 	}
-	if r.PageNumber > 0 {
-		offset := r.PageNumber * pageSize
+	mods = append(mods, qm.Limit(pageSize))
+	if r.PageNumber > 1 {
+		offset := (r.PageNumber - 1)  * pageSize
 		if total < int64(offset) {
 			c.JSON(http.StatusOK, NewCollectionsResponse())
 			return
 		}
 		mods = append(mods, qm.Offset(offset))
 	}
-	mods = append(mods, qm.Limit(pageSize))
 
 	mods = append(mods, qm.Load(
 		"CollectionsContentUnits",
@@ -149,7 +149,7 @@ func CollectionsHandler(c *gin.Context) {
 			return
 		}
 		cl := &Collection{
-			MDB_UID:     x.UID,
+			ID:          x.UID,
 			ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[x.TypeID].Name,
 			FilmDate:    Date{Time: props.FilmDate.Time},
 		}
@@ -180,7 +180,7 @@ func CollectionsHandler(c *gin.Context) {
 				return
 			}
 			u := &ContentUnit{
-				MDB_UID:          cu.UID,
+				ID:               cu.UID,
 				ContentType:      mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
 				NameInCollection: ccu.Name,
 				FilmDate:         Date{Time: props.FilmDate.Time},
@@ -236,7 +236,7 @@ func ContentUnitsHandler(c *gin.Context) {
 		return
 	}
 	u := &ContentUnit{
-		MDB_UID:          cu.UID,
+		ID:               cu.UID,
 		ContentType:      mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
 		FilmDate:         Date{Time: props.FilmDate.Time},
 		Duration:         props.Duration,
@@ -284,7 +284,7 @@ func ContentUnitsHandler(c *gin.Context) {
 		}
 
 		f := &File{
-			MDB_UID:     x.UID,
+			ID:          x.UID,
 			Name:        x.Name,
 			Size:        x.Size,
 			Type:        x.Type,

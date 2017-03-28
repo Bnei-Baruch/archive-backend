@@ -38,7 +38,7 @@ func NewCollectionsResponse() *CollectionsResponse {
 }
 
 type Collection struct {
-	MDB_UID      string         `json:"mdb_uid"`
+	ID           string         `json:"id"`
 	ContentType  string         `json:"content_type"`
 	FilmDate     Date           `json:"film_date"`
 	Name         string         `json:"name,omitempty"`
@@ -47,7 +47,7 @@ type Collection struct {
 }
 
 type ContentUnit struct {
-	MDB_UID          string  `json:"mdb_uid"`
+	ID               string  `json:"id"`
 	ContentType      string  `json:"content_type"`
 	NameInCollection string  `json:"name_in_collection,omitempty"`
 	FilmDate         Date    `json:"film_date"`
@@ -59,7 +59,7 @@ type ContentUnit struct {
 }
 
 type File struct {
-	MDB_UID     string `json:"mdb_uid"`
+	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Size        int64  `json:"size"`
 	URL         string `json:"url"`
