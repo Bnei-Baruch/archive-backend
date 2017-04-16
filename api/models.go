@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"gopkg.in/nullbio/null.v6"
 	"strings"
 	"time"
 )
@@ -12,25 +13,55 @@ type BaseRequest struct {
 
 type ListRequest struct {
 	BaseRequest
-	StartDate  *Date  `json:"start_date" form:"start_date" binding:"omitempty"`
-	EndDate    *Date  `json:"end_date" form:"end_date" binding:"omitempty"`
 	PageNumber int    `json:"page_no" form:"page_no" binding:"omitempty,min=1"`
 	PageSize   int    `json:"page_size" form:"page_size" binding:"omitempty,min=1"`
+	StartIndex int    `json:"start_index" form:"start_index" binding:"omitempty,min=1"`
+	StopIndex  int    `json:"stop_index" form:"stop_index" binding:"omitempty,min=1"`
 	OrderBy    string `json:"order_by" form:"order_by" binding:"omitempty"`
-}
-
-type CollectionsRequest struct {
-	ListRequest
-	ContentType []string `json:"content_type" form:"content_type" binding:"omitempty"`
 }
 
 type ListResponse struct {
 	Total int64 `json:"total"`
 }
 
+type ContentTypesFilter struct {
+	ContentTypes []string `json:"content_types" form:"content_type" binding:"omitempty"`
+}
+
+type DateRangeFilter struct {
+	StartDate string `json:"start_date" form:"start_date" binding:"omitempty"`
+	EndDate   string `json:"end_date" form:"end_date" binding:"omitempty"`
+}
+
+func (drf *DateRangeFilter) Range() (time.Time, time.Time, error) {
+	var err error
+	var s, e time.Time
+
+	if drf.StartDate != "" {
+		s, err = time.Parse("2006-01-02", drf.StartDate)
+	}
+	if err == nil && drf.EndDate != "" {
+		e, err = time.Parse("2006-01-02", drf.EndDate)
+	}
+
+	return s, e, err
+}
+
+type CollectionsRequest struct {
+	ListRequest
+	ContentTypesFilter
+	DateRangeFilter
+}
+
 type CollectionsResponse struct {
 	ListResponse
 	Collections []*Collection `json:"collections"`
+}
+
+type HierarchyRequest struct {
+	BaseRequest
+	RootUID  string `json:"root" form:"root" binding:"omitempty,len=8"`
+	Depth    int    `json:"depth" form:"depth"`
 }
 
 func NewCollectionsResponse() *CollectionsResponse {
@@ -70,6 +101,34 @@ type File struct {
 	MimeType    string `json:"mimetype,omitempty"`
 	Type        string `json:"type,omitempty"`
 	SubType     string `json:"subtype,omitempty"`
+}
+
+type Source struct {
+	UID         string      `json:"uid"`
+	Pattern     null.String `json:"pattern,omitempty"`
+	Type        string      `json:"type"`
+	Name        null.String `json:"name"`
+	Description null.String `json:"description,omitempty"`
+	Children    []*Source   `json:"children,omitempty"`
+	ID          int64       `json:"-"`
+	ParentID    null.Int64  `json:"-"`
+	Position    null.Int    `json:"-"`
+}
+
+type Author struct {
+	Code     string      `json:"code"`
+	Name     string      `json:"name"`
+	FullName null.String `json:"full_name,omitempty"`
+	Children []*Source   `json:"children,omitempty"`
+}
+
+type Tag struct {
+	UID      string      `json:"uid"`
+	Pattern  null.String `json:"pattern,omitempty"`
+	Label    null.String `json:"label"`
+	Children []*Tag      `json:"children,omitempty"`
+	ID       int64       `json:"-"`
+	ParentID null.Int64  `json:"-"`
 }
 
 // Custom fields

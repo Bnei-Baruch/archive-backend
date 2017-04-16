@@ -3,12 +3,12 @@ package api
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/vattle/sqlboiler/queries/qm"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v5"
@@ -23,35 +23,25 @@ func CollectionsHandler(c *gin.Context) {
 	if c.Bind(&r) != nil {
 		return
 	}
+
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
 	mods := make([]qm.QueryMod, 0)
 
-	if !utils.IsEmpty(r.ContentType) {
-		a := make([]interface{}, len(r.ContentType))
-		for i, x := range r.ContentType {
-			ct, ok := mdb.CONTENT_TYPE_REGISTRY.ByName[strings.ToUpper(x)]
-			if !ok {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"status": "error",
-					"error":  fmt.Sprintf("Unknown content type: %s", x)})
-				return
-			}
-			a[i] = ct.ID
-		}
-		mods = append(mods, qm.WhereIn("type_id in ?", a...))
+	// filters
+	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
 	}
 
-	if r.StartDate != nil {
-		mods = append(mods, qm.Where("(properties->>'film_date')::date >= ?", r.StartDate.Time))
-	}
-	if r.EndDate != nil {
-		mods = append(mods, qm.Where("(properties->>'film_date')::date <= ?", r.EndDate.Time))
-	}
-
+	// count query
 	total, err := mdbmodels.Collections(db, mods...).Count()
 	if err != nil {
-		internalServerError(c, err)
+		NewInternalError(err).Abort(c)
 		return
 	}
 	if total == 0 {
@@ -59,35 +49,21 @@ func CollectionsHandler(c *gin.Context) {
 		return
 	}
 
-	if r.OrderBy == "" {
-		mods = append(mods, qm.OrderBy("id"))
-	} else {
-		mods = append(mods, qm.OrderBy(r.OrderBy))
+	// order, limit, offset
+	if err = appendListMods(&mods, r.ListRequest); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
 	}
 
-	var pageSize int
-	if r.PageSize == 0 {
-		pageSize = DEFAULT_PAGE_SIZE
-	} else {
-		pageSize = utils.Min(r.PageSize, MAX_PAGE_SIZE)
-	}
-	mods = append(mods, qm.Limit(pageSize))
-	if r.PageNumber > 1 {
-		offset := (r.PageNumber - 1) * pageSize
-		if total < int64(offset) {
-			c.JSON(http.StatusOK, NewCollectionsResponse())
-			return
-		}
-		mods = append(mods, qm.Offset(offset))
-	}
-
+	// Eager loading
 	mods = append(mods, qm.Load(
 		"CollectionsContentUnits",
 		"CollectionsContentUnits.ContentUnit"))
 
+	// data query
 	collections, err := mdbmodels.Collections(db, mods...).All()
 	if err != nil {
-		internalServerError(c, err)
+		NewInternalError(err).Abort(c)
 		return
 	}
 
@@ -105,7 +81,7 @@ func CollectionsHandler(c *gin.Context) {
 		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
 		All()
 	if err != nil {
-		internalServerError(c, err)
+		NewInternalError(err).Abort(c)
 		return
 	}
 	ci18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(cids))
@@ -123,7 +99,7 @@ func CollectionsHandler(c *gin.Context) {
 		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
 		All()
 	if err != nil {
-		internalServerError(c, err)
+		NewInternalError(err).Abort(c)
 		return
 	}
 	cui18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(cuids))
@@ -145,7 +121,7 @@ func CollectionsHandler(c *gin.Context) {
 		var props mdb.CollectionProperties
 		err = x.Properties.Unmarshal(&props)
 		if err != nil {
-			internalServerError(c, err)
+			NewInternalError(err).Abort(c)
 			return
 		}
 		cl := &Collection{
@@ -178,7 +154,7 @@ func CollectionsHandler(c *gin.Context) {
 			var props mdb.ContentUnitProperties
 			err = cu.Properties.Unmarshal(&props)
 			if err != nil {
-				internalServerError(c, err)
+				NewInternalError(err).Abort(c)
 				return
 			}
 			u := &ContentUnit{
@@ -220,15 +196,16 @@ func ContentUnitsHandler(c *gin.Context) {
 		return
 	}
 
-	uid := c.Param("uid")
 	db := c.MustGet("MDB_DB").(*sql.DB)
+
+	uid := c.Param("uid")
 	cu, err := mdbmodels.ContentUnits(db, qm.Where("uid = ?", uid)).One()
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{})
+			NewNotFoundError().Abort(c)
 			return
 		} else {
-			internalServerError(c, err)
+			NewInternalError(err).Abort(c)
 			return
 		}
 	}
@@ -236,7 +213,7 @@ func ContentUnitsHandler(c *gin.Context) {
 	var props mdb.ContentUnitProperties
 	err = cu.Properties.Unmarshal(&props)
 	if err != nil {
-		internalServerError(c, err)
+		NewInternalError(err).Abort(c)
 		return
 	}
 	u := &ContentUnit{
@@ -253,7 +230,7 @@ func ContentUnitsHandler(c *gin.Context) {
 		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
 		All()
 	if err != nil {
-		internalServerError(c, err)
+		NewInternalError(err).Abort(c)
 		return
 	}
 	for _, l := range LANG_ORDER[r.Language] {
@@ -275,7 +252,7 @@ func ContentUnitsHandler(c *gin.Context) {
 		qm.And("properties ->> 'url' is not null")).
 		All()
 	if err != nil {
-		internalServerError(c, err)
+		NewInternalError(err).Abort(c)
 		return
 	}
 	u.Files = make([]*File, len(files))
@@ -283,7 +260,7 @@ func ContentUnitsHandler(c *gin.Context) {
 		var props mdb.FileProperties
 		err := x.Properties.Unmarshal(&props)
 		if err != nil {
-			internalServerError(c, err)
+			NewInternalError(err).Abort(c)
 			return
 		}
 
@@ -317,10 +294,7 @@ func ContentUnitsHandler(c *gin.Context) {
 func SearchHandler(c *gin.Context) {
 	text := c.Query("text")
 	if text == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status": "error",
-			"error":  "Can'd search for an empty text",
-		})
+		NewBadRequestError(errors.New("Can't search for an empty text")).Abort(c)
 		return
 	}
 
@@ -330,20 +304,17 @@ func SearchHandler(c *gin.Context) {
 		var err error
 		page, err = strconv.Atoi(pageQ)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status": "error",
-				"error":  fmt.Sprintf("Illegal value provided for 'page' parameter: %s", pageQ),
-			})
+			NewBadRequestError(err).Abort(c)
 			return
 		}
 	}
 
 	res, err := handleSearch(c.MustGet("ES_CLIENT").(*elastic.Client), "mdb_collections", text, page)
-	if err != nil {
-		internalServerError(c, err)
+	if err == nil {
+		c.JSON(http.StatusOK, res)
+	} else {
+		NewInternalError(err).Abort(c)
 	}
-
-	c.JSON(http.StatusOK, res)
 }
 
 func handleSearch(esc *elastic.Client, index string, text string, from int) (*elastic.SearchResult, error) {
@@ -360,7 +331,81 @@ func handleSearch(esc *elastic.Client, index string, text string, from int) (*el
 		Do(context.TODO())
 }
 
-func internalServerError(c *gin.Context, err error) {
-	c.Error(err).SetType(gin.ErrorTypePrivate)
-	c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": "Internal Server Error"})
+func appendListMods(mods *[]qm.QueryMod, r ListRequest) error {
+	if r.OrderBy == "" {
+		*mods = append(*mods, qm.OrderBy("id"))
+	} else {
+		*mods = append(*mods, qm.OrderBy(r.OrderBy))
+	}
+
+	var limit, offset int
+
+	if r.StartIndex == 0 {
+		// pagination style
+		if r.PageSize == 0 {
+			limit = DEFAULT_PAGE_SIZE
+		} else {
+			limit = utils.Min(r.PageSize, MAX_PAGE_SIZE)
+		}
+		if r.PageNumber > 1 {
+			offset = (r.PageNumber - 1) * limit
+		}
+	} else {
+		// start & stop index style for "infinite" lists
+		offset = r.StartIndex - 1
+		if r.StopIndex == 0 {
+			limit = MAX_PAGE_SIZE
+		} else if r.StopIndex < r.StartIndex {
+			return errors.Errorf("Invalid range [%d-%d]", r.StartIndex, r.StopIndex)
+		} else {
+			limit = r.StopIndex - r.StartIndex + 1
+		}
+	}
+
+	*mods = append(*mods, qm.Limit(limit))
+	if offset != 0 {
+		*mods = append(*mods, qm.Offset(offset))
+	}
+
+	return nil
+}
+
+func appendContentTypesFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) error {
+	if utils.IsEmpty(f.ContentTypes) {
+		return nil
+	}
+
+	a := make([]interface{}, len(f.ContentTypes))
+	for i, x := range f.ContentTypes {
+		ct, ok := mdb.CONTENT_TYPE_REGISTRY.ByName[strings.ToUpper(x)]
+		if ok {
+			a[i] = ct.ID
+		} else {
+			return errors.Errorf("Unknown content type: %s", x)
+		}
+	}
+
+	*mods = append(*mods, qm.WhereIn("type_id in ?", a...))
+
+	return nil
+}
+
+func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
+	s, e, err := f.Range()
+	if err != nil {
+		return err
+	}
+
+	if f.StartDate != "" && f.EndDate != "" && e.Before(s) {
+		return errors.New("Invalid date range")
+	}
+
+	if f.StartDate != "" {
+		*mods = append(*mods, qm.Where("(properties->>'film_date')::date >= ?", s))
+	}
+	if f.EndDate != "" {
+		*mods = append(*mods, qm.Where("(properties->>'film_date')::date <= ?", e))
+	}
+
+	return nil
 }

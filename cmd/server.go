@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"database/sql"
-	"net/http"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stvp/rollbar"
@@ -44,6 +42,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 
 	log.Info("Initializing type registries")
 	utils.Must(mdb.CONTENT_TYPE_REGISTRY.Init(mdbDB))
+	utils.Must(mdb.SOURCE_TYPE_REGISTRY.Init(mdbDB))
 
 	log.Info("Setting up connection to ElasticSearch")
 	url := viper.GetString("elasticsearch.url")
@@ -68,19 +67,11 @@ func serverFn(cmd *cobra.Command, args []string) {
 	// Setup gin
 	gin.SetMode(viper.GetString("server.mode"))
 	router := gin.New()
-
-	var recovery gin.HandlerFunc
-	if len(rollbar.Token) > 0 {
-		recovery = RollbarRecoveryMiddleware()
-	} else {
-		recovery = gin.Recovery()
-	}
-
 	router.Use(
-		DataStoresMiddleware(mdbDB, esc),
-		ErrorHandlingMiddleware(),
+		utils.DataStoresMiddleware(mdbDB, esc),
+		utils.ErrorHandlingMiddleware(),
 		cors.Default(),
-		recovery)
+		utils.RecoveryMiddleware())
 
 	api.SetupRoutes(router)
 
@@ -93,52 +84,4 @@ func serverFn(cmd *cobra.Command, args []string) {
 	//if len(rollbar.Token) > 0 {
 	//	rollbar.Wait()
 	//}
-}
-
-func DataStoresMiddleware(mbdDB *sql.DB, esc *elastic.Client) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Set("MDB_DB", mbdDB)
-		c.Set("ES_CLIENT", esc)
-		c.Next()
-	}
-}
-
-func RollbarRecoveryMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		defer func() {
-			// Log panics
-			if rval := recover(); rval != nil {
-				if err, ok := rval.(error); ok {
-					rollbar.RequestError(rollbar.CRIT, c.Request, err)
-				} else {
-					rollbar.RequestError(rollbar.CRIT, c.Request, errors.Errorf("%s", rval))
-				}
-				c.AbortWithStatus(http.StatusInternalServerError)
-			}
-		}()
-
-		c.Next()
-
-		// Log context errors
-		for _, e := range c.Errors.ByType(gin.ErrorTypePrivate) {
-			rollbar.RequestError(rollbar.CRIT, c.Request, e.Err)
-		}
-	}
-}
-
-func ErrorHandlingMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Next()
-
-		for _, e := range c.Errors.ByType(gin.ErrorTypePrivate) {
-			log.Error(e.Err.Error())
-		}
-
-		if be := c.Errors.ByType(gin.ErrorTypeBind).Last(); be != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status": "error",
-				"error":  be.Err.Error(),
-			})
-		}
-	}
 }
