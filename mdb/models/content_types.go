@@ -29,8 +29,8 @@ type ContentType struct {
 
 // contentTypeR is where relationships are stored.
 type contentTypeR struct {
-	TypeCollections  CollectionSlice
 	TypeContentUnits ContentUnitSlice
+	TypeCollections  CollectionSlice
 }
 
 // contentTypeL is where Load methods for each relationship are stored.
@@ -172,30 +172,6 @@ func (q contentTypeQuery) Exists() (bool, error) {
 	return count > 0, nil
 }
 
-// TypeCollectionsG retrieves all the collection's collections via type_id column.
-func (o *ContentType) TypeCollectionsG(mods ...qm.QueryMod) collectionQuery {
-	return o.TypeCollections(boil.GetDB(), mods...)
-}
-
-// TypeCollections retrieves all the collection's collections with an executor via type_id column.
-func (o *ContentType) TypeCollections(exec boil.Executor, mods ...qm.QueryMod) collectionQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
-	}
-
-	if len(mods) != 0 {
-		queryMods = append(queryMods, mods...)
-	}
-
-	queryMods = append(queryMods,
-		qm.Where("\"a\".\"type_id\"=?", o.ID),
-	)
-
-	query := Collections(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"collections\" as \"a\"")
-	return query
-}
-
 // TypeContentUnitsG retrieves all the content_unit's content units via type_id column.
 func (o *ContentType) TypeContentUnitsG(mods ...qm.QueryMod) contentUnitQuery {
 	return o.TypeContentUnits(boil.GetDB(), mods...)
@@ -220,69 +196,28 @@ func (o *ContentType) TypeContentUnits(exec boil.Executor, mods ...qm.QueryMod) 
 	return query
 }
 
-// LoadTypeCollections allows an eager lookup of values, cached into the
-// loaded structs of the objects.
-func (contentTypeL) LoadTypeCollections(e boil.Executor, singular bool, maybeContentType interface{}) error {
-	var slice []*ContentType
-	var object *ContentType
+// TypeCollectionsG retrieves all the collection's collections via type_id column.
+func (o *ContentType) TypeCollectionsG(mods ...qm.QueryMod) collectionQuery {
+	return o.TypeCollections(boil.GetDB(), mods...)
+}
 
-	count := 1
-	if singular {
-		object = maybeContentType.(*ContentType)
-	} else {
-		slice = *maybeContentType.(*ContentTypeSlice)
-		count = len(slice)
+// TypeCollections retrieves all the collection's collections with an executor via type_id column.
+func (o *ContentType) TypeCollections(exec boil.Executor, mods ...qm.QueryMod) collectionQuery {
+	queryMods := []qm.QueryMod{
+		qm.Select("\"a\".*"),
 	}
 
-	args := make([]interface{}, count)
-	if singular {
-		if object.R == nil {
-			object.R = &contentTypeR{}
-		}
-		args[0] = object.ID
-	} else {
-		for i, obj := range slice {
-			if obj.R == nil {
-				obj.R = &contentTypeR{}
-			}
-			args[i] = obj.ID
-		}
+	if len(mods) != 0 {
+		queryMods = append(queryMods, mods...)
 	}
 
-	query := fmt.Sprintf(
-		"select * from \"collections\" where \"type_id\" in (%s)",
-		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
+	queryMods = append(queryMods,
+		qm.Where("\"a\".\"type_id\"=?", o.ID),
 	)
-	if boil.DebugMode {
-		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
-	}
 
-	results, err := e.Query(query, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to eager load collections")
-	}
-	defer results.Close()
-
-	var resultSlice []*Collection
-	if err = queries.Bind(results, &resultSlice); err != nil {
-		return errors.Wrap(err, "failed to bind eager loaded slice collections")
-	}
-
-	if singular {
-		object.R.TypeCollections = resultSlice
-		return nil
-	}
-
-	for _, foreign := range resultSlice {
-		for _, local := range slice {
-			if local.ID == foreign.TypeID {
-				local.R.TypeCollections = append(local.R.TypeCollections, foreign)
-				break
-			}
-		}
-	}
-
-	return nil
+	query := Collections(exec, queryMods...)
+	queries.SetFrom(query.Query, "\"collections\" as \"a\"")
+	return query
 }
 
 // LoadTypeContentUnits allows an eager lookup of values, cached into the
@@ -350,87 +285,68 @@ func (contentTypeL) LoadTypeContentUnits(e boil.Executor, singular bool, maybeCo
 	return nil
 }
 
-// AddTypeCollectionsG adds the given related objects to the existing relationships
-// of the content_type, optionally inserting them as new records.
-// Appends related to o.R.TypeCollections.
-// Sets related.R.Type appropriately.
-// Uses the global database handle.
-func (o *ContentType) AddTypeCollectionsG(insert bool, related ...*Collection) error {
-	return o.AddTypeCollections(boil.GetDB(), insert, related...)
-}
+// LoadTypeCollections allows an eager lookup of values, cached into the
+// loaded structs of the objects.
+func (contentTypeL) LoadTypeCollections(e boil.Executor, singular bool, maybeContentType interface{}) error {
+	var slice []*ContentType
+	var object *ContentType
 
-// AddTypeCollectionsP adds the given related objects to the existing relationships
-// of the content_type, optionally inserting them as new records.
-// Appends related to o.R.TypeCollections.
-// Sets related.R.Type appropriately.
-// Panics on error.
-func (o *ContentType) AddTypeCollectionsP(exec boil.Executor, insert bool, related ...*Collection) {
-	if err := o.AddTypeCollections(exec, insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddTypeCollectionsGP adds the given related objects to the existing relationships
-// of the content_type, optionally inserting them as new records.
-// Appends related to o.R.TypeCollections.
-// Sets related.R.Type appropriately.
-// Uses the global database handle and panics on error.
-func (o *ContentType) AddTypeCollectionsGP(insert bool, related ...*Collection) {
-	if err := o.AddTypeCollections(boil.GetDB(), insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddTypeCollections adds the given related objects to the existing relationships
-// of the content_type, optionally inserting them as new records.
-// Appends related to o.R.TypeCollections.
-// Sets related.R.Type appropriately.
-func (o *ContentType) AddTypeCollections(exec boil.Executor, insert bool, related ...*Collection) error {
-	var err error
-	for _, rel := range related {
-		if insert {
-			rel.TypeID = o.ID
-			if err = rel.Insert(exec); err != nil {
-				return errors.Wrap(err, "failed to insert into foreign table")
-			}
-		} else {
-			updateQuery := fmt.Sprintf(
-				"UPDATE \"collections\" SET %s WHERE %s",
-				strmangle.SetParamNames("\"", "\"", 1, []string{"type_id"}),
-				strmangle.WhereClause("\"", "\"", 2, collectionPrimaryKeyColumns),
-			)
-			values := []interface{}{o.ID, rel.ID}
-
-			if boil.DebugMode {
-				fmt.Fprintln(boil.DebugWriter, updateQuery)
-				fmt.Fprintln(boil.DebugWriter, values)
-			}
-
-			if _, err = exec.Exec(updateQuery, values...); err != nil {
-				return errors.Wrap(err, "failed to update foreign table")
-			}
-
-			rel.TypeID = o.ID
-		}
-	}
-
-	if o.R == nil {
-		o.R = &contentTypeR{
-			TypeCollections: related,
-		}
+	count := 1
+	if singular {
+		object = maybeContentType.(*ContentType)
 	} else {
-		o.R.TypeCollections = append(o.R.TypeCollections, related...)
+		slice = *maybeContentType.(*ContentTypeSlice)
+		count = len(slice)
 	}
 
-	for _, rel := range related {
-		if rel.R == nil {
-			rel.R = &collectionR{
-				Type: o,
+	args := make([]interface{}, count)
+	if singular {
+		if object.R == nil {
+			object.R = &contentTypeR{}
+		}
+		args[0] = object.ID
+	} else {
+		for i, obj := range slice {
+			if obj.R == nil {
+				obj.R = &contentTypeR{}
 			}
-		} else {
-			rel.R.Type = o
+			args[i] = obj.ID
 		}
 	}
+
+	query := fmt.Sprintf(
+		"select * from \"collections\" where \"type_id\" in (%s)",
+		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
+	)
+	if boil.DebugMode {
+		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
+	}
+
+	results, err := e.Query(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to eager load collections")
+	}
+	defer results.Close()
+
+	var resultSlice []*Collection
+	if err = queries.Bind(results, &resultSlice); err != nil {
+		return errors.Wrap(err, "failed to bind eager loaded slice collections")
+	}
+
+	if singular {
+		object.R.TypeCollections = resultSlice
+		return nil
+	}
+
+	for _, foreign := range resultSlice {
+		for _, local := range slice {
+			if local.ID == foreign.TypeID {
+				local.R.TypeCollections = append(local.R.TypeCollections, foreign)
+				break
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -509,6 +425,90 @@ func (o *ContentType) AddTypeContentUnits(exec boil.Executor, insert bool, relat
 	for _, rel := range related {
 		if rel.R == nil {
 			rel.R = &contentUnitR{
+				Type: o,
+			}
+		} else {
+			rel.R.Type = o
+		}
+	}
+	return nil
+}
+
+// AddTypeCollectionsG adds the given related objects to the existing relationships
+// of the content_type, optionally inserting them as new records.
+// Appends related to o.R.TypeCollections.
+// Sets related.R.Type appropriately.
+// Uses the global database handle.
+func (o *ContentType) AddTypeCollectionsG(insert bool, related ...*Collection) error {
+	return o.AddTypeCollections(boil.GetDB(), insert, related...)
+}
+
+// AddTypeCollectionsP adds the given related objects to the existing relationships
+// of the content_type, optionally inserting them as new records.
+// Appends related to o.R.TypeCollections.
+// Sets related.R.Type appropriately.
+// Panics on error.
+func (o *ContentType) AddTypeCollectionsP(exec boil.Executor, insert bool, related ...*Collection) {
+	if err := o.AddTypeCollections(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddTypeCollectionsGP adds the given related objects to the existing relationships
+// of the content_type, optionally inserting them as new records.
+// Appends related to o.R.TypeCollections.
+// Sets related.R.Type appropriately.
+// Uses the global database handle and panics on error.
+func (o *ContentType) AddTypeCollectionsGP(insert bool, related ...*Collection) {
+	if err := o.AddTypeCollections(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddTypeCollections adds the given related objects to the existing relationships
+// of the content_type, optionally inserting them as new records.
+// Appends related to o.R.TypeCollections.
+// Sets related.R.Type appropriately.
+func (o *ContentType) AddTypeCollections(exec boil.Executor, insert bool, related ...*Collection) error {
+	var err error
+	for _, rel := range related {
+		if insert {
+			rel.TypeID = o.ID
+			if err = rel.Insert(exec); err != nil {
+				return errors.Wrap(err, "failed to insert into foreign table")
+			}
+		} else {
+			updateQuery := fmt.Sprintf(
+				"UPDATE \"collections\" SET %s WHERE %s",
+				strmangle.SetParamNames("\"", "\"", 1, []string{"type_id"}),
+				strmangle.WhereClause("\"", "\"", 2, collectionPrimaryKeyColumns),
+			)
+			values := []interface{}{o.ID, rel.ID}
+
+			if boil.DebugMode {
+				fmt.Fprintln(boil.DebugWriter, updateQuery)
+				fmt.Fprintln(boil.DebugWriter, values)
+			}
+
+			if _, err = exec.Exec(updateQuery, values...); err != nil {
+				return errors.Wrap(err, "failed to update foreign table")
+			}
+
+			rel.TypeID = o.ID
+		}
+	}
+
+	if o.R == nil {
+		o.R = &contentTypeR{
+			TypeCollections: related,
+		}
+	} else {
+		o.R.TypeCollections = append(o.R.TypeCollections, related...)
+	}
+
+	for _, rel := range related {
+		if rel.R == nil {
+			rel.R = &collectionR{
 				Type: o,
 			}
 		} else {

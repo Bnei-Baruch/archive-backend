@@ -17,8 +17,8 @@ import (
 	"gopkg.in/nullbio/null.v6"
 )
 
-// TagsI18n is an object representing the database table.
-type TagsI18n struct {
+// TagI18n is an object representing the database table.
+type TagI18n struct {
 	TagID            int64       `boil:"tag_id" json:"tag_id" toml:"tag_id" yaml:"tag_id"`
 	Language         string      `boil:"language" json:"language" toml:"language" yaml:"language"`
 	OriginalLanguage null.String `boil:"original_language" json:"original_language,omitempty" toml:"original_language" yaml:"original_language,omitempty"`
@@ -26,47 +26,47 @@ type TagsI18n struct {
 	UserID           null.Int64  `boil:"user_id" json:"user_id,omitempty" toml:"user_id" yaml:"user_id,omitempty"`
 	CreatedAt        time.Time   `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
 
-	R *tagsI18nR `boil:"-" json:"-" toml:"-" yaml:"-"`
-	L tagsI18nL  `boil:"-" json:"-" toml:"-" yaml:"-"`
+	R *tagI18nR `boil:"-" json:"-" toml:"-" yaml:"-"`
+	L tagI18nL  `boil:"-" json:"-" toml:"-" yaml:"-"`
 }
 
-// tagsI18nR is where relationships are stored.
-type tagsI18nR struct {
+// tagI18nR is where relationships are stored.
+type tagI18nR struct {
 	Tag  *Tag
 	User *User
 }
 
-// tagsI18nL is where Load methods for each relationship are stored.
-type tagsI18nL struct{}
+// tagI18nL is where Load methods for each relationship are stored.
+type tagI18nL struct{}
 
 var (
-	tagsI18nColumns               = []string{"tag_id", "language", "original_language", "label", "user_id", "created_at"}
-	tagsI18nColumnsWithoutDefault = []string{"tag_id", "language", "original_language", "label", "user_id"}
-	tagsI18nColumnsWithDefault    = []string{"created_at"}
-	tagsI18nPrimaryKeyColumns     = []string{"tag_id", "language"}
+	tagI18nColumns               = []string{"tag_id", "language", "original_language", "label", "user_id", "created_at"}
+	tagI18nColumnsWithoutDefault = []string{"tag_id", "language", "original_language", "label", "user_id"}
+	tagI18nColumnsWithDefault    = []string{"created_at"}
+	tagI18nPrimaryKeyColumns     = []string{"tag_id", "language"}
 )
 
 type (
-	// TagsI18nSlice is an alias for a slice of pointers to TagsI18n.
-	// This should generally be used opposed to []TagsI18n.
-	TagsI18nSlice []*TagsI18n
+	// TagI18nSlice is an alias for a slice of pointers to TagI18n.
+	// This should generally be used opposed to []TagI18n.
+	TagI18nSlice []*TagI18n
 
-	tagsI18nQuery struct {
+	tagI18nQuery struct {
 		*queries.Query
 	}
 )
 
 // Cache for insert, update and upsert
 var (
-	tagsI18nType                 = reflect.TypeOf(&TagsI18n{})
-	tagsI18nMapping              = queries.MakeStructMapping(tagsI18nType)
-	tagsI18nPrimaryKeyMapping, _ = queries.BindMapping(tagsI18nType, tagsI18nMapping, tagsI18nPrimaryKeyColumns)
-	tagsI18nInsertCacheMut       sync.RWMutex
-	tagsI18nInsertCache          = make(map[string]insertCache)
-	tagsI18nUpdateCacheMut       sync.RWMutex
-	tagsI18nUpdateCache          = make(map[string]updateCache)
-	tagsI18nUpsertCacheMut       sync.RWMutex
-	tagsI18nUpsertCache          = make(map[string]insertCache)
+	tagI18nType                 = reflect.TypeOf(&TagI18n{})
+	tagI18nMapping              = queries.MakeStructMapping(tagI18nType)
+	tagI18nPrimaryKeyMapping, _ = queries.BindMapping(tagI18nType, tagI18nMapping, tagI18nPrimaryKeyColumns)
+	tagI18nInsertCacheMut       sync.RWMutex
+	tagI18nInsertCache          = make(map[string]insertCache)
+	tagI18nUpdateCacheMut       sync.RWMutex
+	tagI18nUpdateCache          = make(map[string]updateCache)
+	tagI18nUpsertCacheMut       sync.RWMutex
+	tagI18nUpsertCache          = make(map[string]insertCache)
 )
 
 var (
@@ -76,8 +76,8 @@ var (
 	_ = bytes.MinRead
 )
 
-// OneP returns a single tagsI18n record from the query, and panics on error.
-func (q tagsI18nQuery) OneP() *TagsI18n {
+// OneP returns a single tagI18n record from the query, and panics on error.
+func (q tagI18nQuery) OneP() *TagI18n {
 	o, err := q.One()
 	if err != nil {
 		panic(boil.WrapErr(err))
@@ -86,9 +86,9 @@ func (q tagsI18nQuery) OneP() *TagsI18n {
 	return o
 }
 
-// One returns a single tagsI18n record from the query.
-func (q tagsI18nQuery) One() (*TagsI18n, error) {
-	o := &TagsI18n{}
+// One returns a single tagI18n record from the query.
+func (q tagI18nQuery) One() (*TagI18n, error) {
+	o := &TagI18n{}
 
 	queries.SetLimit(q.Query, 1)
 
@@ -97,14 +97,14 @@ func (q tagsI18nQuery) One() (*TagsI18n, error) {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
 		}
-		return nil, errors.Wrap(err, "mdbmodels: failed to execute a one query for tags_i18n")
+		return nil, errors.Wrap(err, "mdbmodels: failed to execute a one query for tag_i18n")
 	}
 
 	return o, nil
 }
 
-// AllP returns all TagsI18n records from the query, and panics on error.
-func (q tagsI18nQuery) AllP() TagsI18nSlice {
+// AllP returns all TagI18n records from the query, and panics on error.
+func (q tagI18nQuery) AllP() TagI18nSlice {
 	o, err := q.All()
 	if err != nil {
 		panic(boil.WrapErr(err))
@@ -113,20 +113,20 @@ func (q tagsI18nQuery) AllP() TagsI18nSlice {
 	return o
 }
 
-// All returns all TagsI18n records from the query.
-func (q tagsI18nQuery) All() (TagsI18nSlice, error) {
-	var o TagsI18nSlice
+// All returns all TagI18n records from the query.
+func (q tagI18nQuery) All() (TagI18nSlice, error) {
+	var o TagI18nSlice
 
 	err := q.Bind(&o)
 	if err != nil {
-		return nil, errors.Wrap(err, "mdbmodels: failed to assign all query results to TagsI18n slice")
+		return nil, errors.Wrap(err, "mdbmodels: failed to assign all query results to TagI18n slice")
 	}
 
 	return o, nil
 }
 
-// CountP returns the count of all TagsI18n records in the query, and panics on error.
-func (q tagsI18nQuery) CountP() int64 {
+// CountP returns the count of all TagI18n records in the query, and panics on error.
+func (q tagI18nQuery) CountP() int64 {
 	c, err := q.Count()
 	if err != nil {
 		panic(boil.WrapErr(err))
@@ -135,8 +135,8 @@ func (q tagsI18nQuery) CountP() int64 {
 	return c
 }
 
-// Count returns the count of all TagsI18n records in the query.
-func (q tagsI18nQuery) Count() (int64, error) {
+// Count returns the count of all TagI18n records in the query.
+func (q tagI18nQuery) Count() (int64, error) {
 	var count int64
 
 	queries.SetSelect(q.Query, nil)
@@ -144,14 +144,14 @@ func (q tagsI18nQuery) Count() (int64, error) {
 
 	err := q.Query.QueryRow().Scan(&count)
 	if err != nil {
-		return 0, errors.Wrap(err, "mdbmodels: failed to count tags_i18n rows")
+		return 0, errors.Wrap(err, "mdbmodels: failed to count tag_i18n rows")
 	}
 
 	return count, nil
 }
 
 // Exists checks if the row exists in the table, and panics on error.
-func (q tagsI18nQuery) ExistsP() bool {
+func (q tagI18nQuery) ExistsP() bool {
 	e, err := q.Exists()
 	if err != nil {
 		panic(boil.WrapErr(err))
@@ -161,7 +161,7 @@ func (q tagsI18nQuery) ExistsP() bool {
 }
 
 // Exists checks if the row exists in the table.
-func (q tagsI18nQuery) Exists() (bool, error) {
+func (q tagI18nQuery) Exists() (bool, error) {
 	var count int64
 
 	queries.SetCount(q.Query)
@@ -169,19 +169,19 @@ func (q tagsI18nQuery) Exists() (bool, error) {
 
 	err := q.Query.QueryRow().Scan(&count)
 	if err != nil {
-		return false, errors.Wrap(err, "mdbmodels: failed to check if tags_i18n exists")
+		return false, errors.Wrap(err, "mdbmodels: failed to check if tag_i18n exists")
 	}
 
 	return count > 0, nil
 }
 
 // TagG pointed to by the foreign key.
-func (o *TagsI18n) TagG(mods ...qm.QueryMod) tagQuery {
+func (o *TagI18n) TagG(mods ...qm.QueryMod) tagQuery {
 	return o.Tag(boil.GetDB(), mods...)
 }
 
 // Tag pointed to by the foreign key.
-func (o *TagsI18n) Tag(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
+func (o *TagI18n) Tag(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
 	queryMods := []qm.QueryMod{
 		qm.Where("id=?", o.TagID),
 	}
@@ -195,12 +195,12 @@ func (o *TagsI18n) Tag(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
 }
 
 // UserG pointed to by the foreign key.
-func (o *TagsI18n) UserG(mods ...qm.QueryMod) userQuery {
+func (o *TagI18n) UserG(mods ...qm.QueryMod) userQuery {
 	return o.User(boil.GetDB(), mods...)
 }
 
 // User pointed to by the foreign key.
-func (o *TagsI18n) User(exec boil.Executor, mods ...qm.QueryMod) userQuery {
+func (o *TagI18n) User(exec boil.Executor, mods ...qm.QueryMod) userQuery {
 	queryMods := []qm.QueryMod{
 		qm.Where("id=?", o.UserID),
 	}
@@ -215,28 +215,28 @@ func (o *TagsI18n) User(exec boil.Executor, mods ...qm.QueryMod) userQuery {
 
 // LoadTag allows an eager lookup of values, cached into the
 // loaded structs of the objects.
-func (tagsI18nL) LoadTag(e boil.Executor, singular bool, maybeTagsI18n interface{}) error {
-	var slice []*TagsI18n
-	var object *TagsI18n
+func (tagI18nL) LoadTag(e boil.Executor, singular bool, maybeTagI18n interface{}) error {
+	var slice []*TagI18n
+	var object *TagI18n
 
 	count := 1
 	if singular {
-		object = maybeTagsI18n.(*TagsI18n)
+		object = maybeTagI18n.(*TagI18n)
 	} else {
-		slice = *maybeTagsI18n.(*TagsI18nSlice)
+		slice = *maybeTagI18n.(*TagI18nSlice)
 		count = len(slice)
 	}
 
 	args := make([]interface{}, count)
 	if singular {
 		if object.R == nil {
-			object.R = &tagsI18nR{}
+			object.R = &tagI18nR{}
 		}
 		args[0] = object.TagID
 	} else {
 		for i, obj := range slice {
 			if obj.R == nil {
-				obj.R = &tagsI18nR{}
+				obj.R = &tagI18nR{}
 			}
 			args[i] = obj.TagID
 		}
@@ -281,28 +281,28 @@ func (tagsI18nL) LoadTag(e boil.Executor, singular bool, maybeTagsI18n interface
 
 // LoadUser allows an eager lookup of values, cached into the
 // loaded structs of the objects.
-func (tagsI18nL) LoadUser(e boil.Executor, singular bool, maybeTagsI18n interface{}) error {
-	var slice []*TagsI18n
-	var object *TagsI18n
+func (tagI18nL) LoadUser(e boil.Executor, singular bool, maybeTagI18n interface{}) error {
+	var slice []*TagI18n
+	var object *TagI18n
 
 	count := 1
 	if singular {
-		object = maybeTagsI18n.(*TagsI18n)
+		object = maybeTagI18n.(*TagI18n)
 	} else {
-		slice = *maybeTagsI18n.(*TagsI18nSlice)
+		slice = *maybeTagI18n.(*TagI18nSlice)
 		count = len(slice)
 	}
 
 	args := make([]interface{}, count)
 	if singular {
 		if object.R == nil {
-			object.R = &tagsI18nR{}
+			object.R = &tagI18nR{}
 		}
 		args[0] = object.UserID
 	} else {
 		for i, obj := range slice {
 			if obj.R == nil {
-				obj.R = &tagsI18nR{}
+				obj.R = &tagI18nR{}
 			}
 			args[i] = obj.UserID
 		}
@@ -345,38 +345,38 @@ func (tagsI18nL) LoadUser(e boil.Executor, singular bool, maybeTagsI18n interfac
 	return nil
 }
 
-// SetTagG of the tags_i18n to the related item.
+// SetTagG of the tag_i18n to the related item.
 // Sets o.R.Tag to related.
-// Adds o to related.R.TagsI18ns.
+// Adds o to related.R.TagI18ns.
 // Uses the global database handle.
-func (o *TagsI18n) SetTagG(insert bool, related *Tag) error {
+func (o *TagI18n) SetTagG(insert bool, related *Tag) error {
 	return o.SetTag(boil.GetDB(), insert, related)
 }
 
-// SetTagP of the tags_i18n to the related item.
+// SetTagP of the tag_i18n to the related item.
 // Sets o.R.Tag to related.
-// Adds o to related.R.TagsI18ns.
+// Adds o to related.R.TagI18ns.
 // Panics on error.
-func (o *TagsI18n) SetTagP(exec boil.Executor, insert bool, related *Tag) {
+func (o *TagI18n) SetTagP(exec boil.Executor, insert bool, related *Tag) {
 	if err := o.SetTag(exec, insert, related); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
-// SetTagGP of the tags_i18n to the related item.
+// SetTagGP of the tag_i18n to the related item.
 // Sets o.R.Tag to related.
-// Adds o to related.R.TagsI18ns.
+// Adds o to related.R.TagI18ns.
 // Uses the global database handle and panics on error.
-func (o *TagsI18n) SetTagGP(insert bool, related *Tag) {
+func (o *TagI18n) SetTagGP(insert bool, related *Tag) {
 	if err := o.SetTag(boil.GetDB(), insert, related); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
-// SetTag of the tags_i18n to the related item.
+// SetTag of the tag_i18n to the related item.
 // Sets o.R.Tag to related.
-// Adds o to related.R.TagsI18ns.
-func (o *TagsI18n) SetTag(exec boil.Executor, insert bool, related *Tag) error {
+// Adds o to related.R.TagI18ns.
+func (o *TagI18n) SetTag(exec boil.Executor, insert bool, related *Tag) error {
 	var err error
 	if insert {
 		if err = related.Insert(exec); err != nil {
@@ -385,9 +385,9 @@ func (o *TagsI18n) SetTag(exec boil.Executor, insert bool, related *Tag) error {
 	}
 
 	updateQuery := fmt.Sprintf(
-		"UPDATE \"tags_i18n\" SET %s WHERE %s",
+		"UPDATE \"tag_i18n\" SET %s WHERE %s",
 		strmangle.SetParamNames("\"", "\"", 1, []string{"tag_id"}),
-		strmangle.WhereClause("\"", "\"", 2, tagsI18nPrimaryKeyColumns),
+		strmangle.WhereClause("\"", "\"", 2, tagI18nPrimaryKeyColumns),
 	)
 	values := []interface{}{related.ID, o.TagID, o.Language}
 
@@ -403,7 +403,7 @@ func (o *TagsI18n) SetTag(exec boil.Executor, insert bool, related *Tag) error {
 	o.TagID = related.ID
 
 	if o.R == nil {
-		o.R = &tagsI18nR{
+		o.R = &tagI18nR{
 			Tag: related,
 		}
 	} else {
@@ -412,47 +412,47 @@ func (o *TagsI18n) SetTag(exec boil.Executor, insert bool, related *Tag) error {
 
 	if related.R == nil {
 		related.R = &tagR{
-			TagsI18ns: TagsI18nSlice{o},
+			TagI18ns: TagI18nSlice{o},
 		}
 	} else {
-		related.R.TagsI18ns = append(related.R.TagsI18ns, o)
+		related.R.TagI18ns = append(related.R.TagI18ns, o)
 	}
 
 	return nil
 }
 
-// SetUserG of the tags_i18n to the related item.
+// SetUserG of the tag_i18n to the related item.
 // Sets o.R.User to related.
-// Adds o to related.R.TagsI18ns.
+// Adds o to related.R.TagI18ns.
 // Uses the global database handle.
-func (o *TagsI18n) SetUserG(insert bool, related *User) error {
+func (o *TagI18n) SetUserG(insert bool, related *User) error {
 	return o.SetUser(boil.GetDB(), insert, related)
 }
 
-// SetUserP of the tags_i18n to the related item.
+// SetUserP of the tag_i18n to the related item.
 // Sets o.R.User to related.
-// Adds o to related.R.TagsI18ns.
+// Adds o to related.R.TagI18ns.
 // Panics on error.
-func (o *TagsI18n) SetUserP(exec boil.Executor, insert bool, related *User) {
+func (o *TagI18n) SetUserP(exec boil.Executor, insert bool, related *User) {
 	if err := o.SetUser(exec, insert, related); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
-// SetUserGP of the tags_i18n to the related item.
+// SetUserGP of the tag_i18n to the related item.
 // Sets o.R.User to related.
-// Adds o to related.R.TagsI18ns.
+// Adds o to related.R.TagI18ns.
 // Uses the global database handle and panics on error.
-func (o *TagsI18n) SetUserGP(insert bool, related *User) {
+func (o *TagI18n) SetUserGP(insert bool, related *User) {
 	if err := o.SetUser(boil.GetDB(), insert, related); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
-// SetUser of the tags_i18n to the related item.
+// SetUser of the tag_i18n to the related item.
 // Sets o.R.User to related.
-// Adds o to related.R.TagsI18ns.
-func (o *TagsI18n) SetUser(exec boil.Executor, insert bool, related *User) error {
+// Adds o to related.R.TagI18ns.
+func (o *TagI18n) SetUser(exec boil.Executor, insert bool, related *User) error {
 	var err error
 	if insert {
 		if err = related.Insert(exec); err != nil {
@@ -461,9 +461,9 @@ func (o *TagsI18n) SetUser(exec boil.Executor, insert bool, related *User) error
 	}
 
 	updateQuery := fmt.Sprintf(
-		"UPDATE \"tags_i18n\" SET %s WHERE %s",
+		"UPDATE \"tag_i18n\" SET %s WHERE %s",
 		strmangle.SetParamNames("\"", "\"", 1, []string{"user_id"}),
-		strmangle.WhereClause("\"", "\"", 2, tagsI18nPrimaryKeyColumns),
+		strmangle.WhereClause("\"", "\"", 2, tagI18nPrimaryKeyColumns),
 	)
 	values := []interface{}{related.ID, o.TagID, o.Language}
 
@@ -480,7 +480,7 @@ func (o *TagsI18n) SetUser(exec boil.Executor, insert bool, related *User) error
 	o.UserID.Valid = true
 
 	if o.R == nil {
-		o.R = &tagsI18nR{
+		o.R = &tagI18nR{
 			User: related,
 		}
 	} else {
@@ -489,10 +489,10 @@ func (o *TagsI18n) SetUser(exec boil.Executor, insert bool, related *User) error
 
 	if related.R == nil {
 		related.R = &userR{
-			TagsI18ns: TagsI18nSlice{o},
+			TagI18ns: TagI18nSlice{o},
 		}
 	} else {
-		related.R.TagsI18ns = append(related.R.TagsI18ns, o)
+		related.R.TagI18ns = append(related.R.TagI18ns, o)
 	}
 
 	return nil
@@ -502,7 +502,7 @@ func (o *TagsI18n) SetUser(exec boil.Executor, insert bool, related *User) error
 // Sets o.R.User to nil.
 // Removes o from all passed in related items' relationships struct (Optional).
 // Uses the global database handle.
-func (o *TagsI18n) RemoveUserG(related *User) error {
+func (o *TagI18n) RemoveUserG(related *User) error {
 	return o.RemoveUser(boil.GetDB(), related)
 }
 
@@ -510,7 +510,7 @@ func (o *TagsI18n) RemoveUserG(related *User) error {
 // Sets o.R.User to nil.
 // Removes o from all passed in related items' relationships struct (Optional).
 // Panics on error.
-func (o *TagsI18n) RemoveUserP(exec boil.Executor, related *User) {
+func (o *TagI18n) RemoveUserP(exec boil.Executor, related *User) {
 	if err := o.RemoveUser(exec, related); err != nil {
 		panic(boil.WrapErr(err))
 	}
@@ -520,7 +520,7 @@ func (o *TagsI18n) RemoveUserP(exec boil.Executor, related *User) {
 // Sets o.R.User to nil.
 // Removes o from all passed in related items' relationships struct (Optional).
 // Uses the global database handle and panics on error.
-func (o *TagsI18n) RemoveUserGP(related *User) {
+func (o *TagI18n) RemoveUserGP(related *User) {
 	if err := o.RemoveUser(boil.GetDB(), related); err != nil {
 		panic(boil.WrapErr(err))
 	}
@@ -529,7 +529,7 @@ func (o *TagsI18n) RemoveUserGP(related *User) {
 // RemoveUser relationship.
 // Sets o.R.User to nil.
 // Removes o from all passed in related items' relationships struct (Optional).
-func (o *TagsI18n) RemoveUser(exec boil.Executor, related *User) error {
+func (o *TagI18n) RemoveUser(exec boil.Executor, related *User) error {
 	var err error
 
 	o.UserID.Valid = false
@@ -543,40 +543,40 @@ func (o *TagsI18n) RemoveUser(exec boil.Executor, related *User) error {
 		return nil
 	}
 
-	for i, ri := range related.R.TagsI18ns {
+	for i, ri := range related.R.TagI18ns {
 		if o.UserID.Int64 != ri.UserID.Int64 {
 			continue
 		}
 
-		ln := len(related.R.TagsI18ns)
+		ln := len(related.R.TagI18ns)
 		if ln > 1 && i < ln-1 {
-			related.R.TagsI18ns[i] = related.R.TagsI18ns[ln-1]
+			related.R.TagI18ns[i] = related.R.TagI18ns[ln-1]
 		}
-		related.R.TagsI18ns = related.R.TagsI18ns[:ln-1]
+		related.R.TagI18ns = related.R.TagI18ns[:ln-1]
 		break
 	}
 	return nil
 }
 
-// TagsI18nsG retrieves all records.
-func TagsI18nsG(mods ...qm.QueryMod) tagsI18nQuery {
-	return TagsI18ns(boil.GetDB(), mods...)
+// TagI18nsG retrieves all records.
+func TagI18nsG(mods ...qm.QueryMod) tagI18nQuery {
+	return TagI18ns(boil.GetDB(), mods...)
 }
 
-// TagsI18ns retrieves all the records using an executor.
-func TagsI18ns(exec boil.Executor, mods ...qm.QueryMod) tagsI18nQuery {
-	mods = append(mods, qm.From("\"tags_i18n\""))
-	return tagsI18nQuery{NewQuery(exec, mods...)}
+// TagI18ns retrieves all the records using an executor.
+func TagI18ns(exec boil.Executor, mods ...qm.QueryMod) tagI18nQuery {
+	mods = append(mods, qm.From("\"tag_i18n\""))
+	return tagI18nQuery{NewQuery(exec, mods...)}
 }
 
-// FindTagsI18nG retrieves a single record by ID.
-func FindTagsI18nG(tagID int64, language string, selectCols ...string) (*TagsI18n, error) {
-	return FindTagsI18n(boil.GetDB(), tagID, language, selectCols...)
+// FindTagI18nG retrieves a single record by ID.
+func FindTagI18nG(tagID int64, language string, selectCols ...string) (*TagI18n, error) {
+	return FindTagI18n(boil.GetDB(), tagID, language, selectCols...)
 }
 
-// FindTagsI18nGP retrieves a single record by ID, and panics on error.
-func FindTagsI18nGP(tagID int64, language string, selectCols ...string) *TagsI18n {
-	retobj, err := FindTagsI18n(boil.GetDB(), tagID, language, selectCols...)
+// FindTagI18nGP retrieves a single record by ID, and panics on error.
+func FindTagI18nGP(tagID int64, language string, selectCols ...string) *TagI18n {
+	retobj, err := FindTagI18n(boil.GetDB(), tagID, language, selectCols...)
 	if err != nil {
 		panic(boil.WrapErr(err))
 	}
@@ -584,35 +584,35 @@ func FindTagsI18nGP(tagID int64, language string, selectCols ...string) *TagsI18
 	return retobj
 }
 
-// FindTagsI18n retrieves a single record by ID with an executor.
+// FindTagI18n retrieves a single record by ID with an executor.
 // If selectCols is empty Find will return all columns.
-func FindTagsI18n(exec boil.Executor, tagID int64, language string, selectCols ...string) (*TagsI18n, error) {
-	tagsI18nObj := &TagsI18n{}
+func FindTagI18n(exec boil.Executor, tagID int64, language string, selectCols ...string) (*TagI18n, error) {
+	tagI18nObj := &TagI18n{}
 
 	sel := "*"
 	if len(selectCols) > 0 {
 		sel = strings.Join(strmangle.IdentQuoteSlice(dialect.LQ, dialect.RQ, selectCols), ",")
 	}
 	query := fmt.Sprintf(
-		"select %s from \"tags_i18n\" where \"tag_id\"=$1 AND \"language\"=$2", sel,
+		"select %s from \"tag_i18n\" where \"tag_id\"=$1 AND \"language\"=$2", sel,
 	)
 
 	q := queries.Raw(exec, query, tagID, language)
 
-	err := q.Bind(tagsI18nObj)
+	err := q.Bind(tagI18nObj)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
 		}
-		return nil, errors.Wrap(err, "mdbmodels: unable to select from tags_i18n")
+		return nil, errors.Wrap(err, "mdbmodels: unable to select from tag_i18n")
 	}
 
-	return tagsI18nObj, nil
+	return tagI18nObj, nil
 }
 
-// FindTagsI18nP retrieves a single record by ID with an executor, and panics on error.
-func FindTagsI18nP(exec boil.Executor, tagID int64, language string, selectCols ...string) *TagsI18n {
-	retobj, err := FindTagsI18n(exec, tagID, language, selectCols...)
+// FindTagI18nP retrieves a single record by ID with an executor, and panics on error.
+func FindTagI18nP(exec boil.Executor, tagID int64, language string, selectCols ...string) *TagI18n {
+	retobj, err := FindTagI18n(exec, tagID, language, selectCols...)
 	if err != nil {
 		panic(boil.WrapErr(err))
 	}
@@ -621,13 +621,13 @@ func FindTagsI18nP(exec boil.Executor, tagID int64, language string, selectCols 
 }
 
 // InsertG a single record. See Insert for whitelist behavior description.
-func (o *TagsI18n) InsertG(whitelist ...string) error {
+func (o *TagI18n) InsertG(whitelist ...string) error {
 	return o.Insert(boil.GetDB(), whitelist...)
 }
 
 // InsertGP a single record, and panics on error. See Insert for whitelist
 // behavior description.
-func (o *TagsI18n) InsertGP(whitelist ...string) {
+func (o *TagI18n) InsertGP(whitelist ...string) {
 	if err := o.Insert(boil.GetDB(), whitelist...); err != nil {
 		panic(boil.WrapErr(err))
 	}
@@ -635,7 +635,7 @@ func (o *TagsI18n) InsertGP(whitelist ...string) {
 
 // InsertP a single record using an executor, and panics on error. See Insert
 // for whitelist behavior description.
-func (o *TagsI18n) InsertP(exec boil.Executor, whitelist ...string) {
+func (o *TagI18n) InsertP(exec boil.Executor, whitelist ...string) {
 	if err := o.Insert(exec, whitelist...); err != nil {
 		panic(boil.WrapErr(err))
 	}
@@ -646,38 +646,38 @@ func (o *TagsI18n) InsertP(exec boil.Executor, whitelist ...string) {
 // No whitelist behavior: Without a whitelist, columns are inferred by the following rules:
 // - All columns without a default value are included (i.e. name, age)
 // - All columns with a default, but non-zero are included (i.e. health = 75)
-func (o *TagsI18n) Insert(exec boil.Executor, whitelist ...string) error {
+func (o *TagI18n) Insert(exec boil.Executor, whitelist ...string) error {
 	if o == nil {
-		return errors.New("mdbmodels: no tags_i18n provided for insertion")
+		return errors.New("mdbmodels: no tag_i18n provided for insertion")
 	}
 
 	var err error
 
-	nzDefaults := queries.NonZeroDefaultSet(tagsI18nColumnsWithDefault, o)
+	nzDefaults := queries.NonZeroDefaultSet(tagI18nColumnsWithDefault, o)
 
 	key := makeCacheKey(whitelist, nzDefaults)
-	tagsI18nInsertCacheMut.RLock()
-	cache, cached := tagsI18nInsertCache[key]
-	tagsI18nInsertCacheMut.RUnlock()
+	tagI18nInsertCacheMut.RLock()
+	cache, cached := tagI18nInsertCache[key]
+	tagI18nInsertCacheMut.RUnlock()
 
 	if !cached {
 		wl, returnColumns := strmangle.InsertColumnSet(
-			tagsI18nColumns,
-			tagsI18nColumnsWithDefault,
-			tagsI18nColumnsWithoutDefault,
+			tagI18nColumns,
+			tagI18nColumnsWithDefault,
+			tagI18nColumnsWithoutDefault,
 			nzDefaults,
 			whitelist,
 		)
 
-		cache.valueMapping, err = queries.BindMapping(tagsI18nType, tagsI18nMapping, wl)
+		cache.valueMapping, err = queries.BindMapping(tagI18nType, tagI18nMapping, wl)
 		if err != nil {
 			return err
 		}
-		cache.retMapping, err = queries.BindMapping(tagsI18nType, tagsI18nMapping, returnColumns)
+		cache.retMapping, err = queries.BindMapping(tagI18nType, tagI18nMapping, returnColumns)
 		if err != nil {
 			return err
 		}
-		cache.query = fmt.Sprintf("INSERT INTO \"tags_i18n\" (\"%s\") VALUES (%s)", strings.Join(wl, "\",\""), strmangle.Placeholders(dialect.IndexPlaceholders, len(wl), 1, 1))
+		cache.query = fmt.Sprintf("INSERT INTO \"tag_i18n\" (\"%s\") VALUES (%s)", strings.Join(wl, "\",\""), strmangle.Placeholders(dialect.IndexPlaceholders, len(wl), 1, 1))
 
 		if len(cache.retMapping) != 0 {
 			cache.query += fmt.Sprintf(" RETURNING \"%s\"", strings.Join(returnColumns, "\",\""))
@@ -699,67 +699,67 @@ func (o *TagsI18n) Insert(exec boil.Executor, whitelist ...string) error {
 	}
 
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to insert into tags_i18n")
+		return errors.Wrap(err, "mdbmodels: unable to insert into tag_i18n")
 	}
 
 	if !cached {
-		tagsI18nInsertCacheMut.Lock()
-		tagsI18nInsertCache[key] = cache
-		tagsI18nInsertCacheMut.Unlock()
+		tagI18nInsertCacheMut.Lock()
+		tagI18nInsertCache[key] = cache
+		tagI18nInsertCacheMut.Unlock()
 	}
 
 	return nil
 }
 
-// UpdateG a single TagsI18n record. See Update for
+// UpdateG a single TagI18n record. See Update for
 // whitelist behavior description.
-func (o *TagsI18n) UpdateG(whitelist ...string) error {
+func (o *TagI18n) UpdateG(whitelist ...string) error {
 	return o.Update(boil.GetDB(), whitelist...)
 }
 
-// UpdateGP a single TagsI18n record.
+// UpdateGP a single TagI18n record.
 // UpdateGP takes a whitelist of column names that should be updated.
 // Panics on error. See Update for whitelist behavior description.
-func (o *TagsI18n) UpdateGP(whitelist ...string) {
+func (o *TagI18n) UpdateGP(whitelist ...string) {
 	if err := o.Update(boil.GetDB(), whitelist...); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
-// UpdateP uses an executor to update the TagsI18n, and panics on error.
+// UpdateP uses an executor to update the TagI18n, and panics on error.
 // See Update for whitelist behavior description.
-func (o *TagsI18n) UpdateP(exec boil.Executor, whitelist ...string) {
+func (o *TagI18n) UpdateP(exec boil.Executor, whitelist ...string) {
 	err := o.Update(exec, whitelist...)
 	if err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
-// Update uses an executor to update the TagsI18n.
+// Update uses an executor to update the TagI18n.
 // Whitelist behavior: If a whitelist is provided, only the columns given are updated.
 // No whitelist behavior: Without a whitelist, columns are inferred by the following rules:
 // - All columns are inferred to start with
 // - All primary keys are subtracted from this set
 // Update does not automatically update the record in case of default values. Use .Reload()
 // to refresh the records.
-func (o *TagsI18n) Update(exec boil.Executor, whitelist ...string) error {
+func (o *TagI18n) Update(exec boil.Executor, whitelist ...string) error {
 	var err error
 	key := makeCacheKey(whitelist, nil)
-	tagsI18nUpdateCacheMut.RLock()
-	cache, cached := tagsI18nUpdateCache[key]
-	tagsI18nUpdateCacheMut.RUnlock()
+	tagI18nUpdateCacheMut.RLock()
+	cache, cached := tagI18nUpdateCache[key]
+	tagI18nUpdateCacheMut.RUnlock()
 
 	if !cached {
-		wl := strmangle.UpdateColumnSet(tagsI18nColumns, tagsI18nPrimaryKeyColumns, whitelist)
+		wl := strmangle.UpdateColumnSet(tagI18nColumns, tagI18nPrimaryKeyColumns, whitelist)
 		if len(wl) == 0 {
-			return errors.New("mdbmodels: unable to update tags_i18n, could not build whitelist")
+			return errors.New("mdbmodels: unable to update tag_i18n, could not build whitelist")
 		}
 
-		cache.query = fmt.Sprintf("UPDATE \"tags_i18n\" SET %s WHERE %s",
+		cache.query = fmt.Sprintf("UPDATE \"tag_i18n\" SET %s WHERE %s",
 			strmangle.SetParamNames("\"", "\"", 1, wl),
-			strmangle.WhereClause("\"", "\"", len(wl)+1, tagsI18nPrimaryKeyColumns),
+			strmangle.WhereClause("\"", "\"", len(wl)+1, tagI18nPrimaryKeyColumns),
 		)
-		cache.valueMapping, err = queries.BindMapping(tagsI18nType, tagsI18nMapping, append(wl, tagsI18nPrimaryKeyColumns...))
+		cache.valueMapping, err = queries.BindMapping(tagI18nType, tagI18nMapping, append(wl, tagI18nPrimaryKeyColumns...))
 		if err != nil {
 			return err
 		}
@@ -774,58 +774,58 @@ func (o *TagsI18n) Update(exec boil.Executor, whitelist ...string) error {
 
 	_, err = exec.Exec(cache.query, values...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to update tags_i18n row")
+		return errors.Wrap(err, "mdbmodels: unable to update tag_i18n row")
 	}
 
 	if !cached {
-		tagsI18nUpdateCacheMut.Lock()
-		tagsI18nUpdateCache[key] = cache
-		tagsI18nUpdateCacheMut.Unlock()
+		tagI18nUpdateCacheMut.Lock()
+		tagI18nUpdateCache[key] = cache
+		tagI18nUpdateCacheMut.Unlock()
 	}
 
 	return nil
 }
 
 // UpdateAllP updates all rows with matching column names, and panics on error.
-func (q tagsI18nQuery) UpdateAllP(cols M) {
+func (q tagI18nQuery) UpdateAllP(cols M) {
 	if err := q.UpdateAll(cols); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
 // UpdateAll updates all rows with the specified column values.
-func (q tagsI18nQuery) UpdateAll(cols M) error {
+func (q tagI18nQuery) UpdateAll(cols M) error {
 	queries.SetUpdate(q.Query, cols)
 
 	_, err := q.Query.Exec()
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to update all for tags_i18n")
+		return errors.Wrap(err, "mdbmodels: unable to update all for tag_i18n")
 	}
 
 	return nil
 }
 
 // UpdateAllG updates all rows with the specified column values.
-func (o TagsI18nSlice) UpdateAllG(cols M) error {
+func (o TagI18nSlice) UpdateAllG(cols M) error {
 	return o.UpdateAll(boil.GetDB(), cols)
 }
 
 // UpdateAllGP updates all rows with the specified column values, and panics on error.
-func (o TagsI18nSlice) UpdateAllGP(cols M) {
+func (o TagI18nSlice) UpdateAllGP(cols M) {
 	if err := o.UpdateAll(boil.GetDB(), cols); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
 // UpdateAllP updates all rows with the specified column values, and panics on error.
-func (o TagsI18nSlice) UpdateAllP(exec boil.Executor, cols M) {
+func (o TagI18nSlice) UpdateAllP(exec boil.Executor, cols M) {
 	if err := o.UpdateAll(exec, cols); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
 // UpdateAll updates all rows with the specified column values, using an executor.
-func (o TagsI18nSlice) UpdateAll(exec boil.Executor, cols M) error {
+func (o TagI18nSlice) UpdateAll(exec boil.Executor, cols M) error {
 	ln := int64(len(o))
 	if ln == 0 {
 		return nil
@@ -847,14 +847,14 @@ func (o TagsI18nSlice) UpdateAll(exec boil.Executor, cols M) error {
 
 	// Append all of the primary key values for each column
 	for _, obj := range o {
-		pkeyArgs := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(obj)), tagsI18nPrimaryKeyMapping)
+		pkeyArgs := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(obj)), tagI18nPrimaryKeyMapping)
 		args = append(args, pkeyArgs...)
 	}
 
 	sql := fmt.Sprintf(
-		"UPDATE \"tags_i18n\" SET %s WHERE (\"tag_id\",\"language\") IN (%s)",
+		"UPDATE \"tag_i18n\" SET %s WHERE (\"tag_id\",\"language\") IN (%s)",
 		strmangle.SetParamNames("\"", "\"", 1, colNames),
-		strmangle.Placeholders(dialect.IndexPlaceholders, len(o)*len(tagsI18nPrimaryKeyColumns), len(colNames)+1, len(tagsI18nPrimaryKeyColumns)),
+		strmangle.Placeholders(dialect.IndexPlaceholders, len(o)*len(tagI18nPrimaryKeyColumns), len(colNames)+1, len(tagI18nPrimaryKeyColumns)),
 	)
 
 	if boil.DebugMode {
@@ -864,19 +864,19 @@ func (o TagsI18nSlice) UpdateAll(exec boil.Executor, cols M) error {
 
 	_, err := exec.Exec(sql, args...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to update all in tagsI18n slice")
+		return errors.Wrap(err, "mdbmodels: unable to update all in tagI18n slice")
 	}
 
 	return nil
 }
 
 // UpsertG attempts an insert, and does an update or ignore on conflict.
-func (o *TagsI18n) UpsertG(updateOnConflict bool, conflictColumns []string, updateColumns []string, whitelist ...string) error {
+func (o *TagI18n) UpsertG(updateOnConflict bool, conflictColumns []string, updateColumns []string, whitelist ...string) error {
 	return o.Upsert(boil.GetDB(), updateOnConflict, conflictColumns, updateColumns, whitelist...)
 }
 
 // UpsertGP attempts an insert, and does an update or ignore on conflict. Panics on error.
-func (o *TagsI18n) UpsertGP(updateOnConflict bool, conflictColumns []string, updateColumns []string, whitelist ...string) {
+func (o *TagI18n) UpsertGP(updateOnConflict bool, conflictColumns []string, updateColumns []string, whitelist ...string) {
 	if err := o.Upsert(boil.GetDB(), updateOnConflict, conflictColumns, updateColumns, whitelist...); err != nil {
 		panic(boil.WrapErr(err))
 	}
@@ -884,19 +884,19 @@ func (o *TagsI18n) UpsertGP(updateOnConflict bool, conflictColumns []string, upd
 
 // UpsertP attempts an insert using an executor, and does an update or ignore on conflict.
 // UpsertP panics on error.
-func (o *TagsI18n) UpsertP(exec boil.Executor, updateOnConflict bool, conflictColumns []string, updateColumns []string, whitelist ...string) {
+func (o *TagI18n) UpsertP(exec boil.Executor, updateOnConflict bool, conflictColumns []string, updateColumns []string, whitelist ...string) {
 	if err := o.Upsert(exec, updateOnConflict, conflictColumns, updateColumns, whitelist...); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
 // Upsert attempts an insert using an executor, and does an update or ignore on conflict.
-func (o *TagsI18n) Upsert(exec boil.Executor, updateOnConflict bool, conflictColumns []string, updateColumns []string, whitelist ...string) error {
+func (o *TagI18n) Upsert(exec boil.Executor, updateOnConflict bool, conflictColumns []string, updateColumns []string, whitelist ...string) error {
 	if o == nil {
-		return errors.New("mdbmodels: no tags_i18n provided for upsert")
+		return errors.New("mdbmodels: no tag_i18n provided for upsert")
 	}
 
-	nzDefaults := queries.NonZeroDefaultSet(tagsI18nColumnsWithDefault, o)
+	nzDefaults := queries.NonZeroDefaultSet(tagI18nColumnsWithDefault, o)
 
 	// Build cache key in-line uglily - mysql vs postgres problems
 	buf := strmangle.GetBuffer()
@@ -924,43 +924,43 @@ func (o *TagsI18n) Upsert(exec boil.Executor, updateOnConflict bool, conflictCol
 	key := buf.String()
 	strmangle.PutBuffer(buf)
 
-	tagsI18nUpsertCacheMut.RLock()
-	cache, cached := tagsI18nUpsertCache[key]
-	tagsI18nUpsertCacheMut.RUnlock()
+	tagI18nUpsertCacheMut.RLock()
+	cache, cached := tagI18nUpsertCache[key]
+	tagI18nUpsertCacheMut.RUnlock()
 
 	var err error
 
 	if !cached {
 		var ret []string
 		whitelist, ret = strmangle.InsertColumnSet(
-			tagsI18nColumns,
-			tagsI18nColumnsWithDefault,
-			tagsI18nColumnsWithoutDefault,
+			tagI18nColumns,
+			tagI18nColumnsWithDefault,
+			tagI18nColumnsWithoutDefault,
 			nzDefaults,
 			whitelist,
 		)
 		update := strmangle.UpdateColumnSet(
-			tagsI18nColumns,
-			tagsI18nPrimaryKeyColumns,
+			tagI18nColumns,
+			tagI18nPrimaryKeyColumns,
 			updateColumns,
 		)
 		if len(update) == 0 {
-			return errors.New("mdbmodels: unable to upsert tags_i18n, could not build update column list")
+			return errors.New("mdbmodels: unable to upsert tag_i18n, could not build update column list")
 		}
 
 		conflict := conflictColumns
 		if len(conflict) == 0 {
-			conflict = make([]string, len(tagsI18nPrimaryKeyColumns))
-			copy(conflict, tagsI18nPrimaryKeyColumns)
+			conflict = make([]string, len(tagI18nPrimaryKeyColumns))
+			copy(conflict, tagI18nPrimaryKeyColumns)
 		}
-		cache.query = queries.BuildUpsertQueryPostgres(dialect, "\"tags_i18n\"", updateOnConflict, ret, update, conflict, whitelist)
+		cache.query = queries.BuildUpsertQueryPostgres(dialect, "\"tag_i18n\"", updateOnConflict, ret, update, conflict, whitelist)
 
-		cache.valueMapping, err = queries.BindMapping(tagsI18nType, tagsI18nMapping, whitelist)
+		cache.valueMapping, err = queries.BindMapping(tagI18nType, tagI18nMapping, whitelist)
 		if err != nil {
 			return err
 		}
 		if len(ret) != 0 {
-			cache.retMapping, err = queries.BindMapping(tagsI18nType, tagsI18nMapping, ret)
+			cache.retMapping, err = queries.BindMapping(tagI18nType, tagI18nMapping, ret)
 			if err != nil {
 				return err
 			}
@@ -988,55 +988,55 @@ func (o *TagsI18n) Upsert(exec boil.Executor, updateOnConflict bool, conflictCol
 		_, err = exec.Exec(cache.query, vals...)
 	}
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to upsert tags_i18n")
+		return errors.Wrap(err, "mdbmodels: unable to upsert tag_i18n")
 	}
 
 	if !cached {
-		tagsI18nUpsertCacheMut.Lock()
-		tagsI18nUpsertCache[key] = cache
-		tagsI18nUpsertCacheMut.Unlock()
+		tagI18nUpsertCacheMut.Lock()
+		tagI18nUpsertCache[key] = cache
+		tagI18nUpsertCacheMut.Unlock()
 	}
 
 	return nil
 }
 
-// DeleteP deletes a single TagsI18n record with an executor.
+// DeleteP deletes a single TagI18n record with an executor.
 // DeleteP will match against the primary key column to find the record to delete.
 // Panics on error.
-func (o *TagsI18n) DeleteP(exec boil.Executor) {
+func (o *TagI18n) DeleteP(exec boil.Executor) {
 	if err := o.Delete(exec); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
-// DeleteG deletes a single TagsI18n record.
+// DeleteG deletes a single TagI18n record.
 // DeleteG will match against the primary key column to find the record to delete.
-func (o *TagsI18n) DeleteG() error {
+func (o *TagI18n) DeleteG() error {
 	if o == nil {
-		return errors.New("mdbmodels: no TagsI18n provided for deletion")
+		return errors.New("mdbmodels: no TagI18n provided for deletion")
 	}
 
 	return o.Delete(boil.GetDB())
 }
 
-// DeleteGP deletes a single TagsI18n record.
+// DeleteGP deletes a single TagI18n record.
 // DeleteGP will match against the primary key column to find the record to delete.
 // Panics on error.
-func (o *TagsI18n) DeleteGP() {
+func (o *TagI18n) DeleteGP() {
 	if err := o.DeleteG(); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
-// Delete deletes a single TagsI18n record with an executor.
+// Delete deletes a single TagI18n record with an executor.
 // Delete will match against the primary key column to find the record to delete.
-func (o *TagsI18n) Delete(exec boil.Executor) error {
+func (o *TagI18n) Delete(exec boil.Executor) error {
 	if o == nil {
-		return errors.New("mdbmodels: no TagsI18n provided for delete")
+		return errors.New("mdbmodels: no TagI18n provided for delete")
 	}
 
-	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), tagsI18nPrimaryKeyMapping)
-	sql := "DELETE FROM \"tags_i18n\" WHERE \"tag_id\"=$1 AND \"language\"=$2"
+	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), tagI18nPrimaryKeyMapping)
+	sql := "DELETE FROM \"tag_i18n\" WHERE \"tag_id\"=$1 AND \"language\"=$2"
 
 	if boil.DebugMode {
 		fmt.Fprintln(boil.DebugWriter, sql)
@@ -1045,61 +1045,61 @@ func (o *TagsI18n) Delete(exec boil.Executor) error {
 
 	_, err := exec.Exec(sql, args...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to delete from tags_i18n")
+		return errors.Wrap(err, "mdbmodels: unable to delete from tag_i18n")
 	}
 
 	return nil
 }
 
 // DeleteAllP deletes all rows, and panics on error.
-func (q tagsI18nQuery) DeleteAllP() {
+func (q tagI18nQuery) DeleteAllP() {
 	if err := q.DeleteAll(); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
 // DeleteAll deletes all matching rows.
-func (q tagsI18nQuery) DeleteAll() error {
+func (q tagI18nQuery) DeleteAll() error {
 	if q.Query == nil {
-		return errors.New("mdbmodels: no tagsI18nQuery provided for delete all")
+		return errors.New("mdbmodels: no tagI18nQuery provided for delete all")
 	}
 
 	queries.SetDelete(q.Query)
 
 	_, err := q.Query.Exec()
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to delete all from tags_i18n")
+		return errors.Wrap(err, "mdbmodels: unable to delete all from tag_i18n")
 	}
 
 	return nil
 }
 
 // DeleteAllGP deletes all rows in the slice, and panics on error.
-func (o TagsI18nSlice) DeleteAllGP() {
+func (o TagI18nSlice) DeleteAllGP() {
 	if err := o.DeleteAllG(); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
 // DeleteAllG deletes all rows in the slice.
-func (o TagsI18nSlice) DeleteAllG() error {
+func (o TagI18nSlice) DeleteAllG() error {
 	if o == nil {
-		return errors.New("mdbmodels: no TagsI18n slice provided for delete all")
+		return errors.New("mdbmodels: no TagI18n slice provided for delete all")
 	}
 	return o.DeleteAll(boil.GetDB())
 }
 
 // DeleteAllP deletes all rows in the slice, using an executor, and panics on error.
-func (o TagsI18nSlice) DeleteAllP(exec boil.Executor) {
+func (o TagI18nSlice) DeleteAllP(exec boil.Executor) {
 	if err := o.DeleteAll(exec); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
 // DeleteAll deletes all rows in the slice, using an executor.
-func (o TagsI18nSlice) DeleteAll(exec boil.Executor) error {
+func (o TagI18nSlice) DeleteAll(exec boil.Executor) error {
 	if o == nil {
-		return errors.New("mdbmodels: no TagsI18n slice provided for delete all")
+		return errors.New("mdbmodels: no TagI18n slice provided for delete all")
 	}
 
 	if len(o) == 0 {
@@ -1108,14 +1108,14 @@ func (o TagsI18nSlice) DeleteAll(exec boil.Executor) error {
 
 	var args []interface{}
 	for _, obj := range o {
-		pkeyArgs := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(obj)), tagsI18nPrimaryKeyMapping)
+		pkeyArgs := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(obj)), tagI18nPrimaryKeyMapping)
 		args = append(args, pkeyArgs...)
 	}
 
 	sql := fmt.Sprintf(
-		"DELETE FROM \"tags_i18n\" WHERE (%s) IN (%s)",
-		strings.Join(strmangle.IdentQuoteSlice(dialect.LQ, dialect.RQ, tagsI18nPrimaryKeyColumns), ","),
-		strmangle.Placeholders(dialect.IndexPlaceholders, len(o)*len(tagsI18nPrimaryKeyColumns), 1, len(tagsI18nPrimaryKeyColumns)),
+		"DELETE FROM \"tag_i18n\" WHERE (%s) IN (%s)",
+		strings.Join(strmangle.IdentQuoteSlice(dialect.LQ, dialect.RQ, tagI18nPrimaryKeyColumns), ","),
+		strmangle.Placeholders(dialect.IndexPlaceholders, len(o)*len(tagI18nPrimaryKeyColumns), 1, len(tagI18nPrimaryKeyColumns)),
 	)
 
 	if boil.DebugMode {
@@ -1125,30 +1125,30 @@ func (o TagsI18nSlice) DeleteAll(exec boil.Executor) error {
 
 	_, err := exec.Exec(sql, args...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to delete all from tagsI18n slice")
+		return errors.Wrap(err, "mdbmodels: unable to delete all from tagI18n slice")
 	}
 
 	return nil
 }
 
 // ReloadGP refetches the object from the database and panics on error.
-func (o *TagsI18n) ReloadGP() {
+func (o *TagI18n) ReloadGP() {
 	if err := o.ReloadG(); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
 // ReloadP refetches the object from the database with an executor. Panics on error.
-func (o *TagsI18n) ReloadP(exec boil.Executor) {
+func (o *TagI18n) ReloadP(exec boil.Executor) {
 	if err := o.Reload(exec); err != nil {
 		panic(boil.WrapErr(err))
 	}
 }
 
 // ReloadG refetches the object from the database using the primary keys.
-func (o *TagsI18n) ReloadG() error {
+func (o *TagI18n) ReloadG() error {
 	if o == nil {
-		return errors.New("mdbmodels: no TagsI18n provided for reload")
+		return errors.New("mdbmodels: no TagI18n provided for reload")
 	}
 
 	return o.Reload(boil.GetDB())
@@ -1156,8 +1156,8 @@ func (o *TagsI18n) ReloadG() error {
 
 // Reload refetches the object from the database
 // using the primary keys with an executor.
-func (o *TagsI18n) Reload(exec boil.Executor) error {
-	ret, err := FindTagsI18n(exec, o.TagID, o.Language)
+func (o *TagI18n) Reload(exec boil.Executor) error {
+	ret, err := FindTagI18n(exec, o.TagID, o.Language)
 	if err != nil {
 		return err
 	}
@@ -1169,7 +1169,7 @@ func (o *TagsI18n) Reload(exec boil.Executor) error {
 // ReloadAllGP refetches every row with matching primary key column values
 // and overwrites the original object slice with the newly updated slice.
 // Panics on error.
-func (o *TagsI18nSlice) ReloadAllGP() {
+func (o *TagI18nSlice) ReloadAllGP() {
 	if err := o.ReloadAllG(); err != nil {
 		panic(boil.WrapErr(err))
 	}
@@ -1178,7 +1178,7 @@ func (o *TagsI18nSlice) ReloadAllGP() {
 // ReloadAllP refetches every row with matching primary key column values
 // and overwrites the original object slice with the newly updated slice.
 // Panics on error.
-func (o *TagsI18nSlice) ReloadAllP(exec boil.Executor) {
+func (o *TagI18nSlice) ReloadAllP(exec boil.Executor) {
 	if err := o.ReloadAll(exec); err != nil {
 		panic(boil.WrapErr(err))
 	}
@@ -1186,9 +1186,9 @@ func (o *TagsI18nSlice) ReloadAllP(exec boil.Executor) {
 
 // ReloadAllG refetches every row with matching primary key column values
 // and overwrites the original object slice with the newly updated slice.
-func (o *TagsI18nSlice) ReloadAllG() error {
+func (o *TagI18nSlice) ReloadAllG() error {
 	if o == nil {
-		return errors.New("mdbmodels: empty TagsI18nSlice provided for reload all")
+		return errors.New("mdbmodels: empty TagI18nSlice provided for reload all")
 	}
 
 	return o.ReloadAll(boil.GetDB())
@@ -1196,41 +1196,41 @@ func (o *TagsI18nSlice) ReloadAllG() error {
 
 // ReloadAll refetches every row with matching primary key column values
 // and overwrites the original object slice with the newly updated slice.
-func (o *TagsI18nSlice) ReloadAll(exec boil.Executor) error {
+func (o *TagI18nSlice) ReloadAll(exec boil.Executor) error {
 	if o == nil || len(*o) == 0 {
 		return nil
 	}
 
-	tagsI18ns := TagsI18nSlice{}
+	tagI18ns := TagI18nSlice{}
 	var args []interface{}
 	for _, obj := range *o {
-		pkeyArgs := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(obj)), tagsI18nPrimaryKeyMapping)
+		pkeyArgs := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(obj)), tagI18nPrimaryKeyMapping)
 		args = append(args, pkeyArgs...)
 	}
 
 	sql := fmt.Sprintf(
-		"SELECT \"tags_i18n\".* FROM \"tags_i18n\" WHERE (%s) IN (%s)",
-		strings.Join(strmangle.IdentQuoteSlice(dialect.LQ, dialect.RQ, tagsI18nPrimaryKeyColumns), ","),
-		strmangle.Placeholders(dialect.IndexPlaceholders, len(*o)*len(tagsI18nPrimaryKeyColumns), 1, len(tagsI18nPrimaryKeyColumns)),
+		"SELECT \"tag_i18n\".* FROM \"tag_i18n\" WHERE (%s) IN (%s)",
+		strings.Join(strmangle.IdentQuoteSlice(dialect.LQ, dialect.RQ, tagI18nPrimaryKeyColumns), ","),
+		strmangle.Placeholders(dialect.IndexPlaceholders, len(*o)*len(tagI18nPrimaryKeyColumns), 1, len(tagI18nPrimaryKeyColumns)),
 	)
 
 	q := queries.Raw(exec, sql, args...)
 
-	err := q.Bind(&tagsI18ns)
+	err := q.Bind(&tagI18ns)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to reload all in TagsI18nSlice")
+		return errors.Wrap(err, "mdbmodels: unable to reload all in TagI18nSlice")
 	}
 
-	*o = tagsI18ns
+	*o = tagI18ns
 
 	return nil
 }
 
-// TagsI18nExists checks if the TagsI18n row exists.
-func TagsI18nExists(exec boil.Executor, tagID int64, language string) (bool, error) {
+// TagI18nExists checks if the TagI18n row exists.
+func TagI18nExists(exec boil.Executor, tagID int64, language string) (bool, error) {
 	var exists bool
 
-	sql := "select exists(select 1 from \"tags_i18n\" where \"tag_id\"=$1 AND \"language\"=$2 limit 1)"
+	sql := "select exists(select 1 from \"tag_i18n\" where \"tag_id\"=$1 AND \"language\"=$2 limit 1)"
 
 	if boil.DebugMode {
 		fmt.Fprintln(boil.DebugWriter, sql)
@@ -1241,20 +1241,20 @@ func TagsI18nExists(exec boil.Executor, tagID int64, language string) (bool, err
 
 	err := row.Scan(&exists)
 	if err != nil {
-		return false, errors.Wrap(err, "mdbmodels: unable to check if tags_i18n exists")
+		return false, errors.Wrap(err, "mdbmodels: unable to check if tag_i18n exists")
 	}
 
 	return exists, nil
 }
 
-// TagsI18nExistsG checks if the TagsI18n row exists.
-func TagsI18nExistsG(tagID int64, language string) (bool, error) {
-	return TagsI18nExists(boil.GetDB(), tagID, language)
+// TagI18nExistsG checks if the TagI18n row exists.
+func TagI18nExistsG(tagID int64, language string) (bool, error) {
+	return TagI18nExists(boil.GetDB(), tagID, language)
 }
 
-// TagsI18nExistsGP checks if the TagsI18n row exists. Panics on error.
-func TagsI18nExistsGP(tagID int64, language string) bool {
-	e, err := TagsI18nExists(boil.GetDB(), tagID, language)
+// TagI18nExistsGP checks if the TagI18n row exists. Panics on error.
+func TagI18nExistsGP(tagID int64, language string) bool {
+	e, err := TagI18nExists(boil.GetDB(), tagID, language)
 	if err != nil {
 		panic(boil.WrapErr(err))
 	}
@@ -1262,9 +1262,9 @@ func TagsI18nExistsGP(tagID int64, language string) bool {
 	return e
 }
 
-// TagsI18nExistsP checks if the TagsI18n row exists. Panics on error.
-func TagsI18nExistsP(exec boil.Executor, tagID int64, language string) bool {
-	e, err := TagsI18nExists(exec, tagID, language)
+// TagI18nExistsP checks if the TagI18n row exists. Panics on error.
+func TagI18nExistsP(exec boil.Executor, tagID int64, language string) bool {
+	e, err := TagI18nExists(exec, tagID, language)
 	if err != nil {
 		panic(boil.WrapErr(err))
 	}
