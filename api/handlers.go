@@ -9,7 +9,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/vattle/sqlboiler/boil"
+	"github.com/vattle/sqlboiler/queries"
 	"github.com/vattle/sqlboiler/queries/qm"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v5"
@@ -70,7 +73,7 @@ func CollectionsHandler(c *gin.Context) {
 		return
 	}
 
-	// Filter secure published content units
+	// Filter secure & published content units
 	// Load i18n for all collections and all units - total 2 DB round trips
 	cids := make([]interface{}, len(collections))
 	cuids := make([]interface{}, 0)
@@ -78,6 +81,16 @@ func CollectionsHandler(c *gin.Context) {
 		cids[i] = x.ID
 		b := x.R.CollectionsContentUnits[:0]
 		for _, y := range x.R.CollectionsContentUnits {
+
+			// Workaround for this bug: https://github.com/vattle/sqlboiler/issues/154
+			if y.R.ContentUnit == nil {
+				err = y.L.LoadContentUnit(db, true, y)
+				if err != nil {
+					NewInternalError(err).Abort(c)
+					return
+				}
+			}
+
 			if mdb.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
 				b = append(b, y)
 				cuids = append(cuids, y.ContentUnitID)
@@ -194,6 +207,207 @@ func CollectionsHandler(c *gin.Context) {
 			cl.ContentUnits = append(cl.ContentUnits, u)
 		}
 		resp.Collections[i] = cl
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func ContentUnitsHandler(c *gin.Context) {
+	var r ContentUnitsRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	db := c.MustGet("MDB_DB").(*sql.DB)
+
+	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+
+	// filters
+	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+	if err := appendSourcesFilterMods(db, &mods, r.SourcesFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			e.Abort(c)
+		} else {
+			NewInternalError(err).Abort(c)
+		}
+		return
+	}
+	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	// count query
+	total, err := mdbmodels.ContentUnits(db, mods...).Count()
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if total == 0 {
+		c.JSON(http.StatusOK, NewContentUnitsResponse())
+		return
+	}
+
+	// order, limit, offset
+	if err = appendListMods(&mods, r.ListRequest); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+
+	// Eager loading
+	mods = append(mods, qm.Load(
+		"CollectionsContentUnits",
+		"CollectionsContentUnits.Collection"))
+
+	// data query
+	units, err := mdbmodels.ContentUnits(db, mods...).All()
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	// Filter secure published collections
+	// Load i18n for all content units and all collections - total 2 DB round trips
+	cuids := make([]interface{}, len(units))
+	cids := make([]interface{}, 0)
+	for i, x := range units {
+		cuids[i] = x.ID
+		b := x.R.CollectionsContentUnits[:0]
+		for _, y := range x.R.CollectionsContentUnits {
+
+			// Workaround for this bug: https://github.com/vattle/sqlboiler/issues/154
+			if y.R.Collection == nil {
+				err = y.L.LoadCollection(db, true, y)
+				if err != nil {
+					NewInternalError(err).Abort(c)
+					return
+				}
+			}
+
+			if mdb.SEC_PUBLIC == y.R.Collection.Secure && y.R.Collection.Published {
+				b = append(b, y)
+				cids = append(cids, y.CollectionID)
+			}
+			x.R.CollectionsContentUnits = b
+		}
+	}
+
+	cui18ns, err := mdbmodels.ContentUnitI18ns(db,
+		qm.WhereIn("content_unit_id in ?", cuids...),
+		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
+		All()
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	cui18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(cuids))
+	for _, x := range cui18ns {
+		v, ok := cui18nsMap[x.ContentUnitID]
+		if !ok {
+			v = make(map[string]*mdbmodels.ContentUnitI18n, 1)
+			cui18nsMap[x.ContentUnitID] = v
+		}
+		v[x.Language] = x
+	}
+
+	ci18ns, err := mdbmodels.CollectionI18ns(db,
+		qm.WhereIn("collection_id in ?", cids...),
+		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
+		All()
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	ci18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(cids))
+	for _, x := range ci18ns {
+		v, ok := ci18nsMap[x.CollectionID]
+		if !ok {
+			v = make(map[string]*mdbmodels.CollectionI18n, 1)
+			ci18nsMap[x.CollectionID] = v
+		}
+		v[x.Language] = x
+	}
+
+	// Response
+	resp := ContentUnitsResponse{
+		ListResponse: ListResponse{Total: total},
+		ContentUnits: make([]*ContentUnit, len(units)),
+	}
+	for i, x := range units {
+		var props mdb.ContentUnitProperties
+		err = x.Properties.Unmarshal(&props)
+		if err != nil {
+			NewInternalError(err).Abort(c)
+			return
+		}
+		cu := &ContentUnit{
+			ID:               x.UID,
+			ContentType:      mdb.CONTENT_TYPE_REGISTRY.ByID[x.TypeID].Name,
+			FilmDate:         Date{Time: props.FilmDate.Time},
+			Duration:         props.Duration,
+			OriginalLanguage: props.OriginalLanguage,
+		}
+
+		// i18n - get from map by lang order
+		i18ns, ok := cui18nsMap[x.ID]
+		if ok {
+			for _, l := range LANG_ORDER[r.Language] {
+				li18n, ok := i18ns[l]
+				if ok {
+					if cu.Name == "" && li18n.Name.Valid {
+						cu.Name = li18n.Name.String
+					}
+					if cu.Description == "" && li18n.Description.Valid {
+						cu.Description = li18n.Description.String
+					}
+				}
+			}
+		}
+
+		// collections
+		cu.Collections = make(map[string]*Collection, 0)
+		for _, ccu := range x.R.CollectionsContentUnits {
+			cl := ccu.R.Collection
+			var props mdb.CollectionProperties
+			err = cl.Properties.Unmarshal(&props)
+			if err != nil {
+				NewInternalError(err).Abort(c)
+				return
+			}
+			cc := &Collection{
+				ID:          cl.UID,
+				ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[cl.TypeID].Name,
+				FilmDate:    Date{Time: props.FilmDate.Time},
+			}
+
+			// i18n - get from map by lang order
+			i18ns, ok := ci18nsMap[cl.ID]
+			if ok {
+				for _, l := range LANG_ORDER[r.Language] {
+					li18n, ok := i18ns[l]
+					if ok {
+						if cc.Name == "" && li18n.Name.Valid {
+							cc.Name = li18n.Name.String
+						}
+						if cc.Description == "" && li18n.Description.Valid {
+							cc.Description = li18n.Description.String
+						}
+					}
+				}
+			}
+
+			// Dirty hack for unique mapping - needs to parse in client...
+			key := fmt.Sprintf("%s____%s", cl.UID, ccu.Name)
+			cu.Collections[key] = cc
+		}
+		resp.ContentUnits[i] = cu
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -414,6 +628,90 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	}
 	if f.EndDate != "" {
 		*mods = append(*mods, qm.Where("(properties->>'film_date')::date <= ?", e))
+	}
+
+	return nil
+}
+
+func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
+	// slice of all source ids we want
+	source_uids := make([]string, 0)
+
+	// fetch source ids by authors
+	if !utils.IsEmpty(f.Authors) {
+		for _, x := range f.Authors {
+			if _, ok := mdb.AUTHOR_REGISTRY.ByCode[strings.ToLower(x)]; !ok {
+				return NewBadRequestError(errors.Errorf("Unknown author: %s", x))
+			}
+		}
+
+		var uids pq.StringArray
+		q := `SELECT array_agg(DISTINCT s.uid)
+		      FROM authors a INNER JOIN authors_sources "as" ON a.id = "as".author_id
+		      INNER JOIN sources s ON "as".source_id = s.id
+		      WHERE a.code = ANY($1)`
+		err := queries.Raw(exec, q, pq.Array(f.Authors)).QueryRow().Scan(&uids)
+		if err != nil {
+			return err
+		}
+		source_uids = append(source_uids, uids...)
+	}
+
+	// blend in requested sources
+	source_uids = append(source_uids, f.Sources...)
+
+	if len(source_uids) == 0 {
+		return nil
+	}
+
+	// find all nested source_uids
+	q := `WITH RECURSIVE rec_sources AS (
+		  SELECT s.id FROM sources s WHERE s.uid = ANY($1)
+		  UNION
+		  SELECT s.id FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
+	      )
+	      SELECT array_agg(distinct id) FROM rec_sources`
+	var ids pq.Int64Array
+	err := queries.Raw(exec, q, pq.Array(source_uids)).QueryRow().Scan(&ids)
+	if err != nil {
+		return err
+	}
+
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods,
+			qm.InnerJoin("content_units_sources cus ON id = cus.content_unit_id"),
+			qm.WhereIn("cus.source_id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+
+	return nil
+}
+
+func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
+	if len(f.Tags) == 0 {
+		return nil
+	}
+
+	// find all nested tag_ids
+	q := `WITH RECURSIVE rec_tags AS (
+	        SELECT t.id FROM tags t WHERE t.uid = ANY($1)
+	        UNION
+	        SELECT t.id FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
+	      )
+	      SELECT array_agg(distinct id) FROM rec_tags`
+	var ids pq.Int64Array
+	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
+	if err != nil {
+		return err
+	}
+
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods,
+			qm.InnerJoin("content_units_tags cut ON id = cut.content_unit_id"),
+			qm.WhereIn("cut.tag_id in ?", utils.ConvertArgsInt64(ids)...))
 	}
 
 	return nil

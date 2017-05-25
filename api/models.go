@@ -28,6 +28,15 @@ type ContentTypesFilter struct {
 	ContentTypes []string `json:"content_types" form:"content_type" binding:"omitempty"`
 }
 
+type SourcesFilter struct {
+	Authors []string `json:"authors" form:"author" binding:"omitempty"`
+	Sources []string  `json:"sources" form:"source" binding:"omitempty,dive,len=8"`
+}
+
+type TagsFilter struct {
+	Tags []string `json:"tags" form:"tag" binding:"omitempty,dive,len=8"`
+}
+
 type DateRangeFilter struct {
 	StartDate string `json:"start_date" form:"start_date" binding:"omitempty"`
 	EndDate   string `json:"end_date" form:"end_date" binding:"omitempty"`
@@ -58,14 +67,31 @@ type CollectionsResponse struct {
 	Collections []*Collection `json:"collections"`
 }
 
+type ContentUnitsRequest struct {
+	ListRequest
+	ContentTypesFilter
+	DateRangeFilter
+	SourcesFilter
+	TagsFilter
+}
+
+type ContentUnitsResponse struct {
+	ListResponse
+	ContentUnits []*ContentUnit `json:"content_units"`
+}
+
 type HierarchyRequest struct {
 	BaseRequest
-	RootUID  string `json:"root" form:"root" binding:"omitempty,len=8"`
-	Depth    int    `json:"depth" form:"depth"`
+	RootUID string `json:"root" form:"root" binding:"omitempty,len=8"`
+	Depth   int    `json:"depth" form:"depth"`
 }
 
 func NewCollectionsResponse() *CollectionsResponse {
 	return &CollectionsResponse{Collections: make([]*Collection, 0)}
+}
+
+func NewContentUnitsResponse() *ContentUnitsResponse {
+	return &ContentUnitsResponse{ContentUnits: make([]*ContentUnit, 0)}
 }
 
 type Collection struct {
@@ -78,15 +104,16 @@ type Collection struct {
 }
 
 type ContentUnit struct {
-	ID               string  `json:"id"`
-	ContentType      string  `json:"content_type"`
-	NameInCollection string  `json:"name_in_collection,omitempty"`
-	FilmDate         Date    `json:"film_date"`
-	Name             string  `json:"name,omitempty"`
-	Description      string  `json:"description,omitempty"`
-	Duration         int     `json:"duration,omitempty"`
-	OriginalLanguage string  `json:"original_language,omitempty"`
-	Files            []*File `json:"files,omitempty"`
+	ID               string                 `json:"id"`
+	ContentType      string                 `json:"content_type"`
+	NameInCollection string                 `json:"name_in_collection,omitempty"`
+	FilmDate         Date                   `json:"film_date"`
+	Name             string                 `json:"name,omitempty"`
+	Description      string                 `json:"description,omitempty"`
+	Duration         int                    `json:"duration,omitempty"`
+	OriginalLanguage string                 `json:"original_language,omitempty"`
+	Files            []*File                `json:"files,omitempty"`
+	Collections      map[string]*Collection `json:"collections"`
 }
 
 type File struct {

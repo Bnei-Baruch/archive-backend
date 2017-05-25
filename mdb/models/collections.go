@@ -19,13 +19,13 @@ import (
 
 // Collection is an object representing the database table.
 type Collection struct {
-	ID         int64      `boil:"id" json:"id" toml:"id" yaml:"id"`
-	UID        string     `boil:"uid" json:"uid" toml:"uid" yaml:"uid"`
-	TypeID     int64      `boil:"type_id" json:"type_id" toml:"type_id" yaml:"type_id"`
-	CreatedAt  time.Time  `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
-	Properties null.JSON  `boil:"properties" json:"properties,omitempty" toml:"properties" yaml:"properties,omitempty"`
-	Secure     null.Int16 `boil:"secure" json:"secure,omitempty" toml:"secure" yaml:"secure,omitempty"`
-	Published  bool       `boil:"published" json:"published" toml:"published" yaml:"published"`
+	ID         int64     `boil:"id" json:"id" toml:"id" yaml:"id"`
+	UID        string    `boil:"uid" json:"uid" toml:"uid" yaml:"uid"`
+	TypeID     int64     `boil:"type_id" json:"type_id" toml:"type_id" yaml:"type_id"`
+	CreatedAt  time.Time `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
+	Properties null.JSON `boil:"properties" json:"properties,omitempty" toml:"properties" yaml:"properties,omitempty"`
+	Secure     int16     `boil:"secure" json:"secure" toml:"secure" yaml:"secure"`
+	Published  bool      `boil:"published" json:"published" toml:"published" yaml:"published"`
 
 	R *collectionR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L collectionL  `boil:"-" json:"-" toml:"-" yaml:"-"`

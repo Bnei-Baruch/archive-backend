@@ -17,6 +17,7 @@ var (
 	CONTENT_TYPE_REGISTRY      = &ContentTypeRegistry{}
 	CONTENT_ROLE_TYPE_REGISTRY = &ContentRoleTypeRegistry{}
 	PERSONS_REGISTRY           = &PersonsRegistry{}
+	AUTHOR_REGISTRY            = &AuthorRegistry{}
 	SOURCE_TYPE_REGISTRY       = &SourceTypeRegistry{}
 )
 
@@ -24,6 +25,7 @@ func InitTypeRegistries(exec boil.Executor) error {
 	registries := []TypeRegistry{CONTENT_TYPE_REGISTRY,
 		CONTENT_ROLE_TYPE_REGISTRY,
 		PERSONS_REGISTRY,
+		AUTHOR_REGISTRY,
 		SOURCE_TYPE_REGISTRY}
 
 	for _, x := range registries {
@@ -91,6 +93,24 @@ func (r *PersonsRegistry) Init(exec boil.Executor) error {
 	r.ByPattern = make(map[string]*mdbmodels.Person)
 	for _, t := range types {
 		r.ByPattern[t.Pattern.String] = t
+	}
+
+	return nil
+}
+
+type AuthorRegistry struct {
+	ByCode map[string]*mdbmodels.Author
+}
+
+func (r *AuthorRegistry) Init(exec boil.Executor) error {
+	authors, err := mdbmodels.Authors(exec).All()
+	if err != nil {
+		return errors.Wrap(err, "Load authors from DB")
+	}
+
+	r.ByCode = make(map[string]*mdbmodels.Author)
+	for _, a := range authors {
+		r.ByCode[a.Code] = a
 	}
 
 	return nil
