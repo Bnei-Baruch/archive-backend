@@ -34,6 +34,17 @@ const (
 	CT_FULL_LESSON           = "FULL_LESSON"
 	CT_TEXT                  = "TEXT"
 
+	// Content Role types
+	CR_LECTURER = "LECTURER"
+
+	// Persons patterns
+	P_RAV = "rav"
+
+	// Security levels
+	SEC_PUBLIC = int16(0)
+	SEC_SENSITIVE = int16(1)
+	SEC_PRIVATE = int16(2)
+
 	// Languages
 	LANG_ENGLISH    = "en"
 	LANG_HEBREW     = "he"

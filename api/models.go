@@ -95,7 +95,6 @@ type File struct {
 	Size        int64  `json:"size"`
 	URL         string `json:"url"`
 	DownloadURL string `json:"download_url"`
-	FilmDate    Date   `json:"film_date"`
 	Duration    int    `json:"duration,omitempty"`
 	Language    string `json:"language,omitempty"`
 	MimeType    string `json:"mimetype,omitempty"`

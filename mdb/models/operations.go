@@ -423,7 +423,7 @@ func (operationL) LoadFiles(e boil.Executor, singular bool, maybeOperation inter
 		one := new(File)
 		var localJoinCol int64
 
-		err = results.Scan(&one.ID, &one.UID, &one.Name, &one.Size, &one.Type, &one.SubType, &one.MimeType, &one.Sha1, &one.ContentUnitID, &one.CreatedAt, &one.Language, &one.BackupCount, &one.FirstBackupTime, &one.Properties, &one.ParentID, &one.FileCreatedAt, &localJoinCol)
+		err = results.Scan(&one.ID, &one.UID, &one.Name, &one.Size, &one.Type, &one.SubType, &one.MimeType, &one.Sha1, &one.ContentUnitID, &one.CreatedAt, &one.Language, &one.BackupCount, &one.FirstBackupTime, &one.Properties, &one.ParentID, &one.FileCreatedAt, &one.Secure, &one.Published, &localJoinCol)
 		if err = results.Err(); err != nil {
 			return errors.Wrap(err, "failed to plebian-bind eager loaded slice files")
 		}

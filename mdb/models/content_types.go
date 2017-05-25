@@ -29,8 +29,8 @@ type ContentType struct {
 
 // contentTypeR is where relationships are stored.
 type contentTypeR struct {
-	TypeContentUnits ContentUnitSlice
 	TypeCollections  CollectionSlice
+	TypeContentUnits ContentUnitSlice
 }
 
 // contentTypeL is where Load methods for each relationship are stored.
@@ -172,30 +172,6 @@ func (q contentTypeQuery) Exists() (bool, error) {
 	return count > 0, nil
 }
 
-// TypeContentUnitsG retrieves all the content_unit's content units via type_id column.
-func (o *ContentType) TypeContentUnitsG(mods ...qm.QueryMod) contentUnitQuery {
-	return o.TypeContentUnits(boil.GetDB(), mods...)
-}
-
-// TypeContentUnits retrieves all the content_unit's content units with an executor via type_id column.
-func (o *ContentType) TypeContentUnits(exec boil.Executor, mods ...qm.QueryMod) contentUnitQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
-	}
-
-	if len(mods) != 0 {
-		queryMods = append(queryMods, mods...)
-	}
-
-	queryMods = append(queryMods,
-		qm.Where("\"a\".\"type_id\"=?", o.ID),
-	)
-
-	query := ContentUnits(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"content_units\" as \"a\"")
-	return query
-}
-
 // TypeCollectionsG retrieves all the collection's collections via type_id column.
 func (o *ContentType) TypeCollectionsG(mods ...qm.QueryMod) collectionQuery {
 	return o.TypeCollections(boil.GetDB(), mods...)
@@ -220,69 +196,28 @@ func (o *ContentType) TypeCollections(exec boil.Executor, mods ...qm.QueryMod) c
 	return query
 }
 
-// LoadTypeContentUnits allows an eager lookup of values, cached into the
-// loaded structs of the objects.
-func (contentTypeL) LoadTypeContentUnits(e boil.Executor, singular bool, maybeContentType interface{}) error {
-	var slice []*ContentType
-	var object *ContentType
+// TypeContentUnitsG retrieves all the content_unit's content units via type_id column.
+func (o *ContentType) TypeContentUnitsG(mods ...qm.QueryMod) contentUnitQuery {
+	return o.TypeContentUnits(boil.GetDB(), mods...)
+}
 
-	count := 1
-	if singular {
-		object = maybeContentType.(*ContentType)
-	} else {
-		slice = *maybeContentType.(*ContentTypeSlice)
-		count = len(slice)
+// TypeContentUnits retrieves all the content_unit's content units with an executor via type_id column.
+func (o *ContentType) TypeContentUnits(exec boil.Executor, mods ...qm.QueryMod) contentUnitQuery {
+	queryMods := []qm.QueryMod{
+		qm.Select("\"a\".*"),
 	}
 
-	args := make([]interface{}, count)
-	if singular {
-		if object.R == nil {
-			object.R = &contentTypeR{}
-		}
-		args[0] = object.ID
-	} else {
-		for i, obj := range slice {
-			if obj.R == nil {
-				obj.R = &contentTypeR{}
-			}
-			args[i] = obj.ID
-		}
+	if len(mods) != 0 {
+		queryMods = append(queryMods, mods...)
 	}
 
-	query := fmt.Sprintf(
-		"select * from \"content_units\" where \"type_id\" in (%s)",
-		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
+	queryMods = append(queryMods,
+		qm.Where("\"a\".\"type_id\"=?", o.ID),
 	)
-	if boil.DebugMode {
-		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
-	}
 
-	results, err := e.Query(query, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to eager load content_units")
-	}
-	defer results.Close()
-
-	var resultSlice []*ContentUnit
-	if err = queries.Bind(results, &resultSlice); err != nil {
-		return errors.Wrap(err, "failed to bind eager loaded slice content_units")
-	}
-
-	if singular {
-		object.R.TypeContentUnits = resultSlice
-		return nil
-	}
-
-	for _, foreign := range resultSlice {
-		for _, local := range slice {
-			if local.ID == foreign.TypeID {
-				local.R.TypeContentUnits = append(local.R.TypeContentUnits, foreign)
-				break
-			}
-		}
-	}
-
-	return nil
+	query := ContentUnits(exec, queryMods...)
+	queries.SetFrom(query.Query, "\"content_units\" as \"a\"")
+	return query
 }
 
 // LoadTypeCollections allows an eager lookup of values, cached into the
@@ -350,87 +285,68 @@ func (contentTypeL) LoadTypeCollections(e boil.Executor, singular bool, maybeCon
 	return nil
 }
 
-// AddTypeContentUnitsG adds the given related objects to the existing relationships
-// of the content_type, optionally inserting them as new records.
-// Appends related to o.R.TypeContentUnits.
-// Sets related.R.Type appropriately.
-// Uses the global database handle.
-func (o *ContentType) AddTypeContentUnitsG(insert bool, related ...*ContentUnit) error {
-	return o.AddTypeContentUnits(boil.GetDB(), insert, related...)
-}
+// LoadTypeContentUnits allows an eager lookup of values, cached into the
+// loaded structs of the objects.
+func (contentTypeL) LoadTypeContentUnits(e boil.Executor, singular bool, maybeContentType interface{}) error {
+	var slice []*ContentType
+	var object *ContentType
 
-// AddTypeContentUnitsP adds the given related objects to the existing relationships
-// of the content_type, optionally inserting them as new records.
-// Appends related to o.R.TypeContentUnits.
-// Sets related.R.Type appropriately.
-// Panics on error.
-func (o *ContentType) AddTypeContentUnitsP(exec boil.Executor, insert bool, related ...*ContentUnit) {
-	if err := o.AddTypeContentUnits(exec, insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddTypeContentUnitsGP adds the given related objects to the existing relationships
-// of the content_type, optionally inserting them as new records.
-// Appends related to o.R.TypeContentUnits.
-// Sets related.R.Type appropriately.
-// Uses the global database handle and panics on error.
-func (o *ContentType) AddTypeContentUnitsGP(insert bool, related ...*ContentUnit) {
-	if err := o.AddTypeContentUnits(boil.GetDB(), insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddTypeContentUnits adds the given related objects to the existing relationships
-// of the content_type, optionally inserting them as new records.
-// Appends related to o.R.TypeContentUnits.
-// Sets related.R.Type appropriately.
-func (o *ContentType) AddTypeContentUnits(exec boil.Executor, insert bool, related ...*ContentUnit) error {
-	var err error
-	for _, rel := range related {
-		if insert {
-			rel.TypeID = o.ID
-			if err = rel.Insert(exec); err != nil {
-				return errors.Wrap(err, "failed to insert into foreign table")
-			}
-		} else {
-			updateQuery := fmt.Sprintf(
-				"UPDATE \"content_units\" SET %s WHERE %s",
-				strmangle.SetParamNames("\"", "\"", 1, []string{"type_id"}),
-				strmangle.WhereClause("\"", "\"", 2, contentUnitPrimaryKeyColumns),
-			)
-			values := []interface{}{o.ID, rel.ID}
-
-			if boil.DebugMode {
-				fmt.Fprintln(boil.DebugWriter, updateQuery)
-				fmt.Fprintln(boil.DebugWriter, values)
-			}
-
-			if _, err = exec.Exec(updateQuery, values...); err != nil {
-				return errors.Wrap(err, "failed to update foreign table")
-			}
-
-			rel.TypeID = o.ID
-		}
-	}
-
-	if o.R == nil {
-		o.R = &contentTypeR{
-			TypeContentUnits: related,
-		}
+	count := 1
+	if singular {
+		object = maybeContentType.(*ContentType)
 	} else {
-		o.R.TypeContentUnits = append(o.R.TypeContentUnits, related...)
+		slice = *maybeContentType.(*ContentTypeSlice)
+		count = len(slice)
 	}
 
-	for _, rel := range related {
-		if rel.R == nil {
-			rel.R = &contentUnitR{
-				Type: o,
+	args := make([]interface{}, count)
+	if singular {
+		if object.R == nil {
+			object.R = &contentTypeR{}
+		}
+		args[0] = object.ID
+	} else {
+		for i, obj := range slice {
+			if obj.R == nil {
+				obj.R = &contentTypeR{}
 			}
-		} else {
-			rel.R.Type = o
+			args[i] = obj.ID
 		}
 	}
+
+	query := fmt.Sprintf(
+		"select * from \"content_units\" where \"type_id\" in (%s)",
+		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
+	)
+	if boil.DebugMode {
+		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
+	}
+
+	results, err := e.Query(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to eager load content_units")
+	}
+	defer results.Close()
+
+	var resultSlice []*ContentUnit
+	if err = queries.Bind(results, &resultSlice); err != nil {
+		return errors.Wrap(err, "failed to bind eager loaded slice content_units")
+	}
+
+	if singular {
+		object.R.TypeContentUnits = resultSlice
+		return nil
+	}
+
+	for _, foreign := range resultSlice {
+		for _, local := range slice {
+			if local.ID == foreign.TypeID {
+				local.R.TypeContentUnits = append(local.R.TypeContentUnits, foreign)
+				break
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -509,6 +425,90 @@ func (o *ContentType) AddTypeCollections(exec boil.Executor, insert bool, relate
 	for _, rel := range related {
 		if rel.R == nil {
 			rel.R = &collectionR{
+				Type: o,
+			}
+		} else {
+			rel.R.Type = o
+		}
+	}
+	return nil
+}
+
+// AddTypeContentUnitsG adds the given related objects to the existing relationships
+// of the content_type, optionally inserting them as new records.
+// Appends related to o.R.TypeContentUnits.
+// Sets related.R.Type appropriately.
+// Uses the global database handle.
+func (o *ContentType) AddTypeContentUnitsG(insert bool, related ...*ContentUnit) error {
+	return o.AddTypeContentUnits(boil.GetDB(), insert, related...)
+}
+
+// AddTypeContentUnitsP adds the given related objects to the existing relationships
+// of the content_type, optionally inserting them as new records.
+// Appends related to o.R.TypeContentUnits.
+// Sets related.R.Type appropriately.
+// Panics on error.
+func (o *ContentType) AddTypeContentUnitsP(exec boil.Executor, insert bool, related ...*ContentUnit) {
+	if err := o.AddTypeContentUnits(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddTypeContentUnitsGP adds the given related objects to the existing relationships
+// of the content_type, optionally inserting them as new records.
+// Appends related to o.R.TypeContentUnits.
+// Sets related.R.Type appropriately.
+// Uses the global database handle and panics on error.
+func (o *ContentType) AddTypeContentUnitsGP(insert bool, related ...*ContentUnit) {
+	if err := o.AddTypeContentUnits(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddTypeContentUnits adds the given related objects to the existing relationships
+// of the content_type, optionally inserting them as new records.
+// Appends related to o.R.TypeContentUnits.
+// Sets related.R.Type appropriately.
+func (o *ContentType) AddTypeContentUnits(exec boil.Executor, insert bool, related ...*ContentUnit) error {
+	var err error
+	for _, rel := range related {
+		if insert {
+			rel.TypeID = o.ID
+			if err = rel.Insert(exec); err != nil {
+				return errors.Wrap(err, "failed to insert into foreign table")
+			}
+		} else {
+			updateQuery := fmt.Sprintf(
+				"UPDATE \"content_units\" SET %s WHERE %s",
+				strmangle.SetParamNames("\"", "\"", 1, []string{"type_id"}),
+				strmangle.WhereClause("\"", "\"", 2, contentUnitPrimaryKeyColumns),
+			)
+			values := []interface{}{o.ID, rel.ID}
+
+			if boil.DebugMode {
+				fmt.Fprintln(boil.DebugWriter, updateQuery)
+				fmt.Fprintln(boil.DebugWriter, values)
+			}
+
+			if _, err = exec.Exec(updateQuery, values...); err != nil {
+				return errors.Wrap(err, "failed to update foreign table")
+			}
+
+			rel.TypeID = o.ID
+		}
+	}
+
+	if o.R == nil {
+		o.R = &contentTypeR{
+			TypeContentUnits: related,
+		}
+	} else {
+		o.R.TypeContentUnits = append(o.R.TypeContentUnits, related...)
+	}
+
+	for _, rel := range related {
+		if rel.R == nil {
+			rel.R = &contentUnitR{
 				Type: o,
 			}
 		} else {

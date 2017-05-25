@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -18,6 +19,8 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
+var SECURE_PUBLISHED_MOD = qm.Where(fmt.Sprintf("secure=%d AND published IS TRUE", mdb.SEC_PUBLIC))
+
 func CollectionsHandler(c *gin.Context) {
 	var r CollectionsRequest
 	if c.Bind(&r) != nil {
@@ -26,7 +29,7 @@ func CollectionsHandler(c *gin.Context) {
 
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
-	mods := make([]qm.QueryMod, 0)
+	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
 	// filters
 	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
@@ -67,13 +70,19 @@ func CollectionsHandler(c *gin.Context) {
 		return
 	}
 
+	// Filter secure published content units
 	// Load i18n for all collections and all units - total 2 DB round trips
 	cids := make([]interface{}, len(collections))
 	cuids := make([]interface{}, 0)
 	for i, x := range collections {
 		cids[i] = x.ID
+		b := x.R.CollectionsContentUnits[:0]
 		for _, y := range x.R.CollectionsContentUnits {
-			cuids = append(cuids, y.ContentUnitID)
+			if mdb.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
+				b = append(b, y)
+				cuids = append(cuids, y.ContentUnitID)
+			}
+			x.R.CollectionsContentUnits = b
 		}
 	}
 	ci18ns, err := mdbmodels.CollectionI18ns(db,
@@ -190,7 +199,7 @@ func CollectionsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-func ContentUnitsHandler(c *gin.Context) {
+func ContentUnitHandler(c *gin.Context) {
 	var r BaseRequest
 	if c.Bind(&r) != nil {
 		return
@@ -199,7 +208,10 @@ func ContentUnitsHandler(c *gin.Context) {
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
 	uid := c.Param("uid")
-	cu, err := mdbmodels.ContentUnits(db, qm.Where("uid = ?", uid)).One()
+	cu, err := mdbmodels.ContentUnits(db,
+		SECURE_PUBLISHED_MOD,
+		qm.Where("uid = ?", uid)).
+		One()
 	if err != nil {
 		if err == sql.ErrNoRows {
 			NewNotFoundError().Abort(c)
@@ -248,8 +260,8 @@ func ContentUnitsHandler(c *gin.Context) {
 
 	// files
 	files, err := mdbmodels.Files(db,
-		qm.Where("content_unit_id = ?", cu.ID),
-		qm.And("properties ->> 'url' is not null")).
+		SECURE_PUBLISHED_MOD,
+		qm.Where("content_unit_id = ?", cu.ID)).
 		All()
 	if err != nil {
 		NewInternalError(err).Abort(c)
@@ -275,9 +287,6 @@ func ContentUnitsHandler(c *gin.Context) {
 			Duration:    props.Duration,
 		}
 
-		if x.FileCreatedAt.Valid {
-			f.FilmDate = Date{Time: x.FileCreatedAt.Time}
-		}
 		if x.Language.Valid {
 			f.Language = x.Language.String
 		}
@@ -385,7 +394,7 @@ func appendContentTypesFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) err
 		}
 	}
 
-	*mods = append(*mods, qm.WhereIn("type_id in ?", a...))
+	*mods = append(*mods, qm.WhereIn("type_id IN ?", a...))
 
 	return nil
 }

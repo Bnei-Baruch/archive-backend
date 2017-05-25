@@ -35,6 +35,8 @@ type File struct {
 	Properties      null.JSON   `boil:"properties" json:"properties,omitempty" toml:"properties" yaml:"properties,omitempty"`
 	ParentID        null.Int64  `boil:"parent_id" json:"parent_id,omitempty" toml:"parent_id" yaml:"parent_id,omitempty"`
 	FileCreatedAt   null.Time   `boil:"file_created_at" json:"file_created_at,omitempty" toml:"file_created_at" yaml:"file_created_at,omitempty"`
+	Secure          int16       `boil:"secure" json:"secure" toml:"secure" yaml:"secure"`
+	Published       bool        `boil:"published" json:"published" toml:"published" yaml:"published"`
 
 	R *fileR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L fileL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -44,17 +46,17 @@ type File struct {
 type fileR struct {
 	ContentUnit *ContentUnit
 	Parent      *File
-	ParentFiles FileSlice
 	Operations  OperationSlice
+	ParentFiles FileSlice
 }
 
 // fileL is where Load methods for each relationship are stored.
 type fileL struct{}
 
 var (
-	fileColumns               = []string{"id", "uid", "name", "size", "type", "sub_type", "mime_type", "sha1", "content_unit_id", "created_at", "language", "backup_count", "first_backup_time", "properties", "parent_id", "file_created_at"}
+	fileColumns               = []string{"id", "uid", "name", "size", "type", "sub_type", "mime_type", "sha1", "content_unit_id", "created_at", "language", "backup_count", "first_backup_time", "properties", "parent_id", "file_created_at", "secure", "published"}
 	fileColumnsWithoutDefault = []string{"uid", "name", "size", "type", "sub_type", "mime_type", "sha1", "content_unit_id", "language", "first_backup_time", "properties", "parent_id", "file_created_at"}
-	fileColumnsWithDefault    = []string{"id", "created_at", "backup_count"}
+	fileColumnsWithDefault    = []string{"id", "created_at", "backup_count", "secure", "published"}
 	filePrimaryKeyColumns     = []string{"id"}
 )
 
@@ -225,30 +227,6 @@ func (o *File) Parent(exec boil.Executor, mods ...qm.QueryMod) fileQuery {
 	return query
 }
 
-// ParentFilesG retrieves all the file's files via parent_id column.
-func (o *File) ParentFilesG(mods ...qm.QueryMod) fileQuery {
-	return o.ParentFiles(boil.GetDB(), mods...)
-}
-
-// ParentFiles retrieves all the file's files with an executor via parent_id column.
-func (o *File) ParentFiles(exec boil.Executor, mods ...qm.QueryMod) fileQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
-	}
-
-	if len(mods) != 0 {
-		queryMods = append(queryMods, mods...)
-	}
-
-	queryMods = append(queryMods,
-		qm.Where("\"a\".\"parent_id\"=?", o.ID),
-	)
-
-	query := Files(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"files\" as \"a\"")
-	return query
-}
-
 // OperationsG retrieves all the operation's operations.
 func (o *File) OperationsG(mods ...qm.QueryMod) operationQuery {
 	return o.Operations(boil.GetDB(), mods...)
@@ -271,6 +249,30 @@ func (o *File) Operations(exec boil.Executor, mods ...qm.QueryMod) operationQuer
 
 	query := Operations(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"operations\" as \"a\"")
+	return query
+}
+
+// ParentFilesG retrieves all the file's files via parent_id column.
+func (o *File) ParentFilesG(mods ...qm.QueryMod) fileQuery {
+	return o.ParentFiles(boil.GetDB(), mods...)
+}
+
+// ParentFiles retrieves all the file's files with an executor via parent_id column.
+func (o *File) ParentFiles(exec boil.Executor, mods ...qm.QueryMod) fileQuery {
+	queryMods := []qm.QueryMod{
+		qm.Select("\"a\".*"),
+	}
+
+	if len(mods) != 0 {
+		queryMods = append(queryMods, mods...)
+	}
+
+	queryMods = append(queryMods,
+		qm.Where("\"a\".\"parent_id\"=?", o.ID),
+	)
+
+	query := Files(exec, queryMods...)
+	queries.SetFrom(query.Query, "\"files\" as \"a\"")
 	return query
 }
 
@@ -406,71 +408,6 @@ func (fileL) LoadParent(e boil.Executor, singular bool, maybeFile interface{}) e
 	return nil
 }
 
-// LoadParentFiles allows an eager lookup of values, cached into the
-// loaded structs of the objects.
-func (fileL) LoadParentFiles(e boil.Executor, singular bool, maybeFile interface{}) error {
-	var slice []*File
-	var object *File
-
-	count := 1
-	if singular {
-		object = maybeFile.(*File)
-	} else {
-		slice = *maybeFile.(*FileSlice)
-		count = len(slice)
-	}
-
-	args := make([]interface{}, count)
-	if singular {
-		if object.R == nil {
-			object.R = &fileR{}
-		}
-		args[0] = object.ID
-	} else {
-		for i, obj := range slice {
-			if obj.R == nil {
-				obj.R = &fileR{}
-			}
-			args[i] = obj.ID
-		}
-	}
-
-	query := fmt.Sprintf(
-		"select * from \"files\" where \"parent_id\" in (%s)",
-		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
-	)
-	if boil.DebugMode {
-		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
-	}
-
-	results, err := e.Query(query, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to eager load files")
-	}
-	defer results.Close()
-
-	var resultSlice []*File
-	if err = queries.Bind(results, &resultSlice); err != nil {
-		return errors.Wrap(err, "failed to bind eager loaded slice files")
-	}
-
-	if singular {
-		object.R.ParentFiles = resultSlice
-		return nil
-	}
-
-	for _, foreign := range resultSlice {
-		for _, local := range slice {
-			if local.ID == foreign.ParentID.Int64 {
-				local.R.ParentFiles = append(local.R.ParentFiles, foreign)
-				break
-			}
-		}
-	}
-
-	return nil
-}
-
 // LoadOperations allows an eager lookup of values, cached into the
 // loaded structs of the objects.
 func (fileL) LoadOperations(e boil.Executor, singular bool, maybeFile interface{}) error {
@@ -544,6 +481,71 @@ func (fileL) LoadOperations(e boil.Executor, singular bool, maybeFile interface{
 		for _, local := range slice {
 			if local.ID == localJoinCol {
 				local.R.Operations = append(local.R.Operations, foreign)
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
+// LoadParentFiles allows an eager lookup of values, cached into the
+// loaded structs of the objects.
+func (fileL) LoadParentFiles(e boil.Executor, singular bool, maybeFile interface{}) error {
+	var slice []*File
+	var object *File
+
+	count := 1
+	if singular {
+		object = maybeFile.(*File)
+	} else {
+		slice = *maybeFile.(*FileSlice)
+		count = len(slice)
+	}
+
+	args := make([]interface{}, count)
+	if singular {
+		if object.R == nil {
+			object.R = &fileR{}
+		}
+		args[0] = object.ID
+	} else {
+		for i, obj := range slice {
+			if obj.R == nil {
+				obj.R = &fileR{}
+			}
+			args[i] = obj.ID
+		}
+	}
+
+	query := fmt.Sprintf(
+		"select * from \"files\" where \"parent_id\" in (%s)",
+		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
+	)
+	if boil.DebugMode {
+		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
+	}
+
+	results, err := e.Query(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to eager load files")
+	}
+	defer results.Close()
+
+	var resultSlice []*File
+	if err = queries.Bind(results, &resultSlice); err != nil {
+		return errors.Wrap(err, "failed to bind eager loaded slice files")
+	}
+
+	if singular {
+		object.R.ParentFiles = resultSlice
+		return nil
+	}
+
+	for _, foreign := range resultSlice {
+		for _, local := range slice {
+			if local.ID == foreign.ParentID.Int64 {
+				local.R.ParentFiles = append(local.R.ParentFiles, foreign)
 				break
 			}
 		}
@@ -826,227 +828,6 @@ func (o *File) RemoveParent(exec boil.Executor, related *File) error {
 	return nil
 }
 
-// AddParentFilesG adds the given related objects to the existing relationships
-// of the file, optionally inserting them as new records.
-// Appends related to o.R.ParentFiles.
-// Sets related.R.Parent appropriately.
-// Uses the global database handle.
-func (o *File) AddParentFilesG(insert bool, related ...*File) error {
-	return o.AddParentFiles(boil.GetDB(), insert, related...)
-}
-
-// AddParentFilesP adds the given related objects to the existing relationships
-// of the file, optionally inserting them as new records.
-// Appends related to o.R.ParentFiles.
-// Sets related.R.Parent appropriately.
-// Panics on error.
-func (o *File) AddParentFilesP(exec boil.Executor, insert bool, related ...*File) {
-	if err := o.AddParentFiles(exec, insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddParentFilesGP adds the given related objects to the existing relationships
-// of the file, optionally inserting them as new records.
-// Appends related to o.R.ParentFiles.
-// Sets related.R.Parent appropriately.
-// Uses the global database handle and panics on error.
-func (o *File) AddParentFilesGP(insert bool, related ...*File) {
-	if err := o.AddParentFiles(boil.GetDB(), insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddParentFiles adds the given related objects to the existing relationships
-// of the file, optionally inserting them as new records.
-// Appends related to o.R.ParentFiles.
-// Sets related.R.Parent appropriately.
-func (o *File) AddParentFiles(exec boil.Executor, insert bool, related ...*File) error {
-	var err error
-	for _, rel := range related {
-		if insert {
-			rel.ParentID.Int64 = o.ID
-			rel.ParentID.Valid = true
-			if err = rel.Insert(exec); err != nil {
-				return errors.Wrap(err, "failed to insert into foreign table")
-			}
-		} else {
-			updateQuery := fmt.Sprintf(
-				"UPDATE \"files\" SET %s WHERE %s",
-				strmangle.SetParamNames("\"", "\"", 1, []string{"parent_id"}),
-				strmangle.WhereClause("\"", "\"", 2, filePrimaryKeyColumns),
-			)
-			values := []interface{}{o.ID, rel.ID}
-
-			if boil.DebugMode {
-				fmt.Fprintln(boil.DebugWriter, updateQuery)
-				fmt.Fprintln(boil.DebugWriter, values)
-			}
-
-			if _, err = exec.Exec(updateQuery, values...); err != nil {
-				return errors.Wrap(err, "failed to update foreign table")
-			}
-
-			rel.ParentID.Int64 = o.ID
-			rel.ParentID.Valid = true
-		}
-	}
-
-	if o.R == nil {
-		o.R = &fileR{
-			ParentFiles: related,
-		}
-	} else {
-		o.R.ParentFiles = append(o.R.ParentFiles, related...)
-	}
-
-	for _, rel := range related {
-		if rel.R == nil {
-			rel.R = &fileR{
-				Parent: o,
-			}
-		} else {
-			rel.R.Parent = o
-		}
-	}
-	return nil
-}
-
-// SetParentFilesG removes all previously related items of the
-// file replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentFiles accordingly.
-// Replaces o.R.ParentFiles with related.
-// Sets related.R.Parent's ParentFiles accordingly.
-// Uses the global database handle.
-func (o *File) SetParentFilesG(insert bool, related ...*File) error {
-	return o.SetParentFiles(boil.GetDB(), insert, related...)
-}
-
-// SetParentFilesP removes all previously related items of the
-// file replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentFiles accordingly.
-// Replaces o.R.ParentFiles with related.
-// Sets related.R.Parent's ParentFiles accordingly.
-// Panics on error.
-func (o *File) SetParentFilesP(exec boil.Executor, insert bool, related ...*File) {
-	if err := o.SetParentFiles(exec, insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// SetParentFilesGP removes all previously related items of the
-// file replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentFiles accordingly.
-// Replaces o.R.ParentFiles with related.
-// Sets related.R.Parent's ParentFiles accordingly.
-// Uses the global database handle and panics on error.
-func (o *File) SetParentFilesGP(insert bool, related ...*File) {
-	if err := o.SetParentFiles(boil.GetDB(), insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// SetParentFiles removes all previously related items of the
-// file replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentFiles accordingly.
-// Replaces o.R.ParentFiles with related.
-// Sets related.R.Parent's ParentFiles accordingly.
-func (o *File) SetParentFiles(exec boil.Executor, insert bool, related ...*File) error {
-	query := "update \"files\" set \"parent_id\" = null where \"parent_id\" = $1"
-	values := []interface{}{o.ID}
-	if boil.DebugMode {
-		fmt.Fprintln(boil.DebugWriter, query)
-		fmt.Fprintln(boil.DebugWriter, values)
-	}
-
-	_, err := exec.Exec(query, values...)
-	if err != nil {
-		return errors.Wrap(err, "failed to remove relationships before set")
-	}
-
-	if o.R != nil {
-		for _, rel := range o.R.ParentFiles {
-			rel.ParentID.Valid = false
-			if rel.R == nil {
-				continue
-			}
-
-			rel.R.Parent = nil
-		}
-
-		o.R.ParentFiles = nil
-	}
-	return o.AddParentFiles(exec, insert, related...)
-}
-
-// RemoveParentFilesG relationships from objects passed in.
-// Removes related items from R.ParentFiles (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-// Uses the global database handle.
-func (o *File) RemoveParentFilesG(related ...*File) error {
-	return o.RemoveParentFiles(boil.GetDB(), related...)
-}
-
-// RemoveParentFilesP relationships from objects passed in.
-// Removes related items from R.ParentFiles (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-// Panics on error.
-func (o *File) RemoveParentFilesP(exec boil.Executor, related ...*File) {
-	if err := o.RemoveParentFiles(exec, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// RemoveParentFilesGP relationships from objects passed in.
-// Removes related items from R.ParentFiles (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-// Uses the global database handle and panics on error.
-func (o *File) RemoveParentFilesGP(related ...*File) {
-	if err := o.RemoveParentFiles(boil.GetDB(), related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// RemoveParentFiles relationships from objects passed in.
-// Removes related items from R.ParentFiles (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-func (o *File) RemoveParentFiles(exec boil.Executor, related ...*File) error {
-	var err error
-	for _, rel := range related {
-		rel.ParentID.Valid = false
-		if rel.R != nil {
-			rel.R.Parent = nil
-		}
-		if err = rel.Update(exec, "parent_id"); err != nil {
-			return err
-		}
-	}
-	if o.R == nil {
-		return nil
-	}
-
-	for _, rel := range related {
-		for i, ri := range o.R.ParentFiles {
-			if rel != ri {
-				continue
-			}
-
-			ln := len(o.R.ParentFiles)
-			if ln > 1 && i < ln-1 {
-				o.R.ParentFiles[i] = o.R.ParentFiles[ln-1]
-			}
-			o.R.ParentFiles = o.R.ParentFiles[:ln-1]
-			break
-		}
-	}
-
-	return nil
-}
-
 // AddOperationsG adds the given related objects to the existing relationships
 // of the file, optionally inserting them as new records.
 // Appends related to o.R.Operations.
@@ -1276,6 +1057,227 @@ func removeOperationsFromFilesSlice(o *File, related []*Operation) {
 			break
 		}
 	}
+}
+
+// AddParentFilesG adds the given related objects to the existing relationships
+// of the file, optionally inserting them as new records.
+// Appends related to o.R.ParentFiles.
+// Sets related.R.Parent appropriately.
+// Uses the global database handle.
+func (o *File) AddParentFilesG(insert bool, related ...*File) error {
+	return o.AddParentFiles(boil.GetDB(), insert, related...)
+}
+
+// AddParentFilesP adds the given related objects to the existing relationships
+// of the file, optionally inserting them as new records.
+// Appends related to o.R.ParentFiles.
+// Sets related.R.Parent appropriately.
+// Panics on error.
+func (o *File) AddParentFilesP(exec boil.Executor, insert bool, related ...*File) {
+	if err := o.AddParentFiles(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddParentFilesGP adds the given related objects to the existing relationships
+// of the file, optionally inserting them as new records.
+// Appends related to o.R.ParentFiles.
+// Sets related.R.Parent appropriately.
+// Uses the global database handle and panics on error.
+func (o *File) AddParentFilesGP(insert bool, related ...*File) {
+	if err := o.AddParentFiles(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddParentFiles adds the given related objects to the existing relationships
+// of the file, optionally inserting them as new records.
+// Appends related to o.R.ParentFiles.
+// Sets related.R.Parent appropriately.
+func (o *File) AddParentFiles(exec boil.Executor, insert bool, related ...*File) error {
+	var err error
+	for _, rel := range related {
+		if insert {
+			rel.ParentID.Int64 = o.ID
+			rel.ParentID.Valid = true
+			if err = rel.Insert(exec); err != nil {
+				return errors.Wrap(err, "failed to insert into foreign table")
+			}
+		} else {
+			updateQuery := fmt.Sprintf(
+				"UPDATE \"files\" SET %s WHERE %s",
+				strmangle.SetParamNames("\"", "\"", 1, []string{"parent_id"}),
+				strmangle.WhereClause("\"", "\"", 2, filePrimaryKeyColumns),
+			)
+			values := []interface{}{o.ID, rel.ID}
+
+			if boil.DebugMode {
+				fmt.Fprintln(boil.DebugWriter, updateQuery)
+				fmt.Fprintln(boil.DebugWriter, values)
+			}
+
+			if _, err = exec.Exec(updateQuery, values...); err != nil {
+				return errors.Wrap(err, "failed to update foreign table")
+			}
+
+			rel.ParentID.Int64 = o.ID
+			rel.ParentID.Valid = true
+		}
+	}
+
+	if o.R == nil {
+		o.R = &fileR{
+			ParentFiles: related,
+		}
+	} else {
+		o.R.ParentFiles = append(o.R.ParentFiles, related...)
+	}
+
+	for _, rel := range related {
+		if rel.R == nil {
+			rel.R = &fileR{
+				Parent: o,
+			}
+		} else {
+			rel.R.Parent = o
+		}
+	}
+	return nil
+}
+
+// SetParentFilesG removes all previously related items of the
+// file replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentFiles accordingly.
+// Replaces o.R.ParentFiles with related.
+// Sets related.R.Parent's ParentFiles accordingly.
+// Uses the global database handle.
+func (o *File) SetParentFilesG(insert bool, related ...*File) error {
+	return o.SetParentFiles(boil.GetDB(), insert, related...)
+}
+
+// SetParentFilesP removes all previously related items of the
+// file replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentFiles accordingly.
+// Replaces o.R.ParentFiles with related.
+// Sets related.R.Parent's ParentFiles accordingly.
+// Panics on error.
+func (o *File) SetParentFilesP(exec boil.Executor, insert bool, related ...*File) {
+	if err := o.SetParentFiles(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetParentFilesGP removes all previously related items of the
+// file replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentFiles accordingly.
+// Replaces o.R.ParentFiles with related.
+// Sets related.R.Parent's ParentFiles accordingly.
+// Uses the global database handle and panics on error.
+func (o *File) SetParentFilesGP(insert bool, related ...*File) {
+	if err := o.SetParentFiles(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetParentFiles removes all previously related items of the
+// file replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentFiles accordingly.
+// Replaces o.R.ParentFiles with related.
+// Sets related.R.Parent's ParentFiles accordingly.
+func (o *File) SetParentFiles(exec boil.Executor, insert bool, related ...*File) error {
+	query := "update \"files\" set \"parent_id\" = null where \"parent_id\" = $1"
+	values := []interface{}{o.ID}
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, query)
+		fmt.Fprintln(boil.DebugWriter, values)
+	}
+
+	_, err := exec.Exec(query, values...)
+	if err != nil {
+		return errors.Wrap(err, "failed to remove relationships before set")
+	}
+
+	if o.R != nil {
+		for _, rel := range o.R.ParentFiles {
+			rel.ParentID.Valid = false
+			if rel.R == nil {
+				continue
+			}
+
+			rel.R.Parent = nil
+		}
+
+		o.R.ParentFiles = nil
+	}
+	return o.AddParentFiles(exec, insert, related...)
+}
+
+// RemoveParentFilesG relationships from objects passed in.
+// Removes related items from R.ParentFiles (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+// Uses the global database handle.
+func (o *File) RemoveParentFilesG(related ...*File) error {
+	return o.RemoveParentFiles(boil.GetDB(), related...)
+}
+
+// RemoveParentFilesP relationships from objects passed in.
+// Removes related items from R.ParentFiles (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+// Panics on error.
+func (o *File) RemoveParentFilesP(exec boil.Executor, related ...*File) {
+	if err := o.RemoveParentFiles(exec, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemoveParentFilesGP relationships from objects passed in.
+// Removes related items from R.ParentFiles (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+// Uses the global database handle and panics on error.
+func (o *File) RemoveParentFilesGP(related ...*File) {
+	if err := o.RemoveParentFiles(boil.GetDB(), related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemoveParentFiles relationships from objects passed in.
+// Removes related items from R.ParentFiles (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+func (o *File) RemoveParentFiles(exec boil.Executor, related ...*File) error {
+	var err error
+	for _, rel := range related {
+		rel.ParentID.Valid = false
+		if rel.R != nil {
+			rel.R.Parent = nil
+		}
+		if err = rel.Update(exec, "parent_id"); err != nil {
+			return err
+		}
+	}
+	if o.R == nil {
+		return nil
+	}
+
+	for _, rel := range related {
+		for i, ri := range o.R.ParentFiles {
+			if rel != ri {
+				continue
+			}
+
+			ln := len(o.R.ParentFiles)
+			if ln > 1 && i < ln-1 {
+				o.R.ParentFiles[i] = o.R.ParentFiles[ln-1]
+			}
+			o.R.ParentFiles = o.R.ParentFiles[:ln-1]
+			break
+		}
+	}
+
+	return nil
 }
 
 // FilesG retrieves all records.

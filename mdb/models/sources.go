@@ -38,10 +38,10 @@ type Source struct {
 type sourceR struct {
 	Parent        *Source
 	Type          *SourceType
-	ParentSources SourceSlice
 	ContentUnits  ContentUnitSlice
 	Authors       AuthorSlice
 	SourceI18ns   SourceI18nSlice
+	ParentSources SourceSlice
 }
 
 // sourceL is where Load methods for each relationship are stored.
@@ -221,30 +221,6 @@ func (o *Source) Type(exec boil.Executor, mods ...qm.QueryMod) sourceTypeQuery {
 	return query
 }
 
-// ParentSourcesG retrieves all the source's sources via parent_id column.
-func (o *Source) ParentSourcesG(mods ...qm.QueryMod) sourceQuery {
-	return o.ParentSources(boil.GetDB(), mods...)
-}
-
-// ParentSources retrieves all the source's sources with an executor via parent_id column.
-func (o *Source) ParentSources(exec boil.Executor, mods ...qm.QueryMod) sourceQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
-	}
-
-	if len(mods) != 0 {
-		queryMods = append(queryMods, mods...)
-	}
-
-	queryMods = append(queryMods,
-		qm.Where("\"a\".\"parent_id\"=?", o.ID),
-	)
-
-	query := Sources(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"sources\" as \"a\"")
-	return query
-}
-
 // ContentUnitsG retrieves all the content_unit's content units.
 func (o *Source) ContentUnitsG(mods ...qm.QueryMod) contentUnitQuery {
 	return o.ContentUnits(boil.GetDB(), mods...)
@@ -316,6 +292,30 @@ func (o *Source) SourceI18ns(exec boil.Executor, mods ...qm.QueryMod) sourceI18n
 
 	query := SourceI18ns(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"source_i18n\" as \"a\"")
+	return query
+}
+
+// ParentSourcesG retrieves all the source's sources via parent_id column.
+func (o *Source) ParentSourcesG(mods ...qm.QueryMod) sourceQuery {
+	return o.ParentSources(boil.GetDB(), mods...)
+}
+
+// ParentSources retrieves all the source's sources with an executor via parent_id column.
+func (o *Source) ParentSources(exec boil.Executor, mods ...qm.QueryMod) sourceQuery {
+	queryMods := []qm.QueryMod{
+		qm.Select("\"a\".*"),
+	}
+
+	if len(mods) != 0 {
+		queryMods = append(queryMods, mods...)
+	}
+
+	queryMods = append(queryMods,
+		qm.Where("\"a\".\"parent_id\"=?", o.ID),
+	)
+
+	query := Sources(exec, queryMods...)
+	queries.SetFrom(query.Query, "\"sources\" as \"a\"")
 	return query
 }
 
@@ -451,71 +451,6 @@ func (sourceL) LoadType(e boil.Executor, singular bool, maybeSource interface{})
 	return nil
 }
 
-// LoadParentSources allows an eager lookup of values, cached into the
-// loaded structs of the objects.
-func (sourceL) LoadParentSources(e boil.Executor, singular bool, maybeSource interface{}) error {
-	var slice []*Source
-	var object *Source
-
-	count := 1
-	if singular {
-		object = maybeSource.(*Source)
-	} else {
-		slice = *maybeSource.(*SourceSlice)
-		count = len(slice)
-	}
-
-	args := make([]interface{}, count)
-	if singular {
-		if object.R == nil {
-			object.R = &sourceR{}
-		}
-		args[0] = object.ID
-	} else {
-		for i, obj := range slice {
-			if obj.R == nil {
-				obj.R = &sourceR{}
-			}
-			args[i] = obj.ID
-		}
-	}
-
-	query := fmt.Sprintf(
-		"select * from \"sources\" where \"parent_id\" in (%s)",
-		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
-	)
-	if boil.DebugMode {
-		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
-	}
-
-	results, err := e.Query(query, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to eager load sources")
-	}
-	defer results.Close()
-
-	var resultSlice []*Source
-	if err = queries.Bind(results, &resultSlice); err != nil {
-		return errors.Wrap(err, "failed to bind eager loaded slice sources")
-	}
-
-	if singular {
-		object.R.ParentSources = resultSlice
-		return nil
-	}
-
-	for _, foreign := range resultSlice {
-		for _, local := range slice {
-			if local.ID == foreign.ParentID.Int64 {
-				local.R.ParentSources = append(local.R.ParentSources, foreign)
-				break
-			}
-		}
-	}
-
-	return nil
-}
-
 // LoadContentUnits allows an eager lookup of values, cached into the
 // loaded structs of the objects.
 func (sourceL) LoadContentUnits(e boil.Executor, singular bool, maybeSource interface{}) error {
@@ -566,7 +501,7 @@ func (sourceL) LoadContentUnits(e boil.Executor, singular bool, maybeSource inte
 		one := new(ContentUnit)
 		var localJoinCol int64
 
-		err = results.Scan(&one.ID, &one.UID, &one.TypeID, &one.CreatedAt, &one.Properties, &localJoinCol)
+		err = results.Scan(&one.ID, &one.UID, &one.TypeID, &one.CreatedAt, &one.Properties, &one.Secure, &one.Published, &localJoinCol)
 		if err = results.Err(); err != nil {
 			return errors.Wrap(err, "failed to plebian-bind eager loaded slice content_units")
 		}
@@ -735,6 +670,71 @@ func (sourceL) LoadSourceI18ns(e boil.Executor, singular bool, maybeSource inter
 		for _, local := range slice {
 			if local.ID == foreign.SourceID {
 				local.R.SourceI18ns = append(local.R.SourceI18ns, foreign)
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
+// LoadParentSources allows an eager lookup of values, cached into the
+// loaded structs of the objects.
+func (sourceL) LoadParentSources(e boil.Executor, singular bool, maybeSource interface{}) error {
+	var slice []*Source
+	var object *Source
+
+	count := 1
+	if singular {
+		object = maybeSource.(*Source)
+	} else {
+		slice = *maybeSource.(*SourceSlice)
+		count = len(slice)
+	}
+
+	args := make([]interface{}, count)
+	if singular {
+		if object.R == nil {
+			object.R = &sourceR{}
+		}
+		args[0] = object.ID
+	} else {
+		for i, obj := range slice {
+			if obj.R == nil {
+				obj.R = &sourceR{}
+			}
+			args[i] = obj.ID
+		}
+	}
+
+	query := fmt.Sprintf(
+		"select * from \"sources\" where \"parent_id\" in (%s)",
+		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
+	)
+	if boil.DebugMode {
+		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
+	}
+
+	results, err := e.Query(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to eager load sources")
+	}
+	defer results.Close()
+
+	var resultSlice []*Source
+	if err = queries.Bind(results, &resultSlice); err != nil {
+		return errors.Wrap(err, "failed to bind eager loaded slice sources")
+	}
+
+	if singular {
+		object.R.ParentSources = resultSlice
+		return nil
+	}
+
+	for _, foreign := range resultSlice {
+		for _, local := range slice {
+			if local.ID == foreign.ParentID.Int64 {
+				local.R.ParentSources = append(local.R.ParentSources, foreign)
 				break
 			}
 		}
@@ -951,227 +951,6 @@ func (o *Source) SetType(exec boil.Executor, insert bool, related *SourceType) e
 		}
 	} else {
 		related.R.TypeSources = append(related.R.TypeSources, o)
-	}
-
-	return nil
-}
-
-// AddParentSourcesG adds the given related objects to the existing relationships
-// of the source, optionally inserting them as new records.
-// Appends related to o.R.ParentSources.
-// Sets related.R.Parent appropriately.
-// Uses the global database handle.
-func (o *Source) AddParentSourcesG(insert bool, related ...*Source) error {
-	return o.AddParentSources(boil.GetDB(), insert, related...)
-}
-
-// AddParentSourcesP adds the given related objects to the existing relationships
-// of the source, optionally inserting them as new records.
-// Appends related to o.R.ParentSources.
-// Sets related.R.Parent appropriately.
-// Panics on error.
-func (o *Source) AddParentSourcesP(exec boil.Executor, insert bool, related ...*Source) {
-	if err := o.AddParentSources(exec, insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddParentSourcesGP adds the given related objects to the existing relationships
-// of the source, optionally inserting them as new records.
-// Appends related to o.R.ParentSources.
-// Sets related.R.Parent appropriately.
-// Uses the global database handle and panics on error.
-func (o *Source) AddParentSourcesGP(insert bool, related ...*Source) {
-	if err := o.AddParentSources(boil.GetDB(), insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddParentSources adds the given related objects to the existing relationships
-// of the source, optionally inserting them as new records.
-// Appends related to o.R.ParentSources.
-// Sets related.R.Parent appropriately.
-func (o *Source) AddParentSources(exec boil.Executor, insert bool, related ...*Source) error {
-	var err error
-	for _, rel := range related {
-		if insert {
-			rel.ParentID.Int64 = o.ID
-			rel.ParentID.Valid = true
-			if err = rel.Insert(exec); err != nil {
-				return errors.Wrap(err, "failed to insert into foreign table")
-			}
-		} else {
-			updateQuery := fmt.Sprintf(
-				"UPDATE \"sources\" SET %s WHERE %s",
-				strmangle.SetParamNames("\"", "\"", 1, []string{"parent_id"}),
-				strmangle.WhereClause("\"", "\"", 2, sourcePrimaryKeyColumns),
-			)
-			values := []interface{}{o.ID, rel.ID}
-
-			if boil.DebugMode {
-				fmt.Fprintln(boil.DebugWriter, updateQuery)
-				fmt.Fprintln(boil.DebugWriter, values)
-			}
-
-			if _, err = exec.Exec(updateQuery, values...); err != nil {
-				return errors.Wrap(err, "failed to update foreign table")
-			}
-
-			rel.ParentID.Int64 = o.ID
-			rel.ParentID.Valid = true
-		}
-	}
-
-	if o.R == nil {
-		o.R = &sourceR{
-			ParentSources: related,
-		}
-	} else {
-		o.R.ParentSources = append(o.R.ParentSources, related...)
-	}
-
-	for _, rel := range related {
-		if rel.R == nil {
-			rel.R = &sourceR{
-				Parent: o,
-			}
-		} else {
-			rel.R.Parent = o
-		}
-	}
-	return nil
-}
-
-// SetParentSourcesG removes all previously related items of the
-// source replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentSources accordingly.
-// Replaces o.R.ParentSources with related.
-// Sets related.R.Parent's ParentSources accordingly.
-// Uses the global database handle.
-func (o *Source) SetParentSourcesG(insert bool, related ...*Source) error {
-	return o.SetParentSources(boil.GetDB(), insert, related...)
-}
-
-// SetParentSourcesP removes all previously related items of the
-// source replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentSources accordingly.
-// Replaces o.R.ParentSources with related.
-// Sets related.R.Parent's ParentSources accordingly.
-// Panics on error.
-func (o *Source) SetParentSourcesP(exec boil.Executor, insert bool, related ...*Source) {
-	if err := o.SetParentSources(exec, insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// SetParentSourcesGP removes all previously related items of the
-// source replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentSources accordingly.
-// Replaces o.R.ParentSources with related.
-// Sets related.R.Parent's ParentSources accordingly.
-// Uses the global database handle and panics on error.
-func (o *Source) SetParentSourcesGP(insert bool, related ...*Source) {
-	if err := o.SetParentSources(boil.GetDB(), insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// SetParentSources removes all previously related items of the
-// source replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentSources accordingly.
-// Replaces o.R.ParentSources with related.
-// Sets related.R.Parent's ParentSources accordingly.
-func (o *Source) SetParentSources(exec boil.Executor, insert bool, related ...*Source) error {
-	query := "update \"sources\" set \"parent_id\" = null where \"parent_id\" = $1"
-	values := []interface{}{o.ID}
-	if boil.DebugMode {
-		fmt.Fprintln(boil.DebugWriter, query)
-		fmt.Fprintln(boil.DebugWriter, values)
-	}
-
-	_, err := exec.Exec(query, values...)
-	if err != nil {
-		return errors.Wrap(err, "failed to remove relationships before set")
-	}
-
-	if o.R != nil {
-		for _, rel := range o.R.ParentSources {
-			rel.ParentID.Valid = false
-			if rel.R == nil {
-				continue
-			}
-
-			rel.R.Parent = nil
-		}
-
-		o.R.ParentSources = nil
-	}
-	return o.AddParentSources(exec, insert, related...)
-}
-
-// RemoveParentSourcesG relationships from objects passed in.
-// Removes related items from R.ParentSources (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-// Uses the global database handle.
-func (o *Source) RemoveParentSourcesG(related ...*Source) error {
-	return o.RemoveParentSources(boil.GetDB(), related...)
-}
-
-// RemoveParentSourcesP relationships from objects passed in.
-// Removes related items from R.ParentSources (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-// Panics on error.
-func (o *Source) RemoveParentSourcesP(exec boil.Executor, related ...*Source) {
-	if err := o.RemoveParentSources(exec, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// RemoveParentSourcesGP relationships from objects passed in.
-// Removes related items from R.ParentSources (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-// Uses the global database handle and panics on error.
-func (o *Source) RemoveParentSourcesGP(related ...*Source) {
-	if err := o.RemoveParentSources(boil.GetDB(), related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// RemoveParentSources relationships from objects passed in.
-// Removes related items from R.ParentSources (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-func (o *Source) RemoveParentSources(exec boil.Executor, related ...*Source) error {
-	var err error
-	for _, rel := range related {
-		rel.ParentID.Valid = false
-		if rel.R != nil {
-			rel.R.Parent = nil
-		}
-		if err = rel.Update(exec, "parent_id"); err != nil {
-			return err
-		}
-	}
-	if o.R == nil {
-		return nil
-	}
-
-	for _, rel := range related {
-		for i, ri := range o.R.ParentSources {
-			if rel != ri {
-				continue
-			}
-
-			ln := len(o.R.ParentSources)
-			if ln > 1 && i < ln-1 {
-				o.R.ParentSources[i] = o.R.ParentSources[ln-1]
-			}
-			o.R.ParentSources = o.R.ParentSources[:ln-1]
-			break
-		}
 	}
 
 	return nil
@@ -1720,6 +1499,227 @@ func (o *Source) AddSourceI18ns(exec boil.Executor, insert bool, related ...*Sou
 			rel.R.Source = o
 		}
 	}
+	return nil
+}
+
+// AddParentSourcesG adds the given related objects to the existing relationships
+// of the source, optionally inserting them as new records.
+// Appends related to o.R.ParentSources.
+// Sets related.R.Parent appropriately.
+// Uses the global database handle.
+func (o *Source) AddParentSourcesG(insert bool, related ...*Source) error {
+	return o.AddParentSources(boil.GetDB(), insert, related...)
+}
+
+// AddParentSourcesP adds the given related objects to the existing relationships
+// of the source, optionally inserting them as new records.
+// Appends related to o.R.ParentSources.
+// Sets related.R.Parent appropriately.
+// Panics on error.
+func (o *Source) AddParentSourcesP(exec boil.Executor, insert bool, related ...*Source) {
+	if err := o.AddParentSources(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddParentSourcesGP adds the given related objects to the existing relationships
+// of the source, optionally inserting them as new records.
+// Appends related to o.R.ParentSources.
+// Sets related.R.Parent appropriately.
+// Uses the global database handle and panics on error.
+func (o *Source) AddParentSourcesGP(insert bool, related ...*Source) {
+	if err := o.AddParentSources(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddParentSources adds the given related objects to the existing relationships
+// of the source, optionally inserting them as new records.
+// Appends related to o.R.ParentSources.
+// Sets related.R.Parent appropriately.
+func (o *Source) AddParentSources(exec boil.Executor, insert bool, related ...*Source) error {
+	var err error
+	for _, rel := range related {
+		if insert {
+			rel.ParentID.Int64 = o.ID
+			rel.ParentID.Valid = true
+			if err = rel.Insert(exec); err != nil {
+				return errors.Wrap(err, "failed to insert into foreign table")
+			}
+		} else {
+			updateQuery := fmt.Sprintf(
+				"UPDATE \"sources\" SET %s WHERE %s",
+				strmangle.SetParamNames("\"", "\"", 1, []string{"parent_id"}),
+				strmangle.WhereClause("\"", "\"", 2, sourcePrimaryKeyColumns),
+			)
+			values := []interface{}{o.ID, rel.ID}
+
+			if boil.DebugMode {
+				fmt.Fprintln(boil.DebugWriter, updateQuery)
+				fmt.Fprintln(boil.DebugWriter, values)
+			}
+
+			if _, err = exec.Exec(updateQuery, values...); err != nil {
+				return errors.Wrap(err, "failed to update foreign table")
+			}
+
+			rel.ParentID.Int64 = o.ID
+			rel.ParentID.Valid = true
+		}
+	}
+
+	if o.R == nil {
+		o.R = &sourceR{
+			ParentSources: related,
+		}
+	} else {
+		o.R.ParentSources = append(o.R.ParentSources, related...)
+	}
+
+	for _, rel := range related {
+		if rel.R == nil {
+			rel.R = &sourceR{
+				Parent: o,
+			}
+		} else {
+			rel.R.Parent = o
+		}
+	}
+	return nil
+}
+
+// SetParentSourcesG removes all previously related items of the
+// source replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentSources accordingly.
+// Replaces o.R.ParentSources with related.
+// Sets related.R.Parent's ParentSources accordingly.
+// Uses the global database handle.
+func (o *Source) SetParentSourcesG(insert bool, related ...*Source) error {
+	return o.SetParentSources(boil.GetDB(), insert, related...)
+}
+
+// SetParentSourcesP removes all previously related items of the
+// source replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentSources accordingly.
+// Replaces o.R.ParentSources with related.
+// Sets related.R.Parent's ParentSources accordingly.
+// Panics on error.
+func (o *Source) SetParentSourcesP(exec boil.Executor, insert bool, related ...*Source) {
+	if err := o.SetParentSources(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetParentSourcesGP removes all previously related items of the
+// source replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentSources accordingly.
+// Replaces o.R.ParentSources with related.
+// Sets related.R.Parent's ParentSources accordingly.
+// Uses the global database handle and panics on error.
+func (o *Source) SetParentSourcesGP(insert bool, related ...*Source) {
+	if err := o.SetParentSources(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetParentSources removes all previously related items of the
+// source replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentSources accordingly.
+// Replaces o.R.ParentSources with related.
+// Sets related.R.Parent's ParentSources accordingly.
+func (o *Source) SetParentSources(exec boil.Executor, insert bool, related ...*Source) error {
+	query := "update \"sources\" set \"parent_id\" = null where \"parent_id\" = $1"
+	values := []interface{}{o.ID}
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, query)
+		fmt.Fprintln(boil.DebugWriter, values)
+	}
+
+	_, err := exec.Exec(query, values...)
+	if err != nil {
+		return errors.Wrap(err, "failed to remove relationships before set")
+	}
+
+	if o.R != nil {
+		for _, rel := range o.R.ParentSources {
+			rel.ParentID.Valid = false
+			if rel.R == nil {
+				continue
+			}
+
+			rel.R.Parent = nil
+		}
+
+		o.R.ParentSources = nil
+	}
+	return o.AddParentSources(exec, insert, related...)
+}
+
+// RemoveParentSourcesG relationships from objects passed in.
+// Removes related items from R.ParentSources (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+// Uses the global database handle.
+func (o *Source) RemoveParentSourcesG(related ...*Source) error {
+	return o.RemoveParentSources(boil.GetDB(), related...)
+}
+
+// RemoveParentSourcesP relationships from objects passed in.
+// Removes related items from R.ParentSources (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+// Panics on error.
+func (o *Source) RemoveParentSourcesP(exec boil.Executor, related ...*Source) {
+	if err := o.RemoveParentSources(exec, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemoveParentSourcesGP relationships from objects passed in.
+// Removes related items from R.ParentSources (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+// Uses the global database handle and panics on error.
+func (o *Source) RemoveParentSourcesGP(related ...*Source) {
+	if err := o.RemoveParentSources(boil.GetDB(), related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemoveParentSources relationships from objects passed in.
+// Removes related items from R.ParentSources (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+func (o *Source) RemoveParentSources(exec boil.Executor, related ...*Source) error {
+	var err error
+	for _, rel := range related {
+		rel.ParentID.Valid = false
+		if rel.R != nil {
+			rel.R.Parent = nil
+		}
+		if err = rel.Update(exec, "parent_id"); err != nil {
+			return err
+		}
+	}
+	if o.R == nil {
+		return nil
+	}
+
+	for _, rel := range related {
+		for i, ri := range o.R.ParentSources {
+			if rel != ri {
+				continue
+			}
+
+			ln := len(o.R.ParentSources)
+			if ln > 1 && i < ln-1 {
+				o.R.ParentSources[i] = o.R.ParentSources[ln-1]
+			}
+			o.R.ParentSources = o.R.ParentSources[:ln-1]
+			break
+		}
+	}
+
 	return nil
 }
 

@@ -32,9 +32,9 @@ type Tag struct {
 // tagR is where relationships are stored.
 type tagR struct {
 	Parent       *Tag
-	ParentTags   TagSlice
 	ContentUnits ContentUnitSlice
 	TagI18ns     TagI18nSlice
+	ParentTags   TagSlice
 }
 
 // tagL is where Load methods for each relationship are stored.
@@ -195,30 +195,6 @@ func (o *Tag) Parent(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
 	return query
 }
 
-// ParentTagsG retrieves all the tag's tags via parent_id column.
-func (o *Tag) ParentTagsG(mods ...qm.QueryMod) tagQuery {
-	return o.ParentTags(boil.GetDB(), mods...)
-}
-
-// ParentTags retrieves all the tag's tags with an executor via parent_id column.
-func (o *Tag) ParentTags(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
-	}
-
-	if len(mods) != 0 {
-		queryMods = append(queryMods, mods...)
-	}
-
-	queryMods = append(queryMods,
-		qm.Where("\"a\".\"parent_id\"=?", o.ID),
-	)
-
-	query := Tags(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"tags\" as \"a\"")
-	return query
-}
-
 // ContentUnitsG retrieves all the content_unit's content units.
 func (o *Tag) ContentUnitsG(mods ...qm.QueryMod) contentUnitQuery {
 	return o.ContentUnits(boil.GetDB(), mods...)
@@ -265,6 +241,30 @@ func (o *Tag) TagI18ns(exec boil.Executor, mods ...qm.QueryMod) tagI18nQuery {
 
 	query := TagI18ns(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"tag_i18n\" as \"a\"")
+	return query
+}
+
+// ParentTagsG retrieves all the tag's tags via parent_id column.
+func (o *Tag) ParentTagsG(mods ...qm.QueryMod) tagQuery {
+	return o.ParentTags(boil.GetDB(), mods...)
+}
+
+// ParentTags retrieves all the tag's tags with an executor via parent_id column.
+func (o *Tag) ParentTags(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
+	queryMods := []qm.QueryMod{
+		qm.Select("\"a\".*"),
+	}
+
+	if len(mods) != 0 {
+		queryMods = append(queryMods, mods...)
+	}
+
+	queryMods = append(queryMods,
+		qm.Where("\"a\".\"parent_id\"=?", o.ID),
+	)
+
+	query := Tags(exec, queryMods...)
+	queries.SetFrom(query.Query, "\"tags\" as \"a\"")
 	return query
 }
 
@@ -334,71 +334,6 @@ func (tagL) LoadParent(e boil.Executor, singular bool, maybeTag interface{}) err
 	return nil
 }
 
-// LoadParentTags allows an eager lookup of values, cached into the
-// loaded structs of the objects.
-func (tagL) LoadParentTags(e boil.Executor, singular bool, maybeTag interface{}) error {
-	var slice []*Tag
-	var object *Tag
-
-	count := 1
-	if singular {
-		object = maybeTag.(*Tag)
-	} else {
-		slice = *maybeTag.(*TagSlice)
-		count = len(slice)
-	}
-
-	args := make([]interface{}, count)
-	if singular {
-		if object.R == nil {
-			object.R = &tagR{}
-		}
-		args[0] = object.ID
-	} else {
-		for i, obj := range slice {
-			if obj.R == nil {
-				obj.R = &tagR{}
-			}
-			args[i] = obj.ID
-		}
-	}
-
-	query := fmt.Sprintf(
-		"select * from \"tags\" where \"parent_id\" in (%s)",
-		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
-	)
-	if boil.DebugMode {
-		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
-	}
-
-	results, err := e.Query(query, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to eager load tags")
-	}
-	defer results.Close()
-
-	var resultSlice []*Tag
-	if err = queries.Bind(results, &resultSlice); err != nil {
-		return errors.Wrap(err, "failed to bind eager loaded slice tags")
-	}
-
-	if singular {
-		object.R.ParentTags = resultSlice
-		return nil
-	}
-
-	for _, foreign := range resultSlice {
-		for _, local := range slice {
-			if local.ID == foreign.ParentID.Int64 {
-				local.R.ParentTags = append(local.R.ParentTags, foreign)
-				break
-			}
-		}
-	}
-
-	return nil
-}
-
 // LoadContentUnits allows an eager lookup of values, cached into the
 // loaded structs of the objects.
 func (tagL) LoadContentUnits(e boil.Executor, singular bool, maybeTag interface{}) error {
@@ -449,7 +384,7 @@ func (tagL) LoadContentUnits(e boil.Executor, singular bool, maybeTag interface{
 		one := new(ContentUnit)
 		var localJoinCol int64
 
-		err = results.Scan(&one.ID, &one.UID, &one.TypeID, &one.CreatedAt, &one.Properties, &localJoinCol)
+		err = results.Scan(&one.ID, &one.UID, &one.TypeID, &one.CreatedAt, &one.Properties, &one.Secure, &one.Published, &localJoinCol)
 		if err = results.Err(); err != nil {
 			return errors.Wrap(err, "failed to plebian-bind eager loaded slice content_units")
 		}
@@ -537,6 +472,71 @@ func (tagL) LoadTagI18ns(e boil.Executor, singular bool, maybeTag interface{}) e
 		for _, local := range slice {
 			if local.ID == foreign.TagID {
 				local.R.TagI18ns = append(local.R.TagI18ns, foreign)
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
+// LoadParentTags allows an eager lookup of values, cached into the
+// loaded structs of the objects.
+func (tagL) LoadParentTags(e boil.Executor, singular bool, maybeTag interface{}) error {
+	var slice []*Tag
+	var object *Tag
+
+	count := 1
+	if singular {
+		object = maybeTag.(*Tag)
+	} else {
+		slice = *maybeTag.(*TagSlice)
+		count = len(slice)
+	}
+
+	args := make([]interface{}, count)
+	if singular {
+		if object.R == nil {
+			object.R = &tagR{}
+		}
+		args[0] = object.ID
+	} else {
+		for i, obj := range slice {
+			if obj.R == nil {
+				obj.R = &tagR{}
+			}
+			args[i] = obj.ID
+		}
+	}
+
+	query := fmt.Sprintf(
+		"select * from \"tags\" where \"parent_id\" in (%s)",
+		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
+	)
+	if boil.DebugMode {
+		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
+	}
+
+	results, err := e.Query(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to eager load tags")
+	}
+	defer results.Close()
+
+	var resultSlice []*Tag
+	if err = queries.Bind(results, &resultSlice); err != nil {
+		return errors.Wrap(err, "failed to bind eager loaded slice tags")
+	}
+
+	if singular {
+		object.R.ParentTags = resultSlice
+		return nil
+	}
+
+	for _, foreign := range resultSlice {
+		for _, local := range slice {
+			if local.ID == foreign.ParentID.Int64 {
+				local.R.ParentTags = append(local.R.ParentTags, foreign)
 				break
 			}
 		}
@@ -679,227 +679,6 @@ func (o *Tag) RemoveParent(exec boil.Executor, related *Tag) error {
 		related.R.ParentTags = related.R.ParentTags[:ln-1]
 		break
 	}
-	return nil
-}
-
-// AddParentTagsG adds the given related objects to the existing relationships
-// of the tag, optionally inserting them as new records.
-// Appends related to o.R.ParentTags.
-// Sets related.R.Parent appropriately.
-// Uses the global database handle.
-func (o *Tag) AddParentTagsG(insert bool, related ...*Tag) error {
-	return o.AddParentTags(boil.GetDB(), insert, related...)
-}
-
-// AddParentTagsP adds the given related objects to the existing relationships
-// of the tag, optionally inserting them as new records.
-// Appends related to o.R.ParentTags.
-// Sets related.R.Parent appropriately.
-// Panics on error.
-func (o *Tag) AddParentTagsP(exec boil.Executor, insert bool, related ...*Tag) {
-	if err := o.AddParentTags(exec, insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddParentTagsGP adds the given related objects to the existing relationships
-// of the tag, optionally inserting them as new records.
-// Appends related to o.R.ParentTags.
-// Sets related.R.Parent appropriately.
-// Uses the global database handle and panics on error.
-func (o *Tag) AddParentTagsGP(insert bool, related ...*Tag) {
-	if err := o.AddParentTags(boil.GetDB(), insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddParentTags adds the given related objects to the existing relationships
-// of the tag, optionally inserting them as new records.
-// Appends related to o.R.ParentTags.
-// Sets related.R.Parent appropriately.
-func (o *Tag) AddParentTags(exec boil.Executor, insert bool, related ...*Tag) error {
-	var err error
-	for _, rel := range related {
-		if insert {
-			rel.ParentID.Int64 = o.ID
-			rel.ParentID.Valid = true
-			if err = rel.Insert(exec); err != nil {
-				return errors.Wrap(err, "failed to insert into foreign table")
-			}
-		} else {
-			updateQuery := fmt.Sprintf(
-				"UPDATE \"tags\" SET %s WHERE %s",
-				strmangle.SetParamNames("\"", "\"", 1, []string{"parent_id"}),
-				strmangle.WhereClause("\"", "\"", 2, tagPrimaryKeyColumns),
-			)
-			values := []interface{}{o.ID, rel.ID}
-
-			if boil.DebugMode {
-				fmt.Fprintln(boil.DebugWriter, updateQuery)
-				fmt.Fprintln(boil.DebugWriter, values)
-			}
-
-			if _, err = exec.Exec(updateQuery, values...); err != nil {
-				return errors.Wrap(err, "failed to update foreign table")
-			}
-
-			rel.ParentID.Int64 = o.ID
-			rel.ParentID.Valid = true
-		}
-	}
-
-	if o.R == nil {
-		o.R = &tagR{
-			ParentTags: related,
-		}
-	} else {
-		o.R.ParentTags = append(o.R.ParentTags, related...)
-	}
-
-	for _, rel := range related {
-		if rel.R == nil {
-			rel.R = &tagR{
-				Parent: o,
-			}
-		} else {
-			rel.R.Parent = o
-		}
-	}
-	return nil
-}
-
-// SetParentTagsG removes all previously related items of the
-// tag replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentTags accordingly.
-// Replaces o.R.ParentTags with related.
-// Sets related.R.Parent's ParentTags accordingly.
-// Uses the global database handle.
-func (o *Tag) SetParentTagsG(insert bool, related ...*Tag) error {
-	return o.SetParentTags(boil.GetDB(), insert, related...)
-}
-
-// SetParentTagsP removes all previously related items of the
-// tag replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentTags accordingly.
-// Replaces o.R.ParentTags with related.
-// Sets related.R.Parent's ParentTags accordingly.
-// Panics on error.
-func (o *Tag) SetParentTagsP(exec boil.Executor, insert bool, related ...*Tag) {
-	if err := o.SetParentTags(exec, insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// SetParentTagsGP removes all previously related items of the
-// tag replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentTags accordingly.
-// Replaces o.R.ParentTags with related.
-// Sets related.R.Parent's ParentTags accordingly.
-// Uses the global database handle and panics on error.
-func (o *Tag) SetParentTagsGP(insert bool, related ...*Tag) {
-	if err := o.SetParentTags(boil.GetDB(), insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// SetParentTags removes all previously related items of the
-// tag replacing them completely with the passed
-// in related items, optionally inserting them as new records.
-// Sets o.R.Parent's ParentTags accordingly.
-// Replaces o.R.ParentTags with related.
-// Sets related.R.Parent's ParentTags accordingly.
-func (o *Tag) SetParentTags(exec boil.Executor, insert bool, related ...*Tag) error {
-	query := "update \"tags\" set \"parent_id\" = null where \"parent_id\" = $1"
-	values := []interface{}{o.ID}
-	if boil.DebugMode {
-		fmt.Fprintln(boil.DebugWriter, query)
-		fmt.Fprintln(boil.DebugWriter, values)
-	}
-
-	_, err := exec.Exec(query, values...)
-	if err != nil {
-		return errors.Wrap(err, "failed to remove relationships before set")
-	}
-
-	if o.R != nil {
-		for _, rel := range o.R.ParentTags {
-			rel.ParentID.Valid = false
-			if rel.R == nil {
-				continue
-			}
-
-			rel.R.Parent = nil
-		}
-
-		o.R.ParentTags = nil
-	}
-	return o.AddParentTags(exec, insert, related...)
-}
-
-// RemoveParentTagsG relationships from objects passed in.
-// Removes related items from R.ParentTags (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-// Uses the global database handle.
-func (o *Tag) RemoveParentTagsG(related ...*Tag) error {
-	return o.RemoveParentTags(boil.GetDB(), related...)
-}
-
-// RemoveParentTagsP relationships from objects passed in.
-// Removes related items from R.ParentTags (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-// Panics on error.
-func (o *Tag) RemoveParentTagsP(exec boil.Executor, related ...*Tag) {
-	if err := o.RemoveParentTags(exec, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// RemoveParentTagsGP relationships from objects passed in.
-// Removes related items from R.ParentTags (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-// Uses the global database handle and panics on error.
-func (o *Tag) RemoveParentTagsGP(related ...*Tag) {
-	if err := o.RemoveParentTags(boil.GetDB(), related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// RemoveParentTags relationships from objects passed in.
-// Removes related items from R.ParentTags (uses pointer comparison, removal does not keep order)
-// Sets related.R.Parent.
-func (o *Tag) RemoveParentTags(exec boil.Executor, related ...*Tag) error {
-	var err error
-	for _, rel := range related {
-		rel.ParentID.Valid = false
-		if rel.R != nil {
-			rel.R.Parent = nil
-		}
-		if err = rel.Update(exec, "parent_id"); err != nil {
-			return err
-		}
-	}
-	if o.R == nil {
-		return nil
-	}
-
-	for _, rel := range related {
-		for i, ri := range o.R.ParentTags {
-			if rel != ri {
-				continue
-			}
-
-			ln := len(o.R.ParentTags)
-			if ln > 1 && i < ln-1 {
-				o.R.ParentTags[i] = o.R.ParentTags[ln-1]
-			}
-			o.R.ParentTags = o.R.ParentTags[:ln-1]
-			break
-		}
-	}
-
 	return nil
 }
 
@@ -1215,6 +994,227 @@ func (o *Tag) AddTagI18ns(exec boil.Executor, insert bool, related ...*TagI18n) 
 			rel.R.Tag = o
 		}
 	}
+	return nil
+}
+
+// AddParentTagsG adds the given related objects to the existing relationships
+// of the tag, optionally inserting them as new records.
+// Appends related to o.R.ParentTags.
+// Sets related.R.Parent appropriately.
+// Uses the global database handle.
+func (o *Tag) AddParentTagsG(insert bool, related ...*Tag) error {
+	return o.AddParentTags(boil.GetDB(), insert, related...)
+}
+
+// AddParentTagsP adds the given related objects to the existing relationships
+// of the tag, optionally inserting them as new records.
+// Appends related to o.R.ParentTags.
+// Sets related.R.Parent appropriately.
+// Panics on error.
+func (o *Tag) AddParentTagsP(exec boil.Executor, insert bool, related ...*Tag) {
+	if err := o.AddParentTags(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddParentTagsGP adds the given related objects to the existing relationships
+// of the tag, optionally inserting them as new records.
+// Appends related to o.R.ParentTags.
+// Sets related.R.Parent appropriately.
+// Uses the global database handle and panics on error.
+func (o *Tag) AddParentTagsGP(insert bool, related ...*Tag) {
+	if err := o.AddParentTags(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddParentTags adds the given related objects to the existing relationships
+// of the tag, optionally inserting them as new records.
+// Appends related to o.R.ParentTags.
+// Sets related.R.Parent appropriately.
+func (o *Tag) AddParentTags(exec boil.Executor, insert bool, related ...*Tag) error {
+	var err error
+	for _, rel := range related {
+		if insert {
+			rel.ParentID.Int64 = o.ID
+			rel.ParentID.Valid = true
+			if err = rel.Insert(exec); err != nil {
+				return errors.Wrap(err, "failed to insert into foreign table")
+			}
+		} else {
+			updateQuery := fmt.Sprintf(
+				"UPDATE \"tags\" SET %s WHERE %s",
+				strmangle.SetParamNames("\"", "\"", 1, []string{"parent_id"}),
+				strmangle.WhereClause("\"", "\"", 2, tagPrimaryKeyColumns),
+			)
+			values := []interface{}{o.ID, rel.ID}
+
+			if boil.DebugMode {
+				fmt.Fprintln(boil.DebugWriter, updateQuery)
+				fmt.Fprintln(boil.DebugWriter, values)
+			}
+
+			if _, err = exec.Exec(updateQuery, values...); err != nil {
+				return errors.Wrap(err, "failed to update foreign table")
+			}
+
+			rel.ParentID.Int64 = o.ID
+			rel.ParentID.Valid = true
+		}
+	}
+
+	if o.R == nil {
+		o.R = &tagR{
+			ParentTags: related,
+		}
+	} else {
+		o.R.ParentTags = append(o.R.ParentTags, related...)
+	}
+
+	for _, rel := range related {
+		if rel.R == nil {
+			rel.R = &tagR{
+				Parent: o,
+			}
+		} else {
+			rel.R.Parent = o
+		}
+	}
+	return nil
+}
+
+// SetParentTagsG removes all previously related items of the
+// tag replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentTags accordingly.
+// Replaces o.R.ParentTags with related.
+// Sets related.R.Parent's ParentTags accordingly.
+// Uses the global database handle.
+func (o *Tag) SetParentTagsG(insert bool, related ...*Tag) error {
+	return o.SetParentTags(boil.GetDB(), insert, related...)
+}
+
+// SetParentTagsP removes all previously related items of the
+// tag replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentTags accordingly.
+// Replaces o.R.ParentTags with related.
+// Sets related.R.Parent's ParentTags accordingly.
+// Panics on error.
+func (o *Tag) SetParentTagsP(exec boil.Executor, insert bool, related ...*Tag) {
+	if err := o.SetParentTags(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetParentTagsGP removes all previously related items of the
+// tag replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentTags accordingly.
+// Replaces o.R.ParentTags with related.
+// Sets related.R.Parent's ParentTags accordingly.
+// Uses the global database handle and panics on error.
+func (o *Tag) SetParentTagsGP(insert bool, related ...*Tag) {
+	if err := o.SetParentTags(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetParentTags removes all previously related items of the
+// tag replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Parent's ParentTags accordingly.
+// Replaces o.R.ParentTags with related.
+// Sets related.R.Parent's ParentTags accordingly.
+func (o *Tag) SetParentTags(exec boil.Executor, insert bool, related ...*Tag) error {
+	query := "update \"tags\" set \"parent_id\" = null where \"parent_id\" = $1"
+	values := []interface{}{o.ID}
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, query)
+		fmt.Fprintln(boil.DebugWriter, values)
+	}
+
+	_, err := exec.Exec(query, values...)
+	if err != nil {
+		return errors.Wrap(err, "failed to remove relationships before set")
+	}
+
+	if o.R != nil {
+		for _, rel := range o.R.ParentTags {
+			rel.ParentID.Valid = false
+			if rel.R == nil {
+				continue
+			}
+
+			rel.R.Parent = nil
+		}
+
+		o.R.ParentTags = nil
+	}
+	return o.AddParentTags(exec, insert, related...)
+}
+
+// RemoveParentTagsG relationships from objects passed in.
+// Removes related items from R.ParentTags (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+// Uses the global database handle.
+func (o *Tag) RemoveParentTagsG(related ...*Tag) error {
+	return o.RemoveParentTags(boil.GetDB(), related...)
+}
+
+// RemoveParentTagsP relationships from objects passed in.
+// Removes related items from R.ParentTags (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+// Panics on error.
+func (o *Tag) RemoveParentTagsP(exec boil.Executor, related ...*Tag) {
+	if err := o.RemoveParentTags(exec, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemoveParentTagsGP relationships from objects passed in.
+// Removes related items from R.ParentTags (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+// Uses the global database handle and panics on error.
+func (o *Tag) RemoveParentTagsGP(related ...*Tag) {
+	if err := o.RemoveParentTags(boil.GetDB(), related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemoveParentTags relationships from objects passed in.
+// Removes related items from R.ParentTags (uses pointer comparison, removal does not keep order)
+// Sets related.R.Parent.
+func (o *Tag) RemoveParentTags(exec boil.Executor, related ...*Tag) error {
+	var err error
+	for _, rel := range related {
+		rel.ParentID.Valid = false
+		if rel.R != nil {
+			rel.R.Parent = nil
+		}
+		if err = rel.Update(exec, "parent_id"); err != nil {
+			return err
+		}
+	}
+	if o.R == nil {
+		return nil
+	}
+
+	for _, rel := range related {
+		for i, ri := range o.R.ParentTags {
+			if rel != ri {
+				continue
+			}
+
+			ln := len(o.R.ParentTags)
+			if ln > 1 && i < ln-1 {
+				o.R.ParentTags[i] = o.R.ParentTags[ln-1]
+			}
+			o.R.ParentTags = o.R.ParentTags[:ln-1]
+			break
+		}
+	}
+
 	return nil
 }
 

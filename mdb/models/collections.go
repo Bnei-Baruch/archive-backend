@@ -19,11 +19,13 @@ import (
 
 // Collection is an object representing the database table.
 type Collection struct {
-	ID         int64     `boil:"id" json:"id" toml:"id" yaml:"id"`
-	UID        string    `boil:"uid" json:"uid" toml:"uid" yaml:"uid"`
-	TypeID     int64     `boil:"type_id" json:"type_id" toml:"type_id" yaml:"type_id"`
-	CreatedAt  time.Time `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
-	Properties null.JSON `boil:"properties" json:"properties,omitempty" toml:"properties" yaml:"properties,omitempty"`
+	ID         int64      `boil:"id" json:"id" toml:"id" yaml:"id"`
+	UID        string     `boil:"uid" json:"uid" toml:"uid" yaml:"uid"`
+	TypeID     int64      `boil:"type_id" json:"type_id" toml:"type_id" yaml:"type_id"`
+	CreatedAt  time.Time  `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
+	Properties null.JSON  `boil:"properties" json:"properties,omitempty" toml:"properties" yaml:"properties,omitempty"`
+	Secure     null.Int16 `boil:"secure" json:"secure,omitempty" toml:"secure" yaml:"secure,omitempty"`
+	Published  bool       `boil:"published" json:"published" toml:"published" yaml:"published"`
 
 	R *collectionR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L collectionL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -32,17 +34,17 @@ type Collection struct {
 // collectionR is where relationships are stored.
 type collectionR struct {
 	Type                    *ContentType
-	CollectionI18ns         CollectionI18nSlice
 	CollectionsContentUnits CollectionsContentUnitSlice
+	CollectionI18ns         CollectionI18nSlice
 }
 
 // collectionL is where Load methods for each relationship are stored.
 type collectionL struct{}
 
 var (
-	collectionColumns               = []string{"id", "uid", "type_id", "created_at", "properties"}
+	collectionColumns               = []string{"id", "uid", "type_id", "created_at", "properties", "secure", "published"}
 	collectionColumnsWithoutDefault = []string{"uid", "type_id", "properties"}
-	collectionColumnsWithDefault    = []string{"id", "created_at"}
+	collectionColumnsWithDefault    = []string{"id", "created_at", "secure", "published"}
 	collectionPrimaryKeyColumns     = []string{"id"}
 )
 
@@ -194,30 +196,6 @@ func (o *Collection) Type(exec boil.Executor, mods ...qm.QueryMod) contentTypeQu
 	return query
 }
 
-// CollectionI18nsG retrieves all the collection_i18n's collection i18n.
-func (o *Collection) CollectionI18nsG(mods ...qm.QueryMod) collectionI18nQuery {
-	return o.CollectionI18ns(boil.GetDB(), mods...)
-}
-
-// CollectionI18ns retrieves all the collection_i18n's collection i18n with an executor.
-func (o *Collection) CollectionI18ns(exec boil.Executor, mods ...qm.QueryMod) collectionI18nQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
-	}
-
-	if len(mods) != 0 {
-		queryMods = append(queryMods, mods...)
-	}
-
-	queryMods = append(queryMods,
-		qm.Where("\"a\".\"collection_id\"=?", o.ID),
-	)
-
-	query := CollectionI18ns(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"collection_i18n\" as \"a\"")
-	return query
-}
-
 // CollectionsContentUnitsG retrieves all the collections_content_unit's collections content units.
 func (o *Collection) CollectionsContentUnitsG(mods ...qm.QueryMod) collectionsContentUnitQuery {
 	return o.CollectionsContentUnits(boil.GetDB(), mods...)
@@ -239,6 +217,30 @@ func (o *Collection) CollectionsContentUnits(exec boil.Executor, mods ...qm.Quer
 
 	query := CollectionsContentUnits(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"collections_content_units\" as \"a\"")
+	return query
+}
+
+// CollectionI18nsG retrieves all the collection_i18n's collection i18n.
+func (o *Collection) CollectionI18nsG(mods ...qm.QueryMod) collectionI18nQuery {
+	return o.CollectionI18ns(boil.GetDB(), mods...)
+}
+
+// CollectionI18ns retrieves all the collection_i18n's collection i18n with an executor.
+func (o *Collection) CollectionI18ns(exec boil.Executor, mods ...qm.QueryMod) collectionI18nQuery {
+	queryMods := []qm.QueryMod{
+		qm.Select("\"a\".*"),
+	}
+
+	if len(mods) != 0 {
+		queryMods = append(queryMods, mods...)
+	}
+
+	queryMods = append(queryMods,
+		qm.Where("\"a\".\"collection_id\"=?", o.ID),
+	)
+
+	query := CollectionI18ns(exec, queryMods...)
+	queries.SetFrom(query.Query, "\"collection_i18n\" as \"a\"")
 	return query
 }
 
@@ -308,71 +310,6 @@ func (collectionL) LoadType(e boil.Executor, singular bool, maybeCollection inte
 	return nil
 }
 
-// LoadCollectionI18ns allows an eager lookup of values, cached into the
-// loaded structs of the objects.
-func (collectionL) LoadCollectionI18ns(e boil.Executor, singular bool, maybeCollection interface{}) error {
-	var slice []*Collection
-	var object *Collection
-
-	count := 1
-	if singular {
-		object = maybeCollection.(*Collection)
-	} else {
-		slice = *maybeCollection.(*CollectionSlice)
-		count = len(slice)
-	}
-
-	args := make([]interface{}, count)
-	if singular {
-		if object.R == nil {
-			object.R = &collectionR{}
-		}
-		args[0] = object.ID
-	} else {
-		for i, obj := range slice {
-			if obj.R == nil {
-				obj.R = &collectionR{}
-			}
-			args[i] = obj.ID
-		}
-	}
-
-	query := fmt.Sprintf(
-		"select * from \"collection_i18n\" where \"collection_id\" in (%s)",
-		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
-	)
-	if boil.DebugMode {
-		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
-	}
-
-	results, err := e.Query(query, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to eager load collection_i18n")
-	}
-	defer results.Close()
-
-	var resultSlice []*CollectionI18n
-	if err = queries.Bind(results, &resultSlice); err != nil {
-		return errors.Wrap(err, "failed to bind eager loaded slice collection_i18n")
-	}
-
-	if singular {
-		object.R.CollectionI18ns = resultSlice
-		return nil
-	}
-
-	for _, foreign := range resultSlice {
-		for _, local := range slice {
-			if local.ID == foreign.CollectionID {
-				local.R.CollectionI18ns = append(local.R.CollectionI18ns, foreign)
-				break
-			}
-		}
-	}
-
-	return nil
-}
-
 // LoadCollectionsContentUnits allows an eager lookup of values, cached into the
 // loaded structs of the objects.
 func (collectionL) LoadCollectionsContentUnits(e boil.Executor, singular bool, maybeCollection interface{}) error {
@@ -430,6 +367,71 @@ func (collectionL) LoadCollectionsContentUnits(e boil.Executor, singular bool, m
 		for _, local := range slice {
 			if local.ID == foreign.CollectionID {
 				local.R.CollectionsContentUnits = append(local.R.CollectionsContentUnits, foreign)
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
+// LoadCollectionI18ns allows an eager lookup of values, cached into the
+// loaded structs of the objects.
+func (collectionL) LoadCollectionI18ns(e boil.Executor, singular bool, maybeCollection interface{}) error {
+	var slice []*Collection
+	var object *Collection
+
+	count := 1
+	if singular {
+		object = maybeCollection.(*Collection)
+	} else {
+		slice = *maybeCollection.(*CollectionSlice)
+		count = len(slice)
+	}
+
+	args := make([]interface{}, count)
+	if singular {
+		if object.R == nil {
+			object.R = &collectionR{}
+		}
+		args[0] = object.ID
+	} else {
+		for i, obj := range slice {
+			if obj.R == nil {
+				obj.R = &collectionR{}
+			}
+			args[i] = obj.ID
+		}
+	}
+
+	query := fmt.Sprintf(
+		"select * from \"collection_i18n\" where \"collection_id\" in (%s)",
+		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
+	)
+	if boil.DebugMode {
+		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
+	}
+
+	results, err := e.Query(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to eager load collection_i18n")
+	}
+	defer results.Close()
+
+	var resultSlice []*CollectionI18n
+	if err = queries.Bind(results, &resultSlice); err != nil {
+		return errors.Wrap(err, "failed to bind eager loaded slice collection_i18n")
+	}
+
+	if singular {
+		object.R.CollectionI18ns = resultSlice
+		return nil
+	}
+
+	for _, foreign := range resultSlice {
+		for _, local := range slice {
+			if local.ID == foreign.CollectionID {
+				local.R.CollectionI18ns = append(local.R.CollectionI18ns, foreign)
 				break
 			}
 		}
@@ -514,90 +516,6 @@ func (o *Collection) SetType(exec boil.Executor, insert bool, related *ContentTy
 	return nil
 }
 
-// AddCollectionI18nsG adds the given related objects to the existing relationships
-// of the collection, optionally inserting them as new records.
-// Appends related to o.R.CollectionI18ns.
-// Sets related.R.Collection appropriately.
-// Uses the global database handle.
-func (o *Collection) AddCollectionI18nsG(insert bool, related ...*CollectionI18n) error {
-	return o.AddCollectionI18ns(boil.GetDB(), insert, related...)
-}
-
-// AddCollectionI18nsP adds the given related objects to the existing relationships
-// of the collection, optionally inserting them as new records.
-// Appends related to o.R.CollectionI18ns.
-// Sets related.R.Collection appropriately.
-// Panics on error.
-func (o *Collection) AddCollectionI18nsP(exec boil.Executor, insert bool, related ...*CollectionI18n) {
-	if err := o.AddCollectionI18ns(exec, insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddCollectionI18nsGP adds the given related objects to the existing relationships
-// of the collection, optionally inserting them as new records.
-// Appends related to o.R.CollectionI18ns.
-// Sets related.R.Collection appropriately.
-// Uses the global database handle and panics on error.
-func (o *Collection) AddCollectionI18nsGP(insert bool, related ...*CollectionI18n) {
-	if err := o.AddCollectionI18ns(boil.GetDB(), insert, related...); err != nil {
-		panic(boil.WrapErr(err))
-	}
-}
-
-// AddCollectionI18ns adds the given related objects to the existing relationships
-// of the collection, optionally inserting them as new records.
-// Appends related to o.R.CollectionI18ns.
-// Sets related.R.Collection appropriately.
-func (o *Collection) AddCollectionI18ns(exec boil.Executor, insert bool, related ...*CollectionI18n) error {
-	var err error
-	for _, rel := range related {
-		if insert {
-			rel.CollectionID = o.ID
-			if err = rel.Insert(exec); err != nil {
-				return errors.Wrap(err, "failed to insert into foreign table")
-			}
-		} else {
-			updateQuery := fmt.Sprintf(
-				"UPDATE \"collection_i18n\" SET %s WHERE %s",
-				strmangle.SetParamNames("\"", "\"", 1, []string{"collection_id"}),
-				strmangle.WhereClause("\"", "\"", 2, collectionI18nPrimaryKeyColumns),
-			)
-			values := []interface{}{o.ID, rel.CollectionID, rel.Language}
-
-			if boil.DebugMode {
-				fmt.Fprintln(boil.DebugWriter, updateQuery)
-				fmt.Fprintln(boil.DebugWriter, values)
-			}
-
-			if _, err = exec.Exec(updateQuery, values...); err != nil {
-				return errors.Wrap(err, "failed to update foreign table")
-			}
-
-			rel.CollectionID = o.ID
-		}
-	}
-
-	if o.R == nil {
-		o.R = &collectionR{
-			CollectionI18ns: related,
-		}
-	} else {
-		o.R.CollectionI18ns = append(o.R.CollectionI18ns, related...)
-	}
-
-	for _, rel := range related {
-		if rel.R == nil {
-			rel.R = &collectionI18nR{
-				Collection: o,
-			}
-		} else {
-			rel.R.Collection = o
-		}
-	}
-	return nil
-}
-
 // AddCollectionsContentUnitsG adds the given related objects to the existing relationships
 // of the collection, optionally inserting them as new records.
 // Appends related to o.R.CollectionsContentUnits.
@@ -673,6 +591,90 @@ func (o *Collection) AddCollectionsContentUnits(exec boil.Executor, insert bool,
 	for _, rel := range related {
 		if rel.R == nil {
 			rel.R = &collectionsContentUnitR{
+				Collection: o,
+			}
+		} else {
+			rel.R.Collection = o
+		}
+	}
+	return nil
+}
+
+// AddCollectionI18nsG adds the given related objects to the existing relationships
+// of the collection, optionally inserting them as new records.
+// Appends related to o.R.CollectionI18ns.
+// Sets related.R.Collection appropriately.
+// Uses the global database handle.
+func (o *Collection) AddCollectionI18nsG(insert bool, related ...*CollectionI18n) error {
+	return o.AddCollectionI18ns(boil.GetDB(), insert, related...)
+}
+
+// AddCollectionI18nsP adds the given related objects to the existing relationships
+// of the collection, optionally inserting them as new records.
+// Appends related to o.R.CollectionI18ns.
+// Sets related.R.Collection appropriately.
+// Panics on error.
+func (o *Collection) AddCollectionI18nsP(exec boil.Executor, insert bool, related ...*CollectionI18n) {
+	if err := o.AddCollectionI18ns(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddCollectionI18nsGP adds the given related objects to the existing relationships
+// of the collection, optionally inserting them as new records.
+// Appends related to o.R.CollectionI18ns.
+// Sets related.R.Collection appropriately.
+// Uses the global database handle and panics on error.
+func (o *Collection) AddCollectionI18nsGP(insert bool, related ...*CollectionI18n) {
+	if err := o.AddCollectionI18ns(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddCollectionI18ns adds the given related objects to the existing relationships
+// of the collection, optionally inserting them as new records.
+// Appends related to o.R.CollectionI18ns.
+// Sets related.R.Collection appropriately.
+func (o *Collection) AddCollectionI18ns(exec boil.Executor, insert bool, related ...*CollectionI18n) error {
+	var err error
+	for _, rel := range related {
+		if insert {
+			rel.CollectionID = o.ID
+			if err = rel.Insert(exec); err != nil {
+				return errors.Wrap(err, "failed to insert into foreign table")
+			}
+		} else {
+			updateQuery := fmt.Sprintf(
+				"UPDATE \"collection_i18n\" SET %s WHERE %s",
+				strmangle.SetParamNames("\"", "\"", 1, []string{"collection_id"}),
+				strmangle.WhereClause("\"", "\"", 2, collectionI18nPrimaryKeyColumns),
+			)
+			values := []interface{}{o.ID, rel.CollectionID, rel.Language}
+
+			if boil.DebugMode {
+				fmt.Fprintln(boil.DebugWriter, updateQuery)
+				fmt.Fprintln(boil.DebugWriter, values)
+			}
+
+			if _, err = exec.Exec(updateQuery, values...); err != nil {
+				return errors.Wrap(err, "failed to update foreign table")
+			}
+
+			rel.CollectionID = o.ID
+		}
+	}
+
+	if o.R == nil {
+		o.R = &collectionR{
+			CollectionI18ns: related,
+		}
+	} else {
+		o.R.CollectionI18ns = append(o.R.CollectionI18ns, related...)
+	}
+
+	for _, rel := range related {
+		if rel.R == nil {
+			rel.R = &collectionI18nR{
 				Collection: o,
 			}
 		} else {

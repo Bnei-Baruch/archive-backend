@@ -7,7 +7,7 @@ import (
 func SetupRoutes(router *gin.Engine) {
 	router.GET("/collections", CollectionsHandler)
 	router.POST("/collections", CollectionsHandler)
-	router.GET("/content_units/:uid", ContentUnitsHandler)
+	router.GET("/content_units/:uid", ContentUnitHandler)
 	router.GET("/sources", SourcesHierarchyHandler)
 	router.GET("/tags", TagsHierarchyHandler)
 	router.GET("/search", SearchHandler)
