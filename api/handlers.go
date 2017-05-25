@@ -556,7 +556,7 @@ func handleSearch(esc *elastic.Client, index string, text string, from int) (*el
 
 func appendListMods(mods *[]qm.QueryMod, r ListRequest) error {
 	if r.OrderBy == "" {
-		*mods = append(*mods, qm.OrderBy("id"))
+		*mods = append(*mods, qm.OrderBy("id desc"))
 	} else {
 		*mods = append(*mods, qm.OrderBy(r.OrderBy))
 	}
