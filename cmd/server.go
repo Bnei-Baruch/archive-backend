@@ -41,8 +41,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 	boil.DebugMode = viper.GetString("server.mode") == "debug"
 
 	log.Info("Initializing type registries")
-	utils.Must(mdb.CONTENT_TYPE_REGISTRY.Init(mdbDB))
-	utils.Must(mdb.SOURCE_TYPE_REGISTRY.Init(mdbDB))
+	utils.Must(mdb.InitTypeRegistries(mdbDB))
 
 	log.Info("Setting up connection to ElasticSearch")
 	url := viper.GetString("elasticsearch.url")

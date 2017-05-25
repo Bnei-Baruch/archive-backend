@@ -62,7 +62,7 @@ func ImportMDB() {
 	log.Infof("Elasticsearch version %s", esversion)
 
 	log.Info("Initializing static data from MDB")
-	utils.Must(mdb.CONTENT_TYPE_REGISTRY.Init(db))
+	utils.Must(mdb.InitTypeRegistries(db))
 
 	utils.Must(recreateIndex(INDEX_NAME))
 
