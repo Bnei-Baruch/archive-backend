@@ -9,3 +9,13 @@ bind-address=":8080"
 mode="debug"  # GIN mode. Either debug, release or test
 rollbar-token=""
 rollbar-environment="development"
+
+[links]
+bind-address=":8081"
+mode="debug"  # GIN mode. Either debug, release or test
+rollbar-token=""
+rollbar-environment="development"
+
+[file_service]
+url1="http://files.kabbalahmedia.info/api/v1/get"
+url2="http://files.kabbalahmedia.info/api/v1/get"
