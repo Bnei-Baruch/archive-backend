@@ -58,7 +58,7 @@ func linksFn(cmd *cobra.Command, args []string) {
 
 	links.SetupRoutes(router)
 
-	log.Infoln("Running application")
+	log.Infoln("Running links backend application")
 	if cmd != nil {
 		router.Run(viper.GetString("links.bind-address"))
 	}

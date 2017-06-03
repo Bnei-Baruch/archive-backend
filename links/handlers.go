@@ -149,7 +149,7 @@ func FilesHandler(c *gin.Context) {
 			return
 		}
 
-		c.Redirect(http.StatusTemporaryRedirect, body.Url)
+		c.Redirect(http.StatusFound, body.Url)
 		return
 	default:
 		defer res.Body.Close()
