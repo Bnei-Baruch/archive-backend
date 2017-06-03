@@ -30,7 +30,7 @@ type ContentTypesFilter struct {
 
 type SourcesFilter struct {
 	Authors []string `json:"authors" form:"author" binding:"omitempty"`
-	Sources []string  `json:"sources" form:"source" binding:"omitempty,dive,len=8"`
+	Sources []string `json:"sources" form:"source" binding:"omitempty,dive,len=8"`
 }
 
 type TagsFilter struct {
@@ -78,6 +78,13 @@ type ContentUnitsRequest struct {
 type ContentUnitsResponse struct {
 	ListResponse
 	ContentUnits []*ContentUnit `json:"content_units"`
+}
+
+type LessonsRequest struct {
+	ListRequest
+	DateRangeFilter
+	SourcesFilter
+	TagsFilter
 }
 
 type HierarchyRequest struct {

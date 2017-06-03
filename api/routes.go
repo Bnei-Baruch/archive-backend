@@ -9,6 +9,8 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/collections", CollectionsHandler)
 	router.GET("/content_units", ContentUnitsHandler)
 	router.GET("/content_units/:uid", ContentUnitHandler)
+	router.GET("/lessons", LessonsHandler)
+	router.POST("/lessons", LessonsHandler)
 	router.GET("/sources", SourcesHierarchyHandler)
 	router.GET("/tags", TagsHierarchyHandler)
 	router.GET("/search", SearchHandler)
