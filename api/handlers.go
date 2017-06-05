@@ -228,8 +228,12 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	}
 
 	// order, limit, offset
-	if err = appendListMods(&mods, r.ListRequest); err != nil {
+	_, offset, err := appendListMods(&mods, r.ListRequest)
+	if err != nil {
 		return nil, NewBadRequestError(err)
+	}
+	if int64(offset) >= total {
+		return NewCollectionsResponse(), nil
 	}
 
 	// Eager loading
@@ -408,8 +412,12 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	}
 
 	// order, limit, offset
-	if err = appendListMods(&mods, r.ListRequest); err != nil {
+	_, offset, err := appendListMods(&mods, r.ListRequest)
+	if err != nil {
 		return nil, NewBadRequestError(err)
+	}
+	if int64(offset) >= total {
+		return NewContentUnitsResponse(), nil
 	}
 
 	// Eager loading
@@ -573,7 +581,9 @@ func handleSearch(esc *elastic.Client, index string, text string, from int) (*el
 		Do(context.TODO())
 }
 
-func appendListMods(mods *[]qm.QueryMod, r ListRequest) error {
+// appendListMods compute and appends the OrderBy, Limit and Offset query mods.
+// It returns the limit, offset and error if any
+func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
 	if r.OrderBy == "" {
 		*mods = append(*mods, qm.OrderBy("id desc"))
 	} else {
@@ -598,7 +608,7 @@ func appendListMods(mods *[]qm.QueryMod, r ListRequest) error {
 		if r.StopIndex == 0 {
 			limit = MAX_PAGE_SIZE
 		} else if r.StopIndex < r.StartIndex {
-			return errors.Errorf("Invalid range [%d-%d]", r.StartIndex, r.StopIndex)
+			return 0, 0, errors.Errorf("Invalid range [%d-%d]", r.StartIndex, r.StopIndex)
 		} else {
 			limit = r.StopIndex - r.StartIndex + 1
 		}
@@ -609,7 +619,7 @@ func appendListMods(mods *[]qm.QueryMod, r ListRequest) error {
 		*mods = append(*mods, qm.Offset(offset))
 	}
 
-	return nil
+	return limit, offset, nil
 }
 
 func appendContentTypesFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) error {
