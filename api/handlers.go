@@ -55,7 +55,9 @@ func ContentUnitHandler(c *gin.Context) {
 	uid := c.Param("uid")
 	cu, err := mdbmodels.ContentUnits(db,
 		SECURE_PUBLISHED_MOD,
-		qm.Where("uid = ?", uid)).
+		qm.Where("uid = ?", uid),
+		qm.Load("CollectionsContentUnits",
+			"CollectionsContentUnits.Collection")).
 		One()
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -141,6 +143,87 @@ func ContentUnitHandler(c *gin.Context) {
 
 		u.Files[i] = f
 	}
+
+	// collections
+	u.Collections = make(map[string]*Collection)
+	cidsMap := make(map[string]interface{})
+	for _, ccu := range cu.R.CollectionsContentUnits {
+		// Workaround for this bug: https://github.com/vattle/sqlboiler/issues/154
+		if ccu.R.Collection == nil {
+			err = ccu.L.LoadCollection(db, true, ccu)
+			if err != nil {
+				NewInternalError(err).Abort(c)
+				return
+			}
+		}
+
+		if mdb.SEC_PUBLIC == ccu.R.Collection.Secure && ccu.R.Collection.Published {
+			cl := ccu.R.Collection
+			var props mdb.CollectionProperties
+			err = cl.Properties.Unmarshal(&props)
+			if err != nil {
+				NewInternalError(err).Abort(c)
+				return
+			}
+			cc := &Collection{
+				ID:          cl.UID,
+				ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[cl.TypeID].Name,
+				FilmDate:    Date{Time: props.FilmDate.Time},
+			}
+
+			// Dirty hack for unique mapping - needs to parse in client...
+			key := fmt.Sprintf("%s____%s", cl.UID, ccu.Name)
+			u.Collections[key] = cc
+
+			cidsMap[key] = cl.ID
+		}
+	}
+
+	// collections - i18n
+	cids := make([]interface{}, 0)
+	for _, v := range cidsMap {
+		cids = append(cids, v)
+	}
+
+	ci18ns, err := mdbmodels.CollectionI18ns(db,
+		qm.WhereIn("collection_id in ?", cids...),
+		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
+		All()
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	ci18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(cids))
+	for _, x := range ci18ns {
+		v, ok := ci18nsMap[x.CollectionID]
+		if !ok {
+			v = make(map[string]*mdbmodels.CollectionI18n, 1)
+			ci18nsMap[x.CollectionID] = v
+		}
+		v[x.Language] = x
+	}
+
+	for k, v := range u.Collections {
+		i18ns, ok := ci18nsMap[cidsMap[k].(int64)]
+		if ok {
+			for _, l := range LANG_ORDER[r.Language] {
+				li18n, ok := i18ns[l]
+				if ok {
+					if v.Name == "" && li18n.Name.Valid {
+						v.Name = li18n.Name.String
+					}
+					if v.Description == "" && li18n.Description.Valid {
+						v.Description = li18n.Description.String
+					}
+				}
+			}
+		}
+	}
+
+	// sources
+
+	// tags
 
 	c.JSON(http.StatusOK, u)
 }
