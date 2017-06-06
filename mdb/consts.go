@@ -9,7 +9,7 @@ const (
 	// Collection Types
 
 	CT_DAILY_LESSON             = "DAILY_LESSON"
-	CT_SATURDAY_LESSON          = "SATURDAY_LESSON"
+	CT_SPECIAL_LESSON           = "SPECIAL_LESSON"
 	CT_WEEKLY_FRIENDS_GATHERING = "WEEKLY_FRIENDS_GATHERING"
 	CT_CONGRESS                 = "CONGRESS"
 	CT_VIDEO_PROGRAM            = "VIDEO_PROGRAM"
@@ -83,7 +83,7 @@ const (
 
 var DEFAULT_NAMES = map[string]string{
 	CT_DAILY_LESSON:             "Daily Lesson",
-	CT_SATURDAY_LESSON:          "Saturday Lesson",
+	CT_SPECIAL_LESSON:           "Saturday Lesson",
 	CT_WEEKLY_FRIENDS_GATHERING: "Weekly Friends Gathering",
 	CT_CONGRESS:                 "Congress",
 	CT_VIDEO_PROGRAM:            "Video Program",

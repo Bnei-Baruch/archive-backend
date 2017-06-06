@@ -242,7 +242,7 @@ func LessonsHandler(c *gin.Context) {
 		utils.IsEmpty(r.Tags) {
 		cr := CollectionsRequest{
 			ContentTypesFilter: ContentTypesFilter{
-				ContentTypes: []string{mdb.CT_DAILY_LESSON, mdb.CT_SATURDAY_LESSON},
+				ContentTypes: []string{mdb.CT_DAILY_LESSON, mdb.CT_SPECIAL_LESSON},
 			},
 			ListRequest:     r.ListRequest,
 			DateRangeFilter: r.DateRangeFilter,
