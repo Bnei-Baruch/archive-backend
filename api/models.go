@@ -104,36 +104,38 @@ func NewContentUnitsResponse() *ContentUnitsResponse {
 type Collection struct {
 	ID           string         `json:"id"`
 	ContentType  string         `json:"content_type"`
-	FilmDate     Date           `json:"film_date"`
+	FilmDate     Date           `json:"film_date,omitempty"`
 	Name         string         `json:"name,omitempty"`
 	Description  string         `json:"description,omitempty"`
-	ContentUnits []*ContentUnit `json:"content_units"`
+	ContentUnits []*ContentUnit `json:"content_units,omitempty"`
 }
 
 type ContentUnit struct {
-	ID               string                 `json:"id"`
-	ContentType      string                 `json:"content_type"`
-	NameInCollection string                 `json:"name_in_collection,omitempty"`
-	FilmDate         Date                   `json:"film_date"`
-	Name             string                 `json:"name,omitempty"`
-	Description      string                 `json:"description,omitempty"`
-	Duration         int                    `json:"duration,omitempty"`
-	OriginalLanguage string                 `json:"original_language,omitempty"`
-	Files            []*File                `json:"files,omitempty"`
-	Collections      map[string]*Collection `json:"collections"`
+	ID               string                  `json:"id"`
+	ContentType      string                  `json:"content_type"`
+	NameInCollection string                  `json:"name_in_collection,omitempty"`
+	FilmDate         Date                    `json:"film_date,omitempty"`
+	Name             string                  `json:"name,omitempty"`
+	Description      string                  `json:"description,omitempty"`
+	Duration         int                     `json:"duration,omitempty"`
+	OriginalLanguage string                  `json:"original_language,omitempty"`
+	Files            []*File                 `json:"files,omitempty"`
+	Collections      map[string]*Collection  `json:"collections,omitempty"`
+	Sources          []string                `json:"sources,omitempty"`
+	Tags             []string                `json:"tags,omitempty"`
+	SourceUnits      map[string]*ContentUnit `json:"source_units,omitempty"`
+	DerivedUnits     map[string]*ContentUnit `json:"derived_units,omitempty"`
 }
 
 type File struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Size        int64  `json:"size"`
-	URL         string `json:"url"`
-	DownloadURL string `json:"download_url"`
-	Duration    int    `json:"duration,omitempty"`
-	Language    string `json:"language,omitempty"`
-	MimeType    string `json:"mimetype,omitempty"`
-	Type        string `json:"type,omitempty"`
-	SubType     string `json:"subtype,omitempty"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Size     int64  `json:"size"`
+	Duration int    `json:"duration,omitempty"`
+	Language string `json:"language,omitempty"`
+	MimeType string `json:"mimetype,omitempty"`
+	Type     string `json:"type,omitempty"`
+	SubType  string `json:"subtype,omitempty"`
 }
 
 type Source struct {

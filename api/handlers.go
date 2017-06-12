@@ -56,8 +56,14 @@ func ContentUnitHandler(c *gin.Context) {
 	cu, err := mdbmodels.ContentUnits(db,
 		SECURE_PUBLISHED_MOD,
 		qm.Where("uid = ?", uid),
-		qm.Load("CollectionsContentUnits",
-			"CollectionsContentUnits.Collection")).
+		qm.Load("Sources",
+			"Tags",
+			"CollectionsContentUnits",
+			"CollectionsContentUnits.Collection",
+			"DerivedContentUnitDerivations",
+			"DerivedContentUnitDerivations.Source",
+			"SourceContentUnitDerivations",
+			"SourceContentUnitDerivations.Derived")).
 		One()
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -69,106 +75,115 @@ func ContentUnitHandler(c *gin.Context) {
 		}
 	}
 
-	var props mdb.ContentUnitProperties
-	err = cu.Properties.Unmarshal(&props)
+	u, err := mdbToCU(cu)
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
-	}
-	u := &ContentUnit{
-		ID:               cu.UID,
-		ContentType:      mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
-		FilmDate:         Date{Time: props.FilmDate.Time},
-		Duration:         props.Duration,
-		OriginalLanguage: props.OriginalLanguage,
 	}
 
-	// i18n
-	cui18ns, err := mdbmodels.ContentUnitI18ns(db,
-		qm.Where("content_unit_id = ?", cu.ID),
-		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
-		All()
-	if err != nil {
-		NewInternalError(err).Abort(c)
-		return
-	}
-	for _, l := range LANG_ORDER[r.Language] {
-		for _, i18n := range cui18ns {
-			if i18n.Language == l {
-				if u.Name == "" && i18n.Name.Valid {
-					u.Name = i18n.Name.String
-				}
-				if u.Description == "" && i18n.Description.Valid {
-					u.Description = i18n.Description.String
-				}
+	// Derived & Source content units
+	cuidsMap := make(map[string]int64)
+
+	u.SourceUnits = make(map[string]*ContentUnit)
+	for _, cud := range cu.R.DerivedContentUnitDerivations {
+		su := cud.R.Source
+		if mdb.SEC_PUBLIC == su.Secure && su.Published {
+			scu, err := mdbToCU(su)
+			if err != nil {
+				NewInternalError(err).Abort(c)
+				return
 			}
+
+			// Dirty hack for unique mapping - needs to parse in client...
+			key := fmt.Sprintf("%s____%s", su.UID, cud.Name)
+			u.SourceUnits[key] = scu
+			cuidsMap[key] = su.ID
 		}
 	}
 
-	// files
-	files, err := mdbmodels.Files(db,
-		SECURE_PUBLISHED_MOD,
-		qm.Where("content_unit_id = ?", cu.ID)).
-		All()
+	u.DerivedUnits = make(map[string]*ContentUnit)
+	for _, cud := range cu.R.SourceContentUnitDerivations {
+		du := cud.R.Derived
+		if mdb.SEC_PUBLIC == du.Secure && du.Published {
+			dcu, err := mdbToCU(du)
+			if err != nil {
+				NewInternalError(err).Abort(c)
+				return
+			}
+
+			// Dirty hack for unique mapping - needs to parse in client...
+			key := fmt.Sprintf("%s____%s", du.UID, cud.Name)
+			u.DerivedUnits[key] = dcu
+			cuidsMap[key] = du.ID
+		}
+	}
+
+	cuids := make([]int64, 1)
+	cuids[0] = cu.ID
+	for _, v := range cuidsMap {
+		cuids = append(cuids, v)
+	}
+
+	// content units i18n
+	cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	u.Files = make([]*File, len(files))
-	for i, x := range files {
-		var props mdb.FileProperties
-		err := x.Properties.Unmarshal(&props)
-		if err != nil {
+	if i18ns, ok := cui18nsMap[cu.ID]; ok {
+		setCUI18n(u, r.Language, i18ns)
+	}
+	for k, v := range u.DerivedUnits {
+		if i18ns, ok := cui18nsMap[cuidsMap[k]]; ok {
+			setCUI18n(v, r.Language, i18ns)
+		}
+	}
+	for k, v := range u.SourceUnits {
+		if i18ns, ok := cui18nsMap[cuidsMap[k]]; ok {
+			setCUI18n(v, r.Language, i18ns)
+		}
+	}
+
+	// files (all CUs)
+	fileMap, err := loadCUFiles(db, cuids)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if files, ok := fileMap[cu.ID]; ok {
+		if err := setCUFiles(u, files); err != nil {
 			NewInternalError(err).Abort(c)
 			return
 		}
-
-		f := &File{
-			ID:          x.UID,
-			Name:        x.Name,
-			Size:        x.Size,
-			Type:        x.Type,
-			SubType:     x.SubType,
-			URL:         props.URL,
-			DownloadURL: props.URL,
-			Duration:    props.Duration,
+	}
+	for k, v := range u.DerivedUnits {
+		if files, ok := fileMap[cuidsMap[k]]; ok {
+			if err := setCUFiles(v, files); err != nil {
+				NewInternalError(err).Abort(c)
+				return
+			}
 		}
-
-		if x.Language.Valid {
-			f.Language = x.Language.String
+	}
+	for k, v := range u.SourceUnits {
+		if files, ok := fileMap[cuidsMap[k]]; ok {
+			if err := setCUFiles(v, files); err != nil {
+				NewInternalError(err).Abort(c)
+				return
+			}
 		}
-		if x.MimeType.Valid {
-			f.MimeType = x.MimeType.String
-		}
-
-		u.Files[i] = f
 	}
 
 	// collections
 	u.Collections = make(map[string]*Collection)
-	cidsMap := make(map[string]interface{})
+	cidsMap := make(map[string]int64)
 	for _, ccu := range cu.R.CollectionsContentUnits {
-		// Workaround for this bug: https://github.com/vattle/sqlboiler/issues/154
-		if ccu.R.Collection == nil {
-			err = ccu.L.LoadCollection(db, true, ccu)
-			if err != nil {
-				NewInternalError(err).Abort(c)
-				return
-			}
-		}
-
 		if mdb.SEC_PUBLIC == ccu.R.Collection.Secure && ccu.R.Collection.Published {
 			cl := ccu.R.Collection
-			var props mdb.CollectionProperties
-			err = cl.Properties.Unmarshal(&props)
+
+			cc, err := mdbToC(cl)
 			if err != nil {
 				NewInternalError(err).Abort(c)
 				return
-			}
-			cc := &Collection{
-				ID:          cl.UID,
-				ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[cl.TypeID].Name,
-				FilmDate:    Date{Time: props.FilmDate.Time},
 			}
 
 			// Dirty hack for unique mapping - needs to parse in client...
@@ -180,50 +195,34 @@ func ContentUnitHandler(c *gin.Context) {
 	}
 
 	// collections - i18n
-	cids := make([]interface{}, 0)
+	cids := make([]int64, 0)
 	for _, v := range cidsMap {
 		cids = append(cids, v)
 	}
-
-	ci18ns, err := mdbmodels.CollectionI18ns(db,
-		qm.WhereIn("collection_id in ?", cids...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
-		All()
-	if err != nil {
-		NewInternalError(err).Abort(c)
-		return
-	}
-
-	ci18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(cids))
-	for _, x := range ci18ns {
-		v, ok := ci18nsMap[x.CollectionID]
-		if !ok {
-			v = make(map[string]*mdbmodels.CollectionI18n, 1)
-			ci18nsMap[x.CollectionID] = v
+	if len(cids) > 0 {
+		ci18nsMap, err := loadCI18ns(db, r.Language, cids)
+		if err != nil {
+			NewInternalError(err).Abort(c)
+			return
 		}
-		v[x.Language] = x
-	}
-
-	for k, v := range u.Collections {
-		i18ns, ok := ci18nsMap[cidsMap[k].(int64)]
-		if ok {
-			for _, l := range LANG_ORDER[r.Language] {
-				li18n, ok := i18ns[l]
-				if ok {
-					if v.Name == "" && li18n.Name.Valid {
-						v.Name = li18n.Name.String
-					}
-					if v.Description == "" && li18n.Description.Valid {
-						v.Description = li18n.Description.String
-					}
-				}
+		for k, v := range u.Collections {
+			if i18ns, ok := ci18nsMap[cidsMap[k]]; ok {
+				setCI18n(v, r.Language, i18ns)
 			}
 		}
 	}
 
 	// sources
+	u.Sources = make([]string, len(cu.R.Sources))
+	for i, x := range cu.R.Sources {
+		u.Sources[i] = x.UID
+	}
 
 	// tags
+	u.Tags = make([]string, len(cu.R.Tags))
+	for i, x := range cu.R.Tags {
+		u.Tags[i] = x.UID
+	}
 
 	c.JSON(http.StatusOK, u)
 }
@@ -332,8 +331,8 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 
 	// Filter secure & published content units
 	// Load i18n for all collections and all units - total 2 DB round trips
-	cids := make([]interface{}, len(collections))
-	cuids := make([]interface{}, 0)
+	cids := make([]int64, len(collections))
+	cuids := make([]int64, 0)
 	for i, x := range collections {
 		cids[i] = x.ID
 		b := x.R.CollectionsContentUnits[:0]
@@ -354,38 +353,14 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 			x.R.CollectionsContentUnits = b
 		}
 	}
-	ci18ns, err := mdbmodels.CollectionI18ns(db,
-		qm.WhereIn("collection_id in ?", cids...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
-		All()
-	if err != nil {
-		return nil, NewInternalError(err)
-	}
-	ci18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(cids))
-	for _, x := range ci18ns {
-		v, ok := ci18nsMap[x.CollectionID]
-		if !ok {
-			v = make(map[string]*mdbmodels.CollectionI18n, 1)
-			ci18nsMap[x.CollectionID] = v
-		}
-		v[x.Language] = x
-	}
 
-	cui18ns, err := mdbmodels.ContentUnitI18ns(db,
-		qm.WhereIn("content_unit_id in ?", cuids...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
-		All()
+	ci18nsMap, err := loadCI18ns(db, r.Language, cids)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
-	cui18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(cuids))
-	for _, x := range cui18ns {
-		v, ok := cui18nsMap[x.ContentUnitID]
-		if !ok {
-			v = make(map[string]*mdbmodels.ContentUnitI18n, 1)
-			cui18nsMap[x.ContentUnitID] = v
-		}
-		v[x.Language] = x
+	cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
+	if err != nil {
+		return nil, NewInternalError(err)
 	}
 
 	// Response
@@ -394,71 +369,32 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		Collections:  make([]*Collection, len(collections)),
 	}
 	for i, x := range collections {
-		var props mdb.CollectionProperties
-		err = x.Properties.Unmarshal(&props)
+		c, err := mdbToC(x)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
-		cl := &Collection{
-			ID:          x.UID,
-			ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[x.TypeID].Name,
-			FilmDate:    Date{Time: props.FilmDate.Time},
-		}
-
-		// i18n - get from map by lang order
-		i18ns, ok := ci18nsMap[x.ID]
-		if ok {
-			for _, l := range LANG_ORDER[r.Language] {
-				li18n, ok := i18ns[l]
-				if ok {
-					if cl.Name == "" && li18n.Name.Valid {
-						cl.Name = li18n.Name.String
-					}
-					if cl.Description == "" && li18n.Description.Valid {
-						cl.Description = li18n.Description.String
-					}
-				}
-			}
+		if i18ns, ok := ci18nsMap[x.ID]; ok {
+			setCI18n(c, r.Language, i18ns)
 		}
 
 		// content units
 		sort.Sort(mdb.InCollection{ExtCCUSlice: mdb.ExtCCUSlice(x.R.CollectionsContentUnits)})
-		cl.ContentUnits = make([]*ContentUnit, 0)
+		c.ContentUnits = make([]*ContentUnit, 0)
 		for _, ccu := range x.R.CollectionsContentUnits {
 			cu := ccu.R.ContentUnit
-			var props mdb.ContentUnitProperties
-			err = cu.Properties.Unmarshal(&props)
+
+			u, err := mdbToCU(cu)
 			if err != nil {
 				return nil, NewInternalError(err)
 			}
-			u := &ContentUnit{
-				ID:               cu.UID,
-				ContentType:      mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
-				NameInCollection: ccu.Name,
-				FilmDate:         Date{Time: props.FilmDate.Time},
-				Duration:         props.Duration,
-				OriginalLanguage: props.OriginalLanguage,
+			if i18ns, ok := cui18nsMap[cu.ID]; ok {
+				setCUI18n(u, r.Language, i18ns)
 			}
 
-			// i18n - get from map by lang order
-			i18ns, ok := cui18nsMap[cu.ID]
-			if ok {
-				for _, l := range LANG_ORDER[r.Language] {
-					li18n, ok := i18ns[l]
-					if ok {
-						if u.Name == "" && li18n.Name.Valid {
-							u.Name = li18n.Name.String
-						}
-						if u.Description == "" && li18n.Description.Valid {
-							u.Description = li18n.Description.String
-						}
-					}
-				}
-			}
-
-			cl.ContentUnits = append(cl.ContentUnits, u)
+			u.NameInCollection = ccu.Name
+			c.ContentUnits = append(c.ContentUnits, u)
 		}
-		resp.Collections[i] = cl
+		resp.Collections[i] = c
 	}
 
 	return resp, nil
@@ -516,8 +452,8 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 
 	// Filter secure published collections
 	// Load i18n for all content units and all collections - total 2 DB round trips
-	cuids := make([]interface{}, len(units))
-	cids := make([]interface{}, 0)
+	cuids := make([]int64, len(units))
+	cids := make([]int64, 0)
 	for i, x := range units {
 		cuids[i] = x.ID
 		b := x.R.CollectionsContentUnits[:0]
@@ -539,38 +475,13 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		}
 	}
 
-	cui18ns, err := mdbmodels.ContentUnitI18ns(db,
-		qm.WhereIn("content_unit_id in ?", cuids...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
-		All()
+	cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
-	cui18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(cuids))
-	for _, x := range cui18ns {
-		v, ok := cui18nsMap[x.ContentUnitID]
-		if !ok {
-			v = make(map[string]*mdbmodels.ContentUnitI18n, 1)
-			cui18nsMap[x.ContentUnitID] = v
-		}
-		v[x.Language] = x
-	}
-
-	ci18ns, err := mdbmodels.CollectionI18ns(db,
-		qm.WhereIn("collection_id in ?", cids...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[r.Language])...)).
-		All()
+	ci18nsMap, err := loadCI18ns(db, r.Language, cids)
 	if err != nil {
 		return nil, NewInternalError(err)
-	}
-	ci18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(cids))
-	for _, x := range ci18ns {
-		v, ok := ci18nsMap[x.CollectionID]
-		if !ok {
-			v = make(map[string]*mdbmodels.CollectionI18n, 1)
-			ci18nsMap[x.CollectionID] = v
-		}
-		v[x.Language] = x
 	}
 
 	// Response
@@ -579,65 +490,25 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		ContentUnits: make([]*ContentUnit, len(units)),
 	}
 	for i, x := range units {
-		var props mdb.ContentUnitProperties
-		err = x.Properties.Unmarshal(&props)
+		cu, err := mdbToCU(x)
 		if err != nil {
 			return nil, NewInternalError(err)
-
 		}
-		cu := &ContentUnit{
-			ID:               x.UID,
-			ContentType:      mdb.CONTENT_TYPE_REGISTRY.ByID[x.TypeID].Name,
-			FilmDate:         Date{Time: props.FilmDate.Time},
-			Duration:         props.Duration,
-			OriginalLanguage: props.OriginalLanguage,
-		}
-
-		// i18n - get from map by lang order
-		i18ns, ok := cui18nsMap[x.ID]
-		if ok {
-			for _, l := range LANG_ORDER[r.Language] {
-				li18n, ok := i18ns[l]
-				if ok {
-					if cu.Name == "" && li18n.Name.Valid {
-						cu.Name = li18n.Name.String
-					}
-					if cu.Description == "" && li18n.Description.Valid {
-						cu.Description = li18n.Description.String
-					}
-				}
-			}
+		if i18ns, ok := cui18nsMap[x.ID]; ok {
+			setCUI18n(cu, r.Language, i18ns)
 		}
 
 		// collections
 		cu.Collections = make(map[string]*Collection, 0)
 		for _, ccu := range x.R.CollectionsContentUnits {
 			cl := ccu.R.Collection
-			var props mdb.CollectionProperties
-			err = cl.Properties.Unmarshal(&props)
+
+			cc, err := mdbToC(cl)
 			if err != nil {
 				return nil, NewInternalError(err)
 			}
-			cc := &Collection{
-				ID:          cl.UID,
-				ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[cl.TypeID].Name,
-				FilmDate:    Date{Time: props.FilmDate.Time},
-			}
-
-			// i18n - get from map by lang order
-			i18ns, ok := ci18nsMap[cl.ID]
-			if ok {
-				for _, l := range LANG_ORDER[r.Language] {
-					li18n, ok := i18ns[l]
-					if ok {
-						if cc.Name == "" && li18n.Name.Valid {
-							cc.Name = li18n.Name.String
-						}
-						if cc.Description == "" && li18n.Description.Valid {
-							cc.Description = li18n.Description.String
-						}
-					}
-				}
+			if i18ns, ok := ci18nsMap[cl.ID]; ok {
+				setCI18n(cc, r.Language, i18ns)
 			}
 
 			// Dirty hack for unique mapping - needs to parse in client...
@@ -836,4 +707,172 @@ func concludeRequest(c *gin.Context, resp interface{}, err *HttpError) {
 	} else {
 		err.Abort(c)
 	}
+}
+
+func mdbToC(c *mdbmodels.Collection) (*Collection, error) {
+	var props mdb.CollectionProperties
+	if err := c.Properties.Unmarshal(&props); err != nil {
+		return nil, errors.Wrap(err, "json.Unmarshal properties")
+	}
+
+	return &Collection{
+		ID:          c.UID,
+		ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name,
+		FilmDate:    Date{Time: props.FilmDate.Time},
+	}, nil
+}
+
+func mdbToCU(cu *mdbmodels.ContentUnit) (*ContentUnit, error) {
+	var props mdb.ContentUnitProperties
+	if err := cu.Properties.Unmarshal(&props); err != nil {
+		return nil, errors.Wrap(err, "json.Unmarshal properties")
+	}
+
+	return &ContentUnit{
+		ID:               cu.UID,
+		ContentType:      mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
+		FilmDate:         Date{Time: props.FilmDate.Time},
+		Duration:         props.Duration,
+		OriginalLanguage: props.OriginalLanguage,
+	}, nil
+}
+
+func mdbToFile(file *mdbmodels.File) (*File, error) {
+	var props mdb.FileProperties
+	if err := file.Properties.Unmarshal(&props); err != nil {
+		return nil, errors.Wrap(err, "json.Unmarshal properties")
+	}
+
+	f := &File{
+		ID:       file.UID,
+		Name:     file.Name,
+		Size:     file.Size,
+		Type:     file.Type,
+		SubType:  file.SubType,
+		Duration: props.Duration,
+	}
+
+	if file.Language.Valid {
+		f.Language = file.Language.String
+	}
+	if file.MimeType.Valid {
+		f.MimeType = file.MimeType.String
+	}
+
+	return f, nil
+}
+
+func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.CollectionI18n, error) {
+	// Load from DB
+	i18ns, err := mdbmodels.CollectionI18ns(db,
+		qm.WhereIn("collection_id in ?", utils.ConvertArgsInt64(ids)...),
+		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[language])...)).
+		All()
+	if err != nil {
+		return nil, errors.Wrap(err, "Load collections i18ns from DB")
+	}
+
+	// Group by collection and language
+	i18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(ids))
+	for _, x := range i18ns {
+		v, ok := i18nsMap[x.CollectionID]
+		if !ok {
+			v = make(map[string]*mdbmodels.CollectionI18n, 1)
+			i18nsMap[x.CollectionID] = v
+		}
+		v[x.Language] = x
+	}
+
+	return i18nsMap, nil
+}
+
+func setCI18n(c *Collection, language string, i18ns map[string]*mdbmodels.CollectionI18n) {
+	for _, l := range LANG_ORDER[language] {
+		li18n, ok := i18ns[l]
+		if ok {
+			if c.Name == "" && li18n.Name.Valid {
+				c.Name = li18n.Name.String
+			}
+			if c.Description == "" && li18n.Description.Valid {
+				c.Description = li18n.Description.String
+			}
+		}
+	}
+}
+
+func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.ContentUnitI18n, error) {
+	// Load from DB
+	i18ns, err := mdbmodels.ContentUnitI18ns(db,
+		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...),
+		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[language])...)).
+		All()
+	if err != nil {
+		return nil, errors.Wrap(err, "Load content units i18ns from DB")
+	}
+
+	// Group by content unit and language
+	i18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(ids))
+	for _, x := range i18ns {
+		v, ok := i18nsMap[x.ContentUnitID]
+		if !ok {
+			v = make(map[string]*mdbmodels.ContentUnitI18n, 1)
+			i18nsMap[x.ContentUnitID] = v
+		}
+		v[x.Language] = x
+	}
+
+	return i18nsMap, nil
+}
+
+func loadCUFiles(db *sql.DB, ids []int64) (map[int64][]*mdbmodels.File, error) {
+	// Load from DB
+	allFiles, err := mdbmodels.Files(db,
+		SECURE_PUBLISHED_MOD,
+		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...)).
+		All()
+	if err != nil {
+		return nil, errors.Wrap(err, "Load files from DB")
+	}
+
+	// Group by content unit
+	filesMap := make(map[int64][]*mdbmodels.File, len(ids))
+	for _, x := range allFiles {
+		v, ok := filesMap[x.ContentUnitID.Int64]
+		if ok {
+			v = append(v, x)
+		} else {
+			v = []*mdbmodels.File{x}
+		}
+		filesMap[x.ContentUnitID.Int64] = v
+	}
+
+	return filesMap, nil
+}
+
+func setCUI18n(cu *ContentUnit, language string, i18ns map[string]*mdbmodels.ContentUnitI18n) {
+	for _, l := range LANG_ORDER[language] {
+		li18n, ok := i18ns[l]
+		if ok {
+			if cu.Name == "" && li18n.Name.Valid {
+				cu.Name = li18n.Name.String
+			}
+			if cu.Description == "" && li18n.Description.Valid {
+				cu.Description = li18n.Description.String
+			}
+		}
+	}
+}
+
+func setCUFiles(cu *ContentUnit, files []*mdbmodels.File) error {
+	cu.Files = make([]*File, len(files))
+
+	for i, x := range files {
+		f, err := mdbToFile(x)
+		if err != nil {
+			return err
+		}
+		cu.Files[i] = f
+	}
+
+	return nil
 }
