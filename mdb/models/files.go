@@ -239,7 +239,7 @@ func (o *File) ParentFilesG(mods ...qm.QueryMod) fileQuery {
 // ParentFiles retrieves all the file's files with an executor via parent_id column.
 func (o *File) ParentFiles(exec boil.Executor, mods ...qm.QueryMod) fileQuery {
 	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
+		qm.Select("\"files\".*"),
 	}
 
 	if len(mods) != 0 {
@@ -247,11 +247,11 @@ func (o *File) ParentFiles(exec boil.Executor, mods ...qm.QueryMod) fileQuery {
 	}
 
 	queryMods = append(queryMods,
-		qm.Where("\"a\".\"parent_id\"=?", o.ID),
+		qm.Where("\"files\".\"parent_id\"=?", o.ID),
 	)
 
 	query := Files(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"files\" as \"a\"")
+	queries.SetFrom(query.Query, "\"files\"")
 	return query
 }
 
@@ -263,7 +263,7 @@ func (o *File) OperationsG(mods ...qm.QueryMod) operationQuery {
 // Operations retrieves all the operation's operations with an executor.
 func (o *File) Operations(exec boil.Executor, mods ...qm.QueryMod) operationQuery {
 	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
+		qm.Select("\"operations\".*"),
 	}
 
 	if len(mods) != 0 {
@@ -271,12 +271,12 @@ func (o *File) Operations(exec boil.Executor, mods ...qm.QueryMod) operationQuer
 	}
 
 	queryMods = append(queryMods,
-		qm.InnerJoin("\"files_operations\" as \"b\" on \"a\".\"id\" = \"b\".\"operation_id\""),
-		qm.Where("\"b\".\"file_id\"=?", o.ID),
+		qm.InnerJoin("\"files_operations\" on \"operations\".\"id\" = \"files_operations\".\"operation_id\""),
+		qm.Where("\"files_operations\".\"file_id\"=?", o.ID),
 	)
 
 	query := Operations(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"operations\" as \"a\"")
+	queries.SetFrom(query.Query, "\"operations\"")
 	return query
 }
 

@@ -183,7 +183,7 @@ func (o *ContentRoleType) RoleContentUnitsPersonsG(mods ...qm.QueryMod) contentU
 // RoleContentUnitsPersons retrieves all the content_units_person's content units persons with an executor via role_id column.
 func (o *ContentRoleType) RoleContentUnitsPersons(exec boil.Executor, mods ...qm.QueryMod) contentUnitsPersonQuery {
 	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
+		qm.Select("\"content_units_persons\".*"),
 	}
 
 	if len(mods) != 0 {
@@ -191,11 +191,11 @@ func (o *ContentRoleType) RoleContentUnitsPersons(exec boil.Executor, mods ...qm
 	}
 
 	queryMods = append(queryMods,
-		qm.Where("\"a\".\"role_id\"=?", o.ID),
+		qm.Where("\"content_units_persons\".\"role_id\"=?", o.ID),
 	)
 
 	query := ContentUnitsPersons(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"content_units_persons\" as \"a\"")
+	queries.SetFrom(query.Query, "\"content_units_persons\"")
 	return query
 }
 

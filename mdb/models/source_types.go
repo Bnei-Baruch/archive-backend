@@ -181,7 +181,7 @@ func (o *SourceType) TypeSourcesG(mods ...qm.QueryMod) sourceQuery {
 // TypeSources retrieves all the source's sources with an executor via type_id column.
 func (o *SourceType) TypeSources(exec boil.Executor, mods ...qm.QueryMod) sourceQuery {
 	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
+		qm.Select("\"sources\".*"),
 	}
 
 	if len(mods) != 0 {
@@ -189,11 +189,11 @@ func (o *SourceType) TypeSources(exec boil.Executor, mods ...qm.QueryMod) source
 	}
 
 	queryMods = append(queryMods,
-		qm.Where("\"a\".\"type_id\"=?", o.ID),
+		qm.Where("\"sources\".\"type_id\"=?", o.ID),
 	)
 
 	query := Sources(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"sources\" as \"a\"")
+	queries.SetFrom(query.Query, "\"sources\"")
 	return query
 }
 

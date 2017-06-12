@@ -130,23 +130,23 @@
 		},
 		{
 			"ImportPath": "github.com/vattle/sqlboiler/boil",
-			"Comment": "v2.1.7",
-			"Rev": "bfba60eaad30f691f1e3b83882b370223fa5416b"
+			"Comment": "v2.4.0-12-g553cc9f",
+			"Rev": "553cc9f680011fad9aa999e19e87bf9d76fbcf12"
 		},
 		{
 			"ImportPath": "github.com/vattle/sqlboiler/queries",
-			"Comment": "v2.1.7",
-			"Rev": "bfba60eaad30f691f1e3b83882b370223fa5416b"
+			"Comment": "v2.4.0-12-g553cc9f",
+			"Rev": "553cc9f680011fad9aa999e19e87bf9d76fbcf12"
 		},
 		{
 			"ImportPath": "github.com/vattle/sqlboiler/queries/qm",
-			"Comment": "v2.1.7",
-			"Rev": "bfba60eaad30f691f1e3b83882b370223fa5416b"
+			"Comment": "v2.4.0-12-g553cc9f",
+			"Rev": "553cc9f680011fad9aa999e19e87bf9d76fbcf12"
 		},
 		{
 			"ImportPath": "github.com/vattle/sqlboiler/strmangle",
-			"Comment": "v2.1.7",
-			"Rev": "bfba60eaad30f691f1e3b83882b370223fa5416b"
+			"Comment": "v2.4.0-12-g553cc9f",
+			"Rev": "553cc9f680011fad9aa999e19e87bf9d76fbcf12"
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",

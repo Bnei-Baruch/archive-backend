@@ -184,7 +184,7 @@ func (o *ContentType) TypeCollectionsG(mods ...qm.QueryMod) collectionQuery {
 // TypeCollections retrieves all the collection's collections with an executor via type_id column.
 func (o *ContentType) TypeCollections(exec boil.Executor, mods ...qm.QueryMod) collectionQuery {
 	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
+		qm.Select("\"collections\".*"),
 	}
 
 	if len(mods) != 0 {
@@ -192,11 +192,11 @@ func (o *ContentType) TypeCollections(exec boil.Executor, mods ...qm.QueryMod) c
 	}
 
 	queryMods = append(queryMods,
-		qm.Where("\"a\".\"type_id\"=?", o.ID),
+		qm.Where("\"collections\".\"type_id\"=?", o.ID),
 	)
 
 	query := Collections(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"collections\" as \"a\"")
+	queries.SetFrom(query.Query, "\"collections\"")
 	return query
 }
 
@@ -208,7 +208,7 @@ func (o *ContentType) TypeContentUnitsG(mods ...qm.QueryMod) contentUnitQuery {
 // TypeContentUnits retrieves all the content_unit's content units with an executor via type_id column.
 func (o *ContentType) TypeContentUnits(exec boil.Executor, mods ...qm.QueryMod) contentUnitQuery {
 	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
+		qm.Select("\"content_units\".*"),
 	}
 
 	if len(mods) != 0 {
@@ -216,11 +216,11 @@ func (o *ContentType) TypeContentUnits(exec boil.Executor, mods ...qm.QueryMod) 
 	}
 
 	queryMods = append(queryMods,
-		qm.Where("\"a\".\"type_id\"=?", o.ID),
+		qm.Where("\"content_units\".\"type_id\"=?", o.ID),
 	)
 
 	query := ContentUnits(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"content_units\" as \"a\"")
+	queries.SetFrom(query.Query, "\"content_units\"")
 	return query
 }
 

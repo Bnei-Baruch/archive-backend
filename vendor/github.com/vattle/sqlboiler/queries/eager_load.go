@@ -206,9 +206,16 @@ func (l loadRelationshipState) loadRelationshipsRecurse(depth int, obj reflect.V
 	}
 
 	bkind := kindStruct
-	if reflect.Indirect(loadedObject).Kind() != reflect.Struct {
+	if derefed := reflect.Indirect(loadedObject); derefed.Kind() != reflect.Struct {
 		bkind = kindPtrSliceStruct
-		loadedObject = loadedObject.Addr()
+
+		// Convert away any helper slice types
+		// elemType is *elem (from []*elem or helperSliceType)
+		// sliceType is *[]*elem
+		elemType := derefed.Type().Elem()
+		sliceType := reflect.PtrTo(reflect.SliceOf(elemType))
+
+		loadedObject = loadedObject.Addr().Convert(sliceType)
 	}
 	return l.loadRelationships(depth+1, loadedObject.Interface(), bkind)
 }
@@ -241,6 +248,9 @@ func collectLoaded(key string, loadingFrom reflect.Value) (reflect.Value, bindKi
 	if loadedType.Elem().Kind() == reflect.Struct {
 		bkind = kindStruct
 		loadedType = reflect.SliceOf(loadedType)
+	} else {
+		// Ensure that we get rid of all the helper "XSlice" types
+		loadedType = reflect.SliceOf(loadedType.Elem())
 	}
 
 	collection := reflect.MakeSlice(loadedType, 0, 0)

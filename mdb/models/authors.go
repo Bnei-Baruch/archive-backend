@@ -186,7 +186,7 @@ func (o *Author) AuthorI18nsG(mods ...qm.QueryMod) authorI18nQuery {
 // AuthorI18ns retrieves all the author_i18n's author i18n with an executor.
 func (o *Author) AuthorI18ns(exec boil.Executor, mods ...qm.QueryMod) authorI18nQuery {
 	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
+		qm.Select("\"author_i18n\".*"),
 	}
 
 	if len(mods) != 0 {
@@ -194,11 +194,11 @@ func (o *Author) AuthorI18ns(exec boil.Executor, mods ...qm.QueryMod) authorI18n
 	}
 
 	queryMods = append(queryMods,
-		qm.Where("\"a\".\"author_id\"=?", o.ID),
+		qm.Where("\"author_i18n\".\"author_id\"=?", o.ID),
 	)
 
 	query := AuthorI18ns(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"author_i18n\" as \"a\"")
+	queries.SetFrom(query.Query, "\"author_i18n\"")
 	return query
 }
 
@@ -210,7 +210,7 @@ func (o *Author) SourcesG(mods ...qm.QueryMod) sourceQuery {
 // Sources retrieves all the source's sources with an executor.
 func (o *Author) Sources(exec boil.Executor, mods ...qm.QueryMod) sourceQuery {
 	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
+		qm.Select("\"sources\".*"),
 	}
 
 	if len(mods) != 0 {
@@ -218,12 +218,12 @@ func (o *Author) Sources(exec boil.Executor, mods ...qm.QueryMod) sourceQuery {
 	}
 
 	queryMods = append(queryMods,
-		qm.InnerJoin("\"authors_sources\" as \"b\" on \"a\".\"id\" = \"b\".\"source_id\""),
-		qm.Where("\"b\".\"author_id\"=?", o.ID),
+		qm.InnerJoin("\"authors_sources\" on \"sources\".\"id\" = \"authors_sources\".\"source_id\""),
+		qm.Where("\"authors_sources\".\"author_id\"=?", o.ID),
 	)
 
 	query := Sources(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"sources\" as \"a\"")
+	queries.SetFrom(query.Query, "\"sources\"")
 	return query
 }
 

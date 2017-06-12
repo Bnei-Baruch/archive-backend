@@ -46,6 +46,12 @@ func buildSelectQuery(q *Query) (*bytes.Buffer, []interface{}) {
 
 	buf.WriteString("SELECT ")
 
+	if q.dialect.UseTopClause {
+		if q.limit != 0 && q.offset == 0 {
+			fmt.Fprintf(buf, " TOP (%d) ", q.limit)
+		}
+	}
+
 	if q.count {
 		buf.WriteString("COUNT(")
 	}
@@ -190,12 +196,17 @@ func BuildUpsertQueryMySQL(dia Dialect, tableName string, update, whitelist []st
 	buf := strmangle.GetBuffer()
 	defer strmangle.PutBuffer(buf)
 
+	var columns string
+	if len(whitelist) != 0 {
+		columns = strings.Join(whitelist, ", ")
+	}
+
 	if len(update) == 0 {
 		fmt.Fprintf(
 			buf,
 			"INSERT IGNORE INTO %s (%s) VALUES (%s)",
 			tableName,
-			strings.Join(whitelist, ", "),
+			columns,
 			strmangle.Placeholders(dia.IndexPlaceholders, len(whitelist), 1, 1),
 		)
 		return buf.String()
@@ -205,7 +216,7 @@ func BuildUpsertQueryMySQL(dia Dialect, tableName string, update, whitelist []st
 		buf,
 		"INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE ",
 		tableName,
-		strings.Join(whitelist, ", "),
+		columns,
 		strmangle.Placeholders(dia.IndexPlaceholders, len(whitelist), 1, 1),
 	)
 
@@ -232,12 +243,18 @@ func BuildUpsertQueryPostgres(dia Dialect, tableName string, updateOnConflict bo
 	buf := strmangle.GetBuffer()
 	defer strmangle.PutBuffer(buf)
 
+	columns := "DEFAULT VALUES"
+	if len(whitelist) != 0 {
+		columns = fmt.Sprintf("(%s) VALUES (%s)",
+			strings.Join(whitelist, ", "),
+			strmangle.Placeholders(dia.IndexPlaceholders, len(whitelist), 1, 1))
+	}
+
 	fmt.Fprintf(
 		buf,
-		"INSERT INTO %s (%s) VALUES (%s) ON CONFLICT ",
+		"INSERT INTO %s %s ON CONFLICT ",
 		tableName,
-		strings.Join(whitelist, ", "),
-		strmangle.Placeholders(dia.IndexPlaceholders, len(whitelist), 1, 1),
+		columns,
 	)
 
 	if !updateOnConflict || len(update) == 0 {
@@ -261,6 +278,49 @@ func BuildUpsertQueryPostgres(dia Dialect, tableName string, updateOnConflict bo
 	if len(ret) != 0 {
 		buf.WriteString(" RETURNING ")
 		buf.WriteString(strings.Join(ret, ", "))
+	}
+
+	return buf.String()
+}
+
+// BuildUpsertQueryMSSQL builds a SQL statement string using the upsertData provided.
+func BuildUpsertQueryMSSQL(dia Dialect, tableName string, primary, update, insert []string, output []string) string {
+	insert = strmangle.IdentQuoteSlice(dia.LQ, dia.RQ, insert)
+
+	buf := strmangle.GetBuffer()
+	defer strmangle.PutBuffer(buf)
+
+	startIndex := 1
+
+	fmt.Fprintf(buf, "MERGE INTO %s as [t]\n", tableName)
+	fmt.Fprintf(buf, "USING (SELECT %s) as [s] ([%s])\n",
+		strmangle.Placeholders(dia.IndexPlaceholders, len(primary), startIndex, 1),
+		strings.Join(primary, string(dia.RQ)+","+string(dia.LQ)))
+	fmt.Fprint(buf, "ON (")
+	for i, v := range primary {
+		if i != 0 {
+			fmt.Fprint(buf, " AND ")
+		}
+		fmt.Fprintf(buf, "[s].[%s] = [t].[%s]", v, v)
+	}
+	fmt.Fprint(buf, ")\n")
+
+	startIndex += len(primary)
+
+	fmt.Fprint(buf, "WHEN MATCHED THEN ")
+	fmt.Fprintf(buf, "UPDATE SET %s\n", strmangle.SetParamNames(string(dia.LQ), string(dia.RQ), startIndex, update))
+
+	startIndex += len(update)
+
+	fmt.Fprint(buf, "WHEN NOT MATCHED THEN ")
+	fmt.Fprintf(buf, "INSERT (%s) VALUES (%s)",
+		strings.Join(insert, ", "),
+		strmangle.Placeholders(dia.IndexPlaceholders, len(insert), startIndex, 1))
+
+	if len(output) > 0 {
+		fmt.Fprintf(buf, "\nOUTPUT INSERTED.[%s];", strings.Join(output, "],INSERTED.["))
+	} else {
+		fmt.Fprint(buf, ";")
 	}
 
 	return buf.String()
@@ -297,11 +357,36 @@ func writeModifiers(q *Query, buf *bytes.Buffer, args *[]interface{}) {
 		buf.WriteString(strings.Join(q.orderBy, ", "))
 	}
 
-	if q.limit != 0 {
-		fmt.Fprintf(buf, " LIMIT %d", q.limit)
-	}
-	if q.offset != 0 {
-		fmt.Fprintf(buf, " OFFSET %d", q.offset)
+	if !q.dialect.UseTopClause {
+		if q.limit != 0 {
+			fmt.Fprintf(buf, " LIMIT %d", q.limit)
+		}
+
+		if q.offset != 0 {
+			fmt.Fprintf(buf, " OFFSET %d", q.offset)
+		}
+	} else {
+		// From MS SQL 2012 and above: https://technet.microsoft.com/en-us/library/ms188385(v=sql.110).aspx
+		// ORDER BY ...
+		// OFFSET N ROWS
+		// FETCH NEXT M ROWS ONLY
+		if q.offset != 0 {
+
+			// Hack from https://www.microsoftpressstore.com/articles/article.aspx?p=2314819
+			// ...
+			// As mentioned, the OFFSET-FETCH filter requires an ORDER BY clause. If you want to use arbitrary order,
+			// like TOP without an ORDER BY clause, you can use the trick with ORDER BY (SELECT NULL)
+			// ...
+			if len(q.orderBy) == 0 {
+				buf.WriteString(" ORDER BY (SELECT NULL)")
+			}
+
+			fmt.Fprintf(buf, " OFFSET %d", q.offset)
+
+			if q.limit != 0 {
+				fmt.Fprintf(buf, " FETCH NEXT %d ROWS ONLY", q.limit)
+			}
+		}
 	}
 
 	if len(q.forlock) != 0 {

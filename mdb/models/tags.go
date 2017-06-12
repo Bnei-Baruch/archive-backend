@@ -207,7 +207,7 @@ func (o *Tag) ContentUnitsG(mods ...qm.QueryMod) contentUnitQuery {
 // ContentUnits retrieves all the content_unit's content units with an executor.
 func (o *Tag) ContentUnits(exec boil.Executor, mods ...qm.QueryMod) contentUnitQuery {
 	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
+		qm.Select("\"content_units\".*"),
 	}
 
 	if len(mods) != 0 {
@@ -215,12 +215,12 @@ func (o *Tag) ContentUnits(exec boil.Executor, mods ...qm.QueryMod) contentUnitQ
 	}
 
 	queryMods = append(queryMods,
-		qm.InnerJoin("\"content_units_tags\" as \"b\" on \"a\".\"id\" = \"b\".\"content_unit_id\""),
-		qm.Where("\"b\".\"tag_id\"=?", o.ID),
+		qm.InnerJoin("\"content_units_tags\" on \"content_units\".\"id\" = \"content_units_tags\".\"content_unit_id\""),
+		qm.Where("\"content_units_tags\".\"tag_id\"=?", o.ID),
 	)
 
 	query := ContentUnits(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"content_units\" as \"a\"")
+	queries.SetFrom(query.Query, "\"content_units\"")
 	return query
 }
 
@@ -232,7 +232,7 @@ func (o *Tag) TagI18nsG(mods ...qm.QueryMod) tagI18nQuery {
 // TagI18ns retrieves all the tag_i18n's tag i18n with an executor.
 func (o *Tag) TagI18ns(exec boil.Executor, mods ...qm.QueryMod) tagI18nQuery {
 	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
+		qm.Select("\"tag_i18n\".*"),
 	}
 
 	if len(mods) != 0 {
@@ -240,11 +240,11 @@ func (o *Tag) TagI18ns(exec boil.Executor, mods ...qm.QueryMod) tagI18nQuery {
 	}
 
 	queryMods = append(queryMods,
-		qm.Where("\"a\".\"tag_id\"=?", o.ID),
+		qm.Where("\"tag_i18n\".\"tag_id\"=?", o.ID),
 	)
 
 	query := TagI18ns(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"tag_i18n\" as \"a\"")
+	queries.SetFrom(query.Query, "\"tag_i18n\"")
 	return query
 }
 
@@ -256,7 +256,7 @@ func (o *Tag) ParentTagsG(mods ...qm.QueryMod) tagQuery {
 // ParentTags retrieves all the tag's tags with an executor via parent_id column.
 func (o *Tag) ParentTags(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
 	queryMods := []qm.QueryMod{
-		qm.Select("\"a\".*"),
+		qm.Select("\"tags\".*"),
 	}
 
 	if len(mods) != 0 {
@@ -264,11 +264,11 @@ func (o *Tag) ParentTags(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
 	}
 
 	queryMods = append(queryMods,
-		qm.Where("\"a\".\"parent_id\"=?", o.ID),
+		qm.Where("\"tags\".\"parent_id\"=?", o.ID),
 	)
 
 	query := Tags(exec, queryMods...)
-	queries.SetFrom(query.Query, "\"tags\" as \"a\"")
+	queries.SetFrom(query.Query, "\"tags\"")
 	return query
 }
 
