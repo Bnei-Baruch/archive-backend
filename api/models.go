@@ -139,8 +139,8 @@ type File struct {
 }
 
 type Source struct {
-	UID         string      `json:"uid"`
-	Pattern     null.String `json:"pattern,omitempty"`
+	UID         string      `json:"id"`
+	ParentUID   string      `json:"parent_id"`
 	Type        string      `json:"type"`
 	Name        null.String `json:"name"`
 	Description null.String `json:"description,omitempty"`
@@ -151,19 +151,19 @@ type Source struct {
 }
 
 type Author struct {
-	Code     string      `json:"code"`
+	Code     string      `json:"id"`
 	Name     string      `json:"name"`
 	FullName null.String `json:"full_name,omitempty"`
 	Children []*Source   `json:"children,omitempty"`
 }
 
 type Tag struct {
-	UID      string      `json:"uid"`
-	Pattern  null.String `json:"pattern,omitempty"`
-	Label    null.String `json:"label"`
-	Children []*Tag      `json:"children,omitempty"`
-	ID       int64       `json:"-"`
-	ParentID null.Int64  `json:"-"`
+	UID       string      `json:"id"`
+	ParentUID string      `json:"parent_id"`
+	Label     null.String `json:"label"`
+	Children  []*Tag      `json:"children,omitempty"`
+	ID        int64       `json:"-"`
+	ParentID  null.Int64  `json:"-"`
 }
 
 // Custom fields

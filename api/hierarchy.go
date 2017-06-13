@@ -20,7 +20,7 @@ import (
 const SOURCE_HIERARCHY_SQL = `
 WITH RECURSIVE rec_sources AS (
   SELECT
-    s.id, s.uid, s.pattern, s.parent_id, s.position, s.type_id,
+    s.id, s.uid, s.parent_id, s.position, s.type_id,
     coalesce((SELECT name FROM source_i18n WHERE source_id = s.id AND language = '%s'),
              (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'he')) "name",
     coalesce((SELECT description FROM source_i18n WHERE source_id = s.id AND language = '%s'),
@@ -30,7 +30,7 @@ WITH RECURSIVE rec_sources AS (
   WHERE s.%s
   UNION
   SELECT
-    s.id, s.uid, s.pattern, s.parent_id, s.position, s.type_id,
+    s.id, s.uid, s.parent_id, s.position, s.type_id,
     coalesce((SELECT name FROM source_i18n WHERE source_id = s.id AND language = '%s'),
              (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'he')) "name",
     coalesce((SELECT description FROM source_i18n WHERE source_id = s.id AND language = '%s'),
@@ -61,7 +61,7 @@ FROM authors a;
 const TAG_HIERARCHY_SQL = `
 WITH RECURSIVE rec_tags AS (
   SELECT
-    t.id, t.uid, t.pattern, t.parent_id,
+    t.id, t.uid, t.parent_id,
     coalesce((SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = '%s'),
              (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'he')) "label",
     1 "depth"
@@ -69,7 +69,7 @@ WITH RECURSIVE rec_tags AS (
   WHERE t.%s
   UNION
   SELECT
-    t.id, t.uid, t.pattern, t.parent_id,
+    t.id, t.uid, t.parent_id,
     coalesce((SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = '%s'),
              (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'he')) "label",
     depth + 1
@@ -124,7 +124,7 @@ func SourcesHierarchyHandler(c *gin.Context) {
 		// Scan source
 		s := new(Source)
 		var typeID, d int64
-		err := rows.Scan(&s.ID, &s.UID, &s.Pattern, &s.ParentID, &s.Position, &typeID, &s.Name, &s.Description, &d)
+		err := rows.Scan(&s.ID, &s.UID, &s.ParentID, &s.Position, &typeID, &s.Name, &s.Description, &d)
 		if err != nil {
 			NewInternalError(err).Abort(c)
 			return
@@ -140,6 +140,7 @@ func SourcesHierarchyHandler(c *gin.Context) {
 					p.Children = make([]*Source, 0)
 				}
 				p.Children = append(p.Children, s)
+				s.ParentUID = p.UID
 			} else {
 				roots = append(roots, s)
 			}
@@ -176,6 +177,7 @@ func SourcesHierarchyHandler(c *gin.Context) {
 			a.Children = make([]*Source, len(sids))
 			for i, x := range sids {
 				a.Children[i] = sources[x]
+				a.Children[i].ParentUID = a.Code
 			}
 			authors = append(authors, a)
 		}
@@ -235,7 +237,7 @@ func TagsHierarchyHandler(c *gin.Context) {
 		// Scan tag
 		t := new(Tag)
 		var d int64
-		err := rows.Scan(&t.ID, &t.UID, &t.Pattern, &t.ParentID, &t.Label, &d)
+		err := rows.Scan(&t.ID, &t.UID, &t.ParentID, &t.Label, &d)
 		if err != nil {
 			NewInternalError(err).Abort(c)
 			return
@@ -250,6 +252,7 @@ func TagsHierarchyHandler(c *gin.Context) {
 					p.Children = make([]*Tag, 0)
 				}
 				p.Children = append(p.Children, t)
+				t.ParentUID = p.UID
 			} else {
 				roots = append(roots, t)
 			}

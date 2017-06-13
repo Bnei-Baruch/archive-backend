@@ -80,29 +80,3 @@ const (
 	LANG_MULTI      = "zz"
 	LANG_UNKNOWN    = "xx"
 )
-
-var DEFAULT_NAMES = map[string]string{
-	CT_DAILY_LESSON:             "Daily Lesson",
-	CT_SPECIAL_LESSON:           "Saturday Lesson",
-	CT_WEEKLY_FRIENDS_GATHERING: "Weekly Friends Gathering",
-	CT_CONGRESS:                 "Congress",
-	CT_VIDEO_PROGRAM:            "Video Program",
-	CT_LECTURE_SERIES:           "Lecture Series",
-	CT_MEALS:                    "Meals",
-	CT_HOLIDAY:                  "Holiday",
-	CT_PICNIC:                   "Picnic",
-	CT_UNITY_DAY:                "Unity Day",
-
-	CT_LESSON_PART:           "Morning Lesson",
-	CT_LECTURE:               "Lecture",
-	CT_CHILDREN_LESSON_PART:  "Children Lesson",
-	CT_WOMEN_LESSON_PART:     "Women Lesson",
-	CT_CAMPUS_LESSON:         "Campus Lesson",
-	CT_LC_LESSON:             "Learning Center  Lesson",
-	CT_VIRTUAL_LESSON:        "Virtual Lesson",
-	CT_FRIENDS_GATHERING:     "Friends Gathering",
-	CT_MEAL:                  "Meal",
-	CT_VIDEO_PROGRAM_CHAPTER: "Video Program",
-	CT_FULL_LESSON:           "Full Lesson",
-	CT_TEXT:                  "text",
-}
