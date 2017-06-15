@@ -338,13 +338,14 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		b := x.R.CollectionsContentUnits[:0]
 		for _, y := range x.R.CollectionsContentUnits {
 
+			// Edo: Commenting out as I can't reproduce
 			// Workaround for this bug: https://github.com/vattle/sqlboiler/issues/154
-			if y.R.ContentUnit == nil {
-				err = y.L.LoadContentUnit(db, true, y)
-				if err != nil {
-					return nil, NewInternalError(err)
-				}
-			}
+			//if y.R.ContentUnit == nil {
+			//	err = y.L.LoadContentUnit(db, true, y)
+			//	if err != nil {
+			//		return nil, NewInternalError(err)
+			//	}
+			//}
 
 			if mdb.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
 				b = append(b, y)
@@ -459,13 +460,14 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		b := x.R.CollectionsContentUnits[:0]
 		for _, y := range x.R.CollectionsContentUnits {
 
+			// Edo: Commenting out as I can't reproduce
 			// Workaround for this bug: https://github.com/vattle/sqlboiler/issues/154
-			if y.R.Collection == nil {
-				err = y.L.LoadCollection(db, true, y)
-				if err != nil {
-					return nil, NewInternalError(err)
-				}
-			}
+			//if y.R.Collection == nil {
+			//	err = y.L.LoadCollection(db, true, y)
+			//	if err != nil {
+			//		return nil, NewInternalError(err)
+			//	}
+			//}
 
 			if mdb.SEC_PUBLIC == y.R.Collection.Secure && y.R.Collection.Published {
 				b = append(b, y)
