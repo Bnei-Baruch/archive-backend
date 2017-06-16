@@ -34,6 +34,18 @@ func CollectionsHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func CollectionHandler(c *gin.Context) {
+	var r ItemRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	r.UID = c.Param("uid")
+
+	resp, err := handleCollection(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
 func ContentUnitsHandler(c *gin.Context) {
 	var r ContentUnitsRequest
 	if c.Bind(&r) != nil {
@@ -399,6 +411,79 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	}
 
 	return resp, nil
+}
+
+func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
+
+	c, err := mdbmodels.Collections(db,
+		SECURE_PUBLISHED_MOD,
+		qm.Where("uid = ?", r.UID),
+		qm.Load("CollectionsContentUnits",
+			"CollectionsContentUnits.ContentUnit")).
+		One()
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, NewNotFoundError()
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+
+	// collection
+	cl, err := mdbToC(c)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// collection i18n
+	ci18nsMap, err := loadCI18ns(db, r.Language, []int64{c.ID})
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	if i18ns, ok := ci18nsMap[c.ID]; ok {
+		setCI18n(cl, r.Language, i18ns)
+	}
+
+	// content units
+	cuids := make([]int64, 0)
+
+	// filter secure & published
+	b := c.R.CollectionsContentUnits[:0]
+	for _, y := range c.R.CollectionsContentUnits {
+		if mdb.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
+			b = append(b, y)
+			cuids = append(cuids, y.ContentUnitID)
+		}
+		c.R.CollectionsContentUnits = b
+	}
+
+	// load i18ns
+	cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// sort by ccu.name
+	sort.Sort(mdb.InCollection{ExtCCUSlice: mdb.ExtCCUSlice(c.R.CollectionsContentUnits)})
+
+	// construct DTO's
+	cl.ContentUnits = make([]*ContentUnit, 0)
+	for _, ccu := range c.R.CollectionsContentUnits {
+		cu := ccu.R.ContentUnit
+
+		u, err := mdbToCU(cu)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		if i18ns, ok := cui18nsMap[cu.ID]; ok {
+			setCUI18n(u, r.Language, i18ns)
+		}
+
+		u.NameInCollection = ccu.Name
+		cl.ContentUnits = append(cl.ContentUnits, u)
+	}
+
+	return cl, nil
 }
 
 func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsResponse, *HttpError) {

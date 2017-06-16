@@ -2,9 +2,10 @@ package api
 
 import (
 	"fmt"
-	"gopkg.in/nullbio/null.v6"
 	"strings"
 	"time"
+
+	"gopkg.in/nullbio/null.v6"
 )
 
 type BaseRequest struct {
@@ -22,6 +23,11 @@ type ListRequest struct {
 
 type ListResponse struct {
 	Total int64 `json:"total"`
+}
+
+type ItemRequest struct {
+	BaseRequest
+	UID string
 }
 
 type ContentTypesFilter struct {
