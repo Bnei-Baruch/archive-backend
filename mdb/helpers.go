@@ -19,10 +19,8 @@ func (s InCollection) Less(i, j int) bool {
 	// Lesson parts should be sorted by numerically
 	ctlID := CONTENT_TYPE_REGISTRY.ByName[CT_LESSON_PART].ID
 	if a.R.ContentUnit.TypeID == ctlID && b.R.ContentUnit.TypeID == ctlID {
-		ai, err := strconv.Atoi(a.Name)
-		if err != nil {
-			bi, err := strconv.Atoi(b.Name)
-			if err != nil {
+		if ai, err := strconv.Atoi(a.Name); err == nil {
+			if bi, err := strconv.Atoi(b.Name); err == nil {
 				return ai < bi
 			}
 		}
