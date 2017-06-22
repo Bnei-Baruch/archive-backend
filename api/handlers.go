@@ -251,6 +251,9 @@ func LessonsHandler(c *gin.Context) {
 	if utils.IsEmpty(r.Authors) &&
 		utils.IsEmpty(r.Sources) &&
 		utils.IsEmpty(r.Tags) {
+		if r.OrderBy == "" {
+			r.OrderBy = "(properties->>'film_date')::date desc, (properties->>'number')::int desc, created_at desc"
+		}
 		cr := CollectionsRequest{
 			ContentTypesFilter: ContentTypesFilter{
 				ContentTypes: []string{mdb.CT_DAILY_LESSON, mdb.CT_SPECIAL_LESSON},
@@ -261,6 +264,9 @@ func LessonsHandler(c *gin.Context) {
 		resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), cr)
 		concludeRequest(c, resp, err)
 	} else {
+		if r.OrderBy == "" {
+			r.OrderBy = "(properties->>'film_date')::date desc, created_at desc"
+		}
 		cur := ContentUnitsRequest{
 			ContentTypesFilter: ContentTypesFilter{
 				ContentTypes: []string{mdb.CT_LESSON_PART},
@@ -626,7 +632,8 @@ func handleSearch(esc *elastic.Client, index string, text string, from int) (*el
 // It returns the limit, offset and error if any
 func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
 	if r.OrderBy == "" {
-		*mods = append(*mods, qm.OrderBy("id desc"))
+		*mods = append(*mods,
+			qm.OrderBy("id desc"))
 	} else {
 		*mods = append(*mods, qm.OrderBy(r.OrderBy))
 	}
