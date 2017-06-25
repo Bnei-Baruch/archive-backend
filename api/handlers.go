@@ -711,6 +711,10 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 }
 
 func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
+	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
+		return nil
+	}
+
 	// slice of all source ids we want
 	source_uids := make([]string, 0)
 
@@ -736,10 +740,6 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
 
 	// blend in requested sources
 	source_uids = append(source_uids, f.Sources...)
-
-	if len(source_uids) == 0 {
-		return nil
-	}
 
 	// find all nested source_uids
 	q := `WITH RECURSIVE rec_sources AS (
