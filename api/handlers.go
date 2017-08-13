@@ -633,7 +633,7 @@ func handleSearch(esc *elastic.Client, index string, text string, from int) (*el
 func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
 	if r.OrderBy == "" {
 		*mods = append(*mods,
-			qm.OrderBy("id desc"))
+			qm.OrderBy("(coalesce(properties->>'film_date', properties->>'start_date', created_at::text))::date desc, created_at desc"))
 	} else {
 		*mods = append(*mods, qm.OrderBy(r.OrderBy))
 	}
