@@ -803,17 +803,32 @@ func concludeRequest(c *gin.Context, resp interface{}, err *HttpError) {
 	}
 }
 
-func mdbToC(c *mdbmodels.Collection) (*Collection, error) {
+func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 	var props mdb.CollectionProperties
-	if err := c.Properties.Unmarshal(&props); err != nil {
-		return nil, errors.Wrap(err, "json.Unmarshal properties")
+	if err = c.Properties.Unmarshal(&props); err != nil {
+		err = errors.Wrap(err, "json.Unmarshal properties")
+		return
 	}
 
-	return &Collection{
+	cl = &Collection{
 		ID:          c.UID,
 		ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name,
-		FilmDate:    Date{Time: props.FilmDate.Time},
-	}, nil
+		Country:     props.Country,
+		City:        props.City,
+		FullAddress: props.FullAddress,
+	}
+
+	if !props.FilmDate.IsZero() {
+		cl.FilmDate = &Date{Time: props.FilmDate.Time}
+	}
+	if !props.StartDate.IsZero() {
+		cl.StartDate = &Date{Time: props.StartDate.Time}
+	}
+	if !props.EndDate.IsZero() {
+		cl.EndDate = &Date{Time: props.EndDate.Time}
+	}
+
+	return
 }
 
 func mdbToCU(cu *mdbmodels.ContentUnit) (*ContentUnit, error) {
@@ -822,13 +837,18 @@ func mdbToCU(cu *mdbmodels.ContentUnit) (*ContentUnit, error) {
 		return nil, errors.Wrap(err, "json.Unmarshal properties")
 	}
 
-	return &ContentUnit{
+	u := &ContentUnit{
 		ID:               cu.UID,
 		ContentType:      mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
-		FilmDate:         Date{Time: props.FilmDate.Time},
 		Duration:         props.Duration,
 		OriginalLanguage: props.OriginalLanguage,
-	}, nil
+	}
+
+	if !props.FilmDate.IsZero() {
+		u.FilmDate = &Date{Time: props.FilmDate.Time}
+	}
+
+	return u, nil
 }
 
 func mdbToFile(file *mdbmodels.File) (*File, error) {

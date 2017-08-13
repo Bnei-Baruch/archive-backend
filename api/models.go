@@ -110,9 +110,14 @@ func NewContentUnitsResponse() *ContentUnitsResponse {
 type Collection struct {
 	ID           string         `json:"id"`
 	ContentType  string         `json:"content_type"`
-	FilmDate     Date           `json:"film_date,omitempty"`
 	Name         string         `json:"name,omitempty"`
 	Description  string         `json:"description,omitempty"`
+	FilmDate     *Date          `json:"film_date,omitempty"`
+	StartDate    *Date          `json:"start_date,omitempty"`
+	EndDate      *Date          `json:"end_date,omitempty"`
+	Country      string         `json:"country,omitempty"`
+	City         string         `json:"city,omitempty"`
+	FullAddress  string         `json:"full_address,omitempty"`
 	ContentUnits []*ContentUnit `json:"content_units,omitempty"`
 }
 
@@ -120,7 +125,7 @@ type ContentUnit struct {
 	ID               string                  `json:"id"`
 	ContentType      string                  `json:"content_type"`
 	NameInCollection string                  `json:"name_in_collection,omitempty"`
-	FilmDate         Date                    `json:"film_date,omitempty"`
+	FilmDate         *Date                   `json:"film_date,omitempty"`
 	Name             string                  `json:"name,omitempty"`
 	Description      string                  `json:"description,omitempty"`
 	Duration         int                     `json:"duration,omitempty"`
