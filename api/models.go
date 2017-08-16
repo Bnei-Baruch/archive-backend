@@ -57,6 +57,9 @@ func (drf *DateRangeFilter) Range() (time.Time, time.Time, error) {
 	}
 	if err == nil && drf.EndDate != "" {
 		e, err = time.Parse("2006-01-02", drf.EndDate)
+		if err == nil {
+			e = e.Add(24*time.Hour - 1) // make the hour 23:59:59.999999999
+		}
 	}
 
 	return s, e, err
