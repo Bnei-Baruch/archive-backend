@@ -182,10 +182,7 @@ func (o *OperationType) TypeOperationsG(mods ...qm.QueryMod) operationQuery {
 
 // TypeOperations retrieves all the operation's operations with an executor via type_id column.
 func (o *OperationType) TypeOperations(exec boil.Executor, mods ...qm.QueryMod) operationQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"operations\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -196,6 +193,11 @@ func (o *OperationType) TypeOperations(exec boil.Executor, mods ...qm.QueryMod) 
 
 	query := Operations(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"operations\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"operations\".*"})
+	}
+
 	return query
 }
 

@@ -238,10 +238,7 @@ func (o *File) ParentFilesG(mods ...qm.QueryMod) fileQuery {
 
 // ParentFiles retrieves all the file's files with an executor via parent_id column.
 func (o *File) ParentFiles(exec boil.Executor, mods ...qm.QueryMod) fileQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"files\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -252,6 +249,11 @@ func (o *File) ParentFiles(exec boil.Executor, mods ...qm.QueryMod) fileQuery {
 
 	query := Files(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"files\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"files\".*"})
+	}
+
 	return query
 }
 
@@ -262,10 +264,7 @@ func (o *File) OperationsG(mods ...qm.QueryMod) operationQuery {
 
 // Operations retrieves all the operation's operations with an executor.
 func (o *File) Operations(exec boil.Executor, mods ...qm.QueryMod) operationQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"operations\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -277,6 +276,11 @@ func (o *File) Operations(exec boil.Executor, mods ...qm.QueryMod) operationQuer
 
 	query := Operations(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"operations\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"operations\".*"})
+	}
+
 	return query
 }
 

@@ -213,10 +213,7 @@ func (o *ContentUnit) CollectionsContentUnitsG(mods ...qm.QueryMod) collectionsC
 
 // CollectionsContentUnits retrieves all the collections_content_unit's collections content units with an executor.
 func (o *ContentUnit) CollectionsContentUnits(exec boil.Executor, mods ...qm.QueryMod) collectionsContentUnitQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"collections_content_units\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -227,6 +224,11 @@ func (o *ContentUnit) CollectionsContentUnits(exec boil.Executor, mods ...qm.Que
 
 	query := CollectionsContentUnits(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"collections_content_units\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"collections_content_units\".*"})
+	}
+
 	return query
 }
 
@@ -237,10 +239,7 @@ func (o *ContentUnit) DerivedContentUnitDerivationsG(mods ...qm.QueryMod) conten
 
 // DerivedContentUnitDerivations retrieves all the content_unit_derivation's content unit derivations with an executor via derived_id column.
 func (o *ContentUnit) DerivedContentUnitDerivations(exec boil.Executor, mods ...qm.QueryMod) contentUnitDerivationQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"content_unit_derivations\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -251,6 +250,11 @@ func (o *ContentUnit) DerivedContentUnitDerivations(exec boil.Executor, mods ...
 
 	query := ContentUnitDerivations(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"content_unit_derivations\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"content_unit_derivations\".*"})
+	}
+
 	return query
 }
 
@@ -261,10 +265,7 @@ func (o *ContentUnit) SourceContentUnitDerivationsG(mods ...qm.QueryMod) content
 
 // SourceContentUnitDerivations retrieves all the content_unit_derivation's content unit derivations with an executor via source_id column.
 func (o *ContentUnit) SourceContentUnitDerivations(exec boil.Executor, mods ...qm.QueryMod) contentUnitDerivationQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"content_unit_derivations\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -275,6 +276,11 @@ func (o *ContentUnit) SourceContentUnitDerivations(exec boil.Executor, mods ...q
 
 	query := ContentUnitDerivations(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"content_unit_derivations\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"content_unit_derivations\".*"})
+	}
+
 	return query
 }
 
@@ -285,10 +291,7 @@ func (o *ContentUnit) ContentUnitI18nsG(mods ...qm.QueryMod) contentUnitI18nQuer
 
 // ContentUnitI18ns retrieves all the content_unit_i18n's content unit i18n with an executor.
 func (o *ContentUnit) ContentUnitI18ns(exec boil.Executor, mods ...qm.QueryMod) contentUnitI18nQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"content_unit_i18n\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -299,6 +302,11 @@ func (o *ContentUnit) ContentUnitI18ns(exec boil.Executor, mods ...qm.QueryMod) 
 
 	query := ContentUnitI18ns(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"content_unit_i18n\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"content_unit_i18n\".*"})
+	}
+
 	return query
 }
 
@@ -309,10 +317,7 @@ func (o *ContentUnit) ContentUnitsPersonsG(mods ...qm.QueryMod) contentUnitsPers
 
 // ContentUnitsPersons retrieves all the content_units_person's content units persons with an executor.
 func (o *ContentUnit) ContentUnitsPersons(exec boil.Executor, mods ...qm.QueryMod) contentUnitsPersonQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"content_units_persons\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -323,6 +328,11 @@ func (o *ContentUnit) ContentUnitsPersons(exec boil.Executor, mods ...qm.QueryMo
 
 	query := ContentUnitsPersons(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"content_units_persons\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"content_units_persons\".*"})
+	}
+
 	return query
 }
 
@@ -333,10 +343,7 @@ func (o *ContentUnit) SourcesG(mods ...qm.QueryMod) sourceQuery {
 
 // Sources retrieves all the source's sources with an executor.
 func (o *ContentUnit) Sources(exec boil.Executor, mods ...qm.QueryMod) sourceQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"sources\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -348,6 +355,11 @@ func (o *ContentUnit) Sources(exec boil.Executor, mods ...qm.QueryMod) sourceQue
 
 	query := Sources(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"sources\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"sources\".*"})
+	}
+
 	return query
 }
 
@@ -358,10 +370,7 @@ func (o *ContentUnit) TagsG(mods ...qm.QueryMod) tagQuery {
 
 // Tags retrieves all the tag's tags with an executor.
 func (o *ContentUnit) Tags(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"tags\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -373,6 +382,11 @@ func (o *ContentUnit) Tags(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
 
 	query := Tags(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"tags\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"tags\".*"})
+	}
+
 	return query
 }
 
@@ -383,10 +397,7 @@ func (o *ContentUnit) FilesG(mods ...qm.QueryMod) fileQuery {
 
 // Files retrieves all the file's files with an executor.
 func (o *ContentUnit) Files(exec boil.Executor, mods ...qm.QueryMod) fileQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"files\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -397,6 +408,11 @@ func (o *ContentUnit) Files(exec boil.Executor, mods ...qm.QueryMod) fileQuery {
 
 	query := Files(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"files\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"files\".*"})
+	}
+
 	return query
 }
 

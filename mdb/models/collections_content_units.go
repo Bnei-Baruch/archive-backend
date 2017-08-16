@@ -25,6 +25,7 @@ type CollectionsContentUnit struct {
 	CollectionID  int64  `boil:"collection_id" json:"collection_id" toml:"collection_id" yaml:"collection_id"`
 	ContentUnitID int64  `boil:"content_unit_id" json:"content_unit_id" toml:"content_unit_id" yaml:"content_unit_id"`
 	Name          string `boil:"name" json:"name" toml:"name" yaml:"name"`
+	Position      int    `boil:"position" json:"position" toml:"position" yaml:"position"`
 
 	R *collectionsContentUnitR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L collectionsContentUnitL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -40,9 +41,9 @@ type collectionsContentUnitR struct {
 type collectionsContentUnitL struct{}
 
 var (
-	collectionsContentUnitColumns               = []string{"collection_id", "content_unit_id", "name"}
+	collectionsContentUnitColumns               = []string{"collection_id", "content_unit_id", "name", "position"}
 	collectionsContentUnitColumnsWithoutDefault = []string{"collection_id", "content_unit_id", "name"}
-	collectionsContentUnitColumnsWithDefault    = []string{}
+	collectionsContentUnitColumnsWithDefault    = []string{"position"}
 	collectionsContentUnitPrimaryKeyColumns     = []string{"collection_id", "content_unit_id"}
 )
 

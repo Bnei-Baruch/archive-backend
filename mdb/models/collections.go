@@ -207,10 +207,7 @@ func (o *Collection) CollectionI18nsG(mods ...qm.QueryMod) collectionI18nQuery {
 
 // CollectionI18ns retrieves all the collection_i18n's collection i18n with an executor.
 func (o *Collection) CollectionI18ns(exec boil.Executor, mods ...qm.QueryMod) collectionI18nQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"collection_i18n\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -221,6 +218,11 @@ func (o *Collection) CollectionI18ns(exec boil.Executor, mods ...qm.QueryMod) co
 
 	query := CollectionI18ns(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"collection_i18n\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"collection_i18n\".*"})
+	}
+
 	return query
 }
 
@@ -231,10 +233,7 @@ func (o *Collection) CollectionsContentUnitsG(mods ...qm.QueryMod) collectionsCo
 
 // CollectionsContentUnits retrieves all the collections_content_unit's collections content units with an executor.
 func (o *Collection) CollectionsContentUnits(exec boil.Executor, mods ...qm.QueryMod) collectionsContentUnitQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"collections_content_units\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -245,6 +244,11 @@ func (o *Collection) CollectionsContentUnits(exec boil.Executor, mods ...qm.Quer
 
 	query := CollectionsContentUnits(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"collections_content_units\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"collections_content_units\".*"})
+	}
+
 	return query
 }
 

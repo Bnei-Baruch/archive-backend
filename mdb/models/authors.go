@@ -185,10 +185,7 @@ func (o *Author) AuthorI18nsG(mods ...qm.QueryMod) authorI18nQuery {
 
 // AuthorI18ns retrieves all the author_i18n's author i18n with an executor.
 func (o *Author) AuthorI18ns(exec boil.Executor, mods ...qm.QueryMod) authorI18nQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"author_i18n\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -199,6 +196,11 @@ func (o *Author) AuthorI18ns(exec boil.Executor, mods ...qm.QueryMod) authorI18n
 
 	query := AuthorI18ns(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"author_i18n\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"author_i18n\".*"})
+	}
+
 	return query
 }
 
@@ -209,10 +211,7 @@ func (o *Author) SourcesG(mods ...qm.QueryMod) sourceQuery {
 
 // Sources retrieves all the source's sources with an executor.
 func (o *Author) Sources(exec boil.Executor, mods ...qm.QueryMod) sourceQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"sources\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -224,6 +223,11 @@ func (o *Author) Sources(exec boil.Executor, mods ...qm.QueryMod) sourceQuery {
 
 	query := Sources(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"sources\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"sources\".*"})
+	}
+
 	return query
 }
 

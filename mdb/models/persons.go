@@ -183,10 +183,7 @@ func (o *Person) ContentUnitsPersonsG(mods ...qm.QueryMod) contentUnitsPersonQue
 
 // ContentUnitsPersons retrieves all the content_units_person's content units persons with an executor.
 func (o *Person) ContentUnitsPersons(exec boil.Executor, mods ...qm.QueryMod) contentUnitsPersonQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"content_units_persons\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -197,6 +194,11 @@ func (o *Person) ContentUnitsPersons(exec boil.Executor, mods ...qm.QueryMod) co
 
 	query := ContentUnitsPersons(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"content_units_persons\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"content_units_persons\".*"})
+	}
+
 	return query
 }
 
@@ -207,10 +209,7 @@ func (o *Person) PersonI18nsG(mods ...qm.QueryMod) personI18nQuery {
 
 // PersonI18ns retrieves all the person_i18n's person i18n with an executor.
 func (o *Person) PersonI18ns(exec boil.Executor, mods ...qm.QueryMod) personI18nQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"person_i18n\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -221,6 +220,11 @@ func (o *Person) PersonI18ns(exec boil.Executor, mods ...qm.QueryMod) personI18n
 
 	query := PersonI18ns(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"person_i18n\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"person_i18n\".*"})
+	}
+
 	return query
 }
 

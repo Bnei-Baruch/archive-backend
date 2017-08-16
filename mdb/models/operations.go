@@ -227,10 +227,7 @@ func (o *Operation) FilesG(mods ...qm.QueryMod) fileQuery {
 
 // Files retrieves all the file's files with an executor.
 func (o *Operation) Files(exec boil.Executor, mods ...qm.QueryMod) fileQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"files\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -242,6 +239,11 @@ func (o *Operation) Files(exec boil.Executor, mods ...qm.QueryMod) fileQuery {
 
 	query := Files(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"files\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"files\".*"})
+	}
+
 	return query
 }
 

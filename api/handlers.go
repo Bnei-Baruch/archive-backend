@@ -397,7 +397,10 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		}
 
 		// content units
-		sort.Sort(mdb.InCollection{ExtCCUSlice: mdb.ExtCCUSlice(x.R.CollectionsContentUnits)})
+		sort.SliceStable(x.R.CollectionsContentUnits, func (i int, j int) bool {
+			return x.R.CollectionsContentUnits[i].Position < x.R.CollectionsContentUnits[j].Position
+		})
+		//sort.Sort(mdb.InCollection{ExtCCUSlice: mdb.ExtCCUSlice(x.R.CollectionsContentUnits)})
 		c.ContentUnits = make([]*ContentUnit, 0)
 		for _, ccu := range x.R.CollectionsContentUnits {
 			cu := ccu.R.ContentUnit
@@ -470,7 +473,10 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 	}
 
 	// sort by ccu.name
-	sort.Sort(mdb.InCollection{ExtCCUSlice: mdb.ExtCCUSlice(c.R.CollectionsContentUnits)})
+	sort.SliceStable(c.R.CollectionsContentUnits, func (i int, j int) bool {
+		return c.R.CollectionsContentUnits[i].Position < c.R.CollectionsContentUnits[j].Position
+	})
+	//sort.Sort(mdb.InCollection{ExtCCUSlice: mdb.ExtCCUSlice(c.R.CollectionsContentUnits)})
 
 	// construct DTO's
 	cl.ContentUnits = make([]*ContentUnit, 0)

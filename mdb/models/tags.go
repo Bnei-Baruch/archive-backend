@@ -206,10 +206,7 @@ func (o *Tag) ContentUnitsG(mods ...qm.QueryMod) contentUnitQuery {
 
 // ContentUnits retrieves all the content_unit's content units with an executor.
 func (o *Tag) ContentUnits(exec boil.Executor, mods ...qm.QueryMod) contentUnitQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"content_units\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -221,6 +218,11 @@ func (o *Tag) ContentUnits(exec boil.Executor, mods ...qm.QueryMod) contentUnitQ
 
 	query := ContentUnits(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"content_units\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"content_units\".*"})
+	}
+
 	return query
 }
 
@@ -231,10 +233,7 @@ func (o *Tag) TagI18nsG(mods ...qm.QueryMod) tagI18nQuery {
 
 // TagI18ns retrieves all the tag_i18n's tag i18n with an executor.
 func (o *Tag) TagI18ns(exec boil.Executor, mods ...qm.QueryMod) tagI18nQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"tag_i18n\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -245,6 +244,11 @@ func (o *Tag) TagI18ns(exec boil.Executor, mods ...qm.QueryMod) tagI18nQuery {
 
 	query := TagI18ns(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"tag_i18n\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"tag_i18n\".*"})
+	}
+
 	return query
 }
 
@@ -255,10 +259,7 @@ func (o *Tag) ParentTagsG(mods ...qm.QueryMod) tagQuery {
 
 // ParentTags retrieves all the tag's tags with an executor via parent_id column.
 func (o *Tag) ParentTags(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"tags\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -269,6 +270,11 @@ func (o *Tag) ParentTags(exec boil.Executor, mods ...qm.QueryMod) tagQuery {
 
 	query := Tags(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"tags\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"tags\".*"})
+	}
+
 	return query
 }
 

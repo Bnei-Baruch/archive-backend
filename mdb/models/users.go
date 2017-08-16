@@ -191,10 +191,7 @@ func (o *User) CollectionI18nsG(mods ...qm.QueryMod) collectionI18nQuery {
 
 // CollectionI18ns retrieves all the collection_i18n's collection i18n with an executor.
 func (o *User) CollectionI18ns(exec boil.Executor, mods ...qm.QueryMod) collectionI18nQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"collection_i18n\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -205,6 +202,11 @@ func (o *User) CollectionI18ns(exec boil.Executor, mods ...qm.QueryMod) collecti
 
 	query := CollectionI18ns(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"collection_i18n\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"collection_i18n\".*"})
+	}
+
 	return query
 }
 
@@ -215,10 +217,7 @@ func (o *User) ContentUnitI18nsG(mods ...qm.QueryMod) contentUnitI18nQuery {
 
 // ContentUnitI18ns retrieves all the content_unit_i18n's content unit i18n with an executor.
 func (o *User) ContentUnitI18ns(exec boil.Executor, mods ...qm.QueryMod) contentUnitI18nQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"content_unit_i18n\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -229,6 +228,11 @@ func (o *User) ContentUnitI18ns(exec boil.Executor, mods ...qm.QueryMod) content
 
 	query := ContentUnitI18ns(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"content_unit_i18n\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"content_unit_i18n\".*"})
+	}
+
 	return query
 }
 
@@ -239,10 +243,7 @@ func (o *User) OperationsG(mods ...qm.QueryMod) operationQuery {
 
 // Operations retrieves all the operation's operations with an executor.
 func (o *User) Operations(exec boil.Executor, mods ...qm.QueryMod) operationQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"operations\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -253,6 +254,11 @@ func (o *User) Operations(exec boil.Executor, mods ...qm.QueryMod) operationQuer
 
 	query := Operations(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"operations\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"operations\".*"})
+	}
+
 	return query
 }
 
@@ -263,10 +269,7 @@ func (o *User) PersonI18nsG(mods ...qm.QueryMod) personI18nQuery {
 
 // PersonI18ns retrieves all the person_i18n's person i18n with an executor.
 func (o *User) PersonI18ns(exec boil.Executor, mods ...qm.QueryMod) personI18nQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"person_i18n\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -277,6 +280,11 @@ func (o *User) PersonI18ns(exec boil.Executor, mods ...qm.QueryMod) personI18nQu
 
 	query := PersonI18ns(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"person_i18n\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"person_i18n\".*"})
+	}
+
 	return query
 }
 
@@ -287,10 +295,7 @@ func (o *User) TagI18nsG(mods ...qm.QueryMod) tagI18nQuery {
 
 // TagI18ns retrieves all the tag_i18n's tag i18n with an executor.
 func (o *User) TagI18ns(exec boil.Executor, mods ...qm.QueryMod) tagI18nQuery {
-	queryMods := []qm.QueryMod{
-		qm.Select("\"tag_i18n\".*"),
-	}
-
+	var queryMods []qm.QueryMod
 	if len(mods) != 0 {
 		queryMods = append(queryMods, mods...)
 	}
@@ -301,6 +306,11 @@ func (o *User) TagI18ns(exec boil.Executor, mods ...qm.QueryMod) tagI18nQuery {
 
 	query := TagI18ns(exec, queryMods...)
 	queries.SetFrom(query.Query, "\"tag_i18n\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"tag_i18n\".*"})
+	}
+
 	return query
 }
 
