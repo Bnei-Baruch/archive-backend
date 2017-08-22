@@ -27,16 +27,16 @@ func IsEmpty(s []string) bool {
 
 func ConvertArgsInt64(args []int64) []interface{} {
 	c := make([]interface{}, len(args))
-	for i, a := range args {
-		c[i] = a
+	for i := range args {
+		c[i] = args[i]
 	}
 	return c
 }
 
 func ConvertArgsString(args []string) []interface{} {
 	c := make([]interface{}, len(args))
-	for i, a := range args {
-		c[i] = a
+	for i := range args {
+		c[i] = args[i]
 	}
 	return c
 }

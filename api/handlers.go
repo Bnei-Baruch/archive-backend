@@ -311,6 +311,9 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
 	// filters
+	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
@@ -400,7 +403,7 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		sort.SliceStable(x.R.CollectionsContentUnits, func (i int, j int) bool {
 			return x.R.CollectionsContentUnits[i].Position < x.R.CollectionsContentUnits[j].Position
 		})
-		//sort.Sort(mdb.InCollection{ExtCCUSlice: mdb.ExtCCUSlice(x.R.CollectionsContentUnits)})
+
 		c.ContentUnits = make([]*ContentUnit, 0)
 		for _, ccu := range x.R.CollectionsContentUnits {
 			cu := ccu.R.ContentUnit
@@ -472,11 +475,10 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 		return nil, NewInternalError(err)
 	}
 
-	// sort by ccu.name
+	// sort CCUs
 	sort.SliceStable(c.R.CollectionsContentUnits, func (i int, j int) bool {
 		return c.R.CollectionsContentUnits[i].Position < c.R.CollectionsContentUnits[j].Position
 	})
-	//sort.Sort(mdb.InCollection{ExtCCUSlice: mdb.ExtCCUSlice(c.R.CollectionsContentUnits)})
 
 	// construct DTO's
 	cl.ContentUnits = make([]*ContentUnit, 0)
@@ -502,6 +504,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
 	// filters
+	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
@@ -548,6 +553,23 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		return nil, NewInternalError(err)
 	}
 
+	// response
+	cus, ex := prepareCUs(db, units, r.Language)
+	if ex != nil {
+		return nil, ex
+	}
+
+	resp := &ContentUnitsResponse{
+		ListResponse: ListResponse{Total: total},
+		ContentUnits: cus,
+	}
+
+	return resp, nil
+}
+
+// units must be loaded with their CCUs loaded with their collections
+func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]*ContentUnit, *HttpError) {
+
 	// Filter secure published collections
 	// Load i18n for all content units and all collections - total 2 DB round trips
 	cuids := make([]int64, len(units))
@@ -556,16 +578,6 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		cuids[i] = x.ID
 		b := x.R.CollectionsContentUnits[:0]
 		for _, y := range x.R.CollectionsContentUnits {
-
-			// Edo: Commenting out as I can't reproduce
-			// Workaround for this bug: https://github.com/vattle/sqlboiler/issues/154
-			//if y.R.Collection == nil {
-			//	err = y.L.LoadCollection(db, true, y)
-			//	if err != nil {
-			//		return nil, NewInternalError(err)
-			//	}
-			//}
-
 			if mdb.SEC_PUBLIC == y.R.Collection.Secure && y.R.Collection.Published {
 				b = append(b, y)
 				cids = append(cids, y.CollectionID)
@@ -574,27 +586,23 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		}
 	}
 
-	cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
+	cui18nsMap, err := loadCUI18ns(db, language, cuids)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
-	ci18nsMap, err := loadCI18ns(db, r.Language, cids)
+	ci18nsMap, err := loadCI18ns(db, language, cids)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 
-	// Response
-	resp := &ContentUnitsResponse{
-		ListResponse: ListResponse{Total: total},
-		ContentUnits: make([]*ContentUnit, len(units)),
-	}
+	cus := make([]*ContentUnit, len(units))
 	for i, x := range units {
 		cu, err := mdbToCU(x)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
 		if i18ns, ok := cui18nsMap[x.ID]; ok {
-			setCUI18n(cu, r.Language, i18ns)
+			setCUI18n(cu, language, i18ns)
 		}
 
 		// collections
@@ -607,17 +615,17 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 				return nil, NewInternalError(err)
 			}
 			if i18ns, ok := ci18nsMap[cl.ID]; ok {
-				setCI18n(cc, r.Language, i18ns)
+				setCI18n(cc, language, i18ns)
 			}
 
 			// Dirty hack for unique mapping - needs to parse in client...
 			key := fmt.Sprintf("%s____%s", cl.UID, ccu.Name)
 			cu.Collections[key] = cc
 		}
-		resp.ContentUnits[i] = cu
+		cus[i] = cu
 	}
 
-	return resp, nil
+	return cus, nil
 }
 
 func handleSearch(esc *elastic.Client, index string, text string, from int) (*elastic.SearchResult, error) {
@@ -674,6 +682,17 @@ func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
 	}
 
 	return limit, offset, nil
+}
+
+
+func appendIDsFilterMods(mods *[]qm.QueryMod, f IDsFilter) error {
+	if utils.IsEmpty(f.IDs) {
+		return nil
+	}
+
+	*mods = append(*mods, qm.WhereIn("uid IN ?", utils.ConvertArgsString(f.IDs)...))
+
+	return nil
 }
 
 func appendContentTypesFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) error {

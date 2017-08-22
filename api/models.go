@@ -30,6 +30,10 @@ type ItemRequest struct {
 	UID string
 }
 
+type IDsFilter struct {
+	IDs []string `json:"ids" form:"id" binding:"omitempty"`
+}
+
 type ContentTypesFilter struct {
 	ContentTypes []string `json:"content_types" form:"content_type" binding:"omitempty"`
 }
@@ -67,6 +71,7 @@ func (drf *DateRangeFilter) Range() (time.Time, time.Time, error) {
 
 type CollectionsRequest struct {
 	ListRequest
+	IDsFilter
 	ContentTypesFilter
 	DateRangeFilter
 }
@@ -78,6 +83,7 @@ type CollectionsResponse struct {
 
 type ContentUnitsRequest struct {
 	ListRequest
+	IDsFilter
 	ContentTypesFilter
 	DateRangeFilter
 	SourcesFilter
