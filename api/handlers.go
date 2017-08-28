@@ -322,7 +322,9 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	}
 
 	// count query
-	total, err := mdbmodels.Collections(db, mods...).Count()
+	var total int64
+	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
+	err := mdbmodels.Collections(db, countMods...).QueryRow().Scan(&total)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -400,7 +402,7 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		}
 
 		// content units
-		sort.SliceStable(x.R.CollectionsContentUnits, func (i int, j int) bool {
+		sort.SliceStable(x.R.CollectionsContentUnits, func(i int, j int) bool {
 			return x.R.CollectionsContentUnits[i].Position < x.R.CollectionsContentUnits[j].Position
 		})
 
@@ -476,7 +478,7 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 	}
 
 	// sort CCUs
-	sort.SliceStable(c.R.CollectionsContentUnits, func (i int, j int) bool {
+	sort.SliceStable(c.R.CollectionsContentUnits, func(i int, j int) bool {
 		return c.R.CollectionsContentUnits[i].Position < c.R.CollectionsContentUnits[j].Position
 	})
 
@@ -524,8 +526,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		return nil, NewInternalError(err)
 	}
 
-	// count query
-	total, err := mdbmodels.ContentUnits(db, mods...).Count()
+	var total int64
+	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
+	err := mdbmodels.ContentUnits(db, countMods...).QueryRow().Scan(&total)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -645,6 +648,10 @@ func handleSearch(esc *elastic.Client, index string, text string, from int) (*el
 // appendListMods compute and appends the OrderBy, Limit and Offset query mods.
 // It returns the limit, offset and error if any
 func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
+
+	// group by id to remove duplicates
+	*mods = append(*mods, qm.GroupBy("id"))
+
 	if r.OrderBy == "" {
 		*mods = append(*mods,
 			qm.OrderBy("(coalesce(properties->>'film_date', properties->>'start_date', created_at::text))::date desc, created_at desc"))
@@ -683,7 +690,6 @@ func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
 
 	return limit, offset, nil
 }
-
 
 func appendIDsFilterMods(mods *[]qm.QueryMod, f IDsFilter) error {
 	if utils.IsEmpty(f.IDs) {
