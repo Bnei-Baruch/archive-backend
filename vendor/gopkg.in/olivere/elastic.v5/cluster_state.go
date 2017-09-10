@@ -5,11 +5,10 @@
 package elastic
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"gopkg.in/olivere/elastic.v5/uritemplates"
 )
@@ -260,7 +259,7 @@ type shardRouting struct {
 	RelocatingNode string          `json:"relocating_node"`
 	Shard          int             `json:"shard"`
 	Index          string          `json:"index"`
-	Version        int64           `json:"state"`
+	Version        int64           `json:"version"`
 	RestoreSource  *RestoreSource  `json:"restore_source"`
 	AllocationId   *allocationId   `json:"allocation_id"`
 	UnassignedInfo *unassignedInfo `json:"unassigned_info"`
