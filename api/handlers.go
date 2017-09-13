@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -17,12 +18,14 @@ import (
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v5"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-var SECURE_PUBLISHED_MOD = qm.Where(fmt.Sprintf("secure=%d AND published IS TRUE", mdb.SEC_PUBLIC))
+var SECURE_PUBLISHED_MOD = qm.Where(fmt.Sprintf("secure=%d AND published IS TRUE", consts.SEC_PUBLIC))
 
 func CollectionsHandler(c *gin.Context) {
 	var r CollectionsRequest
@@ -99,7 +102,7 @@ func ContentUnitHandler(c *gin.Context) {
 	u.SourceUnits = make(map[string]*ContentUnit)
 	for _, cud := range cu.R.DerivedContentUnitDerivations {
 		su := cud.R.Source
-		if mdb.SEC_PUBLIC == su.Secure && su.Published {
+		if consts.SEC_PUBLIC == su.Secure && su.Published {
 			scu, err := mdbToCU(su)
 			if err != nil {
 				NewInternalError(err).Abort(c)
@@ -116,7 +119,7 @@ func ContentUnitHandler(c *gin.Context) {
 	u.DerivedUnits = make(map[string]*ContentUnit)
 	for _, cud := range cu.R.SourceContentUnitDerivations {
 		du := cud.R.Derived
-		if mdb.SEC_PUBLIC == du.Secure && du.Published {
+		if consts.SEC_PUBLIC == du.Secure && du.Published {
 			dcu, err := mdbToCU(du)
 			if err != nil {
 				NewInternalError(err).Abort(c)
@@ -189,7 +192,7 @@ func ContentUnitHandler(c *gin.Context) {
 	u.Collections = make(map[string]*Collection)
 	cidsMap := make(map[string]int64)
 	for _, ccu := range cu.R.CollectionsContentUnits {
-		if mdb.SEC_PUBLIC == ccu.R.Collection.Secure && ccu.R.Collection.Published {
+		if consts.SEC_PUBLIC == ccu.R.Collection.Secure && ccu.R.Collection.Published {
 			cl := ccu.R.Collection
 
 			cc, err := mdbToC(cl)
@@ -256,7 +259,7 @@ func LessonsHandler(c *gin.Context) {
 		}
 		cr := CollectionsRequest{
 			ContentTypesFilter: ContentTypesFilter{
-				ContentTypes: []string{mdb.CT_DAILY_LESSON, mdb.CT_SPECIAL_LESSON},
+				ContentTypes: []string{consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON},
 			},
 			ListRequest:     r.ListRequest,
 			DateRangeFilter: r.DateRangeFilter,
@@ -269,7 +272,7 @@ func LessonsHandler(c *gin.Context) {
 		}
 		cur := ContentUnitsRequest{
 			ContentTypesFilter: ContentTypesFilter{
-				ContentTypes: []string{mdb.CT_LESSON_PART},
+				ContentTypes: []string{consts.CT_LESSON_PART},
 			},
 			ListRequest:     r.ListRequest,
 			DateRangeFilter: r.DateRangeFilter,
@@ -300,6 +303,33 @@ func SearchHandler(c *gin.Context) {
 	}
 
 	res, err := handleSearch(c.MustGet("ES_CLIENT").(*elastic.Client), "mdb_collections", text, page)
+	if err == nil {
+		c.JSON(http.StatusOK, res)
+	} else {
+		NewInternalError(err).Abort(c)
+	}
+}
+
+func AutocompleteHandler(c *gin.Context) {
+	q := c.Query("q")
+	if q == "" {
+		NewBadRequestError(errors.New("Can't search for an empty term")).Abort(c)
+		return
+	}
+
+	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	se := search.NewESEngine(esc, db)
+
+	// Detect input language
+	order := utils.DetectLanguage(q, c.Request.Header.Get("Accept-Language"), nil)
+
+	// Have a 50ms deadline on the search engine call.
+	// It's autocomplete after all...
+	ctx, cancelFn := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancelFn()
+
+	res, err := se.GetSuggestions(ctx, search.Query{Term: q, LanguageOrder: order})
 	if err == nil {
 		c.JSON(http.StatusOK, res)
 	} else {
@@ -370,7 +400,7 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 			//	}
 			//}
 
-			if mdb.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
+			if consts.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
 				b = append(b, y)
 				cuids = append(cuids, y.ContentUnitID)
 			}
@@ -464,7 +494,7 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 	// filter secure & published
 	b := c.R.CollectionsContentUnits[:0]
 	for _, y := range c.R.CollectionsContentUnits {
-		if mdb.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
+		if consts.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
 			b = append(b, y)
 			cuids = append(cuids, y.ContentUnitID)
 		}
@@ -581,7 +611,7 @@ func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]
 		cuids[i] = x.ID
 		b := x.R.CollectionsContentUnits[:0]
 		for _, y := range x.R.CollectionsContentUnits {
-			if mdb.SEC_PUBLIC == y.R.Collection.Secure && y.R.Collection.Published {
+			if consts.SEC_PUBLIC == y.R.Collection.Secure && y.R.Collection.Published {
 				b = append(b, y)
 				cids = append(cids, y.CollectionID)
 			}
@@ -664,9 +694,9 @@ func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
 	if r.StartIndex == 0 {
 		// pagination style
 		if r.PageSize == 0 {
-			limit = DEFAULT_PAGE_SIZE
+			limit = consts.API_DEFAULT_PAGE_SIZE
 		} else {
-			limit = utils.Min(r.PageSize, MAX_PAGE_SIZE)
+			limit = utils.Min(r.PageSize, consts.API_MAX_PAGE_SIZE)
 		}
 		if r.PageNumber > 1 {
 			offset = (r.PageNumber - 1) * limit
@@ -675,7 +705,7 @@ func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
 		// start & stop index style for "infinite" lists
 		offset = r.StartIndex - 1
 		if r.StopIndex == 0 {
-			limit = MAX_PAGE_SIZE
+			limit = consts.API_MAX_PAGE_SIZE
 		} else if r.StopIndex < r.StartIndex {
 			return 0, 0, errors.Errorf("Invalid range [%d-%d]", r.StartIndex, r.StopIndex)
 		} else {
@@ -911,7 +941,7 @@ func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]
 	// Load from DB
 	i18ns, err := mdbmodels.CollectionI18ns(db,
 		qm.WhereIn("collection_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[language])...)).
+		qm.AndIn("language in ?", utils.ConvertArgsString(consts.LANG_ORDER[language])...)).
 		All()
 	if err != nil {
 		return nil, errors.Wrap(err, "Load collections i18ns from DB")
@@ -932,7 +962,7 @@ func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]
 }
 
 func setCI18n(c *Collection, language string, i18ns map[string]*mdbmodels.CollectionI18n) {
-	for _, l := range LANG_ORDER[language] {
+	for _, l := range consts.LANG_ORDER[language] {
 		li18n, ok := i18ns[l]
 		if ok {
 			if c.Name == "" && li18n.Name.Valid {
@@ -949,7 +979,7 @@ func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string
 	// Load from DB
 	i18ns, err := mdbmodels.ContentUnitI18ns(db,
 		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(LANG_ORDER[language])...)).
+		qm.AndIn("language in ?", utils.ConvertArgsString(consts.LANG_ORDER[language])...)).
 		All()
 	if err != nil {
 		return nil, errors.Wrap(err, "Load content units i18ns from DB")
@@ -995,7 +1025,7 @@ func loadCUFiles(db *sql.DB, ids []int64) (map[int64][]*mdbmodels.File, error) {
 }
 
 func setCUI18n(cu *ContentUnit, language string, i18ns map[string]*mdbmodels.ContentUnitI18n) {
-	for _, l := range LANG_ORDER[language] {
+	for _, l := range consts.LANG_ORDER[language] {
 		li18n, ok := i18ns[l]
 		if ok {
 			if cu.Name == "" && li18n.Name.Valid {

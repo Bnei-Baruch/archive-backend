@@ -2,9 +2,6 @@ package es
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
-	"io/ioutil"
 	"sort"
 	"strings"
 	"sync"
@@ -13,58 +10,18 @@ import (
 	log "github.com/Sirupsen/logrus"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
-	"github.com/vattle/sqlboiler/boil"
 	"github.com/vattle/sqlboiler/queries/qm"
-	elastic "gopkg.in/olivere/elastic.v5"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-const INDEX_NAME = "mdb_collections"
-
-var (
-	db  *sql.DB
-	esc *elastic.Client
-)
-
 func ImportMDB() {
-	var err error
-	clock := time.Now()
+	clock := Init()
 
-	// Setup logging
-	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
-	log.Infoln("Import MDB to elasticsearch started")
-
-	log.Info("Setting up connection to MDB")
-	db, err = sql.Open("postgres", viper.GetString("mdb.url"))
-	utils.Must(err)
-	defer db.Close()
-	utils.Must(db.Ping())
-	boil.SetDB(db)
-	//boil.DebugMode = true
-
-	log.Info("Setting up connection to ElasticSearch")
-	url := viper.GetString("elasticsearch.url")
-	esc, err = elastic.NewClient(
-		elastic.SetURL(url),
-		elastic.SetSniff(false),
-		elastic.SetHealthcheckInterval(10*time.Second),
-		elastic.SetErrorLog(log.StandardLogger()),
-		//elastic.SetInfoLog(log.StandardLogger()),
-	)
-	utils.Must(err)
-
-	esversion, err := esc.ElasticsearchVersion(url)
-	utils.Must(err)
-	log.Infof("Elasticsearch version %s", esversion)
-
-	log.Info("Initializing static data from MDB")
-	utils.Must(mdb.InitTypeRegistries(db))
-
-	utils.Must(recreateIndex(INDEX_NAME))
+	utils.Must(recreateIndex(consts.ES_COLLECTIONS_INDEX, "es/mappings.json"))
 
 	collectionsCount := mdbmodels.Collections(db).CountP()
 	log.Infof("%d collections in MDB", collectionsCount)
@@ -103,6 +60,7 @@ func ImportMDB() {
 	log.Info("Waiting for indexers to finish")
 	indexersWG.Wait()
 
+	Shutdown()
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 
@@ -127,7 +85,7 @@ func indexer(jobs <-chan ProcessResult, wg *sync.WaitGroup) {
 		if j.err == nil {
 			log.Infof("Indexing collection %d", j.mdb.ID)
 			_, err := esc.Index().
-				Index(INDEX_NAME).
+				Index(consts.ES_COLLECTIONS_INDEX).
 				Type("collection").
 				Id(j.mdb.UID).
 				BodyJson(j.es).
@@ -315,41 +273,4 @@ func processFile(file *mdbmodels.File) (*File, error) {
 	}
 
 	return f, nil
-}
-
-func recreateIndex(name string) error {
-	ctx := context.TODO()
-
-	exists, err := esc.IndexExists(name).Do(ctx)
-	if exists {
-		log.Infof("Index %s already exist, deleting...", name)
-		_, err = esc.DeleteIndex(name).Do(ctx)
-		if err != nil {
-			return err
-		}
-	}
-
-	log.Infof("Creating index: %s", name)
-	mappings, err := ioutil.ReadFile("es/mappings.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	var bodyJson map[string]interface{}
-	if err = json.Unmarshal(mappings, &bodyJson); err != nil {
-		log.Fatal(err)
-	}
-	_, err = esc.CreateIndex(name).BodyJson(bodyJson).Do(ctx)
-	//_, err = esc.CreateIndex(name).Do(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Settings for bulk indexing.
-	// TODO: These should be reverted back when done
-	_, err = esc.IndexPutSettings(name).BodyJson(map[string]interface{}{
-		"refresh_interval":   "-1",
-		"number_of_replicas": 0,
-	}).Do(ctx)
-
-	return err
 }

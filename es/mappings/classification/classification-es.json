@@ -1,0 +1,68 @@
+{
+  "mappings": {
+    "tags": {
+      "_all": {
+        "enabled": false
+      },
+      "properties": {
+        "mdb_uid": {
+          "type": "keyword",
+          "index": false
+        },
+        "name": {
+          "type": "text",
+          "analyzer": "spanish"
+        },
+        "name_suggest": {
+          "type": "completion",
+          "contexts": [
+            {
+              "name": "classification",
+              "type": "category",
+              "path": "classification_type"
+            }
+          ]
+        }
+      }
+    },
+    "sources": {
+      "_all": {
+        "enabled": false
+      },
+      "properties": {
+        "mdb_uid": {
+          "type": "keyword",
+          "index": false
+        },
+        "name": {
+          "type": "text",
+          "analyzer": "spanish"
+        },
+        "name_suggest": {
+          "type": "completion",
+          "contexts": [
+            {
+              "name": "classification",
+              "type": "category",
+              "path": "classification_type"
+            }
+          ]
+        },
+        "description": {
+          "type": "text",
+          "analyzer": "spanish"
+        },
+        "description_suggest": {
+          "type": "completion",
+          "contexts": [
+            {
+              "name": "classification",
+              "type": "category",
+              "path": "classification_type"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -17,5 +17,5 @@ func init() {
 }
 
 func etlFn(cmd *cobra.Command, args []string) {
-	es.ImportMDB()
+	es.IndexClassifications()
 }

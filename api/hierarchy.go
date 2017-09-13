@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"fmt"
 	"math"
 	"net/http"
@@ -9,8 +10,8 @@ import (
 	"github.com/vattle/sqlboiler/queries"
 	"gopkg.in/gin-gonic/gin.v1"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"database/sql"
 )
 
 // args:
@@ -88,7 +89,7 @@ func SourcesHierarchyHandler(c *gin.Context) {
 
 	var l string
 	if r.Language == "" {
-		l = mdb.LANG_HEBREW
+		l = consts.LANG_HEBREW
 	} else {
 		l = r.Language
 	}
@@ -201,7 +202,7 @@ func TagsHierarchyHandler(c *gin.Context) {
 
 	var l string
 	if r.Language == "" {
-		l = mdb.LANG_HEBREW
+		l = consts.LANG_HEBREW
 	} else {
 		l = r.Language
 	}

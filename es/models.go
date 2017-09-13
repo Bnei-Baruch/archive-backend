@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/consts"
 )
 
 type Collection struct {
@@ -56,7 +56,7 @@ func (s ByNameInCollection) Less(i, j int) bool {
 	a, b := s.ContentUnits[i], s.ContentUnits[j]
 
 	// Lesson parts should be sorted by numerically
-	if a.ContentType == mdb.CT_LESSON_PART && b.ContentType == mdb.CT_LESSON_PART {
+	if a.ContentType == consts.CT_LESSON_PART && b.ContentType == consts.CT_LESSON_PART {
 		ai, err := strconv.Atoi(a.NameInCollection)
 		if err != nil {
 			bi, err := strconv.Atoi(b.NameInCollection)
@@ -67,4 +67,13 @@ func (s ByNameInCollection) Less(i, j int) bool {
 	}
 
 	return a.NameInCollection < b.NameInCollection
+}
+
+type Classification struct {
+	MDB_UID            string `json:"mdb_uid"`
+	Name               string `json:"name,omitempty"`
+	NameSuggest        string `json:"name_suggest,omitempty"`
+	Description        string `json:"description,omitempty"`
+	DescriptionSuggest string `json:"description_suggest,omitempty"`
+	Type               string `json:"classification_type"`
 }
