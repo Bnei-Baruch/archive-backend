@@ -1,0 +1,56 @@
+{
+  "mappings": {
+    "content_units": {
+      "_all": {
+        "enabled": false
+      },
+      "properties": {
+        "mdb_uid": {
+          "type": "keyword",
+          "index": false
+        },
+        "name": {
+          "type": "text",
+          "analyzer": "czech"
+        },
+        "description": {
+          "type": "text",
+          "analyzer": "czech"
+        },
+        "content_type": {
+          "type": "keyword",
+          "index": false
+        },
+        "film_date": {
+          "type": "date",
+          "format": "strict_date",
+          "index": false
+        },
+        "duration": {
+          "type": "short",
+          "index": false
+        },
+        "original_language": {
+          "type": "keyword",
+          "index": false
+        },
+        "translations": {
+          "type": "keyword",
+          "index": false
+        },
+        "tags": {
+          "type": "keyword",
+          "index": false
+        },
+        "sources": {
+          "type": "keyword",
+          "index": false
+        },
+        "persons": {
+          "type": "keyword",
+          "index": false
+        }
+      }
+    }
+  }
+}

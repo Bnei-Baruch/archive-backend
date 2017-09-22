@@ -8,6 +8,6 @@ type Query struct {
 }
 
 type Engine interface {
-	DoSearch(ctx context.Context, query Query) (interface{}, error)
 	GetSuggestions(ctx context.Context, query Query) (interface{}, error)
+	DoSearch(ctx context.Context, query Query) (interface{}, error)
 }

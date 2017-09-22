@@ -51,7 +51,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 		elastic.SetHealthcheckInterval(10*time.Second),
 		elastic.SetErrorLog(log.StandardLogger()),
 		elastic.SetInfoLog(log.StandardLogger()),
-		//elastic.SetTraceLog(log.StandardLogger()),
+		elastic.SetTraceLog(log.StandardLogger()),
 	)
 	utils.Must(err)
 

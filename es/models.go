@@ -1,72 +1,45 @@
 package es
 
 import (
-	"strconv"
-	"time"
-
-	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type Collection struct {
 	MDB_UID      string            `json:"mdb_uid"`
 	ContentType  string            `json:"content_type"`
-	FilmDate     time.Time         `json:"film_date"`
+	FilmDate     *utils.Date       `json:"film_date"`
 	Names        map[string]string `json:"names"`
 	Descriptions map[string]string `json:"descriptions"`
-	ContentUnits ContentUnits      `json:"content_units"`
+	ContentUnits []*ContentUnit    `json:"content_units"`
 }
 
 type ContentUnit struct {
-	MDB_UID          string            `json:"mdb_uid"`
-	ContentType      string            `json:"content_type"`
-	NameInCollection string            `json:"name_in_collection"`
-	FilmDate         time.Time         `json:"film_date"`
-	Secure           int               `json:"secure"`
-	Duration         int               `json:"duration,omitempty"`
-	OriginalLanguage string            `json:"original_language,omitempty"`
-	Names            map[string]string `json:"names"`
-	Descriptions     map[string]string `json:"descriptions"`
-	Files            []*File           `json:"files"`
+	MDB_UID          string      `json:"mdb_uid"`
+	Name             string      `json:"name,omitempty"`
+	Description      string      `json:"description,omitempty"`
+	ContentType      string      `json:"content_type"`
+	FilmDate         *utils.Date `json:"film_date,omitempty"`
+	Duration         int16       `json:"duration,omitempty"`
+	OriginalLanguage string      `json:"original_language,omitempty"`
+	Translations     []string    `json:"translations,omitempty"`
+	Tags             []string    `json:"tags,omitempty"`
+	Sources          []string    `json:"sources,omitempty"`
+	Authors          []string    `json:"authors,omitempty"`
+	Persons          []string    `json:"persons,omitempty"`
 }
 
 type File struct {
-	MDB_UID  string    `json:"mdb_uid"`
-	Name     string    `json:"name"`
-	Size     int64     `json:"size"`
-	URL      string    `json:"url"`
-	Secure   int       `json:"secure"`
-	FilmDate time.Time `json:"film_date"`
-	Duration int       `json:"duration,omitempty"`
-	Language string    `json:"language,omitempty"`
-	MimeType string    `json:"mimetype,omitempty"`
-	Type     string    `json:"type,omitempty"`
-	SubType  string    `json:"subtype,omitempty"`
-}
-
-// Sort helpers
-// See https://golang.org/pkg/sort/
-type ContentUnits []*ContentUnit
-
-func (s ContentUnits) Len() int      { return len(s) }
-func (s ContentUnits) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-type ByNameInCollection struct{ ContentUnits }
-
-func (s ByNameInCollection) Less(i, j int) bool {
-	a, b := s.ContentUnits[i], s.ContentUnits[j]
-
-	// Lesson parts should be sorted by numerically
-	if a.ContentType == consts.CT_LESSON_PART && b.ContentType == consts.CT_LESSON_PART {
-		ai, err := strconv.Atoi(a.NameInCollection)
-		if err != nil {
-			bi, err := strconv.Atoi(b.NameInCollection)
-			if err != nil {
-				return ai < bi
-			}
-		}
-	}
-
-	return a.NameInCollection < b.NameInCollection
+	MDB_UID  string      `json:"mdb_uid"`
+	Name     string      `json:"name"`
+	Size     int64       `json:"size"`
+	URL      string      `json:"url"`
+	Secure   int         `json:"secure"`
+	FilmDate *utils.Date `json:"film_date"`
+	Duration int         `json:"duration,omitempty"`
+	Language string      `json:"language,omitempty"`
+	MimeType string      `json:"mimetype,omitempty"`
+	Type     string      `json:"type,omitempty"`
+	SubType  string      `json:"subtype,omitempty"`
 }
 
 type Classification struct {

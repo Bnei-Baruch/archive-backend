@@ -285,24 +285,47 @@ func LessonsHandler(c *gin.Context) {
 }
 
 func SearchHandler(c *gin.Context) {
-	text := c.Query("text")
-	if text == "" {
-		NewBadRequestError(errors.New("Can't search for an empty text")).Abort(c)
+	q := c.Query("q")
+	if q == "" {
+		NewBadRequestError(errors.New("Can't search for an empty term")).Abort(c)
 		return
 	}
 
-	page := 0
-	pageQ := c.Query("page")
-	if pageQ != "" {
-		var err error
-		page, err = strconv.Atoi(pageQ)
+	var err error
+
+	pageNoVal := 0
+	pageNo := c.Query("page_no")
+	if pageNo != "" {
+		pageNoVal, err = strconv.Atoi(pageNo)
 		if err != nil {
-			NewBadRequestError(err).Abort(c)
+			NewBadRequestError(errors.New("page_no expects a positive number")).Abort(c)
 			return
 		}
 	}
 
-	res, err := handleSearch(c.MustGet("ES_CLIENT").(*elastic.Client), "mdb_collections", text, page)
+	pageSizeVal := consts.API_DEFAULT_PAGE_SIZE
+	pageSize := c.Query("page_size")
+	if pageSize != "" {
+		pageSizeVal, err = strconv.Atoi(pageSize)
+		if err != nil {
+			NewBadRequestError(errors.New("page_size expects a positive number")).Abort(c)
+			return
+		}
+	}
+
+	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	se := search.NewESEngine(esc, db)
+
+	// Detect input language
+	order := utils.DetectLanguage(q, c.Request.Header.Get("Accept-Language"), nil)
+
+	res, err := se.DoSearch(
+		context.TODO(),
+		search.Query{Term: q, LanguageOrder: order},
+		pageNoVal,
+		utils.Min(pageSizeVal, consts.API_MAX_PAGE_SIZE),
+	)
 	if err == nil {
 		c.JSON(http.StatusOK, res)
 	} else {
@@ -326,7 +349,7 @@ func AutocompleteHandler(c *gin.Context) {
 
 	// Have a 50ms deadline on the search engine call.
 	// It's autocomplete after all...
-	ctx, cancelFn := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancelFn := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancelFn()
 
 	res, err := se.GetSuggestions(ctx, search.Query{Term: q, LanguageOrder: order})
@@ -661,19 +684,20 @@ func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]
 	return cus, nil
 }
 
-func handleSearch(esc *elastic.Client, index string, text string, from int) (*elastic.SearchResult, error) {
-	q := elastic.NewNestedQuery("content_units",
-		elastic.NewMultiMatchQuery(text, "content_units.names.*", "content_units.descriptions.*"))
+//func handleSearch(esc *elastic.Client, index string, text string, from int) (*elastic.SearchResult, error) {
 
-	h := elastic.NewHighlight().HighlighQuery(q)
-
-	return esc.Search().
-		Index(index).
-		Query(q).
-		Highlight(h).
-		From(from).
-		Do(context.TODO())
-}
+//q := elastic.NewNestedQuery("content_units",
+//	elastic.NewMultiMatchQuery(text, "content_units.names.*", "content_units.descriptions.*"))
+//
+//h := elastic.NewHighlight().HighlighQuery(q)
+//
+//return esc.Search().
+//	Index(index).
+//	Query(q).
+//	Highlight(h).
+//	From(from).
+//	Do(context.TODO())
+//}
 
 // appendListMods compute and appends the OrderBy, Limit and Offset query mods.
 // It returns the limit, offset and error if any
@@ -880,13 +904,13 @@ func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 	}
 
 	if !props.FilmDate.IsZero() {
-		cl.FilmDate = &Date{Time: props.FilmDate.Time}
+		cl.FilmDate = &utils.Date{Time: props.FilmDate.Time}
 	}
 	if !props.StartDate.IsZero() {
-		cl.StartDate = &Date{Time: props.StartDate.Time}
+		cl.StartDate = &utils.Date{Time: props.StartDate.Time}
 	}
 	if !props.EndDate.IsZero() {
-		cl.EndDate = &Date{Time: props.EndDate.Time}
+		cl.EndDate = &utils.Date{Time: props.EndDate.Time}
 	}
 
 	return
@@ -906,7 +930,7 @@ func mdbToCU(cu *mdbmodels.ContentUnit) (*ContentUnit, error) {
 	}
 
 	if !props.FilmDate.IsZero() {
-		u.FilmDate = &Date{Time: props.FilmDate.Time}
+		u.FilmDate = &utils.Date{Time: props.FilmDate.Time}
 	}
 
 	return u, nil

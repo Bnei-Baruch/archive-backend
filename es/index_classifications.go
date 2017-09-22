@@ -110,7 +110,7 @@ func indexTag(t *mdbmodels.Tag) error {
 	//log.Infof("Indexing tag %s", t.UID)
 
 	// create documents in each language with available translation
-	i18nMap := make(map[string]interface{})
+	i18nMap := make(map[string]Classification)
 	for i := range t.R.TagI18ns {
 		i18n := t.R.TagI18ns[i]
 		if i18n.Label.Valid && i18n.Label.String != "" {
@@ -200,7 +200,7 @@ func indexSource(s *mdbmodels.Source) error {
 	//log.Infof("Indexing source %s", s.UID)
 
 	// create documents in each language with available translation
-	i18nMap := make(map[string]interface{})
+	i18nMap := make(map[string]Classification)
 	for i := range s.R.SourceI18ns {
 		i18n := s.R.SourceI18ns[i]
 		if i18n.Name.Valid && i18n.Name.String != "" {

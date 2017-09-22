@@ -34,4 +34,5 @@ LANG_ANALYZERS['cs']=czech
 
 for k in ${!LANG_ANALYZERS[@]}; do
     sed "s/english/${LANG_ANALYZERS[$k]}/g" classification/classification-en.json > classification/classification-${k}.json;
+    sed "s/english/${LANG_ANALYZERS[$k]}/g" units/units-en.json > units/units-${k}.json;
 done

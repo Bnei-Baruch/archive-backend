@@ -1,11 +1,11 @@
 package api
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
 	"gopkg.in/nullbio/null.v6"
+
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type BaseRequest struct {
@@ -121,9 +121,9 @@ type Collection struct {
 	ContentType  string         `json:"content_type"`
 	Name         string         `json:"name,omitempty"`
 	Description  string         `json:"description,omitempty"`
-	FilmDate     *Date          `json:"film_date,omitempty"`
-	StartDate    *Date          `json:"start_date,omitempty"`
-	EndDate      *Date          `json:"end_date,omitempty"`
+	FilmDate     *utils.Date    `json:"film_date,omitempty"`
+	StartDate    *utils.Date    `json:"start_date,omitempty"`
+	EndDate      *utils.Date    `json:"end_date,omitempty"`
 	Country      string         `json:"country,omitempty"`
 	City         string         `json:"city,omitempty"`
 	FullAddress  string         `json:"full_address,omitempty"`
@@ -134,7 +134,7 @@ type ContentUnit struct {
 	ID               string                  `json:"id"`
 	ContentType      string                  `json:"content_type"`
 	NameInCollection string                  `json:"name_in_collection,omitempty"`
-	FilmDate         *Date                   `json:"film_date,omitempty"`
+	FilmDate         *utils.Date             `json:"film_date,omitempty"`
 	Name             string                  `json:"name,omitempty"`
 	Description      string                  `json:"description,omitempty"`
 	Duration         int                     `json:"duration,omitempty"`
@@ -184,21 +184,4 @@ type Tag struct {
 	Children  []*Tag      `json:"children,omitempty"`
 	ID        int64       `json:"-"`
 	ParentID  null.Int64  `json:"-"`
-}
-
-// Custom fields
-
-// A time.Time like structure with date part only JSON marshalling
-type Date struct {
-	time.Time
-}
-
-func (d *Date) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("\"%s\"", d.Time.Format("2006-01-02"))), nil
-}
-
-func (d *Date) UnmarshalJSON(b []byte) error {
-	var err error
-	d.Time, err = time.Parse("2006-01-02", strings.Trim(string(b), "\""))
-	return err
 }
