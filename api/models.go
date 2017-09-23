@@ -137,7 +137,7 @@ type ContentUnit struct {
 	FilmDate         *Date                   `json:"film_date,omitempty"`
 	Name             string                  `json:"name,omitempty"`
 	Description      string                  `json:"description,omitempty"`
-	Duration         int                     `json:"duration,omitempty"`
+	Duration         float64                 `json:"duration,omitempty"`
 	OriginalLanguage string                  `json:"original_language,omitempty"`
 	Files            []*File                 `json:"files,omitempty"`
 	Collections      map[string]*Collection  `json:"collections,omitempty"`
@@ -148,14 +148,14 @@ type ContentUnit struct {
 }
 
 type File struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Size     int64  `json:"size"`
-	Duration int    `json:"duration,omitempty"`
-	Language string `json:"language,omitempty"`
-	MimeType string `json:"mimetype,omitempty"`
-	Type     string `json:"type,omitempty"`
-	SubType  string `json:"subtype,omitempty"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Size     int64   `json:"size"`
+	Duration float64 `json:"duration,omitempty"`
+	Language string  `json:"language,omitempty"`
+	MimeType string  `json:"mimetype,omitempty"`
+	Type     string  `json:"type,omitempty"`
+	SubType  string  `json:"subtype,omitempty"`
 }
 
 type Source struct {

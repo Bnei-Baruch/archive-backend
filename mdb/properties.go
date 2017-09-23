@@ -17,13 +17,13 @@ type ContentUnitProperties struct {
 	FilmDate         Timestamp `json:"film_date"`
 	Secure           int       `json:"secure"`
 	OriginalLanguage string    `json:"original_language"`
-	Duration         int       `json:"duration"`
+	Duration         float64   `json:"duration"`
 }
 
 type FileProperties struct {
-	Secure   int    `json:"secure"`
-	URL      string `json:"url"`
-	Duration int    `json:"duration"`
+	Secure   int     `json:"secure"`
+	URL      string  `json:"url"`
+	Duration float64 `json:"duration"`
 }
 
 // A time.Time like structure with support for date part only JSON marshalling

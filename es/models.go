@@ -22,7 +22,7 @@ type ContentUnit struct {
 	NameInCollection string            `json:"name_in_collection"`
 	FilmDate         time.Time         `json:"film_date"`
 	Secure           int               `json:"secure"`
-	Duration         int               `json:"duration,omitempty"`
+	Duration         float64           `json:"duration,omitempty"`
 	OriginalLanguage string            `json:"original_language,omitempty"`
 	Names            map[string]string `json:"names"`
 	Descriptions     map[string]string `json:"descriptions"`
@@ -36,7 +36,7 @@ type File struct {
 	URL      string    `json:"url"`
 	Secure   int       `json:"secure"`
 	FilmDate time.Time `json:"film_date"`
-	Duration int       `json:"duration,omitempty"`
+	Duration float64   `json:"duration,omitempty"`
 	Language string    `json:"language,omitempty"`
 	MimeType string    `json:"mimetype,omitempty"`
 	Type     string    `json:"type,omitempty"`
