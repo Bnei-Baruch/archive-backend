@@ -4,7 +4,7 @@ import "github.com/Bnei-Baruch/archive-backend/mdb"
 
 const (
 	DEFAULT_PAGE_SIZE = 50
-	MAX_PAGE_SIZE     = 100
+	MAX_PAGE_SIZE     = 1000
 )
 
 var LANG_ORDER = map[string][]string{
