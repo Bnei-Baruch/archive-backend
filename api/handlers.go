@@ -25,7 +25,9 @@ import (
 var SECURE_PUBLISHED_MOD = qm.Where(fmt.Sprintf("secure=%d AND published IS TRUE", mdb.SEC_PUBLIC))
 
 func CollectionsHandler(c *gin.Context) {
-	var r CollectionsRequest
+	r := CollectionsRequest{
+		WithUnits: true,
+	}
 	if c.Bind(&r) != nil {
 		return
 	}
@@ -341,16 +343,51 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		return NewCollectionsResponse(), nil
 	}
 
-	// Eager loading
-	mods = append(mods, qm.Load(
-		"CollectionsContentUnits",
-		"CollectionsContentUnits.ContentUnit"))
+	if r.WithUnits {
+		// Eager loading
+		mods = append(mods, qm.Load(
+			"CollectionsContentUnits",
+			"CollectionsContentUnits.ContentUnit"))
+	}
 
 	// data query
 	collections, err := mdbmodels.Collections(db, mods...).All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
+
+	// response - thin version
+	if !r.WithUnits {
+		cids := make([]int64, len(collections))
+		for i, x := range collections {
+			cids[i] = x.ID
+		}
+
+		ci18nsMap, err := loadCI18ns(db, r.Language, cids)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+
+		// Response
+		resp := &CollectionsResponse{
+			ListResponse: ListResponse{Total: total},
+			Collections:  make([]*Collection, len(collections)),
+		}
+		for i, x := range collections {
+			c, err := mdbToC(x)
+			if err != nil {
+				return nil, NewInternalError(err)
+			}
+			if i18ns, ok := ci18nsMap[x.ID]; ok {
+				setCI18n(c, r.Language, i18ns)
+			}
+			resp.Collections[i] = c
+		}
+
+		return resp, nil
+	}
+
+	// Response - thick version (with content units)
 
 	// Filter secure & published content units
 	// Load i18n for all collections and all units - total 2 DB round trips
@@ -360,16 +397,6 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		cids[i] = x.ID
 		b := x.R.CollectionsContentUnits[:0]
 		for _, y := range x.R.CollectionsContentUnits {
-
-			// Edo: Commenting out as I can't reproduce
-			// Workaround for this bug: https://github.com/vattle/sqlboiler/issues/154
-			//if y.R.ContentUnit == nil {
-			//	err = y.L.LoadContentUnit(db, true, y)
-			//	if err != nil {
-			//		return nil, NewInternalError(err)
-			//	}
-			//}
-
 			if mdb.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
 				b = append(b, y)
 				cuids = append(cuids, y.ContentUnitID)

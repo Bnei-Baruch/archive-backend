@@ -74,6 +74,7 @@ type CollectionsRequest struct {
 	IDsFilter
 	ContentTypesFilter
 	DateRangeFilter
+	WithUnits bool `json:"with_units" form:"with_units"`
 }
 
 type CollectionsResponse struct {
