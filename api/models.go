@@ -118,17 +118,19 @@ func NewContentUnitsResponse() *ContentUnitsResponse {
 }
 
 type Collection struct {
-	ID           string         `json:"id"`
-	ContentType  string         `json:"content_type"`
-	Name         string         `json:"name,omitempty"`
-	Description  string         `json:"description,omitempty"`
-	FilmDate     *Date          `json:"film_date,omitempty"`
-	StartDate    *Date          `json:"start_date,omitempty"`
-	EndDate      *Date          `json:"end_date,omitempty"`
-	Country      string         `json:"country,omitempty"`
-	City         string         `json:"city,omitempty"`
-	FullAddress  string         `json:"full_address,omitempty"`
-	ContentUnits []*ContentUnit `json:"content_units,omitempty"`
+	ID              string         `json:"id"`
+	ContentType     string         `json:"content_type"`
+	Name            string         `json:"name,omitempty"`
+	Description     string         `json:"description,omitempty"`
+	FilmDate        *Date          `json:"film_date,omitempty"`
+	StartDate       *Date          `json:"start_date,omitempty"`
+	EndDate         *Date          `json:"end_date,omitempty"`
+	Country         string         `json:"country,omitempty"`
+	City            string         `json:"city,omitempty"`
+	FullAddress     string         `json:"full_address,omitempty"`
+	Genres          []string       `json:"genres,omitempty"`
+	DefaultLanguage string         `json:"default_language,omitempty"`
+	ContentUnits    []*ContentUnit `json:"content_units,omitempty"`
 }
 
 type ContentUnit struct {

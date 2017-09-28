@@ -869,11 +869,13 @@ func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 	}
 
 	cl = &Collection{
-		ID:          c.UID,
-		ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name,
-		Country:     props.Country,
-		City:        props.City,
-		FullAddress: props.FullAddress,
+		ID:              c.UID,
+		ContentType:     mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name,
+		Country:         props.Country,
+		City:            props.City,
+		FullAddress:     props.FullAddress,
+		Genres:          props.Genres,
+		DefaultLanguage: props.DefaultLanguage,
 	}
 
 	if !props.FilmDate.IsZero() {
