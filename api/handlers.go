@@ -262,6 +262,7 @@ func LessonsHandler(c *gin.Context) {
 			},
 			ListRequest:     r.ListRequest,
 			DateRangeFilter: r.DateRangeFilter,
+			WithUnits: true,
 		}
 		resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), cr)
 		concludeRequest(c, resp, err)
