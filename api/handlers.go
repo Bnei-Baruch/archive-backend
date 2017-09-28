@@ -309,6 +309,11 @@ func SearchHandler(c *gin.Context) {
 	}
 }
 
+func RecentlyUpdatedHandler(c *gin.Context) {
+	resp, err := handleRecentlyUpdated(c.MustGet("MDB_DB").(*sql.DB))
+	concludeRequest(c, resp, err)
+}
+
 func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
@@ -673,6 +678,40 @@ func handleSearch(esc *elastic.Client, index string, text string, from int) (*el
 		Highlight(h).
 		From(from).
 		Do(context.TODO())
+}
+
+func handleRecentlyUpdated(db *sql.DB) ([]CollectionUpdateStatus, *HttpError) {
+	q := `SELECT
+  c.uid,
+  max(cu.properties ->> 'film_date') max_film_date,
+  count(cu.id)
+FROM collections c INNER JOIN collections_content_units ccu
+    ON c.id = ccu.collection_id AND c.type_id = 5 AND c.secure = 0 AND c.published IS TRUE
+  INNER JOIN content_units cu
+    ON ccu.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE AND cu.properties ? 'film_date'
+GROUP BY c.id
+ORDER BY max_film_date DESC`
+
+	rows, err := queries.Raw(db, q).Query()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	data := make([]CollectionUpdateStatus, 0)
+	for rows.Next() {
+		var x CollectionUpdateStatus
+		err := rows.Scan(&x.UID, &x.LastUpdate, &x.UnitsCount)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		data = append(data, x)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	return data, nil
 }
 
 // appendListMods compute and appends the OrderBy, Limit and Offset query mods.

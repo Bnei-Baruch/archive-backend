@@ -195,6 +195,12 @@ type Tag struct {
 	ParentID  null.Int64  `json:"-"`
 }
 
+type CollectionUpdateStatus struct {
+	UID        string `json:"id"`
+	LastUpdate Date   `json:"last_update"`
+	UnitsCount int    `json:"units_count"`
+}
+
 // Custom fields
 
 // A time.Time like structure with date part only JSON marshalling
@@ -209,5 +215,11 @@ func (d *Date) MarshalJSON() ([]byte, error) {
 func (d *Date) UnmarshalJSON(b []byte) error {
 	var err error
 	d.Time, err = time.Parse("2006-01-02", strings.Trim(string(b), "\""))
+	return err
+}
+
+func (d *Date) Scan(value interface{}) error {
+	var err error
+	d.Time, err = time.Parse("2006-01-02", value.(string))
 	return err
 }
