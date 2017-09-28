@@ -552,6 +552,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
@@ -847,6 +850,44 @@ func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter)
 		*mods = append(*mods,
 			qm.InnerJoin("content_units_tags cut ON id = cut.content_unit_id"),
 			qm.WhereIn("cut.tag_id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+
+	return nil
+}
+
+func appendGenresProgramsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f GenresProgramsFilter) error {
+	if len(f.Genres) == 0 && len(f.Programs) == 0 {
+		return nil
+	}
+
+	var ids pq.Int64Array
+	if len(f.Programs) > 0 {
+		// convert collections uids to ids
+		q := `SELECT array_agg(DISTINCT id) FROM collections WHERE uid = ANY($1)`
+		err := queries.Raw(exec, q, pq.Array(f.Programs)).QueryRow().Scan(&ids)
+		if err != nil {
+			return err
+		}
+	} else {
+		// find collections by genres
+		q := `SELECT array_agg(DISTINCT id) FROM collections WHERE type_id = $1 AND properties -> 'genres' ?| $2`
+		err := queries.Raw(exec, q,
+			mdb.CONTENT_TYPE_REGISTRY.ByName[mdb.CT_VIDEO_PROGRAM].ID,
+			pq.Array(f.Genres)).
+			QueryRow().Scan(&ids)
+		if err != nil {
+			return err
+		}
+	}
+
+	// find all nested collection_ids
+
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods,
+			qm.InnerJoin("collections_content_units ccu ON id = ccu.content_unit_id"),
+			qm.WhereIn("ccu.collection_id in ?", utils.ConvertArgsInt64(ids)...))
 	}
 
 	return nil

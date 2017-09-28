@@ -69,6 +69,11 @@ func (drf *DateRangeFilter) Range() (time.Time, time.Time, error) {
 	return s, e, err
 }
 
+type GenresProgramsFilter struct {
+	Genres   []string `json:"genres" form:"genre" binding:"omitempty"`
+	Programs []string `json:"programs" form:"program" binding:"omitempty"`
+}
+
 type CollectionsRequest struct {
 	ListRequest
 	IDsFilter
@@ -89,6 +94,7 @@ type ContentUnitsRequest struct {
 	DateRangeFilter
 	SourcesFilter
 	TagsFilter
+	GenresProgramsFilter
 }
 
 type ContentUnitsResponse struct {
