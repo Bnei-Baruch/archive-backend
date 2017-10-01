@@ -6,16 +6,16 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/es"
 )
 
-var unitsCmd = &cobra.Command{
+var indexUnits = &cobra.Command{
 	Use:   "units",
 	Short: "Index content units in ES",
-	Run:   etlUnitsFn,
+	Run:   indexUnitsFn,
 }
 
 func init() {
-	etlCmd.AddCommand(unitsCmd)
+	indexCmd.AddCommand(indexUnits)
 }
 
-func etlUnitsFn(cmd *cobra.Command, args []string) {
+func indexUnitsFn(cmd *cobra.Command, args []string) {
 	es.IndexUnits()
 }
