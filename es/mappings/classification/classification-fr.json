@@ -9,6 +9,10 @@
           "type": "keyword",
           "index": false
         },
+        "classification_type": {
+          "type": "keyword",
+          "index": false
+        },
         "name": {
           "type": "text",
           "analyzer": "french"
@@ -31,6 +35,10 @@
       },
       "properties": {
         "mdb_uid": {
+          "type": "keyword",
+          "index": false
+        },
+        "classification_type": {
           "type": "keyword",
           "index": false
         },
