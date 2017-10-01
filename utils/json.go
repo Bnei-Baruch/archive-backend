@@ -22,3 +22,9 @@ func (d *Date) UnmarshalJSON(b []byte) error {
 	d.Time, err = time.Parse("2006-01-02", strings.Trim(string(b), "\""))
 	return err
 }
+
+func (d *Date) Scan(value interface{}) error {
+	var err error
+	d.Time, err = time.Parse("2006-01-02", value.(string))
+	return err
+}

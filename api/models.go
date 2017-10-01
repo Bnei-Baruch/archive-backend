@@ -69,11 +69,17 @@ func (drf *DateRangeFilter) Range() (time.Time, time.Time, error) {
 	return s, e, err
 }
 
+type GenresProgramsFilter struct {
+	Genres   []string `json:"genres" form:"genre" binding:"omitempty"`
+	Programs []string `json:"programs" form:"program" binding:"omitempty"`
+}
+
 type CollectionsRequest struct {
 	ListRequest
 	IDsFilter
 	ContentTypesFilter
 	DateRangeFilter
+	WithUnits bool `json:"with_units" form:"with_units"`
 }
 
 type CollectionsResponse struct {
@@ -88,6 +94,7 @@ type ContentUnitsRequest struct {
 	DateRangeFilter
 	SourcesFilter
 	TagsFilter
+	GenresProgramsFilter
 }
 
 type ContentUnitsResponse struct {
@@ -117,17 +124,19 @@ func NewContentUnitsResponse() *ContentUnitsResponse {
 }
 
 type Collection struct {
-	ID           string         `json:"id"`
-	ContentType  string         `json:"content_type"`
-	Name         string         `json:"name,omitempty"`
-	Description  string         `json:"description,omitempty"`
-	FilmDate     *utils.Date    `json:"film_date,omitempty"`
-	StartDate    *utils.Date    `json:"start_date,omitempty"`
-	EndDate      *utils.Date    `json:"end_date,omitempty"`
-	Country      string         `json:"country,omitempty"`
-	City         string         `json:"city,omitempty"`
-	FullAddress  string         `json:"full_address,omitempty"`
-	ContentUnits []*ContentUnit `json:"content_units,omitempty"`
+	ID              string         `json:"id"`
+	ContentType     string         `json:"content_type"`
+	Name            string         `json:"name,omitempty"`
+	Description     string         `json:"description,omitempty"`
+	FilmDate        *utils.Date    `json:"film_date,omitempty"`
+	StartDate       *utils.Date    `json:"start_date,omitempty"`
+	EndDate         *utils.Date    `json:"end_date,omitempty"`
+	Country         string         `json:"country,omitempty"`
+	City            string         `json:"city,omitempty"`
+	FullAddress     string         `json:"full_address,omitempty"`
+	Genres          []string       `json:"genres,omitempty"`
+	DefaultLanguage string         `json:"default_language,omitempty"`
+	ContentUnits    []*ContentUnit `json:"content_units,omitempty"`
 }
 
 type ContentUnit struct {
@@ -137,7 +146,7 @@ type ContentUnit struct {
 	FilmDate         *utils.Date             `json:"film_date,omitempty"`
 	Name             string                  `json:"name,omitempty"`
 	Description      string                  `json:"description,omitempty"`
-	Duration         int                     `json:"duration,omitempty"`
+	Duration         float64                 `json:"duration,omitempty"`
 	OriginalLanguage string                  `json:"original_language,omitempty"`
 	Files            []*File                 `json:"files,omitempty"`
 	Collections      map[string]*Collection  `json:"collections,omitempty"`
@@ -148,14 +157,14 @@ type ContentUnit struct {
 }
 
 type File struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Size     int64  `json:"size"`
-	Duration int    `json:"duration,omitempty"`
-	Language string `json:"language,omitempty"`
-	MimeType string `json:"mimetype,omitempty"`
-	Type     string `json:"type,omitempty"`
-	SubType  string `json:"subtype,omitempty"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Size     int64   `json:"size"`
+	Duration float64 `json:"duration,omitempty"`
+	Language string  `json:"language,omitempty"`
+	MimeType string  `json:"mimetype,omitempty"`
+	Type     string  `json:"type,omitempty"`
+	SubType  string  `json:"subtype,omitempty"`
 }
 
 type Source struct {
@@ -184,4 +193,10 @@ type Tag struct {
 	Children  []*Tag      `json:"children,omitempty"`
 	ID        int64       `json:"-"`
 	ParentID  null.Int64  `json:"-"`
+}
+
+type CollectionUpdateStatus struct {
+	UID        string     `json:"id"`
+	LastUpdate utils.Date `json:"last_update"`
+	UnitsCount int        `json:"units_count"`
 }

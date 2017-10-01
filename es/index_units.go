@@ -141,7 +141,7 @@ func indexUnit(cu *mdbmodels.ContentUnit) error {
 				}
 
 				if duration, ok := props["duration"]; ok {
-					unit.Duration = int16(duration.(float64))
+					unit.Duration = uint16(duration.(float64))
 				}
 
 				if originalLanguage, ok := props["original_language"]; ok {

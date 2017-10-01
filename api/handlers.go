@@ -28,7 +28,9 @@ import (
 var SECURE_PUBLISHED_MOD = qm.Where(fmt.Sprintf("secure=%d AND published IS TRUE", consts.SEC_PUBLIC))
 
 func CollectionsHandler(c *gin.Context) {
-	var r CollectionsRequest
+	r := CollectionsRequest{
+		WithUnits: true,
+	}
 	if c.Bind(&r) != nil {
 		return
 	}
@@ -263,6 +265,7 @@ func LessonsHandler(c *gin.Context) {
 			},
 			ListRequest:     r.ListRequest,
 			DateRangeFilter: r.DateRangeFilter,
+			WithUnits: true,
 		}
 		resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), cr)
 		concludeRequest(c, resp, err)
@@ -360,6 +363,11 @@ func AutocompleteHandler(c *gin.Context) {
 	}
 }
 
+func RecentlyUpdatedHandler(c *gin.Context) {
+	resp, err := handleRecentlyUpdated(c.MustGet("MDB_DB").(*sql.DB))
+	concludeRequest(c, resp, err)
+}
+
 func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
@@ -394,16 +402,51 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		return NewCollectionsResponse(), nil
 	}
 
-	// Eager loading
-	mods = append(mods, qm.Load(
-		"CollectionsContentUnits",
-		"CollectionsContentUnits.ContentUnit"))
+	if r.WithUnits {
+		// Eager loading
+		mods = append(mods, qm.Load(
+			"CollectionsContentUnits",
+			"CollectionsContentUnits.ContentUnit"))
+	}
 
 	// data query
 	collections, err := mdbmodels.Collections(db, mods...).All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
+
+	// response - thin version
+	if !r.WithUnits {
+		cids := make([]int64, len(collections))
+		for i, x := range collections {
+			cids[i] = x.ID
+		}
+
+		ci18nsMap, err := loadCI18ns(db, r.Language, cids)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+
+		// Response
+		resp := &CollectionsResponse{
+			ListResponse: ListResponse{Total: total},
+			Collections:  make([]*Collection, len(collections)),
+		}
+		for i, x := range collections {
+			c, err := mdbToC(x)
+			if err != nil {
+				return nil, NewInternalError(err)
+			}
+			if i18ns, ok := ci18nsMap[x.ID]; ok {
+				setCI18n(c, r.Language, i18ns)
+			}
+			resp.Collections[i] = c
+		}
+
+		return resp, nil
+	}
+
+	// Response - thick version (with content units)
 
 	// Filter secure & published content units
 	// Load i18n for all collections and all units - total 2 DB round trips
@@ -413,16 +456,6 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		cids[i] = x.ID
 		b := x.R.CollectionsContentUnits[:0]
 		for _, y := range x.R.CollectionsContentUnits {
-
-			// Edo: Commenting out as I can't reproduce
-			// Workaround for this bug: https://github.com/vattle/sqlboiler/issues/154
-			//if y.R.ContentUnit == nil {
-			//	err = y.L.LoadContentUnit(db, true, y)
-			//	if err != nil {
-			//		return nil, NewInternalError(err)
-			//	}
-			//}
-
 			if consts.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
 				b = append(b, y)
 				cuids = append(cuids, y.ContentUnitID)
@@ -578,6 +611,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
@@ -698,6 +734,40 @@ func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]
 //	From(from).
 //	Do(context.TODO())
 //}
+
+func handleRecentlyUpdated(db *sql.DB) ([]CollectionUpdateStatus, *HttpError) {
+	q := `SELECT
+  c.uid,
+  max(cu.properties ->> 'film_date') max_film_date,
+  count(cu.id)
+FROM collections c INNER JOIN collections_content_units ccu
+    ON c.id = ccu.collection_id AND c.type_id = 5 AND c.secure = 0 AND c.published IS TRUE
+  INNER JOIN content_units cu
+    ON ccu.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE AND cu.properties ? 'film_date'
+GROUP BY c.id
+ORDER BY max_film_date DESC`
+
+	rows, err := queries.Raw(db, q).Query()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	data := make([]CollectionUpdateStatus, 0)
+	for rows.Next() {
+		var x CollectionUpdateStatus
+		err := rows.Scan(&x.UID, &x.LastUpdate, &x.UnitsCount)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		data = append(data, x)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	return data, nil
+}
 
 // appendListMods compute and appends the OrderBy, Limit and Offset query mods.
 // It returns the limit, offset and error if any
@@ -879,6 +949,44 @@ func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter)
 	return nil
 }
 
+func appendGenresProgramsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f GenresProgramsFilter) error {
+	if len(f.Genres) == 0 && len(f.Programs) == 0 {
+		return nil
+	}
+
+	var ids pq.Int64Array
+	if len(f.Programs) > 0 {
+		// convert collections uids to ids
+		q := `SELECT array_agg(DISTINCT id) FROM collections WHERE uid = ANY($1)`
+		err := queries.Raw(exec, q, pq.Array(f.Programs)).QueryRow().Scan(&ids)
+		if err != nil {
+			return err
+		}
+	} else {
+		// find collections by genres
+		q := `SELECT array_agg(DISTINCT id) FROM collections WHERE type_id = $1 AND properties -> 'genres' ?| $2`
+		err := queries.Raw(exec, q,
+			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID,
+			pq.Array(f.Genres)).
+			QueryRow().Scan(&ids)
+		if err != nil {
+			return err
+		}
+	}
+
+	// find all nested collection_ids
+
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods,
+			qm.InnerJoin("collections_content_units ccu ON id = ccu.content_unit_id"),
+			qm.WhereIn("ccu.collection_id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+
+	return nil
+}
+
 // concludeRequest responds with JSON of given response or aborts the request with the given error.
 func concludeRequest(c *gin.Context, resp interface{}, err *HttpError) {
 	if err == nil {
@@ -896,11 +1004,13 @@ func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 	}
 
 	cl = &Collection{
-		ID:          c.UID,
-		ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name,
-		Country:     props.Country,
-		City:        props.City,
-		FullAddress: props.FullAddress,
+		ID:              c.UID,
+		ContentType:     mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name,
+		Country:         props.Country,
+		City:            props.City,
+		FullAddress:     props.FullAddress,
+		Genres:          props.Genres,
+		DefaultLanguage: props.DefaultLanguage,
 	}
 
 	if !props.FilmDate.IsZero() {

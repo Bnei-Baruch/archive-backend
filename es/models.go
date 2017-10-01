@@ -19,7 +19,7 @@ type ContentUnit struct {
 	Description      string      `json:"description,omitempty"`
 	ContentType      string      `json:"content_type"`
 	FilmDate         *utils.Date `json:"film_date,omitempty"`
-	Duration         int16       `json:"duration,omitempty"`
+	Duration         uint16      `json:"duration,omitempty"`
 	OriginalLanguage string      `json:"original_language,omitempty"`
 	Translations     []string    `json:"translations,omitempty"`
 	Tags             []string    `json:"tags,omitempty"`
@@ -35,7 +35,7 @@ type File struct {
 	URL      string      `json:"url"`
 	Secure   int         `json:"secure"`
 	FilmDate *utils.Date `json:"film_date"`
-	Duration int         `json:"duration,omitempty"`
+	Duration float64     `json:"duration,omitempty"`
 	Language string      `json:"language,omitempty"`
 	MimeType string      `json:"mimetype,omitempty"`
 	Type     string      `json:"type,omitempty"`
