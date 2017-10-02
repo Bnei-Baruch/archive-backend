@@ -25,7 +25,7 @@ func IndexClassifications() {
 	for i := range consts.ALL_KNOWN_LANGS {
 		lang := consts.ALL_KNOWN_LANGS[i]
 		name := IndexName(consts.ES_CLASSIFICATIONS_INDEX, lang)
-		mappings := fmt.Sprintf("es/mappings/classification/classification-%s.json", lang)
+		mappings := fmt.Sprintf("data/es/mappings/classification/classification-%s.json", lang)
 		utils.Must(recreateIndex(name, mappings))
 	}
 

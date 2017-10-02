@@ -134,4 +134,3 @@ const (
 // ElasticSearch 'es'
 const ES_CLASSIFICATIONS_INDEX = "mdb_classifications"
 const ES_UNITS_INDEX = "mdb_units"
-const ES_COLLECTIONS_INDEX = "mdb_collections"

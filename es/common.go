@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"io/ioutil"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -14,9 +13,10 @@ import (
 	"github.com/vattle/sqlboiler/boil"
 	"gopkg.in/olivere/elastic.v5"
 
+	"fmt"
+	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
-	"fmt"
 )
 
 var (
@@ -83,10 +83,10 @@ func recreateIndex(name string, definition string) error {
 		}
 	}
 
-	// read mappings file and create index
-	mappings, err := ioutil.ReadFile(definition)
+	// read mappings and create index
+	mappings, err := bindata.Asset(definition)
 	if err != nil {
-		return errors.Wrap(err, "ioutil.ReadFile")
+		return errors.Wrap(err, "Load binary data")
 	}
 	var bodyJson map[string]interface{}
 	if err = json.Unmarshal(mappings, &bodyJson); err != nil {
