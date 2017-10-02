@@ -10,8 +10,7 @@
           "index": false
         },
         "classification_type": {
-          "type": "keyword",
-          "index": false
+          "type": "keyword"
         },
         "name": {
           "type": "text",
@@ -39,8 +38,7 @@
           "index": false
         },
         "classification_type": {
-          "type": "keyword",
-          "index": false
+          "type": "keyword"
         },
         "name": {
           "type": "text",
