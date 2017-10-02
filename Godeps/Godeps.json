@@ -9,6 +9,10 @@
 			"Rev": "1deb2db2a6fff8a35532079061b903c3a25eed52"
 		},
 		{
+			"ImportPath": "github.com/abadojack/whatlanggo",
+			"Rev": "e8691489d4025904369f4f585138748c89db3ea4"
+		},
+		{
 			"ImportPath": "github.com/fsnotify/fsnotify",
 			"Comment": "v1.4.2-6-g4da3e2c",
 			"Rev": "4da3e2cfbabc9f751898f250b49f2439785783a1"
@@ -26,6 +30,10 @@
 		{
 			"ImportPath": "github.com/golang/protobuf/proto",
 			"Rev": "2bba0603135d7d7f5cb73b2125beeda19c09f4ef"
+		},
+		{
+			"ImportPath": "github.com/golang/sync/errgroup",
+			"Rev": "f52d1811a62927559de87708c8913c1650ce4f26"
 		},
 		{
 			"ImportPath": "github.com/hashicorp/hcl",
@@ -173,12 +181,20 @@
 			"Rev": "fe686d45ea04bc1bd4eff6a52865ce8757320325"
 		},
 		{
-			"ImportPath": "golang.org/x/net/context/ctxhttp",
-			"Rev": "fe686d45ea04bc1bd4eff6a52865ce8757320325"
-		},
-		{
 			"ImportPath": "golang.org/x/sys/unix",
 			"Rev": "fb4cac33e3196ff7f507ab9b2d2a44b0142f5b5a"
+		},
+		{
+			"ImportPath": "golang.org/x/text/internal/tag",
+			"Rev": "9e2f80a6ba7ed4ba13e0cd4b1f094bf916875735"
+		},
+		{
+			"ImportPath": "golang.org/x/text/language",
+			"Rev": "9e2f80a6ba7ed4ba13e0cd4b1f094bf916875735"
+		},
+		{
+			"ImportPath": "golang.org/x/text/language/display",
+			"Rev": "9e2f80a6ba7ed4ba13e0cd4b1f094bf916875735"
 		},
 		{
 			"ImportPath": "golang.org/x/text/transform",
@@ -219,6 +235,11 @@
 			"Rev": "edbef41beaacc2ee95e61af8faff04e67c01e268"
 		},
 		{
+			"ImportPath": "gopkg.in/olivere/elastic.v5/config",
+			"Comment": "v5.0.45",
+			"Rev": "edbef41beaacc2ee95e61af8faff04e67c01e268"
+		},
+		{
 			"ImportPath": "gopkg.in/olivere/elastic.v5/uritemplates",
 			"Comment": "v5.0.45",
 			"Rev": "edbef41beaacc2ee95e61af8faff04e67c01e268"
@@ -226,11 +247,6 @@
 		{
 			"ImportPath": "gopkg.in/yaml.v2",
 			"Rev": "cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b"
-		},
-		{
-			"ImportPath": "gopkg.in/olivere/elastic.v5/config",
-			"Comment": "v5.0.45",
-			"Rev": "edbef41beaacc2ee95e61af8faff04e67c01e268"
 		}
 	]
 }
