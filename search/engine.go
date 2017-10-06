@@ -80,7 +80,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 	return resp, nil
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, from int, size int) (interface{}, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, from int, size int, preference string) (interface{}, error) {
 	// figure out index names from language order
 	indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
@@ -100,6 +100,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, from int, size int
 			)).
 		From(from).
 		Size(size).
+		Preference(preference).
 		Do(context.TODO())
 
 	if err != nil {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/md5"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -265,7 +266,7 @@ func LessonsHandler(c *gin.Context) {
 			},
 			ListRequest:     r.ListRequest,
 			DateRangeFilter: r.DateRangeFilter,
-			WithUnits: true,
+			WithUnits:       true,
 		}
 		resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), cr)
 		concludeRequest(c, resp, err)
@@ -316,6 +317,10 @@ func SearchHandler(c *gin.Context) {
 		}
 	}
 
+	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
+	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
+	preference := fmt.Sprintf("%x", md5.Sum([]byte(c.ClientIP())))
+
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	se := search.NewESEngine(esc, db)
@@ -328,6 +333,7 @@ func SearchHandler(c *gin.Context) {
 		search.Query{Term: q, LanguageOrder: order},
 		pageNoVal,
 		utils.Min(pageSizeVal, consts.API_MAX_PAGE_SIZE),
+		preference,
 	)
 	if err == nil {
 		c.JSON(http.StatusOK, res)
