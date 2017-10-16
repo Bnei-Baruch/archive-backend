@@ -317,6 +317,12 @@ func SearchHandler(c *gin.Context) {
 		}
 	}
 
+	sortByVal := consts.SORT_BY_RELEVANCE
+	sortBy := c.Query("sort_by")
+	if _, ok := consts.SORT_BY_VALUES[sortBy]; ok {
+		sortByVal = sortBy
+	}
+
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
 	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
 	preference := fmt.Sprintf("%x", md5.Sum([]byte(c.ClientIP())))
@@ -331,6 +337,7 @@ func SearchHandler(c *gin.Context) {
 	res, err := se.DoSearch(
 		context.TODO(),
 		search.Query{Term: q, LanguageOrder: order},
+		sortByVal,
 		pageNoVal,
 		utils.Min(pageSizeVal, consts.API_MAX_PAGE_SIZE),
 		preference,

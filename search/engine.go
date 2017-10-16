@@ -46,13 +46,13 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 			sRes, err := e.esc.
 				Search(indices...).
 				Suggester(elastic.NewCompletionSuggester("classification_name").
-					Field("name_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
+				Field("name_suggest").
+				Text(query.Term).
+				ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
 				Suggester(elastic.NewCompletionSuggester("classification_description").
-					Field("description_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
+				Field("description_suggest").
+				Text(query.Term).
+				ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
 				Do(ctx)
 
 			if err != nil {
@@ -80,28 +80,34 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 	return resp, nil
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, from int, size int, preference string) (interface{}, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
 	// figure out index names from language order
 	indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
 		indices[i] = es.IndexName(consts.ES_UNITS_INDEX, query.LanguageOrder[i])
 	}
 
-	resp, err := e.esc.Search(indices...).
+	searchService := e.esc.Search(indices...).
 		Query(
-			elastic.NewBoolQuery().Should(
-				elastic.NewMatchQuery("name", query.Term),
-				elastic.NewMatchQuery("description", query.Term),
-			)).
+		elastic.NewBoolQuery().Should(
+			elastic.NewMatchQuery("name", query.Term),
+			elastic.NewMatchQuery("description", query.Term),
+		)).
 		Highlight(
-			elastic.NewHighlight().Fields(
-				elastic.NewHighlighterField("name"),
-				elastic.NewHighlighterField("description"),
-			)).
+		elastic.NewHighlight().Fields(
+			elastic.NewHighlighterField("name"),
+			elastic.NewHighlighterField("description"),
+		)).
 		From(from).
 		Size(size).
-		Preference(preference).
-		Do(context.TODO())
+		Preference(preference)
+	switch sortBy {
+	case consts.SORT_BY_OLDER_TO_NEWER:
+		searchService = searchService.Sort("film_date", true)
+	case consts.SORT_BY_NEWER_TO_OLDER:
+		searchService = searchService.Sort("film_date", false)
+	}
+	resp, err := searchService.Do(context.TODO())
 
 	if err != nil {
 		return nil, errors.Wrap(err, "ES error")

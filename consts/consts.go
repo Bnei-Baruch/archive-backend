@@ -41,9 +41,9 @@ const (
 	P_RAV = "rav"
 
 	// Security levels
-	SEC_PUBLIC = int16(0)
+	SEC_PUBLIC    = int16(0)
 	SEC_SENSITIVE = int16(1)
-	SEC_PRIVATE = int16(2)
+	SEC_PRIVATE   = int16(2)
 
 	// Languages
 	LANG_ENGLISH    = "en"
@@ -90,7 +90,7 @@ var ALL_KNOWN_LANGS = [...]string{
 }
 
 var LANG_ORDER = map[string][]string{
-	"":                  {LANG_ENGLISH},
+	"":              {LANG_ENGLISH},
 	LANG_ENGLISH:    {LANG_ENGLISH},
 	LANG_HEBREW:     {LANG_HEBREW, LANG_ENGLISH},
 	LANG_RUSSIAN:    {LANG_RUSSIAN, LANG_ENGLISH},
@@ -130,6 +130,18 @@ const (
 	API_DEFAULT_PAGE_SIZE = 50
 	API_MAX_PAGE_SIZE     = 1000
 )
+
+const (
+	SORT_BY_RELEVANCE      = "relevance"
+	SORT_BY_NEWER_TO_OLDER = "newertoolder"
+	SORT_BY_OLDER_TO_NEWER = "oldertonewer"
+)
+
+var SORT_BY_VALUES = map[string]bool{
+	SORT_BY_RELEVANCE:      true,
+	SORT_BY_NEWER_TO_OLDER: true,
+	SORT_BY_OLDER_TO_NEWER: true,
+}
 
 // ElasticSearch 'es'
 const ES_CLASSIFICATIONS_INDEX = "mdb_classifications"
