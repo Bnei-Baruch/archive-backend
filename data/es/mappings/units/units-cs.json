@@ -23,8 +23,7 @@
         },
         "film_date": {
           "type": "date",
-          "format": "strict_date",
-          "index": false
+          "format": "strict_date"
         },
         "duration": {
           "type": "short",
@@ -39,12 +38,10 @@
           "index": false
         },
         "tags": {
-          "type": "keyword",
-          "index": false
+          "type": "keyword"
         },
         "sources": {
-          "type": "keyword",
-          "index": false
+          "type": "keyword"
         },
         "persons": {
           "type": "keyword",

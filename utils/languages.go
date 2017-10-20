@@ -78,6 +78,16 @@ var GO_TO_MDB = map[language.Tag]string{
 	language.Czech:      consts.LANG_CZECH,
 }
 
+func reverseLanguages() map[string]language.Tag {
+    n := make(map[string]language.Tag)
+    for k, v := range GO_TO_MDB {
+        n[v] = k
+    }
+    return n
+}
+
+var MDB_TO_GO = reverseLanguages()
+
 var matcher = language.NewMatcher(serverLangs)
 
 var whatlangoWhitelist = map[whatlanggo.Lang]bool{
@@ -114,28 +124,33 @@ var whatlangoWhitelist = map[whatlanggo.Lang]bool{
 	whatlanggo.Ces: true, // Czech
 }
 
-func DetectLanguage(text string, acceptLanguage string, uiOrder []string) []string {
-	info := whatlanggo.DetectWithOptions(text,
-		whatlanggo.Options{
-			Whitelist: whatlangoWhitelist,
-		})
-	iso3 := whatlanggo.LangToString(info.Lang)
-	log.Infof("DetectLanguage: whatlanggo info: %s", whatlanggo.LangToString(info.Lang))
-
+func DetectLanguage(text string, interfaceLanguage string, acceptLanguage string, uiOrder []string) []string {
 	bestTag := language.Und
-	if iso3 != "" {
-		base, err := language.ParseBase(iso3)
-		if err == nil {
-			bestTag, err = language.Compose(base)
-			if err != nil {
-				log.Warnf("DetectLanguage: error compose language.Tag for %s: %s", iso3, err.Error())
-				bestTag = language.Und
-			}
-		} else {
-			log.Warnf("DetectLanguage: error parsing base for %s: %s", iso3, err.Error())
-			bestTag = language.Und
-		}
-	}
+    if len(text) == 0 {
+        // If text short, use interfaceLanguage
+        bestTag = MDB_TO_GO[interfaceLanguage]
+    } else {
+        info := whatlanggo.DetectWithOptions(text,
+            whatlanggo.Options{
+                Whitelist: whatlangoWhitelist,
+            })
+        iso3 := whatlanggo.LangToString(info.Lang)
+        log.Infof("DetectLanguage: whatlanggo info: %s", whatlanggo.LangToString(info.Lang))
+
+        if iso3 != "" {
+            base, err := language.ParseBase(iso3)
+            if err == nil {
+                bestTag, err = language.Compose(base)
+                if err != nil {
+                    log.Warnf("DetectLanguage: error compose language.Tag for %s: %s", iso3, err.Error())
+                    bestTag = language.Und
+                }
+            } else {
+                log.Warnf("DetectLanguage: error parsing base for %s: %s", iso3, err.Error())
+                bestTag = language.Und
+            }
+        }
+    }
 	log.Infof("DetectLanguage: bestTag 1: %s", display.English.Tags().Name(bestTag))
 
 	if bestTag.IsRoot() {

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+    "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/olivere/elastic.v5"
 
@@ -46,6 +47,24 @@ func (suite *HandlersSuite) TestHandleSearch() {
 	//suite.Require().Nil(err)
 	//suite.NotNil(res.Hits)
 	//suite.NotEmpty(res.Hits.TotalHits)
+}
+
+func (suite *HandlersSuite) TestTokenize() {
+    assert.Nil(suite.T(), Tokenize(""))
+    assert.Equal(suite.T(), []string{"a"}, Tokenize("a"))
+    assert.Equal(suite.T(), []string{"\""}, Tokenize("\""))
+    assert.Equal(suite.T(), []string{"\"\""}, Tokenize("\"\""))
+    assert.Equal(suite.T(), []string{"\"\"\""}, Tokenize("\"\"\""))
+    assert.Equal(suite.T(), []string{"שלום", "\"isk\"", "test"}, Tokenize("שלום \"isk\" test"))
+    assert.Equal(suite.T(), []string{"שלום", "\"is\"k\"", "test"}, Tokenize("שלום \"is\"k\" test"))
+    assert.Equal(suite.T(), []string{"שלום", "\"i\"s\"k\"", "test"}, Tokenize("שלום \"i\"s\"k\" test"))
+    assert.Equal(suite.T(), []string{"שלום", "\"i\"", "s\"k\"", "test"}, Tokenize("שלום \"i\" s\"k\" test"))
+    assert.Equal(suite.T(), []string{"שלום", "\"i\"s \"k\"", "test"}, Tokenize("שלום \"i\"s \"k\" test"))
+    assert.Equal(suite.T(),
+        []string{"article", "of", "rab\"ash", "\" article of rab\"ash \"", "article", "of", "rab\"ash", "\" article of rab\"ash\""},
+        Tokenize("article of rab\"ash \" article of rab\"ash \" article of rab\"ash \" article of rab\"ash\""))
+    assert.Equal(suite.T(), []string{"tag:kuku"}, Tokenize(" tag:kuku"))
+    // TODO: Also ignore quoted quotes (to support "properly" quoted strings too).
 }
 
 type ESLogAdapter struct{ *testing.T }

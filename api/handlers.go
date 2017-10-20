@@ -10,7 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+    "unicode"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/vattle/sqlboiler/boil"
@@ -288,10 +290,72 @@ func LessonsHandler(c *gin.Context) {
 	}
 }
 
+
+func IsTokenStart(i int, runes []rune, lastQuote rune) bool {
+    return i == 0 && !unicode.IsSpace(runes[0]) ||
+        (i > 0 && !unicode.IsSpace(runes[i]) && unicode.IsSpace(runes[i-1]))
+}
+
+func IsTokenEnd(i int, runes []rune, lastQuote rune, lastQuoteIdx int) bool {
+    return i == len(runes)-1 ||
+        (i < len(runes)-1 && unicode.IsSpace(runes[i+1]) &&
+            (lastQuote == rune(0) || runes[i] == lastQuote && lastQuoteIdx >= 0 && lastQuoteIdx < i))
+}
+
+// Tokenizes string to work with user friendly escapings of quotes (see tests).
+func Tokenize(str string) []string {
+    runes := []rune(str)
+    start := -1
+    lastQuote := rune(0)
+    lastQuoteIdx := -1
+    parts := 0
+    var tokens []string
+    for i, r := range runes {
+        if start == -1 && IsTokenStart(i, runes, lastQuote) {
+            start = i
+        }
+        if i == start && lastQuote == rune(0) && unicode.In(r, unicode.Quotation_Mark) {
+            lastQuote = r
+            lastQuoteIdx = i
+        }
+        if start >= 0 && IsTokenEnd(i, runes, lastQuote, lastQuoteIdx) {
+            tokens = append(tokens, string(runes[start : i+1]))
+            lastQuote = rune(0)
+            lastQuoteIdx = -1
+            start = -1
+            parts += 1
+        }
+    }
+
+    return tokens
+}
+
+// Parses query and extracts terms and filters.
+func ParseQuery(q string) ([]string, map[string]string) {
+    filters := make(map[string]string)
+    var terms []string
+    for _, t := range Tokenize(q) {
+        isFilter := false
+        for filter := range consts.FILTERS {
+            prefix := fmt.Sprintf("%s:", filter)
+            if isFilter = strings.HasPrefix(t, prefix); isFilter {
+                filters[consts.FILTERS[filter]] = strings.TrimPrefix(t, prefix)
+                break;
+            }
+        }
+        if !isFilter {
+            terms = append(terms, t)
+        }
+    }
+    return terms, filters
+}
+
 func SearchHandler(c *gin.Context) {
-	q := c.Query("q")
-	if q == "" {
-		NewBadRequestError(errors.New("Can't search for an empty term")).Abort(c)
+    log.Infof("Query: [%s]", c.Query("q"))
+	terms, filters := ParseQuery(c.Query("q"))
+    log.Info(fmt.Sprintf("Terms: %#v Filters: %#v", terms, filters))
+	if len(terms) == 0 && len(filters) == 0 {
+		NewBadRequestError(errors.New("Can't search with no terms and no filters.")).Abort(c)
 		return
 	}
 
@@ -332,11 +396,11 @@ func SearchHandler(c *gin.Context) {
 	se := search.NewESEngine(esc, db)
 
 	// Detect input language
-	order := utils.DetectLanguage(q, c.Request.Header.Get("Accept-Language"), nil)
+	order := utils.DetectLanguage(strings.Join(terms, " "), c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
 	res, err := se.DoSearch(
 		context.TODO(),
-		search.Query{Term: q, LanguageOrder: order},
+		search.Query{Term: strings.Join(terms, " "), Filters: filters, LanguageOrder: order},
 		sortByVal,
 		pageNoVal,
 		utils.Min(pageSizeVal, consts.API_MAX_PAGE_SIZE),
@@ -361,7 +425,7 @@ func AutocompleteHandler(c *gin.Context) {
 	se := search.NewESEngine(esc, db)
 
 	// Detect input language
-	order := utils.DetectLanguage(q, c.Request.Header.Get("Accept-Language"), nil)
+	order := utils.DetectLanguage(q, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
 	// Have a 50ms deadline on the search engine call.
 	// It's autocomplete after all...
