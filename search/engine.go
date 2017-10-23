@@ -104,14 +104,16 @@ func createQuery(q Query) elastic.Query {
         elastic.NewMatchQuery("name", q.Term),
         elastic.NewMatchQuery("description", q.Term),
     )
-    for filter, value := range q.Filters {
+    for filter, values := range q.Filters {
         switch filter {
         case consts.FILTER_START_DATE:
-            query.Filter(elastic.NewRangeQuery("film_date").Gte(value).Format("yyyy-MM-dd"))
+            query.Filter(elastic.NewRangeQuery("film_date").Gte(values[0]).Format("yyyy-MM-dd"))
         case consts.FILTER_END_DATE:
-            query.Filter(elastic.NewRangeQuery("film_date").Lte(value).Format("yyyy-MM-dd"))
+            query.Filter(elastic.NewRangeQuery("film_date").Lte(values[0]).Format("yyyy-MM-dd"))
         default:
-            query.Filter(elastic.NewTermsQuery(filter, value))
+            for _, value := range values {
+                query.Filter(elastic.NewTermsQuery(filter, value))
+            }
         }
     }
     return query
