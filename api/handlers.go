@@ -331,15 +331,15 @@ func Tokenize(str string) []string {
 }
 
 // Parses query and extracts terms and filters.
-func ParseQuery(q string) ([]string, map[string]string) {
-    filters := make(map[string]string)
+func ParseQuery(q string) ([]string, map[string][]string) {
+    filters := make(map[string][]string)
     var terms []string
     for _, t := range Tokenize(q) {
         isFilter := false
         for filter := range consts.FILTERS {
             prefix := fmt.Sprintf("%s:", filter)
             if isFilter = strings.HasPrefix(t, prefix); isFilter {
-                filters[consts.FILTERS[filter]] = strings.TrimPrefix(t, prefix)
+                filters[consts.FILTERS[filter]] = strings.Split(strings.TrimPrefix(t, prefix), ",")
                 break;
             }
         }
@@ -414,6 +414,7 @@ func SearchHandler(c *gin.Context) {
 }
 
 func AutocompleteHandler(c *gin.Context) {
+    log.Infof("Query: [%s]", c.Query("q"))
 	q := c.Query("q")
 	if q == "" {
 		NewBadRequestError(errors.New("Can't search for an empty term")).Abort(c)
