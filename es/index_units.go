@@ -108,7 +108,7 @@ func indexUnits(ctx context.Context) error {
 }
 
 func indexUnit(cu *mdbmodels.ContentUnit) error {
-	log.Infof("Indexing unit %s", cu.UID)
+	//log.Infof("Indexing unit %s", cu.UID)
 
 	//// create documents in each language with available translation
 	i18nMap := make(map[string]ContentUnit)
