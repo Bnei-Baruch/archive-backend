@@ -4,8 +4,8 @@ import "context"
 
 type Query struct {
 	Term          string
-    ExactTerms    []string
-    Filters       map[string][]string
+	ExactTerms    []string
+	Filters       map[string][]string
 	LanguageOrder []string
 }
 

@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-    "unicode"
+	"unicode"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
@@ -290,71 +290,85 @@ func LessonsHandler(c *gin.Context) {
 	}
 }
 
-
 func IsTokenStart(i int, runes []rune, lastQuote rune) bool {
-    return i == 0 && !unicode.IsSpace(runes[0]) ||
-        (i > 0 && !unicode.IsSpace(runes[i]) && unicode.IsSpace(runes[i-1]))
+	return i == 0 && !unicode.IsSpace(runes[0]) ||
+		(i > 0 && !unicode.IsSpace(runes[i]) && unicode.IsSpace(runes[i-1]))
 }
 
 func IsTokenEnd(i int, runes []rune, lastQuote rune, lastQuoteIdx int) bool {
-    return i == len(runes)-1 ||
-        (i < len(runes)-1 && unicode.IsSpace(runes[i+1]) &&
-            (lastQuote == rune(0) || runes[i] == lastQuote && lastQuoteIdx >= 0 && lastQuoteIdx < i))
+	return i == len(runes)-1 ||
+		(i < len(runes)-1 && unicode.IsSpace(runes[i+1]) &&
+			(lastQuote == rune(0) || runes[i] == lastQuote && lastQuoteIdx >= 0 && lastQuoteIdx < i))
+}
+
+func IsRuneQuotationMark(r rune) bool {
+	return unicode.In(r, unicode.Quotation_Mark) || r == rune(1523) || r == rune(1524)
 }
 
 // Tokenizes string to work with user friendly escapings of quotes (see tests).
 func Tokenize(str string) []string {
-    runes := []rune(str)
-    start := -1
-    lastQuote := rune(0)
-    lastQuoteIdx := -1
-    parts := 0
-    var tokens []string
-    for i, r := range runes {
-        if start == -1 && IsTokenStart(i, runes, lastQuote) {
-            start = i
-        }
-        if i == start && lastQuote == rune(0) && unicode.In(r, unicode.Quotation_Mark) {
-            lastQuote = r
-            lastQuoteIdx = i
-        }
-        if start >= 0 && IsTokenEnd(i, runes, lastQuote, lastQuoteIdx) {
-            tokens = append(tokens, string(runes[start : i+1]))
-            lastQuote = rune(0)
-            lastQuoteIdx = -1
-            start = -1
-            parts += 1
-        }
-    }
+	runes := []rune(str)
+	start := -1
+	lastQuote := rune(0)
+	lastQuoteIdx := -1
+	parts := 0
+	var tokens []string
+	for i, r := range runes {
+		if start == -1 && IsTokenStart(i, runes, lastQuote) {
+			start = i
+		}
+		if i == start && lastQuote == rune(0) && IsRuneQuotationMark(r) {
+			lastQuote = r
+			lastQuoteIdx = i
+		}
+		if start >= 0 && IsTokenEnd(i, runes, lastQuote, lastQuoteIdx) {
+			tokens = append(tokens, string(runes[start:i+1]))
+			lastQuote = rune(0)
+			lastQuoteIdx = -1
+			start = -1
+			parts += 1
+		}
+	}
 
-    return tokens
+	return tokens
 }
 
 // Parses query and extracts terms and filters.
-func ParseQuery(q string) ([]string, map[string][]string) {
-    filters := make(map[string][]string)
-    var terms []string
-    for _, t := range Tokenize(q) {
-        isFilter := false
-        for filter := range consts.FILTERS {
-            prefix := fmt.Sprintf("%s:", filter)
-            if isFilter = strings.HasPrefix(t, prefix); isFilter {
-                filters[consts.FILTERS[filter]] = strings.Split(strings.TrimPrefix(t, prefix), ",")
-                break;
-            }
-        }
-        if !isFilter {
-            terms = append(terms, t)
-        }
-    }
-    return terms, filters
+func ParseQuery(q string) search.Query {
+	filters := make(map[string][]string)
+	var terms []string
+	var exactTerms []string
+	for _, t := range Tokenize(q) {
+		isFilter := false
+		for filter := range consts.FILTERS {
+			prefix := fmt.Sprintf("%s:", filter)
+			if isFilter = strings.HasPrefix(t, prefix); isFilter {
+				filters[consts.FILTERS[filter]] = strings.Split(strings.TrimPrefix(t, prefix), ",")
+				break
+			}
+		}
+		if !isFilter {
+			// Not clear what kind of decoding is happening here, utf-8?!
+			runes := []rune(t)
+			log.Info("Runes", t, runes, runes[0], runes[len(runes)-1])
+			for _, c := range runes {
+				fmt.Printf("%04x %s\n", c, string(c))
+			}
+			if len(runes) >= 2 && IsRuneQuotationMark(runes[0]) && runes[0] == runes[len(runes)-1] {
+				exactTerms = append(exactTerms, string(runes[1:len(runes)-1]))
+			} else {
+				terms = append(terms, t)
+			}
+		}
+	}
+	return search.Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Filters: filters}
 }
 
 func SearchHandler(c *gin.Context) {
-    log.Infof("Query: [%s]", c.Query("q"))
-	terms, filters := ParseQuery(c.Query("q"))
-    log.Info(fmt.Sprintf("Terms: %#v Filters: %#v", terms, filters))
-	if len(terms) == 0 && len(filters) == 0 {
+	log.Infof("Query: [%s]", c.Query("q"))
+	query := ParseQuery(c.Query("q"))
+	log.Infof("Parsed Query: %#v", query)
+	if len(query.Term) == 0 && len(query.Filters) == 0 && len(query.ExactTerms) == 0 {
 		NewBadRequestError(errors.New("Can't search with no terms and no filters.")).Abort(c)
 		return
 	}
@@ -396,11 +410,13 @@ func SearchHandler(c *gin.Context) {
 	se := search.NewESEngine(esc, db)
 
 	// Detect input language
-	order := utils.DetectLanguage(strings.Join(terms, " "), c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
+	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
+	log.Info("Detect language input:", detectQuery)
+	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
 	res, err := se.DoSearch(
 		context.TODO(),
-		search.Query{Term: strings.Join(terms, " "), Filters: filters, LanguageOrder: order},
+		query,
 		sortByVal,
 		pageNoVal,
 		utils.Min(pageSizeVal, consts.API_MAX_PAGE_SIZE),
@@ -414,7 +430,7 @@ func SearchHandler(c *gin.Context) {
 }
 
 func AutocompleteHandler(c *gin.Context) {
-    log.Infof("Query: [%s]", c.Query("q"))
+	log.Infof("Query: [%s]", c.Query("q"))
 	q := c.Query("q")
 	if q == "" {
 		NewBadRequestError(errors.New("Can't search for an empty term")).Abort(c)

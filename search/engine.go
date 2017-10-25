@@ -42,37 +42,37 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 		classType := classTypes[i]
 		g.Go(func() error {
 
-            // Call ES
-            multiSearchService := e.esc.MultiSearch()
-            for _, index := range indices {
-                searchSource := elastic.NewSearchSource().
-                    Suggester(elastic.NewCompletionSuggester("classification_name").
-                    Field("name_suggest").
-                    Text(query.Term).
-                    ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
-                    Suggester(elastic.NewCompletionSuggester("classification_description").
-                    Field("description_suggest").
-                    Text(query.Term).
-                    ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
+			// Call ES
+			multiSearchService := e.esc.MultiSearch()
+			for _, index := range indices {
+				searchSource := elastic.NewSearchSource().
+					Suggester(elastic.NewCompletionSuggester("classification_name").
+					Field("name_suggest").
+					Text(query.Term).
+					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
+					Suggester(elastic.NewCompletionSuggester("classification_description").
+					Field("description_suggest").
+					Text(query.Term).
+					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
 
-                request := elastic.NewSearchRequest().
-                    SearchSource(searchSource).
-                    Index(index)
-                multiSearchService.Add(request)
-            }
-            mr, err := multiSearchService.Do(ctx)
+				request := elastic.NewSearchRequest().
+					SearchSource(searchSource).
+					Index(index)
+				multiSearchService.Add(request)
+			}
+			mr, err := multiSearchService.Do(ctx)
 
-            sRes := (*elastic.SearchResult)(nil)
-            for _, r := range mr.Responses {
-                if r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0 {
-                    sRes = r
-                    break
-                }
-            }
+			sRes := (*elastic.SearchResult)(nil)
+			for _, r := range mr.Responses {
+				if r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0 {
+					sRes = r
+					break
+				}
+			}
 
-            if sRes == nil && len(mr.Responses) > 0 {
-                sRes = mr.Responses[0]
-            }
+			if sRes == nil && len(mr.Responses) > 0 {
+				sRes = mr.Responses[0]
+			}
 
 			if err != nil {
 				// don't kill entire request if ctx was cancelled
@@ -100,23 +100,36 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 }
 
 func createQuery(q Query) elastic.Query {
-    query := elastic.NewBoolQuery().Should(
-        elastic.NewMatchQuery("name", q.Term),
-        elastic.NewMatchQuery("description", q.Term),
-    )
-    for filter, values := range q.Filters {
-        switch filter {
-        case consts.FILTER_START_DATE:
-            query.Filter(elastic.NewRangeQuery("film_date").Gte(values[0]).Format("yyyy-MM-dd"))
-        case consts.FILTER_END_DATE:
-            query.Filter(elastic.NewRangeQuery("film_date").Lte(values[0]).Format("yyyy-MM-dd"))
-        default:
-            for _, value := range values {
-                query.Filter(elastic.NewTermsQuery(filter, value))
-            }
-        }
-    }
-    return query
+	query := elastic.NewBoolQuery()
+	if q.Term != "" {
+		query = query.Must(
+			elastic.NewBoolQuery().Should(
+				elastic.NewMatchQuery("name", q.Term),
+				elastic.NewMatchQuery("description", q.Term),
+			).MinimumNumberShouldMatch(1),
+		)
+	}
+	for _, exactTerm := range q.ExactTerms {
+		query = query.Must(
+			elastic.NewBoolQuery().Should(
+				elastic.NewMatchPhraseQuery("name", exactTerm),
+				elastic.NewMatchPhraseQuery("description", exactTerm),
+			).MinimumNumberShouldMatch(1),
+		)
+	}
+	for filter, values := range q.Filters {
+		switch filter {
+		case consts.FILTER_START_DATE:
+			query.Filter(elastic.NewRangeQuery("film_date").Gte(values[0]).Format("yyyy-MM-dd"))
+		case consts.FILTER_END_DATE:
+			query.Filter(elastic.NewRangeQuery("film_date").Lte(values[0]).Format("yyyy-MM-dd"))
+		default:
+			for _, value := range values {
+				query.Filter(elastic.NewTermsQuery(filter, value))
+			}
+		}
+	}
+	return query
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
@@ -127,43 +140,43 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	multiSearchService := e.esc.MultiSearch()
-    for _, index := range indices {
-        searchSource := elastic.NewSearchSource().
-            Query(createQuery(query)).
-            Highlight(
-            elastic.NewHighlight().Fields(
-                elastic.NewHighlighterField("name"),
-                elastic.NewHighlighterField("description"),
-            )).
-            From(from).
-            Size(size)
-        switch sortBy {
-        case consts.SORT_BY_OLDER_TO_NEWER:
-            searchSource = searchSource.Sort("film_date", true)
-        case consts.SORT_BY_NEWER_TO_OLDER:
-            searchSource = searchSource.Sort("film_date", false)
-        }
-        request := elastic.NewSearchRequest().
-            SearchSource(searchSource).
-            Index(index).
-            Preference(preference)
-        multiSearchService.Add(request)
-    }
+	for _, index := range indices {
+		searchSource := elastic.NewSearchSource().
+			Query(createQuery(query)).
+			Highlight(
+			elastic.NewHighlight().Fields(
+				elastic.NewHighlighterField("name"),
+				elastic.NewHighlighterField("description"),
+			)).
+			From(from).
+			Size(size)
+		switch sortBy {
+		case consts.SORT_BY_OLDER_TO_NEWER:
+			searchSource = searchSource.Sort("film_date", true)
+		case consts.SORT_BY_NEWER_TO_OLDER:
+			searchSource = searchSource.Sort("film_date", false)
+		}
+		request := elastic.NewSearchRequest().
+			SearchSource(searchSource).
+			Index(index).
+			Preference(preference)
+		multiSearchService.Add(request)
+	}
 	mr, err := multiSearchService.Do(context.TODO())
 
 	if err != nil {
 		return nil, errors.Wrap(err, "ES error")
 	}
 
-    for _, r := range mr.Responses {
-        if r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0 {
-            return r, nil
-        }
-    }
+	for _, r := range mr.Responses {
+		if r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0 {
+			return r, nil
+		}
+	}
 
-    if len(mr.Responses) > 0 {
-        return mr.Responses[0], nil
-    } else {
-        return nil, errors.Wrap(err, "No responses from multi search.")
-    }
+	if len(mr.Responses) > 0 {
+		return mr.Responses[0], nil
+	} else {
+		return nil, errors.Wrap(err, "No responses from multi search.")
+	}
 }

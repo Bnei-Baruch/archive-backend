@@ -107,19 +107,19 @@ var LANG_ORDER = map[string][]string{
 	LANG_FINNISH:    {LANG_FINNISH, LANG_ENGLISH},
 	LANG_LITHUANIAN: {LANG_LITHUANIAN, LANG_ENGLISH},
 	LANG_JAPANESE:   {LANG_JAPANESE, LANG_ENGLISH},
-    // Temporary disable until solved issue with Russian.
-	LANG_BULGARIAN:  {LANG_RUSSIAN, LANG_BULGARIAN, LANG_ENGLISH},
-	LANG_GEORGIAN:   {LANG_GEORGIAN, LANG_ENGLISH},
-	LANG_NORWEGIAN:  {LANG_NORWEGIAN, LANG_ENGLISH},
-	LANG_SWEDISH:    {LANG_SWEDISH, LANG_ENGLISH},
-	LANG_CROATIAN:   {LANG_CROATIAN, LANG_ENGLISH},
-	LANG_CHINESE:    {LANG_CHINESE, LANG_ENGLISH},
-	LANG_PERSIAN:    {LANG_PERSIAN, LANG_ENGLISH},
-	LANG_ROMANIAN:   {LANG_ROMANIAN, LANG_ENGLISH},
-	LANG_HINDI:      {LANG_HINDI, LANG_ENGLISH},
-    // Temporary disable until solved issue with Russian.
-	LANG_UKRAINIAN:  {LANG_RUSSIAN, LANG_UKRAINIAN, LANG_ENGLISH},
-    // Temporary disable until solved issue with Russian.
+	// Temporary disable until solved issue with Russian.
+	LANG_BULGARIAN: {LANG_RUSSIAN, LANG_BULGARIAN, LANG_ENGLISH},
+	LANG_GEORGIAN:  {LANG_GEORGIAN, LANG_ENGLISH},
+	LANG_NORWEGIAN: {LANG_NORWEGIAN, LANG_ENGLISH},
+	LANG_SWEDISH:   {LANG_SWEDISH, LANG_ENGLISH},
+	LANG_CROATIAN:  {LANG_CROATIAN, LANG_ENGLISH},
+	LANG_CHINESE:   {LANG_CHINESE, LANG_ENGLISH},
+	LANG_PERSIAN:   {LANG_PERSIAN, LANG_ENGLISH},
+	LANG_ROMANIAN:  {LANG_ROMANIAN, LANG_ENGLISH},
+	LANG_HINDI:     {LANG_HINDI, LANG_ENGLISH},
+	// Temporary disable until solved issue with Russian.
+	LANG_UKRAINIAN: {LANG_RUSSIAN, LANG_UKRAINIAN, LANG_ENGLISH},
+	// Temporary disable until solved issue with Russian.
 	LANG_MACEDONIAN: {LANG_RUSSIAN, LANG_MACEDONIAN, LANG_ENGLISH},
 	LANG_SLOVENIAN:  {LANG_SLOVENIAN, LANG_ENGLISH},
 	LANG_LATVIAN:    {LANG_LATVIAN, LANG_ENGLISH},
@@ -147,21 +147,21 @@ var SORT_BY_VALUES = map[string]bool{
 }
 
 const (
-    FILTER_TAG        = "tag"
-    FILTER_START_DATE = "start_date"
-    FILTER_END_DATE   = "end_date"
-    FILTER_SOURCE     = "source"
-    FILTER_AUTHOR     = "author"
+	FILTER_TAG        = "tag"
+	FILTER_START_DATE = "start_date"
+	FILTER_END_DATE   = "end_date"
+	FILTER_SOURCE     = "source"
+	FILTER_AUTHOR     = "author"
 )
 
 // Use to identify and map request filters
 // Maps request filter name to index field name.
 var FILTERS = map[string]string{
-    FILTER_TAG:        "tags",
-    FILTER_START_DATE: "start_date",
-    FILTER_END_DATE:   "end_date",
-    FILTER_SOURCE:     "sources",
-    FILTER_AUTHOR:     "sources",
+	FILTER_TAG:        "tags",
+	FILTER_START_DATE: "start_date",
+	FILTER_END_DATE:   "end_date",
+	FILTER_SOURCE:     "sources",
+	FILTER_AUTHOR:     "sources",
 }
 
 // ElasticSearch 'es'
