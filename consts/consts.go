@@ -7,32 +7,36 @@ This is a modified version of the github.com/Bnei-Baruch/mdb/api/consts.go
 
 const (
 	// Collection Types
-
-	CT_DAILY_LESSON             = "DAILY_LESSON"
-	CT_SPECIAL_LESSON           = "SPECIAL_LESSON"
-	CT_WEEKLY_FRIENDS_GATHERING = "WEEKLY_FRIENDS_GATHERING"
-	CT_CONGRESS                 = "CONGRESS"
-	CT_VIDEO_PROGRAM            = "VIDEO_PROGRAM"
-	CT_LECTURE_SERIES           = "LECTURE_SERIES"
-	CT_MEALS                    = "MEALS"
-	CT_HOLIDAY                  = "HOLIDAY"
-	CT_PICNIC                   = "PICNIC"
-	CT_UNITY_DAY                = "UNITY_DAY"
+	CT_DAILY_LESSON       = "DAILY_LESSON"
+	CT_SPECIAL_LESSON     = "SPECIAL_LESSON"
+	CT_FRIENDS_GATHERINGS = "FRIENDS_GATHERINGS"
+	CT_CONGRESS           = "CONGRESS"
+	CT_VIDEO_PROGRAM      = "VIDEO_PROGRAM"
+	CT_LECTURE_SERIES     = "LECTURE_SERIES"
+	CT_VIRTUAL_LESSONS    = "VIRTUAL_LESSONS"
+	CT_CHILDREN_LESSONS   = "CHILDREN_LESSONS"
+	CT_WOMEN_LESSONS      = "WOMEN_LESSONS"
+	CT_MEALS              = "MEALS"
+	CT_HOLIDAY            = "HOLIDAY"
+	CT_PICNIC             = "PICNIC"
+	CT_UNITY_DAY          = "UNITY_DAY"
 
 	// Content Unit Types
-
 	CT_LESSON_PART           = "LESSON_PART"
 	CT_LECTURE               = "LECTURE"
-	CT_CHILDREN_LESSON_PART  = "CHILDREN_LESSON_PART"
-	CT_WOMEN_LESSON_PART     = "WOMEN_LESSON_PART"
-	CT_CAMPUS_LESSON         = "CAMPUS_LESSON"
-	CT_LC_LESSON             = "LC_LESSON"
 	CT_VIRTUAL_LESSON        = "VIRTUAL_LESSON"
+	CT_CHILDREN_LESSON       = "CHILDREN_LESSON"
+	CT_WOMEN_LESSON          = "WOMEN_LESSON"
 	CT_FRIENDS_GATHERING     = "FRIENDS_GATHERING"
 	CT_MEAL                  = "MEAL"
 	CT_VIDEO_PROGRAM_CHAPTER = "VIDEO_PROGRAM_CHAPTER"
 	CT_FULL_LESSON           = "FULL_LESSON"
 	CT_TEXT                  = "TEXT"
+	CT_EVENT_PART            = "EVENT_PART"
+	CT_UNKNOWN               = "UNKNOWN"
+	CT_CLIP                  = "CLIP"
+	CT_TRAINING              = "TRAINING"
+	CT_KITEI_MAKOR           = "KITEI_MAKOR"
 
 	// Content Role types
 	CR_LECTURER = "LECTURER"
