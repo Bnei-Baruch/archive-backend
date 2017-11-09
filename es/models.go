@@ -26,7 +26,7 @@ type ContentUnit struct {
 	Sources          []string    `json:"sources,omitempty"`
 	Authors          []string    `json:"authors,omitempty"`
 	Persons          []string    `json:"persons,omitempty"`
-    Transcript       string      `json:"transcript,omitempty"`
+	Transcript       string      `json:"transcript,omitempty"`
 }
 
 type File struct {
@@ -50,12 +50,4 @@ type Classification struct {
 	Description        string `json:"description,omitempty"`
 	DescriptionSuggest string `json:"description_suggest,omitempty"`
 	Type               string `json:"classification_type"`
-}
-
-type Transcript struct {
-	MDB_UID  string `json:"mdb_uid"`
-    Name     string `json:"name,omitempty"`
-	Language string `json:"language,omitempty"`
-    Text     string `json:"text,omitempty"`
-    ContentUnitUID string `json:"content_unit_uid,omitempty"`
 }

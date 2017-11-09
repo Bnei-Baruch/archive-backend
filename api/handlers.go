@@ -393,7 +393,7 @@ func SearchHandler(c *gin.Context) {
 			NewBadRequestError(errors.New("page_size expects a positive number")).Abort(c)
 			return
 		}
-        pageSizeVal = utils.Min(pageSizeVal, consts.API_MAX_PAGE_SIZE)
+		pageSizeVal = utils.Min(pageSizeVal, consts.API_MAX_PAGE_SIZE)
 	}
 
 	sortByVal := consts.SORT_BY_RELEVANCE
@@ -419,7 +419,7 @@ func SearchHandler(c *gin.Context) {
 		context.TODO(),
 		query,
 		sortByVal,
-		(pageNoVal - 1) * pageSizeVal,
+		(pageNoVal-1)*pageSizeVal,
 		pageSizeVal,
 		preference,
 	)

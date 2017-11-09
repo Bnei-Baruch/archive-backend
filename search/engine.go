@@ -47,13 +47,13 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 			for _, index := range indices {
 				searchSource := elastic.NewSearchSource().
 					Suggester(elastic.NewCompletionSuggester("classification_name").
-						Field("name_suggest").
-						Text(query.Term).
-						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
+					Field("name_suggest").
+					Text(query.Term).
+					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
 					Suggester(elastic.NewCompletionSuggester("classification_description").
-						Field("description_suggest").
-						Text(query.Term).
-						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
+					Field("description_suggest").
+					Text(query.Term).
+					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
 
 				request := elastic.NewSearchRequest().
 					SearchSource(searchSource).
@@ -136,7 +136,7 @@ func createContentUnitsQuery(q Query) elastic.Query {
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
 	multiSearchService := e.esc.MultiSearch()
-    // Content Units
+	// Content Units
 	content_units_indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
 		content_units_indices[i] = es.IndexName(consts.ES_UNITS_INDEX, query.LanguageOrder[i])
@@ -145,10 +145,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
 			Highlight(elastic.NewHighlight().Fields(
-				elastic.NewHighlighterField("name"),
-				elastic.NewHighlighterField("description"),
-				elastic.NewHighlighterField("transcript"),
-			)).
+			elastic.NewHighlighterField("name"),
+			elastic.NewHighlighterField("description"),
+			elastic.NewHighlighterField("transcript"),
+		)).
 			From(from).
 			Size(size)
 		switch sortBy {
@@ -163,7 +163,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			Preference(preference)
 		multiSearchService.Add(request)
 	}
-    // Do search.
+	// Do search.
 	mr, err := multiSearchService.Do(context.TODO())
 
 	if err != nil {
