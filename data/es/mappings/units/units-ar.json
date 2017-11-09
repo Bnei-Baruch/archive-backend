@@ -46,6 +46,10 @@
         "persons": {
           "type": "keyword",
           "index": false
+        },
+        "transcript": {
+          "type": "text",
+          "analyzer": "arabic"
         }
       }
     }

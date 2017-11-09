@@ -1,12 +1,18 @@
 package es
 
 import (
+    "bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+    "path"
+    "os"
+    "os/exec"
+    "sync/atomic"
 	"time"
 
+    "github.com/spf13/viper"
 	log "github.com/Sirupsen/logrus"
 	"github.com/golang/sync/errgroup"
 	"github.com/lib/pq"
@@ -49,6 +55,10 @@ func IndexUnits() {
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
 
+var total          uint64 = 0
+var indexed        uint64 = 0
+var withTranscript uint64 = 0
+
 func indexUnits(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -61,6 +71,7 @@ func indexUnits(ctx context.Context) error {
 			return errors.Wrap(err, "Count units in mdb")
 		}
 		log.Infof("%d units in MDB", count)
+        atomic.AddUint64(&total, uint64(count))
 
 		units, err := mdbmodels.ContentUnits(db,
 			qm.Load("ContentUnitI18ns")).
@@ -89,6 +100,11 @@ func indexUnits(ctx context.Context) error {
 					log.Errorf("Index unit error: %s", err.Error())
 					return err
 				}
+                atomic.AddUint64(&indexed, 1)
+
+                if atomic.LoadUint64(&indexed) % 100 == 0 {
+                    log.Infof("Indexed %d / %d. With transcripts %d.", indexed, total, withTranscript)
+                }
 
 				select {
 				case <-ctx.Done():
@@ -105,6 +121,27 @@ func indexUnits(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func ParseDocx(uid string) (string, error) {
+    docFolder := path.Join(viper.GetString("elasticsearch.docx-folder"))
+    docxFilename := fmt.Sprintf("%s.docx", uid)
+    docxPath := path.Join(docFolder, docxFilename)
+    if _, err := os.Stat(docxPath); os.IsNotExist(err) {
+        return "", nil
+    }
+    cmd := exec.Command("/home/kolmanv/transcripts/parse_docs.py", docxPath)
+    var stdout bytes.Buffer
+    var stderr bytes.Buffer
+    cmd.Stdout = &stdout
+    cmd.Stderr = &stderr
+    err := cmd.Run()
+    if err != nil {
+        log.Info(fmt.Sprintf("parse_docs.py %s\nstdout: %s\nstderr: %s",
+            docxPath, stdout.String(), stderr.String()))
+        return "", err
+    }
+    return stdout.String(), nil
 }
 
 func indexUnit(cu *mdbmodels.ContentUnit) error {
@@ -161,6 +198,18 @@ func indexUnit(cu *mdbmodels.ContentUnit) error {
 			if val, ok := CLASSIFICATIONS_MANAGER.Translations[cu.ID]; ok {
 				unit.Translations = val
 			}
+            if byLang, ok := CLASSIFICATIONS_MANAGER.Transcripts[cu.ID]; ok {
+                if val, ok := byLang[i18n.Language]; ok {
+                    var err error
+                    unit.Transcript, err = ParseDocx(val[0])
+                    if err != nil {
+                        return err
+                    }
+                    if unit.Transcript != "" {
+                        atomic.AddUint64(&withTranscript, 1)
+                    }
+                }
+            }
 
 			i18nMap[i18n.Language] = unit
 		}
@@ -190,6 +239,7 @@ type ClassificationsManager struct {
 	Tags         map[int64][]string
 	Persons      map[int64][]string
 	Translations map[int64][]string
+    Transcripts  map[int64]map[string][]string
 }
 
 func (cm *ClassificationsManager) Load() error {
@@ -214,6 +264,11 @@ func (cm *ClassificationsManager) Load() error {
 	if err != nil {
 		return err
 	}
+
+    cm.Transcripts, err = cm.loadTranscripts()
+    if err != nil {
+        return err
+    }
 
 	return nil
 }
@@ -326,6 +381,52 @@ func (cm *ClassificationsManager) loadMap(rows *sql.Rows) (map[int64][]string, e
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
 		m[cuid] = sources
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows.Err()")
+	}
+
+	return m, nil
+}
+
+func (cm *ClassificationsManager) loadTranscripts() (map[int64]map[string][]string, error) {
+	rows, err := queries.Raw(db, `
+SELECT
+    f.uid,
+    f.name,
+    f.language,
+    cu.id
+FROM files as f, content_units as cu
+WHERE name ~ '.docx?' AND
+    f.language NOT IN ('zz', 'xx') AND
+    f.content_unit_id IS NOT NULL AND
+    f.secure=0 AND f.published IS TRUE AND
+    f.content_unit_id = cu.id AND cu.type_id = 11;`).Query()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Load transcripts")
+	}
+	defer rows.Close()
+
+	return loadTranscriptsMap(rows)
+}
+
+func loadTranscriptsMap(rows *sql.Rows) (map[int64]map[string][]string, error) {
+    m := make(map[int64]map[string][]string)
+
+	for rows.Next() {
+		var uid string
+        var name string
+        var language string
+        var content_unit_id int64
+		err := rows.Scan(&uid, &name, &language, &content_unit_id)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+        if _, ok := m[content_unit_id]; !ok {
+            m[content_unit_id] = make(map[string][]string)
+        }
+        m[content_unit_id][language] = []string{uid, name}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, errors.Wrap(err, "rows.Err()")

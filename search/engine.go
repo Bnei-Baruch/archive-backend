@@ -99,13 +99,14 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 	return resp, nil
 }
 
-func createQuery(q Query) elastic.Query {
+func createContentUnitsQuery(q Query) elastic.Query {
 	query := elastic.NewBoolQuery()
 	if q.Term != "" {
 		query = query.Must(
 			elastic.NewBoolQuery().Should(
 				elastic.NewMatchQuery("name", q.Term),
 				elastic.NewMatchQuery("description", q.Term),
+				elastic.NewMatchQuery("transcript", q.Term),
 			).MinimumNumberShouldMatch(1),
 		)
 	}
@@ -114,6 +115,7 @@ func createQuery(q Query) elastic.Query {
 			elastic.NewBoolQuery().Should(
 				elastic.NewMatchPhraseQuery("name", exactTerm),
 				elastic.NewMatchPhraseQuery("description", exactTerm),
+				elastic.NewMatchPhraseQuery("transcript", exactTerm),
 			).MinimumNumberShouldMatch(1),
 		)
 	}
@@ -133,20 +135,20 @@ func createQuery(q Query) elastic.Query {
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
-	// figure out index names from language order
-	indices := make([]string, len(query.LanguageOrder))
-	for i := range query.LanguageOrder {
-		indices[i] = es.IndexName(consts.ES_UNITS_INDEX, query.LanguageOrder[i])
-	}
-
 	multiSearchService := e.esc.MultiSearch()
-	for _, index := range indices {
+    // Content Units
+	content_units_indices := make([]string, len(query.LanguageOrder))
+	for i := range query.LanguageOrder {
+		content_units_indices[i] = es.IndexName(consts.ES_UNITS_INDEX, query.LanguageOrder[i])
+	}
+	for _, index := range content_units_indices {
 		searchSource := elastic.NewSearchSource().
-			Query(createQuery(query)).
+			Query(createContentUnitsQuery(query)).
 			Highlight(
 			elastic.NewHighlight().Fields(
 				elastic.NewHighlighterField("name"),
 				elastic.NewHighlighterField("description"),
+				elastic.NewHighlighterField("transcript"),
 			)).
 			From(from).
 			Size(size)
@@ -162,6 +164,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			Preference(preference)
 		multiSearchService.Add(request)
 	}
+    // Do search.
 	mr, err := multiSearchService.Do(context.TODO())
 
 	if err != nil {
