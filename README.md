@@ -50,8 +50,11 @@ When MDB schema is changed we need to update the `mdb` package. Run this script:
 misc/update_mdb_models.sh
 ```
 
-
-
 ## Elasticsearch related stuff
 http://mrzard.github.io/blog/2015/03/25/elasticsearch-enable-mlockall-in-centos-7/
 
+## Build index
+There are two more dependencies required to build index:
+1) Open Office (soffice binary) - to convert all doc to docx.
+2) python-docx pyton library - to get text from docx
+  - pip install python-docx

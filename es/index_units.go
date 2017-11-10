@@ -130,7 +130,7 @@ func ParseDocx(uid string) (string, error) {
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
 		return "", nil
 	}
-	cmd := exec.Command("/home/kolmanv/transcripts/parse_docs.py", docxPath)
+	cmd := exec.Command("es/parse_docs.py", docxPath)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
