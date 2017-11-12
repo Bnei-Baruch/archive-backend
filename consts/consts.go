@@ -20,6 +20,7 @@ const (
 	CT_HOLIDAY            = "HOLIDAY"
 	CT_PICNIC             = "PICNIC"
 	CT_UNITY_DAY          = "UNITY_DAY"
+	CT_CLIPS              = "CLIPS"
 
 	// Content Unit Types
 	CT_LESSON_PART           = "LESSON_PART"
