@@ -47,13 +47,13 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 			for _, index := range indices {
 				searchSource := elastic.NewSearchSource().
 					Suggester(elastic.NewCompletionSuggester("classification_name").
-						Field("name_suggest").
-						Text(query.Term).
-						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
+					Field("name_suggest").
+					Text(query.Term).
+					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
 					Suggester(elastic.NewCompletionSuggester("classification_description").
-						Field("description_suggest").
-						Text(query.Term).
-						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
+					Field("description_suggest").
+					Text(query.Term).
+					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
 
 				request := elastic.NewSearchRequest().
 					SearchSource(searchSource).
@@ -99,13 +99,14 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 	return resp, nil
 }
 
-func createQuery(q Query) elastic.Query {
+func createContentUnitsQuery(q Query) elastic.Query {
 	query := elastic.NewBoolQuery()
 	if q.Term != "" {
 		query = query.Must(
 			elastic.NewBoolQuery().Should(
 				elastic.NewMatchQuery("name", q.Term),
 				elastic.NewMatchQuery("description", q.Term),
+				elastic.NewMatchQuery("transcript", q.Term),
 			).MinimumNumberShouldMatch(1),
 		)
 	}
@@ -114,6 +115,7 @@ func createQuery(q Query) elastic.Query {
 			elastic.NewBoolQuery().Should(
 				elastic.NewMatchPhraseQuery("name", exactTerm),
 				elastic.NewMatchPhraseQuery("description", exactTerm),
+				elastic.NewMatchPhraseQuery("transcript", exactTerm),
 			).MinimumNumberShouldMatch(1),
 		)
 	}
@@ -133,21 +135,23 @@ func createQuery(q Query) elastic.Query {
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
-	// figure out index names from language order
-	indices := make([]string, len(query.LanguageOrder))
-	for i := range query.LanguageOrder {
-		indices[i] = es.IndexName(consts.ES_UNITS_INDEX, query.LanguageOrder[i])
-	}
-
 	multiSearchService := e.esc.MultiSearch()
-	for _, index := range indices {
+	// Content Units
+	content_units_indices := make([]string, len(query.LanguageOrder))
+	for i := range query.LanguageOrder {
+		content_units_indices[i] = es.IndexName(consts.ES_UNITS_INDEX, query.LanguageOrder[i])
+	}
+    fetchSourceContext := elastic.NewFetchSourceContext(true).
+        Include("mdb_uid")
+	for _, index := range content_units_indices {
 		searchSource := elastic.NewSearchSource().
-			Query(createQuery(query)).
-			Highlight(
-				elastic.NewHighlight().Fields(
-					elastic.NewHighlighterField("name"),
-					elastic.NewHighlighterField("description"),
-				)).
+			Query(createContentUnitsQuery(query)).
+			Highlight(elastic.NewHighlight().Fields(
+                elastic.NewHighlighterField("name"),
+                elastic.NewHighlighterField("description"),
+                elastic.NewHighlighterField("transcript"),
+            )).
+            FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size)
 		switch sortBy {
@@ -162,6 +166,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			Preference(preference)
 		multiSearchService.Add(request)
 	}
+	// Do search.
 	mr, err := multiSearchService.Do(context.TODO())
 
 	if err != nil {

@@ -26,6 +26,7 @@ type ContentUnit struct {
 	Sources          []string    `json:"sources,omitempty"`
 	Authors          []string    `json:"authors,omitempty"`
 	Persons          []string    `json:"persons,omitempty"`
+	Transcript       string      `json:"transcript,omitempty"`
 }
 
 type File struct {

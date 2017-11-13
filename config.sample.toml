@@ -3,6 +3,7 @@ url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 
 [elasticsearch]
 url="http://127.0.0.1:9200"
+docx-folder="/tmp/mdb-docx/"
 
 [server]
 bind-address=":8080"
