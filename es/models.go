@@ -19,7 +19,7 @@ type ContentUnit struct {
 	Description      string      `json:"description,omitempty"`
 	ContentType      string      `json:"content_type"`
 	FilmDate         *utils.Date `json:"film_date,omitempty"`
-	Duration         uint16      `json:"duration,omitempty"`
+	Duration         int16       `json:"duration,omitempty"`
 	OriginalLanguage string      `json:"original_language,omitempty"`
 	Translations     []string    `json:"translations,omitempty"`
 	Tags             []string    `json:"tags,omitempty"`
