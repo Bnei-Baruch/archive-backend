@@ -41,6 +41,8 @@ func IndexUnits() {
 	log.Info("Loading content units classifications")
 	utils.Must(CLASSIFICATIONS_MANAGER.Load())
 
+	docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
+
 	ctx := context.Background()
 	utils.Must(indexUnits(ctx))
 
@@ -124,7 +126,6 @@ func indexUnits(ctx context.Context) error {
 }
 
 func ParseDocx(uid string) (string, error) {
-	docFolder := path.Join(viper.GetString("elasticsearch.docx-folder"))
 	docxFilename := fmt.Sprintf("%s.docx", uid)
 	docxPath := path.Join(docFolder, docxFilename)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
@@ -137,9 +138,8 @@ func ParseDocx(uid string) (string, error) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		log.Info(fmt.Sprintf("parse_docs.py %s\nstdout: %s\nstderr: %s",
-			docxPath, stdout.String(), stderr.String()))
-		return "", err
+		log.Warnf("parse_docs.py %s\nstdout: %s\nstderr: %s", docxPath, stdout.String(), stderr.String())
+		return "", errors.Wrapf(err, "cmd.Run %s", uid)
 	}
 	return stdout.String(), nil
 }
@@ -399,7 +399,7 @@ WHERE name ~ '.docx?' AND
     f.language NOT IN ('zz', 'xx') AND
     f.content_unit_id IS NOT NULL AND
     f.secure=0 AND f.published IS TRUE AND
-    f.content_unit_id = cu.id AND cu.type_id = 11;`).Query()
+    f.content_unit_id = cu.id AND cu.type_id != 31;`).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load transcripts")

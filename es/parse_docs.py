@@ -1,11 +1,12 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 
 import sys
 from docx import Document
 
-f = open(sys.argv[1], 'rb')
+with open(sys.argv[1], 'rb') as f:
+    document = Document(f)
+    for p in document.paragraphs:
+        print(p.text.encode('utf-8'))
+    # text = '\n'.join([p.text for p in document.paragraphs])
+    # print(text.encode('utf-8'))
 
-document = Document(f)
-
-text = '\n'.join([p.text for p in document.paragraphs])
-print text.encode('utf-8')

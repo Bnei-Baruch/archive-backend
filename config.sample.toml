@@ -4,6 +4,7 @@ url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 [elasticsearch]
 url="http://127.0.0.1:9200"
 docx-folder="/tmp/mdb-docx/"
+soffice-bin="/usr/bin/soffice"
 
 [server]
 bind-address=":8080"
