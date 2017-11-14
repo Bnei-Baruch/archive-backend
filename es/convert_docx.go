@@ -128,9 +128,6 @@ func downloadAndConvert(docBatch [][]string) error {
 		docxPath := path.Join(docFolder, docxFilename)
 		if _, err := os.Stat(docxPath); !os.IsNotExist(err) {
 			continue
-		} else if err != nil {
-			log.Warnf("os.Stat %s: %s", docxPath, err.Error())
-			continue
 		}
 		if filepath.Ext(name) == ".doc" {
 			convertDocs = append(convertDocs, docPath)
