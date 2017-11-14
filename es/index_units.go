@@ -200,7 +200,7 @@ func indexUnit(cu *mdbmodels.ContentUnit) error {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
 					unit.Transcript, err = ParseDocx(val[0])
-					if err != nil && unit.Transcript != "" {
+					if err == nil && unit.Transcript != "" {
 						atomic.AddUint64(&withTranscript, 1)
 					}
 				}
