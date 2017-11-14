@@ -127,6 +127,8 @@ func downloadAndConvert(docBatch [][]string) error {
 		docPath := path.Join(docFolder, docFilename)
 		docxPath := path.Join(docFolder, docxFilename)
 		if _, err := os.Stat(docxPath); !os.IsNotExist(err) {
+			continue
+		} else if err != nil {
 			log.Warnf("os.Stat %s: %s", docxPath, err.Error())
 			continue
 		}
