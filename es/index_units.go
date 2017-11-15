@@ -414,15 +414,15 @@ func loadTranscriptsMap(rows *sql.Rows) (map[int64]map[string][]string, error) {
 		var uid string
 		var name string
 		var language string
-		var content_unit_id int64
-		err := rows.Scan(&uid, &name, &language, &content_unit_id)
+		var cuID	 int64
+		err := rows.Scan(&uid, &name, &language, &cuID)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
-		if _, ok := m[content_unit_id]; !ok {
-			m[content_unit_id] = make(map[string][]string)
+		if _, ok := m[cuID]; !ok {
+			m[cuID] = make(map[string][]string)
 		}
-		m[content_unit_id][language] = []string{uid, name}
+		m[cuID][language] = []string{uid, name}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, errors.Wrap(err, "rows.Err()")
