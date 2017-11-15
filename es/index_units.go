@@ -42,6 +42,8 @@ func IndexUnits() {
 	log.Info("Loading content units classifications")
 	utils.Must(CLASSIFICATIONS_MANAGER.Load())
 
+	docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
+
 	ctx := context.Background()
 	utils.Must(indexUnits(ctx))
 
@@ -125,7 +127,6 @@ func indexUnits(ctx context.Context) error {
 }
 
 func ParseDocx(uid string) (string, error) {
-	docFolder := path.Join(viper.GetString("elasticsearch.docx-folder"))
 	docxFilename := fmt.Sprintf("%s.docx", uid)
 	docxPath := path.Join(docFolder, docxFilename)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
@@ -138,9 +139,8 @@ func ParseDocx(uid string) (string, error) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		log.Info(fmt.Sprintf("parse_docs.py %s\nstdout: %s\nstderr: %s",
-			docxPath, stdout.String(), stderr.String()))
-		return "", err
+		log.Warnf("parse_docs.py %s\nstdout: %s\nstderr: %s", docxPath, stdout.String(), stderr.String())
+		return "", errors.Wrapf(err, "cmd.Run %s", uid)
 	}
 	return stdout.String(), nil
 }
@@ -201,10 +201,7 @@ func indexUnit(cu *mdbmodels.ContentUnit) error {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
 					unit.Transcript, err = ParseDocx(val[0])
-					if err != nil {
-						return err
-					}
-					if unit.Transcript != "" {
+					if err == nil && unit.Transcript != "" {
 						atomic.AddUint64(&withTranscript, 1)
 					}
 				}

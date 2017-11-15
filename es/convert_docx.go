@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -23,8 +23,15 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
+var soffice string
+var docFolder string
+
 func ConvertDocx() {
 	clock := Init()
+
+	soffice = viper.GetString("elasticsearch.soffice-bin")
+	docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
+	utils.Must(os.MkdirAll(docFolder, 0777))
 
 	utils.Must(convertDocx())
 
@@ -37,7 +44,7 @@ func convertDocx() error {
 	var workersWG sync.WaitGroup
 	docsCH := make(chan []string)
 	workersWG.Add(1)
-	loadErr := (error)(nil)
+	var loadErr error
 	var total uint64
 	go func(wg *sync.WaitGroup) {
 		defer close(docsCH)
@@ -53,16 +60,15 @@ func convertDocx() error {
 			if len(doc) > 0 {
 				docsCH <- doc
 			} else {
-				loadErr = fmt.Errorf("Empty doc, skipping. Should not happen.")
+				loadErr = errors.New("Empty doc, skipping. Should not happen.")
 				return
 			}
 		}
 	}(&workersWG)
 
 	var done uint64 = 0
-	var errors []error
-	for i := 1; i <= 5; i++ {
-		errors = append(errors, nil)
+	var errs [5]error
+	for i := 0; i < 5; i++ {
 		workersWG.Add(1)
 		go func(wg *sync.WaitGroup, i int) {
 			defer wg.Done()
@@ -80,7 +86,7 @@ func convertDocx() error {
 					err := downloadAndConvert(docBatch)
 					atomic.AddUint64(&done, uint64(len(docBatch)))
 					if err != nil {
-						errors[i] = err
+						errs[i] = err
 						return
 					}
 					log.Infof("Done %d / %d", done, total)
@@ -96,7 +102,7 @@ func convertDocx() error {
 	if loadErr != nil {
 		return loadErr
 	}
-	for _, err := range errors {
+	for _, err := range errs {
 		if err != nil {
 			return err
 		}
@@ -108,18 +114,14 @@ var sofficeMutex = &sync.Mutex{}
 
 func downloadAndConvert(docBatch [][]string) error {
 	var convertDocs []string
-	docFolder := path.Join(viper.GetString("elasticsearch.docx-folder"))
-	err := os.MkdirAll(docFolder, 0777)
-	if err != nil {
-		return err
-	}
 	for _, docSource := range docBatch {
 		uid := docSource[0]
 		name := docSource[1]
 		if filepath.Ext(name) != ".docx" && filepath.Ext(name) != ".doc" {
-			log.Infof("File type not supported %s %s, skipping.", uid, name)
+			log.Warnf("File type not supported %s %s, skipping.", uid, name)
 			continue
 		}
+
 		docFilename := fmt.Sprintf("%s%s", uid, filepath.Ext(name))
 		docxFilename := fmt.Sprintf("%s.docx", uid)
 		docPath := path.Join(docFolder, docFilename)
@@ -129,27 +131,36 @@ func downloadAndConvert(docBatch [][]string) error {
 		}
 		if filepath.Ext(name) == ".doc" {
 			convertDocs = append(convertDocs, docPath)
-			defer os.Remove(docPath)
+			//defer os.Remove(docPath)
 		}
+
 		// Download doc.
 		resp, err := http.Get(fmt.Sprintf("https://cdn.kabbalahmedia.info/%s", uid))
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode != 200 { // OK
-			log.Infof("Response code %d for %s, skip.", resp.StatusCode, uid)
+			log.Warnf("Response code %d for %s, skip.", resp.StatusCode, uid)
 			continue
 		}
-		var bodyBytes []byte
-		bodyBytes, err = ioutil.ReadAll(resp.Body)
+
+		out, err := os.Create(docPath)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "os.Create %s", docPath)
 		}
-		// Write to local file.
-		err = ioutil.WriteFile(docPath, bodyBytes, 0777)
+
+		_, err = io.Copy(out, resp.Body)
+
+		if err := resp.Body.Close(); err != nil {
+			log.Errorf("resp.Body.Close %s : %s", docPath, err.Error())
+		}
+
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "io.Copy %s", docPath)
+		}
+
+		if err := out.Close(); err != nil {
+			log.Errorf("out.Close %s : %s", docPath, err.Error())
 		}
 	}
 
@@ -157,19 +168,19 @@ func downloadAndConvert(docBatch [][]string) error {
 		sofficeMutex.Lock()
 		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", docFolder}, convertDocs...)
 		log.Infof("Command [%s]", strings.Join(args, " "))
-		cmd := exec.Command("soffice", args...)
+		cmd := exec.Command(soffice, args...)
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
-		err = cmd.Run()
+		err := cmd.Run()
 		sofficeMutex.Unlock()
 		if _, ok := err.(*exec.ExitError); err != nil || ok {
-			log.Info(fmt.Sprintf("soffice\nstdout: %s\nstderr: %s",
-				stdout.String(), stderr.String()))
-			return err
+			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
+			return errors.Wrapf(err, "Execute soffice")
 		}
 	}
+
 	return nil
 }
 
@@ -183,7 +194,7 @@ WHERE name ~ '.docx?' AND
     secure=0 AND published IS TRUE;`).Query()
 
 	if err != nil {
-		return nil, errors.Wrap(err, "Load doc")
+		return nil, errors.Wrap(err, "Load docs")
 	}
 	defer rows.Close()
 
