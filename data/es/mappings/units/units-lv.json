@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "latvian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "latvian"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "latvian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "latvian"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "latvian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "latvian"
+              }
+          }
         }
       }
     }

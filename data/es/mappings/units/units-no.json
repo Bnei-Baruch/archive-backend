@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "norwegian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "norwegian"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "norwegian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "norwegian"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "norwegian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "norwegian"
+              }
+          }
         }
       }
     }

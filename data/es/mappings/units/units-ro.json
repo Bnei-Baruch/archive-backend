@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "romanian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "romanian"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "romanian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "romanian"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "romanian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "romanian"
+              }
+          }
         }
       }
     }

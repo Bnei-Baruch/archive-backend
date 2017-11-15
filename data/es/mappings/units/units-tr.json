@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "turkish"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "turkish"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "turkish"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "turkish"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "turkish"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "turkish"
+              }
+          }
         }
       }
     }

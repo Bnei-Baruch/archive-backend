@@ -15,6 +15,14 @@ func Min(x, y int) int {
 	return y
 }
 
+// Like math.Min for int
+func Max(x, y uint16) uint16 {
+	if x > y {
+		return x
+	}
+	return y
+}
+
 // true if every string in given slice is empty
 func IsEmpty(s []string) bool {
 	for _, x := range s {

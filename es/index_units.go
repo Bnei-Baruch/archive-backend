@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+    "math"
 	"os"
 	"os/exec"
 	"path"
@@ -176,7 +177,7 @@ func indexUnit(cu *mdbmodels.ContentUnit) error {
 				}
 
 				if duration, ok := props["duration"]; ok {
-					unit.Duration = uint16(duration.(float64))
+                    unit.Duration = uint16(math.Max(0, duration.(float64)))
 				}
 
 				if originalLanguage, ok := props["original_language"]; ok {
@@ -399,7 +400,7 @@ WHERE name ~ '.docx?' AND
     f.language NOT IN ('zz', 'xx') AND
     f.content_unit_id IS NOT NULL AND
     f.secure=0 AND f.published IS TRUE AND
-    f.content_unit_id = cu.id AND cu.type_id = 11;`).Query()
+    f.content_unit_id = cu.id AND cu.type_id != 31;`).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load transcripts")

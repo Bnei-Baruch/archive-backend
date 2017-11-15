@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "italian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "italian"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "italian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "italian"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "italian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "italian"
+              }
+          }
         }
       }
     }

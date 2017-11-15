@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "french"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "french"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "french"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "french"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "french"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "french"
+              }
+          }
         }
       }
     }

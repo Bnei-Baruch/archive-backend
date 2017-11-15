@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "lithuanian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "lithuanian"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "lithuanian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "lithuanian"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "lithuanian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "lithuanian"
+              }
+          }
         }
       }
     }

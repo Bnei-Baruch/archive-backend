@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "english"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "english"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "english"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "english"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "english"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "english"
+              }
+          }
         }
       }
     }

@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "czech"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "czech"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "czech"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "czech"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "czech"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "czech"
+              }
+          }
         }
       }
     }

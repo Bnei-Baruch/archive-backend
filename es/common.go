@@ -101,16 +101,16 @@ func recreateIndex(name string, definition string) error {
 	}
 
 	// update index's settings for bulk indexing.
-	res2, err := esc.IndexPutSettings(name).BodyJson(map[string]interface{}{
-		"refresh_interval":   "-1",
-		"number_of_replicas": 0,
-	}).Do(context.TODO())
-	if err != nil {
-		return errors.Wrap(err, "Change index settings")
-	}
-	if !res2.Acknowledged {
-		return errors.Errorf("Update index settings wasn't acknowledged: %s", name)
-	}
+	// res2, err := esc.IndexPutSettings(name).BodyJson(map[string]interface{}{
+	// 	"refresh_interval":   "-1",
+	// 	"number_of_replicas": 0,
+	// }).Do(context.TODO())
+	// if err != nil {
+	// 	return errors.Wrap(err, "Change index settings")
+	// }
+	// if !res2.Acknowledged {
+	// 	return errors.Errorf("Update index settings wasn't acknowledged: %s", name)
+	// }
 
 	return nil
 }

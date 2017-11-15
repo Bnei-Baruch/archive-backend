@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "arabic"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "arabic"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "arabic"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "arabic"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "arabic"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "arabic"
+              }
+          }
         }
       }
     }

@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "persian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "persian"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "persian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "persian"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "persian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "persian"
+              }
+          }
         }
       }
     }

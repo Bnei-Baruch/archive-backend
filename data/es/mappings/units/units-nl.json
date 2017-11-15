@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "dutch"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "dutch"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "dutch"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "dutch"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "dutch"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "dutch"
+              }
+          }
         }
       }
     }

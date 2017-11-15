@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "cjk"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "cjk"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "cjk"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "cjk"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "cjk"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "cjk"
+              }
+          }
         }
       }
     }

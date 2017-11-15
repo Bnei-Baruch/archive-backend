@@ -11,11 +11,21 @@
         },
         "name": {
           "type": "text",
-          "analyzer": "bulgarian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "bulgarian"
+              }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": "bulgarian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "bulgarian"
+              }
+          }
         },
         "content_type": {
           "type": "keyword",
@@ -49,7 +59,12 @@
         },
         "transcript": {
           "type": "text",
-          "analyzer": "bulgarian"
+          "fields": {
+              "analyzed": {
+                  "type": "text",
+                  "analyzer": "bulgarian"
+              }
+          }
         }
       }
     }

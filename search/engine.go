@@ -104,9 +104,9 @@ func createContentUnitsQuery(q Query) elastic.Query {
 	if q.Term != "" {
 		query = query.Must(
 			elastic.NewBoolQuery().Should(
-				elastic.NewMatchQuery("name", q.Term),
-				elastic.NewMatchQuery("description", q.Term),
-				elastic.NewMatchQuery("transcript", q.Term),
+				elastic.NewMatchQuery("name.analyzed", q.Term),
+				elastic.NewMatchQuery("description.analyzed", q.Term),
+				elastic.NewMatchQuery("transcript.analyzed", q.Term),
 			).MinimumNumberShouldMatch(1),
 		)
 	}
@@ -150,6 +150,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
                 elastic.NewHighlighterField("name"),
                 elastic.NewHighlighterField("description"),
                 elastic.NewHighlighterField("transcript"),
+                elastic.NewHighlighterField("name.analyzed"),
+                elastic.NewHighlighterField("description.analyzed"),
+                elastic.NewHighlighterField("transcript.analyzed"),
             )).
             FetchSourceContext(fetchSourceContext).
 			From(from).
