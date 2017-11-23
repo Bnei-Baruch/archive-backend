@@ -1,4 +1,33 @@
 {
+  "settings": { 
+    "index": {
+        "analysis": {
+            "analyzer": {
+                "phonetic_analyzer": {
+                    "tokenizer": "standard",
+                    "filter": [
+                        "standard",
+                        "lowercase",
+                        "myLatinTransform",
+                        "custom_phonetic"
+                    ]
+                }
+            },
+            "filter": {
+                "myLatinTransform": {
+                    "type": "icu_transform",
+                    "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC" 
+                },
+                "custom_phonetic": {
+                    "type": "phonetic",
+                    "encoder": "beider_morse",
+                    "replace": true,
+                    "languageset": "russian"
+                }
+            }
+        }
+    }
+  },
   "mappings": {
     "content_units": {
       "_all": {
@@ -11,6 +40,7 @@
         },
         "name": {
           "type": "text",
+          "analyzer": "phonetic_analyzer",
           "fields": {
               "analyzed": {
                   "type": "text",
@@ -20,6 +50,7 @@
         },
         "description": {
           "type": "text",
+          "analyzer": "phonetic_analyzer",
           "fields": {
               "analyzed": {
                   "type": "text",
@@ -59,6 +90,7 @@
         },
         "transcript": {
           "type": "text",
+          "analyzer": "phonetic_analyzer",
           "fields": {
               "analyzed": {
                   "type": "text",

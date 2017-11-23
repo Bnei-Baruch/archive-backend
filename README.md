@@ -53,7 +53,23 @@ misc/update_mdb_models.sh
 ## Elasticsearch related stuff
 http://mrzard.github.io/blog/2015/03/25/elasticsearch-enable-mlockall-in-centos-7/
 
-## Build index
+### Plugins
+1. Hebrew plugin:
+  https://github.com/synhershko/elasticsearch-analysis-hebrew
+1. Instead of standard analyzer for exact match (הריון to be same as היריון):
+  ```Shell
+  sudo bin/elasticsearch-plugin install analysis-phonetic
+  ```
+  https://www.elastic.co/guide/en/elasticsearch/plugins/current/analysis-phonetic.html
+
+  WIP - Does not works yet.
+1. ICU plugin to transliterate Russian (and others) to enable phonetic on them:
+  ```Shell
+  sudo bin/elasticsearch-plugin install analysis-icu
+  ```
+1. Ukrainial analyzer (fails for standard)
+
+### Build index
 There are two more dependencies required to build index:
 1) Open Office (soffice binary) - to convert all doc to docx.
 2) python-docx pyton library - to get text from docx
