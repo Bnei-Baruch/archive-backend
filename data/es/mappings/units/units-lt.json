@@ -17,7 +17,7 @@
                     "type": "phonetic",
                     "encoder": "beider_morse",
                     "replace": true,
-                    "languageset": "lithuanian"
+                    "languageset": "any"
                 }
             }
         }
