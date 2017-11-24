@@ -430,7 +430,6 @@ func SearchHandler(c *gin.Context) {
 	}
 }
 
-
 func AutocompleteHandler(c *gin.Context) {
 	log.Infof("Query: [%s]", c.Query("q"))
 	q := c.Query("q")

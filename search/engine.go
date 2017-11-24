@@ -141,20 +141,20 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	for i := range query.LanguageOrder {
 		content_units_indices[i] = es.IndexName(consts.ES_UNITS_INDEX, query.LanguageOrder[i])
 	}
-    fetchSourceContext := elastic.NewFetchSourceContext(true).
-        Include("mdb_uid")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).
+		Include("mdb_uid")
 	for _, index := range content_units_indices {
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
 			Highlight(elastic.NewHighlight().Fields(
-                elastic.NewHighlighterField("name"),
-                elastic.NewHighlighterField("description"),
-                elastic.NewHighlighterField("transcript"),
-                elastic.NewHighlighterField("name.analyzed"),
-                elastic.NewHighlighterField("description.analyzed"),
-                elastic.NewHighlighterField("transcript.analyzed"),
-            )).
-            FetchSourceContext(fetchSourceContext).
+			elastic.NewHighlighterField("name"),
+			elastic.NewHighlighterField("description"),
+			elastic.NewHighlighterField("transcript"),
+			elastic.NewHighlighterField("name.analyzed"),
+			elastic.NewHighlighterField("description.analyzed"),
+			elastic.NewHighlighterField("transcript.analyzed"),
+		)).
+			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size)
 		switch sortBy {

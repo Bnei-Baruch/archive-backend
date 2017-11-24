@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-    "math"
+	"math"
 	"os"
 	"os/exec"
 	"path"
@@ -74,14 +74,16 @@ func indexUnits(ctx context.Context) error {
 			return errors.Wrap(err, "Count units in mdb")
 		}
 		log.Infof("%d units in MDB", count)
-		atomic.AddUint64(&total, uint64(count))
 
 		units, err := mdbmodels.ContentUnits(db,
-			qm.Load("ContentUnitI18ns")).
+			qm.Load("ContentUnitI18ns"),
+            qm.Where("secure = 0"), qm.And("published IS TRUE")).
 			All()
 		if err != nil {
 			return errors.Wrap(err, "Fetch units from mdb")
 		}
+        log.Infof("Indexing %d units (secure and published).", len(units))
+		atomic.AddUint64(&total, uint64(len(units)))
 
 		for i := range units {
 			unit := units[i]
@@ -177,7 +179,7 @@ func indexUnit(cu *mdbmodels.ContentUnit) error {
 				}
 
 				if duration, ok := props["duration"]; ok {
-                    unit.Duration = uint16(math.Max(0, duration.(float64)))
+					unit.Duration = uint16(math.Max(0, duration.(float64)))
 				}
 
 				if originalLanguage, ok := props["original_language"]; ok {
@@ -414,7 +416,7 @@ func loadTranscriptsMap(rows *sql.Rows) (map[int64]map[string][]string, error) {
 		var uid string
 		var name string
 		var language string
-		var cuID	 int64
+		var cuID int64
 		err := rows.Scan(&uid, &name, &language, &cuID)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
