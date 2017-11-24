@@ -67,7 +67,7 @@ http://mrzard.github.io/blog/2015/03/25/elasticsearch-enable-mlockall-in-centos-
   ```Shell
   sudo bin/elasticsearch-plugin install analysis-icu
   ```
-1. Ukrainial analyzer (fails for standard)
+1. Ukrainial analyzer (fails for standard - Not started)
 
 ### Build index
 There are two more dependencies required to build index:

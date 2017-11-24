@@ -1,0 +1,74 @@
+{
+    "mappings": {
+        "sources": {
+            "_all": {
+                "enabled": false
+            }, 
+            "properties": {
+                "name": {
+                    "type": "text", 
+                    "analyzer": "hungarian"
+                }, 
+                "name_suggest": {
+                    "contexts": [
+                        {
+                            "path": "classification_type", 
+                            "type": "category", 
+                            "name": "classification"
+                        }
+                    ], 
+                    "type": "completion"
+                }, 
+                "description_suggest": {
+                    "contexts": [
+                        {
+                            "path": "classification_type", 
+                            "type": "category", 
+                            "name": "classification"
+                        }
+                    ], 
+                    "type": "completion"
+                }, 
+                "classification_type": {
+                    "type": "keyword"
+                }, 
+                "mdb_uid": {
+                    "index": false, 
+                    "type": "keyword"
+                }, 
+                "description": {
+                    "type": "text", 
+                    "analyzer": "hungarian"
+                }
+            }
+        }, 
+        "tags": {
+            "_all": {
+                "enabled": false
+            }, 
+            "properties": {
+                "classification_type": {
+                    "type": "keyword"
+                }, 
+                "name": {
+                    "type": "text", 
+                    "analyzer": "hungarian"
+                }, 
+                "name_suggest": {
+                    "contexts": [
+                        {
+                            "path": "classification_type", 
+                            "type": "category", 
+                            "name": "classification"
+                        }
+                    ], 
+                    "type": "completion"
+                }, 
+                "mdb_uid": {
+                    "index": false, 
+                    "type": "keyword"
+                }
+            }
+        }
+    }
+}

@@ -1,99 +1,98 @@
 {
-  "settings": { 
-    "index": {
-        "analysis": {
-            "analyzer": {
-                "phonetic_analyzer": {
-                    "tokenizer": "standard",
-                    "filter": [
-                        "standard",
-                        "lowercase",
-                        "custom_phonetic"
-                    ]
+    "mappings": {
+        "content_units": {
+            "_all": {
+                "enabled": false
+            }, 
+            "properties": {
+                "film_date": {
+                    "type": "date", 
+                    "format": "strict_date"
+                }, 
+                "description": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "standard"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "tags": {
+                    "type": "keyword"
+                }, 
+                "translations": {
+                    "index": false, 
+                    "type": "keyword"
+                }, 
+                "mdb_uid": {
+                    "index": false, 
+                    "type": "keyword"
+                }, 
+                "sources": {
+                    "type": "keyword"
+                }, 
+                "persons": {
+                    "index": false, 
+                    "type": "keyword"
+                }, 
+                "content_type": {
+                    "index": false, 
+                    "type": "keyword"
+                }, 
+                "duration": {
+                    "index": false, 
+                    "type": "short"
+                }, 
+                "original_language": {
+                    "index": false, 
+                    "type": "keyword"
+                }, 
+                "transcript": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "standard"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "name": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "standard"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
                 }
-            },
-            "filter": {
-                "custom_phonetic": {
-                    "type": "phonetic",
-                    "encoder": "beider_morse",
-                    "replace": true,
-                    "languageset": "standard"
+            }
+        }
+    }, 
+    "settings": {
+        "index": {
+            "analysis": {
+                "filter": {
+                    "custom_phonetic": {
+                        "encoder": "beider_morse", 
+                        "type": "phonetic", 
+                        "replace": true
+                    }
+                }, 
+                "analyzer": {
+                    "phonetic_analyzer": {
+                        "filter": [
+                            "standard", 
+                            "lowercase", 
+                            "custom_phonetic"
+                        ], 
+                        "tokenizer": "standard"
+                    }
                 }
             }
         }
     }
-  },
-  "mappings": {
-    "content_units": {
-      "_all": {
-        "enabled": false
-      },
-      "properties": {
-        "mdb_uid": {
-          "type": "keyword",
-          "index": false
-        },
-        "name": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-              "analyzed": {
-                  "type": "text",
-                  "analyzer": "standard"
-              }
-          }
-        },
-        "description": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-              "analyzed": {
-                  "type": "text",
-                  "analyzer": "standard"
-              }
-          }
-        },
-        "content_type": {
-          "type": "keyword",
-          "index": false
-        },
-        "film_date": {
-          "type": "date",
-          "format": "strict_date"
-        },
-        "duration": {
-          "type": "short",
-          "index": false
-        },
-        "original_language": {
-          "type": "keyword",
-          "index": false
-        },
-        "translations": {
-          "type": "keyword",
-          "index": false
-        },
-        "tags": {
-          "type": "keyword"
-        },
-        "sources": {
-          "type": "keyword"
-        },
-        "persons": {
-          "type": "keyword",
-          "index": false
-        },
-        "transcript": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-              "analyzed": {
-                  "type": "text",
-                  "analyzer": "standard"
-              }
-          }
-        }
-      }
-    }
-  }
 }
