@@ -30,6 +30,9 @@ func ConvertDocx() {
 	clock := Init()
 
 	soffice = viper.GetString("elasticsearch.soffice-bin")
+	if soffice == "" {
+		panic("Soffice binary should be set in config.")
+	}
 	docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
 	utils.Must(os.MkdirAll(docFolder, 0777))
 
