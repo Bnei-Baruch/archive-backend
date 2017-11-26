@@ -1232,7 +1232,7 @@ func loadCUFiles(db *sql.DB, ids []int64) (map[int64][]*mdbmodels.File, error) {
 	// Load from DB
 	allFiles, err := mdbmodels.Files(db,
 		SECURE_PUBLISHED_MOD,
-		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...)).
+		qm.WhereIn("content_unit_id in ? and removed_at is null", utils.ConvertArgsInt64(ids)...)).
 		All()
 	if err != nil {
 		return nil, errors.Wrap(err, "Load files from DB")
