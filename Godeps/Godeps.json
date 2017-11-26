@@ -104,10 +104,6 @@
 			"Rev": "d0303fe809921458f417bcf828397a65db30a7e4"
 		},
 		{
-			"ImportPath": "github.com/nullbio/inflect",
-			"Rev": "0563860d9a8cd788af0f5243761d841239d23ab2"
-		},
-		{
 			"ImportPath": "github.com/pelletier/go-buffruneio",
 			"Comment": "v0.2.0",
 			"Rev": "c37440a7cf42ac63b919c752ca73a85067e05992"
@@ -157,24 +153,28 @@
 			"Rev": "3eb4713e2655cd1be805795be31b3f85b74b05fd"
 		},
 		{
-			"ImportPath": "github.com/vattle/sqlboiler/boil",
-			"Comment": "v2.4.1",
-			"Rev": "c00ebe19110044f1c0ba0965bbca9555cf5f0e46"
+			"ImportPath": "github.com/volatiletech/inflect",
+			"Rev": "e7201282ae8da26cd97aed2e516f75c0bd91bb93"
 		},
 		{
-			"ImportPath": "github.com/vattle/sqlboiler/queries",
-			"Comment": "v2.4.1",
-			"Rev": "c00ebe19110044f1c0ba0965bbca9555cf5f0e46"
+			"ImportPath": "github.com/volatiletech/sqlboiler/boil",
+			"Comment": "v2.6.0",
+			"Rev": "6b95e5d3d7840a737841e2eb446e1c82641f8393"
 		},
 		{
-			"ImportPath": "github.com/vattle/sqlboiler/queries/qm",
-			"Comment": "v2.4.1",
-			"Rev": "c00ebe19110044f1c0ba0965bbca9555cf5f0e46"
+			"ImportPath": "github.com/volatiletech/sqlboiler/queries",
+			"Comment": "v2.6.0",
+			"Rev": "6b95e5d3d7840a737841e2eb446e1c82641f8393"
 		},
 		{
-			"ImportPath": "github.com/vattle/sqlboiler/strmangle",
-			"Comment": "v2.4.1",
-			"Rev": "c00ebe19110044f1c0ba0965bbca9555cf5f0e46"
+			"ImportPath": "github.com/volatiletech/sqlboiler/queries/qm",
+			"Comment": "v2.6.0",
+			"Rev": "6b95e5d3d7840a737841e2eb446e1c82641f8393"
+		},
+		{
+			"ImportPath": "github.com/volatiletech/sqlboiler/strmangle",
+			"Comment": "v2.6.0",
+			"Rev": "6b95e5d3d7840a737841e2eb446e1c82641f8393"
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",
@@ -220,16 +220,6 @@
 			"Rev": "5f57d2222ad794d0dffb07e664ea05e2ee07d60c"
 		},
 		{
-			"ImportPath": "gopkg.in/nullbio/null.v6",
-			"Comment": "v6.3",
-			"Rev": "40264a2e6b7972d183906cf17663983c23231c82"
-		},
-		{
-			"ImportPath": "gopkg.in/nullbio/null.v6/convert",
-			"Comment": "v6.3",
-			"Rev": "40264a2e6b7972d183906cf17663983c23231c82"
-		},
-		{
 			"ImportPath": "gopkg.in/olivere/elastic.v5",
 			"Comment": "v5.0.52",
 			"Rev": "3f891f0d04aba0bba9a8bd365a9d3846efcb3527"
@@ -243,6 +233,16 @@
 			"ImportPath": "gopkg.in/olivere/elastic.v5/uritemplates",
 			"Comment": "v5.0.52",
 			"Rev": "3f891f0d04aba0bba9a8bd365a9d3846efcb3527"
+		},
+		{
+			"ImportPath": "gopkg.in/volatiletech/null.v6",
+			"Comment": "v6.4",
+			"Rev": "0bef4e07ae1b27a2a4efa23bbb3006c8c3d2e01d"
+		},
+		{
+			"ImportPath": "gopkg.in/volatiletech/null.v6/convert",
+			"Comment": "v6.4",
+			"Rev": "0bef4e07ae1b27a2a4efa23bbb3006c8c3d2e01d"
 		},
 		{
 			"ImportPath": "gopkg.in/yaml.v2",

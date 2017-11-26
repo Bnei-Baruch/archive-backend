@@ -10,7 +10,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"github.com/vattle/sqlboiler/boil"
+	"github.com/volatiletech/sqlboiler/boil"
 	"gopkg.in/olivere/elastic.v5"
 
 	"fmt"
