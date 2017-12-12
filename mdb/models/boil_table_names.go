@@ -16,6 +16,7 @@ var TableNames = struct {
 	ContentUnitI18n         string
 	ContentUnits            string
 	ContentUnitsPersons     string
+	ContentUnitsPublishers  string
 	ContentUnitsSources     string
 	ContentUnitsTags        string
 	Files                   string
@@ -25,6 +26,8 @@ var TableNames = struct {
 	Operations              string
 	PersonI18n              string
 	Persons                 string
+	PublisherI18n           string
+	Publishers              string
 	SourceI18n              string
 	SourceTypes             string
 	Sources                 string
@@ -45,6 +48,7 @@ var TableNames = struct {
 	ContentUnitI18n:         "content_unit_i18n",
 	ContentUnits:            "content_units",
 	ContentUnitsPersons:     "content_units_persons",
+	ContentUnitsPublishers:  "content_units_publishers",
 	ContentUnitsSources:     "content_units_sources",
 	ContentUnitsTags:        "content_units_tags",
 	Files:                   "files",
@@ -54,6 +58,8 @@ var TableNames = struct {
 	Operations:              "operations",
 	PersonI18n:              "person_i18n",
 	Persons:                 "persons",
+	PublisherI18n:           "publisher_i18n",
+	Publishers:              "publishers",
 	SourceI18n:              "source_i18n",
 	SourceTypes:             "source_types",
 	Sources:                 "sources",

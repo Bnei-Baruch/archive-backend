@@ -60,6 +60,7 @@ type contentUnitR struct {
 	SourceContentUnitDerivations  ContentUnitDerivationSlice
 	ContentUnitI18ns              ContentUnitI18nSlice
 	ContentUnitsPersons           ContentUnitsPersonSlice
+	Publishers                    PublisherSlice
 	Sources                       SourceSlice
 	Tags                          TagSlice
 	Files                         FileSlice
@@ -348,6 +349,33 @@ func (o *ContentUnit) ContentUnitsPersons(exec boil.Executor, mods ...qm.QueryMo
 
 	if len(queries.GetSelect(query.Query)) == 0 {
 		queries.SetSelect(query.Query, []string{"\"content_units_persons\".*"})
+	}
+
+	return query
+}
+
+// PublishersG retrieves all the publisher's publishers.
+func (o *ContentUnit) PublishersG(mods ...qm.QueryMod) publisherQuery {
+	return o.Publishers(boil.GetDB(), mods...)
+}
+
+// Publishers retrieves all the publisher's publishers with an executor.
+func (o *ContentUnit) Publishers(exec boil.Executor, mods ...qm.QueryMod) publisherQuery {
+	var queryMods []qm.QueryMod
+	if len(mods) != 0 {
+		queryMods = append(queryMods, mods...)
+	}
+
+	queryMods = append(queryMods,
+		qm.InnerJoin("\"content_units_publishers\" on \"publishers\".\"id\" = \"content_units_publishers\".\"publisher_id\""),
+		qm.Where("\"content_units_publishers\".\"content_unit_id\"=?", o.ID),
+	)
+
+	query := Publishers(exec, queryMods...)
+	queries.SetFrom(query.Query, "\"publishers\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"publishers\".*"})
 	}
 
 	return query
@@ -820,6 +848,87 @@ func (contentUnitL) LoadContentUnitsPersons(e boil.Executor, singular bool, mayb
 		for _, local := range slice {
 			if local.ID == foreign.ContentUnitID {
 				local.R.ContentUnitsPersons = append(local.R.ContentUnitsPersons, foreign)
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
+// LoadPublishers allows an eager lookup of values, cached into the
+// loaded structs of the objects.
+func (contentUnitL) LoadPublishers(e boil.Executor, singular bool, maybeContentUnit interface{}) error {
+	var slice []*ContentUnit
+	var object *ContentUnit
+
+	count := 1
+	if singular {
+		object = maybeContentUnit.(*ContentUnit)
+	} else {
+		slice = *maybeContentUnit.(*[]*ContentUnit)
+		count = len(slice)
+	}
+
+	args := make([]interface{}, count)
+	if singular {
+		if object.R == nil {
+			object.R = &contentUnitR{}
+		}
+		args[0] = object.ID
+	} else {
+		for i, obj := range slice {
+			if obj.R == nil {
+				obj.R = &contentUnitR{}
+			}
+			args[i] = obj.ID
+		}
+	}
+
+	query := fmt.Sprintf(
+		"select \"a\".*, \"b\".\"content_unit_id\" from \"publishers\" as \"a\" inner join \"content_units_publishers\" as \"b\" on \"a\".\"id\" = \"b\".\"publisher_id\" where \"b\".\"content_unit_id\" in (%s)",
+		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
+	)
+	if boil.DebugMode {
+		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
+	}
+
+	results, err := e.Query(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to eager load publishers")
+	}
+	defer results.Close()
+
+	var resultSlice []*Publisher
+
+	var localJoinCols []int64
+	for results.Next() {
+		one := new(Publisher)
+		var localJoinCol int64
+
+		err = results.Scan(&one.ID, &one.UID, &one.Pattern, &localJoinCol)
+		if err = results.Err(); err != nil {
+			return errors.Wrap(err, "failed to plebian-bind eager loaded slice publishers")
+		}
+
+		resultSlice = append(resultSlice, one)
+		localJoinCols = append(localJoinCols, localJoinCol)
+	}
+
+	if err = results.Err(); err != nil {
+		return errors.Wrap(err, "failed to plebian-bind eager loaded slice publishers")
+	}
+
+	if singular {
+		object.R.Publishers = resultSlice
+		return nil
+	}
+
+	for i, foreign := range resultSlice {
+		localJoinCol := localJoinCols[i]
+		for _, local := range slice {
+			if local.ID == localJoinCol {
+				local.R.Publishers = append(local.R.Publishers, foreign)
 				break
 			}
 		}
@@ -1549,6 +1658,242 @@ func (o *ContentUnit) AddContentUnitsPersons(exec boil.Executor, insert bool, re
 		}
 	}
 	return nil
+}
+
+// AddPublishersG adds the given related objects to the existing relationships
+// of the content_unit, optionally inserting them as new records.
+// Appends related to o.R.Publishers.
+// Sets related.R.ContentUnits appropriately.
+// Uses the global database handle.
+func (o *ContentUnit) AddPublishersG(insert bool, related ...*Publisher) error {
+	return o.AddPublishers(boil.GetDB(), insert, related...)
+}
+
+// AddPublishersP adds the given related objects to the existing relationships
+// of the content_unit, optionally inserting them as new records.
+// Appends related to o.R.Publishers.
+// Sets related.R.ContentUnits appropriately.
+// Panics on error.
+func (o *ContentUnit) AddPublishersP(exec boil.Executor, insert bool, related ...*Publisher) {
+	if err := o.AddPublishers(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddPublishersGP adds the given related objects to the existing relationships
+// of the content_unit, optionally inserting them as new records.
+// Appends related to o.R.Publishers.
+// Sets related.R.ContentUnits appropriately.
+// Uses the global database handle and panics on error.
+func (o *ContentUnit) AddPublishersGP(insert bool, related ...*Publisher) {
+	if err := o.AddPublishers(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddPublishers adds the given related objects to the existing relationships
+// of the content_unit, optionally inserting them as new records.
+// Appends related to o.R.Publishers.
+// Sets related.R.ContentUnits appropriately.
+func (o *ContentUnit) AddPublishers(exec boil.Executor, insert bool, related ...*Publisher) error {
+	var err error
+	for _, rel := range related {
+		if insert {
+			if err = rel.Insert(exec); err != nil {
+				return errors.Wrap(err, "failed to insert into foreign table")
+			}
+		}
+	}
+
+	for _, rel := range related {
+		query := "insert into \"content_units_publishers\" (\"content_unit_id\", \"publisher_id\") values ($1, $2)"
+		values := []interface{}{o.ID, rel.ID}
+
+		if boil.DebugMode {
+			fmt.Fprintln(boil.DebugWriter, query)
+			fmt.Fprintln(boil.DebugWriter, values)
+		}
+
+		_, err = exec.Exec(query, values...)
+		if err != nil {
+			return errors.Wrap(err, "failed to insert into join table")
+		}
+	}
+	if o.R == nil {
+		o.R = &contentUnitR{
+			Publishers: related,
+		}
+	} else {
+		o.R.Publishers = append(o.R.Publishers, related...)
+	}
+
+	for _, rel := range related {
+		if rel.R == nil {
+			rel.R = &publisherR{
+				ContentUnits: ContentUnitSlice{o},
+			}
+		} else {
+			rel.R.ContentUnits = append(rel.R.ContentUnits, o)
+		}
+	}
+	return nil
+}
+
+// SetPublishersG removes all previously related items of the
+// content_unit replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.ContentUnits's Publishers accordingly.
+// Replaces o.R.Publishers with related.
+// Sets related.R.ContentUnits's Publishers accordingly.
+// Uses the global database handle.
+func (o *ContentUnit) SetPublishersG(insert bool, related ...*Publisher) error {
+	return o.SetPublishers(boil.GetDB(), insert, related...)
+}
+
+// SetPublishersP removes all previously related items of the
+// content_unit replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.ContentUnits's Publishers accordingly.
+// Replaces o.R.Publishers with related.
+// Sets related.R.ContentUnits's Publishers accordingly.
+// Panics on error.
+func (o *ContentUnit) SetPublishersP(exec boil.Executor, insert bool, related ...*Publisher) {
+	if err := o.SetPublishers(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetPublishersGP removes all previously related items of the
+// content_unit replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.ContentUnits's Publishers accordingly.
+// Replaces o.R.Publishers with related.
+// Sets related.R.ContentUnits's Publishers accordingly.
+// Uses the global database handle and panics on error.
+func (o *ContentUnit) SetPublishersGP(insert bool, related ...*Publisher) {
+	if err := o.SetPublishers(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetPublishers removes all previously related items of the
+// content_unit replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.ContentUnits's Publishers accordingly.
+// Replaces o.R.Publishers with related.
+// Sets related.R.ContentUnits's Publishers accordingly.
+func (o *ContentUnit) SetPublishers(exec boil.Executor, insert bool, related ...*Publisher) error {
+	query := "delete from \"content_units_publishers\" where \"content_unit_id\" = $1"
+	values := []interface{}{o.ID}
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, query)
+		fmt.Fprintln(boil.DebugWriter, values)
+	}
+
+	_, err := exec.Exec(query, values...)
+	if err != nil {
+		return errors.Wrap(err, "failed to remove relationships before set")
+	}
+
+	removePublishersFromContentUnitsSlice(o, related)
+	if o.R != nil {
+		o.R.Publishers = nil
+	}
+	return o.AddPublishers(exec, insert, related...)
+}
+
+// RemovePublishersG relationships from objects passed in.
+// Removes related items from R.Publishers (uses pointer comparison, removal does not keep order)
+// Sets related.R.ContentUnits.
+// Uses the global database handle.
+func (o *ContentUnit) RemovePublishersG(related ...*Publisher) error {
+	return o.RemovePublishers(boil.GetDB(), related...)
+}
+
+// RemovePublishersP relationships from objects passed in.
+// Removes related items from R.Publishers (uses pointer comparison, removal does not keep order)
+// Sets related.R.ContentUnits.
+// Panics on error.
+func (o *ContentUnit) RemovePublishersP(exec boil.Executor, related ...*Publisher) {
+	if err := o.RemovePublishers(exec, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemovePublishersGP relationships from objects passed in.
+// Removes related items from R.Publishers (uses pointer comparison, removal does not keep order)
+// Sets related.R.ContentUnits.
+// Uses the global database handle and panics on error.
+func (o *ContentUnit) RemovePublishersGP(related ...*Publisher) {
+	if err := o.RemovePublishers(boil.GetDB(), related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemovePublishers relationships from objects passed in.
+// Removes related items from R.Publishers (uses pointer comparison, removal does not keep order)
+// Sets related.R.ContentUnits.
+func (o *ContentUnit) RemovePublishers(exec boil.Executor, related ...*Publisher) error {
+	var err error
+	query := fmt.Sprintf(
+		"delete from \"content_units_publishers\" where \"content_unit_id\" = $1 and \"publisher_id\" in (%s)",
+		strmangle.Placeholders(dialect.IndexPlaceholders, len(related), 2, 1),
+	)
+	values := []interface{}{o.ID}
+	for _, rel := range related {
+		values = append(values, rel.ID)
+	}
+
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, query)
+		fmt.Fprintln(boil.DebugWriter, values)
+	}
+
+	_, err = exec.Exec(query, values...)
+	if err != nil {
+		return errors.Wrap(err, "failed to remove relationships before set")
+	}
+	removePublishersFromContentUnitsSlice(o, related)
+	if o.R == nil {
+		return nil
+	}
+
+	for _, rel := range related {
+		for i, ri := range o.R.Publishers {
+			if rel != ri {
+				continue
+			}
+
+			ln := len(o.R.Publishers)
+			if ln > 1 && i < ln-1 {
+				o.R.Publishers[i] = o.R.Publishers[ln-1]
+			}
+			o.R.Publishers = o.R.Publishers[:ln-1]
+			break
+		}
+	}
+
+	return nil
+}
+
+func removePublishersFromContentUnitsSlice(o *ContentUnit, related []*Publisher) {
+	for _, rel := range related {
+		if rel.R == nil {
+			continue
+		}
+		for i, ri := range rel.R.ContentUnits {
+			if o.ID != ri.ID {
+				continue
+			}
+
+			ln := len(rel.R.ContentUnits)
+			if ln > 1 && i < ln-1 {
+				rel.R.ContentUnits[i] = rel.R.ContentUnits[ln-1]
+			}
+			rel.R.ContentUnits = rel.R.ContentUnits[:ln-1]
+			break
+		}
+	}
 }
 
 // AddSourcesG adds the given related objects to the existing relationships
