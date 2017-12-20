@@ -77,12 +77,14 @@ func indexUnits(ctx context.Context) error {
 
 		units, err := mdbmodels.ContentUnits(db,
 			qm.Load("ContentUnitI18ns"),
-            qm.Where("secure = 0"), qm.And("published IS TRUE")).
+            qm.Load("CollectionsContentUnits"),
+            qm.Load("CollectionsContentUnits.Collection"),
+			qm.Where("secure = 0"), qm.And("published IS TRUE")).
 			All()
 		if err != nil {
 			return errors.Wrap(err, "Fetch units from mdb")
 		}
-        log.Infof("Indexing %d units (secure and published).", len(units))
+		log.Infof("Indexing %d units (secure and published).", len(units))
 		atomic.AddUint64(&total, uint64(len(units)))
 
 		for i := range units {
@@ -147,6 +149,14 @@ func ParseDocx(uid string) (string, error) {
 	return stdout.String(), nil
 }
 
+func collectionsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
+	ret := make([]string, len(collectionsContentUnits))
+	for i, ccu := range collectionsContentUnits {
+		ret[i] = mdb.CONTENT_TYPE_REGISTRY.ByID[ccu.R.Collection.TypeID].Name
+	}
+	return ret
+}
+
 func indexUnit(cu *mdbmodels.ContentUnit) error {
 	//// create documents in each language with available translation
 	i18nMap := make(map[string]ContentUnit)
@@ -154,9 +164,10 @@ func indexUnit(cu *mdbmodels.ContentUnit) error {
 		i18n := cu.R.ContentUnitI18ns[i]
 		if i18n.Name.Valid && i18n.Name.String != "" {
 			unit := ContentUnit{
-				MDB_UID:     cu.UID,
-				Name:        i18n.Name.String,
-				ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
+				MDB_UID:                 cu.UID,
+				Name:                    i18n.Name.String,
+				ContentType:             mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
+				CollectionsContentTypes: collectionsContentTypes(cu.R.CollectionsContentUnits),
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {

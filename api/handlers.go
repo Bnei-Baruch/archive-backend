@@ -350,7 +350,6 @@ func ParseQuery(q string) search.Query {
 		if !isFilter {
 			// Not clear what kind of decoding is happening here, utf-8?!
 			runes := []rune(t)
-			log.Info("Runes", t, runes, runes[0], runes[len(runes)-1])
 			for _, c := range runes {
 				fmt.Printf("%04x %s\n", c, string(c))
 			}
@@ -814,21 +813,6 @@ func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]
 
 	return cus, nil
 }
-
-//func handleSearch(esc *elastic.Client, index string, text string, from int) (*elastic.SearchResult, error) {
-
-//q := elastic.NewNestedQuery("content_units",
-//	elastic.NewMultiMatchQuery(text, "content_units.names.*", "content_units.descriptions.*"))
-//
-//h := elastic.NewHighlight().HighlighQuery(q)
-//
-//return esc.Search().
-//	Index(index).
-//	Query(q).
-//	Highlight(h).
-//	From(from).
-//	Do(context.TODO())
-//}
 
 func handleRecentlyUpdated(db *sql.DB) ([]CollectionUpdateStatus, *HttpError) {
 	q := `SELECT

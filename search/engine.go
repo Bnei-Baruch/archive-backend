@@ -119,17 +119,27 @@ func createContentUnitsQuery(q Query) elastic.Query {
 			).MinimumNumberShouldMatch(1),
 		)
 	}
+    contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
+    filterByContentType := false
 	for filter, values := range q.Filters {
+        s := make([]interface{}, len(values))
+        for i, v := range values {
+            s[i] = v
+        }
 		switch filter {
-		case consts.FILTER_START_DATE:
+		case consts.FILTERS[consts.FILTER_START_DATE]:
 			query.Filter(elastic.NewRangeQuery("film_date").Gte(values[0]).Format("yyyy-MM-dd"))
-		case consts.FILTER_END_DATE:
+		case consts.FILTERS[consts.FILTER_END_DATE]:
 			query.Filter(elastic.NewRangeQuery("film_date").Lte(values[0]).Format("yyyy-MM-dd"))
+        case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
+            contentTypeQuery.Should(elastic.NewTermsQuery(filter, s...))
+            filterByContentType = true
 		default:
-			for _, value := range values {
-				query.Filter(elastic.NewTermsQuery(filter, value))
-			}
+			query.Filter(elastic.NewTermsQuery(filter, s...))
 		}
+        if filterByContentType {
+            query.Filter(contentTypeQuery)
+        }
 	}
 	return query
 }

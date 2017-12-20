@@ -152,21 +152,25 @@ var SORT_BY_VALUES = map[string]bool{
 }
 
 const (
-	FILTER_TAG        = "tag"
-	FILTER_START_DATE = "start_date"
-	FILTER_END_DATE   = "end_date"
-	FILTER_SOURCE     = "source"
-	FILTER_AUTHOR     = "author"
+	FILTER_TAG                       = "tag"
+	FILTER_START_DATE                = "start_date"
+	FILTER_END_DATE                  = "end_date"
+	FILTER_SOURCE                    = "source"
+	FILTER_AUTHOR                    = "author"
+	FILTER_UNITS_CONTENT_TYPES       = "units_content_types"
+	FILTER_COLLECTIONS_CONTENT_TYPES = "collections_content_types"
 )
 
 // Use to identify and map request filters
 // Maps request filter name to index field name.
 var FILTERS = map[string]string{
-	FILTER_TAG:        "tags",
-	FILTER_START_DATE: "start_date",
-	FILTER_END_DATE:   "end_date",
-	FILTER_SOURCE:     "sources",
-	FILTER_AUTHOR:     "sources",
+	FILTER_TAG:                       "tags",
+	FILTER_START_DATE:                "start_date",
+	FILTER_END_DATE:                  "end_date",
+	FILTER_SOURCE:                    "sources",
+	FILTER_AUTHOR:                    "sources",
+	FILTER_UNITS_CONTENT_TYPES:       "content_type",
+	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
 }
 
 // ElasticSearch 'es'

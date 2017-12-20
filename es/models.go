@@ -14,19 +14,20 @@ type Collection struct {
 }
 
 type ContentUnit struct {
-	MDB_UID          string      `json:"mdb_uid"`
-	Name             string      `json:"name,omitempty"`
-	Description      string      `json:"description,omitempty"`
-	ContentType      string      `json:"content_type"`
-	FilmDate         *utils.Date `json:"film_date,omitempty"`
-	Duration         uint16      `json:"duration,omitempty"`
-	OriginalLanguage string      `json:"original_language,omitempty"`
-	Translations     []string    `json:"translations,omitempty"`
-	Tags             []string    `json:"tags,omitempty"`
-	Sources          []string    `json:"sources,omitempty"`
-	Authors          []string    `json:"authors,omitempty"`
-	Persons          []string    `json:"persons,omitempty"`
-	Transcript       string      `json:"transcript,omitempty"`
+	MDB_UID                 string      `json:"mdb_uid"`
+	Name                    string      `json:"name,omitempty"`
+	Description             string      `json:"description,omitempty"`
+	ContentType             string      `json:"content_type"`
+	CollectionsContentTypes []string    `json:"collections_content_types,omitempty"`
+	FilmDate                *utils.Date `json:"film_date,omitempty"`
+	Duration                uint16      `json:"duration,omitempty"`
+	OriginalLanguage        string      `json:"original_language,omitempty"`
+	Translations            []string    `json:"translations,omitempty"`
+	Tags                    []string    `json:"tags,omitempty"`
+	Sources                 []string    `json:"sources,omitempty"`
+	Authors                 []string    `json:"authors,omitempty"`
+	Persons                 []string    `json:"persons,omitempty"`
+	Transcript              string      `json:"transcript,omitempty"`
 }
 
 type File struct {

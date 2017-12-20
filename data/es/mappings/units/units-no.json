@@ -22,6 +22,9 @@
                 "tags": {
                     "type": "keyword"
                 }, 
+                "collections_content_types": {
+                    "type": "keyword"
+                }, 
                 "translations": {
                     "index": false, 
                     "type": "keyword"
@@ -38,7 +41,6 @@
                     "type": "keyword"
                 }, 
                 "content_type": {
-                    "index": false, 
                     "type": "keyword"
                 }, 
                 "duration": {
