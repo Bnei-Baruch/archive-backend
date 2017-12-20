@@ -15,9 +15,9 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"github.com/vattle/sqlboiler/boil"
-	"github.com/vattle/sqlboiler/queries"
-	"github.com/vattle/sqlboiler/queries/qm"
+	"github.com/volatiletech/sqlboiler/boil"
+	"github.com/volatiletech/sqlboiler/queries"
+	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v5"
 
@@ -1216,7 +1216,7 @@ func loadCUFiles(db *sql.DB, ids []int64) (map[int64][]*mdbmodels.File, error) {
 	// Load from DB
 	allFiles, err := mdbmodels.Files(db,
 		SECURE_PUBLISHED_MOD,
-		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...)).
+		qm.WhereIn("content_unit_id in ? and removed_at is null", utils.ConvertArgsInt64(ids)...)).
 		All()
 	if err != nil {
 		return nil, errors.Wrap(err, "Load files from DB")

@@ -18,7 +18,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"github.com/vattle/sqlboiler/queries"
+	"github.com/volatiletech/sqlboiler/queries"
 
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )

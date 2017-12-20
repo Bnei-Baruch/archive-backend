@@ -18,8 +18,8 @@ import (
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"github.com/vattle/sqlboiler/queries"
-	"github.com/vattle/sqlboiler/queries/qm"
+	"github.com/volatiletech/sqlboiler/queries"
+	"github.com/volatiletech/sqlboiler/queries/qm"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"

@@ -7,8 +7,8 @@ This is a modified version of the github.com/Bnei-Baruch/mdb/api/registry.go
 
 import (
 	"github.com/pkg/errors"
-	"github.com/vattle/sqlboiler/boil"
-	"github.com/vattle/sqlboiler/queries/qm"
+	"github.com/volatiletech/sqlboiler/boil"
+	"github.com/volatiletech/sqlboiler/queries/qm"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )

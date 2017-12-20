@@ -1,3 +1,6 @@
+/sites/mdb-links/logs/nginx-*.log
+/sites/archive-unzip/logs/nginx-*.log
+/sites/imaginary/logs/nginx-*.log
 /sites/archive-backend/logs/nginx-*.log {
     size 10M
     missingok

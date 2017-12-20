@@ -74,3 +74,9 @@ There are two more dependencies required to build index:
 1) Open Office (soffice binary) - to convert all doc to docx.
 2) python-docx pyton library - to get text from docx
   - pip install python-docx
+
+
+
+## License
+
+MIT

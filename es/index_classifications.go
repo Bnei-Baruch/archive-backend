@@ -8,7 +8,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/golang/sync/errgroup"
 	"github.com/pkg/errors"
-	"github.com/vattle/sqlboiler/queries/qm"
+	"github.com/volatiletech/sqlboiler/queries/qm"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"

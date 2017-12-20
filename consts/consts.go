@@ -21,6 +21,7 @@ const (
 	CT_PICNIC             = "PICNIC"
 	CT_UNITY_DAY          = "UNITY_DAY"
 	CT_CLIPS              = "CLIPS"
+	CT_ARTICLES           = "ARTICLES"
 
 	// Content Unit Types
 	CT_LESSON_PART           = "LESSON_PART"
@@ -32,12 +33,13 @@ const (
 	CT_MEAL                  = "MEAL"
 	CT_VIDEO_PROGRAM_CHAPTER = "VIDEO_PROGRAM_CHAPTER"
 	CT_FULL_LESSON           = "FULL_LESSON"
-	CT_TEXT                  = "TEXT"
+	CT_ARTICLE               = "ARTICLE"
 	CT_EVENT_PART            = "EVENT_PART"
 	CT_UNKNOWN               = "UNKNOWN"
 	CT_CLIP                  = "CLIP"
 	CT_TRAINING              = "TRAINING"
 	CT_KITEI_MAKOR           = "KITEI_MAKOR"
+	CT_PUBLICATION           = "PUBLICATION"
 
 	// Content Role types
 	CR_LECTURER = "LECTURER"
