@@ -136,6 +136,7 @@ type Collection struct {
 	FullAddress     string         `json:"full_address,omitempty"`
 	Genres          []string       `json:"genres,omitempty"`
 	DefaultLanguage string         `json:"default_language,omitempty"`
+	HolidayID       string         `json:"holiday_id,omitempty"`
 	ContentUnits    []*ContentUnit `json:"content_units,omitempty"`
 }
 
