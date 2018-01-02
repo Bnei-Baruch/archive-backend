@@ -708,6 +708,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendCollectionsFilterMods(db, &mods, r.CollectionsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
@@ -1053,7 +1056,29 @@ func appendGenresProgramsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f G
 		}
 	}
 
-	// find all nested collection_ids
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods,
+			qm.InnerJoin("collections_content_units ccu ON id = ccu.content_unit_id"),
+			qm.WhereIn("ccu.collection_id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+
+	return nil
+}
+
+func appendCollectionsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f CollectionsFilter) error {
+	if len(f.Collections) == 0 {
+		return nil
+	}
+
+	// convert collections uids to ids
+	var ids pq.Int64Array
+	q := `SELECT array_agg(DISTINCT id) FROM collections WHERE uid = ANY($1)`
+	err := queries.Raw(exec, q, pq.Array(f.Collections)).QueryRow().Scan(&ids)
+	if err != nil {
+		return err
+	}
 
 	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty

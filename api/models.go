@@ -74,6 +74,10 @@ type GenresProgramsFilter struct {
 	Programs []string `json:"programs" form:"program" binding:"omitempty"`
 }
 
+type CollectionsFilter struct {
+	Collections []string `json:"collections" form:"collection" binding:"omitempty"`
+}
+
 type CollectionsRequest struct {
 	ListRequest
 	IDsFilter
@@ -95,6 +99,7 @@ type ContentUnitsRequest struct {
 	SourcesFilter
 	TagsFilter
 	GenresProgramsFilter
+	CollectionsFilter
 }
 
 type ContentUnitsResponse struct {
