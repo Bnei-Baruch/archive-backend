@@ -71,7 +71,15 @@ func (drf *DateRangeFilter) Range() (time.Time, time.Time, error) {
 
 type GenresProgramsFilter struct {
 	Genres   []string `json:"genres" form:"genre" binding:"omitempty"`
-	Programs []string `json:"programs" form:"program" binding:"omitempty"`
+	Programs []string `json:"programs" form:"program" binding:"omitempty,dive,len=8"`
+}
+
+type CollectionsFilter struct {
+	Collections []string `json:"collections" form:"collection" binding:"omitempty,dive,len=8"`
+}
+
+type PublishersFilter struct {
+	Publishers []string `json:"publishers" form:"publisher" binding:"omitempty,dive,len=8"`
 }
 
 type CollectionsRequest struct {
@@ -95,6 +103,8 @@ type ContentUnitsRequest struct {
 	SourcesFilter
 	TagsFilter
 	GenresProgramsFilter
+	CollectionsFilter
+	PublishersFilter
 }
 
 type ContentUnitsResponse struct {
@@ -107,6 +117,15 @@ type LessonsRequest struct {
 	DateRangeFilter
 	SourcesFilter
 	TagsFilter
+}
+
+type PublishersRequest struct {
+	ListRequest
+}
+
+type PublishersResponse struct {
+	ListResponse
+	Publishers []*Publisher `json:"publishers"`
 }
 
 type HierarchyRequest struct {
@@ -123,6 +142,10 @@ func NewContentUnitsResponse() *ContentUnitsResponse {
 	return &ContentUnitsResponse{ContentUnits: make([]*ContentUnit, 0)}
 }
 
+func NewPublishersResponse() *PublishersResponse {
+	return &PublishersResponse{Publishers: make([]*Publisher, 0)}
+}
+
 type Collection struct {
 	ID              string         `json:"id"`
 	ContentType     string         `json:"content_type"`
@@ -136,6 +159,7 @@ type Collection struct {
 	FullAddress     string         `json:"full_address,omitempty"`
 	Genres          []string       `json:"genres,omitempty"`
 	DefaultLanguage string         `json:"default_language,omitempty"`
+	HolidayID       string         `json:"holiday_id,omitempty"`
 	ContentUnits    []*ContentUnit `json:"content_units,omitempty"`
 }
 
@@ -152,6 +176,7 @@ type ContentUnit struct {
 	Collections      map[string]*Collection  `json:"collections,omitempty"`
 	Sources          []string                `json:"sources,omitempty"`
 	Tags             []string                `json:"tags,omitempty"`
+	Publishers       []string                `json:"publishers,omitempty"`
 	SourceUnits      map[string]*ContentUnit `json:"source_units,omitempty"`
 	DerivedUnits     map[string]*ContentUnit `json:"derived_units,omitempty"`
 }
@@ -193,6 +218,13 @@ type Tag struct {
 	Children  []*Tag      `json:"children,omitempty"`
 	ID        int64       `json:"-"`
 	ParentID  null.Int64  `json:"-"`
+}
+
+type Publisher struct {
+	UID         string      `json:"id"`
+	Name        null.String `json:"name"`
+	Description null.String `json:"description,omitempty"`
+	ID          int64       `json:"-"`
 }
 
 type CollectionUpdateStatus struct {

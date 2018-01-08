@@ -13,6 +13,7 @@ type CollectionProperties struct {
 	FullAddress     string    `json:"full_address"`
 	Genres          []string  `json:"genres"`
 	DefaultLanguage string    `json:"default_language"`
+	HolidayTag      string    `json:"holiday_tag"`
 }
 
 type ContentUnitProperties struct {

@@ -78,12 +78,15 @@ func ContentUnitHandler(c *gin.Context) {
 		qm.Where("uid = ?", uid),
 		qm.Load("Sources",
 			"Tags",
+			"Publishers",
 			"CollectionsContentUnits",
 			"CollectionsContentUnits.Collection",
 			"DerivedContentUnitDerivations",
 			"DerivedContentUnitDerivations.Source",
+			"DerivedContentUnitDerivations.Source.Publishers",
 			"SourceContentUnitDerivations",
-			"SourceContentUnitDerivations.Derived")).
+			"SourceContentUnitDerivations.Derived",
+			"SourceContentUnitDerivations.Derived.Publishers")).
 		One()
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -114,6 +117,12 @@ func ContentUnitHandler(c *gin.Context) {
 				return
 			}
 
+			// publishers
+			scu.Publishers = make([]string, len(su.R.Publishers))
+			for i, x := range su.R.Publishers {
+				scu.Publishers[i] = x.UID
+			}
+
 			// Dirty hack for unique mapping - needs to parse in client...
 			key := fmt.Sprintf("%s____%s", su.UID, cud.Name)
 			u.SourceUnits[key] = scu
@@ -129,6 +138,12 @@ func ContentUnitHandler(c *gin.Context) {
 			if err != nil {
 				NewInternalError(err).Abort(c)
 				return
+			}
+
+			// publishers
+			dcu.Publishers = make([]string, len(du.R.Publishers))
+			for i, x := range du.R.Publishers {
+				dcu.Publishers[i] = x.UID
 			}
 
 			// Dirty hack for unique mapping - needs to parse in client...
@@ -244,6 +259,12 @@ func ContentUnitHandler(c *gin.Context) {
 		u.Tags[i] = x.UID
 	}
 
+	// publishers
+	u.Publishers = make([]string, len(cu.R.Publishers))
+	for i, x := range cu.R.Publishers {
+		u.Publishers[i] = x.UID
+	}
+
 	c.JSON(http.StatusOK, u)
 }
 
@@ -288,6 +309,16 @@ func LessonsHandler(c *gin.Context) {
 		resp, err := handleContentUnits(c.MustGet("MDB_DB").(*sql.DB), cur)
 		concludeRequest(c, resp, err)
 	}
+}
+
+func PublishersHandler(c *gin.Context) {
+	var r PublishersRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	resp, err := handlePublishers(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
 }
 
 func IsTokenStart(i int, runes []rune, lastQuote rune) bool {
@@ -708,6 +739,12 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendCollectionsFilterMods(db, &mods, r.CollectionsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
@@ -812,6 +849,69 @@ func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]
 	}
 
 	return cus, nil
+}
+
+func handlePublishers(db *sql.DB, r PublishersRequest) (*PublishersResponse, *HttpError) {
+	total, err := mdbmodels.Publishers(db).Count()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	if total == 0 {
+		return NewPublishersResponse(), nil
+	}
+
+	// order, limit, offset
+	mods := make([]qm.QueryMod, 0)
+	r.OrderBy = "id"
+	_, offset, err := appendListMods(&mods, r.ListRequest)
+	if err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if int64(offset) >= total {
+		return NewPublishersResponse(), nil
+	}
+
+	// Eager loading
+	mods = append(mods, qm.Load("PublisherI18ns"))
+
+	// data query
+	publishers, err := mdbmodels.Publishers(db, mods...).All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// response
+	ps := make([]*Publisher, len(publishers))
+	for i := range publishers {
+		p := publishers[i]
+
+		pp := &Publisher{
+			UID: p.UID,
+		}
+
+		// i18ns
+		for _, l := range consts.LANG_ORDER[r.Language] {
+			for _, i18n := range p.R.PublisherI18ns {
+				if i18n.Language == l {
+					if !pp.Name.Valid && i18n.Name.Valid {
+						pp.Name = i18n.Name
+					}
+					if !pp.Description.Valid && i18n.Description.Valid {
+						pp.Description = i18n.Description
+					}
+				}
+			}
+		}
+
+		ps[i] = pp
+	}
+
+	resp := &PublishersResponse{
+		ListResponse: ListResponse{Total: total},
+		Publishers:   ps,
+	}
+
+	return resp, nil
 }
 
 func handleRecentlyUpdated(db *sql.DB) ([]CollectionUpdateStatus, *HttpError) {
@@ -1053,7 +1153,29 @@ func appendGenresProgramsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f G
 		}
 	}
 
-	// find all nested collection_ids
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods,
+			qm.InnerJoin("collections_content_units ccu ON id = ccu.content_unit_id"),
+			qm.WhereIn("ccu.collection_id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+
+	return nil
+}
+
+func appendCollectionsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f CollectionsFilter) error {
+	if len(f.Collections) == 0 {
+		return nil
+	}
+
+	// convert collections uids to ids
+	var ids pq.Int64Array
+	q := `SELECT array_agg(DISTINCT id) FROM collections WHERE uid = ANY($1) AND secure = 0 AND published IS TRUE`
+	err := queries.Raw(exec, q, pq.Array(f.Collections)).QueryRow().Scan(&ids)
+	if err != nil {
+		return err
+	}
 
 	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
@@ -1061,6 +1183,32 @@ func appendGenresProgramsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f G
 		*mods = append(*mods,
 			qm.InnerJoin("collections_content_units ccu ON id = ccu.content_unit_id"),
 			qm.WhereIn("ccu.collection_id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+
+	return nil
+}
+
+func appendPublishersFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f PublishersFilter) error {
+	if len(f.Publishers) == 0 {
+		return nil
+	}
+
+	// convert publisher uids to ids
+	var ids pq.Int64Array
+	q := `SELECT array_agg(DISTINCT id) FROM publishers WHERE uid = ANY($1)`
+	err := queries.Raw(exec, q, pq.Array(f.Publishers)).QueryRow().Scan(&ids)
+	if err != nil {
+		return err
+	}
+
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		q := `content_unit_derivations cud ON id = cud.source_id AND cud.derived_id IN
+(SELECT cu.id FROM content_units cu
+INNER JOIN content_units_publishers cup ON cu.id = cup.content_unit_id
+AND cu.secure = 0 AND cu.published IS TRUE AND cup.publisher_id = ANY(?))`
+		*mods = append(*mods, qm.InnerJoin(q, ids))
 	}
 
 	return nil
@@ -1090,6 +1238,7 @@ func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 		FullAddress:     props.FullAddress,
 		Genres:          props.Genres,
 		DefaultLanguage: props.DefaultLanguage,
+		HolidayID:       props.HolidayTag,
 	}
 
 	if !props.FilmDate.IsZero() {
