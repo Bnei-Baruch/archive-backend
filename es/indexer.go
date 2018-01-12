@@ -1,72 +1,126 @@
 package es
 
+import (
+	"github.com/Bnei-Baruch/archive-backend/consts"
+)
+
+type Indexer struct {
+    indices []Index
+}
+
+func MakeProdIndexer() *Indexer {
+    return MakeIndexer("prod", []string{consts.ES_CLASSIFICATIONS_INDEX, consts.ES_UNITS_INDEX})
+}
+
+// Receives namespace and list of indexes names.
+func MakeIndexer(namespace string, names []string) *Indexer {
+    indexer := new(Indexer)
+    indexer.indices = make([]Index, len(names))
+    for i, name := range names {
+        if name == consts.ES_CLASSIFICATIONS_INDEX {
+            // indexer.indices[i] = MakeCollectionsIndex(namespace)
+        } else if name == consts.ES_UNITS_INDEX {
+            indexer.indices[i] = MakeContentUnitsIndex(namespace)
+        }
+    }
+    return indexer
+}
+
+func (indexer *Indexer) ReindexAll() error {
+    for _, index := range indexer.indices {
+        // Does indexing things in parallel will make things faster?
+        err := index.ReindexAll()
+        if err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
+func (indexer *Indexer) CreateIndexes() error {
+    for _, index := range indexer.indices {
+        if err := index.CreateIndex(); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
+func (indexer *Indexer) DeleteIndexes() error {
+    for _, index := range indexer.indices {
+        if err := index.DeleteIndex(); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
 // Set of MDB event handlers to incrementally change all indexes.
-
-func CollectionAdd(uid string) error {
+func (indexer *Indexer) CollectionAdd(uid string) error {
     return nil
 }
 
-func CollectionUpdate(uid string) error {
+func (indexer *Indexer) CollectionUpdate(uid string) error {
     return nil
 }
 
-func CollectionDelete(uid string) error {
+func (indexer *Indexer) CollectionDelete(uid string) error {
     return nil
 }
 
-func ContentUnitAdd(uid string) error {
+func (indexer *Indexer) ContentUnitAdd(uid string) error {
     return nil
 }
 
-func ContentUnitUpdate(uid string) error {
+func (indexer *Indexer) ContentUnitUpdate(uid string) error {
     return nil
 }
 
-func ContentUnitDelete(uid string) error {
+func (indexer *Indexer) ContentUnitDelete(uid string) error {
     return nil
 }
 
-func FileAdd(uid string) error {
+func (indexer *Indexer) FileAdd(uid string) error {
     return nil
 }
 
-func FileUpdate(uid string) error {
+func (indexer *Indexer) FileUpdate(uid string) error {
     return nil
 }
 
-func FileDelete(uid string) error {
+func (indexer *Indexer) FileDelete(uid string) error {
     return nil
 }
 
-func SourceAdd(uid string) error {
+func (indexer *Indexer) SourceAdd(uid string) error {
     return nil
 }
 
-func SourceUpdate(uid string) error {
+func (indexer *Indexer) SourceUpdate(uid string) error {
     return nil
 }
 
-func TagAdd(uid string) error {
+func (indexer *Indexer) TagAdd(uid string) error {
     return nil
 }
 
-func TagUpdate(uid string) error {
+func (indexer *Indexer) TagUpdate(uid string) error {
     return nil
 }
 
-func PersonAdd(uid string) error {
+func (indexer *Indexer) PersonAdd(uid string) error {
     return nil
 }
 
-func PersonUpdate(uid string) error {
+func (indexer *Indexer) PersonUpdate(uid string) error {
     return nil
 }
 
-func PublisherAdd(uid string) error {
+func (indexer *Indexer) PublisherAdd(uid string) error {
     return nil
 }
 
-func PublisherUpdate(uid string) error {
+func (indexer *Indexer) PublisherUpdate(uid string) error {
     return nil
 }
 

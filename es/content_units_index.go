@@ -3,18 +3,16 @@ package es
 import (
 	"bytes"
 	"context"
+    "fmt"
 	"database/sql"
 	"encoding/json"
-	"fmt"
-	"math"
+    "math"
 	"os"
 	"os/exec"
 	"path"
-	"sync/atomic"
-	"time"
+    "time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/golang/sync/errgroup"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -27,112 +25,61 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-var CLASSIFICATIONS_MANAGER = new(ClassificationsManager)
-
-func IndexUnits() {
-	clock := Init()
-
-	for i := range consts.ALL_KNOWN_LANGS {
-		lang := consts.ALL_KNOWN_LANGS[i]
-		name := IndexName(consts.ES_UNITS_INDEX, lang)
-		mappings := fmt.Sprintf("data/es/mappings/units/units-%s.json", lang)
-		utils.Must(recreateIndex(name, mappings))
-	}
-
-	log.Info("Loading content units classifications")
-	utils.Must(CLASSIFICATIONS_MANAGER.Load())
-
-	docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
-
-	ctx := context.Background()
-	utils.Must(indexUnits(ctx))
-
-	for i := range consts.ALL_KNOWN_LANGS {
-		lang := consts.ALL_KNOWN_LANGS[i]
-		name := IndexName(consts.ES_UNITS_INDEX, lang)
-		utils.Must(finishIndexing(name))
-	}
-
-	Shutdown()
-	log.Info("Success")
-	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+func MakeContentUnitsIndex(namespace string) *ContentUnitsIndex {
+    cui := new(ContentUnitsIndex)
+    cui.baseName = consts.ES_UNITS_INDEX
+    cui.namespace = namespace
+    cui.docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
+    return cui
 }
 
-var total uint64 = 0
-var indexed uint64 = 0
-var withTranscript uint64 = 0
-
-func indexUnits(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
-
-	unitsCH := make(chan *mdbmodels.ContentUnit)
-	g.Go(func() error {
-		defer close(unitsCH)
-
-		count, err := mdbmodels.ContentUnits(db).Count()
-		if err != nil {
-			return errors.Wrap(err, "Count units in mdb")
-		}
-		log.Infof("%d units in MDB", count)
-
-		units, err := mdbmodels.ContentUnits(db,
-			qm.Load("ContentUnitI18ns"),
-            qm.Load("CollectionsContentUnits"),
-            qm.Load("CollectionsContentUnits.Collection"),
-			qm.Where("secure = 0"), qm.And("published IS TRUE")).
-			All()
-		if err != nil {
-			return errors.Wrap(err, "Fetch units from mdb")
-		}
-		log.Infof("Indexing %d units (secure and published).", len(units))
-		atomic.AddUint64(&total, uint64(len(units)))
-
-		for i := range units {
-			unit := units[i]
-
-			select {
-			case unitsCH <- unit:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-
-		return nil
-	})
-
-	for i := 1; i <= 5; i++ {
-		g.Go(func() error {
-			for unit := range unitsCH {
-				if err := indexUnit(unit); err != nil {
-					log.Errorf("Index unit error: %s", err.Error())
-					return err
-				}
-				atomic.AddUint64(&indexed, 1)
-
-				if atomic.LoadUint64(&indexed)%100 == 0 {
-					log.Infof("Indexed %d / %d. With transcripts %d.", indexed, total, withTranscript)
-				}
-
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				default:
-				}
-			}
-
-			return nil
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		return err
-	}
-	return nil
+type ContentUnitsIndex struct {
+    BaseIndex
+    indexData *IndexData
+    docFolder string
 }
 
-func ParseDocx(uid string) (string, error) {
+func (index *ContentUnitsIndex) ReindexAll() error {
+    return index.Reindex("cu.secure = 0 AND cu.published IS TRUE")
+}
+
+// After scoping
+func (index *ContentUnitsIndex) Reindex(scope string) error {
+    units, err := mdbmodels.ContentUnits(db,
+        qm.Load("ContentUnitI18ns"),
+        qm.Load("CollectionsContentUnits"),
+        qm.Load("CollectionsContentUnits.Collection"),
+        qm.Where(scope)).
+        All()
+    if err != nil {
+        return errors.Wrap(err, "Fetch units from mdb")
+    }
+    log.Infof("Reindexing %d units (secure and published).", len(units))
+
+    index.indexData = new(IndexData)
+    err = index.indexData.Load(scope)
+    if err != nil {
+        return err
+    }
+
+    for _, unit := range units {
+        if err = index.RemoveFromIndex(unit); err != nil {
+            return err
+        }
+        if err = index.IndexUnit(unit); err != nil {
+            return err
+        }
+    }
+    return errors.New("Not implemented.")
+}
+
+func (index* ContentUnitsIndex) RemoveFromIndex(cu *mdbmodels.ContentUnit) error {
+    return errors.New("Not implemented.")
+}
+
+func (index* ContentUnitsIndex) ParseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
-	docxPath := path.Join(docFolder, docxFilename)
+	docxPath := path.Join(index.docFolder, docxFilename)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
 		return "", nil
 	}
@@ -149,7 +96,7 @@ func ParseDocx(uid string) (string, error) {
 	return stdout.String(), nil
 }
 
-func collectionsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
+func (index* ContentUnitsIndex) collectionsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	ret := make([]string, len(collectionsContentUnits))
 	for i, ccu := range collectionsContentUnits {
 		ret[i] = mdb.CONTENT_TYPE_REGISTRY.ByID[ccu.R.Collection.TypeID].Name
@@ -157,8 +104,8 @@ func collectionsContentTypes(collectionsContentUnits mdbmodels.CollectionsConten
 	return ret
 }
 
-func indexUnit(cu *mdbmodels.ContentUnit) error {
-	//// create documents in each language with available translation
+func (index* ContentUnitsIndex) IndexUnit(cu *mdbmodels.ContentUnit) error {
+	// create documents in each language with available translation
 	i18nMap := make(map[string]ContentUnit)
 	for i := range cu.R.ContentUnitI18ns {
 		i18n := cu.R.ContentUnitI18ns[i]
@@ -167,7 +114,7 @@ func indexUnit(cu *mdbmodels.ContentUnit) error {
 				MDB_UID:                 cu.UID,
 				Name:                    i18n.Name.String,
 				ContentType:             mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
-				CollectionsContentTypes: collectionsContentTypes(cu.R.CollectionsContentUnits),
+				CollectionsContentTypes: index.collectionsContentTypes(cu.R.CollectionsContentUnits),
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
@@ -198,25 +145,28 @@ func indexUnit(cu *mdbmodels.ContentUnit) error {
 				}
 			}
 
-			if val, ok := CLASSIFICATIONS_MANAGER.Sources[cu.ID]; ok {
+			if val, ok := index.indexData.Sources[cu.ID]; ok {
 				unit.Sources = val
 			}
-			if val, ok := CLASSIFICATIONS_MANAGER.Tags[cu.ID]; ok {
+			if val, ok := index.indexData.Tags[cu.ID]; ok {
 				unit.Tags = val
 			}
-			if val, ok := CLASSIFICATIONS_MANAGER.Persons[cu.ID]; ok {
+			if val, ok := index.indexData.Persons[cu.ID]; ok {
 				unit.Persons = val
 			}
-			if val, ok := CLASSIFICATIONS_MANAGER.Translations[cu.ID]; ok {
+			if val, ok := index.indexData.Translations[cu.ID]; ok {
 				unit.Translations = val
 			}
-			if byLang, ok := CLASSIFICATIONS_MANAGER.Transcripts[cu.ID]; ok {
+			if byLang, ok := index.indexData.Transcripts[cu.ID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
-					unit.Transcript, err = ParseDocx(val[0])
-					if err == nil && unit.Transcript != "" {
-						atomic.AddUint64(&withTranscript, 1)
-					}
+					unit.Transcript, err = index.ParseDocx(val[0])
+                    if err != nil {
+                        log.Warnf("Error parsing docx: %s", val[0])
+                    }
+					// if err == nil && unit.Transcript != "" {
+					// 	atomic.AddUint64(&withTranscript, 1)
+					// }
 				}
 			}
 
@@ -224,9 +174,9 @@ func indexUnit(cu *mdbmodels.ContentUnit) error {
 		}
 	}
 
-	// index each document in its language index
+	// Index each document in its language index
 	for k, v := range i18nMap {
-		name := IndexName(consts.ES_UNITS_INDEX, k)
+		name := index.indexName(k)
 		resp, err := esc.Index().
 			Index(name).
 			Type("content_units").
@@ -243,7 +193,7 @@ func indexUnit(cu *mdbmodels.ContentUnit) error {
 	return nil
 }
 
-type ClassificationsManager struct {
+type IndexData struct {
 	Sources      map[int64][]string
 	Tags         map[int64][]string
 	Persons      map[int64][]string
@@ -251,30 +201,30 @@ type ClassificationsManager struct {
 	Transcripts  map[int64]map[string][]string
 }
 
-func (cm *ClassificationsManager) Load() error {
+func (cm *IndexData) Load(scope string) error {
 	var err error
 
-	cm.Sources, err = cm.loadSources()
+	cm.Sources, err = cm.loadSources(scope)
 	if err != nil {
 		return err
 	}
 
-	cm.Tags, err = cm.loadTags()
+	cm.Tags, err = cm.loadTags(scope)
 	if err != nil {
 		return err
 	}
 
-	cm.Persons, err = cm.loadPersons()
+	cm.Persons, err = cm.loadPersons(scope)
 	if err != nil {
 		return err
 	}
 
-	cm.Translations, err = cm.loadTranslations()
+	cm.Translations, err = cm.loadTranslations(scope)
 	if err != nil {
 		return err
 	}
 
-	cm.Transcripts, err = cm.loadTranscripts()
+	cm.Transcripts, err = cm.loadTranscripts(scope)
 	if err != nil {
 		return err
 	}
@@ -282,8 +232,8 @@ func (cm *ClassificationsManager) Load() error {
 	return nil
 }
 
-func (cm *ClassificationsManager) loadSources() (map[int64][]string, error) {
-	rows, err := queries.Raw(db, `
+func (cm *IndexData) loadSources(scope string) (map[int64][]string, error) {
+	rows, err := queries.Raw(db, fmt.Sprintf(`
 WITH RECURSIVE rec_sources AS (
   SELECT
     s.id,
@@ -303,9 +253,12 @@ WITH RECURSIVE rec_sources AS (
 SELECT
   cus.content_unit_id,
   array_agg(DISTINCT item)
-FROM content_units_sources cus INNER JOIN rec_sources AS rs ON cus.source_id = rs.id
-  , unnest(rs.path) item
-GROUP BY cus.content_unit_id;`).Query()
+FROM content_units_sources cus
+    INNER JOIN rec_sources AS rs ON cus.source_id = rs.id
+    , unnest(rs.path) item
+    INNER JOIN content_units AS cu ON cus.content_unit_id = cu.id
+WHERE %s
+GROUP BY cus.content_unit_id;`, scope)).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load sources")
@@ -315,8 +268,8 @@ GROUP BY cus.content_unit_id;`).Query()
 	return cm.loadMap(rows)
 }
 
-func (cm *ClassificationsManager) loadTags() (map[int64][]string, error) {
-	rows, err := queries.Raw(db, `
+func (cm *IndexData) loadTags(scope string) (map[int64][]string, error) {
+	rows, err := queries.Raw(db, fmt.Sprintf(`
 WITH RECURSIVE rec_tags AS (
   SELECT
     t.id,
@@ -334,9 +287,12 @@ WITH RECURSIVE rec_tags AS (
 SELECT
   cut.content_unit_id,
   array_agg(DISTINCT item)
-FROM content_units_tags cut INNER JOIN rec_tags AS rt ON cut.tag_id = rt.id
-  , unnest(rt.path) item
-GROUP BY cut.content_unit_id;`).Query()
+FROM content_units_tags cut
+    INNER JOIN rec_tags AS rt ON cut.tag_id = rt.id
+    , unnest(rt.path) item
+    INNER JOIN content_units AS cu ON cut.content_unit_id = cu.id
+WHERE %s
+GROUP BY cut.content_unit_id;`, scope)).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load tags")
@@ -346,13 +302,16 @@ GROUP BY cut.content_unit_id;`).Query()
 	return cm.loadMap(rows)
 }
 
-func (cm *ClassificationsManager) loadPersons() (map[int64][]string, error) {
-	rows, err := queries.Raw(db, `
+func (cm *IndexData) loadPersons(scope string) (map[int64][]string, error) {
+	rows, err := queries.Raw(db, fmt.Sprintf(`
 SELECT
   cup.content_unit_id,
   array_agg(p.uid)
-FROM content_units_persons cup INNER JOIN persons p ON cup.person_id = p.id
-GROUP BY cup.content_unit_id;`).Query()
+FROM content_units_persons cup
+    INNER JOIN persons p ON cup.person_id = p.id
+    INNER JOIN content_units AS cu ON cup.content_unit_id = cu.id
+WHERE %s
+GROUP BY cup.content_unit_id;`, scope)).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load persons")
@@ -362,14 +321,15 @@ GROUP BY cup.content_unit_id;`).Query()
 	return cm.loadMap(rows)
 }
 
-func (cm *ClassificationsManager) loadTranslations() (map[int64][]string, error) {
-	rows, err := queries.Raw(db, `
+func (cm *IndexData) loadTranslations(scope string) (map[int64][]string, error) {
+	rows, err := queries.Raw(db, fmt.Sprintf(`
 SELECT
   content_unit_id,
   array_agg(DISTINCT language)
 FROM files
-WHERE language NOT IN ('zz', 'xx') AND content_unit_id IS NOT NULL AND secure=0 AND published IS TRUE
-GROUP BY content_unit_id;`).Query()
+    INNER JOIN content_units AS cu ON files.content_unit_id = cu.id
+WHERE language NOT IN ('zz', 'xx') AND content_unit_id IS NOT NULL AND %s
+GROUP BY content_unit_id;`, scope)).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load translations")
@@ -379,7 +339,7 @@ GROUP BY content_unit_id;`).Query()
 	return cm.loadMap(rows)
 }
 
-func (cm *ClassificationsManager) loadMap(rows *sql.Rows) (map[int64][]string, error) {
+func (cm *IndexData) loadMap(rows *sql.Rows) (map[int64][]string, error) {
 	m := make(map[int64][]string)
 
 	for rows.Next() {
@@ -398,19 +358,20 @@ func (cm *ClassificationsManager) loadMap(rows *sql.Rows) (map[int64][]string, e
 	return m, nil
 }
 
-func (cm *ClassificationsManager) loadTranscripts() (map[int64]map[string][]string, error) {
-	rows, err := queries.Raw(db, `
+func (cm *IndexData) loadTranscripts(scope string) (map[int64]map[string][]string, error) {
+	rows, err := queries.Raw(db, fmt.Sprintf(`
 SELECT
     f.uid,
     f.name,
     f.language,
     cu.id
-FROM files as f, content_units as cu
+FROM files AS f
+    INNER JOIN content_units AS cu ON f.content_unit_id = cu.id
 WHERE name ~ '.docx?' AND
     f.language NOT IN ('zz', 'xx') AND
     f.content_unit_id IS NOT NULL AND
-    f.secure=0 AND f.published IS TRUE AND
-    f.content_unit_id = cu.id AND cu.type_id != 31;`).Query()
+    cu.type_id != 31 AND
+    %s;`, scope)).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load transcripts")

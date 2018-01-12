@@ -1,5 +1,6 @@
 #!/usr/bin/python2
 
+# TODO: Rewrite this into go.
 # This file creates all mapping for Elastic. It is required because some
 # features are supported for some languages but not others. Also specific
 # languages need specific treatment such as transliteration for cyrillic other

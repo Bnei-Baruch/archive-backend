@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 )
 
@@ -17,5 +18,5 @@ func init() {
 }
 
 func indexClassificationsFn(cmd *cobra.Command, args []string) {
-	es.IndexClassifications()
+	es.IndexCmd(consts.ES_CLASSIFICATIONS_INDEX)
 }
