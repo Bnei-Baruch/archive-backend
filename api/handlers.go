@@ -1300,6 +1300,10 @@ func mdbToFile(file *mdbmodels.File) (*File, error) {
 }
 
 func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.CollectionI18n, error) {
+	if len(ids) == 0 {
+		return make(map[int64]map[string]*mdbmodels.CollectionI18n, 0), nil
+	}
+
 	// Load from DB
 	i18ns, err := mdbmodels.CollectionI18ns(db,
 		qm.WhereIn("collection_id in ?", utils.ConvertArgsInt64(ids)...),
