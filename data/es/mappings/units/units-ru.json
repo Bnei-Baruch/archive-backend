@@ -30,7 +30,6 @@
                     "type": "keyword"
                 }, 
                 "mdb_uid": {
-                    "index": false, 
                     "type": "keyword"
                 }, 
                 "sources": {

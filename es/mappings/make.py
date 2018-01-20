@@ -167,7 +167,6 @@ UNITS_TEMPLATE = {
       "properties": {
         "mdb_uid": {
           "type": "keyword",
-          "index": False,
         },
         "name": {
           "type": "text",
@@ -245,7 +244,6 @@ CLASSIFICATION_TEMPLATE = {
       "properties": {
         "mdb_uid": {
           "type": "keyword",
-          "index": False,
         },
         "classification_type": {
           "type": "keyword",
@@ -273,7 +271,6 @@ CLASSIFICATION_TEMPLATE = {
       "properties": {
         "mdb_uid": {
           "type": "keyword",
-          "index": False,
         },
         "classification_type": {
           "type": "keyword",

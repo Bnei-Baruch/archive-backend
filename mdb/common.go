@@ -1,4 +1,4 @@
-package es
+package mdb
 
 import (
 	"database/sql"
@@ -10,17 +10,16 @@ import (
 	"github.com/volatiletech/sqlboiler/boil"
 	"gopkg.in/olivere/elastic.v5"
 
-	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 var (
-	db  *sql.DB
-	esc *elastic.Client
+	DB  *sql.DB
+	ESC *elastic.Client
 )
 
 func Init() time.Time {
-    return InitWithDefault(nil)
+	return InitWithDefault(nil)
 }
 
 func InitWithDefault(defaultDb *sql.DB) time.Time {
@@ -30,40 +29,39 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
 	//log.SetLevel(log.WarnLevel)
 
-    if defaultDb != nil {
-        db = defaultDb
-    } else {
-        log.Info("Setting up connection to MDB")
-        db, err = sql.Open("postgres", viper.GetString("mdb.url"))
-        utils.Must(err)
-        utils.Must(db.Ping())
-        boil.SetDB(db)
-        //boil.DebugMode = true
-    }
+	if defaultDb != nil {
+		DB = defaultDb
+	} else {
+		log.Info("Setting up connection to MDB")
+		DB, err = sql.Open("postgres", viper.GetString("mdb.url"))
+		utils.Must(err)
+		utils.Must(DB.Ping())
+	}
+	boil.SetDB(DB)
+	boil.DebugMode = viper.GetString("server.mode") == "debug"
+	log.Info("Initializing type registries")
+	utils.Must(InitTypeRegistries(DB))
 
+	// MOVE THIS CODE UNDER es PACKAGE.
 	log.Info("Setting up connection to ElasticSearch")
 	url := viper.GetString("elasticsearch.url")
-	esc, err = elastic.NewClient(
+	ESC, err = elastic.NewClient(
 		elastic.SetURL(url),
 		elastic.SetSniff(false),
 		elastic.SetHealthcheckInterval(10*time.Second),
 		elastic.SetErrorLog(log.StandardLogger()),
-		//elastic.SetInfoLog(log.StandardLogger()),
+		// elastic.SetInfoLog(log.StandardLogger()),
 	)
 	utils.Must(err)
 
-	esversion, err := esc.ElasticsearchVersion(url)
+	esversion, err := ESC.ElasticsearchVersion(url)
 	utils.Must(err)
 	log.Infof("Elasticsearch version %s", esversion)
-
-	log.Info("Initializing static data from MDB")
-	utils.Must(mdb.InitTypeRegistries(db))
 
 	return clock
 }
 
 func Shutdown() {
-	utils.Must(db.Close())
-	esc.Stop()
+	utils.Must(DB.Close())
+	ESC.Stop()
 }
-

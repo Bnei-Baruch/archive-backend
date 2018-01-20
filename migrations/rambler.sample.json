@@ -1,0 +1,11 @@
+{
+  "driver": "postgresql",
+  "protocol": "tcp",
+  "host": "localhost",
+  "port": 5432,
+  "user": "some use name",
+  "password": "some pass word",
+  "database": "mdb",
+  "directory": "migrations",
+  "table": "migrations"
+}

@@ -33,7 +33,6 @@
                     "type": "keyword"
                 }, 
                 "mdb_uid": {
-                    "index": false, 
                     "type": "keyword"
                 }, 
                 "description": {
@@ -65,7 +64,6 @@
                     "type": "completion"
                 }, 
                 "mdb_uid": {
-                    "index": false, 
                     "type": "keyword"
                 }
             }
