@@ -41,18 +41,32 @@ type ContentUnitsIndex struct {
 }
 
 func (index *ContentUnitsIndex) ReindexAll() error {
-    return index.reindex("cu.secure = 0 AND cu.published IS TRUE", false)
+    if err := index.removeFromIndex(nil); err != nil {
+        return err
+    }
+    return index.addToIndex("cu.secure = 0 AND cu.published IS TRUE")
 }
 
-func (index *ContentUnitsIndex) Reindex(scope Scope) error {
+func (index *ContentUnitsIndex) AddToIndex(scope Scope) error {
     sqlScope := "cu.secure = 0 AND cu.published IS TRUE"
     if scope.ContentUnitUID != "" {
       sqlScope = fmt.Sprintf("%s AND cu.uid = '%s'", sqlScope, scope.ContentUnitUID)
     }
-    return index.reindex(sqlScope, true)
+    return index.addToIndex(sqlScope)
 }
 
-func (index *ContentUnitsIndex) reindex(sqlScope string, remove bool) error {
+func (index *ContentUnitsIndex) RemoveFromIndex(scope Scope) error {
+    var elasticScope elastic.Query
+    if scope.ContentUnitUID != "" {
+        elasticScope = elastic.NewTermQuery("mdb_uid", scope.ContentUnitUID)
+    } else {
+        // For now skip, otherwise. Next we will need to add more complex queries here.
+        return nil
+    }
+    return index.removeFromIndex(elasticScope)
+}
+
+func (index *ContentUnitsIndex) addToIndex(sqlScope string) error {
     var units []*mdbmodels.ContentUnit
     err := mdbmodels.NewQuery(mdb.DB,
         qm.From("content_units as cu"),
@@ -63,55 +77,39 @@ func (index *ContentUnitsIndex) reindex(sqlScope string, remove bool) error {
     if err != nil {
         return errors.Wrap(err, "Fetch units from mdb")
     }
-    log.Infof("Reindexing %d units (secure and published).", len(units))
+    log.Infof("Adding %d units.", len(units))
 
     index.indexData = new(IndexData)
     err = index.indexData.Load(sqlScope)
     if err != nil {
         return err
     }
-
-    uids := make([]string, len(units))
-    for i, cu := range units {
-        uids[i] = cu.UID
-    }
-
-    if remove {
-        if err := index.RemoveFromIndex(uids); err != nil {
-            return err
-        }
-    }
     for _, unit := range units {
-        if err := index.IndexUnit(unit); err != nil {
+        if err := index.indexUnit(unit); err != nil {
             return err
         }
     }
     return nil
 }
 
-func (index* ContentUnitsIndex) RemoveFromIndex(uids []string) error {
-    uidsI := make([]interface{}, len(uids))
-    for i, uid := range uids {
-        uidsI[i] = uid
-    }
+func (index* ContentUnitsIndex) removeFromIndex(elasticScope elastic.Query) error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
 		_, err := mdb.ESC.DeleteByQuery(indexName).
-            Query(elastic.NewTermsQuery("mdb_uid", uidsI...)).
+            Query(elasticScope).
             Do(context.TODO())
 		if err != nil {
-            return errors.Wrapf(err, "Remove from index %s %+v\n", indexName, uids)
+            return errors.Wrapf(err, "Remove from index %s %+v\n", indexName, elasticScope)
 		}
         // If not exists Deleted will be 0.
 		// if resp.Deleted != int64(len(uids)) {
 		// 	return errors.Errorf("Not deleted: %s %+v\n", indexName, uids)
 		// }
 	}
-
 	return nil
 }
 
-func (index* ContentUnitsIndex) ParseDocx(uid string) (string, error) {
+func (index* ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
 	docxPath := path.Join(index.docFolder, docxFilename)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
@@ -138,8 +136,8 @@ func (index* ContentUnitsIndex) collectionsContentTypes(collectionsContentUnits 
 	return ret
 }
 
-func (index* ContentUnitsIndex) IndexUnit(cu *mdbmodels.ContentUnit) error {
-    fmt.Printf("IndexUnit: %+v\n", cu)
+func (index* ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
+    fmt.Printf("indexUnit: %+v\n", cu)
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]ContentUnit)
 	for i := range cu.R.ContentUnitI18ns {
@@ -195,7 +193,7 @@ func (index* ContentUnitsIndex) IndexUnit(cu *mdbmodels.ContentUnit) error {
 			if byLang, ok := index.indexData.Transcripts[cu.ID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
-					unit.Transcript, err = index.ParseDocx(val[0])
+					unit.Transcript, err = index.parseDocx(val[0])
                     if err != nil {
                         log.Warnf("Error parsing docx: %s", val[0])
                     }

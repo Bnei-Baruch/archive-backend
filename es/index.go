@@ -18,7 +18,8 @@ type Scope struct {
 
 type Index interface {
 	ReindexAll() error
-	Reindex(scope Scope) error
+	AddToIndex(scope Scope) error
+	RemoveFromIndex(scope Scope) error
 	CreateIndex() error
 	DeleteIndex() error
 	RefreshIndex() error

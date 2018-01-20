@@ -82,7 +82,7 @@ func (indexer *Indexer) CollectionDelete(uid string) error {
 
 func (indexer *Indexer) ContentUnitAdd(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.Reindex(Scope{ContentUnitUID: uid}); err != nil {
+		if err := index.AddToIndex(Scope{ContentUnitUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -90,10 +90,23 @@ func (indexer *Indexer) ContentUnitAdd(uid string) error {
 }
 
 func (indexer *Indexer) ContentUnitUpdate(uid string) error {
+	for _, index := range indexer.indices {
+		if err := index.RemoveFromIndex(Scope{ContentUnitUID: uid}); err != nil {
+			return err
+		}
+		if err := index.AddToIndex(Scope{ContentUnitUID: uid}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (indexer *Indexer) ContentUnitDelete(uid string) error {
+	for _, index := range indexer.indices {
+		if err := index.RemoveFromIndex(Scope{ContentUnitUID: uid}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
