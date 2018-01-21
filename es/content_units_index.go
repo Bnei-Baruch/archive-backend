@@ -95,12 +95,15 @@ func (index *ContentUnitsIndex) addToIndex(sqlScope string) error {
 func (index* ContentUnitsIndex) removeFromIndex(elasticScope elastic.Query) error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
-		_, err := mdb.ESC.DeleteByQuery(indexName).
+		res, err := mdb.ESC.DeleteByQuery(indexName).
             Query(elasticScope).
             Do(context.TODO())
 		if err != nil {
             return errors.Wrapf(err, "Remove from index %s %+v\n", indexName, elasticScope)
 		}
+        if res.Deleted > 0 {
+            fmt.Printf("Deleted %d documents from %s.\n", res.Deleted, indexName)
+        }
         // If not exists Deleted will be 0.
 		// if resp.Deleted != int64(len(uids)) {
 		// 	return errors.Errorf("Not deleted: %s %+v\n", indexName, uids)

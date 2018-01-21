@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"database/sql"
+    "encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -236,6 +237,28 @@ func addContentUnit(cu ContentUnit) (string, error) {
 	return mdbContentUnit.UID, nil
 }
 
+func updateContentUnit(cu ContentUnit) (string, error) {
+    mdbContentUnit, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+    if err != nil {
+        return "", err
+    }
+    // Missing update fields. For now update only i18ns.
+	// if err := mdbContentUnit.Update(mdb.DB); err != nil {
+	// 	return "", err
+	// }
+	mdbContentUnitI18n, err := mdbmodels.FindContentUnitI18n(mdb.DB, mdbContentUnit.ID, "en")
+    if err != nil {
+        return "", err
+    }
+    mdbContentUnitI18n.Name = null.NewString(cu.Name, cu.Name != "")
+    mdbContentUnitI18n.Description = null.NewString(cu.Description, cu.Description != "")
+	if err := mdbContentUnitI18n.Update(mdb.DB); err != nil {
+		return "", err
+	}
+	return mdbContentUnit.UID, nil
+
+}
+
 func deleteContentUnits(UIDs []string) error {
 	UIDsI := make([]interface{}, len(UIDs))
 	for i, v := range UIDs {
@@ -258,56 +281,83 @@ func deleteContentUnits(UIDs []string) error {
 	return mdbmodels.ContentUnits(mdb.DB, qm.WhereIn("uid in ?", UIDsI...)).DeleteAll()
 }
 
+func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *Indexer, expectedNames []string) {
+    t := suite.T()
+    err := indexer.RefreshAll()
+	assert.Nil(t, err)
+    var res *elastic.SearchResult
+	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
+	assert.Nil(t, err)
+    names := make([]string, len(res.Hits.Hits))
+    for i, hit := range res.Hits.Hits {
+        var cu ContentUnit
+        json.Unmarshal(*hit.Source, &cu)
+        names[i] = cu.Name
+    }
+	assert.Equal(t, int64(len(expectedNames)), res.Hits.TotalHits)
+    assert.ElementsMatch(t, expectedNames, names)
+}
+
 func (suite *IndexerSuite) TestContentUnitsIndex() {
+    t := suite.T()
 	fmt.Println("Adding two content units.")
 	UIDs := make([]string, 0)
 	cu1UID, err := addContentUnit(ContentUnit{Name: "something"})
 	UIDs = append(UIDs, cu1UID)
-	assert.Nil(suite.T(), err)
+	assert.Nil(t, err)
 	var cu2UID string
 	cu2UID, err = addContentUnit(ContentUnit{Name: "something else"})
-	assert.Nil(suite.T(), err)
+	assert.Nil(t, err)
 	UIDs = append(UIDs, cu2UID)
 
 	fmt.Println("Reindexing everything.")
-	name := IndexName("test", consts.ES_UNITS_INDEX, "en")
+	indexName := IndexName("test", consts.ES_UNITS_INDEX, "en")
 	indexer := MakeIndexer("test", []string{consts.ES_UNITS_INDEX})
 	// Index existing DB data.
 	err = indexer.ReindexAll()
-	assert.Nil(suite.T(), err)
+	assert.Nil(t, err)
 	err = indexer.RefreshAll()
-	assert.Nil(suite.T(), err)
+	assert.Nil(t, err)
 
 	fmt.Println("Validate we have 2 searchable content units.")
-	var res *elastic.SearchResult
-	res, err = mdb.ESC.Search().Index(name).Do(suite.ctx)
-	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), int64(2), res.Hits.TotalHits)
+    suite.validateContentUnitNames(
+        indexName, indexer,
+        []string{"something", "something else"})
 
 	fmt.Println("Validate adding content unit incrementally.")
 	var cu3UID string
 	cu3UID, err = addContentUnit(ContentUnit{Name: "third something"})
-	assert.Nil(suite.T(), err)
+	assert.Nil(t, err)
 	UIDs = append(UIDs, cu3UID)
 	err = indexer.ContentUnitAdd(cu3UID)
-	assert.Nil(suite.T(), err)
-	err = indexer.RefreshAll()
-	assert.Nil(suite.T(), err)
-	res, err = mdb.ESC.Search().Index(name).Do(suite.ctx)
-	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), int64(3), res.Hits.TotalHits)
+	assert.Nil(t, err)
+    suite.validateContentUnitNames(
+        indexName, indexer,
+        []string{"something", "something else", "third something"})
+
+    fmt.Println("Update content unit and validate.")
+    _, err = updateContentUnit(ContentUnit{MDB_UID: cu3UID, Name: "updated third something"})
+	assert.Nil(t, err)
+    i18ns, err := mdbmodels.ContentUnitI18ns(mdb.DB).All()
+	assert.Nil(t, err)
+    for i, i18n := range i18ns {
+        fmt.Printf("Updated values[%d]: %+v\n", i+1, i18n)
+    }
+	err = indexer.ContentUnitUpdate(cu3UID)
+	assert.Nil(t, err)
+    suite.validateContentUnitNames(
+        indexName, indexer,
+        []string{"something", "something else", "updated third something"})
 
 	fmt.Println("Delete units, reindex and validate we have 0 searchable units.")
 	err = deleteContentUnits(UIDs)
-	assert.Nil(suite.T(), err)
+	assert.Nil(t, err)
 	err = indexer.ReindexAll()
-	assert.Nil(suite.T(), err)
-	err = indexer.RefreshAll()
-	assert.Nil(suite.T(), err)
-	res, err = mdb.ESC.Search().Index(name).Do(suite.ctx)
-	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), int64(0), res.Hits.TotalHits)
+	assert.Nil(t, err)
+    suite.validateContentUnitNames(
+        indexName, indexer,
+        []string{})
 
 	// Remove test indexes.
-	assert.Nil(suite.T(), indexer.DeleteIndexes())
+	assert.Nil(t, indexer.DeleteIndexes())
 }
