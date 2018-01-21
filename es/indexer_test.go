@@ -349,6 +349,13 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
         indexName, indexer,
         []string{"something", "something else", "updated third something"})
 
+    fmt.Println("Delete content unit and validate.")
+	err = indexer.ContentUnitDelete(cu2UID)
+	assert.Nil(t, err)
+    suite.validateContentUnitNames(
+        indexName, indexer,
+        []string{"something", "updated third something"})
+
 	fmt.Println("Delete units, reindex and validate we have 0 searchable units.")
 	err = deleteContentUnits(UIDs)
 	assert.Nil(t, err)
