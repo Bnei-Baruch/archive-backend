@@ -168,6 +168,9 @@ UNITS_TEMPLATE = {
         "mdb_uid": {
           "type": "keyword",
         },
+        "typed_uids": {
+          "type": "keyword",
+        },
         "name": {
           "type": "text",
           "analyzer": "phonetic_analyzer",

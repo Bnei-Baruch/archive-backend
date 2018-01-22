@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+    "strings"
     "time"
 
 	"github.com/lib/pq"
@@ -47,23 +48,68 @@ func (index *ContentUnitsIndex) ReindexAll() error {
     return index.addToIndex("cu.secure = 0 AND cu.published IS TRUE")
 }
 
+func fileScope(fileUID string) ([]string, error) {
+    units, err := mdbmodels.ContentUnits(mdb.DB,
+        qm.Select("uid"),
+        qm.InnerJoin("files AS f on f.content_unit_id = content_unit.id"),
+        qm.Where("f.uid = ?", fileUID)).All()
+    if err != nil {
+        return nil, err
+    }
+    uids := make([]string, len(units))
+    for i, unit := range units {
+        uids[i] = unit.UID
+    }
+    return uids, nil
+}
+
 func (index *ContentUnitsIndex) AddToIndex(scope Scope) error {
     sqlScope := "cu.secure = 0 AND cu.published IS TRUE"
+    var uids []string
     if scope.ContentUnitUID != "" {
-      sqlScope = fmt.Sprintf("%s AND cu.uid = '%s'", sqlScope, scope.ContentUnitUID)
+        uids = append(uids, scope.ContentUnitUID)
+    }
+    if scope.FileUID != "" {
+        moreUIDs, err := fileScope(scope.FileUID)
+        if err != nil {
+            return err
+        }
+        uids = append(uids, moreUIDs...)
+    }
+    if len(uids) > 0 {
+        quoted := make([]string, len(uids))
+        for i, uid := range uids {
+            quoted[i] = fmt.Sprintf("'%s'", uid)
+        }
+        sqlScope = fmt.Sprintf("%s AND cu.uid IN [%s]", sqlScope, strings.Join(quoted, ","))
     }
     return index.addToIndex(sqlScope)
 }
 
 func (index *ContentUnitsIndex) RemoveFromIndex(scope Scope) error {
-    var elasticScope elastic.Query
+    var uids []string
     if scope.ContentUnitUID != "" {
-        elasticScope = elastic.NewTermQuery("mdb_uid", scope.ContentUnitUID)
+        uids = append(uids, scope.ContentUnitUID)
+    }
+    if scope.FileUID != "" {
+        moreUIDs, err := fileScope(scope.FileUID)
+        if err != nil {
+            return err
+        }
+        uids = append(uids, moreUIDs...)
+    }
+    var elasticScope elastic.Query
+    if len(uids) > 0 {
+        uidsI := make([]interface{}, len(uids))
+        for i, uid := range uids {
+            uidsI[i] = uid
+        }
+        elasticScope = elastic.NewTermsQuery("mdb_uid", uidsI...)
+        return index.removeFromIndex(elasticScope)
     } else {
-        // For now skip, otherwise. Next we will need to add more complex queries here.
+        // Nothing to remove.
         return nil
     }
-    return index.removeFromIndex(elasticScope)
 }
 
 func (index *ContentUnitsIndex) addToIndex(sqlScope string) error {
@@ -135,12 +181,28 @@ func (index* ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	return stdout.String(), nil
 }
 
-func (index* ContentUnitsIndex) collectionsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
+func collectionsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	ret := make([]string, len(collectionsContentUnits))
 	for i, ccu := range collectionsContentUnits {
 		ret[i] = mdb.CONTENT_TYPE_REGISTRY.ByID[ccu.R.Collection.TypeID].Name
 	}
 	return ret
+}
+
+func collectionsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
+	ret := make([]string, len(collectionsContentUnits))
+	for i, ccu := range collectionsContentUnits {
+        ret[i] = fmt.Sprintf("collection:%s", ccu.R.Collection.UID)
+	}
+	return ret
+}
+
+func uidsToTypedUIDs(t string, uids []string) []string {
+    ret := make([]string, len(uids))
+    for i, uid := range uids {
+        ret[i] = fmt.Sprintf("%s:%s", t, uid)
+    }
+    return ret
 }
 
 func (index* ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
@@ -150,11 +212,14 @@ func (index* ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 	for i := range cu.R.ContentUnitI18ns {
 		i18n := cu.R.ContentUnitI18ns[i]
 		if i18n.Name.Valid && i18n.Name.String != "" {
+            typedUIDs := append([]string{fmt.Sprintf("content_unit:%s", cu.UID)},
+                                collectionsTypedUIDs(cu.R.CollectionsContentUnits)...)
 			unit := ContentUnit{
 				MDB_UID:                 cu.UID,
+                TypedUIDs:               typedUIDs,
 				Name:                    i18n.Name.String,
 				ContentType:             mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
-				CollectionsContentTypes: index.collectionsContentTypes(cu.R.CollectionsContentUnits),
+				CollectionsContentTypes: collectionsContentTypes(cu.R.CollectionsContentUnits),
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
@@ -187,20 +252,25 @@ func (index* ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 
 			if val, ok := index.indexData.Sources[cu.ID]; ok {
 				unit.Sources = val
+                unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("sources", val)...)
 			}
 			if val, ok := index.indexData.Tags[cu.ID]; ok {
 				unit.Tags = val
+                unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("tags", val)...)
 			}
 			if val, ok := index.indexData.Persons[cu.ID]; ok {
 				unit.Persons = val
+                unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("persons", val)...)
 			}
 			if val, ok := index.indexData.Translations[cu.ID]; ok {
-				unit.Translations = val
+				unit.Translations = val[1]
+                unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("files:", val[0])...)
 			}
 			if byLang, ok := index.indexData.Transcripts[cu.ID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
 					unit.Transcript, err = index.parseDocx(val[0])
+                    unit.TypedUIDs = append(unit.TypedUIDs, fmt.Sprintf("files:%s", val[0]))
                     if err != nil {
                         log.Warnf("Error parsing docx: %s", val[0])
                     }
@@ -240,7 +310,7 @@ type IndexData struct {
 	Sources      map[int64][]string
 	Tags         map[int64][]string
 	Persons      map[int64][]string
-	Translations map[int64][]string
+	Translations map[int64][][]string
 	Transcripts  map[int64]map[string][]string
 }
 
@@ -308,7 +378,7 @@ GROUP BY cus.content_unit_id;`, sqlScope)).Query()
 	}
 	defer rows.Close()
 
-	return cm.loadMap(rows)
+	return cm.rowsToIdToValues(rows)
 }
 
 func (cm *IndexData) loadTags(sqlScope string) (map[int64][]string, error) {
@@ -342,7 +412,7 @@ GROUP BY cut.content_unit_id;`, sqlScope)).Query()
 	}
 	defer rows.Close()
 
-	return cm.loadMap(rows)
+	return cm.rowsToIdToValues(rows)
 }
 
 func (cm *IndexData) loadPersons(sqlScope string) (map[int64][]string, error) {
@@ -361,14 +431,15 @@ GROUP BY cup.content_unit_id;`, sqlScope)).Query()
 	}
 	defer rows.Close()
 
-	return cm.loadMap(rows)
+	return cm.rowsToIdToValues(rows)
 }
 
-func (cm *IndexData) loadTranslations(sqlScope string) (map[int64][]string, error) {
+func (cm *IndexData) loadTranslations(sqlScope string) (map[int64][][]string, error) {
 	rows, err := queries.Raw(mdb.DB, fmt.Sprintf(`
 SELECT
-  content_unit_id,
-  array_agg(DISTINCT language)
+  files.content_unit_id,
+  array_agg(DISTINCT files.uid)
+  array_agg(DISTINCT files.language)
 FROM files
     INNER JOIN content_units AS cu ON files.content_unit_id = cu.id
 WHERE language NOT IN ('zz', 'xx') AND content_unit_id IS NOT NULL AND %s
@@ -379,20 +450,40 @@ GROUP BY content_unit_id;`, sqlScope)).Query()
 	}
 	defer rows.Close()
 
-	return cm.loadMap(rows)
+	return cm.rowsToIdToUIDsAndValues(rows)
 }
 
-func (cm *IndexData) loadMap(rows *sql.Rows) (map[int64][]string, error) {
+func (cm *IndexData) rowsToIdToValues(rows *sql.Rows) (map[int64][]string, error) {
 	m := make(map[int64][]string)
 
 	for rows.Next() {
 		var cuid int64
-		var sources pq.StringArray
-		err := rows.Scan(&cuid, &sources)
+		var values pq.StringArray
+		err := rows.Scan(&cuid, &values)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
-		m[cuid] = sources
+		m[cuid] = values
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows.Err()")
+	}
+
+	return m, nil
+}
+
+func (cm *IndexData) rowsToIdToUIDsAndValues(rows *sql.Rows) (map[int64][][]string, error) {
+	m := make(map[int64][][]string)
+
+	for rows.Next() {
+		var cuid int64
+		var values pq.StringArray
+		var uids pq.StringArray
+		err := rows.Scan(&cuid, &uids, &values)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		m[cuid] = [][]string{uids, values}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, errors.Wrap(err, "rows.Err()")

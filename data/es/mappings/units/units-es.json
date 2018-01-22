@@ -32,19 +32,22 @@
                 "mdb_uid": {
                     "type": "keyword"
                 }, 
-                "sources": {
-                    "type": "keyword"
+                "duration": {
+                    "index": false, 
+                    "type": "short"
                 }, 
                 "persons": {
                     "index": false, 
                     "type": "keyword"
                 }, 
+                "sources": {
+                    "type": "keyword"
+                }, 
                 "content_type": {
                     "type": "keyword"
                 }, 
-                "duration": {
-                    "index": false, 
-                    "type": "short"
+                "typed_uids": {
+                    "type": "keyword"
                 }, 
                 "original_language": {
                     "index": false, 
