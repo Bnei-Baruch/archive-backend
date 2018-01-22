@@ -5,16 +5,23 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
-	"github.com/Bnei-Baruch/archive-backend/utils"
+	//"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	//"github.com/Bnei-Baruch/archive-backend/utils"
 	log "github.com/Sirupsen/logrus"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/boil"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 	"os"
 	"os/signal"
+	"github.com/Bnei-Baruch/archive-backend/utils"
+	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/volatiletech/sqlboiler/queries/qm"
+	"net/http"
 )
+
+// pointer to connection to db
+var MdbConn *sql.DB
+
 
 func RunLListener() {
 
@@ -22,22 +29,24 @@ func RunLListener() {
 	natsClientId := viper.GetString("nats.client-id")
 	natsClusterId := viper.GetString("nats.cluster-id")
 	natsSubject := viper.GetString("nats.subject")
-	mdbUrl := "mdb.url"
+	mdbUrl := viper.GetString("mdb.url")
 
-	// Open handle to database like normal
-	mdb, err := sql.Open("postgres", viper.GetString(mdbUrl))
-	utils.Must(err)
-	utils.Must(mdb.Ping())
-	defer mdb.Close()
+	var err1 error
+	MdbConn, err1 = sql.Open("postgres", mdbUrl )
+	boil.SetDB(MdbConn)
+	utils.Must(err1)
+	utils.Must(MdbConn.Ping())
+	defer MdbConn.Close()
+
 
 	// connect to nats server
 
-		sc, err := stan.Connect(natsClusterId, natsClientId, stan.NatsURL(natsUrl))
-		if err != nil {
-			log.Fatalf("Can't connect: %v.\nMake sure a NATS Streaming Server is running at: %s\n retrying:", err, natsUrl)
-			panic("...")
-		}
-		log.Printf("Connected to %s clusterID: [%s] clientID: [%s]\n", natsUrl, natsClusterId, natsClientId)
+	sc, err := stan.Connect(natsClusterId, natsClientId, stan.NatsURL(natsUrl))
+	if err != nil {
+		log.Fatalf("Can't connect: %v.\nMake sure a NATS Streaming Server is running at: %s\n retrying:", err, natsUrl)
+		panic("...")
+	}
+	log.Printf("Connected to %s clusterID: [%s] clientID: [%s]\n", natsUrl, natsClusterId, natsClientId)
 
 	// connection options
 	startOpt := stan.DeliverAllAvailable()
@@ -50,7 +59,7 @@ func RunLListener() {
 	cleanupDone := make(chan bool)
 	signal.Notify(signalChan, os.Interrupt)
 	go func() {
-		for _ = range signalChan {
+		for  range signalChan {
 			fmt.Printf("\nReceived an interrupt, unsubscribing and closing connection...\n\n")
 			// Do not unsubscribe a durable on exit, except if asked to.
 			sc.Close()
@@ -60,17 +69,14 @@ func RunLListener() {
 	<-cleanupDone
 }
 
-func fileSecure(s string, mdb *sql.DB) int16 {
-	boil.SetDB(mdb)
 
-	file := mdbmodels.Files(mdb, qm.Where("uid=?", s))
-	OneFile, _ := file.One()
-	println(OneFile.Type)
-	return OneFile.Secure
-}
 
-//checks message type and calls "callEs"
+//checks message type and calls "eventHandler"
 func msgHandler(msg *stan.Msg) {
+
+
+
+
 
 	type TypeTest struct {
 		Type string `json:"type"`
@@ -82,25 +88,28 @@ func msgHandler(msg *stan.Msg) {
 		fmt.Printf("json.Unmarshal error: %s\n", err)
 	}
 
+// check if event is FILE_REPLACE and run function
 	if test.Type != E_FILE_REPLACE {
 
 		type SimpleData struct {
 			Id      string `json:"id"`
 			Type    string `json:"type"`
 			Payload struct {
-				Id  int64  `json:"id"`
-				Uid string `json:"uid"`
+				ID  int64  `json:"id"`
+				UID string `json:"uid"`
 			} `json:"payload"`
 		}
 
-		var data SimpleData
+		var PayloadData SimpleData
 
-		err = json.Unmarshal(msg.Data, &data)
+		err = json.Unmarshal(msg.Data, &PayloadData)
 		if err != nil {
 			fmt.Printf("json.Unmarshal error: %s\n", err)
 		}
+		//fmt.Println(PayloadData)
 
-		callEs(data.Type, data.Payload.Uid, "")
+		eventHandler(PayloadData.Type, PayloadData.Payload.UID, "")
+		//test1(MdbConn, PayloadData.Payload.UID)
 	} else {
 
 		type ReplaceData struct {
@@ -119,18 +128,21 @@ func msgHandler(msg *stan.Msg) {
 			} `json:"payload"`
 		}
 
-		var data ReplaceData
-		err = json.Unmarshal(msg.Data, &data)
+		var PayloadData ReplaceData
+		err = json.Unmarshal(msg.Data, &PayloadData)
 		if err != nil {
 			fmt.Printf("json.Unmarshal error: %s\n", err)
 		}
-		callEs(data.Type, data.Payload.Old.UID, data.Payload.New.UID)
+		//fmt.Println(PayloadData)
+		eventHandler(PayloadData.Type, PayloadData.Payload.New.UID, PayloadData.Payload.Old.UID)
 	}
+
 }
 
+
 //calls searching functions
-func callEs(eventType string, uid string, oldUid string) {
-	fmt.Println("old_uid: " + oldUid + ",new_uid: " + uid)
+func eventHandler(eventType string, uid string, oldUid string) {
+	fmt.Println("old_uid: " + oldUid + ",new_uid: " + uid + "  eventType: " + eventType)
 	switch eventType {
 	case E_COLLECTION_CREATE:
 		CollectionCreate(uid)
@@ -188,6 +200,19 @@ func callEs(eventType string, uid string, oldUid string) {
 	case E_PUBLISHER_UPDATE:
 		PublisherUpdate(uid)
 	default:
-		fmt.Println("unknown event type: " + eventType + " for UID: " + uid)
+		log.Errorf("unknown event type: %s uid: %s", eventType, uid)
 	}
+}
+
+func Unzip(db *sql.DB, u string) int16 {
+	mdbFile := mdbmodels.Files(db, qm.Where("uid=?", u))
+	OneFile, _ := mdbFile.One()
+	fmt.Printf("\n*****************%v\n",OneFile.Secure)
+	if OneFile.Secure == 0 {
+		_, err := http.Get("http://API/" + u)
+			if err != nil{
+				log.Error()
+			}
+	}
+	return OneFile.Secure
 }

@@ -122,6 +122,7 @@ func ContentUnitPublishersChange(uid string) error {
 
 func FilePublished(uid string) error {
 	err := es.FileAdd(uid)
+	Unzip(MdbConn, uid)
 	if err != nil {
 		log.Errorf("couldn't add file to ES", err)
 	}
