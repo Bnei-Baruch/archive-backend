@@ -488,6 +488,88 @@ func AutocompleteHandler(c *gin.Context) {
 	}
 }
 
+func HomePageHandler(c *gin.Context) {
+
+	myDate := &utils.Date{Time:  time.Now()}
+	
+	resp := struct {
+		LatestDailyLesson Collection
+		Promoted struct { Section string; SubHeader string; Header string; Url string; Image string }
+		LatestContentUnits      []ContentUnit
+		PopularTopics []struct { Title string; Url string; Image string }
+	}{
+		Collection{
+			ID: "lg0UKPsg",
+			ContentType: "DAILY_LESSON", 
+			FilmDate: myDate,
+		},
+		struct { Section string; SubHeader string; Header string; Url string; Image string }{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
+		[]ContentUnit{
+				{
+					ID: "kvHFhL2Z",
+					ContentType: "LESSON_PART",
+					FilmDate: myDate,
+					Name: "Preparation to the Lesson",
+					Duration: 694,
+					OriginalLanguage: "he",
+					Collections: map[string]*Collection{
+						"0ijpKZPZ____0": {
+							ID: "kvH0ijpKZPZFhL2Z",
+							ContentType: "DAILY_LESSON",
+							FilmDate: myDate,
+						},
+					},
+				},
+				{
+					ID: "aUGdhjQC",
+					ContentType: "VIRTUAL_LESSON",
+					FilmDate: myDate,
+					Name: "mlt_o_rav_2017-10-22_vl_webinar_kak-obshayutsia-kabbalisti",
+					Duration: 3644,
+					OriginalLanguage: "ru",
+					Collections: map[string]*Collection{
+						"VwCQ0OBq____0": {
+							ID: "VwCQ0OBq",
+							ContentType: "VIRTUAL_LESSON",
+							DefaultLanguage: "ru",
+						},
+					},
+				},
+				{
+					ID: "QUgJI8T3",
+					ContentType: "VIDEO_PROGRAM_CHAPTER",
+					FilmDate: myDate,
+					Name: "heb_o_rav_2017-09-28_program_haim-hadashim-ktaim_n668",
+					Duration: 856,
+					OriginalLanguage: "he",
+					Collections: map[string]*Collection{
+						"G30TMsPn____668": {
+							ID: "G30TMsPn",
+							Name: "A New Life. Excerpts",
+							ContentType: "VIDEO_PROGRAM",
+							DefaultLanguage: "he",
+						},
+					},
+				},
+				{
+					ID: "KqKa8COz",
+					ContentType: "FRIENDS_GATHERING",
+					FilmDate: myDate,
+					Name: "mlt_o_norav_2017-10-22_yeshivat-haverim_n1",
+					Duration: 2921,
+					OriginalLanguage: "he",
+				},
+		},
+		[]struct { Title string; Url string; Image string }{
+			struct { Title string; Url string; Image string }{"Conception", "#", "http://www.thefertilebody.com/Content/Images/UploadedImages/a931e8de-3798-4332-8055-ea5b041dc0b0/ShopItemImage/conception.jpg"},
+			struct { Title string; Url string; Image string }{"The role of women in the spiritual system", "#", "https://images-na.ssl-images-amazon.com/images/I/71mpCuqBFaL._SY717_.jpg"},
+		},
+	
+}
+
+	concludeRequest(c, resp, nil)
+}
+
 func RecentlyUpdatedHandler(c *gin.Context) {
 	resp, err := handleRecentlyUpdated(c.MustGet("MDB_DB").(*sql.DB))
 	concludeRequest(c, resp, err)
