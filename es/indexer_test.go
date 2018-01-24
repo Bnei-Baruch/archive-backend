@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"database/sql"
-    "encoding/json"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/volatiletech/sqlboiler/boil"
 	"github.com/volatiletech/sqlboiler/queries/qm"
@@ -193,7 +193,8 @@ func (suite *IndexerSuite) SetupSuite() {
 	// Set package db and esc variables.
 	mdb.InitWithDefault(suite.DB)
 	// Show all SQLs
-	boil.DebugMode = false  // true
+	// boil.DebugMode = false
+	boil.DebugMode = true
 	suite.esc = mdb.ESC
 }
 
@@ -214,11 +215,19 @@ func TestIndexer(t *testing.T) {
 	suite.Run(t, new(IndexerSuite))
 }
 
-func addContentUnit(cu ContentUnit) (string, error) {
+func addContentUnit(cu ContentUnit, lang string, published bool, secure bool) (string, error) {
+	s := int16(0)
+	if !secure {
+		s = int16(1)
+	}
+	p := true
+	if !published {
+		p = false
+	}
 	mdbContentUnit := mdbmodels.ContentUnit{
 		UID:       GenerateUID(8),
-		Secure:    0,
-		Published: true,
+		Secure:    s,
+		Published: p,
 		TypeID:    mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
 		// Properties: film_date, ...
 	}
@@ -227,7 +236,7 @@ func addContentUnit(cu ContentUnit) (string, error) {
 	}
 	mdbContentUnitI18n := mdbmodels.ContentUnitI18n{
 		ContentUnitID: mdbContentUnit.ID,
-		Language:      "en",
+		Language:      lang,
 		Name:          null.NewString(cu.Name, cu.Name != ""),
 		Description:   null.NewString(cu.Description, cu.Description != ""),
 	}
@@ -237,26 +246,38 @@ func addContentUnit(cu ContentUnit) (string, error) {
 	return mdbContentUnit.UID, nil
 }
 
-func updateContentUnit(cu ContentUnit) (string, error) {
-    mdbContentUnit, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
-    if err != nil {
-        return "", err
-    }
-    // Missing update fields. For now update only i18ns.
-	// if err := mdbContentUnit.Update(mdb.DB); err != nil {
-	// 	return "", err
-	// }
-	mdbContentUnitI18n, err := mdbmodels.FindContentUnitI18n(mdb.DB, mdbContentUnit.ID, "en")
-    if err != nil {
-        return "", err
-    }
-    mdbContentUnitI18n.Name = null.NewString(cu.Name, cu.Name != "")
-    mdbContentUnitI18n.Description = null.NewString(cu.Description, cu.Description != "")
+func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool) (string, error) {
+	mdbContentUnit, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+	if err != nil {
+		return "", err
+	}
+	s := int16(0)
+	if !secure {
+		s = int16(1)
+	}
+	p := true
+	if !published {
+		p = false
+	}
+	mdbContentUnit.Secure = s
+	mdbContentUnit.Published = p
+	if err := mdbContentUnit.Update(mdb.DB); err != nil {
+		return "", err
+	}
+	mdbContentUnitI18n, err := mdbmodels.FindContentUnitI18n(mdb.DB, mdbContentUnit.ID, lang)
+	if err != nil {
+		return "", err
+	}
+	if cu.Name != "" {
+		mdbContentUnitI18n.Name = null.NewString(cu.Name, cu.Name != "")
+	}
+	if cu.Description != "" {
+		mdbContentUnitI18n.Description = null.NewString(cu.Description, cu.Description != "")
+	}
 	if err := mdbContentUnitI18n.Update(mdb.DB); err != nil {
 		return "", err
 	}
 	return mdbContentUnit.UID, nil
-
 }
 
 func deleteContentUnits(UIDs []string) error {
@@ -281,90 +302,100 @@ func deleteContentUnits(UIDs []string) error {
 	return mdbmodels.ContentUnits(mdb.DB, qm.WhereIn("uid in ?", UIDsI...)).DeleteAll()
 }
 
+func (suite *IndexerSuite) acu(cu ContentUnit, lang string, published bool, secure bool) string {
+	r := require.New(suite.T())
+	uid, err := addContentUnit(cu, lang, published, secure)
+	r.Nil(err)
+	return uid
+}
+
+func (suite *IndexerSuite) ucu(cu ContentUnit, lang string, published bool, secure bool) string {
+	r := require.New(suite.T())
+	uid, err := updateContentUnit(cu, lang, published, secure)
+	r.Nil(err)
+	return uid
+}
+
 func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *Indexer, expectedNames []string) {
-    t := suite.T()
-    err := indexer.RefreshAll()
-	assert.Nil(t, err)
-    var res *elastic.SearchResult
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
 	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
-	assert.Nil(t, err)
-    names := make([]string, len(res.Hits.Hits))
-    for i, hit := range res.Hits.Hits {
-        var cu ContentUnit
-        json.Unmarshal(*hit.Source, &cu)
-        names[i] = cu.Name
-    }
-	assert.Equal(t, int64(len(expectedNames)), res.Hits.TotalHits)
-    assert.ElementsMatch(t, expectedNames, names)
+	r.Nil(err)
+	names := make([]string, len(res.Hits.Hits))
+	for i, hit := range res.Hits.Hits {
+		var cu ContentUnit
+		json.Unmarshal(*hit.Source, &cu)
+		names[i] = cu.Name
+	}
+	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
+	r.ElementsMatch(expectedNames, names)
 }
 
 func (suite *IndexerSuite) TestContentUnitsIndex() {
-    t := suite.T()
-	fmt.Println("Adding two content units.")
-	UIDs := make([]string, 0)
-	cu1UID, err := addContentUnit(ContentUnit{Name: "something"})
-	UIDs = append(UIDs, cu1UID)
-	assert.Nil(t, err)
-	var cu2UID string
-	cu2UID, err = addContentUnit(ContentUnit{Name: "something else"})
-	assert.Nil(t, err)
-	UIDs = append(UIDs, cu2UID)
+	// TODO: Add i18n for content units. Use Language property, default to "en".
+	// TODO: Add collections and check collections update.
+	// TODO: Add tag and source tests.
+
+	r := require.New(suite.T())
+	fmt.Println("Adding content units.")
+	cu1UID := suite.acu(ContentUnit{Name: "something"}, "en", true, true)
+	cu2UID := suite.acu(ContentUnit{Name: "something else"}, "en", true, true)
+	cuNotPublishedUID := suite.acu(ContentUnit{Name: "not published"}, "en", false, true)
+	cuNotSecureUID := suite.acu(ContentUnit{Name: "not secured"}, "en", true, false)
+	UIDs := []string{cu1UID, cu2UID, cuNotPublishedUID, cuNotSecureUID}
 
 	fmt.Println("Reindexing everything.")
 	indexName := IndexName("test", consts.ES_UNITS_INDEX, "en")
 	indexer := MakeIndexer("test", []string{consts.ES_UNITS_INDEX})
 	// Index existing DB data.
-	err = indexer.ReindexAll()
-	assert.Nil(t, err)
-	err = indexer.RefreshAll()
-	assert.Nil(t, err)
+	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.RefreshAll())
 
 	fmt.Println("Validate we have 2 searchable content units.")
-    suite.validateContentUnitNames(
-        indexName, indexer,
-        []string{"something", "something else"})
+	suite.validateContentUnitNames(indexName, indexer, []string{"something", "something else"})
+
+	fmt.Println("Make content unit not published and validate.")
+	suite.ucu(ContentUnit{MDB_UID: cu1UID}, "en", false, true)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.validateContentUnitNames(indexName, indexer, []string{"something else"})
+
+	fmt.Println("Make content unit not secured and validate.")
+	suite.ucu(ContentUnit{MDB_UID: cu2UID}, "en", true, false)
+	r.Nil(indexer.ContentUnitUpdate(cu2UID))
+	suite.validateContentUnitNames(indexName, indexer, []string{})
+
+	fmt.Println("Secure and publish content units again and check we have 2 searchable content units.")
+	suite.ucu(ContentUnit{MDB_UID: cu1UID}, "en", true, true)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.ucu(ContentUnit{MDB_UID: cu2UID}, "en", true, true)
+	r.Nil(indexer.ContentUnitUpdate(cu2UID))
+	suite.validateContentUnitNames(indexName, indexer, []string{"something", "something else"})
 
 	fmt.Println("Validate adding content unit incrementally.")
 	var cu3UID string
-	cu3UID, err = addContentUnit(ContentUnit{Name: "third something"})
-	assert.Nil(t, err)
+	cu3UID = suite.acu(ContentUnit{Name: "third something"}, "en", true, true)
 	UIDs = append(UIDs, cu3UID)
-	err = indexer.ContentUnitAdd(cu3UID)
-	assert.Nil(t, err)
-    suite.validateContentUnitNames(
-        indexName, indexer,
-        []string{"something", "something else", "third something"})
+	r.Nil(indexer.ContentUnitAdd(cu3UID))
+	suite.validateContentUnitNames(indexName, indexer,
+		[]string{"something", "something else", "third something"})
 
-    fmt.Println("Update content unit and validate.")
-    _, err = updateContentUnit(ContentUnit{MDB_UID: cu3UID, Name: "updated third something"})
-	assert.Nil(t, err)
-    i18ns, err := mdbmodels.ContentUnitI18ns(mdb.DB).All()
-	assert.Nil(t, err)
-    for i, i18n := range i18ns {
-        fmt.Printf("Updated values[%d]: %+v\n", i+1, i18n)
-    }
-	err = indexer.ContentUnitUpdate(cu3UID)
-	assert.Nil(t, err)
-    suite.validateContentUnitNames(
-        indexName, indexer,
-        []string{"something", "something else", "updated third something"})
+	fmt.Println("Update content unit and validate.")
+	suite.ucu(ContentUnit{MDB_UID: cu3UID, Name: "updated third something"}, "en", true, true)
+	r.Nil(indexer.ContentUnitUpdate(cu3UID))
+	suite.validateContentUnitNames(indexName, indexer,
+		[]string{"something", "something else", "updated third something"})
 
-    fmt.Println("Delete content unit and validate.")
-	err = indexer.ContentUnitDelete(cu2UID)
-	assert.Nil(t, err)
-    suite.validateContentUnitNames(
-        indexName, indexer,
-        []string{"something", "updated third something"})
+	fmt.Println("Delete content unit and validate.")
+	r.Nil(indexer.ContentUnitDelete(cu2UID))
+	suite.validateContentUnitNames(indexName, indexer, []string{"something", "updated third something"})
 
 	fmt.Println("Delete units, reindex and validate we have 0 searchable units.")
-	err = deleteContentUnits(UIDs)
-	assert.Nil(t, err)
-	err = indexer.ReindexAll()
-	assert.Nil(t, err)
-    suite.validateContentUnitNames(
-        indexName, indexer,
-        []string{})
+	r.Nil(deleteContentUnits(UIDs))
+	r.Nil(indexer.ReindexAll())
+	suite.validateContentUnitNames(indexName, indexer, []string{})
 
 	// Remove test indexes.
-	assert.Nil(t, indexer.DeleteIndexes())
+	r.Nil(indexer.DeleteIndexes())
 }

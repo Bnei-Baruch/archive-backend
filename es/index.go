@@ -13,16 +13,15 @@ import (
 )
 
 type Scope struct {
-	ContentUnitUID  string
-    FileUID         string
-    CollectionUID   string
-    TagUID          string
-    SourceUID       string
+	ContentUnitUID string
+	FileUID        string
+	CollectionUID  string
+	TagUID         string
+	SourceUID      string
 
-
-    // Not used for now...
-    PersonUID       string
-    PublisherUID    string
+	// Not used for now...
+	PersonUID    string
+	PublisherUID string
 }
 
 type Index interface {

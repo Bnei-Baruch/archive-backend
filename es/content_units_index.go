@@ -3,23 +3,23 @@ package es
 import (
 	"bytes"
 	"context"
-    "fmt"
 	"database/sql"
 	"encoding/json"
-    "math"
+	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path"
-    "strings"
-    "time"
+	"strings"
+	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/queries"
 	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/olivere/elastic.v5"
-	log "github.com/Sirupsen/logrus"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -28,133 +28,144 @@ import (
 )
 
 func MakeContentUnitsIndex(namespace string) *ContentUnitsIndex {
-    cui := new(ContentUnitsIndex)
-    cui.baseName = consts.ES_UNITS_INDEX
-    cui.namespace = namespace
-    cui.docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
-    return cui
+	cui := new(ContentUnitsIndex)
+	cui.baseName = consts.ES_UNITS_INDEX
+	cui.namespace = namespace
+	cui.docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
+	return cui
 }
 
 type ContentUnitsIndex struct {
-    BaseIndex
-    indexData *IndexData
-    docFolder string
+	BaseIndex
+	indexData *IndexData
+	docFolder string
 }
 
 func (index *ContentUnitsIndex) ReindexAll() error {
-    if err := index.removeFromIndex(nil); err != nil {
-        return err
-    }
-    return index.addToIndex("cu.secure = 0 AND cu.published IS TRUE")
+	if err := index.removeFromIndex(elastic.NewMatchAllQuery()); err != nil {
+		return err
+	}
+	return index.addToIndex("cu.secure = 0 AND cu.published IS TRUE")
 }
 
-func fileScope(fileUID string) ([]string, error) {
-    units, err := mdbmodels.ContentUnits(mdb.DB,
-        qm.Select("uid"),
-        qm.InnerJoin("files AS f on f.content_unit_id = content_unit.id"),
-        qm.Where("f.uid = ?", fileUID)).All()
-    if err != nil {
-        return nil, err
-    }
-    uids := make([]string, len(units))
-    for i, unit := range units {
-        uids[i] = unit.UID
-    }
-    return uids, nil
+func contentUnitsScopeByFile(fileUID string) ([]string, error) {
+	units, err := mdbmodels.ContentUnits(mdb.DB,
+		qm.Select("uid"),
+		qm.InnerJoin("files AS f on f.content_unit_id = content_unit.id"),
+		qm.Where("f.uid = ?", fileUID)).All()
+	if err != nil {
+		return nil, err
+	}
+	uids := make([]string, len(units))
+	for i, unit := range units {
+		uids[i] = unit.UID
+	}
+	return uids, nil
 }
 
 func (index *ContentUnitsIndex) AddToIndex(scope Scope) error {
-    sqlScope := "cu.secure = 0 AND cu.published IS TRUE"
-    var uids []string
-    if scope.ContentUnitUID != "" {
-        uids = append(uids, scope.ContentUnitUID)
-    }
-    if scope.FileUID != "" {
-        moreUIDs, err := fileScope(scope.FileUID)
-        if err != nil {
-            return err
-        }
-        uids = append(uids, moreUIDs...)
-    }
-    if len(uids) > 0 {
-        quoted := make([]string, len(uids))
-        for i, uid := range uids {
-            quoted[i] = fmt.Sprintf("'%s'", uid)
-        }
-        sqlScope = fmt.Sprintf("%s AND cu.uid IN [%s]", sqlScope, strings.Join(quoted, ","))
-    }
-    return index.addToIndex(sqlScope)
+	sqlScope := "cu.secure = 0 AND cu.published IS TRUE"
+	var uids []string
+	if scope.ContentUnitUID != "" {
+		uids = append(uids, scope.ContentUnitUID)
+	}
+	if scope.FileUID != "" {
+		moreUIDs, err := contentUnitsScopeByFile(scope.FileUID)
+		if err != nil {
+			return err
+		}
+		uids = append(uids, moreUIDs...)
+	}
+	if len(uids) > 0 {
+		quoted := make([]string, len(uids))
+		for i, uid := range uids {
+			quoted[i] = fmt.Sprintf("'%s'", uid)
+		}
+		sqlScope = fmt.Sprintf("%s AND cu.uid IN (%s)", sqlScope, strings.Join(quoted, ","))
+	}
+	return index.addToIndex(sqlScope)
 }
 
 func (index *ContentUnitsIndex) RemoveFromIndex(scope Scope) error {
-    var uids []string
-    if scope.ContentUnitUID != "" {
-        uids = append(uids, scope.ContentUnitUID)
-    }
-    if scope.FileUID != "" {
-        moreUIDs, err := fileScope(scope.FileUID)
-        if err != nil {
-            return err
-        }
-        uids = append(uids, moreUIDs...)
-    }
-    var elasticScope elastic.Query
-    if len(uids) > 0 {
-        uidsI := make([]interface{}, len(uids))
-        for i, uid := range uids {
-            uidsI[i] = uid
-        }
-        elasticScope = elastic.NewTermsQuery("mdb_uid", uidsI...)
-        return index.removeFromIndex(elasticScope)
-    } else {
-        // Nothing to remove.
-        return nil
-    }
+	var typedUIDs []string
+	if scope.ContentUnitUID != "" {
+		typedUIDs = append(typedUIDs, fmt.Sprintf("content_unit:%s", scope.ContentUnitUID))
+	}
+	if scope.FileUID != "" {
+		typedUIDs = append(typedUIDs, fmt.Sprintf("file:%s", scope.FileUID))
+	}
+	if scope.CollectionUID != "" {
+		typedUIDs = append(typedUIDs, fmt.Sprintf("collection:%s", scope.CollectionUID))
+	}
+	if scope.TagUID != "" {
+		typedUIDs = append(typedUIDs, fmt.Sprintf("tag:%s", scope.TagUID))
+	}
+	if scope.SourceUID != "" {
+		typedUIDs = append(typedUIDs, fmt.Sprintf("source:%s", scope.SourceUID))
+	}
+	if scope.PersonUID != "" {
+		typedUIDs = append(typedUIDs, fmt.Sprintf("person:%s", scope.PersonUID))
+	}
+	if scope.PublisherUID != "" {
+		typedUIDs = append(typedUIDs, fmt.Sprintf("publisher:%s", scope.PublisherUID))
+	}
+	var elasticScope elastic.Query
+	if len(typedUIDs) > 0 {
+		typedUIDsI := make([]interface{}, len(typedUIDs))
+		for i, typedUID := range typedUIDs {
+			typedUIDsI[i] = typedUID
+		}
+		elasticScope = elastic.NewTermsQuery("typed_uids", typedUIDsI...)
+		return index.removeFromIndex(elasticScope)
+	} else {
+		// Nothing to remove.
+		return nil
+	}
 }
 
 func (index *ContentUnitsIndex) addToIndex(sqlScope string) error {
-    var units []*mdbmodels.ContentUnit
-    // Note: I have noticed that Load("ContentUnitI18ns") uses following SQL: 
-    // select * from "content_unit_i18n" where "content_unit_id" in ($1,$2,$3,$4,$5,$ ...
-    // Which is bad as there is a limit on X in [...list...]. We should really do inner join.
-    // This is a problem for reindexing all elements ofcourse.
-    err := mdbmodels.NewQuery(mdb.DB,
-        qm.From("content_units as cu"),
-        qm.Load("ContentUnitI18ns"),
-        qm.Load("CollectionsContentUnits"),
-        qm.Load("CollectionsContentUnits.Collection"),
-        qm.Where(sqlScope)).Bind(&units)
-    if err != nil {
-        return errors.Wrap(err, "Fetch units from mdb")
-    }
-    log.Infof("Adding %d units.", len(units))
+	var units []*mdbmodels.ContentUnit
+	// Note: I have noticed that Load("ContentUnitI18ns") uses following SQL:
+	// select * from "content_unit_i18n" where "content_unit_id" in ($1,$2,$3,$4,$5,$ ...
+	// Which is bad as there is a limit on X in [...list...]. We should really do inner join.
+	// This is a problem for reindexing all elements ofcourse.
+	err := mdbmodels.NewQuery(mdb.DB,
+		qm.From("content_units as cu"),
+		qm.Load("ContentUnitI18ns"),
+		qm.Load("CollectionsContentUnits"),
+		qm.Load("CollectionsContentUnits.Collection"),
+		qm.Where(sqlScope)).Bind(&units)
+	if err != nil {
+		return errors.Wrap(err, "Fetch units from mdb")
+	}
+	log.Infof("Adding %d units.", len(units))
 
-    index.indexData = new(IndexData)
-    err = index.indexData.Load(sqlScope)
-    if err != nil {
-        return err
-    }
-    for _, unit := range units {
-        if err := index.indexUnit(unit); err != nil {
-            return err
-        }
-    }
-    return nil
+	index.indexData = new(IndexData)
+	err = index.indexData.Load(sqlScope)
+	if err != nil {
+		return err
+	}
+	for _, unit := range units {
+		if err := index.indexUnit(unit); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (index* ContentUnitsIndex) removeFromIndex(elasticScope elastic.Query) error {
+func (index *ContentUnitsIndex) removeFromIndex(elasticScope elastic.Query) error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
 		res, err := mdb.ESC.DeleteByQuery(indexName).
-            Query(elasticScope).
-            Do(context.TODO())
+			Query(elasticScope).
+			Do(context.TODO())
 		if err != nil {
-            return errors.Wrapf(err, "Remove from index %s %+v\n", indexName, elasticScope)
+			return errors.Wrapf(err, "Remove from index %s %+v\n", indexName, elasticScope)
 		}
-        if res.Deleted > 0 {
-            fmt.Printf("Deleted %d documents from %s.\n", res.Deleted, indexName)
-        }
-        // If not exists Deleted will be 0.
+		if res.Deleted > 0 {
+			fmt.Printf("Deleted %d documents from %s.\n", res.Deleted, indexName)
+		}
+		// If not exists Deleted will be 0.
 		// if resp.Deleted != int64(len(uids)) {
 		// 	return errors.Errorf("Not deleted: %s %+v\n", indexName, uids)
 		// }
@@ -162,7 +173,7 @@ func (index* ContentUnitsIndex) removeFromIndex(elasticScope elastic.Query) erro
 	return nil
 }
 
-func (index* ContentUnitsIndex) parseDocx(uid string) (string, error) {
+func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
 	docxPath := path.Join(index.docFolder, docxFilename)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
@@ -192,31 +203,31 @@ func collectionsContentTypes(collectionsContentUnits mdbmodels.CollectionsConten
 func collectionsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	ret := make([]string, len(collectionsContentUnits))
 	for i, ccu := range collectionsContentUnits {
-        ret[i] = fmt.Sprintf("collection:%s", ccu.R.Collection.UID)
+		ret[i] = fmt.Sprintf("collection:%s", ccu.R.Collection.UID)
 	}
 	return ret
 }
 
 func uidsToTypedUIDs(t string, uids []string) []string {
-    ret := make([]string, len(uids))
-    for i, uid := range uids {
-        ret[i] = fmt.Sprintf("%s:%s", t, uid)
-    }
-    return ret
+	ret := make([]string, len(uids))
+	for i, uid := range uids {
+		ret[i] = fmt.Sprintf("%s:%s", t, uid)
+	}
+	return ret
 }
 
-func (index* ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
-    fmt.Printf("indexUnit: %+v\n", cu)
+func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
+	fmt.Printf("indexUnit: %+v\n", cu)
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]ContentUnit)
 	for i := range cu.R.ContentUnitI18ns {
 		i18n := cu.R.ContentUnitI18ns[i]
 		if i18n.Name.Valid && i18n.Name.String != "" {
-            typedUIDs := append([]string{fmt.Sprintf("content_unit:%s", cu.UID)},
-                                collectionsTypedUIDs(cu.R.CollectionsContentUnits)...)
+			typedUIDs := append([]string{fmt.Sprintf("content_unit:%s", cu.UID)},
+				collectionsTypedUIDs(cu.R.CollectionsContentUnits)...)
 			unit := ContentUnit{
 				MDB_UID:                 cu.UID,
-                TypedUIDs:               typedUIDs,
+				TypedUIDs:               typedUIDs,
 				Name:                    i18n.Name.String,
 				ContentType:             mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
 				CollectionsContentTypes: collectionsContentTypes(cu.R.CollectionsContentUnits),
@@ -252,28 +263,28 @@ func (index* ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 
 			if val, ok := index.indexData.Sources[cu.ID]; ok {
 				unit.Sources = val
-                unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("sources", val)...)
+				unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("source", val)...)
 			}
 			if val, ok := index.indexData.Tags[cu.ID]; ok {
 				unit.Tags = val
-                unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("tags", val)...)
+				unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("tag", val)...)
 			}
 			if val, ok := index.indexData.Persons[cu.ID]; ok {
 				unit.Persons = val
-                unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("persons", val)...)
+				unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("person", val)...)
 			}
 			if val, ok := index.indexData.Translations[cu.ID]; ok {
 				unit.Translations = val[1]
-                unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("files:", val[0])...)
+				unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("file:", val[0])...)
 			}
 			if byLang, ok := index.indexData.Transcripts[cu.ID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
 					unit.Transcript, err = index.parseDocx(val[0])
-                    unit.TypedUIDs = append(unit.TypedUIDs, fmt.Sprintf("files:%s", val[0]))
-                    if err != nil {
-                        log.Warnf("Error parsing docx: %s", val[0])
-                    }
+					unit.TypedUIDs = append(unit.TypedUIDs, fmt.Sprintf("file:%s", val[0]))
+					if err != nil {
+						log.Warnf("Error parsing docx: %s", val[0])
+					}
 					// if err == nil && unit.Transcript != "" {
 					// 	atomic.AddUint64(&withTranscript, 1)
 					// }
@@ -284,12 +295,12 @@ func (index* ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 		}
 	}
 
-    fmt.Printf("i18nMap: %+v\n", i18nMap)
+	fmt.Printf("i18nMap: %+v\n", i18nMap)
 
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
-        fmt.Printf("Indexing to %s: %+v\n", name, v)
+		fmt.Printf("Indexing to %s: %+v\n", name, v)
 		resp, err := mdb.ESC.Index().
 			Index(name).
 			Type("content_units").
@@ -438,7 +449,7 @@ func (cm *IndexData) loadTranslations(sqlScope string) (map[int64][][]string, er
 	rows, err := queries.Raw(mdb.DB, fmt.Sprintf(`
 SELECT
   files.content_unit_id,
-  array_agg(DISTINCT files.uid)
+  array_agg(DISTINCT files.uid),
   array_agg(DISTINCT files.language)
 FROM files
     INNER JOIN content_units AS cu ON files.content_unit_id = cu.id

@@ -15,7 +15,7 @@ type Collection struct {
 
 type ContentUnit struct {
 	MDB_UID                 string      `json:"mdb_uid"`
-    TypedUIDs               []string    `json:"typed_uids"`
+	TypedUIDs               []string    `json:"typed_uids"`
 	Name                    string      `json:"name,omitempty"`
 	Description             string      `json:"description,omitempty"`
 	ContentType             string      `json:"content_type"`

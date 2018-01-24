@@ -109,12 +109,12 @@ func (indexer *Indexer) ContentUnitAdd(uid string) error {
 
 func (indexer *Indexer) ContentUnitUpdate(uid string) error {
 	for _, index := range indexer.indices {
-        // TODO: Optimize update to update elastic and not delete and then
-        // add. It might be a problem on bulk updates, i.e., of someone added
-        // some kind of tag for 1000 documents.
-        // In that case removeing and adding will be much slower then updating
-        // existing documents in elastic. 
-        // Decicded to not optimize prematurly.
+		// TODO: Optimize update to update elastic and not delete and then
+		// add. It might be a problem on bulk updates, i.e., of someone added
+		// some kind of tag for 1000 documents.
+		// In that case removeing and adding will be much slower then updating
+		// existing documents in elastic.
+		// Decicded to not optimize prematurly.
 		if err := index.RemoveFromIndex(Scope{ContentUnitUID: uid}); err != nil {
 			return err
 		}
