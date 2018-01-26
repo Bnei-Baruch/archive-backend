@@ -124,32 +124,39 @@ func (index *ContentUnitsIndex) RemoveFromIndex(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) addToIndex(sqlScope string) error {
-	var units []*mdbmodels.ContentUnit
-	// Note: I have noticed that Load("ContentUnitI18ns") uses following SQL:
-	// select * from "content_unit_i18n" where "content_unit_id" in ($1,$2,$3,$4,$5,$ ...
-	// Which is bad as there is a limit on X in [...list...]. We should really do inner join.
-	// This is a problem for reindexing all elements ofcourse.
-	err := mdbmodels.NewQuery(mdb.DB,
-		qm.From("content_units as cu"),
-		qm.Load("ContentUnitI18ns"),
-		qm.Load("CollectionsContentUnits"),
-		qm.Load("CollectionsContentUnits.Collection"),
-		qm.Where(sqlScope)).Bind(&units)
-	if err != nil {
-		return errors.Wrap(err, "Fetch units from mdb")
-	}
-	log.Infof("Adding %d units.", len(units))
+    count, err := mdbmodels.ContentUnits(mdb.DB).Count()
+    if err != nil {
+        return err
+    }
+    offset := 0
+    limit := 1000
+    for offset < int(count) {
+        var units []*mdbmodels.ContentUnit
+        err := mdbmodels.NewQuery(mdb.DB,
+            qm.From("content_units as cu"),
+            qm.Load("ContentUnitI18ns"),
+            qm.Load("CollectionsContentUnits"),
+            qm.Load("CollectionsContentUnits.Collection"),
+            qm.Where(sqlScope),
+            qm.Offset(offset),
+            qm.Limit(limit)).Bind(&units)
+        if err != nil {
+            return errors.Wrap(err, "Fetch units from mdb")
+        }
+        log.Infof("Adding %d units.", len(units))
 
-	index.indexData = new(IndexData)
-	err = index.indexData.Load(sqlScope)
-	if err != nil {
-		return err
-	}
-	for _, unit := range units {
-		if err := index.indexUnit(unit); err != nil {
-			return err
-		}
-	}
+        index.indexData = new(IndexData)
+        err = index.indexData.Load(sqlScope)
+        if err != nil {
+            return err
+        }
+        for _, unit := range units {
+            if err := index.indexUnit(unit); err != nil {
+                return err
+            }
+        }
+        offset += limit
+    }
 	return nil
 }
 
