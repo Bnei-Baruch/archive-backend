@@ -54,6 +54,16 @@ func CollectionHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func LatestLessonHandler(c *gin.Context) {
+	var r BaseRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	resp, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
 func ContentUnitsHandler(c *gin.Context) {
 	var r ContentUnitsRequest
 	if c.Bind(&r) != nil {
@@ -725,6 +735,82 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 	c, err := mdbmodels.Collections(db,
 		SECURE_PUBLISHED_MOD,
 		qm.Where("uid = ?", r.UID),
+		qm.Load("CollectionsContentUnits",
+			"CollectionsContentUnits.ContentUnit")).
+		One()
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, NewNotFoundError()
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+
+	// collection
+	cl, err := mdbToC(c)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// collection i18n
+	ci18nsMap, err := loadCI18ns(db, r.Language, []int64{c.ID})
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	if i18ns, ok := ci18nsMap[c.ID]; ok {
+		setCI18n(cl, r.Language, i18ns)
+	}
+
+	// content units
+	cuids := make([]int64, 0)
+
+	// filter secure & published
+	b := c.R.CollectionsContentUnits[:0]
+	for _, y := range c.R.CollectionsContentUnits {
+		if consts.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
+			b = append(b, y)
+			cuids = append(cuids, y.ContentUnitID)
+		}
+		c.R.CollectionsContentUnits = b
+	}
+
+	// load i18ns
+	cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// sort CCUs
+	sort.SliceStable(c.R.CollectionsContentUnits, func(i int, j int) bool {
+		return c.R.CollectionsContentUnits[i].Position < c.R.CollectionsContentUnits[j].Position
+	})
+
+	// construct DTO's
+	cl.ContentUnits = make([]*ContentUnit, 0)
+	for _, ccu := range c.R.CollectionsContentUnits {
+		cu := ccu.R.ContentUnit
+
+		u, err := mdbToCU(cu)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		if i18ns, ok := cui18nsMap[cu.ID]; ok {
+			setCUI18n(u, r.Language, i18ns)
+		}
+
+		u.NameInCollection = ccu.Name
+		cl.ContentUnits = append(cl.ContentUnits, u)
+	}
+
+	return cl, nil
+}
+
+func handleLatestLesson(db *sql.DB, r BaseRequest) (*Collection, *HttpError) {
+
+	c, err := mdbmodels.Collections(db,
+		SECURE_PUBLISHED_MOD,
+		qm.WhereIn("type_id in ?",1, 2),
+		qm.OrderBy("created_at desc"),
 		qm.Load("CollectionsContentUnits",
 			"CollectionsContentUnits.ContentUnit")).
 		One()
