@@ -60,7 +60,7 @@ func LatestLessonHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r)
+	resp, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, true)
 	concludeRequest(c, resp, err)
 }
 
@@ -499,6 +499,16 @@ func AutocompleteHandler(c *gin.Context) {
 }
 
 func HomePageHandler(c *gin.Context) {
+	var r BaseRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+	
+	latestLesson, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, false)
+	if err != nil {
+		NewBadRequestError(errors.New("Unable to retrieve lattest daily lesson.")).Abort(c)
+		return
+	}
 
 	myDate := &utils.Date{Time:  time.Now()}
 	
@@ -508,11 +518,7 @@ func HomePageHandler(c *gin.Context) {
 		LatestContentUnits      []ContentUnit
 		PopularTopics []struct { Title string; Url string; Image string }
 	}{
-		Collection{
-			ID: "lg0UKPsg",
-			ContentType: "DAILY_LESSON", 
-			FilmDate: myDate,
-		},
+		*latestLesson,
 		struct { Section string; SubHeader string; Header string; Url string; Image string }{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
 		[]ContentUnit{
 				{
@@ -805,7 +811,7 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 	return cl, nil
 }
 
-func handleLatestLesson(db *sql.DB, r BaseRequest) (*Collection, *HttpError) {
+func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool) (*Collection, *HttpError) {
 
 	c, err := mdbmodels.Collections(db,
 		SECURE_PUBLISHED_MOD,
@@ -836,6 +842,8 @@ func handleLatestLesson(db *sql.DB, r BaseRequest) (*Collection, *HttpError) {
 	if i18ns, ok := ci18nsMap[c.ID]; ok {
 		setCI18n(cl, r.Language, i18ns)
 	}
+
+	if (bringContentUnits) {
 
 	// content units
 	cuids := make([]int64, 0)
@@ -877,7 +885,7 @@ func handleLatestLesson(db *sql.DB, r BaseRequest) (*Collection, *HttpError) {
 		u.NameInCollection = ccu.Name
 		cl.ContentUnits = append(cl.ContentUnits, u)
 	}
-
+	}
 	return cl, nil
 }
 
