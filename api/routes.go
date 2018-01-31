@@ -18,6 +18,8 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/recently_updated", RecentlyUpdatedHandler)
 	router.GET("/search", SearchHandler)
 	router.GET("/autocomplete", AutocompleteHandler)
+	router.GET("/home", HomePageHandler)
+	router.GET("/latestLesson", LatestLessonHandler)
 
 	router.GET("/_recover", func(c *gin.Context) {
 		panic("test recover")

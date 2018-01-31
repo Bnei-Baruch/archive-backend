@@ -40,6 +40,7 @@ const (
 	CT_TRAINING              = "TRAINING"
 	CT_KITEI_MAKOR           = "KITEI_MAKOR"
 	CT_PUBLICATION           = "PUBLICATION"
+	CT_LELO_MIKUD            = "LELO_MIKUD"
 
 	// Content Role types
 	CR_LECTURER = "LECTURER"
