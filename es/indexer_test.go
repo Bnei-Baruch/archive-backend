@@ -192,9 +192,7 @@ func (suite *IndexerSuite) SetupSuite() {
 
 	// Set package db and esc variables.
 	mdb.InitWithDefault(suite.DB)
-	// Show all SQLs
-	// boil.DebugMode = false
-	boil.DebugMode = true
+    boil.DebugMode = false
 	suite.esc = mdb.ESC
 }
 
@@ -213,6 +211,50 @@ func (s ESLogAdapter) Printf(format string, v ...interface{}) { s.Logf(format, v
 // a normal test function and pass our suite to suite.Run
 func TestIndexer(t *testing.T) {
 	suite.Run(t, new(IndexerSuite))
+}
+
+func updateCollection(c Collection, cuUID string) (string, error) {
+    var mdbCollection mdbmodels.Collection
+    if c.MDB_UID != "" {
+        cp, err := mdbmodels.Collections(mdb.DB, qm.Where("uid = ?", c.MDB_UID)).One()
+        if err != nil {
+            return "", err
+        }
+        cp.TypeID = mdb.CONTENT_TYPE_REGISTRY.ByName[c.ContentType].ID
+        if err := cp.Update(mdb.DB); err != nil {
+            return "", err
+        }
+        mdbCollection = *cp
+    } else {
+        mdbCollection = mdbmodels.Collection{
+            UID: GenerateUID(8),
+            TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[c.ContentType].ID,
+        }
+        if err := mdbCollection.Insert(mdb.DB); err != nil {
+            return "", err
+        }
+    }
+    fmt.Printf("********%+v\n", mdbCollection)
+    cu, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cuUID)).One()
+    if err != nil {
+        return "", err
+    }
+    if _, err := mdbmodels.FindCollectionsContentUnit(mdb.DB, mdbCollection.ID, cu.ID); err == sql.ErrNoRows {
+        var mdbCollectionsContentUnit mdbmodels.CollectionsContentUnit
+        mdbCollectionsContentUnit.CollectionID = mdbCollection.ID
+        mdbCollectionsContentUnit.ContentUnitID = cu.ID
+        if err := mdbCollectionsContentUnit.Insert(mdb.DB); err != nil {
+            return "", err
+        }
+    }
+    return mdbCollection.UID, nil
+}
+
+func (suite *IndexerSuite) uc(c Collection, cuUID string) string {
+	r := require.New(suite.T())
+	uid, err := updateCollection(c, cuUID)
+	r.Nil(err)
+	return uid
 }
 
 func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool) (string, error) {
@@ -272,25 +314,56 @@ func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool)
 	return mdbContentUnit.UID, nil
 }
 
+func deleteCollection(UID string) error {
+    ccu, err := mdbmodels.CollectionsContentUnits(mdb.DB,
+		qm.InnerJoin("collections on collections.id = collections_content_units.collection_id"),
+        qm.Where("collections.uid = ?", UID)).All()
+    if err != nil {
+        return err
+    }
+    ccu.DeleteAll(mdb.DB)
+    return mdbmodels.Collections(mdb.DB, qm.Where("uid = ?", UID)).DeleteAll()
+}
+
 func deleteContentUnits(UIDs []string) error {
 	UIDsI := make([]interface{}, len(UIDs))
 	for i, v := range UIDs {
 		UIDsI[i] = v
 	}
-	ids, err := mdbmodels.ContentUnitI18ns(mdb.DB, qm.Select("content_unit_id"),
+	contentUnitsI18ns, err := mdbmodels.ContentUnitI18ns(mdb.DB,
 		qm.InnerJoin("content_units on content_units.id = content_unit_i18n.content_unit_id"),
 		qm.WhereIn("content_units.uid in ?", UIDsI...)).All()
 	if err != nil {
 		return err
 	}
-	idsI := make([]interface{}, len(ids))
-	for i, v := range ids {
+	idsI := make([]interface{}, len(contentUnitsI18ns))
+	for i, v := range contentUnitsI18ns {
 		idsI[i] = v.ContentUnitID
 	}
 	if err := mdbmodels.ContentUnitI18ns(mdb.DB,
 		qm.WhereIn("content_unit_id in ?", idsI...)).DeleteAll(); err != nil {
 		return err
 	}
+    collectionIds, err := mdbmodels.CollectionsContentUnits(mdb.DB,
+		qm.InnerJoin("content_units on content_units.id = collections_content_units.content_unit_id"),
+        qm.WhereIn("content_units.uid IN ?", UIDsI...)).All()
+    if err != nil {
+        return err
+    }
+    if len(collectionIds) > 0 {
+        collectionIdsI := make([]interface{}, len(collectionIds))
+        for i, v := range collectionIds {
+            collectionIdsI[i] = v.CollectionID
+        }
+        if err := mdbmodels.CollectionsContentUnits(mdb.DB,
+            qm.WhereIn("collection_id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
+            return err
+        }
+        if err := mdbmodels.Collections(mdb.DB,
+            qm.WhereIn("id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
+            return err
+        }
+    }
 	return mdbmodels.ContentUnits(mdb.DB, qm.WhereIn("uid in ?", UIDsI...)).DeleteAll()
 }
 
@@ -318,10 +391,101 @@ func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *I
 	r.ElementsMatch(expectedNames, names)
 }
 
-func (suite *IndexerSuite) TestContentUnitsIndex() {
-	// TODO: Add collections and check collections update.
-	// TODO: Add tag and source tests.
+func (suite *IndexerSuite) validateMaps(e map[string][]string, a map[string][]string) {
+	r := require.New(suite.T())
+    for k, v := range e {
+        val, ok := a[k]
+        r.True(ok, fmt.Sprintf("%s not found in actual: %+v", k, a))
+        r.ElementsMatch(v, val, "Elements don't match expected: %+v actual: %+v", v, val)
+    }
+    for k := range a {
+        _, ok := e[k]
+        r.True(ok)
+    }
+}
 
+func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *Indexer, expectedTypes map[string][]string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	types := make(map[string][]string)
+	for _, hit := range res.Hits.Hits {
+		var cu ContentUnit
+		json.Unmarshal(*hit.Source, &cu)
+		types[cu.MDB_UID] = cu.CollectionsContentTypes
+	}
+	suite.validateMaps(expectedTypes, types)
+}
+
+func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
+	// Show all SQLs
+	boil.DebugMode = true
+	defer func() { boil.DebugMode = false }()
+
+    // Add test for collection for multiple content units.
+	r := require.New(suite.T())
+	fmt.Println("Adding content units.")
+	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
+    suite.uc(Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID)
+    suite.uc(Collection{ContentType: consts.CT_CONGRESS}, cu1UID)
+	cu2UID := suite.ucu(ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
+    c2UID := suite.uc(Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID)
+	UIDs := []string{cu1UID, cu2UID}
+
+	fmt.Println("Reindexing everything.")
+	indexName := IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_ENGLISH)
+	indexer := MakeIndexer("test", []string{consts.ES_UNITS_INDEX})
+	// Index existing DB data.
+	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.RefreshAll())
+
+	fmt.Println("Validate we have 2 searchable content units with proper content types.")
+	suite.validateContentUnitNames(indexName, indexer, []string{"something", "something else"})
+	suite.validateContentUnitTypes(indexName, indexer,map[string][]string{
+        cu1UID: []string{consts.CT_DAILY_LESSON, consts.CT_CONGRESS},
+        cu2UID: []string{consts.CT_SPECIAL_LESSON},
+    })
+
+    fmt.Println("Validate we have successfully added a content type.")
+    c1UID := suite.uc(Collection{ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID)
+	r.Nil(indexer.CollectionAdd(c1UID))
+	suite.validateContentUnitTypes(indexName, indexer,map[string][]string{
+        cu1UID: []string{consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
+        cu2UID: []string{consts.CT_SPECIAL_LESSON},
+    })
+
+    fmt.Println("Validate we have successfully updated a content type.")
+    suite.uc(Collection{MDB_UID: c2UID, ContentType: consts.CT_MEALS}, cu2UID)
+	r.Nil(indexer.CollectionUpdate(c2UID))
+	suite.validateContentUnitTypes(indexName, indexer,map[string][]string{
+        cu1UID: []string{consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
+        cu2UID: []string{consts.CT_MEALS},
+    })
+
+    fmt.Println("Validate we have successfully deleted a content type.")
+    r.Nil(deleteCollection(c2UID))
+	r.Nil(indexer.CollectionDelete(c2UID))
+	suite.validateContentUnitTypes(indexName, indexer,map[string][]string{
+        cu1UID: []string{consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
+        cu2UID: []string{},
+    })
+
+	fmt.Println("Delete units, reindex and validate we have 0 searchable units.")
+	r.Nil(deleteContentUnits(UIDs))
+	r.Nil(indexer.ReindexAll())
+	suite.validateContentUnitNames(indexName, indexer, []string{})
+	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{})
+
+	// Remove test indexes.
+	r.Nil(indexer.DeleteIndexes())
+}
+
+func (suite *IndexerSuite) TestContentUnitsIndex() {
+    // TODO: Add file changes...
+	// TODO: Add tag and source tests.
 	r := require.New(suite.T())
 	fmt.Println("Adding content units.")
 	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+    "reflect"
 	"strings"
 	"time"
 
@@ -42,16 +43,16 @@ type ContentUnitsIndex struct {
 }
 
 func (index *ContentUnitsIndex) ReindexAll() error {
-	if err := index.removeFromIndex(elastic.NewMatchAllQuery()); err != nil {
+	if err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
 		return err
 	}
-	return index.addToIndex("cu.secure = 0 AND cu.published IS TRUE")
+	return index.addToIndexSql("cu.secure = 0 AND cu.published IS TRUE")
 }
 
 func contentUnitsScopeByFile(fileUID string) ([]string, error) {
 	units, err := mdbmodels.ContentUnits(mdb.DB,
-		qm.Select("uid"),
-		qm.InnerJoin("files AS f on f.content_unit_id = content_unit.id"),
+		qm.Select("content_units.uid"),
+		qm.InnerJoin("files AS f on f.content_unit_id = content_units.id"),
 		qm.Where("f.uid = ?", fileUID)).All()
 	if err != nil {
 		return nil, err
@@ -63,7 +64,68 @@ func contentUnitsScopeByFile(fileUID string) ([]string, error) {
 	return uids, nil
 }
 
-func (index *ContentUnitsIndex) AddToIndex(scope Scope) error {
+func is(slice interface{}) []interface{} {
+    s := reflect.ValueOf(slice)
+    if s.Kind() != reflect.Slice {
+        panic("InterfaceSlice() given a non-slice type")
+    }
+    ret := make([]interface{}, s.Len())
+    for i:=0; i<s.Len(); i++ {
+        ret[i] = s.Index(i).Interface()
+    }
+    return ret
+}
+
+func pprint(l interface{}) string {
+    var s []string
+    for _, i := range is(l) {
+        s = append(s, fmt.Sprintf("%+v", i))
+    }
+    return strings.Join(s, "\n\t")
+}
+
+func contentUnitsScopeByCollection(cUID string) ([]string, error) {
+    units, err := mdbmodels.ContentUnits(mdb.DB,
+        qm.InnerJoin("collections_content_units AS ccu ON ccu.content_unit_id = content_units.id"),
+        qm.InnerJoin("collections AS c ON ccu.collection_id = c.id"),
+        qm.Where("c.uid = ?", cUID)).All()
+	if err != nil {
+		return nil, err
+	}
+	uids := make([]string, len(units))
+	for i, unit := range units {
+		uids[i] = unit.UID
+	}
+	return uids, nil
+}
+
+func (index *ContentUnitsIndex) Add(scope Scope) error {
+    return index.addToIndex(scope)
+}
+
+func (index *ContentUnitsIndex) Update(scope Scope) error {
+    if err := index.removeFromIndex(scope); err != nil {
+        return err
+    }
+    return index.addToIndex(scope)
+}
+
+func (index *ContentUnitsIndex) Delete(scope Scope) error {
+    // We only delete content units when content unit is deleted, otherwise we just update.
+    if scope.ContentUnitUID != "" {
+        if err := index.removeFromIndex(Scope{ContentUnitUID: scope.ContentUnitUID}); err != nil {
+            return err
+        }
+        scope.ContentUnitUID = ""
+    }
+    emptyScope := Scope{}
+    if scope != emptyScope {
+        return index.Update(scope)
+    }
+    return nil
+}
+
+func (index *ContentUnitsIndex) addToIndex(scope Scope) error {
 	sqlScope := "cu.secure = 0 AND cu.published IS TRUE"
 	var uids []string
 	if scope.ContentUnitUID != "" {
@@ -76,6 +138,13 @@ func (index *ContentUnitsIndex) AddToIndex(scope Scope) error {
 		}
 		uids = append(uids, moreUIDs...)
 	}
+    if scope.CollectionUID != "" {
+		moreUIDs, err := contentUnitsScopeByCollection(scope.CollectionUID)
+		if err != nil {
+			return err
+		}
+		uids = append(uids, moreUIDs...)
+    }
 	if len(uids) > 0 {
 		quoted := make([]string, len(uids))
 		for i, uid := range uids {
@@ -83,10 +152,10 @@ func (index *ContentUnitsIndex) AddToIndex(scope Scope) error {
 		}
 		sqlScope = fmt.Sprintf("%s AND cu.uid IN (%s)", sqlScope, strings.Join(quoted, ","))
 	}
-	return index.addToIndex(sqlScope)
+	return index.addToIndexSql(sqlScope)
 }
 
-func (index *ContentUnitsIndex) RemoveFromIndex(scope Scope) error {
+func (index *ContentUnitsIndex) removeFromIndex(scope Scope) error {
 	var typedUIDs []string
 	if scope.ContentUnitUID != "" {
 		typedUIDs = append(typedUIDs, fmt.Sprintf("content_unit:%s", scope.ContentUnitUID))
@@ -116,14 +185,14 @@ func (index *ContentUnitsIndex) RemoveFromIndex(scope Scope) error {
 			typedUIDsI[i] = typedUID
 		}
 		elasticScope = elastic.NewTermsQuery("typed_uids", typedUIDsI...)
-		return index.removeFromIndex(elasticScope)
+		return index.removeFromIndexQuery(elasticScope)
 	} else {
 		// Nothing to remove.
 		return nil
 	}
 }
 
-func (index *ContentUnitsIndex) addToIndex(sqlScope string) error {
+func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
     count, err := mdbmodels.ContentUnits(mdb.DB).Count()
     if err != nil {
         return err
@@ -160,7 +229,7 @@ func (index *ContentUnitsIndex) addToIndex(sqlScope string) error {
 	return nil
 }
 
-func (index *ContentUnitsIndex) removeFromIndex(elasticScope elastic.Query) error {
+func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query) error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
 		res, err := mdb.ESC.DeleteByQuery(indexName).

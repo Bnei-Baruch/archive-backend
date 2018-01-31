@@ -70,7 +70,7 @@ func (indexer *Indexer) DeleteIndexes() error {
 // Set of MDB event handlers to incrementally change all indexes.
 func (indexer *Indexer) CollectionAdd(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.AddToIndex(Scope{CollectionUID: uid}); err != nil {
+		if err := index.Add(Scope{CollectionUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -79,10 +79,7 @@ func (indexer *Indexer) CollectionAdd(uid string) error {
 
 func (indexer *Indexer) CollectionUpdate(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.RemoveFromIndex(Scope{CollectionUID: uid}); err != nil {
-			return err
-		}
-		if err := index.AddToIndex(Scope{CollectionUID: uid}); err != nil {
+		if err := index.Update(Scope{CollectionUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -91,7 +88,7 @@ func (indexer *Indexer) CollectionUpdate(uid string) error {
 
 func (indexer *Indexer) CollectionDelete(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.RemoveFromIndex(Scope{CollectionUID: uid}); err != nil {
+		if err := index.Delete(Scope{CollectionUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -100,7 +97,7 @@ func (indexer *Indexer) CollectionDelete(uid string) error {
 
 func (indexer *Indexer) ContentUnitAdd(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.AddToIndex(Scope{ContentUnitUID: uid}); err != nil {
+		if err := index.Add(Scope{ContentUnitUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -115,10 +112,7 @@ func (indexer *Indexer) ContentUnitUpdate(uid string) error {
 		// In that case removeing and adding will be much slower then updating
 		// existing documents in elastic.
 		// Decicded to not optimize prematurly.
-		if err := index.RemoveFromIndex(Scope{ContentUnitUID: uid}); err != nil {
-			return err
-		}
-		if err := index.AddToIndex(Scope{ContentUnitUID: uid}); err != nil {
+		if err := index.Update(Scope{ContentUnitUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -127,7 +121,7 @@ func (indexer *Indexer) ContentUnitUpdate(uid string) error {
 
 func (indexer *Indexer) ContentUnitDelete(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.RemoveFromIndex(Scope{ContentUnitUID: uid}); err != nil {
+		if err := index.Delete(Scope{ContentUnitUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -136,7 +130,7 @@ func (indexer *Indexer) ContentUnitDelete(uid string) error {
 
 func (indexer *Indexer) FileAdd(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.AddToIndex(Scope{FileUID: uid}); err != nil {
+		if err := index.Add(Scope{FileUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -145,10 +139,7 @@ func (indexer *Indexer) FileAdd(uid string) error {
 
 func (indexer *Indexer) FileUpdate(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.RemoveFromIndex(Scope{FileUID: uid}); err != nil {
-			return err
-		}
-		if err := index.AddToIndex(Scope{FileUID: uid}); err != nil {
+		if err := index.Update(Scope{FileUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -157,7 +148,7 @@ func (indexer *Indexer) FileUpdate(uid string) error {
 
 func (indexer *Indexer) FileDelete(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.RemoveFromIndex(Scope{FileUID: uid}); err != nil {
+		if err := index.Delete(Scope{FileUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -166,7 +157,7 @@ func (indexer *Indexer) FileDelete(uid string) error {
 
 func (indexer *Indexer) SourceAdd(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.AddToIndex(Scope{SourceUID: uid}); err != nil {
+		if err := index.Add(Scope{SourceUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -175,10 +166,7 @@ func (indexer *Indexer) SourceAdd(uid string) error {
 
 func (indexer *Indexer) SourceUpdate(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.RemoveFromIndex(Scope{SourceUID: uid}); err != nil {
-			return err
-		}
-		if err := index.AddToIndex(Scope{SourceUID: uid}); err != nil {
+		if err := index.Update(Scope{SourceUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -187,7 +175,7 @@ func (indexer *Indexer) SourceUpdate(uid string) error {
 
 func (indexer *Indexer) TagAdd(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.AddToIndex(Scope{TagUID: uid}); err != nil {
+		if err := index.Add(Scope{TagUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -196,10 +184,7 @@ func (indexer *Indexer) TagAdd(uid string) error {
 
 func (indexer *Indexer) TagUpdate(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.RemoveFromIndex(Scope{TagUID: uid}); err != nil {
-			return err
-		}
-		if err := index.AddToIndex(Scope{TagUID: uid}); err != nil {
+		if err := index.Update(Scope{TagUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -208,7 +193,7 @@ func (indexer *Indexer) TagUpdate(uid string) error {
 
 func (indexer *Indexer) PersonAdd(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.AddToIndex(Scope{PersonUID: uid}); err != nil {
+		if err := index.Add(Scope{PersonUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -217,10 +202,7 @@ func (indexer *Indexer) PersonAdd(uid string) error {
 
 func (indexer *Indexer) PersonUpdate(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.RemoveFromIndex(Scope{PersonUID: uid}); err != nil {
-			return err
-		}
-		if err := index.AddToIndex(Scope{PersonUID: uid}); err != nil {
+		if err := index.Update(Scope{PersonUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -229,7 +211,7 @@ func (indexer *Indexer) PersonUpdate(uid string) error {
 
 func (indexer *Indexer) PublisherAdd(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.AddToIndex(Scope{PublisherUID: uid}); err != nil {
+		if err := index.Add(Scope{PublisherUID: uid}); err != nil {
 			return err
 		}
 	}
@@ -238,10 +220,7 @@ func (indexer *Indexer) PublisherAdd(uid string) error {
 
 func (indexer *Indexer) PublisherUpdate(uid string) error {
 	for _, index := range indexer.indices {
-		if err := index.RemoveFromIndex(Scope{PublisherUID: uid}); err != nil {
-			return err
-		}
-		if err := index.AddToIndex(Scope{PublisherUID: uid}); err != nil {
+		if err := index.Update(Scope{PublisherUID: uid}); err != nil {
 			return err
 		}
 	}

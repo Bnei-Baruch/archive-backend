@@ -26,8 +26,9 @@ type Scope struct {
 
 type Index interface {
 	ReindexAll() error
-	AddToIndex(scope Scope) error
-	RemoveFromIndex(scope Scope) error
+	Add(scope Scope) error
+	Update(scope Scope) error
+	Delete(scope Scope) error
 	CreateIndex() error
 	DeleteIndex() error
 	RefreshIndex() error
@@ -52,8 +53,8 @@ func (index *BaseIndex) indexName(lang string) string {
 func (index *BaseIndex) CreateIndex() error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		name := index.indexName(lang)
-		definition := fmt.Sprintf("data/es/mappings/units/units-%s.json", lang)
-		// read mappings and create index
+		definition := fmt.Sprintf("data/es/mappings/units/%s-%s.json", index.baseName, lang)
+		// Read mappings and create index
 		mappings, err := bindata.Asset(definition)
 		if err != nil {
 			return errors.Wrapf(err, "Failed loading mapping %s", definition)
