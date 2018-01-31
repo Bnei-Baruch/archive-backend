@@ -326,5 +326,5 @@ def Resolve(lang, value):
 for lang in LANG_GROUPS[ALL]:
   with open('./data/es/mappings/units/units-%s.json' % lang, 'w') as f:
     json.dump(Resolve(lang, UNITS_TEMPLATE), f, indent=4)
-  with open('./data/es/mappings/classification/classification-%s.json' % lang, 'w') as f:
+  with open('./data/es/mappings/classifications/classifications-%s.json' % lang, 'w') as f:
     json.dump(Resolve(lang, CLASSIFICATION_TEMPLATE), f, indent=4)

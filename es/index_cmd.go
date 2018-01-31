@@ -11,8 +11,13 @@ import (
 func IndexCmd(index string) {
 	clock := mdb.Init()
 	indexer := MakeIndexer("prod", []string{index})
-	indexer.ReindexAll()
+	err := indexer.ReindexAll()
+    if err != nil {
+        log.Error(err)
+    }
 	mdb.Shutdown()
-	log.Info("Success")
-	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+    if err == nil {
+        log.Info("Success")
+        log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+    }
 }

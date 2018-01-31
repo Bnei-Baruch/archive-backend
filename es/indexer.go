@@ -1,6 +1,8 @@
 package es
 
 import (
+    "fmt"
+
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )
 
@@ -18,7 +20,7 @@ func MakeIndexer(namespace string, names []string) *Indexer {
 	indexer.indices = make([]Index, len(names))
 	for i, name := range names {
 		if name == consts.ES_CLASSIFICATIONS_INDEX {
-			// indexer.indices[i] = MakeCollectionsIndex(namespace)
+			indexer.indices[i] = MakeClassificationsIndex(namespace)
 		} else if name == consts.ES_UNITS_INDEX {
 			indexer.indices[i] = MakeContentUnitsIndex(namespace)
 		}
@@ -27,6 +29,7 @@ func MakeIndexer(namespace string, names []string) *Indexer {
 }
 
 func (indexer *Indexer) ReindexAll() error {
+    fmt.Println("Indexing everything.")
 	for _, index := range indexer.indices {
 		// TODO: Check if indexing things in parallel will make things faster?
 		if err := index.DeleteIndex(); err != nil {

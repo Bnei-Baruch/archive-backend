@@ -126,6 +126,7 @@ func (index *ContentUnitsIndex) Delete(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) addToIndex(scope Scope) error {
+    // TODO: Work not done! Missing tags and sources scopes!
 	sqlScope := "cu.secure = 0 AND cu.published IS TRUE"
 	var uids []string
 	if scope.ContentUnitUID != "" {
@@ -178,13 +179,12 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) error {
 	if scope.PublisherUID != "" {
 		typedUIDs = append(typedUIDs, fmt.Sprintf("publisher:%s", scope.PublisherUID))
 	}
-	var elasticScope elastic.Query
 	if len(typedUIDs) > 0 {
 		typedUIDsI := make([]interface{}, len(typedUIDs))
 		for i, typedUID := range typedUIDs {
 			typedUIDsI[i] = typedUID
 		}
-		elasticScope = elastic.NewTermsQuery("typed_uids", typedUIDsI...)
+		elasticScope := elastic.NewTermsQuery("typed_uids", typedUIDsI...)
 		return index.removeFromIndexQuery(elasticScope)
 	} else {
 		// Nothing to remove.
