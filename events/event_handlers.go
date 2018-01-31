@@ -5,238 +5,260 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
-
 //collection functions
-func CollectionCreate(uid string) error {
-	err := es.CollectionAdd(uid)
+func CollectionCreate(d Data) {
+	log.Info(d.Payload["uid"].(string))
+
+	err := es.CollectionAdd(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't add collection in ES", err)
 	}
-	return nil
 }
 
-func CollectionDelete(uid string) error {
-	err := es.CollectionDelete(uid)
+func CollectionDelete(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.CollectionDelete(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't add collection in ES", err)
 	}
-	return nil
 }
 
-func CollectionUpdate(uid string) error {
-	err := es.CollectionUpdate(uid)
+func CollectionUpdate(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.CollectionUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update collection in  ES", err)
 	}
-	return nil
 }
 
-func CollectionPublishedChange(uid string) error {
-	err := es.CollectionUpdate(uid)
+//
+func CollectionPublishedChange(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.CollectionUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update collection in  ES", err)
 	}
-	return nil
 }
 
-func CollectionContentUnitsChange(uid string) error {
-	err := es.CollectionUpdate(uid)
+func CollectionContentUnitsChange(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.CollectionUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update collection in  ES", err)
 	}
-	return nil
 }
 
-//event functions
-func ContentUnitCreate(uid string) error {
-	err := es.ContentUnitAdd(uid)
+//
+////event functions
+func ContentUnitCreate(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.ContentUnitAdd(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't add content unit to ES", err)
 	}
-	return nil
 }
 
-func ContentUnitDelete(uid string) error {
-	err := es.ContentUnitDelete(uid)
+func ContentUnitDelete(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.ContentUnitDelete(d.Payload["uid"].(string))
 	if err != nil {
-		log.Errorf("couldn't add delete unit to ES", err)
+		log.Errorf("couldn't delete content unit in ES", err)
 	}
-	return nil
 }
 
-func ContentUnitUpdate(uid string) error {
-	err := es.ContentUnitUpdate(uid)
-	if err != nil {
-		log.Errorf("couldn't update content unit in ES", err)
-	}
-	return nil
-}
+func ContentUnitUpdate(d Data) {
+	log.Infof("%+v", d)
 
-func ContentUnitPublishedChange(uid string) error {
-	err := es.ContentUnitUpdate(uid)
+	err := es.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update content unit in ES", err)
 	}
-	return nil
 }
 
-func ContentUnitDerivativesChange(uid string) error {
-	err := es.ContentUnitUpdate(uid)
+func ContentUnitPublishedChange(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update content unit in ES", err)
 	}
-	return nil
 }
 
-func ContentUnitSourcesChange(uid string) error {
-	err := es.ContentUnitUpdate(uid)
+func ContentUnitDerivativesChange(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update content unit in ES", err)
 	}
-	return nil
 }
 
-func ContentUnitTagsChange(uid string) error {
-	err := es.ContentUnitUpdate(uid)
+func ContentUnitSourcesChange(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update content unit in ES", err)
 	}
-	return nil
 }
 
-func ContentUnitPersonsChange(uid string) error {
-	err := es.ContentUnitUpdate(uid)
+func ContentUnitTagsChange(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update content unit in ES", err)
 	}
-	return nil
 }
 
-func ContentUnitPublishersChange(uid string) error {
-	err := es.ContentUnitUpdate(uid)
+func ContentUnitPersonsChange(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update content unit in ES", err)
 	}
-	return nil
 }
 
-func FilePublished(uid string) error {
-	err := es.FileAdd(uid)
-	Unzip(MdbConn, uid)
+func ContentUnitPublishersChange(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.ContentUnitUpdate(d.Payload["uid"].(string))
+	if err != nil {
+		log.Errorf("couldn't update content unit in ES", err)
+	}
+}
+
+func FilePublished(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.FileAdd(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't add file to ES", err)
 	}
-	return nil
+
+	err = unZipFile(d.Payload["uid"].(string))
+	if err != nil {
+		log.Errorf("problem unzipping file %v", d.Payload["uid"].(string), err)
+	}
 }
 
-func FileReplace(uid string, oldUid string) error {
-	errReplace := es.FileDelete(oldUid)
-	if errReplace != nil {
-		log.Errorf("couldn't delete file from ES", errReplace)
-	}
+func FileReplace(d Data) {
+	log.Infof("%+v", d)
+	//errReplace := es.FileDelete(oldUid)
+	//if errReplace != nil {
+	//	log.Errorf("couldn't delete file from ES", errReplace)
+	//}
+	//
+	//errAdd := es.FileAdd(d.Payload["uid"].(string))
+	//if errAdd != nil {
+	//	log.Errorf("couldn't add file to ES", errAdd)
+	//}
 
-	errAdd := es.FileAdd(uid)
-	if errAdd != nil {
-		log.Errorf("couldn't add file to ES", errAdd)
-	}
-
-	return nil
 }
 
-func FileInsert(uid string) error {
-	err := es.FileAdd(uid)
+func FileInsert(d Data) {
+	log.Infof("%+v", d)
+	err := es.FileAdd(d.Payload["uid"].(string))
+
 	if err != nil {
 		log.Errorf("couldn't add file to ES", err)
 	}
-	return nil
 }
 
-func FileUpdate(uid string) error {
-	err := es.FileUpdate(uid)
+func FileUpdate(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.FileUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update file in ES", err)
 	}
-	return nil
 }
 
-func SourceCreate(uid string) error {
-	err := es.SourceAdd(uid)
+func SourceCreate(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.SourceAdd(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't create source in ES", err)
 	}
-	return nil
 }
 
-func SourceUpdate(uid string) error {
-	err := es.SourceUpdate(uid)
+func SourceUpdate(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.SourceUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update source in ES", err)
 	}
-	return nil
 }
 
-func TagCreate(uid string) error {
-	err := es.TagAdd(uid)
+func TagCreate(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.TagAdd(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't add tag in ES", err)
 	}
-	return nil
 }
 
-func TagUpdate(uid string) error {
-	err := es.TagUpdate(uid)
+func TagUpdate(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.TagUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update tag in ES", err)
 	}
-	return nil
 }
 
-func PersonCreate(uid string) error {
-	err := es.PersonAdd(uid)
+func PersonCreate(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.PersonAdd(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't add person in ES", err)
 	}
-	return nil
 }
 
-func PersonDelete(uid string) error {
-	err := es.PersonDelete(uid)
+func PersonDelete(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.PersonDelete(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't delete person in ES", err)
 	}
-	return nil
 }
 
-func PersonUpdate(uid string) error {
-	err := es.PersonUpdate(uid)
+func PersonUpdate(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.PersonUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update person in ES", err)
 	}
-	return nil
 }
 
-func PublisherCreate(uid string) error {
-	err := es.PublisherAdd(uid)
+func PublisherCreate(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.PublisherAdd(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't create publisher in ES", err)
 	}
-	return nil
 }
 
-func PublisherUpdate(uid string) error {
-	err := es.PublisherUpdate(uid)
+func PublisherUpdate(d Data) {
+	log.Infof("%+v", d)
+
+	err := es.PublisherUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update publisher in ES", err)
 	}
-	return nil
+	
 }
-
-
-
-
-
-
-
-
-
-

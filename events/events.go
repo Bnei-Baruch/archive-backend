@@ -4,62 +4,66 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"strings"
 
-	//"github.com/Bnei-Baruch/archive-backend/mdb/models"
-	//"github.com/Bnei-Baruch/archive-backend/utils"
+	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 	log "github.com/Sirupsen/logrus"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/boil"
-	"os"
-	"os/signal"
-	"github.com/Bnei-Baruch/archive-backend/utils"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/volatiletech/sqlboiler/queries/qm"
-	"net/http"
 )
 
-// pointer to connection to db
+// MdbConn pointer to connection to db
 var MdbConn *sql.DB
 
-
+// RunLListener function sdfsf sdfsdf
 func RunLListener() {
-
-	natsUrl := viper.GetString("nats.url")
-	natsClientId := viper.GetString("nats.client-id")
-	natsClusterId := viper.GetString("nats.cluster-id")
+	// variables for connections to sources
+	natsURL := viper.GetString("nats.url")
+	natsClientID := viper.GetString("nats.client-id")
+	natsClusterID := viper.GetString("nats.cluster-id")
 	natsSubject := viper.GetString("nats.subject")
-	mdbUrl := viper.GetString("mdb.url")
+	mdbURL := viper.GetString("mdb.url")
 
-	var err1 error
-	MdbConn, err1 = sql.Open("postgres", mdbUrl )
-	boil.SetDB(MdbConn)
-	utils.Must(err1)
+	// connect to postgres
+	var err error
+	MdbConn, err = sql.Open("postgres", mdbURL)
+	utils.Must(err)
 	utils.Must(MdbConn.Ping())
+
+	log.Infof("Connected to db %v", MdbConn)
+	boil.SetDB(MdbConn)
 	defer MdbConn.Close()
 
 
 	// connect to nats server
-
-	sc, err := stan.Connect(natsClusterId, natsClientId, stan.NatsURL(natsUrl))
+	sc, err := stan.Connect(natsClusterID, natsClientID, stan.NatsURL(natsURL))
 	if err != nil {
-		log.Fatalf("Can't connect: %v.\nMake sure a NATS Streaming Server is running at: %s\n retrying:", err, natsUrl)
+		log.Fatalf("Can't connect: %v.\nMake sure a NATS Streaming Server is running at: %s\n retrying:", err, natsURL)
 		panic("...")
 	}
-	log.Printf("Connected to %s clusterID: [%s] clientID: [%s]\n", natsUrl, natsClusterId, natsClientId)
+	defer sc.Close()
+	log.Printf("Connected to %s clusterID: [%s] clientID: [%s]\n", natsURL, natsClusterID, natsClientID)
+
 
 	// connection options
 	startOpt := stan.DeliverAllAvailable()
-
-	sc.Subscribe(natsSubject, msgHandler, startOpt)
-
-	log.Printf("Listening on [%s], clientID=[%s], durable=[%s]\n", natsSubject, natsUrl, "false")
+	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt)
+	if err != nil {
+		log.Fatalln("couldn't subscribe to nats", err)
+	}
+	log.Printf("Listening on [%s], clientID=[%s], durable=[%s]\n", natsSubject, natsURL, "false")
 
 	signalChan := make(chan os.Signal, 1)
 	cleanupDone := make(chan bool)
 	signal.Notify(signalChan, os.Interrupt)
 	go func() {
-		for  range signalChan {
+		for range signalChan {
 			fmt.Printf("\nReceived an interrupt, unsubscribing and closing connection...\n\n")
 			// Do not unsubscribe a durable on exit, except if asked to.
 			sc.Close()
@@ -69,150 +73,115 @@ func RunLListener() {
 	<-cleanupDone
 }
 
-
+//Data struct for unmarshaling data
+type Data struct {
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Payload map[string]interface{} `json:"payload"`
+}
 
 //checks message type and calls "eventHandler"
 func msgHandler(msg *stan.Msg) {
 
+	msgSrcData := msg.Data
+	var MsgData Data
 
-
-
-
-	type TypeTest struct {
-		Type string `json:"type"`
-	}
-
-	var test TypeTest
-	err := json.Unmarshal(msg.Data, &test)
+	err := json.Unmarshal(msgSrcData, &MsgData)
 	if err != nil {
-		fmt.Printf("json.Unmarshal error: %s\n", err)
+		log.Errorf("json.Unmarshal error: %s\n", err)
 	}
 
-// check if event is FILE_REPLACE and run function
-	if test.Type != E_FILE_REPLACE {
-
-		type SimpleData struct {
-			Id      string `json:"id"`
-			Type    string `json:"type"`
-			Payload struct {
-				ID  int64  `json:"id"`
-				UID string `json:"uid"`
-			} `json:"payload"`
-		}
-
-		var PayloadData SimpleData
-
-		err = json.Unmarshal(msg.Data, &PayloadData)
-		if err != nil {
-			fmt.Printf("json.Unmarshal error: %s\n", err)
-		}
-		//fmt.Println(PayloadData)
-
-		eventHandler(PayloadData.Type, PayloadData.Payload.UID, "")
-		//test1(MdbConn, PayloadData.Payload.UID)
-	} else {
-
-		type ReplaceData struct {
-			ID      string `json:"id"`
-			Type    string `json:"type"`
-			Payload struct {
-				InsertType string `json:"insert_type"`
-				New        struct {
-					ID  int    `json:"id"`
-					UID string `json:"uid"`
-				} `json:"new"`
-				Old struct {
-					ID  int    `json:"id"`
-					UID string `json:"uid"`
-				} `json:"old"`
-			} `json:"payload"`
-		}
-
-		var PayloadData ReplaceData
-		err = json.Unmarshal(msg.Data, &PayloadData)
-		if err != nil {
-			fmt.Printf("json.Unmarshal error: %s\n", err)
-		}
-		//fmt.Println(PayloadData)
-		eventHandler(PayloadData.Type, PayloadData.Payload.New.UID, PayloadData.Payload.Old.UID)
-	}
-
-}
-
-
-//calls searching functions
-func eventHandler(eventType string, uid string, oldUid string) {
-	fmt.Println("old_uid: " + oldUid + ",new_uid: " + uid + "  eventType: " + eventType)
-	switch eventType {
+	switch MsgData.Type {
 	case E_COLLECTION_CREATE:
-		CollectionCreate(uid)
+		CollectionCreate(MsgData)
 	case E_COLLECTION_DELETE:
-		CollectionDelete(uid)
+		CollectionDelete(MsgData)
 	case E_COLLECTION_UPDATE:
-		CollectionUpdate(uid)
+		CollectionUpdate(MsgData)
 	case E_COLLECTION_PUBLISHED_CHANGE:
-		CollectionPublishedChange(uid)
+		CollectionPublishedChange(MsgData)
 	case E_COLLECTION_CONTENT_UNITS_CHANGE:
-		CollectionContentUnitsChange(uid)
+		CollectionContentUnitsChange(MsgData)
 	case E_CONTENT_UNIT_CREATE:
-		ContentUnitCreate(uid)
+		ContentUnitCreate(MsgData)
 	case E_CONTENT_UNIT_DELETE:
-		ContentUnitDelete(uid)
+		ContentUnitDelete(MsgData)
 	case E_CONTENT_UNIT_UPDATE:
-		ContentUnitUpdate(uid)
+		ContentUnitUpdate(MsgData)
 	case E_CONTENT_UNIT_PUBLISHED_CHANGE:
-		ContentUnitPublishedChange(uid)
+		ContentUnitPublishedChange(MsgData)
 	case E_CONTENT_UNIT_DERIVATIVES_CHANGE:
-		ContentUnitDerivativesChange(uid)
+		ContentUnitDerivativesChange(MsgData)
 	case E_CONTENT_UNIT_SOURCES_CHANGE:
-		ContentUnitSourcesChange(uid)
+		ContentUnitSourcesChange(MsgData)
 	case E_CONTENT_UNIT_TAGS_CHANGE:
-		ContentUnitTagsChange(uid)
+		ContentUnitTagsChange(MsgData)
 	case E_CONTENT_UNIT_PERSONS_CHANGE:
-		ContentUnitPersonsChange(uid)
+		ContentUnitPersonsChange(MsgData)
 	case E_CONTENT_UNIT_PUBLISHERS_CHANGE:
-		ContentUnitPublishersChange(uid)
-
+		ContentUnitPublishersChange(MsgData)
 	case E_FILE_PUBLISHED:
-		FilePublished(uid)
+		FilePublished(MsgData)
 	case E_FILE_REPLACE:
-		FileReplace(uid, oldUid)
+		FileReplace(MsgData)
 	case E_FILE_INSERT:
-		FileInsert(uid)
+		FileInsert(MsgData)
 	case E_FILE_UPDATE:
-		FileUpdate(uid)
+		FileUpdate(MsgData)
 	case E_SOURCE_CREATE:
-		SourceCreate(uid)
+		SourceCreate(MsgData)
 	case E_SOURCE_UPDATE:
-		SourceUpdate(uid)
+		SourceUpdate(MsgData)
 	case E_TAG_CREATE:
-		TagCreate(uid)
+		TagCreate(MsgData)
 	case E_TAG_UPDATE:
-		TagUpdate(uid)
+		TagUpdate(MsgData)
 	case E_PERSON_CREATE:
-		PersonCreate(uid)
+		PersonCreate(MsgData)
 	case E_PERSON_DELETE:
-		PersonDelete(uid)
+		PersonDelete(MsgData)
 	case E_PERSON_UPDATE:
-		PersonUpdate(uid)
+		PersonUpdate(MsgData)
 	case E_PUBLISHER_CREATE:
-		PublisherCreate(uid)
+		PublisherCreate(MsgData)
 	case E_PUBLISHER_UPDATE:
-		PublisherUpdate(uid)
-	default:
-		log.Errorf("unknown event type: %s uid: %s", eventType, uid)
+		PublisherUpdate(MsgData)
+	//default:
+	//	log.Errorf("unknown event type: %s MsgData: %s", eventType, MsgData)
 	}
 }
 
-func Unzip(db *sql.DB, u string) int16 {
-	mdbFile := mdbmodels.Files(db, qm.Where("uid=?", u))
-	OneFile, _ := mdbFile.One()
-	fmt.Printf("\n*****************%v\n",OneFile.Secure)
-	if OneFile.Secure == 0 {
-		_, err := http.Get("http://API/" + u)
-			if err != nil{
-				log.Error()
-			}
+// GetFileObj gets the file object from db
+func GetFileObj(uid string) *mdbmodels.File {
+	//fmt.Println("uid is: ", uid)
+	utils.Must(MdbConn.Ping())
+	mdbFile := mdbmodels.Files(MdbConn, qm.Where("uid=?", uid))
+	OneFile, err := mdbFile.One()
+	if err != nil {
+		log.Error(err)
 	}
-	return OneFile.Secure
+
+	//fmt.Printf("\n*********************************\n%+v\n", OneFile)
+	return OneFile
+}
+
+// BACKEND_URL is a  url for a backend service
+const BACKEND_URL = "https://jopa.com"
+
+func unZipFile(uid string) error {
+
+	file := GetFileObj(uid)
+	if (file.Type == "image" ||
+		strings.HasSuffix(file.Name, ".zip")) &&
+		file.Secure != 1 {
+		fmt.Printf("\n*********************************\n%+v\n", file)
+		fmt.Println("IMAGE!!! ", file.UID)
+
+		resp, err := http.Get(BACKEND_URL + "/" + uid)
+		if err != nil {
+			return err
+		}
+		fmt.Println(resp)
+	}
+	return nil
 }
