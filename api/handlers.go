@@ -503,110 +503,71 @@ func HomePageHandler(c *gin.Context) {
 	if c.Bind(&r) != nil {
 		return
 	}
-
+	
 	latestLesson, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, false)
 	if err != nil {
-		NewBadRequestError(errors.New("Unable to retrieve lattest daily lesson.")).Abort(c)
+		NewBadRequestError(err).Abort(c)
 		return
 	}
 
-	myDate := &utils.Date{Time: time.Now()}
+	cus, err := handleLatestContentUnits(c.MustGet("MDB_DB").(*sql.DB), r)
+	if err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+
+	var lesson ContentUnit
+	var program ContentUnit
+	var lecture ContentUnit
+	var event ContentUnit
+
+	for _, cu := range cus {
+		cuAssigned := false
+		for _, value := range cu.Collections {
+			switch value.ContentType {
+			case consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON:
+				lesson = *cu
+				cuAssigned = true
+				break
+			case consts.CT_VIDEO_PROGRAM:
+				program = *cu
+				cuAssigned = true
+				break
+			case consts.CT_LECTURE_SERIES,consts.CT_CHILDREN_LESSONS,consts.CT_WOMEN_LESSONS,consts.CT_VIRTUAL_LESSONS, consts.CT_VIRTUAL_LESSON, consts.CT_LECTURE,consts.CT_CHILDREN_LESSON,consts.CT_WOMEN_LESSON:
+				lecture = *cu
+				cuAssigned = true
+				break
+			case consts.CT_CONGRESS,consts.CT_HOLIDAY,consts.CT_PICNIC,consts.CT_UNITY_DAY:
+				event = *cu
+				cuAssigned = true
+				break
+			}
+			if (cuAssigned) {
+				break
+			}
+		}
+	}
+
+	unitsMap := make(map[string]ContentUnit)
+	unitsMap["lesson"] = lesson
+	unitsMap["program"] = program
+	unitsMap["lecture"] = lecture
+	unitsMap["event"] = event
+
+	//TBD from here
 
 	resp := struct {
 		LatestDailyLesson Collection
-		Promoted          struct {
-			Section   string
-			SubHeader string
-			Header    string
-			Url       string
-			Image     string
-		}
-		LatestContentUnits []ContentUnit
-		PopularTopics      []struct {
-			Title string
-			Url   string
-			Image string
-		}
+		Promoted struct { Section string; SubHeader string; Header string; Url string; Image string }
+		LatestContentUnits      map[string]ContentUnit
+		PopularTopics []struct { Title string; Url string; Image string }
 	}{
 		*latestLesson,
-		struct {
-			Section   string
-			SubHeader string
-			Header    string
-			Url       string
-			Image     string
-		}{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
-		[]ContentUnit{
-			{
-				ID:               "kvHFhL2Z",
-				ContentType:      "LESSON_PART",
-				FilmDate:         myDate,
-				Name:             "Preparation to the Lesson",
-				Duration:         694,
-				OriginalLanguage: "he",
-				Collections: map[string]*Collection{
-					"0ijpKZPZ____0": {
-						ID:          "kvH0ijpKZPZFhL2Z",
-						ContentType: "DAILY_LESSON",
-						FilmDate:    myDate,
-					},
-				},
-			},
-			{
-				ID:               "aUGdhjQC",
-				ContentType:      "VIRTUAL_LESSON",
-				FilmDate:         myDate,
-				Name:             "mlt_o_rav_2017-10-22_vl_webinar_kak-obshayutsia-kabbalisti",
-				Duration:         3644,
-				OriginalLanguage: "ru",
-				Collections: map[string]*Collection{
-					"VwCQ0OBq____0": {
-						ID:              "VwCQ0OBq",
-						ContentType:     "VIRTUAL_LESSON",
-						DefaultLanguage: "ru",
-					},
-				},
-			},
-			{
-				ID:               "QUgJI8T3",
-				ContentType:      "VIDEO_PROGRAM_CHAPTER",
-				FilmDate:         myDate,
-				Name:             "heb_o_rav_2017-09-28_program_haim-hadashim-ktaim_n668",
-				Duration:         856,
-				OriginalLanguage: "he",
-				Collections: map[string]*Collection{
-					"G30TMsPn____668": {
-						ID:              "G30TMsPn",
-						Name:            "A New Life. Excerpts",
-						ContentType:     "VIDEO_PROGRAM",
-						DefaultLanguage: "he",
-					},
-				},
-			},
-			{
-				ID:               "KqKa8COz",
-				ContentType:      "FRIENDS_GATHERING",
-				FilmDate:         myDate,
-				Name:             "mlt_o_norav_2017-10-22_yeshivat-haverim_n1",
-				Duration:         2921,
-				OriginalLanguage: "he",
-			},
-		},
-		[]struct {
-			Title string
-			Url   string
-			Image string
-		}{
-			struct {
-				Title string
-				Url   string
-				Image string
-			}{"Conception", "#", "http://www.thefertilebody.com/Content/Images/UploadedImages/a931e8de-3798-4332-8055-ea5b041dc0b0/ShopItemImage/conception.jpg"},
-			struct {
-				Title string
-				Url   string
-				Image string
-			}{"The role of women in the spiritual system", "#", "https://images-na.ssl-images-amazon.com/images/I/71mpCuqBFaL._SY717_.jpg"},
+		struct { Section string; SubHeader string; Header string; Url string; Image string }{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
+		unitsMap,
+		[]struct { Title string; Url string; Image string }{
+			struct { Title string; Url string; Image string }{"Conception", "#", "http://www.thefertilebody.com/Content/Images/UploadedImages/a931e8de-3798-4332-8055-ea5b041dc0b0/ShopItemImage/conception.jpg"},
+			struct { Title string; Url string; Image string }{"The role of women in the spiritual system", "#", "https://images-na.ssl-images-amazon.com/images/I/71mpCuqBFaL._SY717_.jpg"},
 		},
 	}
 
@@ -836,6 +797,63 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 	}
 
 	return cl, nil
+}
+
+func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpError) {
+
+	const query = `select distinct on (c.type_id) cu.uid
+	from collections_content_units ccu
+	inner join content_units cu on cu.id = ccu.content_unit_id
+	inner join
+	(select distinct on (collections.type_id) id, type_id, created_at
+	from collections
+	where secure=0 AND published IS TRUE
+	order by type_id, (properties->>'film_date')::date desc, created_at desc) c
+	on ccu.collection_id = c.id
+	where cu.secure=0 AND cu.published IS TRUE
+	order by c.type_id, (cu.properties->>'film_date')::date desc, cu.created_at desc`
+
+	rows, err := queries.Raw(db, query).Query()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	ccIds := make([]string, 0)
+	for rows.Next() {
+		var myId string
+		err := rows.Scan(&myId)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		ccIds = append(ccIds, myId)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+
+	mods = append(mods, qm.WhereIn("uid IN ?", utils.ConvertArgsString(ccIds)...))
+
+		// Eager loading
+	mods = append(mods, qm.Load(
+		"CollectionsContentUnits",
+		"CollectionsContentUnits.Collection"))
+
+	// data query
+	units, err := mdbmodels.ContentUnits(db, mods...).All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// response
+	cus, ex := prepareCUs(db, units, r.Language)
+	if ex != nil {
+		return nil, ex
+	}
+
+	return cus,nil
 }
 
 func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool) (*Collection, *HttpError) {
