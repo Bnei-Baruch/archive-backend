@@ -516,17 +516,55 @@ func HomePageHandler(c *gin.Context) {
 		return
 	}
 
+	var lesson ContentUnit
+	var program ContentUnit
+	var lecture ContentUnit
+	var event ContentUnit
+	
+	for _, cu := range cus {
+		cuAssigned := false
+		for _, value := range cu.Collections {
+			switch value.ContentType {
+			case consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON:
+				lesson = *cu
+				cuAssigned = true
+				break
+			case consts.CT_VIDEO_PROGRAM:
+				program = *cu
+				cuAssigned = true
+				break
+			case consts.CT_LECTURE_SERIES,consts.CT_CHILDREN_LESSONS,consts.CT_WOMEN_LESSONS,consts.CT_VIRTUAL_LESSONS, consts.CT_VIRTUAL_LESSON, consts.CT_LECTURE,consts.CT_CHILDREN_LESSON,consts.CT_WOMEN_LESSON:
+				lecture = *cu
+				cuAssigned = true
+				break
+			case consts.CT_CONGRESS,consts.CT_HOLIDAY,consts.CT_PICNIC,consts.CT_UNITY_DAY:
+				event = *cu
+				cuAssigned = true
+				break
+			}
+			if (cuAssigned) {
+				break
+			}
+		}
+	}
+
+	unitsMap := make(map[string]ContentUnit)
+	unitsMap["lesson"] = lesson
+	unitsMap["program"] = program
+	unitsMap["lecture"] = lecture
+	unitsMap["event"] = event
+
 	//TBD from here
 
 	resp := struct {
 		LatestDailyLesson Collection
 		Promoted struct { Section string; SubHeader string; Header string; Url string; Image string }
-		LatestContentUnits      []*ContentUnit
+		LatestContentUnits      map[string]ContentUnit
 		PopularTopics []struct { Title string; Url string; Image string }
 	}{
 		*latestLesson,
 		struct { Section string; SubHeader string; Header string; Url string; Image string }{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
-		cus,
+		unitsMap,
 		[]struct { Title string; Url string; Image string }{
 			struct { Title string; Url string; Image string }{"Conception", "#", "http://www.thefertilebody.com/Content/Images/UploadedImages/a931e8de-3798-4332-8055-ea5b041dc0b0/ShopItemImage/conception.jpg"},
 			struct { Title string; Url string; Image string }{"The role of women in the spiritual system", "#", "https://images-na.ssl-images-amazon.com/images/I/71mpCuqBFaL._SY717_.jpg"},
@@ -764,17 +802,17 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 
 func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpError) {
 
-	//TBD use film_date
 	const query = `select distinct on (c.type_id) cu.uid
 	from collections_content_units ccu
 	inner join content_units cu on cu.id = ccu.content_unit_id
 	inner join
 	(select distinct on (collections.type_id) id, type_id, created_at
 	from collections
-	order by type_id, created_at desc) c
+	where secure=0 AND published IS TRUE
+	order by type_id, (properties->>'film_date')::date desc, created_at desc) c
 	on ccu.collection_id = c.id
 	where cu.secure=0 AND cu.published IS TRUE
-	order by c.type_id, cu.created_at desc`
+	order by c.type_id, (cu.properties->>'film_date')::date desc, cu.created_at desc`
 
 	rows, err := queries.Raw(db, query).Query()
 	if err != nil {
