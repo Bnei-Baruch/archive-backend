@@ -4,10 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
-	"strings"
+
 
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
@@ -155,33 +154,42 @@ func msgHandler(msg *stan.Msg) {
 func GetFileObj(uid string) *mdbmodels.File {
 	//fmt.Println("uid is: ", uid)
 	utils.Must(MdbConn.Ping())
-	mdbFile := mdbmodels.Files(MdbConn, qm.Where("uid=?", uid))
-	OneFile, err := mdbFile.One()
+	mdbObj := mdbmodels.Files(MdbConn, qm.Where("uid=?", uid))
+	OneFile, err := mdbObj.One()
 	if err != nil {
 		log.Error(err)
 	}
 
-	//fmt.Printf("\n*********************************\n%+v\n", OneFile)
 	return OneFile
 }
 
-// BACKEND_URL is a  url for a backend service
-const BACKEND_URL = "https://jopa.com"
-
-func unZipFile(uid string) error {
-
-	file := GetFileObj(uid)
-	if (file.Type == "image" ||
-		strings.HasSuffix(file.Name, ".zip")) &&
-		file.Secure != 1 {
-		fmt.Printf("\n*********************************\n%+v\n", file)
-		fmt.Println("IMAGE!!! ", file.UID)
-
-		resp, err := http.Get(BACKEND_URL + "/" + uid)
-		if err != nil {
-			return err
-		}
-		fmt.Println(resp)
+func GetUnitObj(uid string) *mdbmodels.ContentUnit {
+	//fmt.Println("uid is: ", uid)
+	utils.Must(MdbConn.Ping())
+	mdbObj := mdbmodels.ContentUnits(MdbConn, qm.Where("uid=?", uid))
+	OneObj, err := mdbObj.One()
+	if err != nil {
+		log.Error(err)
 	}
-	return nil
+
+	return OneObj
 }
+
+
+//func unZipFile(uid string) error {
+//
+//	file := GetFileObj(uid)
+//	if (file.Type == "image" ||
+//		strings.HasSuffix(file.Name, ".zip")) &&
+//		file.Secure != 1 {
+//		fmt.Printf("\n*********************************\n%+v\n", file)
+//		fmt.Println("IMAGE!!! ", file.UID)
+//
+//		resp, err := http.Get(BACKEND_URL + "/" + uid)
+//		if err != nil {
+//			return err
+//		}
+//		fmt.Println(resp)
+//	}
+//	return nil
+//}

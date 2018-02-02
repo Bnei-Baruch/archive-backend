@@ -3,6 +3,13 @@ package events
 import (
 	"github.com/Bnei-Baruch/archive-backend/es"
 	log "github.com/Sirupsen/logrus"
+	"fmt"
+	//"strings"
+	//"github.com/spf13/viper"
+	//"net/http"
+	"github.com/spf13/viper"
+	"net/http"
+	"strings"
 )
 
 //collection functions
@@ -82,6 +89,17 @@ func ContentUnitUpdate(d Data) {
 }
 
 func ContentUnitPublishedChange(d Data) {
+	unit := GetUnitObj(d.Payload["uid"].(string))
+	fmt.Printf("*************:\n %+v", unit.UID)
+	if unit.Published == true &&
+		unit.Secure != 1 {
+			apiUrl := viper.GetString("api.url")
+			resp, err := http.Get(apiUrl + "/thumbnail/" + unit.UID)
+			if err != nil {
+				log.Error(err)
+			}
+			fmt.Println(resp)
+	}
 	log.Infof("%+v", d)
 
 	err := es.ContentUnitUpdate(d.Payload["uid"].(string))
@@ -127,7 +145,6 @@ func ContentUnitPersonsChange(d Data) {
 }
 
 func ContentUnitPublishersChange(d Data) {
-	log.Infof("%+v", d)
 
 	err := es.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -136,17 +153,40 @@ func ContentUnitPublishersChange(d Data) {
 }
 
 func FilePublished(d Data) {
+	fileUid := d.Payload["uid"].(string)
 	log.Infof("%+v", d)
 
-	err := es.FileAdd(d.Payload["uid"].(string))
+	err := es.FileAdd(fileUid)
 	if err != nil {
 		log.Errorf("couldn't add file to ES", err)
 	}
 
-	err = unZipFile(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("problem unzipping file %v", d.Payload["uid"].(string), err)
+
+	file := GetFileObj(fileUid)
+	if file.Secure != 1 {
+		switch file.Type {
+		case "image":
+			if strings.HasSuffix(file.Name, ".zip") {
+				fmt.Printf("************* file is zipped IMAGE:\n %+v", file)
+				apiUrl := viper.GetString("api.url")
+				resp, err := http.Get(apiUrl + "/unzip/" + file.UID)
+				if err != nil {
+					log.Error(err)
+				}
+				fmt.Println(resp)
+			}
+			if file.MimeType.String == "application/msword" {
+				fmt.Printf("************* file is word doc:\n %+v", file)
+			}
+		}
+
 	}
+
+
+	//err = unZipFile(d.Payload["uid"].(string))
+	//if err != nil {
+	//	log.Errorf("problem unzipping file %v", d.Payload["uid"].(string), err)
+	//}
 }
 
 func FileReplace(d Data) {
