@@ -526,20 +526,36 @@ func HomePageHandler(c *gin.Context) {
 		for _, value := range cu.Collections {
 			switch value.ContentType {
 			case consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON:
-				lesson = *cu
-				cuAssigned = true
+				if (!cuAssigned) {
+					lesson = *cu
+					cuAssigned = true
+				} else if (lesson.FilmDate.Time.Before(cu.FilmDate.Time)) {
+					lesson = *cu
+				}
 				break
 			case consts.CT_VIDEO_PROGRAM:
-				program = *cu
-				cuAssigned = true
+				if (!cuAssigned) {
+					program = *cu
+					cuAssigned = true
+				} else if (program.FilmDate.Time.Before(cu.FilmDate.Time)) {
+					program = *cu					
+				}
 				break
 			case consts.CT_LECTURE_SERIES,consts.CT_CHILDREN_LESSONS,consts.CT_WOMEN_LESSONS,consts.CT_VIRTUAL_LESSONS, consts.CT_VIRTUAL_LESSON, consts.CT_LECTURE,consts.CT_CHILDREN_LESSON,consts.CT_WOMEN_LESSON:
-				lecture = *cu
-				cuAssigned = true
+				if (!cuAssigned) {
+					lecture = *cu
+					cuAssigned = true
+				} else if (lecture.FilmDate.Time.Before(cu.FilmDate.Time)) {
+					lecture = *cu					
+				}
 				break
 			case consts.CT_CONGRESS,consts.CT_HOLIDAY,consts.CT_PICNIC,consts.CT_UNITY_DAY:
-				event = *cu
-				cuAssigned = true
+				if (!cuAssigned) {
+					event = *cu
+					cuAssigned = true
+				} else if (event.FilmDate.Time.Before(cu.FilmDate.Time)) {
+					event = *cu					
+				}
 				break
 			}
 			if (cuAssigned) {
