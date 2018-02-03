@@ -213,6 +213,20 @@ func TestIndexer(t *testing.T) {
 	suite.Run(t, new(IndexerSuite))
 }
 
+func (suite *IndexerSuite) SetupTest() {
+	r := require.New(suite.T())
+    units, err := mdbmodels.ContentUnits(mdb.DB).All()
+    r.Nil(err)
+    var uids []string
+    for _, unit := range units {
+        uids = append(uids, unit.UID)
+    }
+	r.Nil(deleteContentUnits(uids))
+	// Remove test indexes.
+	indexer := MakeIndexer("test", []string{consts.ES_UNITS_INDEX, consts.ES_CLASSIFICATIONS_INDEX})
+	r.Nil(indexer.DeleteIndexes())
+}
+
 func updateCollection(c Collection, cuUID string) (string, error) {
     var mdbCollection mdbmodels.Collection
     if c.MDB_UID != "" {
@@ -234,7 +248,6 @@ func updateCollection(c Collection, cuUID string) (string, error) {
             return "", err
         }
     }
-    fmt.Printf("********%+v\n", mdbCollection)
     cu, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cuUID)).One()
     if err != nil {
         return "", err
@@ -326,6 +339,9 @@ func deleteCollection(UID string) error {
 }
 
 func deleteContentUnits(UIDs []string) error {
+    if len(UIDs) == 0 {
+        return nil
+    }
 	UIDsI := make([]interface{}, len(UIDs))
 	for i, v := range UIDs {
 		UIDsI[i] = v
@@ -411,23 +427,33 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *I
 	var res *elastic.SearchResult
 	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
-	types := make(map[string][]string)
+    cus := make(map[string]ContentUnit)
 	for _, hit := range res.Hits.Hits {
 		var cu ContentUnit
 		json.Unmarshal(*hit.Source, &cu)
-		types[cu.MDB_UID] = cu.CollectionsContentTypes
+        if val, ok := cus[cu.MDB_UID]; ok {
+            r.Nil(errors.New(fmt.Sprintf(
+                "Two identical UID: %s\tFirst : %+v\tSecond: %+v",
+                cu.MDB_UID, cu, val)))
+        }
+		cus[cu.MDB_UID] = cu
 	}
+	types := make(map[string][]string)
+    for k, cu := range cus {
+		types[k] = cu.CollectionsContentTypes
+    }
 	suite.validateMaps(expectedTypes, types)
 }
 
 func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
+    fmt.Printf("\n\n\n--- TEST CONTENT UNITS COLLECTION INDEX ---\n\n\n")
 	// Show all SQLs
 	boil.DebugMode = true
 	defer func() { boil.DebugMode = false }()
 
     // Add test for collection for multiple content units.
 	r := require.New(suite.T())
-	fmt.Println("Adding content units.")
+	fmt.Printf("\n\n\nAdding content units.\n\n")
 	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
     suite.uc(Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID)
     suite.uc(Collection{ContentType: consts.CT_CONGRESS}, cu1UID)
@@ -435,45 +461,49 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
     c2UID := suite.uc(Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID)
 	UIDs := []string{cu1UID, cu2UID}
 
-	fmt.Println("Reindexing everything.")
+	fmt.Printf("\n\n\nReindexing everything.\n\n")
 	indexName := IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_ENGLISH)
 	indexer := MakeIndexer("test", []string{consts.ES_UNITS_INDEX})
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll())
 	r.Nil(indexer.RefreshAll())
 
-	fmt.Println("Validate we have 2 searchable content units with proper content types.")
+	fmt.Printf("\n\n\nValidate we have 2 searchable content units with proper content types.\n\n")
 	suite.validateContentUnitNames(indexName, indexer, []string{"something", "something else"})
 	suite.validateContentUnitTypes(indexName, indexer,map[string][]string{
         cu1UID: []string{consts.CT_DAILY_LESSON, consts.CT_CONGRESS},
         cu2UID: []string{consts.CT_SPECIAL_LESSON},
     })
 
-    fmt.Println("Validate we have successfully added a content type.")
+    fmt.Printf("\n\n\nValidate we have successfully added a content type.\n\n")
     c1UID := suite.uc(Collection{ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID)
 	r.Nil(indexer.CollectionAdd(c1UID))
-	suite.validateContentUnitTypes(indexName, indexer,map[string][]string{
+	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
         cu1UID: []string{consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
         cu2UID: []string{consts.CT_SPECIAL_LESSON},
     })
 
-    fmt.Println("Validate we have successfully updated a content type.")
+    fmt.Printf("\n\n\nValidate we have successfully updated a content type.\n\n")
     suite.uc(Collection{MDB_UID: c2UID, ContentType: consts.CT_MEALS}, cu2UID)
 	r.Nil(indexer.CollectionUpdate(c2UID))
-	suite.validateContentUnitTypes(indexName, indexer,map[string][]string{
+	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
         cu1UID: []string{consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
         cu2UID: []string{consts.CT_MEALS},
     })
 
-    fmt.Println("Validate we have successfully deleted a content type.")
+    fmt.Printf("\n\n\nValidate we have successfully deleted a content type.\n\n")
     r.Nil(deleteCollection(c2UID))
+    dumpDB("Before")
+    dumpIndexes("Before")
 	r.Nil(indexer.CollectionDelete(c2UID))
-	suite.validateContentUnitTypes(indexName, indexer,map[string][]string{
+    dumpDB("After")
+    dumpIndexes("After")
+	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
         cu1UID: []string{consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
         cu2UID: []string{},
     })
 
-	fmt.Println("Delete units, reindex and validate we have 0 searchable units.")
+	fmt.Printf("\n\n\nDelete units, reindex and validate we have 0 searchable units.\n\n")
 	r.Nil(deleteContentUnits(UIDs))
 	r.Nil(indexer.ReindexAll())
 	suite.validateContentUnitNames(indexName, indexer, []string{})
@@ -484,10 +514,11 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 }
 
 func (suite *IndexerSuite) TestContentUnitsIndex() {
+    fmt.Printf("\n\n\n--- TEST CONTENT UNITS INDEX ---\n\n\n")
     // TODO: Add file changes...
 	// TODO: Add tag and source tests.
 	r := require.New(suite.T())
-	fmt.Println("Adding content units.")
+	fmt.Printf("\n\n\nAdding content units.\n\n")
 	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
     suite.ucu(ContentUnit{MDB_UID: cu1UID, Name: "משהוא"}, consts.LANG_HEBREW, true, true)
     suite.ucu(ContentUnit{MDB_UID: cu1UID, Name: "чтото"}, consts.LANG_RUSSIAN, true, true)
@@ -496,7 +527,7 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	cuNotSecureUID := suite.ucu(ContentUnit{Name: "not secured"}, consts.LANG_ENGLISH, true, false)
 	UIDs := []string{cu1UID, cu2UID, cuNotPublishedUID, cuNotSecureUID}
 
-	fmt.Println("Reindexing everything.")
+	fmt.Printf("\n\n\nReindexing everything.\n\n")
 	indexNameEn := IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_ENGLISH)
 	indexNameHe := IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_HEBREW)
 	indexNameRu := IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_RUSSIAN)
