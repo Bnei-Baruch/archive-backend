@@ -73,7 +73,7 @@ func (index *ClassificationsIndex) addToIndex(scope Scope) error {
 
 func (index *ClassificationsIndex) addTagsToIndexSql(sqlScope string) error {
     tags, err := mdbmodels.Tags(mdb.DB,
-        qm.Load("TagsI18ns"),
+        qm.Load("TagI18ns"),
         qm.Where(sqlScope)).All()
     if err != nil {
         return errors.Wrap(err, "Fetch tags from mdb")
@@ -94,7 +94,7 @@ func (index *ClassificationsIndex) addTagsToIndexSql(sqlScope string) error {
 
 func (index *ClassificationsIndex) addSourcesToIndexSql(sqlScope string) error {
     sources, err := mdbmodels.Sources(mdb.DB,
-        qm.Load("SourcesI18ns"),
+        qm.Load("SourceI18ns"),
         qm.Where(sqlScope)).All()
     if err != nil {
         return errors.Wrap(err, "Fetch sources from mdb.")
@@ -140,7 +140,6 @@ func (index *ClassificationsIndex) indexTag(t *mdbmodels.Tag) error {
                 NameSuggest: i18n.Label.String,
             }
             name := index.indexName(i18n.Language)
-            fmt.Printf("Indexing to %s: %+v\n", name, c)
             resp, err := mdb.ESC.Index().
                 Index(name).
                 Type("tags").
@@ -172,7 +171,6 @@ func (index *ClassificationsIndex) indexSource(s* mdbmodels.Source) error {
                 c.DescriptionSuggest = i18n.Description.String
             }
             name := index.indexName(i18n.Language)
-            fmt.Printf("Indexing to %s: %+v\n", name, c)
             resp, err := mdb.ESC.Index().
                 Index(name).
                 Type("sources").

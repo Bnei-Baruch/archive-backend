@@ -53,7 +53,7 @@ func (index *BaseIndex) indexName(lang string) string {
 func (index *BaseIndex) CreateIndex() error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		name := index.indexName(lang)
-		definition := fmt.Sprintf("data/es/mappings/units/%s-%s.json", index.baseName, lang)
+		definition := fmt.Sprintf("data/es/mappings/%s/%s-%s.json", index.baseName, index.baseName, lang)
 		// Read mappings and create index
 		mappings, err := bindata.Asset(definition)
 		if err != nil {

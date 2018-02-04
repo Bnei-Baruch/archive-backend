@@ -405,7 +405,6 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
-		fmt.Printf("Indexing to %s: %+v\n", name, v)
 		resp, err := mdb.ESC.Index().
 			Index(name).
 			Type("content_units").
