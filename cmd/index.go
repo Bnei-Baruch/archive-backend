@@ -17,5 +17,5 @@ func init() {
 }
 
 func indexFn(cmd *cobra.Command, args []string) {
-	fmt.Println("Use one of the subcommands")
+	fmt.Println("Use one of the subcommands.")
 }

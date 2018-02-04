@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/queries"
 
+	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -27,7 +28,7 @@ var soffice string
 var docFolder string
 
 func ConvertDocx() {
-	clock := Init()
+	clock := mdb.Init()
 
 	soffice = viper.GetString("elasticsearch.soffice-bin")
 	if soffice == "" {
@@ -38,7 +39,7 @@ func ConvertDocx() {
 
 	utils.Must(convertDocx())
 
-	Shutdown()
+	mdb.Shutdown()
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
@@ -188,7 +189,7 @@ func downloadAndConvert(docBatch [][]string) error {
 }
 
 func loadDocs() ([][]string, error) {
-	rows, err := queries.Raw(db, `
+	rows, err := queries.Raw(mdb.DB, `
 SELECT uid, name
 FROM files
 WHERE name ~ '.docx?' AND

@@ -40,6 +40,7 @@ const (
 	CT_TRAINING              = "TRAINING"
 	CT_KITEI_MAKOR           = "KITEI_MAKOR"
 	CT_PUBLICATION           = "PUBLICATION"
+	CT_LELO_MIKUD            = "LELO_MIKUD"
 
 	// Content Role types
 	CR_LECTURER = "LECTURER"
@@ -176,5 +177,5 @@ var FILTERS = map[string]string{
 }
 
 // ElasticSearch 'es'
-const ES_CLASSIFICATIONS_INDEX = "mdb_classifications"
-const ES_UNITS_INDEX = "mdb_units"
+const ES_CLASSIFICATIONS_INDEX = "classifications"
+const ES_UNITS_INDEX = "units"
