@@ -1,7 +1,7 @@
 package es
 
 import (
-    "fmt"
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )
@@ -29,7 +29,7 @@ func MakeIndexer(namespace string, names []string) *Indexer {
 }
 
 func (indexer *Indexer) ReindexAll() error {
-    fmt.Println("Indexing everything.")
+	log.Info("Re-Indexing everything")
 	for _, index := range indexer.indices {
 		// TODO: Check if indexing things in parallel will make things faster?
 		if err := index.DeleteIndex(); err != nil {
