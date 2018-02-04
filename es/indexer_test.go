@@ -227,14 +227,16 @@ func (suite *IndexerSuite) SetupTest() {
 	r.Nil(indexer.DeleteIndexes())
 }
 
-func updateCollection(c Collection, cuUID string) (string, error) {
+func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (string, error) {
     var mdbCollection mdbmodels.Collection
     if c.MDB_UID != "" {
         cp, err := mdbmodels.Collections(mdb.DB, qm.Where("uid = ?", c.MDB_UID)).One()
         if err != nil {
             return "", err
         }
-        cp.TypeID = mdb.CONTENT_TYPE_REGISTRY.ByName[c.ContentType].ID
+        if c.ContentType != "" {
+            cp.TypeID = mdb.CONTENT_TYPE_REGISTRY.ByName[c.ContentType].ID
+        }
         if err := cp.Update(mdb.DB); err != nil {
             return "", err
         }
@@ -260,12 +262,28 @@ func updateCollection(c Collection, cuUID string) (string, error) {
             return "", err
         }
     }
+    if removeContentUnitUID != "" {
+        ccus, err := mdbmodels.CollectionsContentUnits(mdb.DB,
+            qm.InnerJoin("content_units on content_units.id = collections_content_units.content_unit_id"),
+            qm.Where("content_units.uid = ?", removeContentUnitUID),
+            qm.And("collection_id = ?", mdbCollection.ID)).All()
+        if err != nil {
+            return "", err
+        }
+        for _, ccu := range ccus {
+            if err := mdbmodels.CollectionsContentUnits(mdb.DB,
+                qm.Where("collection_id = ?", ccu.CollectionID),
+                qm.And("content_unit_id = ?", ccu.ContentUnitID)).DeleteAll(); err != nil {
+                return "", err
+            }
+        }
+    }
     return mdbCollection.UID, nil
 }
 
-func (suite *IndexerSuite) uc(c Collection, cuUID string) string {
+func (suite *IndexerSuite) uc(c Collection, cuUID string, removeContentUnitUID string) string {
 	r := require.New(suite.T())
-	uid, err := updateCollection(c, cuUID)
+	uid, err := updateCollection(c, cuUID, removeContentUnitUID)
 	r.Nil(err)
 	return uid
 }
@@ -453,12 +471,12 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 
     // Add test for collection for multiple content units.
 	r := require.New(suite.T())
-	fmt.Printf("\n\n\nAdding content units.\n\n")
+	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
 	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
-    suite.uc(Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID)
-    suite.uc(Collection{ContentType: consts.CT_CONGRESS}, cu1UID)
+    c3UID := suite.uc(Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID, "")
+    suite.uc(Collection{ContentType: consts.CT_CONGRESS}, cu1UID, "")
 	cu2UID := suite.ucu(ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
-    c2UID := suite.uc(Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID)
+    c2UID := suite.uc(Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID, "")
 	UIDs := []string{cu1UID, cu2UID}
 
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
@@ -476,7 +494,7 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
     })
 
     fmt.Printf("\n\n\nValidate we have successfully added a content type.\n\n")
-    c1UID := suite.uc(Collection{ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID)
+    c1UID := suite.uc(Collection{ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID, "")
 	r.Nil(indexer.CollectionAdd(c1UID))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
         cu1UID: []string{consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
@@ -484,7 +502,7 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
     })
 
     fmt.Printf("\n\n\nValidate we have successfully updated a content type.\n\n")
-    suite.uc(Collection{MDB_UID: c2UID, ContentType: consts.CT_MEALS}, cu2UID)
+    suite.uc(Collection{MDB_UID: c2UID, ContentType: consts.CT_MEALS}, cu2UID, "")
 	r.Nil(indexer.CollectionUpdate(c2UID))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
         cu1UID: []string{consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
@@ -493,14 +511,22 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 
     fmt.Printf("\n\n\nValidate we have successfully deleted a content type.\n\n")
     r.Nil(deleteCollection(c2UID))
-    dumpDB("Before")
-    dumpIndexes("Before")
+    // dumpDB("Before")
+    // dumpIndexes("Before")
 	r.Nil(indexer.CollectionDelete(c2UID))
-    dumpDB("After")
-    dumpIndexes("After")
+    // dumpDB("After")
+    // dumpIndexes("After")
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
         cu1UID: []string{consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
         cu2UID: []string{},
+    })
+
+    fmt.Printf("\n\n\nUpdate collection, remove one unit and add another.\n\n")
+    suite.uc(Collection{MDB_UID: c3UID}, /* Add */ cu2UID, /* Remove */ cu1UID)
+	r.Nil(indexer.CollectionUpdate(c3UID))
+	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
+        cu1UID: []string{consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
+        cu2UID: []string{consts.CT_DAILY_LESSON},
     })
 
 	fmt.Printf("\n\n\nDelete units, reindex and validate we have 0 searchable units.\n\n")
