@@ -17,5 +17,5 @@ func init() {
 }
 
 func eventsFn(cmd *cobra.Command, args []string) {
-	events.RunLListener()
+	events.RunListener()
 }

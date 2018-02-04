@@ -25,3 +25,9 @@ rollbar-environment="development"
 [file_service]
 url1="http://files.kabbalahmedia.info/api/v1/get"
 url2="http://files.kabbalahmedia.info/api/v1/get"
+
+[nats]
+url="nats://localhost:4222"
+client-id="my-sample-nats-client"
+cluster-id="my-nats-cluster-id"
+subject="subject"
