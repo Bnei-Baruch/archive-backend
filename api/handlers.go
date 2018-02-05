@@ -516,59 +516,53 @@ func HomePageHandler(c *gin.Context) {
 		return
 	}
 
-	var lesson ContentUnit
-	var program ContentUnit
-	var lecture ContentUnit
-	var event ContentUnit
+	var lesson *ContentUnit
+	var program *ContentUnit
+	var lecture *ContentUnit
+	var event *ContentUnit
 	
 	for _, cu := range cus {
-		cuAssigned := false
 		for _, value := range cu.Collections {
 			switch value.ContentType {
 			case consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON:
-				if (!cuAssigned) {
-					lesson = *cu
-					cuAssigned = true
+				if (lesson == nil) {
+					lesson = cu
+					fmt.Printf("assigned to lesson - " + lesson.Name)
 				} else if (lesson.FilmDate.Time.Before(cu.FilmDate.Time)) {
-					lesson = *cu
+					lesson = cu
+					fmt.Printf("assigned to lesson - " + lesson.Name)
 				}
 				break
 			case consts.CT_VIDEO_PROGRAM:
-				if (!cuAssigned) {
-					program = *cu
-					cuAssigned = true
+				if (program == nil) {
+					program = cu
 				} else if (program.FilmDate.Time.Before(cu.FilmDate.Time)) {
-					program = *cu					
+					program = cu
 				}
 				break
 			case consts.CT_LECTURE_SERIES,consts.CT_CHILDREN_LESSONS,consts.CT_WOMEN_LESSONS,consts.CT_VIRTUAL_LESSONS, consts.CT_VIRTUAL_LESSON, consts.CT_LECTURE,consts.CT_CHILDREN_LESSON,consts.CT_WOMEN_LESSON:
-				if (!cuAssigned) {
-					lecture = *cu
-					cuAssigned = true
+				if (lecture == nil) {
+					lecture = cu
 				} else if (lecture.FilmDate.Time.Before(cu.FilmDate.Time)) {
-					lecture = *cu					
+					lecture = cu
 				}
 				break
 			case consts.CT_CONGRESS,consts.CT_HOLIDAY,consts.CT_PICNIC,consts.CT_UNITY_DAY:
-				if (!cuAssigned) {
-					event = *cu
-					cuAssigned = true
+				if (event == nil) {
+					event = cu
 				} else if (event.FilmDate.Time.Before(cu.FilmDate.Time)) {
-					event = *cu					
+					event = cu					
 				}
-				break
-			}
-			if (cuAssigned) {
 				break
 			}
 		}
 	}
 
 	unitsMap := make(map[string]ContentUnit)
-	unitsMap["lessons"] = lesson
-	unitsMap["programs"] = program
-	unitsMap["lectures"] = lecture
-	unitsMap["events"] = event
+	unitsMap["lessons"] = *lesson
+	unitsMap["programs"] = *program
+	unitsMap["lectures"] = *lecture
+	unitsMap["events"] = *event
 
 	resp := struct {
 		LatestDailyLesson Collection
