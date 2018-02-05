@@ -570,8 +570,6 @@ func HomePageHandler(c *gin.Context) {
 	unitsMap["lecture"] = lecture
 	unitsMap["event"] = event
 
-	//TBD from here
-
 	resp := struct {
 		LatestDailyLesson Collection
 		Promoted struct { Section string; SubHeader string; Header string; Url string; Image string }
@@ -582,10 +580,9 @@ func HomePageHandler(c *gin.Context) {
 		struct { Section string; SubHeader string; Header string; Url string; Image string }{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
 		unitsMap,
 		[]struct { Title string; Url string; Image string }{
-			struct { Title string; Url string; Image string }{"Conception", "#", "http://www.thefertilebody.com/Content/Images/UploadedImages/a931e8de-3798-4332-8055-ea5b041dc0b0/ShopItemImage/conception.jpg"},
-			struct { Title string; Url string; Image string }{"The role of women in the spiritual system", "#", "https://images-na.ssl-images-amazon.com/images/I/71mpCuqBFaL._SY717_.jpg"},
-		},
-	
+			/*struct { Title string; Url string; Image string }{"Conception", "#", "http://www.thefertilebody.com/Content/Images/UploadedImages/a931e8de-3798-4332-8055-ea5b041dc0b0/ShopItemImage/conception.jpg"},
+			struct { Title string; Url string; Image string }{"The role of women in the spiritual system", "#", "https://images-na.ssl-images-amazon.com/images/I/71mpCuqBFaL._SY717_.jpg"},*/
+		},	
 }
 
 	concludeRequest(c, resp, nil)
