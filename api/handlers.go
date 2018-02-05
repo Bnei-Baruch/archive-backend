@@ -565,10 +565,10 @@ func HomePageHandler(c *gin.Context) {
 	}
 
 	unitsMap := make(map[string]ContentUnit)
-	unitsMap["lesson"] = lesson
-	unitsMap["program"] = program
-	unitsMap["lecture"] = lecture
-	unitsMap["event"] = event
+	unitsMap["lessons"] = lesson
+	unitsMap["programs"] = program
+	unitsMap["lectures"] = lecture
+	unitsMap["events"] = event
 
 	resp := struct {
 		LatestDailyLesson Collection
