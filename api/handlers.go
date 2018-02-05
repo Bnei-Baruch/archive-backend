@@ -516,26 +516,16 @@ func HomePageHandler(c *gin.Context) {
 		return
 	}
 
-	resp := struct {
-		LatestDailyLesson Collection
-		Promoted          struct {
-			Section   string
-			SubHeader string
-			Header    string
-			Url       string
-			Image     string
-		}
-		LatestContentUnits []*ContentUnit
-	}{
-		*latestLesson,
-		struct {
-			Section   string
-			SubHeader string
-			Header    string
-			Url       string
-			Image     string
-		}{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
-		latestCUs,
+	resp := HomeResponse{
+		LatestDailyLesson:  latestLesson,
+		LatestContentUnits: latestCUs,
+		Banner: Banner{
+			Section:   "Events",
+			Header:    "February 2018",
+			SubHeader: "The World Kabbalah Congress",
+			Url:       "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA",
+			Image:     "/static/media/hp_featured_temp.cca39640.jpg",
+		},
 	}
 
 	concludeRequest(c, resp, nil)
