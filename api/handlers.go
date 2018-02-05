@@ -527,10 +527,8 @@ func HomePageHandler(c *gin.Context) {
 			case consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON:
 				if (lesson == nil) {
 					lesson = cu
-					fmt.Printf("assigned to lesson - " + lesson.Name)
 				} else if (lesson.FilmDate.Time.Before(cu.FilmDate.Time)) {
 					lesson = cu
-					fmt.Printf("assigned to lesson - " + lesson.Name)
 				}
 				break
 			case consts.CT_VIDEO_PROGRAM:
