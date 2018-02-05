@@ -516,16 +516,16 @@ func HomePageHandler(c *gin.Context) {
 		return
 	}
 
+	banner, err := handleBanner(r)
+	if err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+
 	resp := HomeResponse{
 		LatestDailyLesson:  latestLesson,
 		LatestContentUnits: latestCUs,
-		Banner: Banner{
-			Section:   "Events",
-			Header:    "February 2018",
-			SubHeader: "The World Kabbalah Congress",
-			Url:       "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA",
-			Image:     "/static/media/hp_featured_temp.cca39640.jpg",
-		},
+		Banner:             banner,
 	}
 
 	concludeRequest(c, resp, nil)
@@ -882,6 +882,37 @@ func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool) (*Col
 	}
 
 	return cl, nil
+}
+
+func handleBanner(r BaseRequest) (*Banner, *HttpError) {
+	var banner *Banner
+
+	switch r.Language {
+	case consts.LANG_HEBREW:
+		banner = &Banner{
+			Section:   "אירועים",
+			Header:    "כנס קבלה לעם העולמי",
+			SubHeader: "פברואר 2018",
+			Url:       "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA",
+		}
+
+	case consts.LANG_RUSSIAN:
+		banner = &Banner{
+			Section:   "Конгрессы",
+			Header:    "Международный каббалистический конгресс",
+			SubHeader: "Февраль 2018",
+			Url:       "http://www.kabbalah.info/rus/content/view/frame/162465",
+		}
+	default:
+		banner = &Banner{
+			Section:   "Events",
+			Header:    "World Kabbalah Convention in Israel",
+			SubHeader: "Feb. 2018",
+			Url:       "http://www.kabbalah.info/engkab/kabbalah-worldwide/convention2018",
+		}
+	}
+
+	return banner, nil
 }
 
 func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsResponse, *HttpError) {
