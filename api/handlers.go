@@ -503,79 +503,40 @@ func HomePageHandler(c *gin.Context) {
 	if c.Bind(&r) != nil {
 		return
 	}
-	
+
 	latestLesson, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, false)
 	if err != nil {
 		NewBadRequestError(err).Abort(c)
 		return
 	}
 
-	cus, err := handleLatestContentUnits(c.MustGet("MDB_DB").(*sql.DB), r)
+	latestCUs, err := handleLatestContentUnits(c.MustGet("MDB_DB").(*sql.DB), r)
 	if err != nil {
 		NewBadRequestError(err).Abort(c)
 		return
 	}
 
-	var lesson *ContentUnit
-	var program *ContentUnit
-	var lecture *ContentUnit
-	var event *ContentUnit
-	
-	for _, cu := range cus {
-		for _, value := range cu.Collections {
-			switch value.ContentType {
-			case consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON:
-				if (lesson == nil) {
-					lesson = cu
-				} else if (lesson.FilmDate.Time.Before(cu.FilmDate.Time)) {
-					lesson = cu
-				}
-				break
-			case consts.CT_VIDEO_PROGRAM:
-				if (program == nil) {
-					program = cu
-				} else if (program.FilmDate.Time.Before(cu.FilmDate.Time)) {
-					program = cu
-				}
-				break
-			case consts.CT_LECTURE_SERIES,consts.CT_CHILDREN_LESSONS,consts.CT_WOMEN_LESSONS,consts.CT_VIRTUAL_LESSONS, consts.CT_VIRTUAL_LESSON, consts.CT_LECTURE,consts.CT_CHILDREN_LESSON,consts.CT_WOMEN_LESSON:
-				if (lecture == nil) {
-					lecture = cu
-				} else if (lecture.FilmDate.Time.Before(cu.FilmDate.Time)) {
-					lecture = cu
-				}
-				break
-			case consts.CT_CONGRESS,consts.CT_HOLIDAY,consts.CT_PICNIC,consts.CT_UNITY_DAY:
-				if (event == nil) {
-					event = cu
-				} else if (event.FilmDate.Time.Before(cu.FilmDate.Time)) {
-					event = cu
-				}
-				break
-			}
-		}
-	}
-
-	unitsMap := make(map[string]ContentUnit)
-	unitsMap["lessons"] = *lesson
-	unitsMap["programs"] = *program
-	unitsMap["lectures"] = *lecture
-	unitsMap["events"] = *event
-
 	resp := struct {
 		LatestDailyLesson Collection
-		Promoted struct { Section string; SubHeader string; Header string; Url string; Image string }
-		LatestContentUnits      map[string]ContentUnit
-		PopularTopics []struct { Title string; Url string; Image string }
+		Promoted          struct {
+			Section   string
+			SubHeader string
+			Header    string
+			Url       string
+			Image     string
+		}
+		LatestContentUnits []*ContentUnit
 	}{
 		*latestLesson,
-		struct { Section string; SubHeader string; Header string; Url string; Image string }{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
-		unitsMap,
-		[]struct { Title string; Url string; Image string }{
-			/*struct { Title string; Url string; Image string }{"Conception", "#", "http://www.thefertilebody.com/Content/Images/UploadedImages/a931e8de-3798-4332-8055-ea5b041dc0b0/ShopItemImage/conception.jpg"},
-			struct { Title string; Url string; Image string }{"The role of women in the spiritual system", "#", "https://images-na.ssl-images-amazon.com/images/I/71mpCuqBFaL._SY717_.jpg"},*/
-		},
-}
+		struct {
+			Section   string
+			SubHeader string
+			Header    string
+			Url       string
+			Image     string
+		}{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
+		latestCUs,
+	}
 
 	concludeRequest(c, resp, nil)
 }
@@ -807,48 +768,35 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 
 func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpError) {
 
-	const query = `select distinct on (c.type_id) cu.uid
-	from collections_content_units ccu
-	inner join content_units cu on cu.id = ccu.content_unit_id
-	inner join
-	(select distinct on (collections.type_id) id, type_id, created_at
-	from collections
-	where secure=0 AND published IS TRUE
-	order by type_id, (properties->>'film_date')::date desc, created_at desc) c
-	on ccu.collection_id = c.id
-	where cu.secure=0 AND cu.published IS TRUE
-	order by c.type_id, (cu.properties->>'film_date')::date desc, cu.created_at desc`
-
+	// CU ids query
+	const query = `SELECT DISTINCT ON (type_id) id
+FROM content_units
+WHERE secure = 0 AND published IS TRUE
+ORDER BY type_id, (coalesce(properties ->> 'film_date', created_at :: TEXT)) :: DATE DESC, created_at DESC;`
 	rows, err := queries.Raw(db, query).Query()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 	defer rows.Close()
 
-	ccIds := make([]string, 0)
+	cuIDs := make([]int64, 0)
 	for rows.Next() {
-		var myId string
+		var myId int64
 		err := rows.Scan(&myId)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
-		ccIds = append(ccIds, myId)
+		cuIDs = append(cuIDs, myId)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, NewInternalError(err)
 	}
 
-	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
-
-	mods = append(mods, qm.WhereIn("uid IN ?", utils.ConvertArgsString(ccIds)...))
-
-		// Eager loading
-	mods = append(mods, qm.Load(
-		"CollectionsContentUnits",
-		"CollectionsContentUnits.Collection"))
-
 	// data query
-	units, err := mdbmodels.ContentUnits(db, mods...).All()
+	units, err := mdbmodels.ContentUnits(db,
+		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
+		qm.Load("CollectionsContentUnits", "CollectionsContentUnits.Collection")).
+		All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -859,7 +807,7 @@ func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpE
 		return nil, ex
 	}
 
-	return cus,nil
+	return cus, nil
 }
 
 func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool) (*Collection, *HttpError) {
