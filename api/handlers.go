@@ -54,6 +54,16 @@ func CollectionHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func LatestLessonHandler(c *gin.Context) {
+	var r BaseRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	resp, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, true)
+	concludeRequest(c, resp, err)
+}
+
 func ContentUnitsHandler(c *gin.Context) {
 	var r ContentUnitsRequest
 	if c.Bind(&r) != nil {
@@ -488,6 +498,98 @@ func AutocompleteHandler(c *gin.Context) {
 	}
 }
 
+func HomePageHandler(c *gin.Context) {
+	var r BaseRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+	
+	latestLesson, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, false)
+	if err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+
+	cus, err := handleLatestContentUnits(c.MustGet("MDB_DB").(*sql.DB), r)
+	if err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+
+	var lesson ContentUnit
+	var program ContentUnit
+	var lecture ContentUnit
+	var event ContentUnit
+
+	for _, cu := range cus {
+		cuAssigned := false
+		for _, value := range cu.Collections {
+			switch value.ContentType {
+			case consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON:
+				if (!cuAssigned) {
+					lesson = *cu
+					cuAssigned = true
+				} else if (lesson.FilmDate.Time.Before(cu.FilmDate.Time)) {
+					lesson = *cu
+				}
+				break
+			case consts.CT_VIDEO_PROGRAM:
+				if (!cuAssigned) {
+					program = *cu
+					cuAssigned = true
+				} else if (program.FilmDate.Time.Before(cu.FilmDate.Time)) {
+					program = *cu					
+				}
+				break
+			case consts.CT_LECTURE_SERIES,consts.CT_CHILDREN_LESSONS,consts.CT_WOMEN_LESSONS,consts.CT_VIRTUAL_LESSONS, consts.CT_VIRTUAL_LESSON, consts.CT_LECTURE,consts.CT_CHILDREN_LESSON,consts.CT_WOMEN_LESSON:
+				if (!cuAssigned) {
+					lecture = *cu
+					cuAssigned = true
+				} else if (lecture.FilmDate.Time.Before(cu.FilmDate.Time)) {
+					lecture = *cu					
+				}
+				break
+			case consts.CT_CONGRESS,consts.CT_HOLIDAY,consts.CT_PICNIC,consts.CT_UNITY_DAY:
+				if (!cuAssigned) {
+					event = *cu
+					cuAssigned = true
+				} else if (event.FilmDate.Time.Before(cu.FilmDate.Time)) {
+					event = *cu					
+				}
+				break
+			}
+			if (cuAssigned) {
+				break
+			}
+		}
+	}
+
+	unitsMap := make(map[string]ContentUnit)
+	unitsMap["lesson"] = lesson
+	unitsMap["program"] = program
+	unitsMap["lecture"] = lecture
+	unitsMap["event"] = event
+
+	//TBD from here
+
+	resp := struct {
+		LatestDailyLesson Collection
+		Promoted struct { Section string; SubHeader string; Header string; Url string; Image string }
+		LatestContentUnits      map[string]ContentUnit
+		PopularTopics []struct { Title string; Url string; Image string }
+	}{
+		*latestLesson,
+		struct { Section string; SubHeader string; Header string; Url string; Image string }{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
+		unitsMap,
+		[]struct { Title string; Url string; Image string }{
+			struct { Title string; Url string; Image string }{"Conception", "#", "http://www.thefertilebody.com/Content/Images/UploadedImages/a931e8de-3798-4332-8055-ea5b041dc0b0/ShopItemImage/conception.jpg"},
+			struct { Title string; Url string; Image string }{"The role of women in the spiritual system", "#", "https://images-na.ssl-images-amazon.com/images/I/71mpCuqBFaL._SY717_.jpg"},
+		},
+	}
+
+	concludeRequest(c, resp, nil)
+}
+
 func RecentlyUpdatedHandler(c *gin.Context) {
 	resp, err := handleRecentlyUpdated(c.MustGet("MDB_DB").(*sql.DB))
 	concludeRequest(c, resp, err)
@@ -708,6 +810,147 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 
 		u.NameInCollection = ccu.Name
 		cl.ContentUnits = append(cl.ContentUnits, u)
+	}
+
+	return cl, nil
+}
+
+func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpError) {
+
+	const query = `select distinct on (c.type_id) cu.uid
+	from collections_content_units ccu
+	inner join content_units cu on cu.id = ccu.content_unit_id
+	inner join
+	(select distinct on (collections.type_id) id, type_id, created_at
+	from collections
+	where secure=0 AND published IS TRUE
+	order by type_id, (properties->>'film_date')::date desc, created_at desc) c
+	on ccu.collection_id = c.id
+	where cu.secure=0 AND cu.published IS TRUE
+	order by c.type_id, (cu.properties->>'film_date')::date desc, cu.created_at desc`
+
+	rows, err := queries.Raw(db, query).Query()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	ccIds := make([]string, 0)
+	for rows.Next() {
+		var myId string
+		err := rows.Scan(&myId)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		ccIds = append(ccIds, myId)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+
+	mods = append(mods, qm.WhereIn("uid IN ?", utils.ConvertArgsString(ccIds)...))
+
+		// Eager loading
+	mods = append(mods, qm.Load(
+		"CollectionsContentUnits",
+		"CollectionsContentUnits.Collection"))
+
+	// data query
+	units, err := mdbmodels.ContentUnits(db, mods...).All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// response
+	cus, ex := prepareCUs(db, units, r.Language)
+	if ex != nil {
+		return nil, ex
+	}
+
+	return cus,nil
+}
+
+func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool) (*Collection, *HttpError) {
+	mods := []qm.QueryMod{
+		SECURE_PUBLISHED_MOD,
+		qm.WhereIn("type_id in ?",
+			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
+			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SPECIAL_LESSON].ID),
+		qm.OrderBy("(properties->>'film_date')::date desc"),
+	}
+	if bringContentUnits {
+		mods = append(mods, qm.Load(
+			"CollectionsContentUnits",
+			"CollectionsContentUnits.ContentUnit"))
+	}
+
+	c, err := mdbmodels.Collections(db, mods...).One()
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, NewNotFoundError()
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+
+	// collection
+	cl, err := mdbToC(c)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// collection i18n
+	ci18nsMap, err := loadCI18ns(db, r.Language, []int64{c.ID})
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	if i18ns, ok := ci18nsMap[c.ID]; ok {
+		setCI18n(cl, r.Language, i18ns)
+	}
+
+	if bringContentUnits {
+		// content units
+		cuids := make([]int64, 0)
+
+		// filter secure & published
+		b := c.R.CollectionsContentUnits[:0]
+		for _, y := range c.R.CollectionsContentUnits {
+			if consts.SEC_PUBLIC == y.R.ContentUnit.Secure && y.R.ContentUnit.Published {
+				b = append(b, y)
+				cuids = append(cuids, y.ContentUnitID)
+			}
+			c.R.CollectionsContentUnits = b
+		}
+
+		// load i18ns
+		cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+
+		// sort CCUs
+		sort.SliceStable(c.R.CollectionsContentUnits, func(i int, j int) bool {
+			return c.R.CollectionsContentUnits[i].Position < c.R.CollectionsContentUnits[j].Position
+		})
+
+		// construct DTO's
+		cl.ContentUnits = make([]*ContentUnit, 0)
+		for _, ccu := range c.R.CollectionsContentUnits {
+			cu := ccu.R.ContentUnit
+
+			u, err := mdbToCU(cu)
+			if err != nil {
+				return nil, NewInternalError(err)
+			}
+			if i18ns, ok := cui18nsMap[cu.ID]; ok {
+				setCUI18n(u, r.Language, i18ns)
+			}
+
+			u.NameInCollection = ccu.Name
+			cl.ContentUnits = append(cl.ContentUnits, u)
+		}
 	}
 
 	return cl, nil
@@ -1300,6 +1543,10 @@ func mdbToFile(file *mdbmodels.File) (*File, error) {
 }
 
 func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.CollectionI18n, error) {
+	if len(ids) == 0 {
+		return make(map[int64]map[string]*mdbmodels.CollectionI18n, 0), nil
+	}
+
 	// Load from DB
 	i18ns, err := mdbmodels.CollectionI18ns(db,
 		qm.WhereIn("collection_id in ?", utils.ConvertArgsInt64(ids)...),

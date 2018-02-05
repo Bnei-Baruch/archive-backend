@@ -16,12 +16,13 @@ import (
 
 type ESEngine struct {
 	esc *elastic.Client
+	// TODO: Is mdb required here?!?!?!?!
 	mdb *sql.DB
 }
 
 var classTypes = [...]string{"source", "tag"}
 
-// TODO: all interactions with ES should be throttled to prevent downstream pressure
+// TODO: All interactions with ES should be throttled to prevent downstream pressure
 
 func NewESEngine(esc *elastic.Client, db *sql.DB) *ESEngine {
 	return &ESEngine{esc: esc, mdb: db}
@@ -31,7 +32,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 	// figure out index names from language order
 	indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
-		indices[i] = es.IndexName(consts.ES_CLASSIFICATIONS_INDEX, query.LanguageOrder[i])
+		indices[i] = es.IndexName("prod", consts.ES_CLASSIFICATIONS_INDEX, query.LanguageOrder[i])
 	}
 
 	// We call ES in parallel. Each call with a different context query
@@ -119,27 +120,27 @@ func createContentUnitsQuery(q Query) elastic.Query {
 			).MinimumNumberShouldMatch(1),
 		)
 	}
-    contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
-    filterByContentType := false
+	contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
+	filterByContentType := false
 	for filter, values := range q.Filters {
-        s := make([]interface{}, len(values))
-        for i, v := range values {
-            s[i] = v
-        }
+		s := make([]interface{}, len(values))
+		for i, v := range values {
+			s[i] = v
+		}
 		switch filter {
 		case consts.FILTERS[consts.FILTER_START_DATE]:
 			query.Filter(elastic.NewRangeQuery("film_date").Gte(values[0]).Format("yyyy-MM-dd"))
 		case consts.FILTERS[consts.FILTER_END_DATE]:
 			query.Filter(elastic.NewRangeQuery("film_date").Lte(values[0]).Format("yyyy-MM-dd"))
-        case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
-            contentTypeQuery.Should(elastic.NewTermsQuery(filter, s...))
-            filterByContentType = true
+		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
+			contentTypeQuery.Should(elastic.NewTermsQuery(filter, s...))
+			filterByContentType = true
 		default:
 			query.Filter(elastic.NewTermsQuery(filter, s...))
 		}
-        if filterByContentType {
-            query.Filter(contentTypeQuery)
-        }
+		if filterByContentType {
+			query.Filter(contentTypeQuery)
+		}
 	}
 	return query
 }
@@ -149,7 +150,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// Content Units
 	content_units_indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
-		content_units_indices[i] = es.IndexName(consts.ES_UNITS_INDEX, query.LanguageOrder[i])
+		content_units_indices[i] = es.IndexName("prod", consts.ES_UNITS_INDEX, query.LanguageOrder[i])
 	}
 	fetchSourceContext := elastic.NewFetchSourceContext(true).
 		Include("mdb_uid")

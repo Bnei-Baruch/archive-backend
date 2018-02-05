@@ -1,17 +1,12 @@
 package cmd
 
 import (
-	"database/sql"
-	"time"
-
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stvp/rollbar"
-	"github.com/volatiletech/sqlboiler/boil"
 	"gopkg.in/gin-contrib/cors.v1"
 	"gopkg.in/gin-gonic/gin.v1"
-	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/api"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -30,34 +25,9 @@ func init() {
 }
 
 func serverFn(cmd *cobra.Command, args []string) {
-	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
-
 	log.Infof("Starting Archive backend server version %s", version.Version)
-
-	log.Info("Setting up connection to MDB")
-	mdbDB, err := sql.Open("postgres", viper.GetString("mdb.url"))
-	utils.Must(err)
-	defer mdbDB.Close()
-	boil.DebugMode = viper.GetString("server.mode") == "debug"
-
-	log.Info("Initializing type registries")
-	utils.Must(mdb.InitTypeRegistries(mdbDB))
-
-	log.Info("Setting up connection to ElasticSearch")
-	url := viper.GetString("elasticsearch.url")
-	esc, err := elastic.NewClient(
-		elastic.SetURL(viper.GetString("elasticsearch.url")),
-		elastic.SetSniff(false),
-		elastic.SetHealthcheckInterval(10*time.Second),
-		elastic.SetErrorLog(log.StandardLogger()),
-		elastic.SetInfoLog(log.StandardLogger()),
-		elastic.SetTraceLog(log.StandardLogger()),
-	)
-	utils.Must(err)
-
-	esversion, err := esc.ElasticsearchVersion(url)
-	utils.Must(err)
-	log.Infof("Elasticsearch version %s", esversion)
+	mdb.Init()
+	defer mdb.Shutdown()
 
 	// Setup Rollbar
 	rollbar.Token = viper.GetString("server.rollbar-token")
@@ -68,7 +38,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 	gin.SetMode(viper.GetString("server.mode"))
 	router := gin.New()
 	router.Use(
-		utils.DataStoresMiddleware(mdbDB, esc),
+		utils.DataStoresMiddleware(mdb.DB, mdb.ESC),
 		utils.ErrorHandlingMiddleware(),
 		cors.Default(),
 		utils.RecoveryMiddleware())
@@ -81,7 +51,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 	}
 
 	// This would be reasonable once we'll have graceful shutdown implemented
-	//if len(rollbar.Token) > 0 {
-	//	rollbar.Wait()
-	//}
+	// if len(rollbar.Token) > 0 {
+	// 	rollbar.Wait()
+	// }
 }
