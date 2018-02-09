@@ -39,8 +39,11 @@ func RunListener() {
 	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt)
 	utils.Must(err)
 
-	indexer = es.MakeProdIndexer()
-
+	if viper.GetBool("server.fake-indexer") {
+		indexer = es.MakeFakeIndexer()
+	} else {
+		indexer = es.MakeProdIndexer()
+	}
 	log.Info("Press Ctrl+C to terminate")
 	signalChan := make(chan os.Signal, 1)
 	cleanupDone := make(chan bool)
