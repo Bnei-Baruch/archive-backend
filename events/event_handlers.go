@@ -5,11 +5,12 @@ import (
 	"net/http"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/volatiletech/sqlboiler/queries/qm"
 
+	"github.com/Bnei-Baruch/archive-backend/mdb"
 )
 
 //collection functions
@@ -87,19 +88,39 @@ func ContentUnitUpdate(d Data) {
 }
 
 func ContentUnitPublishedChange(d Data) {
+	log.Infof("%+v\n", d)
+
 	unit := GetUnitObj(d.Payload["uid"].(string))
-	fmt.Printf("*************:\n %+v", unit.UID)
+
+	// check if type needs thumbnail
+	NeedThumbnail := true
+	unitTypeName := mdb.CONTENT_TYPE_REGISTRY.ByID[unit.TypeID].Name
+	thumbnailExcludeTypeNames := []string{"KITEI_MAKOR",
+		"LELO_MIKUD", "PUBLICATION", "ARTICLE"}
+	for _, b := range thumbnailExcludeTypeNames {
+		if b == unitTypeName {
+			NeedThumbnail = false
+			log.Printf("\nNeedThumbnail: %t because type is  %s\n", NeedThumbnail, unitTypeName)
+		}
+	}
+	//
+
 	if unit.Published == true &&
-		unit.Secure == 0 {
+		unit.Secure == 0 &&
+		NeedThumbnail == true {
 		apiUrl := viper.GetString("api.url")
 		resp, err := http.Get(apiUrl + "/thumbnail/" + unit.UID)
+		fmt.Printf("the unit %s status is: %s\n", unit.UID, resp.Status)
 		if err != nil {
-			log.Error(err)
+			log.Errorf("problem sending post request to thumbnail api %V\n", err)
 		}
-		fmt.Println(resp)
-	}
-	log.Infof("%+v", d)
+		if resp.StatusCode != 200 {
+			log.Errorf("***creating thumbnail for unit %s returned %s instead of 200", unit.UID, resp.Status)
+		}
 
+		fmt.Printf("response from post request is: %+v", resp)
+	}
+	// elastic indexer
 	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
 		log.Errorf("couldn't update content unit in ES", err)
@@ -169,17 +190,26 @@ func FilePublished(d Data) {
 				apiUrl := viper.GetString("api.url")
 				resp, err := http.Get(apiUrl + "/unzip/" + file.UID)
 				if err != nil {
-					log.Errorf("unzip failed: %+v",err)
+					log.Errorf("unzip failed: %+v", err)
 				}
 				fmt.Println(resp)
 			}
 			if file.MimeType.String == "application/msword" {
 				fmt.Printf("************* file is word doc:\n %+v", file)
 			}
+
+		case "text":
+			if file.MimeType.String == "application/msword" {
+				apiUrl := viper.GetString("api.url")
+				resp, err := http.Get(apiUrl + "/doc2html/" + file.UID)
+				if err != nil {
+					log.Errorf("convert doc2html failed: %+v\n", err)
+				}
+				fmt.Printf("doc2html response: %+v\n", resp)
+			}
 		}
 
 	}
-
 
 }
 
@@ -321,7 +351,6 @@ func GetUnitObj(uid string) *mdbmodels.ContentUnit {
 
 	return OneObj
 }
-
 
 //err = unZipFile(d.Payload["uid"].(string))
 //if err != nil {
