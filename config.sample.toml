@@ -13,6 +13,7 @@ soffice-bin="/usr/bin/soffice"
 [server]
 bind-address=":8080"
 mode="debug"  # GIN mode. Either debug, release or test
+boiler-mode="debug"
 rollbar-token=""
 rollbar-environment="development"
 

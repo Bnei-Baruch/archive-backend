@@ -14,6 +14,10 @@ func MakeProdIndexer() *Indexer {
 	return MakeIndexer("prod", []string{consts.ES_CLASSIFICATIONS_INDEX, consts.ES_UNITS_INDEX})
 }
 
+func MakeFakeIndexer() *Indexer {
+	return MakeIndexer("fake", []string{})
+}
+
 // Receives namespace and list of indexes names.
 func MakeIndexer(namespace string, names []string) *Indexer {
 	indexer := new(Indexer)

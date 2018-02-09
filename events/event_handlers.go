@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/queries/qm"
-
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/spf13/viper"
+
 )
 
 //collection functions
@@ -40,7 +40,6 @@ func CollectionUpdate(d Data) {
 	}
 }
 
-//
 func CollectionPublishedChange(d Data) {
 	log.Infof("%+v", d)
 
@@ -59,8 +58,7 @@ func CollectionContentUnitsChange(d Data) {
 	}
 }
 
-//
-////event functions
+//event functions
 func ContentUnitCreate(d Data) {
 	log.Infof("%+v", d)
 
@@ -145,6 +143,7 @@ func ContentUnitPersonsChange(d Data) {
 }
 
 func ContentUnitPublishersChange(d Data) {
+	log.Infof("%+v", d)
 
 	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -170,7 +169,7 @@ func FilePublished(d Data) {
 				apiUrl := viper.GetString("api.url")
 				resp, err := http.Get(apiUrl + "/unzip/" + file.UID)
 				if err != nil {
-					log.Error(err)
+					log.Errorf("unzip failed: %+v",err)
 				}
 				fmt.Println(resp)
 			}
@@ -181,23 +180,25 @@ func FilePublished(d Data) {
 
 	}
 
-	//err = unZipFile(d.Payload["uid"].(string))
-	//if err != nil {
-	//	log.Errorf("problem unzipping file %v", d.Payload["uid"].(string), err)
-	//}
+
 }
 
 func FileReplace(d Data) {
 	log.Infof("%+v", d)
-	//errReplace := indexer.FileDelete(oldUid)
-	//if errReplace != nil {
-	//	log.Errorf("couldn't delete file from ES", errReplace)
-	//}
-	//
-	//errAdd := indexer.FileAdd(d.Payload["uid"].(string))
-	//if errAdd != nil {
-	//	log.Errorf("couldn't add file to ES", errAdd)
-	//}
+	OldUID := d.Payload["old"].(map[string]interface{})
+	NewUID := d.Payload["new"].(map[string]interface{})
+	fmt.Printf("\nOLD_ID IS: %v\n", OldUID["uid"])
+	fmt.Printf("\nNEW_ID IS: %v\n", NewUID["uid"])
+
+	errReplace := indexer.FileDelete(OldUID["uid"].(string))
+	if errReplace != nil {
+		log.Errorf("couldn't delete file from ES", errReplace)
+	}
+
+	errAdd := indexer.FileAdd(NewUID["uid"].(string))
+	if errAdd != nil {
+		log.Errorf("couldn't add file to ES", errAdd)
+	}
 
 }
 
@@ -298,7 +299,6 @@ func PublisherUpdate(d Data) {
 	if err != nil {
 		log.Errorf("couldn't update publisher in ES", err)
 	}
-
 }
 
 // GetFileObj gets the file object from db
@@ -322,20 +322,7 @@ func GetUnitObj(uid string) *mdbmodels.ContentUnit {
 	return OneObj
 }
 
-//func unZipFile(uid string) error {
-//
-//	file := GetFileObj(uid)
-//	if (file.Type == "image" ||
-//		strings.HasSuffix(file.Name, ".zip")) &&
-//		file.Secure != 1 {
-//		fmt.Printf("\n*********************************\n%+v\n", file)
-//		fmt.Println("IMAGE!!! ", file.UID)
-//
-//		resp, err := http.Get(BACKEND_URL + "/" + uid)
-//		if err != nil {
-//			return err
-//		}
-//		fmt.Println(resp)
-//	}
-//	return nil
-//}
+
+//err = unZipFile(d.Payload["uid"].(string))
+//if err != nil {
+//log.Errorf("problem unzipping file %v", d.Payload["uid"].(string), err)
