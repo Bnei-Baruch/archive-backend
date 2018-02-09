@@ -35,7 +35,7 @@ func RunListener() {
 	log.Printf("Connected to %s clusterID: [%s] clientID: [%s]\n", natsURL, natsClusterID, natsClientID)
 
 	log.Info("Subscribing to nats")
-	startOpt := stan.DeliverAllAvailable()
+	startOpt := stan.DurableName(viper.GetString("nats.durable-name"))
 	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt)
 	utils.Must(err)
 
