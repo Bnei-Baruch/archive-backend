@@ -134,6 +134,12 @@ type HierarchyRequest struct {
 	Depth   int    `json:"depth" form:"depth"`
 }
 
+type HomeResponse struct {
+	LatestDailyLesson  *Collection    `json:"latest_daily_lesson"`
+	LatestContentUnits []*ContentUnit `json:"latest_units"`
+	Banner             *Banner        `json:"banner"`
+}
+
 func NewCollectionsResponse() *CollectionsResponse {
 	return &CollectionsResponse{Collections: make([]*Collection, 0)}
 }
@@ -231,4 +237,12 @@ type CollectionUpdateStatus struct {
 	UID        string     `json:"id"`
 	LastUpdate utils.Date `json:"last_update"`
 	UnitsCount int        `json:"units_count"`
+}
+
+type Banner struct {
+	Section   string `json:"section"`
+	Header    string `json:"header"`
+	SubHeader string `json:"sub_header"`
+	Url       string `json:"url"`
+	Image     string `json:"image"`
 }

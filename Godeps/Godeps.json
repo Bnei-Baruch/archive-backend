@@ -28,6 +28,21 @@
 			"Rev": "e2212d40c62a98b388a5eb48ecbdcf88534688ba"
 		},
 		{
+			"ImportPath": "github.com/gogo/protobuf/gogoproto",
+			"Comment": "v0.5-33-g971cbfd2",
+			"Rev": "971cbfd2e72b513a28c74af7462aee0800248d69"
+		},
+		{
+			"ImportPath": "github.com/gogo/protobuf/proto",
+			"Comment": "v0.5-33-g971cbfd2",
+			"Rev": "971cbfd2e72b513a28c74af7462aee0800248d69"
+		},
+		{
+			"ImportPath": "github.com/gogo/protobuf/protoc-gen-gogo/descriptor",
+			"Comment": "v0.5-33-g971cbfd2",
+			"Rev": "971cbfd2e72b513a28c74af7462aee0800248d69"
+		},
+		{
 			"ImportPath": "github.com/golang/protobuf/proto",
 			"Rev": "2bba0603135d7d7f5cb73b2125beeda19c09f4ef"
 		},
@@ -102,6 +117,36 @@
 		{
 			"ImportPath": "github.com/mitchellh/mapstructure",
 			"Rev": "d0303fe809921458f417bcf828397a65db30a7e4"
+		},
+		{
+			"ImportPath": "github.com/nats-io/go-nats",
+			"Comment": "v1.3.0-21-gf0d9c59",
+			"Rev": "f0d9c5988d4c2a17ad466fcdffe010165c46434e"
+		},
+		{
+			"ImportPath": "github.com/nats-io/go-nats-streaming",
+			"Comment": "v0.3.4-33-g88fd0ce",
+			"Rev": "88fd0ce51e45a3a711b737174fd951944c91f085"
+		},
+		{
+			"ImportPath": "github.com/nats-io/go-nats-streaming/pb",
+			"Comment": "v0.3.4-33-g88fd0ce",
+			"Rev": "88fd0ce51e45a3a711b737174fd951944c91f085"
+		},
+		{
+			"ImportPath": "github.com/nats-io/go-nats/encoders/builtin",
+			"Comment": "v1.3.0-21-gf0d9c59",
+			"Rev": "f0d9c5988d4c2a17ad466fcdffe010165c46434e"
+		},
+		{
+			"ImportPath": "github.com/nats-io/go-nats/util",
+			"Comment": "v1.3.0-21-gf0d9c59",
+			"Rev": "f0d9c5988d4c2a17ad466fcdffe010165c46434e"
+		},
+		{
+			"ImportPath": "github.com/nats-io/nuid",
+			"Comment": "v1.0.0-3-g33c6031",
+			"Rev": "33c603157d6fd1b0ac2599bcc4a286b36479a06d"
 		},
 		{
 			"ImportPath": "github.com/pelletier/go-buffruneio",

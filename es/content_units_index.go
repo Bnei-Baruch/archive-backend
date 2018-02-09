@@ -52,20 +52,20 @@ func (index *ContentUnitsIndex) Add(scope Scope) error {
 			return err
 		}
 		scope.ContentUnitUID = ""
-	}
-	emptyScope := Scope{}
-	if scope != emptyScope {
-		return index.Update(scope)
-	}
-	return nil
+    }
+    emptyScope := Scope{}
+    if scope != emptyScope {
+        return index.Update(scope)
+    }
+    return nil
 }
 
 func (index *ContentUnitsIndex) Update(scope Scope) error {
 	removed, err := index.removeFromIndex(scope)
-	if err != nil {
-		return err
-	}
-	return index.addToIndex(scope, removed)
+    if err != nil {
+        return err
+    }
+    return index.addToIndex(scope, removed)
 }
 
 func (index *ContentUnitsIndex) Delete(scope Scope) error {
@@ -154,10 +154,15 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 }
 
 func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
-	count, err := mdbmodels.ContentUnits(mdb.DB).Count()
+	var count int64
+	err := mdbmodels.NewQuery(mdb.DB,
+		qm.Select("COUNT(1)"),
+		qm.From("content_units as cu"),
+		qm.Where(sqlScope)).QueryRow().Scan(&count)
 	if err != nil {
 		return err
 	}
+
 	offset := 0
 	limit := 1000
 	for offset < int(count) {
@@ -187,6 +192,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		}
 		offset += limit
 	}
+
 	return nil
 }
 
