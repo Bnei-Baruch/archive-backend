@@ -1,7 +1,6 @@
 package events
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -15,7 +14,7 @@ import (
 
 //collection functions
 func CollectionCreate(d Data) {
-	log.Info(d.Payload["uid"].(string))
+	log.Debugf(d.Payload["uid"].(string))
 
 	err := indexer.CollectionAdd(d.Payload["uid"].(string))
 	if err != nil {
@@ -24,7 +23,7 @@ func CollectionCreate(d Data) {
 }
 
 func CollectionDelete(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.CollectionDelete(d.Payload["uid"].(string))
 	if err != nil {
@@ -33,7 +32,7 @@ func CollectionDelete(d Data) {
 }
 
 func CollectionUpdate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.CollectionUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -42,7 +41,7 @@ func CollectionUpdate(d Data) {
 }
 
 func CollectionPublishedChange(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.CollectionUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -51,7 +50,7 @@ func CollectionPublishedChange(d Data) {
 }
 
 func CollectionContentUnitsChange(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.CollectionUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -61,7 +60,7 @@ func CollectionContentUnitsChange(d Data) {
 
 //event functions
 func ContentUnitCreate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.ContentUnitAdd(d.Payload["uid"].(string))
 	if err != nil {
@@ -70,7 +69,7 @@ func ContentUnitCreate(d Data) {
 }
 
 func ContentUnitDelete(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.ContentUnitDelete(d.Payload["uid"].(string))
 	if err != nil {
@@ -79,7 +78,7 @@ func ContentUnitDelete(d Data) {
 }
 
 func ContentUnitUpdate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -88,20 +87,24 @@ func ContentUnitUpdate(d Data) {
 }
 
 func ContentUnitPublishedChange(d Data) {
-	log.Infof("%+v\n", d)
+	log.Debugf("%+v\n", d)
 
 	unit := GetUnitObj(d.Payload["uid"].(string))
 
 	// check if type needs thumbnail
 	NeedThumbnail := true
 	unitTypeName := mdb.CONTENT_TYPE_REGISTRY.ByID[unit.TypeID].Name
-	thumbnailExcludeTypeNames := []string{"KITEI_MAKOR",
+	excludeUnitTypeNames := []string{"KITEI_MAKOR",
 		"LELO_MIKUD", "PUBLICATION", "ARTICLE"}
-	for _, b := range thumbnailExcludeTypeNames {
+	for _, b := range excludeUnitTypeNames {
 		if b == unitTypeName {
 			NeedThumbnail = false
-			log.Printf("\nNeedThumbnail: %t because type is  %s\n", NeedThumbnail, unitTypeName)
 		}
+	}
+	if NeedThumbnail {
+		log.Debugf("Unit %s needs thumbnail because it is of type  \"%s\"", unit.UID,  unitTypeName)
+	} else {
+		log.Debugf("Unit %s needs NO thumbnail because it is of type  \"%s\"", unit.UID,  unitTypeName)
 	}
 	//
 
@@ -110,15 +113,13 @@ func ContentUnitPublishedChange(d Data) {
 		NeedThumbnail == true {
 		apiUrl := viper.GetString("api.url")
 		resp, err := http.Get(apiUrl + "/thumbnail/" + unit.UID)
-		fmt.Printf("the unit %s status is: %s\n", unit.UID, resp.Status)
+		log.Infof("response status code for creating  unit \"%s\" thumbnail of type \"%s\" is: %d", unit.UID ,unitTypeName, resp.StatusCode)
 		if err != nil {
 			log.Errorf("problem sending post request to thumbnail api %V\n", err)
 		}
 		if resp.StatusCode != 200 {
-			log.Errorf("***creating thumbnail for unit %s returned %s instead of 200", unit.UID, resp.Status)
+			log.Errorf("creating thumbnail for unit %s returned status code %d instead of 200", unit.UID, resp.StatusCode)
 		}
-
-		fmt.Printf("response from post request is: %+v", resp)
 	}
 	// elastic indexer
 	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
@@ -128,7 +129,7 @@ func ContentUnitPublishedChange(d Data) {
 }
 
 func ContentUnitDerivativesChange(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -137,7 +138,7 @@ func ContentUnitDerivativesChange(d Data) {
 }
 
 func ContentUnitSourcesChange(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -146,7 +147,7 @@ func ContentUnitSourcesChange(d Data) {
 }
 
 func ContentUnitTagsChange(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -155,7 +156,7 @@ func ContentUnitTagsChange(d Data) {
 }
 
 func ContentUnitPersonsChange(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -164,7 +165,7 @@ func ContentUnitPersonsChange(d Data) {
 }
 
 func ContentUnitPublishersChange(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -173,8 +174,9 @@ func ContentUnitPublishersChange(d Data) {
 }
 
 func FilePublished(d Data) {
+	log.Debugf("%+v", d)
+
 	fileUid := d.Payload["uid"].(string)
-	log.Infof("%+v", d)
 
 	err := indexer.FileAdd(fileUid)
 	if err != nil {
@@ -186,26 +188,30 @@ func FilePublished(d Data) {
 		switch file.Type {
 		case "image":
 			if strings.HasSuffix(file.Name, ".zip") {
-				fmt.Printf("************* file is zipped IMAGE:\n %+v", file)
+				log.Debugf("file %s is zipped image, sending unsip post request to backend", file.UID)
 				apiUrl := viper.GetString("api.url")
 				resp, err := http.Get(apiUrl + "/unzip/" + file.UID)
 				if err != nil {
 					log.Errorf("unzip failed: %+v", err)
 				}
-				fmt.Println(resp)
-			}
-			if file.MimeType.String == "application/msword" {
-				fmt.Printf("************* file is word doc:\n %+v", file)
+				if resp.StatusCode != 200 {
+					log.Errorf("we got response %d for api unzip request. file UID is \"%s\"", resp.StatusCode, file.UID)
+				}
+				log.Infof("response status code for unzipping file \"%s\" is: %d", file.UID, resp.StatusCode)
 			}
 
 		case "text":
 			if file.MimeType.String == "application/msword" {
 				apiUrl := viper.GetString("api.url")
 				resp, err := http.Get(apiUrl + "/doc2html/" + file.UID)
+				log.Debugf("doc2html response: %+v\n", resp)
 				if err != nil {
 					log.Errorf("convert doc2html failed: %+v\n", err)
 				}
-				fmt.Printf("doc2html response: %+v\n", resp)
+				if resp.StatusCode != 200 {
+					log.Errorf("we got response %d for api post doc2html request. file UID is \"%s\"", resp.StatusCode, file.UID)
+				}
+				log.Infof("response status code for doc2htmling file \"%s\" is: %d", file.UID, resp.StatusCode)
 			}
 		}
 
@@ -214,11 +220,12 @@ func FilePublished(d Data) {
 }
 
 func FileReplace(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
+
 	OldUID := d.Payload["old"].(map[string]interface{})
 	NewUID := d.Payload["new"].(map[string]interface{})
-	fmt.Printf("\nOLD_ID IS: %v\n", OldUID["uid"])
-	fmt.Printf("\nNEW_ID IS: %v\n", NewUID["uid"])
+	//fmt.Printf("\nOLD_ID IS: %v\n", OldUID["uid"])
+	//fmt.Printf("\nNEW_ID IS: %v\n", NewUID["uid"])
 
 	errReplace := indexer.FileDelete(OldUID["uid"].(string))
 	if errReplace != nil {
@@ -233,7 +240,7 @@ func FileReplace(d Data) {
 }
 
 func FileInsert(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 	err := indexer.FileAdd(d.Payload["uid"].(string))
 
 	if err != nil {
@@ -242,7 +249,7 @@ func FileInsert(d Data) {
 }
 
 func FileUpdate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.FileUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -251,7 +258,7 @@ func FileUpdate(d Data) {
 }
 
 func SourceCreate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.SourceAdd(d.Payload["uid"].(string))
 	if err != nil {
@@ -260,7 +267,7 @@ func SourceCreate(d Data) {
 }
 
 func SourceUpdate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.SourceUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -269,7 +276,7 @@ func SourceUpdate(d Data) {
 }
 
 func TagCreate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.TagAdd(d.Payload["uid"].(string))
 	if err != nil {
@@ -278,7 +285,7 @@ func TagCreate(d Data) {
 }
 
 func TagUpdate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.TagUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -287,7 +294,7 @@ func TagUpdate(d Data) {
 }
 
 func PersonCreate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.PersonAdd(d.Payload["uid"].(string))
 	if err != nil {
@@ -296,7 +303,7 @@ func PersonCreate(d Data) {
 }
 
 func PersonDelete(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	//err := indexer.PersonDelete(d.Payload["uid"].(string))
 	//if err != nil {
@@ -305,7 +312,7 @@ func PersonDelete(d Data) {
 }
 
 func PersonUpdate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.PersonUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -314,7 +321,7 @@ func PersonUpdate(d Data) {
 }
 
 func PublisherCreate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.PublisherAdd(d.Payload["uid"].(string))
 	if err != nil {
@@ -323,7 +330,7 @@ func PublisherCreate(d Data) {
 }
 
 func PublisherUpdate(d Data) {
-	log.Infof("%+v", d)
+	log.Debugf("%+v", d)
 
 	err := indexer.PublisherUpdate(d.Payload["uid"].(string))
 	if err != nil {
@@ -352,6 +359,3 @@ func GetUnitObj(uid string) *mdbmodels.ContentUnit {
 	return OneObj
 }
 
-//err = unZipFile(d.Payload["uid"].(string))
-//if err != nil {
-//log.Errorf("problem unzipping file %v", d.Payload["uid"].(string), err)
