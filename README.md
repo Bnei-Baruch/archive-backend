@@ -51,6 +51,9 @@ misc/update_mdb_models.sh
 ```
 
 ## Elasticsearch related stuff
+
+(See the next section below for the instructions on installing Elasticsearch for Windows)
+
 http://mrzard.github.io/blog/2015/03/25/elasticsearch-enable-mlockall-in-centos-7/
 
 ### Plugins
@@ -75,7 +78,73 @@ There are two more dependencies required to build index:
 2) python-docx pyton library - to get text from docx
   - pip install python-docx
 
+## Elasticsearch installation for Windows
 
+1. Download and install the Java Virtual Machine for Windows from
+http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.html
+
+![alt text](https://image.prntscr.com/image/PzmaOTOMQX2Bds_Dv_cXSA.png)
+
+2. Download and install the Elasticsearch 5.6.0 MSI from
+https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-5.6.0.msi
+
+3. Open CMD as administrator
+
+    1. Go to Elasticsearch bin directory
+
+        ```Shell
+        cd C:\Program Files\Elastic\Elasticsearch\bin
+        ```
+
+    2. To install analysis-phonetic type
+
+        ```Shell
+        elasticsearch-plugin install analysis-phonetic
+        ```
+
+    3. To install the hebrew plugin type
+
+        ```Shell
+        elasticsearch-plugin install https://bintray.com/synhershko/elasticsearch-analysis-hebrew/download_file?file_path=elasticsearch-analysis-hebrew-5.6.0.zip
+        ```
+
+    4. Answer 'y' to the security question
+
+        ```Shell
+        Continue with installation? [y/N]y
+        ```
+
+    5. To install ICU plugin type
+
+        ```Shell
+        elasticsearch-plugin install analysis-icu
+        ```
+
+4. Download and install Python - **version 2.7.x**
+https://www.python.org/downloads/
+
+
+5. Install python-docx (to get text from docx):
+
+    * in CMD go to python directory
+
+    ```Shell
+    cd C:\Python27
+    ```
+
+    * and type
+
+    ```Shell
+    python -m pip install python-docx
+    ```
+
+6. Download and install OpenOffice
+
+    https://www.openoffice.org/download/
+
+    We need soffice.exe that is located on C:\\Program Files (x86)\\OpenOffice 4\\program
+
+    Update 'soffice-bin' value with soffice.exe location in config.toml, [elasticsearch] section.
 
 ## License
 
