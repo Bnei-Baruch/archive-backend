@@ -19,6 +19,15 @@ import (
 var indexer *es.Indexer
 
 func RunListener() {
+	go func(){
+		for {
+			//fmt.Println(<- ChanIndexFuncs)
+			a1 := <-ChanIndexFuncs
+			fmt.Println(a1)
+			a1.F(a1.S)
+		}
+	}()
+
 	log.SetLevel(log.InfoLevel)
 	var err error
 
@@ -41,6 +50,7 @@ func RunListener() {
 	//startOpt := stan.DeliverAllAvailable()
 	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt)
 	utils.Must(err)
+
 
 	if viper.GetBool("server.fake-indexer") {
 		indexer = es.MakeFakeIndexer()
@@ -68,6 +78,14 @@ type Data struct {
 	Type    string                 `json:"type"`
 	Payload map[string]interface{} `json:"payload"`
 }
+
+type ChannelForIndexers struct {
+	F func(s string) error
+	S string
+}
+
+var ChanIndexFuncs = make(chan ChannelForIndexers, 100000)
+
 
 type MessageHandler func(d Data)
 
@@ -107,8 +125,12 @@ var messageHandlers = map[string]MessageHandler{
 	E_PUBLISHER_UPDATE: PublisherUpdate,
 }
 
+
 // checks message type and calls "eventHandler"
 func msgHandler(msg *stan.Msg) {
+
+
+
 	var d Data
 	err := json.Unmarshal(msg.Data, &d)
 	if err != nil {
@@ -122,4 +144,5 @@ func msgHandler(msg *stan.Msg) {
 
 	log.Debugf("Handling %+v", d)
 	handler(d)
+
 }
