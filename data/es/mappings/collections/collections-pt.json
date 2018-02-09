@@ -1,0 +1,116 @@
+{
+    "mappings": {
+        "collections": {
+            "_all": {
+                "enabled": false
+            }, 
+            "properties": {
+                "content_units_descriptions_uids": {
+                    "type": "keyword"
+                }, 
+                "content_units_names": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "portuguese"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "content_units_content_types": {
+                    "type": "keyword"
+                }, 
+                "name": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "portuguese"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "content_units_sources": {
+                    "type": "text"
+                }, 
+                "content_units_tags_uids": {
+                    "type": "keyword"
+                }, 
+                "description": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "portuguese"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "content_units_names_uids": {
+                    "type": "keyword"
+                }, 
+                "mdb_uid": {
+                    "type": "keyword"
+                }, 
+                "content_units_sources_uids": {
+                    "type": "keyword"
+                }, 
+                "from_date": {
+                    "type": "date", 
+                    "format": "strict_date"
+                }, 
+                "content_units_tags": {
+                    "type": "keyword"
+                }, 
+                "to_date": {
+                    "type": "date", 
+                    "format": "strict_date"
+                }, 
+                "content_type": {
+                    "type": "keyword"
+                }, 
+                "typed_uids": {
+                    "type": "keyword"
+                }, 
+                "original_language": {
+                    "index": false, 
+                    "type": "keyword"
+                }, 
+                "content_units_descriptions": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "portuguese"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }
+            }
+        }
+    }, 
+    "settings": {
+        "index": {
+            "analysis": {
+                "filter": {
+                    "custom_phonetic": {
+                        "encoder": "beider_morse", 
+                        "type": "phonetic", 
+                        "replace": true
+                    }
+                }, 
+                "analyzer": {
+                    "phonetic_analyzer": {
+                        "filter": [
+                            "standard", 
+                            "lowercase", 
+                            "custom_phonetic"
+                        ], 
+                        "tokenizer": "standard"
+                    }
+                }
+            }
+        }
+    }
+}

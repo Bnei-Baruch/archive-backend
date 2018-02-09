@@ -38,7 +38,8 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 		utils.Must(DB.Ping())
 	}
 	boil.SetDB(DB)
-	boil.DebugMode = viper.GetString("server.mode") == "debug"
+	boil.DebugMode = viper.GetString("server.boiler-mode") == "debug"
+	boil.DebugMode = false
 	log.Info("Initializing type registries")
 	utils.Must(InitTypeRegistries(DB))
 

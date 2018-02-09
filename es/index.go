@@ -18,10 +18,8 @@ type Scope struct {
 	CollectionUID  string
 	TagUID         string
 	SourceUID      string
-
-	// Not used for now...
-	PersonUID    string
-	PublisherUID string
+	PersonUID      string
+	PublisherUID   string
 }
 
 type Index interface {
@@ -119,6 +117,6 @@ func (index *BaseIndex) RefreshIndex() error {
 
 func (index *BaseIndex) RefreshIndexByLang(lang string) error {
 	_, err := mdb.ESC.Refresh(index.indexName(lang)).Do(context.TODO())
-    // fmt.Printf("\n\n\nShards: %+v \n\n\n", shards)
+	// fmt.Printf("\n\n\nShards: %+v \n\n\n", shards)
 	return err
 }

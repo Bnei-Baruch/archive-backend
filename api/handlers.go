@@ -503,7 +503,7 @@ func HomePageHandler(c *gin.Context) {
 	if c.Bind(&r) != nil {
 		return
 	}
-	
+
 	latestLesson, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, false)
 	if err != nil {
 		NewBadRequestError(err).Abort(c)
@@ -526,39 +526,39 @@ func HomePageHandler(c *gin.Context) {
 		for _, value := range cu.Collections {
 			switch value.ContentType {
 			case consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON:
-				if (!cuAssigned) {
+				if !cuAssigned {
 					lesson = *cu
 					cuAssigned = true
-				} else if (lesson.FilmDate.Time.Before(cu.FilmDate.Time)) {
+				} else if lesson.FilmDate.Time.Before(cu.FilmDate.Time) {
 					lesson = *cu
 				}
 				break
 			case consts.CT_VIDEO_PROGRAM:
-				if (!cuAssigned) {
+				if !cuAssigned {
 					program = *cu
 					cuAssigned = true
-				} else if (program.FilmDate.Time.Before(cu.FilmDate.Time)) {
-					program = *cu					
+				} else if program.FilmDate.Time.Before(cu.FilmDate.Time) {
+					program = *cu
 				}
 				break
-			case consts.CT_LECTURE_SERIES,consts.CT_CHILDREN_LESSONS,consts.CT_WOMEN_LESSONS,consts.CT_VIRTUAL_LESSONS, consts.CT_VIRTUAL_LESSON, consts.CT_LECTURE,consts.CT_CHILDREN_LESSON,consts.CT_WOMEN_LESSON:
-				if (!cuAssigned) {
+			case consts.CT_LECTURE_SERIES, consts.CT_CHILDREN_LESSONS, consts.CT_WOMEN_LESSONS, consts.CT_VIRTUAL_LESSONS, consts.CT_VIRTUAL_LESSON, consts.CT_LECTURE, consts.CT_CHILDREN_LESSON, consts.CT_WOMEN_LESSON:
+				if !cuAssigned {
 					lecture = *cu
 					cuAssigned = true
-				} else if (lecture.FilmDate.Time.Before(cu.FilmDate.Time)) {
-					lecture = *cu					
+				} else if lecture.FilmDate.Time.Before(cu.FilmDate.Time) {
+					lecture = *cu
 				}
 				break
-			case consts.CT_CONGRESS,consts.CT_HOLIDAY,consts.CT_PICNIC,consts.CT_UNITY_DAY:
-				if (!cuAssigned) {
+			case consts.CT_CONGRESS, consts.CT_HOLIDAY, consts.CT_PICNIC, consts.CT_UNITY_DAY:
+				if !cuAssigned {
 					event = *cu
 					cuAssigned = true
-				} else if (event.FilmDate.Time.Before(cu.FilmDate.Time)) {
-					event = *cu					
+				} else if event.FilmDate.Time.Before(cu.FilmDate.Time) {
+					event = *cu
 				}
 				break
 			}
-			if (cuAssigned) {
+			if cuAssigned {
 				break
 			}
 		}
@@ -574,16 +574,44 @@ func HomePageHandler(c *gin.Context) {
 
 	resp := struct {
 		LatestDailyLesson Collection
-		Promoted struct { Section string; SubHeader string; Header string; Url string; Image string }
-		LatestContentUnits      map[string]ContentUnit
-		PopularTopics []struct { Title string; Url string; Image string }
+		Promoted          struct {
+			Section   string
+			SubHeader string
+			Header    string
+			Url       string
+			Image     string
+		}
+		LatestContentUnits map[string]ContentUnit
+		PopularTopics      []struct {
+			Title string
+			Url   string
+			Image string
+		}
 	}{
 		*latestLesson,
-		struct { Section string; SubHeader string; Header string; Url string; Image string }{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
+		struct {
+			Section   string
+			SubHeader string
+			Header    string
+			Url       string
+			Image     string
+		}{"Events", "February 2018", "The World Kabbalah Congress", "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA", "/static/media/hp_featured_temp.cca39640.jpg"},
 		unitsMap,
-		[]struct { Title string; Url string; Image string }{
-			struct { Title string; Url string; Image string }{"Conception", "#", "http://www.thefertilebody.com/Content/Images/UploadedImages/a931e8de-3798-4332-8055-ea5b041dc0b0/ShopItemImage/conception.jpg"},
-			struct { Title string; Url string; Image string }{"The role of women in the spiritual system", "#", "https://images-na.ssl-images-amazon.com/images/I/71mpCuqBFaL._SY717_.jpg"},
+		[]struct {
+			Title string
+			Url   string
+			Image string
+		}{
+			struct {
+				Title string
+				Url   string
+				Image string
+			}{"Conception", "#", "http://www.thefertilebody.com/Content/Images/UploadedImages/a931e8de-3798-4332-8055-ea5b041dc0b0/ShopItemImage/conception.jpg"},
+			struct {
+				Title string
+				Url   string
+				Image string
+			}{"The role of women in the spiritual system", "#", "https://images-na.ssl-images-amazon.com/images/I/71mpCuqBFaL._SY717_.jpg"},
 		},
 	}
 
@@ -852,7 +880,7 @@ func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpE
 
 	mods = append(mods, qm.WhereIn("uid IN ?", utils.ConvertArgsString(ccIds)...))
 
-		// Eager loading
+	// Eager loading
 	mods = append(mods, qm.Load(
 		"CollectionsContentUnits",
 		"CollectionsContentUnits.Collection"))
@@ -869,7 +897,7 @@ func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpE
 		return nil, ex
 	}
 
-	return cus,nil
+	return cus, nil
 }
 
 func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool) (*Collection, *HttpError) {

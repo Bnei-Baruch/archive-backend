@@ -5,12 +5,25 @@ import (
 )
 
 type Collection struct {
-	MDB_UID      string            `json:"mdb_uid"`
-	ContentType  string            `json:"content_type"`
-	FilmDate     *utils.Date       `json:"film_date"`
-	Names        map[string]string `json:"names"`
-	Descriptions map[string]string `json:"descriptions"`
-	ContentUnits []*ContentUnit    `json:"content_units"`
+	MDB_UID                  string      `json:"mdb_uid"`
+	TypedUIDs                []string    `json:"typed_uids"`
+	Name                     string      `json:"name"`
+	Description              string      `json:"description"`
+	ContentType              string      `json:"content_type"`
+	ContentUnitsContentTypes []string    `json:"content_units_content_types,omitempty"`
+	FromDate                 *utils.Date `json:"from_date"`
+	ToDate                   *utils.Date `json:"to_date"`
+	OriginalLanguage         string      `json:"original_language,omitempty"`
+
+	// Content units aggregated data
+	ContentUnitsNames            []string   `json:"content_units_names"`
+	ContentUnitsNamesUIDs        []string   `json:"content_units_names_uids"`
+	ContentUnitsDescriptions     []string   `json:"content_units_descriptions"`
+	ContentUnitsDescriptionsUIDs []string   `json:"content_units_descriptions_uids"`
+	ContentUnitsTags             [][]string `json:"content_units_tags,omitempty"`
+	ContentUnitsTagsUIDs         []string   `json:"content_units_tags_uids,omitempty"`
+	ContentUnitsSources          [][]string `json:"content_units_sources,omitempty"`
+	ContentUnitsSourcesUIDs      []string   `json:"content_units_sources_uids,omitempty"`
 }
 
 type ContentUnit struct {

@@ -11,7 +11,10 @@ type Indexer struct {
 }
 
 func MakeProdIndexer() *Indexer {
-	return MakeIndexer("prod", []string{consts.ES_CLASSIFICATIONS_INDEX, consts.ES_UNITS_INDEX})
+	return MakeIndexer("prod", []string{
+		consts.ES_CLASSIFICATIONS_INDEX,
+		consts.ES_UNITS_INDEX,
+		consts.ES_COLLECTIONS_INDEX})
 }
 
 // Receives namespace and list of indexes names.
@@ -23,6 +26,8 @@ func MakeIndexer(namespace string, names []string) *Indexer {
 			indexer.indices[i] = MakeClassificationsIndex(namespace)
 		} else if name == consts.ES_UNITS_INDEX {
 			indexer.indices[i] = MakeContentUnitsIndex(namespace)
+		} else if name == consts.ES_COLLECTIONS_INDEX {
+			indexer.indices[i] = MakeCollectionsIndex(namespace)
 		}
 	}
 	return indexer
@@ -32,12 +37,15 @@ func (indexer *Indexer) ReindexAll() error {
 	log.Info("Re-Indexing everything")
 	for _, index := range indexer.indices {
 		// TODO: Check if indexing things in parallel will make things faster?
+        log.Info("Deleting index.")
 		if err := index.DeleteIndex(); err != nil {
 			return err
 		}
+        log.Info("Creating index.")
 		if err := index.CreateIndex(); err != nil {
 			return err
 		}
+        log.Info("Reindexing")
 		if err := index.ReindexAll(); err != nil {
 			return err
 		}
@@ -206,6 +214,15 @@ func (indexer *Indexer) PersonAdd(uid string) error {
 func (indexer *Indexer) PersonUpdate(uid string) error {
 	for _, index := range indexer.indices {
 		if err := index.Update(Scope{PersonUID: uid}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (indexer *Indexer) PersonDelete(uid string) error {
+	for _, index := range indexer.indices {
+		if err := index.Delete(Scope{PersonUID: uid}); err != nil {
 			return err
 		}
 	}

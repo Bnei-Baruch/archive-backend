@@ -179,3 +179,4 @@ var FILTERS = map[string]string{
 // ElasticSearch 'es'
 const ES_CLASSIFICATIONS_INDEX = "classifications"
 const ES_UNITS_INDEX = "units"
+const ES_COLLECTIONS_INDEX = "collections"
