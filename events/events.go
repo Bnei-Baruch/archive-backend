@@ -15,9 +15,11 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
+
 var indexer *es.Indexer
 
 func RunListener() {
+	log.SetLevel(log.InfoLevel)
 	var err error
 
 	log.Info("Initialize connections to MDB and elasticsearch")
@@ -36,6 +38,7 @@ func RunListener() {
 
 	log.Info("Subscribing to nats")
 	startOpt := stan.DurableName(viper.GetString("nats.durable-name"))
+	//startOpt := stan.DeliverAllAvailable()
 	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt)
 	utils.Must(err)
 
@@ -117,6 +120,6 @@ func msgHandler(msg *stan.Msg) {
 		log.Errorf("Unknown event type: %v", d)
 	}
 
-	log.Infof("Handling %+v", d)
+	log.Debugf("Handling %+v", d)
 	handler(d)
 }
