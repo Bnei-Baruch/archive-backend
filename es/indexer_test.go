@@ -731,19 +731,19 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 
 	// *** Yuri ***
 
-	fmt.Println("Add a tag to content unit and validate.")
-	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, true)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce"})	
-	fmt.Println("Add second tag to content unit and validate.")
-	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, true)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce", "L3jMWyce"})	
-
-	fmt.Println("Remove one tag from content unit and validate.")
-	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, false)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L3jMWyce"})
+	// fmt.Println("Add a tag to content unit and validate.")
+	// suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, true)
+	// r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	// suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce"})
+	// fmt.Println("Add second tag to content unit and validate.")
+	// suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, true)
+	// r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	// suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce", "L3jMWyce"})
+    //
+	// fmt.Println("Remove one tag from content unit and validate.")
+	// suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, false)
+	// r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	// suite.validateContentUnitTags(indexNameEn, indexer, []string{"L3jMWyce"})
 
 	// ************
 
