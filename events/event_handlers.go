@@ -9,86 +9,72 @@ import (
 	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/queries/qm"
 
-	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"fmt"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"time"
 )
 
-
-func putToIndexer (f func(string) error, s string ) {
+func putToIndexer(f func(string) error, s string) {
 	for {
-
 		select {
 		case <-time.After(2 * time.Second):
 			fmt.Println("timeout")
 		case ChanIndexFuncs <- ChannelForIndexers{
 			F: f,
 			S: s,
-		}: return
+		}:
+			return
 		}
 	}
 }
 
 //collection functions
 func CollectionCreate(d Data) {
-
 	log.Debugf(d.Payload["uid"].(string))
-
 	putToIndexer(indexer.CollectionAdd, d.Payload["uid"].(string))
-
 }
 
 func CollectionDelete(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.CollectionDelete, d.Payload["uid"].(string))
 }
 
 func CollectionUpdate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
-
 }
 
 func CollectionPublishedChange(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
 }
 
 func CollectionContentUnitsChange(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
 }
 
 //event functions
 func ContentUnitCreate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.ContentUnitAdd, d.Payload["uid"].(string))
 }
 
 func ContentUnitDelete(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.ContentUnitDelete, d.Payload["uid"].(string))
 }
 
 func ContentUnitUpdate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitPublishedChange(d Data) {
 	log.Debugf("%+v\n", d)
-
 	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 
 	unit := GetUnitObj(d.Payload["uid"].(string))
-
 	// check if type needs thumbnail
 	NeedThumbnail := true
 	unitTypeName := mdb.CONTENT_TYPE_REGISTRY.ByID[unit.TypeID].Name
@@ -100,9 +86,9 @@ func ContentUnitPublishedChange(d Data) {
 		}
 	}
 	if NeedThumbnail {
-		log.Debugf("Unit %s needs thumbnail because it is of type  \"%s\"", unit.UID,  unitTypeName)
+		log.Debugf("Unit %s needs thumbnail because it is of type  \"%s\"", unit.UID, unitTypeName)
 	} else {
-		log.Debugf("Unit %s needs NO thumbnail because it is of type  \"%s\"", unit.UID,  unitTypeName)
+		log.Debugf("Unit %s needs NO thumbnail because it is of type  \"%s\"", unit.UID, unitTypeName)
 	}
 	//
 
@@ -111,7 +97,7 @@ func ContentUnitPublishedChange(d Data) {
 		NeedThumbnail == true {
 		apiUrl := viper.GetString("api.url")
 		resp, err := http.Get(apiUrl + "/thumbnail/" + unit.UID)
-		log.Infof("response status code for creating  unit \"%s\" thumbnail of type \"%s\" is: %d", unit.UID ,unitTypeName, resp.StatusCode)
+		log.Infof("response status code for creating  unit \"%s\" thumbnail of type \"%s\" is: %d", unit.UID, unitTypeName, resp.StatusCode)
 		if err != nil {
 			log.Errorf("problem sending post request to thumbnail api %V\n", err)
 		}
@@ -119,46 +105,38 @@ func ContentUnitPublishedChange(d Data) {
 			log.Errorf("creating thumbnail for unit %s returned status code %d instead of 200", unit.UID, resp.StatusCode)
 		}
 	}
-
 }
 
 func ContentUnitDerivativesChange(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitSourcesChange(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitTagsChange(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitPersonsChange(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitPublishersChange(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func FilePublished(d Data) {
 	log.Debugf("%+v", d)
-
-	fileUid := d.Payload["uid"].(string)
-
 	putToIndexer(indexer.FileAdd, d.Payload["uid"].(string))
 
+	fileUid := d.Payload["uid"].(string)
 	file := GetFileObj(fileUid)
 	if file.Secure != 1 {
 		switch file.Type {
@@ -197,7 +175,6 @@ func FilePublished(d Data) {
 
 func FileReplace(d Data) {
 	log.Debugf("%+v", d)
-
 	OldUID := d.Payload["old"].(map[string]interface{})
 	NewUID := d.Payload["new"].(map[string]interface{})
 
@@ -207,68 +184,56 @@ func FileReplace(d Data) {
 
 func FileInsert(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.FileAdd, d.Payload["uid"].(string))
 }
 
 func FileUpdate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.FileUpdate, d.Payload["uid"].(string))
 }
 
 func SourceCreate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.SourceAdd, d.Payload["uid"].(string))
 }
 
 func SourceUpdate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.SourceUpdate, d.Payload["uid"].(string))
 }
 
 func TagCreate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.TagAdd, d.Payload["uid"].(string))
 }
 
 func TagUpdate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.TagUpdate, d.Payload["uid"].(string))
 }
 
 func PersonCreate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.PersonAdd, d.Payload["uid"].(string))
 }
 
 func PersonDelete(d Data) {
 	log.Debugf("%+v", d)
-
-
 	//putToIndexer(indexer.PersonDelete, d.Payload["uid"].(string))
 }
 
 func PersonUpdate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.PersonUpdate, d.Payload["uid"].(string))
 }
 
 func PublisherCreate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.PublisherAdd, d.Payload["uid"].(string))
 }
 
 func PublisherUpdate(d Data) {
 	log.Debugf("%+v", d)
-
 	putToIndexer(indexer.PublisherUpdate, d.Payload["uid"].(string))
 }
 
@@ -279,7 +244,6 @@ func GetFileObj(uid string) *mdbmodels.File {
 	if err != nil {
 		log.Error(err)
 	}
-
 	return OneFile
 }
 
@@ -289,6 +253,5 @@ func GetUnitObj(uid string) *mdbmodels.ContentUnit {
 	if err != nil {
 		log.Error(err)
 	}
-
 	return OneObj
 }
