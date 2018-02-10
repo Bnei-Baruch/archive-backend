@@ -50,10 +50,10 @@ func ConvertArgsString(args []string) []interface{} {
 }
 
 func Int64InSlice(i int64, s []int64) bool {
-    for _, v := range s {
-        if v == i {
-            return true
-        }
-    }
-    return false
+	for _, v := range s {
+		if v == i {
+			return true
+		}
+	}
+	return false
 }

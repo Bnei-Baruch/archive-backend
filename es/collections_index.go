@@ -31,10 +31,10 @@ type CollectionsIndex struct {
 }
 
 func defaultCollectionsSql() string {
-    return fmt.Sprintf("c.secure = 0 AND c.published IS TRUE AND c.type_id NOT IN (%d, %d, %d)",
-        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
-        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SPECIAL_LESSON].ID,
-        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIPS].ID)
+	return fmt.Sprintf("c.secure = 0 AND c.published IS TRUE AND c.type_id NOT IN (%d, %d, %d)",
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SPECIAL_LESSON].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIPS].ID)
 }
 
 func (index *CollectionsIndex) ReindexAll() error {
@@ -149,12 +149,12 @@ func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
 func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 	var count int64
 	if err := mdbmodels.NewQuery(mdb.DB,
-        qm.Select("count(*)"),
+		qm.Select("count(*)"),
 		qm.From("collections as c"),
 		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
 		return err
 	}
-    log.Infof("Adding %d collections.", count)
+	log.Infof("Adding %d collections.", count)
 	offset := 0
 	limit := 10
 	for offset < int(count) {
@@ -238,24 +238,24 @@ func (index *CollectionsIndex) removeFromIndexQuery(elasticScope elastic.Query) 
 }
 
 func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
-    m := make(map[string]bool)
+	m := make(map[string]bool)
 	for _, ccu := range collectionsContentUnits {
-        cu := ccu.R.ContentUnit
-        if cu.Secure == 0 && cu.Published && !utils.Int64InSlice(cu.TypeID, []int64{mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID}) {
-            m[mdb.CONTENT_TYPE_REGISTRY.ByID[ccu.R.ContentUnit.TypeID].Name] = true
-        }
+		cu := ccu.R.ContentUnit
+		if cu.Secure == 0 && cu.Published && !utils.Int64InSlice(cu.TypeID, []int64{mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID}) {
+			m[mdb.CONTENT_TYPE_REGISTRY.ByID[ccu.R.ContentUnit.TypeID].Name] = true
+		}
 	}
-    var keys []string
-    for k := range m {
-        keys = append(keys, k)
-    }
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
 	return keys
 }
 
 func contentUnitsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	ret := make([]string, len(collectionsContentUnits))
 	for i, ccu := range collectionsContentUnits {
-        ret[i] = uidToTypedUID("content_unit", ccu.R.ContentUnit.UID)
+		ret[i] = uidToTypedUID("content_unit", ccu.R.ContentUnit.UID)
 	}
 	return ret
 }
@@ -287,12 +287,12 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 				}
 
 				if startDate, ok := props["start_date"]; ok {
-                    val, err := time.Parse("2006-01-02", startDate.(string))
+					val, err := time.Parse("2006-01-02", startDate.(string))
 					if err != nil {
-                        val, err = time.Parse("2006-01-02T15:04:05Z", startDate.(string))
-                        if err != nil {
-                            return errors.Wrapf(err, "time.Parse start_date %s", c.UID)
-                        }
+						val, err = time.Parse("2006-01-02T15:04:05Z", startDate.(string))
+						if err != nil {
+							return errors.Wrapf(err, "time.Parse start_date %s", c.UID)
+						}
 					}
 					collection.EffectiveDate = &utils.Date{Time: val}
 				}

@@ -37,15 +37,15 @@ func (indexer *Indexer) ReindexAll() error {
 	log.Info("Re-Indexing everything")
 	for _, index := range indexer.indices {
 		// TODO: Check if indexing things in parallel will make things faster?
-        log.Info("Deleting index.")
+		log.Info("Deleting index.")
 		if err := index.DeleteIndex(); err != nil {
 			return err
 		}
-        log.Info("Creating index.")
+		log.Info("Creating index.")
 		if err := index.CreateIndex(); err != nil {
 			return err
 		}
-        log.Info("Reindexing")
+		log.Info("Reindexing")
 		if err := index.ReindexAll(); err != nil {
 			return err
 		}

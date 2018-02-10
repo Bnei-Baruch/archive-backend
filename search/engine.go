@@ -3,11 +3,11 @@ package search
 import (
 	"context"
 	"database/sql"
-    "encoding/json"
-    "fmt"
-    "math"
+	"encoding/json"
+	"fmt"
+	"math"
 	"net/url"
-    "time"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/golang/sync/errgroup"
@@ -16,7 +16,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
-    "github.com/Bnei-Baruch/archive-backend/utils"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type ESEngine struct {
@@ -262,83 +262,83 @@ func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, 
 }
 
 func haveHits(r *elastic.SearchResult) bool {
-    return r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0
+	return r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0
 }
 
-func compareHits(h1* elastic.SearchHit, h2* elastic.SearchHit, sortBy string) (bool, error) {
-    if sortBy == consts.SORT_BY_RELEVANCE {
-        return *(h1.Score) >= *(h2.Score), nil
-    } else {
-        var ed1, ed2 es.EffectiveDate
-        if err := json.Unmarshal(*h1.Source, &ed1); err != nil {
-            return false, err
-        }
-        if err := json.Unmarshal(*h2.Source, &ed2); err != nil {
-            return false, err
-        }
-        if ed1.EffectiveDate == nil{
-            ed1.EffectiveDate = &utils.Date{time.Time{}}
-        }
-        if ed2.EffectiveDate == nil {
-            ed2.EffectiveDate = &utils.Date{time.Time{}}
-        }
-        if sortBy == consts.SORT_BY_OLDER_TO_NEWER {
-            return !ed1.EffectiveDate.Time.After(ed2.EffectiveDate.Time), nil
-        } else {
-            return ed1.EffectiveDate.Time.After(ed2.EffectiveDate.Time), nil
-        }
-    }
+func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (bool, error) {
+	if sortBy == consts.SORT_BY_RELEVANCE {
+		return *(h1.Score) >= *(h2.Score), nil
+	} else {
+		var ed1, ed2 es.EffectiveDate
+		if err := json.Unmarshal(*h1.Source, &ed1); err != nil {
+			return false, err
+		}
+		if err := json.Unmarshal(*h2.Source, &ed2); err != nil {
+			return false, err
+		}
+		if ed1.EffectiveDate == nil {
+			ed1.EffectiveDate = &utils.Date{time.Time{}}
+		}
+		if ed2.EffectiveDate == nil {
+			ed2.EffectiveDate = &utils.Date{time.Time{}}
+		}
+		if sortBy == consts.SORT_BY_OLDER_TO_NEWER {
+			return !ed1.EffectiveDate.Time.After(ed2.EffectiveDate.Time), nil
+		} else {
+			return ed1.EffectiveDate.Time.After(ed2.EffectiveDate.Time), nil
+		}
+	}
 }
 
 func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) (*elastic.SearchResult, error) {
-    if r1.Hits.TotalHits == 0 {
-        return r2, nil
-    } else if r2.Hits.TotalHits == 0 {
-        return r1, nil
-    }
-    result := elastic.SearchResult(*r1)
-    result.Hits.TotalHits += r2.Hits.TotalHits
-    if sortBy == consts.SORT_BY_RELEVANCE {
-        result.Hits.MaxScore = new(float64)
-        *result.Hits.MaxScore = math.Max(*result.Hits.MaxScore, *r2.Hits.MaxScore)
-    }
-    var hits []*elastic.SearchHit
+	if r1.Hits.TotalHits == 0 {
+		return r2, nil
+	} else if r2.Hits.TotalHits == 0 {
+		return r1, nil
+	}
+	result := elastic.SearchResult(*r1)
+	result.Hits.TotalHits += r2.Hits.TotalHits
+	if sortBy == consts.SORT_BY_RELEVANCE {
+		result.Hits.MaxScore = new(float64)
+		*result.Hits.MaxScore = math.Max(*result.Hits.MaxScore, *r2.Hits.MaxScore)
+	}
+	var hits []*elastic.SearchHit
 
-    // Merge by score
-    i1, i2 := int(0), int(0)
-    for i1 < len(r1.Hits.Hits) || i2 < len(r2.Hits.Hits) {
-        if i1 == len(r1.Hits.Hits) {
-            hits = append(hits, r2.Hits.Hits[i2:]...)
-            break
-        }
-        if i2 == len(r2.Hits.Hits) {
-            hits = append(hits, r1.Hits.Hits[i1:]...)
-            break
-        }
-        h1Larger, err := compareHits(r1.Hits.Hits[i1], r2.Hits.Hits[i2], sortBy)
-        if err != nil {
-            return nil, err
-        }
-        if h1Larger {
-            hits = append(hits, r1.Hits.Hits[i1])
-            i1++
-        } else {
-            hits = append(hits, r2.Hits.Hits[i2])
-            i2++
-        }
-    }
+	// Merge by score
+	i1, i2 := int(0), int(0)
+	for i1 < len(r1.Hits.Hits) || i2 < len(r2.Hits.Hits) {
+		if i1 == len(r1.Hits.Hits) {
+			hits = append(hits, r2.Hits.Hits[i2:]...)
+			break
+		}
+		if i2 == len(r2.Hits.Hits) {
+			hits = append(hits, r1.Hits.Hits[i1:]...)
+			break
+		}
+		h1Larger, err := compareHits(r1.Hits.Hits[i1], r2.Hits.Hits[i2], sortBy)
+		if err != nil {
+			return nil, err
+		}
+		if h1Larger {
+			hits = append(hits, r1.Hits.Hits[i1])
+			i1++
+		} else {
+			hits = append(hits, r2.Hits.Hits[i2])
+			i2++
+		}
+	}
 
-    result.Hits.Hits = hits[from:utils.Min(from + size, len(hits))]
-    return &result, nil
+	result.Hits.Hits = hits[from:utils.Min(from+size, len(hits))]
+	return &result, nil
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
-    log.Infof("Query: %+v", query)
+	log.Infof("Query: %+v", query)
 	multiSearchService := e.esc.MultiSearch()
 	// Content Units
-    AddContentUnitsSearchRequests(multiSearchService, query, sortBy, 0, from + size, preference)
-    // Collections
-    AddCollectionsSearchRequests(multiSearchService, query, sortBy, 0, from + size, preference)
+	AddContentUnitsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
+	// Collections
+	AddCollectionsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
 
 	// Do search.
 	mr, err := multiSearchService.Do(context.TODO())
@@ -347,20 +347,20 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		return nil, errors.Wrap(err, "ES error.")
 	}
 
-    if len(mr.Responses) != 2*len(query.LanguageOrder) {
-        return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
-            len(mr.Responses), 2*len(query.LanguageOrder)))
-    }
+	if len(mr.Responses) != 2*len(query.LanguageOrder) {
+		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
+			len(mr.Responses), 2*len(query.LanguageOrder)))
+	}
 
-    // Interleave content units and collection results by language.
-    // Then go over responses and choose first not empty retults list.
-    for i := 0; i < len(query.LanguageOrder); i++ {
-        cuR := mr.Responses[i]
-        cR := mr.Responses[i+len(query.LanguageOrder)]
-        if haveHits(cuR) || haveHits(cR) {
-            return joinResponses(cuR, cR, sortBy, from, size)
-        }
-    }
+	// Interleave content units and collection results by language.
+	// Then go over responses and choose first not empty retults list.
+	for i := 0; i < len(query.LanguageOrder); i++ {
+		cuR := mr.Responses[i]
+		cR := mr.Responses[i+len(query.LanguageOrder)]
+		if haveHits(cuR) || haveHits(cR) {
+			return joinResponses(cuR, cR, sortBy, from, size)
+		}
+	}
 
 	if len(mr.Responses) > 0 {
 		return mr.Responses[0], nil

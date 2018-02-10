@@ -350,7 +350,7 @@ func addContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, 
 			}
 			tag.UID = string(b)*/
 
-			err = tag.Insert(mdb.DB,)
+			err = tag.Insert(mdb.DB)
 			if err != nil {
 				return "", err
 			}
@@ -502,11 +502,11 @@ func (suite *IndexerSuite) ucut(cu ContentUnit, lang string, tag mdbmodels.Tag, 
 	var err error
 	var uid string
 
-	if (add){
+	if add {
 		uid, err = addContentUnitTag(cu, lang, tag)
-	}else{
+	} else {
 		uid, err = removeContentUnitTag(cu, lang, tag)
-	}	
+	}
 	r.Nil(err)
 	return uid
 }
@@ -541,7 +541,7 @@ func (suite *IndexerSuite) validateContentUnitTags(indexName string, indexer *In
 		json.Unmarshal(*hit.Source, &cu)
 		for _, t := range cu.Tags {
 			tags = append(tags, t)
-		}		
+		}
 	}
 	r.Equal(len(expectedTags), len(tags))
 	r.ElementsMatch(expectedTags, tags)
@@ -739,7 +739,7 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	// suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, true)
 	// r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	// suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce", "L3jMWyce"})
-    //
+	//
 	// fmt.Println("Remove one tag from content unit and validate.")
 	// suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, false)
 	// r.Nil(indexer.ContentUnitUpdate(cu1UID))

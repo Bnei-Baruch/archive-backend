@@ -5,7 +5,7 @@ import (
 )
 
 type EffectiveDate struct {
-    EffectiveDate *utils.Date `json:"effective_date"`
+	EffectiveDate *utils.Date `json:"effective_date"`
 }
 
 type Collection struct {

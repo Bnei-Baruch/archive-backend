@@ -39,8 +39,8 @@ type ContentUnitsIndex struct {
 }
 
 func defaultContentUnitSql() string {
-    return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d)",
-        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID)
+	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d)",
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID)
 }
 
 func (index *ContentUnitsIndex) ReindexAll() error {
@@ -57,20 +57,20 @@ func (index *ContentUnitsIndex) Add(scope Scope) error {
 			return err
 		}
 		scope.ContentUnitUID = ""
-    }
-    emptyScope := Scope{}
-    if scope != emptyScope {
-        return index.Update(scope)
-    }
-    return nil
+	}
+	emptyScope := Scope{}
+	if scope != emptyScope {
+		return index.Update(scope)
+	}
+	return nil
 }
 
 func (index *ContentUnitsIndex) Update(scope Scope) error {
 	removed, err := index.removeFromIndex(scope)
-    if err != nil {
-        return err
-    }
-    return index.addToIndex(scope, removed)
+	if err != nil {
+		return err
+	}
+	return index.addToIndex(scope, removed)
 }
 
 func (index *ContentUnitsIndex) Delete(scope Scope) error {
@@ -168,7 +168,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		return err
 	}
 
-    log.Infof("Adding %d units.", count)
+	log.Infof("Adding %d units.", count)
 
 	offset := 0
 	limit := 1000
@@ -185,7 +185,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		if err != nil {
 			return errors.Wrap(err, "Fetch units from mdb")
 		}
-        log.Infof("Adding %d units (offset: %d).", len(units), offset)
+		log.Infof("Adding %d units (offset: %d).", len(units), offset)
 
 		index.indexData = new(IndexData)
 		err = index.indexData.Load(sqlScope)
