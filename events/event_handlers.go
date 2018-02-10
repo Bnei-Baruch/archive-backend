@@ -1,17 +1,19 @@
 package events
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
+	"encoding/hex"
+	"bytes"
+	"encoding/json"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/queries/qm"
-
-	"fmt"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"time"
 )
 
 func putToIndexer(f func(string) error, s string) {
@@ -190,6 +192,9 @@ func FileInsert(d Data) {
 func FileUpdate(d Data) {
 	log.Debugf("%+v", d)
 	putToIndexer(indexer.FileUpdate, d.Payload["uid"].(string))
+
+	removeFile(d.Payload["uid"].(string))
+
 }
 
 func SourceCreate(d Data) {
@@ -254,4 +259,41 @@ func GetUnitObj(uid string) *mdbmodels.ContentUnit {
 		log.Error(err)
 	}
 	return OneObj
+}
+
+func removeFile(s string) error {
+
+	file := GetFileObj(s)
+	if file.Secure == 1 &&
+		file.Published == true {
+		log.Debugf("file %s became secured , sending POST request to api do disable", file.UID)
+
+		type FileBackendRequest struct {
+			SHA1     string `json:"sha1"`
+			Name     string `json:"name"`
+			ClientIP string `json:"clientip,omitempty"`
+		}
+
+
+		data := FileBackendRequest{
+			SHA1:     hex.EncodeToString(file.Sha1.Bytes),
+			Name:     file.Name,
+		}
+
+		b := new(bytes.Buffer)
+		err := json.NewEncoder(b).Encode(data)
+		if err != nil {
+			return err
+		}
+
+		apiUrl := viper.GetString("api.url1") + "/api/v1/getremove"
+		resp, err := http.Post(apiUrl,"application/json; charset=utf-8",b)
+		if err != nil {
+			log.Errorf("post request to file api failed with %+v", err)
+		}
+		if resp.StatusCode != 200 {
+			log.Errorf("post request to file file api %s  returned status code %d instead of 200", resp.StatusCode)
+		}
+	}
+	return nil
 }

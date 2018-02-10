@@ -31,6 +31,7 @@ func RunListener() {
 			currentFunc := strings.Split(runtime.FuncForPC(reflect.ValueOf(a1.F).Pointer()).Name(),".")
 			lastElement := currentFunc[len(currentFunc)-1]
 			log.Infof("running indexer function \"%+v\", with parameter %s\n",lastElement,a1.S)
+			log.Infof("*******number of elements on Indexer channel is %d",len(ChanIndexFuncs))
 		}
 	}()
 
