@@ -406,10 +406,10 @@ func ParseQuery(q string) search.Query {
 }
 
 func SearchHandler(c *gin.Context) {
-    log.Infof("Language: %s", c.Query("language"))
+    log.Debugf("Language: %s", c.Query("language"))
     log.Infof("Query: [%s]", c.Query("q"))
     query := ParseQuery(c.Query("q"))
-    log.Infof("Parsed Query: %#v", query)
+    log.Debugf("Parsed Query: %#v", query)
     if len(query.Term) == 0 && len(query.Filters) == 0 && len(query.ExactTerms) == 0 {
         NewBadRequestError(errors.New("Can't search with no terms and no filters.")).Abort(c)
         return
@@ -454,7 +454,7 @@ func SearchHandler(c *gin.Context) {
 
     // Detect input language
     detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
-    log.Infof("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
+    log.Debugf("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
     query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
     res, err := se.DoSearch(
@@ -485,7 +485,7 @@ func AutocompleteHandler(c *gin.Context) {
     se := search.NewESEngine(esc, db)
 
     // Detect input language
-    log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
+    log.Debugf("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
     order := utils.DetectLanguage(q, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
     // Have a 50ms deadline on the search engine call.

@@ -135,7 +135,7 @@ func DetectLanguage(text string, interfaceLanguage string, acceptLanguage string
 				Whitelist: whatlangoWhitelist,
 			})
 		iso3 := whatlanggo.LangToString(info.Lang)
-		log.Infof("DetectLanguage: whatlanggo info: %s", whatlanggo.LangToString(info.Lang))
+		log.Debugf("DetectLanguage: whatlanggo info: %s", whatlanggo.LangToString(info.Lang))
 
 		if iso3 != "" {
 			base, err := language.ParseBase(iso3)
@@ -151,14 +151,14 @@ func DetectLanguage(text string, interfaceLanguage string, acceptLanguage string
 			}
 		}
 	}
-	log.Infof("DetectLanguage: bestTag 1: %s", display.English.Tags().Name(bestTag))
+	log.Debugf("DetectLanguage: bestTag 1: %s", display.English.Tags().Name(bestTag))
 
 	if bestTag.IsRoot() {
-		log.Info("DetectLanguage: bestTag is Root, falling back to Accept-Language")
+		log.Debug("DetectLanguage: bestTag is Root, falling back to Accept-Language")
 		tags, _, _ := language.ParseAcceptLanguage(acceptLanguage)
-		log.Infof("DetectLanguage: parsing Accept-Language got us %v", tags)
+		log.Debugf("DetectLanguage: parsing Accept-Language got us %v", tags)
 		tag, _, confidence := matcher.Match(tags...)
-		log.Infof("DetectLanguage: matcher found %s with confidence %v",
+		log.Debugf("DetectLanguage: matcher found %s with confidence %v",
 			display.English.Tags().Name(tag), confidence)
 		if confidence != language.No {
 			bestTag = tag
@@ -168,12 +168,12 @@ func DetectLanguage(text string, interfaceLanguage string, acceptLanguage string
 	if !bestTag.IsRoot() {
 		if l, ok := GO_TO_MDB[bestTag]; ok {
 			if order, ok := consts.LANG_ORDER[l]; ok {
-				log.Infof("DetectLanguage: best language is %s", l)
+				log.Debugf("DetectLanguage: best language is %s", l)
 				return order
 			}
 		}
 	}
 
-	log.Info("DetectLanguage: using default language")
+	log.Debug("DetectLanguage: using default language")
 	return consts.LANG_ORDER[interfaceLanguage]
 }

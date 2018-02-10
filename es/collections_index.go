@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
@@ -14,6 +15,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 func MakeCollectionsIndex(namespace string) *CollectionsIndex {
@@ -131,12 +133,6 @@ func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	if scope.SourceUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("source", scope.SourceUID))
 	}
-	// if scope.PersonUID != "" {
-	// 	typedUIDs = append(typedUIDs, uidToTypedUID("person", scope.PersonUID))
-	// }
-	// if scope.PublisherUID != "" {
-	// 	typedUIDs = append(typedUIDs, uidToTypedUID("publisher", scope.PublisherUID))
-	// }
 	if len(typedUIDs) > 0 {
 		typedUIDsI := make([]interface{}, len(typedUIDs))
 		for i, typedUID := range typedUIDs {
@@ -168,7 +164,7 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 			qm.Load("CollectionI18ns"),
 			qm.Load("CollectionsContentUnits"),
 			qm.Load("CollectionsContentUnits.ContentUnit"),
-			qm.Load("CollectionsContentUnits.ContentUnit.ContentUnitI18ns"),
+			// qm.Load("CollectionsContentUnits.ContentUnit.ContentUnitI18ns"),
 			qm.Where(sqlScope),
 			qm.Offset(offset),
 			qm.Limit(limit)).Bind(&collections)
@@ -185,7 +181,7 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 				cuUIDs = append(cuUIDs, fmt.Sprintf("'%s'", ccu.R.ContentUnit.UID))
 			}
 		}
-		contentUnitsSqlScope := "cu.secure = 0 AND cu.published IS TRUE"
+		contentUnitsSqlScope := defaultContentUnitSql()
 		if len(cuUIDs) > 0 {
 			contentUnitsSqlScope = fmt.Sprintf(
 				"%s AND cu.uid in (%s)", contentUnitsSqlScope, strings.Join(cuUIDs, ","))
@@ -242,17 +238,24 @@ func (index *CollectionsIndex) removeFromIndexQuery(elasticScope elastic.Query) 
 }
 
 func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
-	ret := make([]string, len(collectionsContentUnits))
-	for i, ccu := range collectionsContentUnits {
-		ret[i] = mdb.CONTENT_TYPE_REGISTRY.ByID[ccu.R.ContentUnit.TypeID].Name
+    m := make(map[string]bool)
+	for _, ccu := range collectionsContentUnits {
+        cu := ccu.R.ContentUnit
+        if cu.Secure == 0 && cu.Published && !utils.Int64InSlice(cu.TypeID, []int64{mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID}) {
+            m[mdb.CONTENT_TYPE_REGISTRY.ByID[ccu.R.ContentUnit.TypeID].Name] = true
+        }
 	}
-	return ret
+    var keys []string
+    for k := range m {
+        keys = append(keys, k)
+    }
+	return keys
 }
 
 func contentUnitsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	ret := make([]string, len(collectionsContentUnits))
 	for i, ccu := range collectionsContentUnits {
-		ret[i] = uidToTypedUID("content_unit", ccu.R.ContentUnit.UID)
+        ret[i] = uidToTypedUID("content_unit", ccu.R.ContentUnit.UID)
 	}
 	return ret
 }
@@ -283,42 +286,19 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 					return errors.Wrapf(err, "json.Unmarshal properties %s", c.UID)
 				}
 
-				// Should be from and to
-				// if filmDate, ok := props["film_date"]; ok {
-				// 	val, err := time.Parse("2006-01-02", filmDate.(string))
-				// 	if err != nil {
-				// 		return errors.Wrapf(err, "time.Parse film_date %s", c.UID)
-				// 	}
-				// 	collection.FilmDate = &utils.Date{Time: val}
-				// }
+				if startDate, ok := props["start_date"]; ok {
+                    val, err := time.Parse("2006-01-02", startDate.(string))
+					if err != nil {
+                        val, err = time.Parse("2006-01-02T15:04:05Z", startDate.(string))
+                        if err != nil {
+                            return errors.Wrapf(err, "time.Parse start_date %s", c.UID)
+                        }
+					}
+					collection.EffectiveDate = &utils.Date{Time: val}
+				}
 
 				if originalLanguage, ok := props["original_language"]; ok {
 					collection.OriginalLanguage = originalLanguage.(string)
-				}
-			}
-
-			for _, ccu := range c.R.CollectionsContentUnits {
-				cu := ccu.R.ContentUnit
-				if cu.Secure == 0 && cu.Published {
-					// Sources
-					collection.ContentUnitsSources = append(collection.ContentUnitsSources, index.indexData.Sources[cu.UID])
-					collection.ContentUnitsSourcesUIDs = append(collection.ContentUnitsSourcesUIDs, cu.UID)
-					collection.TypedUIDs = append(collection.TypedUIDs, uidsToTypedUIDs("source", index.indexData.Sources[cu.UID])...)
-					// Tags
-					collection.ContentUnitsTags = append(collection.ContentUnitsTags, index.indexData.Tags[cu.UID])
-					collection.ContentUnitsTagsUIDs = append(collection.ContentUnitsTagsUIDs, cu.UID)
-					collection.TypedUIDs = append(collection.TypedUIDs, uidsToTypedUIDs("tag", index.indexData.Tags[cu.UID])...)
-					// Name and Description
-					for _, cuI18n := range ccu.R.ContentUnit.R.ContentUnitI18ns {
-						if i18n.Language == cuI18n.Language {
-							collection.ContentUnitsNames = append(collection.ContentUnitsNames, cuI18n.Name.String)
-							collection.ContentUnitsNamesUIDs = append(collection.ContentUnitsNamesUIDs, cu.UID)
-							if cuI18n.Description.Valid && cuI18n.Description.String != "" {
-								collection.ContentUnitsDescriptions = append(collection.ContentUnitsDescriptions, cuI18n.Description.String)
-								collection.ContentUnitsDescriptionsUIDs = append(collection.ContentUnitsDescriptionsUIDs, cu.UID)
-							}
-						}
-					}
 				}
 			}
 

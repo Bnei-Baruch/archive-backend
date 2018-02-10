@@ -3,9 +3,11 @@ package search
 import (
 	"context"
 	"database/sql"
+    "encoding/json"
     "fmt"
     "math"
 	"net/url"
+    "time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/golang/sync/errgroup"
@@ -132,9 +134,9 @@ func createContentUnitsQuery(q Query) elastic.Query {
 		}
 		switch filter {
 		case consts.FILTERS[consts.FILTER_START_DATE]:
-			query.Filter(elastic.NewRangeQuery("film_date").Gte(values[0]).Format("yyyy-MM-dd"))
+			query.Filter(elastic.NewRangeQuery("effective_date").Gte(values[0]).Format("yyyy-MM-dd"))
 		case consts.FILTERS[consts.FILTER_END_DATE]:
-			query.Filter(elastic.NewRangeQuery("film_date").Lte(values[0]).Format("yyyy-MM-dd"))
+			query.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
 		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
 			contentTypeQuery.Should(elastic.NewTermsQuery(filter, s...))
 			filterByContentType = true
@@ -154,7 +156,7 @@ func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query,
 		content_units_indices[i] = es.IndexName("prod", consts.ES_UNITS_INDEX, query.LanguageOrder[i])
 	}
 	fetchSourceContext := elastic.NewFetchSourceContext(true).
-		Include("mdb_uid")
+		Include("mdb_uid", "effective_date")
 	for _, index := range content_units_indices {
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
@@ -171,9 +173,9 @@ func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query,
 			Size(size)
 		switch sortBy {
 		case consts.SORT_BY_OLDER_TO_NEWER:
-			searchSource = searchSource.Sort("film_date", true)
+			searchSource = searchSource.Sort("effective_date", true)
 		case consts.SORT_BY_NEWER_TO_OLDER:
-			searchSource = searchSource.Sort("film_date", false)
+			searchSource = searchSource.Sort("effective_date", false)
 		}
 		request := elastic.NewSearchRequest().
 			SearchSource(searchSource).
@@ -209,10 +211,10 @@ func createCollectionsQuery(q Query) elastic.Query {
 			s[i] = v
 		}
 		switch filter {
-		// case consts.FILTERS[consts.FILTER_START_DATE]:
-		// 	query.Filter(elastic.NewRangeQuery("film_date").Gte(values[0]).Format("yyyy-MM-dd"))
-		// case consts.FILTERS[consts.FILTER_END_DATE]:
-		// 	query.Filter(elastic.NewRangeQuery("film_date").Lte(values[0]).Format("yyyy-MM-dd"))
+		case consts.FILTERS[consts.FILTER_START_DATE]:
+			query.Filter(elastic.NewRangeQuery("effective_date").Gte(values[0]).Format("yyyy-MM-dd"))
+		case consts.FILTERS[consts.FILTER_END_DATE]:
+			query.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
 		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
 			contentTypeQuery.Should(elastic.NewTermsQuery(filter, s...))
 			filterByContentType = true
@@ -232,27 +234,25 @@ func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, 
 		collections_indices[i] = es.IndexName("prod", consts.ES_COLLECTIONS_INDEX, query.LanguageOrder[i])
 	}
 	fetchSourceContext := elastic.NewFetchSourceContext(true).
-		Include("mdb_uid")
+		Include("mdb_uid", "effective_date")
 	for _, index := range collections_indices {
 		searchSource := elastic.NewSearchSource().
 			Query(createCollectionsQuery(query)).
 			Highlight(elastic.NewHighlight().Fields(
 			elastic.NewHighlighterField("name"),
 			elastic.NewHighlighterField("description"),
-			// elastic.NewHighlighterField("transcript"),
 			elastic.NewHighlighterField("name.analyzed"),
 			elastic.NewHighlighterField("description.analyzed"),
-			// elastic.NewHighlighterField("transcript.analyzed"),
 		)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size)
-		// switch sortBy {
-		// case consts.SORT_BY_OLDER_TO_NEWER:
-		// 	searchSource = searchSource.Sort("film_date", true)
-		// case consts.SORT_BY_NEWER_TO_OLDER:
-		// 	searchSource = searchSource.Sort("film_date", false)
-		// }
+		switch sortBy {
+		case consts.SORT_BY_OLDER_TO_NEWER:
+			searchSource = searchSource.Sort("effective_date", true)
+		case consts.SORT_BY_NEWER_TO_OLDER:
+			searchSource = searchSource.Sort("effective_date", false)
+		}
 		request := elastic.NewSearchRequest().
 			SearchSource(searchSource).
 			Index(index).
@@ -265,16 +265,45 @@ func haveHits(r *elastic.SearchResult) bool {
     return r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0
 }
 
-func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) *elastic.SearchResult {
+func compareHits(h1* elastic.SearchHit, h2* elastic.SearchHit, sortBy string) (bool, error) {
+    log.Infof("Scores %+v %+v, SortBy %s", h1.Score, h2.Score, sortBy)
+    if sortBy == consts.SORT_BY_RELEVANCE {
+        return *(h1.Score) >= *(h2.Score), nil
+    } else {
+        var ed1, ed2 es.EffectiveDate
+        if err := json.Unmarshal(*h1.Source, &ed1); err != nil {
+            return false, err
+        }
+        if err := json.Unmarshal(*h2.Source, &ed2); err != nil {
+            return false, err
+        }
+        if ed1.EffectiveDate == nil{
+            ed1.EffectiveDate = &utils.Date{time.Time{}}
+        }
+        if ed2.EffectiveDate == nil {
+            ed2.EffectiveDate = &utils.Date{time.Time{}}
+        }
+        log.Infof("Date %+v %+v", ed1, ed2)
+        if sortBy == consts.SORT_BY_OLDER_TO_NEWER {
+            return !ed1.EffectiveDate.Time.After(ed2.EffectiveDate.Time), nil
+        } else {
+            return ed1.EffectiveDate.Time.After(ed2.EffectiveDate.Time), nil
+        }
+    }
+}
+
+func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) (*elastic.SearchResult, error) {
     if r1.Hits.TotalHits == 0 {
-        return r2
+        return r2, nil
     } else if r2.Hits.TotalHits == 0 {
-        return r1
+        return r1, nil
     }
     result := elastic.SearchResult(*r1)
     result.Hits.TotalHits += r2.Hits.TotalHits
-    result.Hits.MaxScore = new(float64)
-    *result.Hits.MaxScore = math.Max(*result.Hits.MaxScore, *r2.Hits.MaxScore)
+    if sortBy == consts.SORT_BY_RELEVANCE {
+        result.Hits.MaxScore = new(float64)
+        *result.Hits.MaxScore = math.Max(*result.Hits.MaxScore, *r2.Hits.MaxScore)
+    }
     var hits []*elastic.SearchHit
 
     // Merge by score
@@ -288,7 +317,11 @@ func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy st
             hits = append(hits, r1.Hits.Hits[i1:]...)
             break
         }
-        if *(r1.Hits.Hits[i1].Score) >= *(r2.Hits.Hits[i2].Score) {
+        h1Larger, err := compareHits(r1.Hits.Hits[i1], r2.Hits.Hits[i2], sortBy)
+        if err != nil {
+            return nil, err
+        }
+        if h1Larger {
             hits = append(hits, r1.Hits.Hits[i1])
             i1++
         } else {
@@ -298,7 +331,7 @@ func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy st
     }
 
     result.Hits.Hits = hits[from:utils.Min(from + size, len(hits))]
-    return &result
+    return &result, nil
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
@@ -327,7 +360,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
         cuR := mr.Responses[i]
         cR := mr.Responses[i+len(query.LanguageOrder)]
         if haveHits(cuR) || haveHits(cR) {
-            return joinResponses(cuR, cR, sortBy, from, size), nil
+            return joinResponses(cuR, cR, sortBy, from, size)
         }
     }
 

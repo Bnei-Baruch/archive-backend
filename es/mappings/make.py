@@ -197,7 +197,7 @@ UNITS_TEMPLATE = {
         "collections_content_types": {
           "type": "keyword",
         },
-        "film_date": {
+        "effective_date": {
           "type": "date",
           "format": "strict_date",
         },
@@ -379,55 +379,13 @@ COLLECTIONS_TEMPLATE = {
         "content_units_content_types": {
           "type": "keyword",
         },
-        "from_date": {
-          "type": "date",
-          "format": "strict_date",
-        },
-        "to_date": {
+        "effective_date": {
           "type": "date",
           "format": "strict_date",
         },
         "original_language": {
           "type": "keyword",
           "index": False,
-        },
-        "content_units_names": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-          },
-        },
-        "content_units_names_uids": {
-          "type": "keyword",
-        },
-        "content_units_descriptions": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-          },
-        },
-        "content_units_descriptions_uids": {
-          "type": "keyword",
-        },
-        "content_units_tags": {
-          "type": "keyword",
-        },
-        "content_units_tags_uids": {
-          "type": "keyword",
-        },
-        "content_units_sources": {
-          "type": "text",
-        },
-        "content_units_sources_uids": {
-            "type": "keyword",
         },
       },
     },

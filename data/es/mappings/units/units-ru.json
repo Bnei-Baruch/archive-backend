@@ -5,10 +5,6 @@
                 "enabled": false
             }, 
             "properties": {
-                "film_date": {
-                    "type": "date", 
-                    "format": "strict_date"
-                }, 
                 "description": {
                     "fields": {
                         "analyzed": {
@@ -22,6 +18,10 @@
                 "tags": {
                     "type": "keyword"
                 }, 
+                "effective_date": {
+                    "type": "date", 
+                    "format": "strict_date"
+                }, 
                 "collections_content_types": {
                     "type": "keyword"
                 }, 
@@ -32,9 +32,8 @@
                 "mdb_uid": {
                     "type": "keyword"
                 }, 
-                "duration": {
-                    "index": false, 
-                    "type": "short"
+                "typed_uids": {
+                    "type": "keyword"
                 }, 
                 "persons": {
                     "index": false, 
@@ -46,8 +45,9 @@
                 "content_type": {
                     "type": "keyword"
                 }, 
-                "typed_uids": {
-                    "type": "keyword"
+                "duration": {
+                    "index": false, 
+                    "type": "short"
                 }, 
                 "original_language": {
                     "index": false, 

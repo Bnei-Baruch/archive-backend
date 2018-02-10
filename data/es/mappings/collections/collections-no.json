@@ -5,19 +5,6 @@
                 "enabled": false
             }, 
             "properties": {
-                "content_units_descriptions_uids": {
-                    "type": "keyword"
-                }, 
-                "content_units_names": {
-                    "fields": {
-                        "analyzed": {
-                            "type": "text", 
-                            "analyzer": "norwegian"
-                        }
-                    }, 
-                    "type": "text", 
-                    "analyzer": "phonetic_analyzer"
-                }, 
                 "content_units_content_types": {
                     "type": "keyword"
                 }, 
@@ -31,53 +18,24 @@
                     "type": "text", 
                     "analyzer": "phonetic_analyzer"
                 }, 
-                "content_units_sources": {
-                    "type": "text"
-                }, 
-                "content_units_tags_uids": {
-                    "type": "keyword"
-                }, 
-                "description": {
-                    "fields": {
-                        "analyzed": {
-                            "type": "text", 
-                            "analyzer": "norwegian"
-                        }
-                    }, 
-                    "type": "text", 
-                    "analyzer": "phonetic_analyzer"
-                }, 
-                "content_units_names_uids": {
-                    "type": "keyword"
-                }, 
                 "mdb_uid": {
-                    "type": "keyword"
-                }, 
-                "content_units_sources_uids": {
-                    "type": "keyword"
-                }, 
-                "from_date": {
-                    "type": "date", 
-                    "format": "strict_date"
-                }, 
-                "content_units_tags": {
-                    "type": "keyword"
-                }, 
-                "to_date": {
-                    "type": "date", 
-                    "format": "strict_date"
-                }, 
-                "content_type": {
                     "type": "keyword"
                 }, 
                 "typed_uids": {
                     "type": "keyword"
                 }, 
+                "content_type": {
+                    "type": "keyword"
+                }, 
+                "effective_date": {
+                    "type": "date", 
+                    "format": "strict_date"
+                }, 
                 "original_language": {
                     "index": false, 
                     "type": "keyword"
                 }, 
-                "content_units_descriptions": {
+                "description": {
                     "fields": {
                         "analyzed": {
                             "type": "text", 

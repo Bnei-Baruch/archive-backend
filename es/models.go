@@ -4,6 +4,10 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
+type EffectiveDate struct {
+    EffectiveDate *utils.Date `json:"effective_date"`
+}
+
 type Collection struct {
 	MDB_UID                  string      `json:"mdb_uid"`
 	TypedUIDs                []string    `json:"typed_uids"`
@@ -11,19 +15,8 @@ type Collection struct {
 	Description              string      `json:"description"`
 	ContentType              string      `json:"content_type"`
 	ContentUnitsContentTypes []string    `json:"content_units_content_types,omitempty"`
-	FromDate                 *utils.Date `json:"from_date"`
-	ToDate                   *utils.Date `json:"to_date"`
+	EffectiveDate            *utils.Date `json:"effective_date"`
 	OriginalLanguage         string      `json:"original_language,omitempty"`
-
-	// Content units aggregated data
-	ContentUnitsNames            []string   `json:"content_units_names"`
-	ContentUnitsNamesUIDs        []string   `json:"content_units_names_uids"`
-	ContentUnitsDescriptions     []string   `json:"content_units_descriptions"`
-	ContentUnitsDescriptionsUIDs []string   `json:"content_units_descriptions_uids"`
-	ContentUnitsTags             [][]string `json:"content_units_tags,omitempty"`
-	ContentUnitsTagsUIDs         []string   `json:"content_units_tags_uids,omitempty"`
-	ContentUnitsSources          [][]string `json:"content_units_sources,omitempty"`
-	ContentUnitsSourcesUIDs      []string   `json:"content_units_sources_uids,omitempty"`
 }
 
 type ContentUnit struct {
@@ -33,7 +26,7 @@ type ContentUnit struct {
 	Description             string      `json:"description,omitempty"`
 	ContentType             string      `json:"content_type"`
 	CollectionsContentTypes []string    `json:"collections_content_types,omitempty"`
-	FilmDate                *utils.Date `json:"film_date,omitempty"`
+	EffectiveDate           *utils.Date `json:"effective_date,omitempty"`
 	Duration                uint16      `json:"duration,omitempty"`
 	OriginalLanguage        string      `json:"original_language,omitempty"`
 	Translations            []string    `json:"translations,omitempty"`

@@ -306,7 +306,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 					if err != nil {
 						return errors.Wrapf(err, "time.Parse film_date %s", cu.UID)
 					}
-					unit.FilmDate = &utils.Date{Time: val}
+					unit.EffectiveDate = &utils.Date{Time: val}
 				}
 
 				if duration, ok := props["duration"]; ok {
