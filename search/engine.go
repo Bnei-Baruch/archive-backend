@@ -266,10 +266,15 @@ func haveHits(r *elastic.SearchResult) bool {
 }
 
 func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) *elastic.SearchResult {
+    if r1.Hits.TotalHits == 0 {
+        return r2
+    } else if r2.Hits.TotalHits == 0 {
+        return r1
+    }
     result := elastic.SearchResult(*r1)
     result.Hits.TotalHits += r2.Hits.TotalHits
-    maxScore := math.Max(*result.Hits.MaxScore, *r2.Hits.MaxScore)
-    result.Hits.MaxScore = &maxScore
+    result.Hits.MaxScore = new(float64)
+    *result.Hits.MaxScore = math.Max(*result.Hits.MaxScore, *r2.Hits.MaxScore)
     var hits []*elastic.SearchHit
 
     // Merge by score
@@ -283,7 +288,7 @@ func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy st
             hits = append(hits, r1.Hits.Hits[i1:]...)
             break
         }
-        if *r1.Hits.Hits[i1].Score >= *r2.Hits.Hits[i2].Score {
+        if *(r1.Hits.Hits[i1].Score) >= *(r2.Hits.Hits[i2].Score) {
             hits = append(hits, r1.Hits.Hits[i1])
             i1++
         } else {
@@ -297,6 +302,7 @@ func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy st
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
+    log.Infof("Query: %+v", query)
 	multiSearchService := e.esc.MultiSearch()
 	// Content Units
     AddContentUnitsSearchRequests(multiSearchService, query, sortBy, 0, from + size, preference)
@@ -319,7 +325,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
     // Then go over responses and choose first not empty retults list.
     for i := 0; i < len(query.LanguageOrder); i++ {
         cuR := mr.Responses[i]
-        cR := mr.Responses[i]
+        cR := mr.Responses[i+len(query.LanguageOrder)]
         if haveHits(cuR) || haveHits(cR) {
             return joinResponses(cuR, cR, sortBy, from, size), nil
         }

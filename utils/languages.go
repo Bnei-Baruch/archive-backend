@@ -175,5 +175,5 @@ func DetectLanguage(text string, interfaceLanguage string, acceptLanguage string
 	}
 
 	log.Info("DetectLanguage: using default language")
-	return consts.LANG_ORDER[consts.LANG_ENGLISH]
+	return consts.LANG_ORDER[interfaceLanguage]
 }

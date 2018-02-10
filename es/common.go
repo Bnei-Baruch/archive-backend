@@ -80,7 +80,7 @@ func is(slice interface{}) []interface{} {
 	return ret
 }
 
-func pprint(l interface{}) string {
+func Pprint(l interface{}) string {
 	var s []string
 	for _, i := range is(l) {
 		s = append(s, fmt.Sprintf("%+v", i))
