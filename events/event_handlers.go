@@ -261,6 +261,7 @@ func GetUnitObj(uid string) *mdbmodels.ContentUnit {
 	return OneObj
 }
 
+//removeFile to send post req to file-api and remove file from search?
 func removeFile(s string) error {
 
 	file := GetFileObj(s)
