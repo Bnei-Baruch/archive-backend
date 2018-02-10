@@ -209,7 +209,7 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 		indexName := index.indexName(lang)
 		searchRes, err := mdb.ESC.Search(indexName).Query(elasticScope).Do(context.TODO())
 		if err != nil {
-			return []string{}, nil
+			return []string{}, err
 		}
 		for _, h := range searchRes.Hits.Hits {
 			var cu ContentUnit
