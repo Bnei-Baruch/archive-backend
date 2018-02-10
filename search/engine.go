@@ -266,7 +266,6 @@ func haveHits(r *elastic.SearchResult) bool {
 }
 
 func compareHits(h1* elastic.SearchHit, h2* elastic.SearchHit, sortBy string) (bool, error) {
-    log.Infof("Scores %+v %+v, SortBy %s", h1.Score, h2.Score, sortBy)
     if sortBy == consts.SORT_BY_RELEVANCE {
         return *(h1.Score) >= *(h2.Score), nil
     } else {
@@ -283,7 +282,6 @@ func compareHits(h1* elastic.SearchHit, h2* elastic.SearchHit, sortBy string) (b
         if ed2.EffectiveDate == nil {
             ed2.EffectiveDate = &utils.Date{time.Time{}}
         }
-        log.Infof("Date %+v %+v", ed1, ed2)
         if sortBy == consts.SORT_BY_OLDER_TO_NEWER {
             return !ed1.EffectiveDate.Time.After(ed2.EffectiveDate.Time), nil
         } else {
