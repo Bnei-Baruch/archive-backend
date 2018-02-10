@@ -266,6 +266,11 @@ func haveHits(r *elastic.SearchResult) bool {
 }
 
 func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) *elastic.SearchResult {
+    if r1.Hits.TotalHits == 0 {
+        return r2
+    } else if r2.Hits.TotalHits == 0 {
+        return r1
+    }
     result := elastic.SearchResult(*r1)
     result.Hits.TotalHits += r2.Hits.TotalHits
     result.Hits.MaxScore = new(float64)
@@ -273,29 +278,20 @@ func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy st
     var hits []*elastic.SearchHit
 
     // Merge by score
-    fmt.Printf("r1: %d\n", len(r1.Hits.Hits))
-    fmt.Printf("r2: %d\n", len(r2.Hits.Hits))
     i1, i2 := int(0), int(0)
     for i1 < len(r1.Hits.Hits) || i2 < len(r2.Hits.Hits) {
         if i1 == len(r1.Hits.Hits) {
-            fmt.Printf("Appending rest from r2, i2: %d\n", i2)
             hits = append(hits, r2.Hits.Hits[i2:]...)
             break
         }
         if i2 == len(r2.Hits.Hits) {
-            fmt.Printf("Appending rest from r1, i1: %d\n", i1)
             hits = append(hits, r1.Hits.Hits[i1:]...)
             break
         }
-        fmt.Printf("%d: %f   |    %d: %f\n", i1, *(r1.Hits.Hits[i1].Score), i2, *(r2.Hits.Hits[i2].Score))
         if *(r1.Hits.Hits[i1].Score) >= *(r2.Hits.Hits[i2].Score) {
-            fmt.Printf("Appending hit from r1, i1: %d, score: %f, other score: %f\n",
-                i1, *(r1.Hits.Hits[i1].Score), *(r2.Hits.Hits[i2].Score))
             hits = append(hits, r1.Hits.Hits[i1])
             i1++
         } else {
-            fmt.Printf("Appending hit from r2, i2: %d, score: %f, other score: %f\n",
-                i2, *(r2.Hits.Hits[i2].Score), *(r1.Hits.Hits[i1].Score))
             hits = append(hits, r2.Hits.Hits[i2])
             i2++
         }
@@ -306,6 +302,7 @@ func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy st
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
+    log.Infof("Query: %+v", query)
 	multiSearchService := e.esc.MultiSearch()
 	// Content Units
     AddContentUnitsSearchRequests(multiSearchService, query, sortBy, 0, from + size, preference)

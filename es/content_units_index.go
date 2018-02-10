@@ -38,11 +38,16 @@ type ContentUnitsIndex struct {
 	docFolder string
 }
 
+func defaultContentUnitSql() string {
+    return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d)",
+        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID)
+}
+
 func (index *ContentUnitsIndex) ReindexAll() error {
 	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
 		return err
 	}
-	return index.addToIndexSql("cu.secure = 0 AND cu.published IS TRUE")
+	return index.addToIndexSql(defaultContentUnitSql())
 }
 
 func (index *ContentUnitsIndex) Add(scope Scope) error {
@@ -85,7 +90,7 @@ func (index *ContentUnitsIndex) Delete(scope Scope) error {
 
 func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) error {
 	// TODO: Work not done! Missing tags and sources scopes!
-	sqlScope := "cu.secure = 0 AND cu.published IS TRUE"
+	sqlScope := defaultContentUnitSql()
 	uids := removedUIDs
 	if scope.ContentUnitUID != "" {
 		uids = append(uids, scope.ContentUnitUID)
@@ -163,6 +168,8 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		return err
 	}
 
+    log.Infof("Adding %d units.", count)
+
 	offset := 0
 	limit := 1000
 	for offset < int(count) {
@@ -178,7 +185,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		if err != nil {
 			return errors.Wrap(err, "Fetch units from mdb")
 		}
-		log.Infof("Adding %d units.", len(units))
+        log.Infof("Adding %d units (offset: %d).", len(units), offset)
 
 		index.indexData = new(IndexData)
 		err = index.indexData.Load(sqlScope)

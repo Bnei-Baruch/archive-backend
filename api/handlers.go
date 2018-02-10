@@ -391,9 +391,10 @@ func ParseQuery(q string) search.Query {
         if !isFilter {
             // Not clear what kind of decoding is happening here, utf-8?!
             runes := []rune(t)
-            for _, c := range runes {
-                fmt.Printf("%04x %s\n", c, string(c))
-            }
+            // For debug
+            // for _, c := range runes {
+            //     fmt.Printf("%04x %s\n", c, string(c))
+            // }
             if len(runes) >= 2 && IsRuneQuotationMark(runes[0]) && runes[0] == runes[len(runes)-1] {
                 exactTerms = append(exactTerms, string(runes[1:len(runes)-1]))
             } else {
@@ -405,6 +406,7 @@ func ParseQuery(q string) search.Query {
 }
 
 func SearchHandler(c *gin.Context) {
+    log.Infof("Language: %s", c.Query("language"))
     log.Infof("Query: [%s]", c.Query("q"))
     query := ParseQuery(c.Query("q"))
     log.Infof("Parsed Query: %#v", query)
@@ -452,7 +454,7 @@ func SearchHandler(c *gin.Context) {
 
     // Detect input language
     detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
-    log.Info("Detect language input:", detectQuery)
+    log.Infof("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
     query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
     res, err := se.DoSearch(
@@ -483,6 +485,7 @@ func AutocompleteHandler(c *gin.Context) {
     se := search.NewESEngine(esc, db)
 
     // Detect input language
+    log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
     order := utils.DetectLanguage(q, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
     // Have a 50ms deadline on the search engine call.

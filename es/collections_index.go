@@ -28,13 +28,18 @@ type CollectionsIndex struct {
 	indexData *IndexData
 }
 
-const defaultSql = "c.secure = 0 AND c.published IS TRUE AND c.type_id NOT IN (1, 2)"
+func defaultCollectionsSql() string {
+    return fmt.Sprintf("c.secure = 0 AND c.published IS TRUE AND c.type_id NOT IN (%d, %d, %d)",
+        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
+        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SPECIAL_LESSON].ID,
+        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIPS].ID)
+}
 
 func (index *CollectionsIndex) ReindexAll() error {
 	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
 		return err
 	}
-	return index.addToIndexSql(defaultSql)
+	return index.addToIndexSql(defaultCollectionsSql())
 }
 
 func (index *CollectionsIndex) Add(scope Scope) error {
@@ -77,7 +82,7 @@ func (index *CollectionsIndex) Delete(scope Scope) error {
 
 func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) error {
 	// TODO: Work not done! Missing tags and sources scopes!
-	sqlScope := defaultSql
+	sqlScope := defaultCollectionsSql()
 	uids := removedUIDs
 	if scope.CollectionUID != "" {
 		uids = append(uids, scope.CollectionUID)
