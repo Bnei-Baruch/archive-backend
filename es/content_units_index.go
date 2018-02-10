@@ -46,7 +46,7 @@ func (index *ContentUnitsIndex) ReindexAll() error {
 }
 
 func (index *ContentUnitsIndex) Add(scope Scope) error {
-	// We only add content units when content unit is added, otherwise we need to update.
+	// We only add content units when the scope is content unit, otherwise we need to update.
 	if scope.ContentUnitUID != "" {
 		if err := index.addToIndex(Scope{ContentUnitUID: scope.ContentUnitUID}, []string{}); err != nil {
 			return err
