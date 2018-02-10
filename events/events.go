@@ -13,8 +13,8 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
-	"runtime"
 	"reflect"
+	"runtime"
 	"strings"
 )
 
@@ -28,10 +28,10 @@ func RunListener() {
 		for {
 			a1 := <-ChanIndexFuncs
 			a1.F(a1.S)
-			currentFunc := strings.Split(runtime.FuncForPC(reflect.ValueOf(a1.F).Pointer()).Name(),".")
+			currentFunc := strings.Split(runtime.FuncForPC(reflect.ValueOf(a1.F).Pointer()).Name(), ".")
 			lastElement := currentFunc[len(currentFunc)-1]
-			log.Infof("running indexer function \"%+v\", with parameter %s\n",lastElement,a1.S)
-			log.Infof("*******number of elements on Indexer channel is %d",len(ChanIndexFuncs))
+			log.Infof("running indexer function \"%+v\", with parameter %s\n", lastElement, a1.S)
+			log.Infof("*******number of elements on Indexer channel is %d", len(ChanIndexFuncs))
 		}
 	}()
 

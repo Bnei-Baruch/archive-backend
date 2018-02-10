@@ -1,19 +1,19 @@
 package events
 
 import (
+	"bytes"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
-	"encoding/hex"
-	"bytes"
-	"encoding/json"
 
+	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/queries/qm"
-	"github.com/Bnei-Baruch/archive-backend/mdb"
 )
 
 func putToIndexer(f func(string) error, s string) {
@@ -145,15 +145,19 @@ func FilePublished(d Data) {
 		case "image":
 			if strings.HasSuffix(file.Name, ".zip") {
 				log.Debugf("file %s is zipped image, sending unsip post request to backend", file.UID)
-				apiUrl := viper.GetString("api.url")
-				resp, err := http.Get(apiUrl + "/unzip/" + file.UID)
+				err := UnZipFIle(file.UID)
 				if err != nil {
-					log.Errorf("unzip failed: %+v", err)
+					log.Errorf("couldn't unzip %s\n because of error %+v", file.UID, err)
 				}
-				if resp.StatusCode != 200 {
-					log.Errorf("we got response %d for api unzip request. file UID is \"%s\"", resp.StatusCode, file.UID)
-				}
-				log.Infof("response status code for unzipping file \"%s\" is: %d", file.UID, resp.StatusCode)
+				//apiUrl := viper.GetString("api.url")
+				//resp, err := http.Get(apiUrl + "/unzip/" + file.UID)
+				//if err != nil {
+				//	log.Errorf("unzip failed: %+v", err)
+				//}
+				//if resp.StatusCode != 200 {
+				//	log.Errorf("we got response %d for api unzip request. file UID is \"%s\"", resp.StatusCode, file.UID)
+				//}
+				//log.Infof("response status code for unzipping file \"%s\" is: %d", file.UID, resp.StatusCode)
 			}
 
 		case "text":
@@ -252,6 +256,7 @@ func GetFileObj(uid string) *mdbmodels.File {
 	return OneFile
 }
 
+// GetUnitObj gets the Unit object from db
 func GetUnitObj(uid string) *mdbmodels.ContentUnit {
 	mdbObj := mdbmodels.ContentUnitsG(qm.Where("uid=?", uid))
 	OneObj, err := mdbObj.One()
@@ -259,6 +264,21 @@ func GetUnitObj(uid string) *mdbmodels.ContentUnit {
 		log.Error(err)
 	}
 	return OneObj
+}
+
+// UnZipFIle sends request to unzip api by file UID
+func UnZipFIle(uid string) error {
+
+	apiUrl := viper.GetString("api.url")
+	resp, err := http.Get(apiUrl + "/unzip/" + uid)
+	if err != nil {
+		log.Errorf("unzip failed: %+v", err)
+	}
+	if resp.StatusCode != 200 {
+		log.Errorf("we got response %d for api unzip request. file UID is \"%s\"", resp.StatusCode, uid)
+	}
+	log.Infof("response status code for unzipping file \"%s\" is: %d", uid, resp.StatusCode)
+	return nil
 }
 
 //removeFile to send post req to file-api and remove file from search?
@@ -275,10 +295,9 @@ func removeFile(s string) error {
 			ClientIP string `json:"clientip,omitempty"`
 		}
 
-
 		data := FileBackendRequest{
-			SHA1:     hex.EncodeToString(file.Sha1.Bytes),
-			Name:     file.Name,
+			SHA1: hex.EncodeToString(file.Sha1.Bytes),
+			Name: file.Name,
 		}
 
 		b := new(bytes.Buffer)
@@ -288,7 +307,7 @@ func removeFile(s string) error {
 		}
 
 		apiUrl := viper.GetString("api.url1") + "/api/v1/getremove"
-		resp, err := http.Post(apiUrl,"application/json; charset=utf-8",b)
+		resp, err := http.Post(apiUrl, "application/json; charset=utf-8", b)
 		if err != nil {
 			log.Errorf("post request to file api failed with %+v", err)
 		}
