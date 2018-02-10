@@ -13,6 +13,9 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
+	"runtime"
+	"reflect"
+	"strings"
 )
 
 var indexer *es.Indexer
@@ -25,7 +28,9 @@ func RunListener() {
 		for {
 			a1 := <-ChanIndexFuncs
 			a1.F(a1.S)
-			fmt.Println(a1)
+			currentFunc := strings.Split(runtime.FuncForPC(reflect.ValueOf(a1.F).Pointer()).Name(),".")
+			lastElement := currentFunc[len(currentFunc)-1]
+			log.Infof("running indexer function \"%+v\", with parameter %s\n",lastElement,a1.S)
 		}
 	}()
 
@@ -43,10 +48,15 @@ func RunListener() {
 	utils.Must(err)
 	defer sc.Close()
 	log.Printf("Connected to %s clusterID: [%s] clientID: [%s]\n", natsURL, natsClusterID, natsClientID)
-
 	log.Info("Subscribing to nats")
-	//startOpt := stan.DurableName(viper.GetString("nats.durable-name"))
-	startOpt := stan.DeliverAllAvailable()
+
+	var startOpt stan.SubscriptionOption
+	if viper.GetBool("nats.durable") == true {
+		startOpt = stan.DurableName(viper.GetString("nats.durable-name"))
+	} else {
+		startOpt = stan.DeliverAllAvailable()
+	}
+
 	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt)
 	utils.Must(err)
 
