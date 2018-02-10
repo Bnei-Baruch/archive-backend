@@ -192,7 +192,7 @@ func (suite *IndexerSuite) SetupSuite() {
 
 	// Set package db and esc variables.
 	mdb.InitWithDefault(suite.DB)
-	boil.DebugMode = false
+	boil.DebugMode = true
 	suite.esc = mdb.ESC
 }
 
@@ -286,6 +286,94 @@ func (suite *IndexerSuite) uc(c Collection, cuUID string, removeContentUnitUID s
 	uid, err := updateCollection(c, cuUID, removeContentUnitUID)
 	r.Nil(err)
 	return uid
+}
+
+func removeContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, error) {
+	var mdbContentUnit mdbmodels.ContentUnit
+	if cu.MDB_UID != "" {
+		cup, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		if err != nil {
+			return "", err
+		}
+		mdbContentUnit = *cup
+	} else {
+		mdbContentUnit = mdbmodels.ContentUnit{
+			UID:    GenerateUID(8),
+			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
+		}
+		if err := mdbContentUnit.Insert(mdb.DB); err != nil {
+			return "", err
+		}
+	}
+
+	_, err := mdbmodels.FindTag(mdb.DB, tag.ID)
+	if err != nil {
+		return "", err
+	}
+
+	err = mdbContentUnit.RemoveTags(mdb.DB, &tag)
+	if err != nil {
+		return "", err
+	}
+
+	return mdbContentUnit.UID, nil
+}
+
+func addContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, error) {
+	var mdbContentUnit mdbmodels.ContentUnit
+	if cu.MDB_UID != "" {
+		cup, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		if err != nil {
+			return "", err
+		}
+		mdbContentUnit = *cup
+	} else {
+		mdbContentUnit = mdbmodels.ContentUnit{
+			UID:    GenerateUID(8),
+			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
+		}
+		if err := mdbContentUnit.Insert(mdb.DB); err != nil {
+			return "", err
+		}
+	}
+
+	_, err := mdbmodels.FindTag(mdb.DB, tag.ID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+
+			// save tag to DB:
+
+			/*//generate uid
+			b := make([]byte, 8)
+			for i := range b {
+				b[i] = uidBytes[rand.Intn(len(uidBytes))]
+			}
+			tag.UID = string(b)*/
+
+			err = tag.Insert(mdb.DB,)
+			if err != nil {
+				return "", err
+			}
+
+			// save i18n
+			/*for _, v := range tag.I18n {
+				err := t.AddTagI18ns(exec, true, v)
+				if err != nil {
+					return "", err
+				}
+			}*/
+
+		} else {
+			return "", err
+		}
+	}
+
+	err = mdbContentUnit.AddTags(mdb.DB, false, &tag)
+	if err != nil {
+		return "", err
+	}
+
+	return mdbContentUnit.UID, nil
 }
 
 func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool) (string, error) {
@@ -408,6 +496,21 @@ func (suite *IndexerSuite) ucu(cu ContentUnit, lang string, published bool, secu
 	return uid
 }
 
+func (suite *IndexerSuite) ucut(cu ContentUnit, lang string, tag mdbmodels.Tag, add bool) string {
+	r := require.New(suite.T())
+
+	var err error
+	var uid string
+
+	if (add){
+		uid, err = addContentUnitTag(cu, lang, tag)
+	}else{
+		uid, err = removeContentUnitTag(cu, lang, tag)
+	}	
+	r.Nil(err)
+	return uid
+}
+
 func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *Indexer, expectedNames []string) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
@@ -424,6 +527,63 @@ func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *I
 	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
 	r.ElementsMatch(expectedNames, names)
 }
+
+func (suite *IndexerSuite) validateContentUnitTags(indexName string, indexer *Indexer, expectedTags []string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	tags := make([]string, 0)
+	for _, hit := range res.Hits.Hits {
+		var cu ContentUnit
+		json.Unmarshal(*hit.Source, &cu)
+		for _, t := range cu.Tags {
+			tags = append(tags, t)
+		}		
+	}
+	r.Equal(len(expectedTags), len(tags))
+	r.ElementsMatch(expectedTags, tags)
+}
+
+//In Progress
+/*
+func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *Indexer, expectedFiles []string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+
+	//TBD
+	//1. determine if file has transcript
+	//2. determine lang
+
+	//get langs
+	langs := make([]string, 0)
+	for _, hit := range res.Hits.Hits {
+		var cu ContentUnit
+		json.Unmarshal(*hit.Source, &cu)
+		for _, t := range cu.Translations {
+			langs = append(langs, t)
+		}
+	}
+
+	//get transcript
+	transcripts := make([]string, 0)
+	for _, hit := range res.Hits.Hits {
+		var cu ContentUnit
+		json.Unmarshal(*hit.Source, &cu)
+		transcripts = append(transcripts, cu.Transcript)
+	}
+
+	//TBD
+	//r.Equal(int64(len(expectedTags)), len(tags))
+	//r.ElementsMatch(expectedTags, tags)
+}
+*/
 
 func (suite *IndexerSuite) validateMaps(e map[string][]string, a map[string][]string) {
 	r := require.New(suite.T())
@@ -494,8 +654,12 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 	})
 
 	fmt.Printf("\n\n\nValidate we have successfully added a content type.\n\n")
+	dumpDB("Before DB")
+	dumpIndexes("Before Indexes")
 	c1UID := suite.uc(Collection{ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID, "")
 	r.Nil(indexer.CollectionAdd(c1UID))
+	dumpDB("After DB")
+	dumpIndexes("After Indexes")
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {consts.CT_SPECIAL_LESSON},
@@ -565,9 +729,31 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	fmt.Println("Validate we have 2 searchable content units.")
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
 
+	// *** Yuri ***
+
+	fmt.Println("Add a tag to content unit and validate.")
+	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, true)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce"})	
+	fmt.Println("Add second tag to content unit and validate.")
+	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, true)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce", "L3jMWyce"})	
+
+	fmt.Println("Remove one tag from content unit and validate.")
+	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, false)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L3jMWyce"})
+
+	// ************
+
 	fmt.Println("Make content unit not published and validate.")
+	//dumpDB("TestContentUnitsIndex, BeforeDB")
+	//dumpIndexes("TestContentUnitsIndex, BeforeIndexes")
 	suite.ucu(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, false, true)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	//dumpDB("TestContentUnitsIndex, AfterDB")
+	//dumpIndexes("TestContentUnitsIndex, AfterIndexes")
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something else"})
 	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
 	suite.validateContentUnitNames(indexNameRu, indexer, []string{})

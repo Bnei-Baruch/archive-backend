@@ -51,7 +51,7 @@ func (index *ContentUnitsIndex) ReindexAll() error {
 }
 
 func (index *ContentUnitsIndex) Add(scope Scope) error {
-	// We only add content units when content unit is added, otherwise we need to update.
+	// We only add content units when the scope is content unit, otherwise we need to update.
 	if scope.ContentUnitUID != "" {
 		if err := index.addToIndex(Scope{ContentUnitUID: scope.ContentUnitUID}, []string{}); err != nil {
 			return err
@@ -209,7 +209,7 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 		indexName := index.indexName(lang)
 		searchRes, err := mdb.ESC.Search(indexName).Query(elasticScope).Do(context.TODO())
 		if err != nil {
-			return []string{}, nil
+			return []string{}, err
 		}
 		for _, h := range searchRes.Hits.Hits {
 			var cu ContentUnit
