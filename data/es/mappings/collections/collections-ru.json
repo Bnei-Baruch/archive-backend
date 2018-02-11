@@ -1,0 +1,80 @@
+{
+    "mappings": {
+        "collections": {
+            "_all": {
+                "enabled": false
+            }, 
+            "properties": {
+                "content_units_content_types": {
+                    "type": "keyword"
+                }, 
+                "name": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "russian"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "mdb_uid": {
+                    "type": "keyword"
+                }, 
+                "typed_uids": {
+                    "type": "keyword"
+                }, 
+                "content_type": {
+                    "type": "keyword"
+                }, 
+                "effective_date": {
+                    "type": "date", 
+                    "format": "strict_date"
+                }, 
+                "original_language": {
+                    "index": false, 
+                    "type": "keyword"
+                }, 
+                "description": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "russian"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }
+            }
+        }
+    }, 
+    "settings": {
+        "index": {
+            "analysis": {
+                "filter": {
+                    "custom_phonetic": {
+                        "encoder": "beider_morse", 
+                        "type": "phonetic", 
+                        "languageset": "russian", 
+                        "replace": true
+                    }, 
+                    "icu_transliterate": {
+                        "type": "icu_transform", 
+                        "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC"
+                    }
+                }, 
+                "analyzer": {
+                    "phonetic_analyzer": {
+                        "filter": [
+                            "standard", 
+                            "lowercase", 
+                            "icu_transliterate", 
+                            "custom_phonetic"
+                        ], 
+                        "tokenizer": "standard"
+                    }
+                }
+            }
+        }
+    }
+}

@@ -4,13 +4,19 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
+type EffectiveDate struct {
+	EffectiveDate *utils.Date `json:"effective_date"`
+}
+
 type Collection struct {
-	MDB_UID      string            `json:"mdb_uid"`
-	ContentType  string            `json:"content_type"`
-	FilmDate     *utils.Date       `json:"film_date"`
-	Names        map[string]string `json:"names"`
-	Descriptions map[string]string `json:"descriptions"`
-	ContentUnits []*ContentUnit    `json:"content_units"`
+	MDB_UID                  string      `json:"mdb_uid"`
+	TypedUIDs                []string    `json:"typed_uids"`
+	Name                     string      `json:"name"`
+	Description              string      `json:"description"`
+	ContentType              string      `json:"content_type"`
+	ContentUnitsContentTypes []string    `json:"content_units_content_types,omitempty"`
+	EffectiveDate            *utils.Date `json:"effective_date"`
+	OriginalLanguage         string      `json:"original_language,omitempty"`
 }
 
 type ContentUnit struct {
@@ -20,7 +26,7 @@ type ContentUnit struct {
 	Description             string      `json:"description,omitempty"`
 	ContentType             string      `json:"content_type"`
 	CollectionsContentTypes []string    `json:"collections_content_types,omitempty"`
-	FilmDate                *utils.Date `json:"film_date,omitempty"`
+	EffectiveDate           *utils.Date `json:"effective_date,omitempty"`
 	Duration                uint16      `json:"duration,omitempty"`
 	OriginalLanguage        string      `json:"original_language,omitempty"`
 	Translations            []string    `json:"translations,omitempty"`
