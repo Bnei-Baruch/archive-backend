@@ -2,24 +2,29 @@ package events
 
 import (
 	"testing"
-	"net/http"
 	log "github.com/Sirupsen/logrus"
-
+	"github.com/Bnei-Baruch/archive-backend/utils"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestApiGet(t *testing.T){
-	apiType := "unzip"
-	uid := "ZLuOz4ih"
-	apiURL := "https://archive.kbb1.com/assets/api/"
-	resp, err := http.Get(apiURL + "/"+ apiType +"/" + uid)
-	defer resp.Body.Close()
-	if err != nil {
-		log.Errorf("unzip failed: %+v", err)
-	}
-	if resp.StatusCode != 200 {
-		log.Errorf("we got response %d for api unzip request. file UID is \"%s\"", resp.StatusCode, uid)
-	}
-	log.Infof("response status code for unzipping file \"%s\" is: %d", uid, resp.StatusCode)
+type HandlersSuite struct {
+	suite.Suite
 }
 
+func (suite *HandlersSuite) SetupSuite() {
+	utils.InitConfig("", "../")
+}
 
+func TestHandlers(t *testing.T) {
+	suite.Run(t, new(HandlersSuite))
+}
+
+func (suite *HandlersSuite) TestApiGet(){
+	log.SetLevel(log.DebugLevel)
+	apiType := "unzip"
+	uid := "ZLuOz4ih"
+	err := ApiGet(uid, apiType)
+	if err != nil {
+		suite.T().Errorf("test failed with %+v",err)
+	}
+}

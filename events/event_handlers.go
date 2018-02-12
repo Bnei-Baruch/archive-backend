@@ -243,8 +243,9 @@ func GetUnitObj(uid string) *mdbmodels.ContentUnit {
 func ApiGet(uid string, apiType string) error {
 
 	apiURL := viper.GetString("api.url")
+	log.Debugf("request url is [%s]", apiURL)
 	resp, err := http.Get(apiURL + "/" + apiType + "/" + uid)
-	defer resp.Body.Close()
+	//defer resp.Body.Close()
 	if err != nil {
 		log.Errorf("%s failed: %+v", apiType, err)
 	}
@@ -252,7 +253,7 @@ func ApiGet(uid string, apiType string) error {
 		log.Errorf("we got response %d for api %s request. UID is \"%s\"", resp.StatusCode, apiType, uid)
 	}
 	log.Infof("response status code for api call %s. uid \"%s\" is: %d",apiType, uid, resp.StatusCode)
-
+    log.Debugf("the resp status code is %+d",resp.StatusCode)
 	return nil
 }
 
