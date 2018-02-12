@@ -296,15 +296,9 @@ func removeContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (strin
 			return "", err
 		}
 		mdbContentUnit = *cup
-	} else {
-		mdbContentUnit = mdbmodels.ContentUnit{
-			UID:    GenerateUID(8),
-			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
+		} else {
+			return "", errors.New("cu.MDB_UID is empty")
 		}
-		if err := mdbContentUnit.Insert(mdb.DB); err != nil {
-			return "", err
-		}
-	}
 
 	_, err := mdbmodels.FindTag(mdb.DB, tag.ID)
 	if err != nil {
@@ -375,6 +369,133 @@ func addContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, 
 
 	return mdbContentUnit.UID, nil
 }
+
+func addContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source) (string, error) {
+	var mdbContentUnit mdbmodels.ContentUnit
+	if cu.MDB_UID != "" {
+		cup, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		if err != nil {
+			return "", err
+		}
+		mdbContentUnit = *cup
+	} else {
+		mdbContentUnit = mdbmodels.ContentUnit{
+			UID:    GenerateUID(8),
+			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
+		}
+		if err := mdbContentUnit.Insert(mdb.DB); err != nil {
+			return "", err
+		}
+	}
+
+	_, err := mdbmodels.FindSource(mdb.DB, src.ID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			err = src.Insert(mdb.DB)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			return "", err
+		}
+	}
+
+	err = mdbContentUnit.AddSources(mdb.DB, false, &src)
+	if err != nil {
+		return "", err
+	}
+
+	return mdbContentUnit.UID, nil
+}
+
+func removeContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source) (string, error) {
+	var mdbContentUnit mdbmodels.ContentUnit
+	if cu.MDB_UID != "" {
+		cup, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		if err != nil {
+			return "", err
+		}
+		mdbContentUnit = *cup
+		} else {
+			return "", errors.New("cu.MDB_UID is empty")
+		}
+
+	_, err := mdbmodels.FindTag(mdb.DB, src.ID)
+	if err != nil {
+		return "", err
+	}
+
+	err = mdbContentUnit.RemoveSources(mdb.DB, &src)
+	if err != nil {
+		return "", err
+	}
+
+	return mdbContentUnit.UID, nil
+}
+
+func addContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (string, error) {
+	var mdbContentUnit mdbmodels.ContentUnit
+	if cu.MDB_UID != "" {
+		cup, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		if err != nil {
+			return "", err
+		}
+		mdbContentUnit = *cup
+	} else {
+		mdbContentUnit = mdbmodels.ContentUnit{
+			UID:    GenerateUID(8),
+			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
+		}
+		if err := mdbContentUnit.Insert(mdb.DB); err != nil {
+			return "", err
+		}
+	}
+
+	_, err := mdbmodels.FindFile(mdb.DB, file.ID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			err = file.Insert(mdb.DB)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			return "", err
+		}
+	}
+
+	err = mdbContentUnit.AddFiles(mdb.DB, false, &file)
+	if err != nil {
+		return "", err
+	}
+
+	return mdbContentUnit.UID, nil
+}
+
+func removeContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (string, error) {
+	var mdbContentUnit mdbmodels.ContentUnit
+	if cu.MDB_UID != "" {
+		cup, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		if err != nil {
+			return "", err
+		}
+		mdbContentUnit = *cup
+	} else {
+		return "", errors.New("cu.MDB_UID is empty")
+	}
+
+	_, err := mdbmodels.FindFile(mdb.DB, file.ID)
+	if err != nil {
+		return "", err
+	}
+
+	err = mdbContentUnit.RemoveFiles(mdb.DB, &file)
+	if err != nil {
+		return "", err
+	}
+
+	return mdbContentUnit.UID, nil
+}
+
 
 func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
@@ -511,6 +632,36 @@ func (suite *IndexerSuite) ucut(cu ContentUnit, lang string, tag mdbmodels.Tag, 
 	return uid
 }
 
+func (suite *IndexerSuite) ucus(cu ContentUnit, lang string, src mdbmodels.Source, add bool) string {
+	r := require.New(suite.T())
+
+	var err error
+	var uid string
+
+	if add {
+		uid, err = addContentUnitSource(cu, lang, src)
+	} else {
+		uid, err = removeContentUnitSource(cu, lang, src)
+	}
+	r.Nil(err)
+	return uid
+}
+
+func (suite *IndexerSuite) ucuf(cu ContentUnit, lang string, file mdbmodels.File, add bool) string {
+	r := require.New(suite.T())
+
+	var err error
+	var uid string
+
+	if add {
+		uid, err = addContentUnitFile(cu, lang, file)
+	} else {
+		uid, err = removeContentUnitFile(cu, lang, file)
+	}
+	r.Nil(err)
+	return uid
+}
+
 func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *Indexer, expectedNames []string) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
@@ -547,9 +698,26 @@ func (suite *IndexerSuite) validateContentUnitTags(indexName string, indexer *In
 	r.ElementsMatch(expectedTags, tags)
 }
 
-//In Progress
-/*
-func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *Indexer, expectedFiles []string) {
+func (suite *IndexerSuite) validateContentUnitSources(indexName string, indexer *Indexer, expectedSources []string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	sources := make([]string, 0)
+	for _, hit := range res.Hits.Hits {
+		var cu ContentUnit
+		json.Unmarshal(*hit.Source, &cu)
+		for _, s := range cu.Sources {
+			sources = append(sources, s)
+		}
+	}
+	r.Equal(len(expectedSources), len(sources))
+	r.ElementsMatch(expectedSources, sources)
+}
+
+func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *Indexer, expectedLangs []string, expectedTranscriptLength null.Int) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
@@ -557,33 +725,38 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *I
 	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 
-	//TBD
-	//1. determine if file has transcript
-	//2. determine lang
+	if (len(expectedLangs) > 0) {
 
-	//get langs
-	langs := make([]string, 0)
-	for _, hit := range res.Hits.Hits {
-		var cu ContentUnit
-		json.Unmarshal(*hit.Source, &cu)
-		for _, t := range cu.Translations {
-			langs = append(langs, t)
+		//get langs
+		langs := make([]string, 0)
+		for _, hit := range res.Hits.Hits {
+			var cu ContentUnit
+			json.Unmarshal(*hit.Source, &cu)
+			for _, t := range cu.Translations {
+				langs = append(langs, t)
+			}
 		}
+
+		r.Equal(len(expectedLangs), len(langs))
+		r.ElementsMatch(expectedLangs, langs)
 	}
 
-	//get transcript
-	transcripts := make([]string, 0)
-	for _, hit := range res.Hits.Hits {
-		var cu ContentUnit
-		json.Unmarshal(*hit.Source, &cu)
-		transcripts = append(transcripts, cu.Transcript)
-	}
+	
+		//get transcript
+		transcriptLengths := make([]int, 0)
+		for _, hit := range res.Hits.Hits {
+			var cu ContentUnit
+			json.Unmarshal(*hit.Source, &cu)
+			transcriptLengths = append(transcriptLengths, len(cu.Transcript))
+		}
 
-	//TBD
-	//r.Equal(int64(len(expectedTags)), len(tags))
-	//r.ElementsMatch(expectedTags, tags)
+		if (expectedTranscriptLength.Valid) {
+			r.Contains(transcriptLengths,expectedTranscriptLength.Int)
+		} else {
+			r.Equal(len(transcriptLengths), 0)
+		}
 }
-*/
+
 
 func (suite *IndexerSuite) validateMaps(e map[string][]string, a map[string][]string) {
 	r := require.New(suite.T())
@@ -705,8 +878,6 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 
 func (suite *IndexerSuite) TestContentUnitsIndex() {
 	fmt.Printf("\n\n\n--- TEST CONTENT UNITS INDEX ---\n\n\n")
-	// TODO: Add file changes...
-	// TODO: Add tag and source tests.
 	r := require.New(suite.T())
 	fmt.Printf("\n\n\nAdding content units.\n\n")
 	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
@@ -731,19 +902,46 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 
 	// *** Yuri ***
 
-	// fmt.Println("Add a tag to content unit and validate.")
-	// suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, true)
-	// r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	// suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce"})
-	// fmt.Println("Add second tag to content unit and validate.")
-	// suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, true)
-	// r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	// suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce", "L3jMWyce"})
-	//
-	// fmt.Println("Remove one tag from content unit and validate.")
-	// suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, false)
-	// r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	// suite.validateContentUnitTags(indexNameEn, indexer, []string{"L3jMWyce"})
+	fmt.Println("Add a file to content unit and validate.")
+	originalDocxPath := viper.Get("docx-folder")
+	testingsDocxPath := viper.Get("test-docx-folder")	
+	viper.Set("docx-folder", testingsDocxPath)
+	file := mdbmodels.File{ID: 1, UID: "xxxxxxxx", Language: null.String{"he", true}, Secure: 0, Published: true }
+	suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, file, true)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.validateContentUnitFiles(indexNameEn, indexer, []string{"he"}, null.Int{109, true})
+	fmt.Println("Remove a file from content unit and validate.")
+	suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, file, false)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	viper.Set("docx-folder", originalDocxPath)
+
+	fmt.Println("Add a tag to content unit and validate.")
+	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, true)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce"})
+	fmt.Println("Add second tag to content unit and validate.")
+	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, true)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce", "L3jMWyce"})
+	fmt.Println("Remove one tag from content unit and validate.")
+	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, false)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L3jMWyce"})
+
+	fmt.Println("Add a source to content unit and validate.")
+	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, UID: "ALlyoveA"}, true)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.validateContentUnitSources(indexNameEn, indexer, []string{"ALlyoveA"})
+	fmt.Println("Add second source to content unit and validate.")
+	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, UID: "1vCj4qN9"}, true)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.validateContentUnitSources(indexNameEn, indexer, []string{"ALlyoveA", "1vCj4qN9"})
+	fmt.Println("Remove one source from content unit and validate.")
+	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, UID: "L2jMWyce"}, false)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.validateContentUnitSources(indexNameEn, indexer, []string{"1vCj4qN9"})
+
+	//TBD remove created sources and tags
 
 	// ************
 
