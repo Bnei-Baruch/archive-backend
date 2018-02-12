@@ -13,13 +13,29 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
+	"reflect"
+	"runtime"
+	"strings"
 )
 
 var indexer *es.Indexer
 
 func RunListener() {
-	var err error
+	log.SetLevel(log.InfoLevel)
 
+	// routine to run indexer functions from channel
+	go func() {
+		for {
+			a1 := <-ChanIndexFuncs
+			a1.F(a1.S)
+			currentFunc := strings.Split(runtime.FuncForPC(reflect.ValueOf(a1.F).Pointer()).Name(), ".")
+			lastElement := currentFunc[len(currentFunc)-1]
+			log.Infof("running indexer function \"%+v\", with parameter %s\n", lastElement, a1.S)
+			log.Infof("*******number of elements on Indexer channel is %d", len(ChanIndexFuncs))
+		}
+	}()
+
+	var err error
 	log.Info("Initialize connections to MDB and elasticsearch")
 	mdb.Init()
 	defer mdb.Shutdown()
@@ -33,13 +49,24 @@ func RunListener() {
 	utils.Must(err)
 	defer sc.Close()
 	log.Printf("Connected to %s clusterID: [%s] clientID: [%s]\n", natsURL, natsClusterID, natsClientID)
-
 	log.Info("Subscribing to nats")
-	startOpt := stan.DeliverAllAvailable()
+
+	var startOpt stan.SubscriptionOption
+	if viper.GetBool("nats.durable") == true {
+		startOpt = stan.DurableName(viper.GetString("nats.durable-name"))
+	} else {
+		startOpt = stan.DeliverAllAvailable()
+	}
+
 	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt)
 	utils.Must(err)
 
-	indexer = es.MakeProdIndexer()
+	// to disbable indexing set this in config
+	if viper.GetBool("server.fake-indexer") {
+		indexer = es.MakeFakeIndexer()
+	} else {
+		indexer = es.MakeProdIndexer()
+	}
 
 	log.Info("Press Ctrl+C to terminate")
 	signalChan := make(chan os.Signal, 1)
@@ -56,12 +83,21 @@ func RunListener() {
 	<-cleanupDone
 }
 
-// Data struct for unmarshaling data
+// Data struct for unmarshaling data from nats
 type Data struct {
 	ID      string                 `json:"id"`
 	Type    string                 `json:"type"`
 	Payload map[string]interface{} `json:"payload"`
 }
+
+// ChannelForIndexers for putting indexer funcs on nats
+type ChannelForIndexers struct {
+	F func(s string) error
+	S string
+}
+
+// ChanIndexFuncs channel to pass indexer functions
+var ChanIndexFuncs = make(chan ChannelForIndexers, 100000)
 
 type MessageHandler func(d Data)
 
@@ -101,8 +137,9 @@ var messageHandlers = map[string]MessageHandler{
 	E_PUBLISHER_UPDATE: PublisherUpdate,
 }
 
-// checks message type and calls "eventHandler"
+// msgHandler checks message type and calls "eventHandler"
 func msgHandler(msg *stan.Msg) {
+
 	var d Data
 	err := json.Unmarshal(msg.Data, &d)
 	if err != nil {
@@ -114,6 +151,7 @@ func msgHandler(msg *stan.Msg) {
 		log.Errorf("Unknown event type: %v", d)
 	}
 
-	log.Infof("Handling %+v", d)
+	log.Debugf("Handling %+v", d)
 	handler(d)
+
 }

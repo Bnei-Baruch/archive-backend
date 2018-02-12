@@ -17,6 +17,10 @@ func MakeProdIndexer() *Indexer {
 		consts.ES_COLLECTIONS_INDEX})
 }
 
+func MakeFakeIndexer() *Indexer {
+	return MakeIndexer("fake", []string{})
+}
+
 // Receives namespace and list of indexes names.
 func MakeIndexer(namespace string, names []string) *Indexer {
 	indexer := new(Indexer)
