@@ -9,6 +9,7 @@ import (
 	"github.com/volatiletech/sqlboiler/queries"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/consts"
 )
 
 type IndexData struct {
@@ -198,6 +199,7 @@ func (indexData *IndexData) rowsToIdToUIDsAndValues(rows *sql.Rows) (map[string]
 }
 
 func (indexData *IndexData) loadTranscripts(sqlScope string) (map[string]map[string][]string, error) {
+    kmID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID
 	rows, err := queries.Raw(mdb.DB, fmt.Sprintf(`
 SELECT
     f.uid,
@@ -209,8 +211,8 @@ FROM files AS f
 WHERE name ~ '.docx?' AND
     f.language NOT IN ('zz', 'xx') AND
     f.content_unit_id IS NOT NULL AND
-    cu.type_id != 31 AND
-    %s;`, sqlScope)).Query()
+    cu.type_id != %d AND
+    %s;`, kmID, sqlScope)).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load transcripts")
