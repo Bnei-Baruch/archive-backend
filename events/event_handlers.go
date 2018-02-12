@@ -97,15 +97,7 @@ func ContentUnitPublishedChange(d Data) {
 	if unit.Published == true &&
 		unit.Secure == 0 &&
 		NeedThumbnail == true {
-		apiUrl := viper.GetString("api.url")
-		resp, err := http.Get(apiUrl + "/thumbnail/" + unit.UID)
-		log.Infof("response status code for creating  unit \"%s\" thumbnail of type \"%s\" is: %d", unit.UID, unitTypeName, resp.StatusCode)
-		if err != nil {
-			log.Errorf("problem sending post request to thumbnail api %V\n", err)
-		}
-		if resp.StatusCode != 200 {
-			log.Errorf("creating thumbnail for unit %s returned status code %d instead of 200", unit.UID, resp.StatusCode)
-		}
+		ApiGet(unit.UID, "thumbnail")
 	}
 }
 
@@ -144,34 +136,14 @@ func FilePublished(d Data) {
 		switch file.Type {
 		case "image":
 			if strings.HasSuffix(file.Name, ".zip") {
-				log.Debugf("file %s is zipped image, sending unsip post request to backend", file.UID)
-				err := UnZipFIle(file.UID)
-				if err != nil {
-					log.Errorf("couldn't unzip %s\n because of error %+v", file.UID, err)
-				}
-				//apiUrl := viper.GetString("api.url")
-				//resp, err := http.Get(apiUrl + "/unzip/" + file.UID)
-				//if err != nil {
-				//	log.Errorf("unzip failed: %+v", err)
-				//}
-				//if resp.StatusCode != 200 {
-				//	log.Errorf("we got response %d for api unzip request. file UID is \"%s\"", resp.StatusCode, file.UID)
-				//}
-				//log.Infof("response status code for unzipping file \"%s\" is: %d", file.UID, resp.StatusCode)
+				log.Debugf("file %s is zipped image, sending unsip get request to backend", file.UID)
+				ApiGet(file.UID, "unzip")
 			}
 
 		case "text":
 			if file.MimeType.String == "application/msword" {
-				apiUrl := viper.GetString("api.url")
-				resp, err := http.Get(apiUrl + "/doc2html/" + file.UID)
-				log.Debugf("doc2html response: %+v\n", resp)
-				if err != nil {
-					log.Errorf("convert doc2html failed: %+v\n", err)
-				}
-				if resp.StatusCode != 200 {
-					log.Errorf("we got response %d for api post doc2html request. file UID is \"%s\"", resp.StatusCode, file.UID)
-				}
-				log.Infof("response status code for doc2htmling file \"%s\" is: %d", file.UID, resp.StatusCode)
+				log.Debugf("file %s is doc/docx, sending doc2html get request to backend", file.UID)
+				ApiGet(file.UID, "doc2html")
 			}
 		}
 
@@ -266,20 +238,24 @@ func GetUnitObj(uid string) *mdbmodels.ContentUnit {
 	return OneObj
 }
 
-// UnZipFIle sends request to unzip api by file UID
-func UnZipFIle(uid string) error {
 
-	apiUrl := viper.GetString("api.url")
-	resp, err := http.Get(apiUrl + "/unzip/" + uid)
+// UnZipFIle sends request to unzip api by file UID
+func ApiGet(uid string, apiType string) error {
+
+	apiURL := viper.GetString("api.url")
+	resp, err := http.Get(apiURL + "/" + apiType + "/" + uid)
+	defer resp.Body.Close()
 	if err != nil {
-		log.Errorf("unzip failed: %+v", err)
+		log.Errorf("%s failed: %+v", apiType, err)
 	}
 	if resp.StatusCode != 200 {
-		log.Errorf("we got response %d for api unzip request. file UID is \"%s\"", resp.StatusCode, uid)
+		log.Errorf("we got response %d for api %s request. UID is \"%s\"", resp.StatusCode, apiType, uid)
 	}
-	log.Infof("response status code for unzipping file \"%s\" is: %d", uid, resp.StatusCode)
+	log.Infof("response status code for api call %s. uid \"%s\" is: %d",apiType, uid, resp.StatusCode)
+
 	return nil
 }
+
 
 //removeFile to send post req to file-api and remove file from search?
 func removeFile(s string) error {
@@ -306,8 +282,8 @@ func removeFile(s string) error {
 			return err
 		}
 
-		apiUrl := viper.GetString("api.url1") + "/api/v1/getremove"
-		resp, err := http.Post(apiUrl, "application/json; charset=utf-8", b)
+		apiURL := viper.GetString("api.url1") + "/api/v1/getremove"
+		resp, err := http.Post(apiURL, "application/json; charset=utf-8", b)
 		if err != nil {
 			log.Errorf("post request to file api failed with %+v", err)
 		}
