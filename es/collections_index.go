@@ -240,8 +240,7 @@ func (index *CollectionsIndex) removeFromIndexQuery(elasticScope elastic.Query) 
 func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	m := make(map[string]bool)
 	for _, ccu := range collectionsContentUnits {
-		cu := ccu.R.ContentUnit
-		if cu.Secure == 0 && cu.Published && !utils.Int64InSlice(cu.TypeID, []int64{mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID}) {
+		if defaultContentUnit(ccu.R.ContentUnit) {
 			m[mdb.CONTENT_TYPE_REGISTRY.ByID[ccu.R.ContentUnit.TypeID].Name] = true
 		}
 	}
