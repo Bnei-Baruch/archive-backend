@@ -391,9 +391,10 @@ func ParseQuery(q string) search.Query {
 		if !isFilter {
 			// Not clear what kind of decoding is happening here, utf-8?!
 			runes := []rune(t)
-			for _, c := range runes {
-				fmt.Printf("%04x %s\n", c, string(c))
-			}
+			// For debug
+			// for _, c := range runes {
+			//     fmt.Printf("%04x %s\n", c, string(c))
+			// }
 			if len(runes) >= 2 && IsRuneQuotationMark(runes[0]) && runes[0] == runes[len(runes)-1] {
 				exactTerms = append(exactTerms, string(runes[1:len(runes)-1]))
 			} else {
@@ -405,9 +406,10 @@ func ParseQuery(q string) search.Query {
 }
 
 func SearchHandler(c *gin.Context) {
+	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
 	query := ParseQuery(c.Query("q"))
-	log.Infof("Parsed Query: %#v", query)
+	log.Debugf("Parsed Query: %#v", query)
 	if len(query.Term) == 0 && len(query.Filters) == 0 && len(query.ExactTerms) == 0 {
 		NewBadRequestError(errors.New("Can't search with no terms and no filters.")).Abort(c)
 		return
@@ -452,7 +454,7 @@ func SearchHandler(c *gin.Context) {
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
-	log.Info("Detect language input:", detectQuery)
+	log.Debugf("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
 	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
 	res, err := se.DoSearch(
@@ -483,6 +485,7 @@ func AutocompleteHandler(c *gin.Context) {
 	se := search.NewESEngine(esc, db)
 
 	// Detect input language
+	log.Debugf("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
 	order := utils.DetectLanguage(q, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
 	// Have a 50ms deadline on the search engine call.
@@ -1264,9 +1267,9 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
 
 		var uids pq.StringArray
 		q := `SELECT array_agg(DISTINCT s.uid)
-		      FROM authors a INNER JOIN authors_sources "as" ON a.id = "as".author_id
-		      INNER JOIN sources s ON "as".source_id = s.id
-		      WHERE a.code = ANY($1)`
+              FROM authors a INNER JOIN authors_sources "as" ON a.id = "as".author_id
+              INNER JOIN sources s ON "as".source_id = s.id
+              WHERE a.code = ANY($1)`
 		err := queries.Raw(exec, q, pq.Array(f.Authors)).QueryRow().Scan(&uids)
 		if err != nil {
 			return err
@@ -1279,11 +1282,11 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
 
 	// find all nested source_uids
 	q := `WITH RECURSIVE rec_sources AS (
-		  SELECT s.id FROM sources s WHERE s.uid = ANY($1)
-		  UNION
-		  SELECT s.id FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
-	      )
-	      SELECT array_agg(distinct id) FROM rec_sources`
+          SELECT s.id FROM sources s WHERE s.uid = ANY($1)
+          UNION
+          SELECT s.id FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
+          )
+          SELECT array_agg(distinct id) FROM rec_sources`
 	var ids pq.Int64Array
 	err := queries.Raw(exec, q, pq.Array(source_uids)).QueryRow().Scan(&ids)
 	if err != nil {
@@ -1308,11 +1311,11 @@ func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter)
 
 	// find all nested tag_ids
 	q := `WITH RECURSIVE rec_tags AS (
-	        SELECT t.id FROM tags t WHERE t.uid = ANY($1)
-	        UNION
-	        SELECT t.id FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
-	      )
-	      SELECT array_agg(distinct id) FROM rec_tags`
+            SELECT t.id FROM tags t WHERE t.uid = ANY($1)
+            UNION
+            SELECT t.id FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
+          )
+          SELECT array_agg(distinct id) FROM rec_tags`
 	var ids pq.Int64Array
 	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
 	if err != nil {

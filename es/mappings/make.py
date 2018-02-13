@@ -197,7 +197,7 @@ UNITS_TEMPLATE = {
         "collections_content_types": {
           "type": "keyword",
         },
-        "film_date": {
+        "effective_date": {
           "type": "date",
           "format": "strict_date",
         },
@@ -238,7 +238,7 @@ UNITS_TEMPLATE = {
   },
 }
 
-CLASSIFICATION_TEMPLATE = {
+CLASSIFICATIONS_TEMPLATE = {
   "mappings": {
     "tags": {
       "_all": {
@@ -311,6 +311,87 @@ CLASSIFICATION_TEMPLATE = {
   },
 }
 
+COLLECTIONS_TEMPLATE = {
+  "settings": {
+    "index": {
+      "analysis": {
+        "analyzer": {
+          "phonetic_analyzer": {
+            "tokenizer": "standard",
+            "filter": [
+              "standard",
+              "lowercase",
+              lambda lang: IsCyrillic(lang, 'icu_transliterate'),
+              "custom_phonetic",
+            ],
+          },
+        },
+        "filter": {
+          "icu_transliterate": lambda lang: IsCyrillic(lang, {
+            "type": "icu_transform",
+            "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
+          }),
+          "custom_phonetic": {
+            "type": "phonetic",
+            "encoder": "beider_morse",
+            "replace": True,
+            "languageset": BeiderMorseLanguageset,
+          },
+        },
+      },
+    },
+  },
+  "mappings": {
+    "collections": {
+      "_all": {
+        "enabled": False,
+      },
+      "properties": {
+        "mdb_uid": {
+          "type": "keyword",
+        },
+        "typed_uids": {
+          "type": "keyword",
+        },
+        "name": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+          },
+        },
+        "description": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+          },
+        },
+        "content_type": {
+          "type": "keyword",
+        },
+        "content_units_content_types": {
+          "type": "keyword",
+        },
+        "effective_date": {
+          "type": "date",
+          "format": "strict_date",
+        },
+        "original_language": {
+          "type": "keyword",
+          "index": False,
+        },
+      },
+    },
+  },
+}
+
 def Resolve(lang, value):
   if isinstance(value, dict):
     l = [(k, Resolve(lang, v)) for (k, v) in value.iteritems()]
@@ -327,4 +408,6 @@ for lang in LANG_GROUPS[ALL]:
   with open('./data/es/mappings/units/units-%s.json' % lang, 'w') as f:
     json.dump(Resolve(lang, UNITS_TEMPLATE), f, indent=4)
   with open('./data/es/mappings/classifications/classifications-%s.json' % lang, 'w') as f:
-    json.dump(Resolve(lang, CLASSIFICATION_TEMPLATE), f, indent=4)
+    json.dump(Resolve(lang, CLASSIFICATIONS_TEMPLATE), f, indent=4)
+  with open('./data/es/mappings/collections/collections-%s.json' % lang, 'w') as f:
+    json.dump(Resolve(lang, COLLECTIONS_TEMPLATE), f, indent=4)
