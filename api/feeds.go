@@ -13,63 +13,11 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/pkg/errors"
 )
 
 func FeedRusZohar(c *gin.Context) {
 	var err error
-
-	db := c.MustGet("MDB_DB").(*sql.DB)
-
-	cur := ContentUnitsRequest{
-		ListRequest{
-			BaseRequest: BaseRequest{
-				Language: consts.LANG_RUSSIAN,
-			},
-			PageNumber: 1,
-			PageSize:   1,
-			OrderBy:    "(properties->>'film_date')::date desc, created_at desc",
-		},
-		IDsFilter{},
-		ContentTypesFilter{
-			ContentTypes: []string{consts.CT_LESSON_PART},
-		},
-		DateRangeFilter{},
-		SourcesFilter{Sources: []string{"AwGBQX2L"}}, // Zohar
-		TagsFilter{},
-		GenresProgramsFilter{},
-		CollectionsFilter{},
-		PublishersFilter{},
-	}
-	item, herr := handleContentUnits(db, cur)
-	if herr != nil {
-		c.AbortWithError(400, herr.Err)
-		return
-	}
-	cu := item.ContentUnits[0]
-	xu, err := mdbmodels.ContentUnits(db,
-		SECURE_PUBLISHED_MOD,
-		qm.Where("uid = ?", cu.ID),
-		qm.Load(
-			"CollectionsContentUnits",
-			"CollectionsContentUnits.Collection",
-		)).
-		One()
-	if err != nil {
-		c.AbortWithError(400, err)
-		return
-	}
-	cuids := make([]int64, 1)
-	cuids[0] = xu.ID
-	fileMap, err := loadCUFiles(db, cuids)
-	if err != nil {
-		c.AbortWithError(400, err)
-		return
-	}
-	files, ok := fileMap[xu.ID]
-	if !ok {
-		c.AbortWithError(400, err)
-		return
-	}
 
 	href := utils.ResolveScheme(c) + "://" + utils.ResolveHost(c) + "/feeds/rus_zohar.rss"
 	feed := &feeds.Feed{
@@ -78,6 +26,51 @@ func FeedRusZohar(c *gin.Context) {
 		Description: "The evening Zohar lesson from Kabbalahmedia Archive",
 		Updated:     time.Now(),
 		Copyright:   "Bnei-Baruch Copyright 2008-2018",
+	}
+
+	db := c.MustGet("MDB_DB").(*sql.DB)
+
+	cur := ContentUnitsRequest{
+		ListRequest: ListRequest{
+			BaseRequest: BaseRequest{
+				Language: consts.LANG_RUSSIAN,
+			},
+			PageNumber: 1,
+			PageSize:   1,
+			OrderBy:    "(properties->>'film_date')::date desc, created_at desc",
+		},
+		ContentTypesFilter: ContentTypesFilter{
+			ContentTypes: []string{consts.CT_LESSON_PART},
+		},
+		SourcesFilter: SourcesFilter{Sources: []string{"AwGBQX2L"}}, // Zohar
+	}
+
+	item, herr := handleContentUnits(db, cur)
+	if herr != nil {
+		herr.Abort(c)
+		return
+	}
+	cu := item.ContentUnits[0]
+	xu, err := mdbmodels.ContentUnits(db, qm.Where("uid = ?", cu.ID)).One()
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// TODO: empty feed
+		} else {
+			NewInternalError(err).Abort(c)
+			return
+		}
+	}
+	cuids := make([]int64, 1)
+	cuids[0] = xu.ID
+	fileMap, err := loadCUFiles(db, cuids)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	files, ok := fileMap[xu.ID]
+	if !ok {
+		NewInternalError(errors.Errorf("Illegal state: unit %s not in file map", cu.ID)).Abort(c)
+		return
 	}
 
 	videoRus := buildHtmlFromFile(consts.LANG_RUSSIAN, consts.MEDIA_MP4, files, cu.Duration)
@@ -89,7 +82,7 @@ func FeedRusZohar(c *gin.Context) {
 		{
 			Title: "Урок по Книге Зоар, " + cu.FilmDate.Format("02.01.2006"),
 			Id:    cu.ID,
-			Link:  &feeds.Link{Href: "https://archive.kbb1.com/lessons/cu/" + cu.ID},
+			Link:  &feeds.Link{Href: "https://archive.kbb1.com/ru/lessons/cu/" + cu.ID},
 			Description: &feeds.Description{Text: fmt.Sprintf(
 				`
 					<div class="title">
@@ -111,7 +104,7 @@ func FeedRusZohar(c *gin.Context) {
 	}
 	content, err := feeds.ToXML(rssFeed)
 	if err != nil {
-		c.AbortWithError(400, err)
+		NewInternalError(err).Abort(c)
 		return
 	}
 	c.String(http.StatusOK, content)
@@ -137,7 +130,7 @@ func buildHtmlFromFile(language string, mimeType string, files []*mdbmodels.File
 }
 
 func convertSizeToMb(size int64) float64 {
-	return float64(size) / 1024 / 1025
+	return float64(size) / 1024 / 1024
 }
 
 func convertDuration(duration float64) string {
