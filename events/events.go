@@ -2,7 +2,6 @@ package events
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/signal"
 
@@ -13,29 +12,16 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
-	"reflect"
-	"runtime"
-	"strings"
 )
 
 var indexer *es.Indexer
+var indexerQueue WorkQueue
 
 func RunListener() {
 	log.SetLevel(log.InfoLevel)
 
-	// routine to run indexer functions from channel
-	go func() {
-		for {
-			a1 := <-ChanIndexFuncs
-			a1.F(a1.S)
-			currentFunc := strings.Split(runtime.FuncForPC(reflect.ValueOf(a1.F).Pointer()).Name(), ".")
-			lastElement := currentFunc[len(currentFunc)-1]
-			log.Infof("running indexer function \"%+v\", with parameter %s\n", lastElement, a1.S)
-			log.Infof("*******number of elements on Indexer channel is %d", len(ChanIndexFuncs))
-		}
-	}()
-
 	var err error
+
 	log.Info("Initialize connections to MDB and elasticsearch")
 	mdb.Init()
 	defer mdb.Shutdown()
@@ -49,24 +35,27 @@ func RunListener() {
 	utils.Must(err)
 	defer sc.Close()
 	log.Printf("Connected to %s clusterID: [%s] clientID: [%s]\n", natsURL, natsClusterID, natsClientID)
-	log.Info("Subscribing to nats")
 
+	log.Info("Subscribing to nats subject")
 	var startOpt stan.SubscriptionOption
 	if viper.GetBool("nats.durable") == true {
 		startOpt = stan.DurableName(viper.GetString("nats.durable-name"))
 	} else {
 		startOpt = stan.DeliverAllAvailable()
 	}
-
 	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt)
 	utils.Must(err)
 
-	// to disbable indexing set this in config
+	log.Info("Initialize search engine indexer")
 	if viper.GetBool("server.fake-indexer") {
 		indexer = es.MakeFakeIndexer()
 	} else {
 		indexer = es.MakeProdIndexer()
 	}
+
+	log.Info("Initialize indexer queue")
+	indexerQueue = new(IndexerQueue)
+	indexerQueue.Init()
 
 	log.Info("Press Ctrl+C to terminate")
 	signalChan := make(chan os.Signal, 1)
@@ -74,9 +63,13 @@ func RunListener() {
 	signal.Notify(signalChan, os.Interrupt)
 	go func() {
 		for range signalChan {
-			fmt.Printf("\nReceived an interrupt, unsubscribing and closing connection...\n\n")
+			log.Info("Closing connection to nats")
 			// Do not unsubscribe a durable on exit, except if asked to.
 			sc.Close()
+
+			log.Info("Closing indexer queue")
+			indexerQueue.Close()
+
 			cleanupDone <- true
 		}
 	}()
@@ -89,15 +82,6 @@ type Data struct {
 	Type    string                 `json:"type"`
 	Payload map[string]interface{} `json:"payload"`
 }
-
-// ChannelForIndexers for putting indexer funcs on nats
-type ChannelForIndexers struct {
-	F func(s string) error
-	S string
-}
-
-// ChanIndexFuncs channel to pass indexer functions
-var ChanIndexFuncs = make(chan ChannelForIndexers, 100000)
 
 type MessageHandler func(d Data)
 
@@ -139,7 +123,6 @@ var messageHandlers = map[string]MessageHandler{
 
 // msgHandler checks message type and calls "eventHandler"
 func msgHandler(msg *stan.Msg) {
-
 	var d Data
 	err := json.Unmarshal(msg.Data, &d)
 	if err != nil {
@@ -153,5 +136,4 @@ func msgHandler(msg *stan.Msg) {
 
 	log.Debugf("Handling %+v", d)
 	handler(d)
-
 }

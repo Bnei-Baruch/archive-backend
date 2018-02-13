@@ -2,9 +2,11 @@ package events
 
 import (
 	"testing"
+
 	log "github.com/Sirupsen/logrus"
-	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type HandlersSuite struct {
@@ -19,12 +21,9 @@ func TestHandlers(t *testing.T) {
 	suite.Run(t, new(HandlersSuite))
 }
 
-func (suite *HandlersSuite) TestApiGet(){
+func (suite *HandlersSuite) TestApiGet() {
 	log.SetLevel(log.DebugLevel)
 	apiType := "unzip"
 	uid := "ZLuOz4ih"
-	err := ApiGet(uid, apiType)
-	if err != nil {
-		suite.T().Errorf("test failed with %+v",err)
-	}
+	AssetsAPI(apiType, uid)
 }
