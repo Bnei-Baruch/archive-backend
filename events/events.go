@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/signal"
+	"runtime/debug"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/nats-io/go-nats-streaming"
@@ -22,7 +23,7 @@ func RunListener() {
 
 	var err error
 
-	log.Info("Initialize connections to MDB and elasticsearch")
+	log.Info("Initialize data stores")
 	mdb.Init()
 	defer mdb.Shutdown()
 
@@ -34,7 +35,6 @@ func RunListener() {
 	sc, err := stan.Connect(natsClusterID, natsClientID, stan.NatsURL(natsURL))
 	utils.Must(err)
 	defer sc.Close()
-	log.Printf("Connected to %s clusterID: [%s] clientID: [%s]\n", natsURL, natsClusterID, natsClientID)
 
 	log.Info("Subscribing to nats subject")
 	var startOpt stan.SubscriptionOption
@@ -57,12 +57,14 @@ func RunListener() {
 	indexerQueue = new(IndexerQueue)
 	indexerQueue.Init()
 
-	log.Info("Press Ctrl+C to terminate")
+	// wait for kill
 	signalChan := make(chan os.Signal, 1)
 	cleanupDone := make(chan bool)
 	signal.Notify(signalChan, os.Interrupt)
 	go func() {
 		for range signalChan {
+			log.Info("Shutting down...")
+
 			log.Info("Closing connection to nats")
 			// Do not unsubscribe a durable on exit, except if asked to.
 			sc.Close()
@@ -73,6 +75,8 @@ func RunListener() {
 			cleanupDone <- true
 		}
 	}()
+
+	log.Info("Press Ctrl+C to terminate")
 	<-cleanupDone
 }
 
@@ -123,6 +127,14 @@ var messageHandlers = map[string]MessageHandler{
 
 // msgHandler checks message type and calls "eventHandler"
 func msgHandler(msg *stan.Msg) {
+	// don't panic !
+	defer func() {
+		if rval := recover(); rval != nil {
+			log.Errorf("msgHandler panic: %v while handling %v", rval, msg)
+			debug.PrintStack()
+		}
+	}()
+
 	var d Data
 	err := json.Unmarshal(msg.Data, &d)
 	if err != nil {
@@ -134,6 +146,6 @@ func msgHandler(msg *stan.Msg) {
 		log.Errorf("Unknown event type: %v", d)
 	}
 
-	log.Debugf("Handling %+v", d)
+	log.Infof("Handling %+v", d)
 	handler(d)
 }

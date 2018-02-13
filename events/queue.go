@@ -9,6 +9,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"runtime/debug"
 )
 
 type WorkQueue interface {
@@ -45,7 +46,7 @@ func (q *IndexerQueue) Init() {
 			case job := <-q.jobs:
 				job.Do()
 				if q.ctx.Err() != nil {
-					log.Info("worker: ctx.Err() != nil")
+					log.Info("worker: context cancelled")
 					return
 				}
 			}
@@ -87,6 +88,14 @@ type IndexerTask struct {
 
 func (t IndexerTask) Do() {
 	clock := time.Now()
+
+	// don't panic !
+	defer func() {
+		if rval := recover(); rval != nil {
+			log.Errorf("IndexerTask.Do panic: %s", rval)
+			debug.PrintStack()
+		}
+	}()
 
 	err := t.F(t.S)
 

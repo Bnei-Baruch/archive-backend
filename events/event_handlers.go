@@ -74,7 +74,7 @@ func ContentUnitPublishedChange(d Data) {
 		ct != consts.CT_ARTICLE
 
 	if createThumbnail {
-		log.Infof("thumbnail %s", unit.UID)
+		log.Infof("thumbnail %s [%s]", unit.UID, ct)
 		AssetsAPI("thumbnail", unit.UID)
 	}
 }
