@@ -20,12 +20,13 @@ func FeedRusZohar(c *gin.Context) {
 	var err error
 
 	href := utils.ResolveScheme(c) + "://" + utils.ResolveHost(c) + "/feeds/rus_zohar.rss"
+	copyright := fmt.Sprintf("Bnei-Baruch Copyright 2008-%d", time.Now().Year())
 	feed := &feeds.Feed{
 		Title:       "Kabbalah Media Zohar Lesson",
 		Link:        &feeds.Link{Href: href},
 		Description: "The evening Zohar lesson from Kabbalahmedia Archive",
 		Updated:     time.Now(),
-		Copyright:   "Bnei-Baruch Copyright 2008-2018",
+		Copyright:   copyright,
 	}
 
 	db := c.MustGet("MDB_DB").(*sql.DB)
@@ -54,11 +55,11 @@ func FeedRusZohar(c *gin.Context) {
 	xu, err := mdbmodels.ContentUnits(db, qm.Where("uid = ?", cu.ID)).One()
 	if err != nil {
 		if err == sql.ErrNoRows {
-			// TODO: empty feed
+			// empty feed
 		} else {
 			NewInternalError(err).Abort(c)
-			return
 		}
+		return
 	}
 	cuids := make([]int64, 1)
 	cuids[0] = xu.ID
@@ -94,6 +95,10 @@ func FeedRusZohar(c *gin.Context) {
 		},
 	}
 
+	createFeed(feed, href, c)
+}
+
+func createFeed(feed *feeds.Feed, href string, c *gin.Context) {
 	rss := &feeds.Rss{Feed: feed}
 	rssFeed := rss.RssFeed()
 	rssFeed.Language = "RUS"
@@ -135,4 +140,19 @@ func convertSizeToMb(size int64) float64 {
 
 func convertDuration(duration float64) string {
 	return time.Unix(int64(duration), 0).UTC().Format("15:04:05")
+}
+
+func FeedRusForLaitmanRu(c *gin.Context) {
+	//var err error
+	//
+	//href := utils.ResolveScheme(c) + "://" + utils.ResolveHost(c) + "/feeds/rus_for_laitman_ru.rss"
+	//feed := &feeds.Feed{
+	//	Title:       "Kabbalah Media Morning Lesson",
+	//	Link:        &feeds.Link{Href: href},
+	//	Description: "The last lesson from Kabbalamedia Archive",
+	//	Updated:     time.Now(),
+	//	Copyright:   "Bnei-Baruch Copyright 2008-" + time.Now().Year(),
+	//}
+	//
+	//db := c.MustGet("MDB_DB").(*sql.DB)
 }
