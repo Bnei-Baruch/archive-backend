@@ -21,6 +21,8 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/home", HomePageHandler)
 	router.GET("/latestLesson", LatestLessonHandler)
 
+	router.GET("/feeds/rus_zohar.rss", FeedRusZohar)
+
 	router.GET("/_recover", func(c *gin.Context) {
 		panic("test recover")
 	})

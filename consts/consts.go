@@ -179,3 +179,10 @@ var FILTERS = map[string]string{
 // ElasticSearch 'es'
 const ES_CLASSIFICATIONS_INDEX = "classifications"
 const ES_UNITS_INDEX = "units"
+
+const (
+	MEDIA_MP4 = "video/mp4"
+	MEDIA_MP3 = "audio/mpeg"
+)
+
+const CDN = "https://cdn.kabbalahmedia.info"
