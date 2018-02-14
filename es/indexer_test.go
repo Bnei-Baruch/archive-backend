@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -17,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -262,19 +262,20 @@ func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (
 			return "", err
 		}
 	}
+    // Remomove only the connection between the collection and this content unit.
 	if removeContentUnitUID != "" {
 		ccus, err := mdbmodels.CollectionsContentUnits(mdb.DB,
 			qm.InnerJoin("content_units on content_units.id = collections_content_units.content_unit_id"),
 			qm.Where("content_units.uid = ?", removeContentUnitUID),
 			qm.And("collection_id = ?", mdbCollection.ID)).All()
 		if err != nil {
-			return "", err
+			return "", errors.Wrap(err, "updateCollection select ccu")
 		}
 		for _, ccu := range ccus {
 			if err := mdbmodels.CollectionsContentUnits(mdb.DB,
 				qm.Where("collection_id = ?", ccu.CollectionID),
 				qm.And("content_unit_id = ?", ccu.ContentUnitID)).DeleteAll(); err != nil {
-				return "", err
+                return "", errors.Wrap(err, "updateCollection delete ccu")
 			}
 		}
 	}
@@ -433,6 +434,34 @@ func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool)
 	return mdbContentUnit.UID, nil
 }
 
+func updateFile(f File, cuUID string) (string, error) {
+    cup, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cuUID)).One()
+    if err != nil {
+        return "", err
+    }
+	var mdbFile mdbmodels.File
+	if f.MDB_UID != "" {
+		fp, err := mdbmodels.Files(mdb.DB, qm.Where("uid = ?", f.MDB_UID)).One()
+		if err != nil {
+			return "", err
+		}
+		mdbFile = *fp
+	} else {
+		mdbFile = mdbmodels.File{
+			UID:    GenerateUID(8),
+		}
+		if err := mdbFile.Insert(mdb.DB); err != nil {
+			return "", err
+		}
+	}
+	mdbFile.Name = f.Name
+	mdbFile.ContentUnitID = null.Int64{cup.ID, true}
+	if err := mdbFile.Update(mdb.DB); err != nil {
+		return "", err
+	}
+	return mdbFile.UID, nil
+}
+
 func deleteCollection(UID string) error {
 	ccu, err := mdbmodels.CollectionsContentUnits(mdb.DB,
 		qm.InnerJoin("collections on collections.id = collections_content_units.collection_id"),
@@ -452,25 +481,41 @@ func deleteContentUnits(UIDs []string) error {
 	for i, v := range UIDs {
 		UIDsI[i] = v
 	}
+	files, err := mdbmodels.Files(mdb.DB,
+		qm.InnerJoin("content_units on content_units.id = files.content_unit_id"),
+		qm.WhereIn("content_units.uid in ?", UIDsI...)).All()
+	if err != nil {
+		return errors.Wrap(err, "deleteContentUnits, Select files.")
+	}
+	fileIdsI := make([]interface{}, len(files))
+	for i, v := range files {
+		fileIdsI[i] = v.ContentUnitID
+	}
+    if len(files) > 0 {
+        if err := mdbmodels.Files(mdb.DB, qm.WhereIn("content_unit_id in ?", fileIdsI...)).DeleteAll(); err != nil {
+            return errors.Wrap(err, "deleteContentUnits, delete files.")
+        }
+    }
 	contentUnitsI18ns, err := mdbmodels.ContentUnitI18ns(mdb.DB,
 		qm.InnerJoin("content_units on content_units.id = content_unit_i18n.content_unit_id"),
 		qm.WhereIn("content_units.uid in ?", UIDsI...)).All()
 	if err != nil {
-		return err
+        return errors.Wrap(err, "deleteContentUnits, select cu i18n.")
 	}
 	idsI := make([]interface{}, len(contentUnitsI18ns))
 	for i, v := range contentUnitsI18ns {
 		idsI[i] = v.ContentUnitID
 	}
-	if err := mdbmodels.ContentUnitI18ns(mdb.DB,
-		qm.WhereIn("content_unit_id in ?", idsI...)).DeleteAll(); err != nil {
-		return err
-	}
+    if len(contentUnitsI18ns) > 0 {
+        if err := mdbmodels.ContentUnitI18ns(mdb.DB, qm.WhereIn("content_unit_id in ?", idsI...)).DeleteAll(); err != nil {
+            return errors.Wrap(err, "deleteContentUnits, delete cu i18n.")
+        }
+    }
 	collectionIds, err := mdbmodels.CollectionsContentUnits(mdb.DB,
 		qm.InnerJoin("content_units on content_units.id = collections_content_units.content_unit_id"),
 		qm.WhereIn("content_units.uid IN ?", UIDsI...)).All()
 	if err != nil {
-		return err
+        return errors.Wrap(err, "deleteContentUnits, select ccu.")
 	}
 	if len(collectionIds) > 0 {
 		collectionIdsI := make([]interface{}, len(collectionIds))
@@ -479,11 +524,11 @@ func deleteContentUnits(UIDs []string) error {
 		}
 		if err := mdbmodels.CollectionsContentUnits(mdb.DB,
 			qm.WhereIn("collection_id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
-			return err
+            return errors.Wrap(err, "deleteContentUnits, delete ccu.")
 		}
 		if err := mdbmodels.Collections(mdb.DB,
 			qm.WhereIn("id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
-			return err
+            return errors.Wrap(err, "deleteContentUnits, delete collections.")
 		}
 	}
 	return mdbmodels.ContentUnits(mdb.DB, qm.WhereIn("uid in ?", UIDsI...)).DeleteAll()
@@ -492,6 +537,13 @@ func deleteContentUnits(UIDs []string) error {
 func (suite *IndexerSuite) ucu(cu ContentUnit, lang string, published bool, secure bool) string {
 	r := require.New(suite.T())
 	uid, err := updateContentUnit(cu, lang, published, secure)
+	r.Nil(err)
+	return uid
+}
+
+func (suite *IndexerSuite) uf(f File, cuUID string) string {
+	r := require.New(suite.T())
+	uid, err := updateFile(f, cuUID)
 	r.Nil(err)
 	return uid
 }
@@ -654,12 +706,8 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 	})
 
 	fmt.Printf("\n\n\nValidate we have successfully added a content type.\n\n")
-	dumpDB("Before DB")
-	dumpIndexes("Before Indexes")
 	c1UID := suite.uc(Collection{ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID, "")
 	r.Nil(indexer.CollectionAdd(c1UID))
-	dumpDB("After DB")
-	dumpIndexes("After Indexes")
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {consts.CT_SPECIAL_LESSON},
@@ -686,8 +734,12 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 	})
 
 	fmt.Printf("\n\n\nUpdate collection, remove one unit and add another.\n\n")
-	suite.uc(Collection{MDB_UID: c3UID} /* Add */, cu2UID /* Remove */, cu1UID)
+	dumpDB("Before DB")
+	suite.uc(Collection{MDB_UID: c3UID}, /* Add */ cu2UID, /* Remove */ cu1UID)
+	dumpDB("After DB")
+	dumpIndexes("Before Indexes")
 	r.Nil(indexer.CollectionUpdate(c3UID))
+	dumpIndexes("After Indexes")
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {consts.CT_DAILY_LESSON},
@@ -811,7 +863,28 @@ func (suite *IndexerSuite) TestCollectionsScopeByContentUnit() {
     cu2UID := suite.ucu(ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
 	suite.uc(Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID, "")
 
+	// dumpDB("TestCollectionsScopeByContentUnit")
+
     uids, err := collectionsScopeByContentUnit(cu1UID)
+    r.Nil(err)
+    r.ElementsMatch([]string{c2UID, c1UID}, uids)
+}
+
+func (suite *IndexerSuite) TestCollectionsScopeByFile() {
+	// Add test for collection for multiple content units.
+	r := require.New(suite.T())
+	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
+	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
+	c1UID := suite.uc(Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID, "")
+    c2UID := suite.uc(Collection{ContentType: consts.CT_CONGRESS}, cu1UID, "")
+    cu2UID := suite.ucu(ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
+	suite.uc(Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID, "")
+    f1UID := suite.uf(File{Name: "f1"}, cu1UID)
+    suite.uf(File{Name: "f2"}, cu1UID)
+    suite.uf(File{Name: "f3"}, cu2UID)
+    suite.uf(File{Name: "f4"}, cu2UID)
+
+    uids, err := collectionsScopeByFile(f1UID)
     r.Nil(err)
     r.ElementsMatch([]string{c2UID, c1UID}, uids)
 }

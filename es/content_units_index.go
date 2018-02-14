@@ -118,6 +118,9 @@ func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) er
 		}
 		uids = append(uids, moreUIDs...)
 	}
+    if len(uids) == 0 {
+        return nil
+    }
 	quoted := make([]string, len(uids))
 	for i, uid := range uids {
 		quoted[i] = fmt.Sprintf("'%s'", uid)

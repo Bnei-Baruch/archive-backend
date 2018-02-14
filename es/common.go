@@ -30,7 +30,6 @@ func uidsToTypedUIDs(t string, uids []string) []string {
 
 func contentUnitsScopeByFile(fileUID string) ([]string, error) {
 	units, err := mdbmodels.ContentUnits(mdb.DB,
-		qm.Select("content_units.uid"),
 		qm.InnerJoin("files AS f on f.content_unit_id = content_units.id"),
 		qm.Where("f.uid = ?", fileUID)).All()
 	if err != nil {
@@ -44,8 +43,19 @@ func contentUnitsScopeByFile(fileUID string) ([]string, error) {
 }
 
 func collectionsScopeByFile(fileUID string) ([]string, error) {
-	panic("collectionsScopeByFile not implemented.")
-	return []string{}, nil
+	collections, err := mdbmodels.Collections(mdb.DB,
+		qm.InnerJoin("collections_content_units AS ccu ON ccu.collection_id = collections.id"),
+		qm.InnerJoin("content_units AS cu ON ccu.content_unit_id = cu.id"),
+		qm.InnerJoin("files AS f on f.content_unit_id = cu.id"),
+		qm.Where("f.uid = ?", fileUID)).All()
+	if err != nil {
+		return nil, err
+	}
+	uids := make([]string, len(collections))
+	for i, collection := range collections {
+		uids[i] = collection.UID
+	}
+	return uids, nil
 }
 
 func contentUnitsScopeByCollection(cUID string) ([]string, error) {
@@ -136,6 +146,15 @@ func dumpDB(title string) error {
 	fmt.Printf("\n\nCOLLECTIONS_CONTENT_UNITS\n-----------\n\n")
 	for i, ccu := range ccus {
 		fmt.Printf("%d: %+v\n", i, ccu)
+	}
+
+	files, err := mdbmodels.Files(mdb.DB).All()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n\nFILES\n-------------\n\n")
+	for i, file := range files {
+		fmt.Printf("%d: %+v\n", i, file)
 	}
 
 	fmt.Printf("\n\n ------------------- END OF %s ------------------- \n\n", title)
