@@ -296,9 +296,9 @@ func removeContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (strin
 			return "", err
 		}
 		mdbContentUnit = *cup
-		} else {
-			return "", errors.New("cu.MDB_UID is empty")
-		}
+	} else {
+		return "", errors.New("cu.MDB_UID is empty")
+	}
 
 	_, err := mdbmodels.FindTag(mdb.DB, tag.ID)
 	if err != nil {
@@ -416,9 +416,9 @@ func removeContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source) 
 			return "", err
 		}
 		mdbContentUnit = *cup
-		} else {
-			return "", errors.New("cu.MDB_UID is empty")
-		}
+	} else {
+		return "", errors.New("cu.MDB_UID is empty")
+	}
 
 	_, err := mdbmodels.FindTag(mdb.DB, src.ID)
 	if err != nil {
@@ -495,7 +495,6 @@ func removeContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (st
 
 	return mdbContentUnit.UID, nil
 }
-
 
 func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
@@ -725,7 +724,7 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *I
 	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 
-	if (len(expectedLangs) > 0) {
+	if len(expectedLangs) > 0 {
 
 		//get langs
 		langs := make([]string, 0)
@@ -741,22 +740,22 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *I
 		r.ElementsMatch(expectedLangs, langs)
 	}
 
-	
-		//get transcript
-		transcriptLengths := make([]int, 0)
-		for _, hit := range res.Hits.Hits {
-			var cu ContentUnit
-			json.Unmarshal(*hit.Source, &cu)
-			transcriptLengths = append(transcriptLengths, len(cu.Transcript))
-		}
+	//get transcript
+	transcriptLengths := make([]int, 0)
+	for _, hit := range res.Hits.Hits {
+		var cu ContentUnit
+		json.Unmarshal(*hit.Source, &cu)
+		//***
+		fmt.Printf("\n\n TRANSCRIPT: %+v \n\n", cu.Transcript)
+		transcriptLengths = append(transcriptLengths, len(cu.Transcript))
+	}
 
-		if (expectedTranscriptLength.Valid) {
-			r.Contains(transcriptLengths,expectedTranscriptLength.Int)
-		} else {
-			r.Equal(len(transcriptLengths), 0)
-		}
+	if expectedTranscriptLength.Valid {
+		r.Contains(transcriptLengths, expectedTranscriptLength.Int)
+	} else {
+		r.Equal(len(transcriptLengths), 0)
+	}
 }
-
 
 func (suite *IndexerSuite) validateMaps(e map[string][]string, a map[string][]string) {
 	r := require.New(suite.T())
@@ -827,12 +826,12 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 	})
 
 	fmt.Printf("\n\n\nValidate we have successfully added a content type.\n\n")
-	dumpDB("Before DB")
-	dumpIndexes("Before Indexes")
+	//dumpDB("Before DB")
+	//dumpIndexes("Before Indexes")
 	c1UID := suite.uc(Collection{ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID, "")
 	r.Nil(indexer.CollectionAdd(c1UID))
-	dumpDB("After DB")
-	dumpIndexes("After Indexes")
+	//dumpDB("After DB")
+	//dumpIndexes("After Indexes")
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {consts.CT_SPECIAL_LESSON},
@@ -878,6 +877,12 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 
 func (suite *IndexerSuite) TestContentUnitsIndex() {
 	fmt.Printf("\n\n\n--- TEST CONTENT UNITS INDEX ---\n\n\n")
+
+	fmt.Println("Replace docx-folder with temp. path.")
+	originalDocxPath := viper.Get("elasticsearch.docx-folder")
+	testingsDocxPath := viper.Get("test.test-docx-folder")
+	viper.Set("elasticsearch.docx-folder", testingsDocxPath)
+
 	r := require.New(suite.T())
 	fmt.Printf("\n\n\nAdding content units.\n\n")
 	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
@@ -900,20 +905,14 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	fmt.Println("Validate we have 2 searchable content units.")
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
 
-	// *** Yuri ***
-
 	fmt.Println("Add a file to content unit and validate.")
-	originalDocxPath := viper.Get("docx-folder")
-	testingsDocxPath := viper.Get("test-docx-folder")	
-	viper.Set("docx-folder", testingsDocxPath)
-	file := mdbmodels.File{ID: 1, UID: "xxxxxxxx", Language: null.String{"he", true}, Secure: 0, Published: true }
+	file := mdbmodels.File{ID: 1, Name: "sample.doc", UID: "xxxxxxxx", Language: null.String{"he", true}, Secure: 0, Published: true}
 	suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, file, true)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	suite.validateContentUnitFiles(indexNameEn, indexer, []string{"he"}, null.Int{109, true})
 	fmt.Println("Remove a file from content unit and validate.")
 	suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, file, false)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	viper.Set("docx-folder", originalDocxPath)
 
 	fmt.Println("Add a tag to content unit and validate.")
 	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, true)
@@ -927,6 +926,8 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, false)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L3jMWyce"})
+	fmt.Println("Remove the second tag.")
+	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, true)
 
 	fmt.Println("Add a source to content unit and validate.")
 	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, UID: "ALlyoveA"}, true)
@@ -940,10 +941,8 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, UID: "L2jMWyce"}, false)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	suite.validateContentUnitSources(indexNameEn, indexer, []string{"1vCj4qN9"})
-
-	//TBD remove created sources and tags
-
-	// ************
+	fmt.Println("Remove the second tag.")
+	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, UID: "1vCj4qN9"}, true)
 
 	fmt.Println("Make content unit not published and validate.")
 	//dumpDB("TestContentUnitsIndex, BeforeDB")
@@ -994,6 +993,9 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	r.Nil(deleteContentUnits(UIDs))
 	r.Nil(indexer.ReindexAll())
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
+
+	fmt.Println("Restore docx-folder path to original.")
+	viper.Set("docx-folder", originalDocxPath)
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())
