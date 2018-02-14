@@ -800,3 +800,18 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())
 }
+
+func (suite *IndexerSuite) TestCollectionsScopeByContentUnit() {
+	// Add test for collection for multiple content units.
+	r := require.New(suite.T())
+	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
+	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
+	c1UID := suite.uc(Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID, "")
+    c2UID := suite.uc(Collection{ContentType: consts.CT_CONGRESS}, cu1UID, "")
+    cu2UID := suite.ucu(ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
+	suite.uc(Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID, "")
+
+    uids, err := collectionsScopeByContentUnit(cu1UID)
+    r.Nil(err)
+    r.ElementsMatch([]string{c2UID, c1UID}, uids)
+}

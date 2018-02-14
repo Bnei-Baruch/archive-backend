@@ -64,8 +64,18 @@ func contentUnitsScopeByCollection(cUID string) ([]string, error) {
 }
 
 func collectionsScopeByContentUnit(cuUID string) ([]string, error) {
-	panic("collectionsScopeByContentUnit not implemented.")
-	return []string{}, nil
+	collections, err := mdbmodels.Collections(mdb.DB,
+		qm.InnerJoin("collections_content_units AS ccu ON ccu.collection_id = collections.id"),
+		qm.InnerJoin("content_units AS cu ON ccu.content_unit_id = cu.id"),
+		qm.Where("cu.uid = ?", cuUID)).All()
+	if err != nil {
+		return nil, err
+	}
+	uids := make([]string, len(collections))
+	for i, collection := range collections {
+		uids[i] = collection.UID
+	}
+	return uids, nil
 }
 
 func is(slice interface{}) []interface{} {
