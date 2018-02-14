@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/nats-io/go-nats-streaming"
@@ -145,6 +146,10 @@ func msgHandler(msg *stan.Msg) {
 	if !ok {
 		log.Errorf("Unknown event type: %v", d)
 	}
+
+	// DIRTY HACK !!!
+	// delay handler until our read replica will be synced (hopefully)
+	time.Sleep(500 * time.Millisecond)
 
 	log.Infof("Handling %+v", d)
 	handler(d)
