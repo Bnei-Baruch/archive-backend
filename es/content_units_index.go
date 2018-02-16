@@ -261,9 +261,9 @@ func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	//pythonPath := "C:\\Python27\\python.exe"
 	//pscriptPath := "C:\\Users\\Yuri\\go\\src\\github.com\\Bnei-Baruch\\archive-backend\\es\\parse_docs.py" //"es/parse_docs.py"
 	//cmd := exec.Command(pythonPath, pscriptPath, docxPath)
-	
+
 	//for linux:
-	cmd := exec.Command(pscriptPath, docxPath)
+	cmd := exec.Command("es/parse_docs.py", docxPath)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
