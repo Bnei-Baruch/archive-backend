@@ -70,7 +70,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 
 			sRes := (*elastic.SearchResult)(nil)
 			for _, r := range mr.Responses {
-				if r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0 {
+				if r != nil && len(r.Suggest) > 0 {
 					sRes = r
 					break
 				}

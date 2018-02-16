@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
-	"strings"
 
 	"github.com/volatiletech/sqlboiler/queries/qm"
 
@@ -86,26 +84,6 @@ func collectionsScopeByContentUnit(cuUID string) ([]string, error) {
 		uids[i] = collection.UID
 	}
 	return uids, nil
-}
-
-func is(slice interface{}) []interface{} {
-	s := reflect.ValueOf(slice)
-	if s.Kind() != reflect.Slice {
-		panic("InterfaceSlice() given a non-slice type")
-	}
-	ret := make([]interface{}, s.Len())
-	for i := 0; i < s.Len(); i++ {
-		ret[i] = s.Index(i).Interface()
-	}
-	return ret
-}
-
-func Pprint(l interface{}) string {
-	var s []string
-	for _, i := range is(l) {
-		s = append(s, fmt.Sprintf("%+v", i))
-	}
-	return strings.Join(s, "\n\t")
 }
 
 // DEBUG FUNCTIONS

@@ -8,8 +8,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/volatiletech/sqlboiler/queries"
 
-	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
 )
 
 type IndexData struct {
@@ -199,7 +199,7 @@ func (indexData *IndexData) rowsToIdToUIDsAndValues(rows *sql.Rows) (map[string]
 }
 
 func (indexData *IndexData) loadTranscripts(sqlScope string) (map[string]map[string][]string, error) {
-    kmID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID
+	kmID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID
 	rows, err := queries.Raw(mdb.DB, fmt.Sprintf(`
 SELECT
     f.uid,

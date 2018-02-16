@@ -39,17 +39,17 @@ type ContentUnitsIndex struct {
 }
 
 func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
-    return cu.Secure == 0 && cu.Published && !utils.Int64InSlice(cu.TypeID, []int64{
-        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
-    })
+	return cu.Secure == 0 && cu.Published && !utils.Int64InSlice(cu.TypeID, []int64{
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
+	})
 }
 
 func defaultContentUnitSql() string {
-    fmt.Printf("%+v\n", mdb.CONTENT_TYPE_REGISTRY.ByName)
+	fmt.Printf("%+v\n", mdb.CONTENT_TYPE_REGISTRY.ByName)
 	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d)",
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID)
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID)
 }
 
 func (index *ContentUnitsIndex) ReindexAll() error {
@@ -118,9 +118,9 @@ func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) er
 		}
 		uids = append(uids, moreUIDs...)
 	}
-    if len(uids) == 0 {
-        return nil
-    }
+	if len(uids) == 0 {
+		return nil
+	}
 	quoted := make([]string, len(uids))
 	for i, uid := range uids {
 		quoted[i] = fmt.Sprintf("'%s'", uid)

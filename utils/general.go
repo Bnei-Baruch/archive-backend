@@ -1,5 +1,11 @@
 package utils
 
+import (
+	"fmt"
+	"reflect"
+	"strings"
+)
+
 // panic if err != nil
 func Must(err error) {
 	if err != nil {
@@ -56,4 +62,24 @@ func Int64InSlice(i int64, s []int64) bool {
 		}
 	}
 	return false
+}
+
+func is(slice interface{}) []interface{} {
+	s := reflect.ValueOf(slice)
+	if s.Kind() != reflect.Slice {
+		panic("InterfaceSlice() given a non-slice type")
+	}
+	ret := make([]interface{}, s.Len())
+	for i := 0; i < s.Len(); i++ {
+		ret[i] = s.Index(i).Interface()
+	}
+	return ret
+}
+
+func Pprint(l interface{}) string {
+	var s []string
+	for _, i := range is(l) {
+		s = append(s, fmt.Sprintf("%+v", i))
+	}
+	return strings.Join(s, "\n\t")
 }

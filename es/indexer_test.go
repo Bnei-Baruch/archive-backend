@@ -262,7 +262,7 @@ func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (
 			return "", err
 		}
 	}
-    // Remomove only the connection between the collection and this content unit.
+	// Remomove only the connection between the collection and this content unit.
 	if removeContentUnitUID != "" {
 		ccus, err := mdbmodels.CollectionsContentUnits(mdb.DB,
 			qm.InnerJoin("content_units on content_units.id = collections_content_units.content_unit_id"),
@@ -275,7 +275,7 @@ func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (
 			if err := mdbmodels.CollectionsContentUnits(mdb.DB,
 				qm.Where("collection_id = ?", ccu.CollectionID),
 				qm.And("content_unit_id = ?", ccu.ContentUnitID)).DeleteAll(); err != nil {
-                return "", errors.Wrap(err, "updateCollection delete ccu")
+				return "", errors.Wrap(err, "updateCollection delete ccu")
 			}
 		}
 	}
@@ -435,10 +435,10 @@ func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool)
 }
 
 func updateFile(f File, cuUID string) (string, error) {
-    cup, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cuUID)).One()
-    if err != nil {
-        return "", err
-    }
+	cup, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cuUID)).One()
+	if err != nil {
+		return "", err
+	}
 	var mdbFile mdbmodels.File
 	if f.MDB_UID != "" {
 		fp, err := mdbmodels.Files(mdb.DB, qm.Where("uid = ?", f.MDB_UID)).One()
@@ -448,7 +448,7 @@ func updateFile(f File, cuUID string) (string, error) {
 		mdbFile = *fp
 	} else {
 		mdbFile = mdbmodels.File{
-			UID:    GenerateUID(8),
+			UID: GenerateUID(8),
 		}
 		if err := mdbFile.Insert(mdb.DB); err != nil {
 			return "", err
@@ -491,31 +491,31 @@ func deleteContentUnits(UIDs []string) error {
 	for i, v := range files {
 		fileIdsI[i] = v.ContentUnitID
 	}
-    if len(files) > 0 {
-        if err := mdbmodels.Files(mdb.DB, qm.WhereIn("content_unit_id in ?", fileIdsI...)).DeleteAll(); err != nil {
-            return errors.Wrap(err, "deleteContentUnits, delete files.")
-        }
-    }
+	if len(files) > 0 {
+		if err := mdbmodels.Files(mdb.DB, qm.WhereIn("content_unit_id in ?", fileIdsI...)).DeleteAll(); err != nil {
+			return errors.Wrap(err, "deleteContentUnits, delete files.")
+		}
+	}
 	contentUnitsI18ns, err := mdbmodels.ContentUnitI18ns(mdb.DB,
 		qm.InnerJoin("content_units on content_units.id = content_unit_i18n.content_unit_id"),
 		qm.WhereIn("content_units.uid in ?", UIDsI...)).All()
 	if err != nil {
-        return errors.Wrap(err, "deleteContentUnits, select cu i18n.")
+		return errors.Wrap(err, "deleteContentUnits, select cu i18n.")
 	}
 	idsI := make([]interface{}, len(contentUnitsI18ns))
 	for i, v := range contentUnitsI18ns {
 		idsI[i] = v.ContentUnitID
 	}
-    if len(contentUnitsI18ns) > 0 {
-        if err := mdbmodels.ContentUnitI18ns(mdb.DB, qm.WhereIn("content_unit_id in ?", idsI...)).DeleteAll(); err != nil {
-            return errors.Wrap(err, "deleteContentUnits, delete cu i18n.")
-        }
-    }
+	if len(contentUnitsI18ns) > 0 {
+		if err := mdbmodels.ContentUnitI18ns(mdb.DB, qm.WhereIn("content_unit_id in ?", idsI...)).DeleteAll(); err != nil {
+			return errors.Wrap(err, "deleteContentUnits, delete cu i18n.")
+		}
+	}
 	collectionIds, err := mdbmodels.CollectionsContentUnits(mdb.DB,
 		qm.InnerJoin("content_units on content_units.id = collections_content_units.content_unit_id"),
 		qm.WhereIn("content_units.uid IN ?", UIDsI...)).All()
 	if err != nil {
-        return errors.Wrap(err, "deleteContentUnits, select ccu.")
+		return errors.Wrap(err, "deleteContentUnits, select ccu.")
 	}
 	if len(collectionIds) > 0 {
 		collectionIdsI := make([]interface{}, len(collectionIds))
@@ -524,11 +524,11 @@ func deleteContentUnits(UIDs []string) error {
 		}
 		if err := mdbmodels.CollectionsContentUnits(mdb.DB,
 			qm.WhereIn("collection_id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
-            return errors.Wrap(err, "deleteContentUnits, delete ccu.")
+			return errors.Wrap(err, "deleteContentUnits, delete ccu.")
 		}
 		if err := mdbmodels.Collections(mdb.DB,
 			qm.WhereIn("id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
-            return errors.Wrap(err, "deleteContentUnits, delete collections.")
+			return errors.Wrap(err, "deleteContentUnits, delete collections.")
 		}
 	}
 	return mdbmodels.ContentUnits(mdb.DB, qm.WhereIn("uid in ?", UIDsI...)).DeleteAll()
@@ -735,7 +735,7 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 
 	fmt.Printf("\n\n\nUpdate collection, remove one unit and add another.\n\n")
 	dumpDB("Before DB")
-	suite.uc(Collection{MDB_UID: c3UID}, /* Add */ cu2UID, /* Remove */ cu1UID)
+	suite.uc(Collection{MDB_UID: c3UID} /* Add */, cu2UID /* Remove */, cu1UID)
 	dumpDB("After DB")
 	dumpIndexes("Before Indexes")
 	r.Nil(indexer.CollectionUpdate(c3UID))
@@ -859,15 +859,15 @@ func (suite *IndexerSuite) TestCollectionsScopeByContentUnit() {
 	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
 	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
 	c1UID := suite.uc(Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID, "")
-    c2UID := suite.uc(Collection{ContentType: consts.CT_CONGRESS}, cu1UID, "")
-    cu2UID := suite.ucu(ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
+	c2UID := suite.uc(Collection{ContentType: consts.CT_CONGRESS}, cu1UID, "")
+	cu2UID := suite.ucu(ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
 	suite.uc(Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID, "")
 
 	// dumpDB("TestCollectionsScopeByContentUnit")
 
-    uids, err := collectionsScopeByContentUnit(cu1UID)
-    r.Nil(err)
-    r.ElementsMatch([]string{c2UID, c1UID}, uids)
+	uids, err := collectionsScopeByContentUnit(cu1UID)
+	r.Nil(err)
+	r.ElementsMatch([]string{c2UID, c1UID}, uids)
 }
 
 func (suite *IndexerSuite) TestCollectionsScopeByFile() {
@@ -876,15 +876,15 @@ func (suite *IndexerSuite) TestCollectionsScopeByFile() {
 	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
 	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
 	c1UID := suite.uc(Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID, "")
-    c2UID := suite.uc(Collection{ContentType: consts.CT_CONGRESS}, cu1UID, "")
-    cu2UID := suite.ucu(ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
+	c2UID := suite.uc(Collection{ContentType: consts.CT_CONGRESS}, cu1UID, "")
+	cu2UID := suite.ucu(ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
 	suite.uc(Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID, "")
-    f1UID := suite.uf(File{Name: "f1"}, cu1UID)
-    suite.uf(File{Name: "f2"}, cu1UID)
-    suite.uf(File{Name: "f3"}, cu2UID)
-    suite.uf(File{Name: "f4"}, cu2UID)
+	f1UID := suite.uf(File{Name: "f1"}, cu1UID)
+	suite.uf(File{Name: "f2"}, cu1UID)
+	suite.uf(File{Name: "f3"}, cu2UID)
+	suite.uf(File{Name: "f4"}, cu2UID)
 
-    uids, err := collectionsScopeByFile(f1UID)
-    r.Nil(err)
-    r.ElementsMatch([]string{c2UID, c1UID}, uids)
+	uids, err := collectionsScopeByFile(f1UID)
+	r.Nil(err)
+	r.ElementsMatch([]string{c2UID, c1UID}, uids)
 }
