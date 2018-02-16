@@ -24,3 +24,4 @@ ssh archive@app.archive.bbdomain.org "ln -sf /sites/archive-backend/archive-back
 
 echo "Restarting application"
 ssh archive@app.archive.bbdomain.org "supervisorctl restart archive"
+ssh archive@app.archive.bbdomain.org "supervisorctl restart events"
