@@ -23,6 +23,7 @@ func SetupRoutes(router *gin.Engine) {
 
 	router.GET("/feeds/rus_zohar.rss", FeedRusZohar)
 	router.GET("/feeds/rus_for_laitman_ru.rss", FeedRusForLaitmanRu)
+	router.GET("/feeds/morning_lesson.rss", FeedMorningLesson)
 
 	router.GET("/_recover", func(c *gin.Context) {
 		panic("test recover")
