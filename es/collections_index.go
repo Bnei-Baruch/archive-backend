@@ -103,18 +103,18 @@ func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) err
 		}
 		uids = append(uids, moreUIDs...)
 	}
-    if len(uids) == 0 {
-        return nil
-    }
+	if len(uids) == 0 {
+		return nil
+	}
 	quoted := make([]string, len(uids))
 	for i, uid := range uids {
 		quoted[i] = fmt.Sprintf("'%s'", uid)
 	}
 	sqlScope = fmt.Sprintf("%s AND c.uid IN (%s)", sqlScope, strings.Join(quoted, ","))
-    if err := index.addToIndexSql(sqlScope); err != nil {
-        return errors.Wrap(err, "collections index addToIndex addToIndexSql")
-    }
-    return nil
+	if err := index.addToIndexSql(sqlScope); err != nil {
+		return errors.Wrap(err, "collections index addToIndex addToIndexSql")
+	}
+	return nil
 }
 
 func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
