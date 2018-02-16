@@ -33,6 +33,17 @@ func NewESEngine(esc *elastic.Client, db *sql.DB) *ESEngine {
 	return &ESEngine{esc: esc, mdb: db}
 }
 
+func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
+	for _, v := range ss {
+		for _, s := range v {
+			if len(s.Options) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}, error) {
 	// figure out index names from language order
 	indices := make([]string, len(query.LanguageOrder))
@@ -70,7 +81,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 
 			sRes := (*elastic.SearchResult)(nil)
 			for _, r := range mr.Responses {
-				if r != nil && len(r.Suggest) > 0 {
+				if r != nil && SuggestionHasOptions(r.Suggest) {
 					sRes = r
 					break
 				}
