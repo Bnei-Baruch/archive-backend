@@ -39,17 +39,17 @@ type ContentUnitsIndex struct {
 }
 
 func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
-    return cu.Secure == 0 && cu.Published && !utils.Int64InSlice(cu.TypeID, []int64{
-        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
-    })
+	return cu.Secure == 0 && cu.Published && !utils.Int64InSlice(cu.TypeID, []int64{
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
+	})
 }
 
 func defaultContentUnitSql() string {
-    fmt.Printf("%+v\n", mdb.CONTENT_TYPE_REGISTRY.ByName)
+	fmt.Printf("%+v\n", mdb.CONTENT_TYPE_REGISTRY.ByName)
 	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d)",
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-        mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID)
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID)
 }
 
 func (index *ContentUnitsIndex) ReindexAll() error {
@@ -252,16 +252,26 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
 	docxPath := path.Join(index.docFolder, docxFilename)
+	log.Infof("Path of .docx file is: %s", docxPath)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
 		return "", nil
 	}
-	cmd := exec.Command("es/parse_docs.py", docxPath)
+
+	//for windows:
+	//pythonPath := "C:\\Python27\\python.exe"
+	//pscriptPath := "C:\\Users\\Yuri\\go\\src\\github.com\\Bnei-Baruch\\archive-backend\\es\\parse_docs.py" //"es/parse_docs.py"
+	//cmd := exec.Command(pythonPath, pscriptPath, docxPath)
+	
+	//for linux:
+	cmd := exec.Command(pscriptPath, docxPath)
+
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
+		//log.Errorf("DOCX PARSING ERROR: %s", err)
 		log.Warnf("parse_docs.py %s\nstdout: %s\nstderr: %s", docxPath, stdout.String(), stderr.String())
 		return "", errors.Wrapf(err, "cmd.Run %s", uid)
 	}
@@ -347,6 +357,9 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
 					unit.Transcript, err = index.parseDocx(val[0])
+					//if len(unit.Transcript) > 0 {
+					//	log.Infof("Assigned unit %s. Transcript is: %s", unit.MDB_UID, unit.Transcript[0:100])
+					//}
 					unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
 					if err != nil {
 						log.Warnf("Error parsing docx: %s", val[0])
@@ -364,6 +377,9 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
+		//if len(v.Transcript) > 0 {
+		//	log.Infof("index: %s UID: %s, v.Transcript: %s", name, v.MDB_UID, v.Transcript[0:100])
+		//}
 		resp, err := mdb.ESC.Index().
 			Index(name).
 			Type("content_units").
