@@ -44,79 +44,7 @@ func ConvertDocx() {
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
 
-func convertDocx() error {
-	var workersWG sync.WaitGroup
-	docsCH := make(chan []string)
-	workersWG.Add(1)
-	var loadErr error
-	var total uint64
-	go func(wg *sync.WaitGroup) {
-		defer close(docsCH)
-		defer wg.Done()
-		docs, err := loadDocs()
-		if err != nil {
-			loadErr = errors.Wrap(err, "Fetch docs from mdb")
-			return
-		}
-		log.Infof("%d docs in MDB", len(docs))
-		total = uint64(len(docs))
-		for _, doc := range docs {
-			if len(doc) > 0 {
-				docsCH <- doc
-			} else {
-				loadErr = errors.New("Empty doc, skipping. Should not happen.")
-				return
-			}
-		}
-	}(&workersWG)
-
-	var done uint64 = 0
-	var errs [5]error
-	for i := 0; i < 5; i++ {
-		workersWG.Add(1)
-		go func(wg *sync.WaitGroup, i int) {
-			defer wg.Done()
-			for {
-				var docBatch [][]string
-				for j := 0; j < 50; j++ {
-					doc := <-docsCH
-					if len(doc) > 0 {
-						docBatch = append(docBatch, doc)
-					} else {
-						break
-					}
-				}
-				if len(docBatch) > 0 {
-					err := downloadAndConvert(docBatch)
-					atomic.AddUint64(&done, uint64(len(docBatch)))
-					if err != nil {
-						errs[i] = err
-						return
-					}
-					log.Infof("Done %d / %d", done, total)
-				} else {
-					log.Infof("Worker %d done.", i)
-					return
-				}
-			}
-		}(&workersWG, i)
-	}
-
-	workersWG.Wait()
-	if loadErr != nil {
-		return loadErr
-	}
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-var sofficeMutex = &sync.Mutex{}
-
-func downloadAndConvert(docBatch [][]string) error {
+func DownloadAndConvert(docBatch [][]string) error {
 	var convertDocs []string
 	for _, docSource := range docBatch {
 		uid := docSource[0]
@@ -180,6 +108,7 @@ func downloadAndConvert(docBatch [][]string) error {
 		err := cmd.Run()
 		sofficeMutex.Unlock()
 		if _, ok := err.(*exec.ExitError); err != nil || ok {
+			log.Errorf("soffice is '%s'. Error: %s", soffice, err)
 			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
 			return errors.Wrapf(err, "Execute soffice")
 		}
@@ -187,6 +116,28 @@ func downloadAndConvert(docBatch [][]string) error {
 
 	return nil
 }
+
+func LoadDoc(fileUID string) (string, error) {
+
+	var fileName string
+
+	err := queries.Raw(mdb.DB, `
+SELECT name
+FROM files
+WHERE name ~ '.docx?' AND
+    language NOT IN ('zz', 'xx') AND
+    content_unit_id IS NOT NULL AND
+	secure=0 AND published IS TRUE
+	AND uid = $1;`, fileUID).QueryRow().Scan(&fileName)
+
+	if err != nil {
+		return "", errors.Wrap(err, "Load doc")
+	}
+
+	return fileName, nil
+}
+
+var sofficeMutex = &sync.Mutex{}
 
 func loadDocs() ([][]string, error) {
 	rows, err := queries.Raw(mdb.DB, `
@@ -222,4 +173,74 @@ func loadMap(rows *sql.Rows) ([][]string, error) {
 	}
 
 	return m, nil
+}
+
+func convertDocx() error {
+	var workersWG sync.WaitGroup
+	docsCH := make(chan []string)
+	workersWG.Add(1)
+	var loadErr error
+	var total uint64
+	go func(wg *sync.WaitGroup) {
+		defer close(docsCH)
+		defer wg.Done()
+		docs, err := loadDocs()
+		if err != nil {
+			loadErr = errors.Wrap(err, "Fetch docs from mdb")
+			return
+		}
+		log.Infof("%d docs in MDB", len(docs))
+		total = uint64(len(docs))
+		for _, doc := range docs {
+			if len(doc) > 0 {
+				docsCH <- doc
+			} else {
+				loadErr = errors.New("Empty doc, skipping. Should not happen.")
+				return
+			}
+		}
+	}(&workersWG)
+
+	var done uint64 = 0
+	var errs [5]error
+	for i := 0; i < 5; i++ {
+		workersWG.Add(1)
+		go func(wg *sync.WaitGroup, i int) {
+			defer wg.Done()
+			for {
+				var docBatch [][]string
+				for j := 0; j < 50; j++ {
+					doc := <-docsCH
+					if len(doc) > 0 {
+						docBatch = append(docBatch, doc)
+					} else {
+						break
+					}
+				}
+				if len(docBatch) > 0 {
+					err := DownloadAndConvert(docBatch)
+					atomic.AddUint64(&done, uint64(len(docBatch)))
+					if err != nil {
+						errs[i] = err
+						return
+					}
+					log.Infof("Done %d / %d", done, total)
+				} else {
+					log.Infof("Worker %d done.", i)
+					return
+				}
+			}
+		}(&workersWG, i)
+	}
+
+	workersWG.Wait()
+	if loadErr != nil {
+		return loadErr
+	}
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

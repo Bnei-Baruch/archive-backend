@@ -906,11 +906,11 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
 
 	fmt.Println("Add a file to content unit and validate.")
-	file := mdbmodels.File{ID: 1, Name: "sample.doc", UID: "xxxxxxxx", Language: null.String{"he", true}, Secure: 0, Published: true}
+	file := mdbmodels.File{ID: 1, Name: "heb_o_rav_2017-05-25_lesson_achana_n1_p0.doc", UID: "dEvgPVpr", Language: null.String{"he", true}, Secure: 0, Published: true}
 	suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	//dumpIndexes("dumpIndexes after adding transcript")
-	suite.validateContentUnitFiles(indexNameHe, indexer, []string{"he"}, null.Int{16306, true})
+	suite.validateContentUnitFiles(indexNameHe, indexer, []string{"he"}, null.Int{1067, true})
 	fmt.Println("Remove a file from content unit and validate.")
 	suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, false)
 

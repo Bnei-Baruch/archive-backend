@@ -257,10 +257,11 @@ func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 		return "", nil
 	}
 
+	//TBD add windows \ linux flag and python script path to config.toml
 	//for windows:
-	//pythonPath := "C:\\Python27\\python.exe"
-	//pscriptPath := "C:\\Users\\Yuri\\go\\src\\github.com\\Bnei-Baruch\\archive-backend\\es\\parse_docs.py" //"es/parse_docs.py"
-	//cmd := exec.Command(pythonPath, pscriptPath, docxPath)
+	/*pythonPath := "C:\\Python27\\python.exe"
+	pscriptPath := "C:\\Users\\Yuri\\go\\src\\github.com\\Bnei-Baruch\\archive-backend\\es\\parse_docs.py" //"es/parse_docs.py"
+	cmd := exec.Command(pythonPath, pscriptPath, docxPath)*/
 
 	//for linux:
 	cmd := exec.Command("es/parse_docs.py", docxPath)
@@ -356,17 +357,33 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 			if byLang, ok := index.indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
-					unit.Transcript, err = index.parseDocx(val[0])
-					//if len(unit.Transcript) > 0 {
-					//	log.Infof("Assigned unit %s. Transcript is: %s", unit.MDB_UID, unit.Transcript[0:100])
-					//}
-					unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
-					if err != nil {
-						log.Warnf("Error parsing docx: %s", val[0])
+					soffice = viper.GetString("elasticsearch.soffice-bin")
+					if soffice == "" {
+						panic("Soffice binary should be set in config.")
 					}
-					// if err == nil && unit.Transcript != "" {
-					// 	atomic.AddUint64(&withTranscript, 1)
-					// }
+					docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
+					utils.Must(os.MkdirAll(docFolder, 0777))
+					fileName, err := LoadDoc(val[0])
+					if err != nil {
+						log.Warnf("Error retrieving doc from DB: %s", val[0])
+					} else {
+						err = DownloadAndConvert([][]string{[]string{val[0], fileName}})
+						if err != nil {
+							log.Warnf("Error downloading or converting doc: %s", val[0])
+						} else {
+							unit.Transcript, err = index.parseDocx(val[0])
+							//if len(unit.Transcript) > 0 {
+							//	log.Infof("Assigned unit %s. Transcript is: %s", unit.MDB_UID, unit.Transcript[0:100])
+							//}
+							unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
+							if err != nil {
+								log.Warnf("Error parsing docx: %s", val[0])
+							}
+							// if err == nil && unit.Transcript != "" {
+							// 	atomic.AddUint64(&withTranscript, 1)
+							// }
+						}
+					}
 				}
 			}
 
