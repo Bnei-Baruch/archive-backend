@@ -126,7 +126,7 @@ func (suite *EngineSuite) TestJoinResponsesTakeLargerFirst() {
 func (suite *EngineSuite) TestJoinResponsesInterleave() {
 	fmt.Printf("\n------ TestJoinResponsesInterleave ------\n\n")
 	r := require.New(suite.T())
-    d := parse("1111-11-11")
+	d := parse("1111-11-11")
 	r1 := SearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
 	r2 := SearchResult([]SRR{SRR{2.5, "1", d}, SRR{2.2, "2", d}, SRR{1.6, "3", d}, SRR{1.0, "4", d}, SRR{0.7, "5", d}})
 	r3, err := joinResponses(r1, r2, consts.SORT_BY_RELEVANCE, 0, 4)
@@ -143,7 +143,7 @@ func (suite *EngineSuite) TestJoinResponsesInterleave() {
 func (suite *EngineSuite) TestJoinResponsesInterleaveSecondPage() {
 	fmt.Printf("\n------ TestJoinResponsesInterleaveSecondPage ------\n\n")
 	r := require.New(suite.T())
-    d := parse("1111-11-11")
+	d := parse("1111-11-11")
 	r1 := SearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
 	r2 := SearchResult([]SRR{SRR{2.5, "1", d}, SRR{2.2, "2", d}, SRR{1.6, "3", d}, SRR{1.0, "4", d}, SRR{0.7, "5", d}})
 	r3, err := joinResponses(r1, r2, consts.SORT_BY_RELEVANCE, 4, 4)
@@ -160,7 +160,7 @@ func (suite *EngineSuite) TestJoinResponsesInterleaveSecondPage() {
 func (suite *EngineSuite) TestJoinResponsesInterleaveSecondPageOneSide() {
 	fmt.Printf("\n------ TestJoinResponsesInterleaveSecondPageOneSide ------\n\n")
 	r := require.New(suite.T())
-    d := parse("1111-11-11")
+	d := parse("1111-11-11")
 	r1 := SearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
 	r2 := SearchResult([]SRR{})
 	r3, err := joinResponses(r1, r2, consts.SORT_BY_RELEVANCE, 4, 4)
@@ -184,7 +184,7 @@ func (suite *EngineSuite) TestJoinResponsesNewerToOlder() {
 	r.Nil(err)
 
 	expected := []SRR{SRR{2.4, "1", parse("2018-01-16")}, SRR{2.5, "a", parse("2018-01-06")},
-                      SRR{2.0, "b", parse("2015-05-22")}, SRR{2.2, "2", parse("2015-05-21")}}
+		SRR{2.0, "b", parse("2015-05-22")}, SRR{2.2, "2", parse("2015-05-21")}}
 	r.Equal(len(expected), len(r3.Hits.Hits))
 	for i, h := range r3.Hits.Hits {
 		r.Equal(expected[i].Score, *h.Score)
