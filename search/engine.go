@@ -303,8 +303,10 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 
 func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) (*elastic.SearchResult, error) {
 	if r1.Hits.TotalHits == 0 {
-		return r2, nil
+        r2.Hits.Hits = r2.Hits.Hits[from:utils.Min(from+size, len(r2.Hits.Hits))]
+        return r2, nil
 	} else if r2.Hits.TotalHits == 0 {
+        r1.Hits.Hits = r1.Hits.Hits[from:utils.Min(from+size, len(r1.Hits.Hits))]
 		return r1, nil
 	}
 	result := elastic.SearchResult(*r1)
@@ -315,7 +317,7 @@ func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy st
 	}
 	var hits []*elastic.SearchHit
 
-	// Merge by score
+	// Merge using compareHits
 	i1, i2 := int(0), int(0)
 	for i1 < len(r1.Hits.Hits) || i2 < len(r2.Hits.Hits) {
 		if i1 == len(r1.Hits.Hits) {
@@ -344,12 +346,12 @@ func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy st
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
-	log.Infof("Query: %+v", query)
+    log.Infof("Query: %+v sort by: %s, from: %d, size: %d", query, sortBy, from, size)
 	multiSearchService := e.esc.MultiSearch()
 	// Content Units
-	AddContentUnitsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
+	AddContentUnitsSearchRequests(multiSearchService, query, sortBy, 0, from + size, preference)
 	// Collections
-	AddCollectionsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
+	AddCollectionsSearchRequests(multiSearchService, query, sortBy, 0, from + size, preference)
 
 	// Do search.
 	mr, err := multiSearchService.Do(context.TODO())
@@ -369,7 +371,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		cuR := mr.Responses[i]
 		cR := mr.Responses[i+len(query.LanguageOrder)]
 		if haveHits(cuR) || haveHits(cR) {
-			return joinResponses(cuR, cR, sortBy, from, size)
+            return joinResponses(cuR, cR, sortBy, from, size)
 		}
 	}
 

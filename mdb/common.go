@@ -50,6 +50,7 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 		elastic.SetSniff(false),
 		elastic.SetHealthcheckInterval(10*time.Second),
 		elastic.SetErrorLog(log.StandardLogger()),
+        // Should be commented out in prod.
 		// elastic.SetInfoLog(log.StandardLogger()),
 		// elastic.SetTraceLog(log.StandardLogger()),
 	)
