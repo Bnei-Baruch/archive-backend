@@ -226,8 +226,10 @@ func createCollectionsQuery(q Query) elastic.Query {
 			query.Filter(elastic.NewRangeQuery("effective_date").Gte(values[0]).Format("yyyy-MM-dd"))
 		case consts.FILTERS[consts.FILTER_END_DATE]:
 			query.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
-		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
-			contentTypeQuery.Should(elastic.NewTermsQuery(filter, s...))
+		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]:
+			// Skip, do nothing (filtring on content units).
+		case consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
+			contentTypeQuery.Should(elastic.NewTermsQuery("content_type", s...))
 			filterByContentType = true
 		default:
 			query.Filter(elastic.NewTermsQuery(filter, s...))
@@ -371,7 +373,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		cuR := mr.Responses[i]
 		cR := mr.Responses[i+len(query.LanguageOrder)]
 		if haveHits(cuR) || haveHits(cR) {
-			return joinResponses(cuR, cR, sortBy, from, size)
+			log.Debugf("Joining:\n%+v\n\n%+v\n\n\n", cuR.Hits, cR.Hits)
+			ret, err := joinResponses(cuR, cR, sortBy, from, size)
+			log.Debugf("Res: %+v", ret.Hits)
+			return ret, err
 		}
 	}
 
