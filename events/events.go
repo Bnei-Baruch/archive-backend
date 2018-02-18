@@ -2,9 +2,10 @@ package events
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/nats-io/go-nats-streaming"
@@ -16,11 +17,14 @@ import (
 )
 
 var indexer *es.Indexer
+var indexerQueue WorkQueue
 
 func RunListener() {
+	log.SetLevel(log.InfoLevel)
+
 	var err error
 
-	log.Info("Initialize connections to MDB and elasticsearch")
+	log.Info("Initialize data stores")
 	mdb.Init()
 	defer mdb.Shutdown()
 
@@ -32,31 +36,52 @@ func RunListener() {
 	sc, err := stan.Connect(natsClusterID, natsClientID, stan.NatsURL(natsURL))
 	utils.Must(err)
 	defer sc.Close()
-	log.Printf("Connected to %s clusterID: [%s] clientID: [%s]\n", natsURL, natsClusterID, natsClientID)
 
-	log.Info("Subscribing to nats")
-	startOpt := stan.DeliverAllAvailable()
+	log.Info("Subscribing to nats subject")
+	var startOpt stan.SubscriptionOption
+	if viper.GetBool("nats.durable") == true {
+		startOpt = stan.DurableName(viper.GetString("nats.durable-name"))
+	} else {
+		startOpt = stan.DeliverAllAvailable()
+	}
 	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt)
 	utils.Must(err)
 
-	indexer = es.MakeProdIndexer()
+	log.Info("Initialize search engine indexer")
+	if viper.GetBool("server.fake-indexer") {
+		indexer = es.MakeFakeIndexer()
+	} else {
+		indexer = es.MakeProdIndexer()
+	}
 
-	log.Info("Press Ctrl+C to terminate")
+	log.Info("Initialize indexer queue")
+	indexerQueue = new(IndexerQueue)
+	indexerQueue.Init()
+
+	// wait for kill
 	signalChan := make(chan os.Signal, 1)
 	cleanupDone := make(chan bool)
 	signal.Notify(signalChan, os.Interrupt)
 	go func() {
 		for range signalChan {
-			fmt.Printf("\nReceived an interrupt, unsubscribing and closing connection...\n\n")
+			log.Info("Shutting down...")
+
+			log.Info("Closing connection to nats")
 			// Do not unsubscribe a durable on exit, except if asked to.
 			sc.Close()
+
+			log.Info("Closing indexer queue")
+			indexerQueue.Close()
+
 			cleanupDone <- true
 		}
 	}()
+
+	log.Info("Press Ctrl+C to terminate")
 	<-cleanupDone
 }
 
-// Data struct for unmarshaling data
+// Data struct for unmarshaling data from nats
 type Data struct {
 	ID      string                 `json:"id"`
 	Type    string                 `json:"type"`
@@ -101,8 +126,16 @@ var messageHandlers = map[string]MessageHandler{
 	E_PUBLISHER_UPDATE: PublisherUpdate,
 }
 
-// checks message type and calls "eventHandler"
+// msgHandler checks message type and calls "eventHandler"
 func msgHandler(msg *stan.Msg) {
+	// don't panic !
+	defer func() {
+		if rval := recover(); rval != nil {
+			log.Errorf("msgHandler panic: %v while handling %v", rval, msg)
+			debug.PrintStack()
+		}
+	}()
+
 	var d Data
 	err := json.Unmarshal(msg.Data, &d)
 	if err != nil {
@@ -113,6 +146,10 @@ func msgHandler(msg *stan.Msg) {
 	if !ok {
 		log.Errorf("Unknown event type: %v", d)
 	}
+
+	// DIRTY HACK !!!
+	// delay handler until our read replica will be synced (hopefully)
+	time.Sleep(500 * time.Millisecond)
 
 	log.Infof("Handling %+v", d)
 	handler(d)

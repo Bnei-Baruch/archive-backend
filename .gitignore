@@ -1,6 +1,7 @@
 .idea/
 .logs/
 .vscode
+bindata.go
 
 *.swp
 *.log

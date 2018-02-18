@@ -1,341 +1,240 @@
 package events
 
 import (
+	"bytes"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/queries/qm"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
-//collection functions
-func CollectionCreate(d Data) {
-	log.Info(d.Payload["uid"].(string))
+var httpClient = &http.Client{
+	Timeout: 5 * time.Second,
+}
 
-	err := indexer.CollectionAdd(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't add collection in ES", err)
-	}
+func CollectionCreate(d Data) {
+	putToIndexer(indexer.CollectionAdd, d.Payload["uid"].(string))
 }
 
 func CollectionDelete(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.CollectionDelete(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't add collection in ES", err)
-	}
+	putToIndexer(indexer.CollectionDelete, d.Payload["uid"].(string))
 }
 
 func CollectionUpdate(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.CollectionUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update collection in  ES", err)
-	}
+	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
 }
 
-//
 func CollectionPublishedChange(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.CollectionUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update collection in  ES", err)
-	}
+	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
 }
 
 func CollectionContentUnitsChange(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.CollectionUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update collection in  ES", err)
-	}
+	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
 }
 
-//
-////event functions
 func ContentUnitCreate(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.ContentUnitAdd(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't add content unit to ES", err)
-	}
+	putToIndexer(indexer.ContentUnitAdd, d.Payload["uid"].(string))
 }
 
 func ContentUnitDelete(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.ContentUnitDelete(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't delete content unit in ES", err)
-	}
+	putToIndexer(indexer.ContentUnitDelete, d.Payload["uid"].(string))
 }
 
 func ContentUnitUpdate(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update content unit in ES", err)
-	}
+	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitPublishedChange(d Data) {
-	unit := GetUnitObj(d.Payload["uid"].(string))
-	fmt.Printf("*************:\n %+v", unit.UID)
-	if unit.Published == true &&
-		unit.Secure == 0 {
-		apiUrl := viper.GetString("api.url")
-		resp, err := http.Get(apiUrl + "/thumbnail/" + unit.UID)
-		if err != nil {
-			log.Error(err)
-		}
-		fmt.Println(resp)
-	}
-	log.Infof("%+v", d)
+	uid := d.Payload["uid"].(string)
+	putToIndexer(indexer.ContentUnitUpdate, uid)
 
-	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
+	// Prepare unit thumbnail
+	unit, err := mdbmodels.ContentUnitsG(qm.Where("uid=?", uid)).One()
 	if err != nil {
-		log.Errorf("couldn't update content unit in ES", err)
+		log.Errorf("Error loading unit from mdb %s: %s", uid, err.Error())
+		return
+	}
+
+	ct := mdb.CONTENT_TYPE_REGISTRY.ByID[unit.TypeID].Name
+	createThumbnail := unit.Published &&
+		unit.Secure == 0 &&
+		ct != consts.CT_KITEI_MAKOR &&
+		ct != consts.CT_LELO_MIKUD &&
+		ct != consts.CT_PUBLICATION &&
+		ct != consts.CT_ARTICLE
+
+	if createThumbnail {
+		log.Infof("thumbnail %s [%s]", unit.UID, ct)
+		AssetsAPI("thumbnail", unit.UID)
 	}
 }
 
 func ContentUnitDerivativesChange(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update content unit in ES", err)
-	}
+	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitSourcesChange(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update content unit in ES", err)
-	}
+	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitTagsChange(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update content unit in ES", err)
-	}
+	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitPersonsChange(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update content unit in ES", err)
-	}
+	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitPublishersChange(d Data) {
-
-	err := indexer.ContentUnitUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update content unit in ES", err)
-	}
+	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func FilePublished(d Data) {
-	fileUid := d.Payload["uid"].(string)
-	log.Infof("%+v", d)
+	putToIndexer(indexer.FileAdd, d.Payload["uid"].(string))
 
-	err := indexer.FileAdd(fileUid)
+	uid := d.Payload["uid"].(string)
+	file, err := mdbmodels.FilesG(qm.Where("uid=?", uid)).One()
 	if err != nil {
-		log.Errorf("couldn't add file to ES", err)
+		log.Errorf("Error loading file from mdb %s: %s", uid, err.Error())
+		return
 	}
 
-	file := GetFileObj(fileUid)
-	if file.Secure != 1 {
+	if file.Secure == 0 {
 		switch file.Type {
 		case "image":
 			if strings.HasSuffix(file.Name, ".zip") {
-				fmt.Printf("************* file is zipped IMAGE:\n %+v", file)
-				apiUrl := viper.GetString("api.url")
-				resp, err := http.Get(apiUrl + "/unzip/" + file.UID)
-				if err != nil {
-					log.Error(err)
-				}
-				fmt.Println(resp)
+				log.Infof("unzip %s [%s]", file.Name, file.UID)
+				AssetsAPI("unzip", file.UID)
 			}
+
+		case "text":
 			if file.MimeType.String == "application/msword" {
-				fmt.Printf("************* file is word doc:\n %+v", file)
+				log.Infof("doc2html %s [%s]", file.Name, file.UID)
+				AssetsAPI("doc2html", file.UID)
 			}
 		}
-
 	}
-
-	//err = unZipFile(d.Payload["uid"].(string))
-	//if err != nil {
-	//	log.Errorf("problem unzipping file %v", d.Payload["uid"].(string), err)
-	//}
 }
 
 func FileReplace(d Data) {
-	log.Infof("%+v", d)
-	//errReplace := indexer.FileDelete(oldUid)
-	//if errReplace != nil {
-	//	log.Errorf("couldn't delete file from ES", errReplace)
-	//}
-	//
-	//errAdd := indexer.FileAdd(d.Payload["uid"].(string))
-	//if errAdd != nil {
-	//	log.Errorf("couldn't add file to ES", errAdd)
-	//}
+	oFile := d.Payload["old"].(map[string]interface{})
+	nFile := d.Payload["new"].(map[string]interface{})
 
+	putToIndexer(indexer.FileDelete, oFile["uid"].(string))
+	putToIndexer(indexer.FileAdd, nFile["uid"].(string))
 }
 
 func FileInsert(d Data) {
-	log.Infof("%+v", d)
-	err := indexer.FileAdd(d.Payload["uid"].(string))
-
-	if err != nil {
-		log.Errorf("couldn't add file to ES", err)
-	}
+	putToIndexer(indexer.FileAdd, d.Payload["uid"].(string))
 }
 
 func FileUpdate(d Data) {
-	log.Infof("%+v", d)
+	putToIndexer(indexer.FileUpdate, d.Payload["uid"].(string))
 
-	err := indexer.FileUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update file in ES", err)
-	}
+	RemoveFile(d.Payload["uid"].(string))
 }
 
 func SourceCreate(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.SourceAdd(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't create source in ES", err)
-	}
+	putToIndexer(indexer.SourceAdd, d.Payload["uid"].(string))
 }
 
 func SourceUpdate(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.SourceUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update source in ES", err)
-	}
+	putToIndexer(indexer.SourceUpdate, d.Payload["uid"].(string))
 }
 
 func TagCreate(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.TagAdd(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't add tag in ES", err)
-	}
+	putToIndexer(indexer.TagAdd, d.Payload["uid"].(string))
 }
 
 func TagUpdate(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.TagUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update tag in ES", err)
-	}
+	putToIndexer(indexer.TagUpdate, d.Payload["uid"].(string))
 }
 
 func PersonCreate(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.PersonAdd(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't add person in ES", err)
-	}
+	putToIndexer(indexer.PersonAdd, d.Payload["uid"].(string))
 }
 
 func PersonDelete(d Data) {
-	log.Infof("%+v", d)
-
-	//err := indexer.PersonDelete(d.Payload["uid"].(string))
-	//if err != nil {
-	//	log.Errorf("couldn't delete person in ES", err)
-	//}
+	putToIndexer(indexer.PersonDelete, d.Payload["uid"].(string))
 }
 
 func PersonUpdate(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.PersonUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update person in ES", err)
-	}
+	putToIndexer(indexer.PersonUpdate, d.Payload["uid"].(string))
 }
 
 func PublisherCreate(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.PublisherAdd(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't create publisher in ES", err)
-	}
+	putToIndexer(indexer.PublisherAdd, d.Payload["uid"].(string))
 }
 
 func PublisherUpdate(d Data) {
-	log.Infof("%+v", d)
-
-	err := indexer.PublisherUpdate(d.Payload["uid"].(string))
-	if err != nil {
-		log.Errorf("couldn't update publisher in ES", err)
-	}
-
+	putToIndexer(indexer.PublisherUpdate, d.Payload["uid"].(string))
 }
 
-// GetFileObj gets the file object from db
-func GetFileObj(uid string) *mdbmodels.File {
-	mdbObj := mdbmodels.FilesG(qm.Where("uid=?", uid))
-	OneFile, err := mdbObj.One()
-	if err != nil {
-		log.Error(err)
-	}
-
-	return OneFile
+func putToIndexer(f func(string) error, s string) {
+	indexerQueue.Enqueue(IndexerTask{F: f, S: s})
 }
 
-func GetUnitObj(uid string) *mdbmodels.ContentUnit {
-	mdbObj := mdbmodels.ContentUnitsG(qm.Where("uid=?", uid))
-	OneObj, err := mdbObj.One()
+// AssetsAPI sends request to unzip api by file UID
+func AssetsAPI(path string, uid string) {
+	apiURL := viper.GetString("assets_service.url")
+	resp, err := httpClient.Get(fmt.Sprintf("%s%s/%s", apiURL, path, uid))
 	if err != nil {
-		log.Error(err)
+		log.Errorf("file_service http.POST path= %s uid = %s: %s", path, uid, err.Error())
+		return
 	}
 
-	return OneObj
+	if resp.StatusCode != 200 {
+		log.Warnf("assets_service returned status code %d path= %s uid = %s", resp.StatusCode, path, uid)
+	}
 }
 
-//func unZipFile(uid string) error {
-//
-//	file := GetFileObj(uid)
-//	if (file.Type == "image" ||
-//		strings.HasSuffix(file.Name, ".zip")) &&
-//		file.Secure != 1 {
-//		fmt.Printf("\n*********************************\n%+v\n", file)
-//		fmt.Println("IMAGE!!! ", file.UID)
-//
-//		resp, err := http.Get(BACKEND_URL + "/" + uid)
-//		if err != nil {
-//			return err
-//		}
-//		fmt.Println(resp)
-//	}
-//	return nil
-//}
+type FileBackendRequest struct {
+	SHA1 string `json:"sha1"`
+	Name string `json:"name"`
+}
+
+// RemoveFile to send post req to file-api and remove file from search?
+func RemoveFile(uid string) {
+	file, err := mdbmodels.FilesG(qm.Where("uid=?", uid)).One()
+	if err != nil {
+		log.Errorf("Error loading file from mdb %s: %s", uid, err.Error())
+		return
+	}
+
+	if file.Secure > 0 && file.Published == true {
+		log.Infof("file_service disable file %s", uid)
+
+		data := FileBackendRequest{
+			SHA1: hex.EncodeToString(file.Sha1.Bytes),
+			Name: file.Name,
+		}
+
+		b := new(bytes.Buffer)
+		err := json.NewEncoder(b).Encode(data)
+		if err != nil {
+			log.Errorf("json.Encode uid = %s: %s", uid, err.Error())
+			return
+		}
+
+		apiURL := viper.GetString("file_service.url1") + "/api/v1/getremove"
+		resp, err := httpClient.Post(apiURL, "application/json; charset=utf-8", b)
+		if err != nil {
+			log.Errorf("file_service http.POST uid = %s: %s", uid, err.Error())
+			return
+		}
+
+		if resp.StatusCode != 200 {
+			log.Warnf("file_service returned status code %d", resp.StatusCode)
+		}
+	}
+}

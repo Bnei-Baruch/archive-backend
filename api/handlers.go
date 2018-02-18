@@ -473,7 +473,6 @@ func SearchHandler(c *gin.Context) {
 }
 
 func AutocompleteHandler(c *gin.Context) {
-	log.Infof("Query: [%s]", c.Query("q"))
 	q := c.Query("q")
 	if q == "" {
 		NewBadRequestError(errors.New("Can't search for an empty term")).Abort(c)
@@ -485,8 +484,10 @@ func AutocompleteHandler(c *gin.Context) {
 	se := search.NewESEngine(esc, db)
 
 	// Detect input language
-	log.Debugf("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
+	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
 	order := utils.DetectLanguage(q, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
+
+	log.Infof("Query: [%s] Language Order: [%+v]", c.Query("q"), order)
 
 	// Have a 50ms deadline on the search engine call.
 	// It's autocomplete after all...
@@ -495,6 +496,7 @@ func AutocompleteHandler(c *gin.Context) {
 
 	res, err := se.GetSuggestions(ctx, search.Query{Term: q, LanguageOrder: order})
 	if err == nil {
+		log.Infof("Autocomplete: %+v", utils.Pprint(res))
 		c.JSON(http.StatusOK, res)
 	} else {
 		NewInternalError(err).Abort(c)

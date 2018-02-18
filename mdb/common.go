@@ -39,7 +39,6 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	}
 	boil.SetDB(DB)
 	boil.DebugMode = viper.GetString("server.boiler-mode") == "debug"
-	boil.DebugMode = false
 	log.Info("Initializing type registries")
 	utils.Must(InitTypeRegistries(DB))
 
@@ -51,6 +50,7 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 		elastic.SetSniff(false),
 		elastic.SetHealthcheckInterval(10*time.Second),
 		elastic.SetErrorLog(log.StandardLogger()),
+		// Should be commented out in prod.
 		// elastic.SetInfoLog(log.StandardLogger()),
 		// elastic.SetTraceLog(log.StandardLogger()),
 	)

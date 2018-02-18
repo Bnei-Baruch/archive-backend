@@ -92,23 +92,29 @@ func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) err
 	if scope.FileUID != "" {
 		moreUIDs, err := collectionsScopeByFile(scope.FileUID)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "collections index addToIndex collectionsScopeByFile")
 		}
 		uids = append(uids, moreUIDs...)
 	}
 	if scope.ContentUnitUID != "" {
 		moreUIDs, err := collectionsScopeByContentUnit(scope.ContentUnitUID)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "collections index addToIndex collectionsScopeByContentUnit")
 		}
 		uids = append(uids, moreUIDs...)
+	}
+	if len(uids) == 0 {
+		return nil
 	}
 	quoted := make([]string, len(uids))
 	for i, uid := range uids {
 		quoted[i] = fmt.Sprintf("'%s'", uid)
 	}
 	sqlScope = fmt.Sprintf("%s AND c.uid IN (%s)", sqlScope, strings.Join(quoted, ","))
-	return index.addToIndexSql(sqlScope)
+	if err := index.addToIndexSql(sqlScope); err != nil {
+		return errors.Wrap(err, "collections index addToIndex addToIndexSql")
+	}
+	return nil
 }
 
 func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
