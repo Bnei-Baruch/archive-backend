@@ -17,25 +17,14 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/queries"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-var soffice string
-var docFolder string
-
 func ConvertDocx() {
 	clock := mdb.Init()
-
-	soffice = viper.GetString("elasticsearch.soffice-bin")
-	if soffice == "" {
-		panic("Soffice binary should be set in config.")
-	}
-	docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
-	utils.Must(os.MkdirAll(docFolder, 0777))
 
 	utils.Must(convertDocx())
 
@@ -56,8 +45,8 @@ func DownloadAndConvert(docBatch [][]string) error {
 
 		docFilename := fmt.Sprintf("%s%s", uid, filepath.Ext(name))
 		docxFilename := fmt.Sprintf("%s.docx", uid)
-		docPath := path.Join(docFolder, docFilename)
-		docxPath := path.Join(docFolder, docxFilename)
+		docPath := path.Join(mdb.DocFolder, docFilename)
+		docxPath := path.Join(mdb.DocFolder, docxFilename)
 		if _, err := os.Stat(docxPath); !os.IsNotExist(err) {
 			continue
 		}
@@ -98,9 +87,9 @@ func DownloadAndConvert(docBatch [][]string) error {
 
 	if len(convertDocs) > 0 {
 		sofficeMutex.Lock()
-		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", docFolder}, convertDocs...)
+		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", mdb.DocFolder}, convertDocs...)
 		log.Infof("Command [%s]", strings.Join(args, " "))
-		cmd := exec.Command(soffice, args...)
+		cmd := exec.Command(mdb.SofficeBin, args...)
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -108,7 +97,7 @@ func DownloadAndConvert(docBatch [][]string) error {
 		err := cmd.Run()
 		sofficeMutex.Unlock()
 		if _, ok := err.(*exec.ExitError); err != nil || ok {
-			log.Errorf("soffice is '%s'. Error: %s", soffice, err)
+			log.Errorf("soffice is '%s'. Error: %s", mdb.SofficeBin, err)
 			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
 			return errors.Wrapf(err, "Execute soffice")
 		}

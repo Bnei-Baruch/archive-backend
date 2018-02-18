@@ -254,7 +254,7 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
 	docxPath := path.Join(index.docFolder, docxFilename)
-	log.Infof("Path of .docx file is: %s", docxPath)
+	//log.Infof("Path of .docx file is: %s", docxPath)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
 		return "", nil
 	}
@@ -359,12 +359,6 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 			if byLang, ok := index.indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
-					soffice = viper.GetString("elasticsearch.soffice-bin")
-					if soffice == "" {
-						panic("Soffice binary should be set in config.")
-					}
-					docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
-					utils.Must(os.MkdirAll(docFolder, 0777))
 					fileName, err := LoadDoc(val[0])
 					if err != nil {
 						log.Warnf("Error retrieving doc from DB: %s", val[0])
@@ -374,16 +368,10 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 							log.Warnf("Error downloading or converting doc: %s", val[0])
 						} else {
 							unit.Transcript, err = index.parseDocx(val[0])
-							//if len(unit.Transcript) > 0 {
-							//	log.Infof("Assigned unit %s. Transcript is: %s", unit.MDB_UID, unit.Transcript[0:100])
-							//}
 							unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
 							if err != nil {
 								log.Warnf("Error parsing docx: %s", val[0])
 							}
-							// if err == nil && unit.Transcript != "" {
-							// 	atomic.AddUint64(&withTranscript, 1)
-							// }
 						}
 					}
 				}
