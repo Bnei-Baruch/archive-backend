@@ -246,3 +246,9 @@ type Banner struct {
 	Url       string `json:"url"`
 	Image     string `json:"image"`
 }
+
+type SemiQuasiData struct {
+	Authors    []*Author    `json:"sources"`
+	Tags       []*Tag       `json:"tags"`
+	Publishers []*Publisher `json:"publishers"`
+}

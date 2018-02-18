@@ -541,6 +541,15 @@ func RecentlyUpdatedHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func SemiQuasiDataHandler(c *gin.Context) {
+	var r BaseRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+	resp, err := handleSemiQuasiData(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
 func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
@@ -1153,6 +1162,30 @@ ORDER BY max_film_date DESC`
 	}
 
 	return data, nil
+}
+
+func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError) {
+	sqd := new(SemiQuasiData)
+
+	res, err := handleSources(db, HierarchyRequest{BaseRequest: r})
+	if err != nil {
+		return nil, err
+	}
+	sqd.Authors = res.([]*Author)
+
+	res, err = handleTags(db, HierarchyRequest{BaseRequest: r})
+	if err != nil {
+		return nil, err
+	}
+	sqd.Tags = res.([]*Tag)
+
+	publishers, err := handlePublishers(db, PublishersRequest{ListRequest: ListRequest{BaseRequest: r}})
+	if err != nil {
+		return nil, err
+	}
+	sqd.Publishers = publishers.Publishers
+
+	return sqd, nil
 }
 
 // appendListMods compute and appends the OrderBy, Limit and Offset query mods.
