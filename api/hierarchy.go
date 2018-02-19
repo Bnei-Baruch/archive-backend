@@ -3,10 +3,11 @@ package api
 import (
 	"database/sql"
 	"fmt"
+	"math"
+
 	"github.com/lib/pq"
 	"github.com/volatiletech/sqlboiler/queries"
 	"gopkg.in/gin-gonic/gin.v1"
-	"math"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"

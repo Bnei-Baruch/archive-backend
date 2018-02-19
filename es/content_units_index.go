@@ -14,7 +14,6 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/olivere/elastic.v5"
 
@@ -28,7 +27,7 @@ func MakeContentUnitsIndex(namespace string) *ContentUnitsIndex {
 	cui := new(ContentUnitsIndex)
 	cui.baseName = consts.ES_UNITS_INDEX
 	cui.namespace = namespace
-	cui.docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
+	cui.docFolder = path.Join(mdb.DocFolder)
 	return cui
 }
 
@@ -255,7 +254,7 @@ func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
 	docxPath := path.Join(index.docFolder, docxFilename)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
-		return "", nil
+		return "", errors.Wrapf(err, "os.Stat %s", docxPath)
 	}
 
 	cmd := exec.Command(mdb.ParseDocsBin, docxPath)
@@ -349,20 +348,21 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 			if byLang, ok := index.indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
-					fileName, err := LoadDoc(val[0])
+					fileName, err := LoadDocFilename(val[0])
 					if err != nil {
-						log.Warnf("Error retrieving doc from DB: %s", val[0])
+						log.Errorf("Error retrieving doc from DB: %s", val[0])
 					} else {
-						err = DownloadAndConvert([][]string{[]string{val[0], fileName}})
+						err = DownloadAndConvert([][]string{{val[0], fileName}})
 						if err != nil {
-							log.Warnf("Error %+v", err)
-							log.Warnf("Error downloading or converting doc: %s", val[0])
+							log.Errorf("Error downloading or converting doc: %s", val[0])
+							log.Errorf("Error %+v", err)
 						} else {
 							unit.Transcript, err = index.parseDocx(val[0])
 							if err != nil {
-								log.Warnf("Error parsing docx: %s", val[0])
+								log.Errorf("Error parsing docx: %s", val[0])
+							} else {
+								unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
 							}
-							unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
 						}
 					}
 				}

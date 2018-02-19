@@ -107,7 +107,7 @@ func DownloadAndConvert(docBatch [][]string) error {
 	return nil
 }
 
-func LoadDoc(fileUID string) (string, error) {
+func LoadDocFilename(fileUID string) (string, error) {
 
 	var fileName string
 
@@ -121,7 +121,7 @@ WHERE name ~ '.docx?' AND
 	AND uid = $1;`, fileUID).QueryRow().Scan(&fileName)
 
 	if err != nil {
-		return "", errors.Wrap(err, "Load doc")
+		return "", errors.Wrapf(err, "Load doc %s", fileUID)
 	}
 
 	return fileName, nil
