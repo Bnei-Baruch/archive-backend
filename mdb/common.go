@@ -16,10 +16,12 @@ import (
 )
 
 var (
-	DB         *sql.DB
-	ESC        *elastic.Client
-	SofficeBin string
-	DocFolder  string
+	DB           *sql.DB
+	ESC          *elastic.Client
+	SofficeBin   string
+	DocFolder    string
+	ParseDocsBin string
+	CDNUrl       string
 )
 
 func Init() time.Time {
@@ -68,8 +70,25 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	if SofficeBin == "" {
 		panic("Soffice binary should be set in config.")
 	}
+	if _, err := os.Stat(SofficeBin); os.IsNotExist(err) {
+		panic("Soffice binary not found.")
+	}
+
+	ParseDocsBin = viper.GetString("elasticsearch.parse-docs-bin")
+	if ParseDocsBin == "" {
+		panic("parse_docs.py binary should be set in config.")
+	}
+	if _, err := os.Stat(ParseDocsBin); os.IsNotExist(err) {
+		panic("parse_docs.py not found.")
+	}
+
 	DocFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
 	utils.Must(os.MkdirAll(DocFolder, 0777))
+
+	CDNUrl = viper.GetString("elasticsearch.cdn-url")
+	if CDNUrl == "" {
+		panic("cdn url should be set in config.")
+	}
 
 	return clock
 }

@@ -9,6 +9,8 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -178,8 +180,10 @@ func RandomSHA1() string {
 type IndexerSuite struct {
 	suite.Suite
 	TestDBManager
-	esc *elastic.Client
-	ctx context.Context
+	esc             *elastic.Client
+	ctx             context.Context
+	server          *httptest.Server
+	serverResponses map[string]string
 }
 
 func (suite *IndexerSuite) SetupSuite() {
@@ -190,6 +194,30 @@ func (suite *IndexerSuite) SetupSuite() {
 	}
 	suite.ctx = context.Background()
 
+	fmt.Println("Replace docx-folder with temp. path.")
+	testingsDocxPath := viper.GetString("test.test-docx-folder")
+	viper.Set("elasticsearch.docx-folder", testingsDocxPath)
+
+	fmt.Println("Replace cdn-url with test.")
+	suite.serverResponses = make(map[string]string)
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		key := ""
+		if r.URL.Path != "" {
+			key += fmt.Sprintf("%s", r.URL.Path)
+		}
+		if r.URL.RawQuery != "" {
+			key += fmt.Sprintf("?%s", r.URL.RawQuery)
+		}
+		if r.URL.Fragment != "" {
+			key += fmt.Sprintf("#%s", r.URL.Fragment)
+		}
+		fmt.Printf("LOOKUP KEY [%s]\n", key)
+		w.Header().Set("Content-Type", "plain/text")
+		io.WriteString(w, suite.serverResponses[key])
+	}
+	suite.server = httptest.NewServer(http.HandlerFunc(handler))
+	viper.Set("elasticsearch.cdn-url", suite.server.URL)
+
 	// Set package db and esc variables.
 	mdb.InitWithDefault(suite.DB)
 	boil.DebugMode = true
@@ -197,6 +225,8 @@ func (suite *IndexerSuite) SetupSuite() {
 }
 
 func (suite *IndexerSuite) TearDownSuite() {
+	// Close mock server.
+	suite.server.Close()
 	// Close connections.
 	mdb.Shutdown()
 	// Drop test database.
@@ -225,6 +255,9 @@ func (suite *IndexerSuite) SetupTest() {
 	// Remove test indexes.
 	indexer := MakeIndexer("test", []string{consts.ES_UNITS_INDEX, consts.ES_CLASSIFICATIONS_INDEX})
 	r.Nil(indexer.DeleteIndexes())
+	// Delete test directory
+	os.RemoveAll(viper.GetString("test.test-docx-folder"))
+	utils.Must(os.MkdirAll(viper.GetString("test.test-docx-folder"), 0777))
 }
 
 func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (string, error) {
@@ -792,17 +825,18 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *I
 		r.ElementsMatch(expectedLangs, langs)
 	}
 
-	//get transcript
+	// Get transcript
 	transcriptLengths := make([]int, 0)
 	for _, hit := range res.Hits.Hits {
 		var cu ContentUnit
 		json.Unmarshal(*hit.Source, &cu)
 		//***
-		fmt.Printf("\n\n TRANSCRIPT: %+v \n\n", cu.Transcript)
+		fmt.Printf("\n\n TRANSCRIPT: [%+v] \n\n", cu.Transcript)
 		transcriptLengths = append(transcriptLengths, len(cu.Transcript))
 	}
 
 	if expectedTranscriptLength.Valid {
+		r.NotEqual(transcriptLengths, 0)
 		r.Contains(transcriptLengths, expectedTranscriptLength.Int)
 	} else {
 		r.Equal(len(transcriptLengths), 0)
@@ -934,11 +968,6 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 func (suite *IndexerSuite) TestContentUnitsIndex() {
 	fmt.Printf("\n\n\n--- TEST CONTENT UNITS INDEX ---\n\n\n")
 
-	fmt.Println("Replace docx-folder with temp. path.")
-	originalDocxPath := viper.Get("elasticsearch.docx-folder")
-	testingsDocxPath := viper.Get("test.test-docx-folder")
-	viper.Set("elasticsearch.docx-folder", testingsDocxPath)
-
 	r := require.New(suite.T())
 	fmt.Printf("\n\n\nAdding content units.\n\n")
 	cu1UID := suite.ucu(ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
@@ -962,11 +991,13 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
 
 	fmt.Println("Add a file to content unit and validate.")
+	transcriptContent := "1234"
+	suite.serverResponses["/dEvgPVpr"] = transcriptContent
 	file := mdbmodels.File{ID: 1, Name: "heb_o_rav_2017-05-25_lesson_achana_n1_p0.doc", UID: "dEvgPVpr", Language: null.String{"he", true}, Secure: 0, Published: true}
 	suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	//dumpIndexes("dumpIndexes after adding transcript")
-	suite.validateContentUnitFiles(indexNameHe, indexer, []string{"he"}, null.Int{1067, true})
+	suite.validateContentUnitFiles(indexNameHe, indexer, []string{"he"}, null.Int{len(transcriptContent), true})
 	fmt.Println("Remove a file from content unit and validate.")
 	suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, false)
 
@@ -1050,9 +1081,6 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	r.Nil(deleteContentUnits(UIDs))
 	r.Nil(indexer.ReindexAll())
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
-
-	fmt.Println("Restore docx-folder path to original.")
-	viper.Set("docx-folder", originalDocxPath)
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())

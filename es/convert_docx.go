@@ -56,8 +56,9 @@ func DownloadAndConvert(docBatch [][]string) error {
 		}
 
 		// Download doc.
-		resp, err := http.Get(fmt.Sprintf("https://cdn.kabbalahmedia.info/%s", uid))
+		resp, err := http.Get(fmt.Sprintf("%s/%s", mdb.CDNUrl, uid))
 		if err != nil {
+			log.Warnf("Error downloading, Error: %+v", err)
 			return err
 		}
 		if resp.StatusCode != 200 { // OK
