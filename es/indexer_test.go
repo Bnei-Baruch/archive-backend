@@ -797,8 +797,6 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *I
 	for _, hit := range res.Hits.Hits {
 		var cu ContentUnit
 		json.Unmarshal(*hit.Source, &cu)
-		//***
-		fmt.Printf("\n\n TRANSCRIPT: %+v \n\n", cu.Transcript)
 		transcriptLengths = append(transcriptLengths, len(cu.Transcript))
 	}
 
@@ -985,10 +983,10 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	fmt.Println("Remove the second tag.")
 	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, false)
 
-	// failed tests
-	/*fmt.Println("Add a source to content unit and validate.")
+	fmt.Println("Add a source to content unit and validate.")
 	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, TypeID: 1, UID: "ALlyoveA"}, true)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	//r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	r.Nil(indexer.SourceUpdate(cu1UID))
 	suite.validateContentUnitSources(indexNameEn, indexer, []string{"ALlyoveA"})
 	fmt.Println("Add second source to content unit and validate.")
 	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: "1vCj4qN9"}, true)
@@ -999,7 +997,7 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	suite.validateContentUnitSources(indexNameEn, indexer, []string{"1vCj4qN9"})
 	fmt.Println("Remove the second source.")
-	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: "1vCj4qN9"}, false)*/
+	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: "1vCj4qN9"}, false)
 
 	fmt.Println("Make content unit not published and validate.")
 	//dumpDB("TestContentUnitsIndex, BeforeDB")

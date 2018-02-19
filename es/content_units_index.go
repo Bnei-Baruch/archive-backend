@@ -117,6 +117,13 @@ func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) er
 		}
 		uids = append(uids, moreUIDs...)
 	}
+	if scope.SourceUID != "" {
+		moreUIDs, err := contentUnitsScopeBySource(scope.SourceUID)
+		if err != nil {
+			return err
+		}
+		uids = append(uids, moreUIDs...)
+	}
 	if len(uids) == 0 {
 		return nil
 	}

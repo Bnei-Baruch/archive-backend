@@ -86,6 +86,21 @@ func collectionsScopeByContentUnit(cuUID string) ([]string, error) {
 	return uids, nil
 }
 
+func contentUnitsScopeBySource(sourceUID string) ([]string, error) {
+	sources, err := mdbmodels.ContentUnits(mdb.DB,
+		qm.InnerJoin("content_units_sources AS cus ON cus.content_unit_id = id"),
+		qm.InnerJoin("sources AS s ON s.id = cus.source_id"),
+		qm.Where("s.uid = ?", sourceUID)).All()
+	if err != nil {
+		return nil, err
+	}
+	uids := make([]string, len(sources))
+	for i, sources := range sources {
+		uids[i] = sources.UID
+	}
+	return uids, nil
+}
+
 // DEBUG FUNCTIONS
 
 func dumpDB(title string) error {
