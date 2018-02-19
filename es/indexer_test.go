@@ -797,8 +797,6 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *I
 	for _, hit := range res.Hits.Hits {
 		var cu ContentUnit
 		json.Unmarshal(*hit.Source, &cu)
-		//***
-		fmt.Printf("\n\n TRANSCRIPT: %+v \n\n", cu.Transcript)
 		transcriptLengths = append(transcriptLengths, len(cu.Transcript))
 	}
 
