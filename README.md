@@ -138,13 +138,14 @@ https://www.python.org/downloads/
     python -m pip install python-docx
     ```
 
-6. Download and install OpenOffice
+6. Download and install LibreOffice (not OpenOffice!)
 
-    https://www.openoffice.org/download/
+    https://www.libreoffice.org/donate/dl/win-x86_64/5.4.5/en-US/LibreOffice_5.4.5_Win_x64.msi
 
-    We need soffice.exe that is located on C:\\Program Files (x86)\\OpenOffice 4\\program
+    Update 'soffice-bin' value with soffice.exe full path in config.toml, [elasticsearch] section:
+    "C://Program Files//LibreOffice 5//program//soffice.exe"
 
-    Update 'soffice-bin' value with soffice.exe location in config.toml, [elasticsearch] section.
+7. Copy to config.toml the required commented-out lines from config.sample.toml that are related to Windows.
 
 ## License
 

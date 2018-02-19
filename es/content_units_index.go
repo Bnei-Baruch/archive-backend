@@ -28,14 +28,14 @@ func MakeContentUnitsIndex(namespace string) *ContentUnitsIndex {
 	cui := new(ContentUnitsIndex)
 	cui.baseName = consts.ES_UNITS_INDEX
 	cui.namespace = namespace
-	cui.docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
+	//cui.docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
 	return cui
 }
 
 type ContentUnitsIndex struct {
 	BaseIndex
 	indexData *IndexData
-	docFolder string
+	//docFolder string
 }
 
 func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
@@ -253,17 +253,28 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 
 func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
-	docxPath := path.Join(index.docFolder, docxFilename)
+	docxPath := path.Join(mdb.DocFolder, docxFilename)
+	//log.Infof("Path of .docx file is: %s", docxPath)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
 		return "", nil
 	}
-	cmd := exec.Command("es/parse_docs.py", docxPath)
+
+	var cmd *exec.Cmd
+	pscriptPath := viper.GetString("elasticsearch.python-script")
+	pythonPath := viper.GetString("elasticsearch.python-path")
+	if strings.ToLower(viper.GetString("mdb.os")) == "windows" {
+		cmd = exec.Command(pythonPath, pscriptPath, docxPath)
+	} else {
+		cmd = exec.Command(pscriptPath, docxPath)
+	}
+
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
+		//log.Errorf("DOCX PARSING ERROR: %s", err)
 		log.Warnf("parse_docs.py %s\nstdout: %s\nstderr: %s", docxPath, stdout.String(), stderr.String())
 		return "", errors.Wrapf(err, "cmd.Run %s", uid)
 	}
@@ -348,14 +359,21 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 			if byLang, ok := index.indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
-					unit.Transcript, err = index.parseDocx(val[0])
-					unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
+					fileName, err := LoadDoc(val[0])
 					if err != nil {
-						log.Warnf("Error parsing docx: %s", val[0])
+						log.Warnf("Error retrieving doc from DB: %s", val[0])
+					} else {
+						err = DownloadAndConvert([][]string{[]string{val[0], fileName}})
+						if err != nil {
+							log.Warnf("Error downloading or converting doc: %s", val[0])
+						} else {
+							unit.Transcript, err = index.parseDocx(val[0])
+							unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
+							if err != nil {
+								log.Warnf("Error parsing docx: %s", val[0])
+							}
+						}
 					}
-					// if err == nil && unit.Transcript != "" {
-					// 	atomic.AddUint64(&withTranscript, 1)
-					// }
 				}
 			}
 
