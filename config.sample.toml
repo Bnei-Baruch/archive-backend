@@ -12,7 +12,7 @@ url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 [test]
 test-docx-folder="es/testdocx"
 #for windows:
-#test-docx-folder="C://Users//Yuri//go//src//github.com//Bnei-Baruch//archive-backend//es//testdocx"
+#test-docx-folder="C://Users//[USERNAME]//go//src//github.com//Bnei-Baruch//archive-backend//es//testdocx"
 
 [elasticsearch]
 url="http://127.0.0.1:9200"
@@ -20,7 +20,7 @@ docx-folder="/tmp/mdb-docx/"
 soffice-bin="/usr/bin/soffice"
 #for windows:
 #soffice-bin="C://Program Files//LibreOffice 5//program//soffice.exe"
-#python-script = "C://Users//Yuri//go//src//github.com//Bnei-Baruch//archive-backend//es//parse_docs.py"
+#python-script = "C://Users//[USERNAME]//go//src//github.com//Bnei-Baruch//archive-backend//es//parse_docs.py"
 #python-path="C://Python27//python.exe"
 
 [nats]
