@@ -254,16 +254,27 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
 	docxPath := path.Join(index.docFolder, docxFilename)
+	//log.Infof("Path of .docx file is: %s", docxPath)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
 		return "", nil
 	}
+
+	//TBD add windows \ linux flag and python script path to config.toml
+	//for windows:
+	/*pythonPath := "C:\\Python27\\python.exe"
+	pscriptPath := "C:\\Users\\Yuri\\go\\src\\github.com\\Bnei-Baruch\\archive-backend\\es\\parse_docs.py" //"es/parse_docs.py"
+	cmd := exec.Command(pythonPath, pscriptPath, docxPath)*/
+
+	//for linux:
 	cmd := exec.Command("es/parse_docs.py", docxPath)
+
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
+		//log.Errorf("DOCX PARSING ERROR: %s", err)
 		log.Warnf("parse_docs.py %s\nstdout: %s\nstderr: %s", docxPath, stdout.String(), stderr.String())
 		return "", errors.Wrapf(err, "cmd.Run %s", uid)
 	}
@@ -348,14 +359,21 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 			if byLang, ok := index.indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
-					unit.Transcript, err = index.parseDocx(val[0])
-					unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
+					fileName, err := LoadDoc(val[0])
 					if err != nil {
-						log.Warnf("Error parsing docx: %s", val[0])
+						log.Warnf("Error retrieving doc from DB: %s", val[0])
+					} else {
+						err = DownloadAndConvert([][]string{[]string{val[0], fileName}})
+						if err != nil {
+							log.Warnf("Error downloading or converting doc: %s", val[0])
+						} else {
+							unit.Transcript, err = index.parseDocx(val[0])
+							unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
+							if err != nil {
+								log.Warnf("Error parsing docx: %s", val[0])
+							}
+						}
 					}
-					// if err == nil && unit.Transcript != "" {
-					// 	atomic.AddUint64(&withTranscript, 1)
-					// }
 				}
 			}
 

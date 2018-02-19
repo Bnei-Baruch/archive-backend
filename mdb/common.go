@@ -2,6 +2,8 @@ package mdb
 
 import (
 	"database/sql"
+	"os"
+	"path"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -14,8 +16,10 @@ import (
 )
 
 var (
-	DB  *sql.DB
-	ESC *elastic.Client
+	DB         *sql.DB
+	ESC        *elastic.Client
+	SofficeBin string
+	DocFolder  string
 )
 
 func Init() time.Time {
@@ -59,6 +63,13 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	esversion, err := ESC.ElasticsearchVersion(url)
 	utils.Must(err)
 	log.Infof("Elasticsearch version %s", esversion)
+
+	SofficeBin = viper.GetString("elasticsearch.soffice-bin")
+	if SofficeBin == "" {
+		panic("Soffice binary should be set in config.")
+	}
+	DocFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
+	utils.Must(os.MkdirAll(DocFolder, 0777))
 
 	return clock
 }
