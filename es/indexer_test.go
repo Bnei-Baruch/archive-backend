@@ -935,9 +935,9 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	fmt.Printf("\n\n\n--- TEST CONTENT UNITS INDEX ---\n\n\n")
 
 	fmt.Println("Replace docx-folder with temp. path.")
-	originalDocxPath := viper.Get("elasticsearch.docx-folder")
+	originalDocxPath := mdb.DocFolder //viper.Get("elasticsearch.docx-folder")
 	testingsDocxPath := viper.Get("test.test-docx-folder")
-	viper.Set("elasticsearch.docx-folder", testingsDocxPath)
+	mdb.DocFolder = testingsDocxPath.(string) //viper.Set("elasticsearch.docx-folder", testingsDocxPath)
 
 	r := require.New(suite.T())
 	fmt.Printf("\n\n\nAdding content units.\n\n")
@@ -1052,7 +1052,8 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
 
 	fmt.Println("Restore docx-folder path to original.")
-	viper.Set("docx-folder", originalDocxPath)
+	mdb.DocFolder = originalDocxPath
+	//viper.Set("docx-folder", originalDocxPath)
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())

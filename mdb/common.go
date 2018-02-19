@@ -60,6 +60,10 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	)
 	utils.Must(err)
 
+	viper.SetDefault("elasticsearch.python-script", "es/parse_docs.py")
+	viper.SetDefault("elasticsearch.python-path", "C:\\Python27\\python.exe") //for Windows OS only
+	viper.SetDefault("mdb.os", "linux")
+
 	esversion, err := ESC.ElasticsearchVersion(url)
 	utils.Must(err)
 	log.Infof("Elasticsearch version %s", esversion)

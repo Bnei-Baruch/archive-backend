@@ -28,14 +28,14 @@ func MakeContentUnitsIndex(namespace string) *ContentUnitsIndex {
 	cui := new(ContentUnitsIndex)
 	cui.baseName = consts.ES_UNITS_INDEX
 	cui.namespace = namespace
-	cui.docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
+	//cui.docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
 	return cui
 }
 
 type ContentUnitsIndex struct {
 	BaseIndex
 	indexData *IndexData
-	docFolder string
+	//docFolder string
 }
 
 func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
@@ -253,20 +253,20 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 
 func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
-	docxPath := path.Join(index.docFolder, docxFilename)
+	docxPath := path.Join(mdb.DocFolder, docxFilename)
 	//log.Infof("Path of .docx file is: %s", docxPath)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
 		return "", nil
 	}
 
-	//TBD add windows \ linux flag and python script path to config.toml
-	//for windows:
-	/*pythonPath := "C:\\Python27\\python.exe"
-	pscriptPath := "C:\\Users\\Yuri\\go\\src\\github.com\\Bnei-Baruch\\archive-backend\\es\\parse_docs.py" //"es/parse_docs.py"
-	cmd := exec.Command(pythonPath, pscriptPath, docxPath)*/
-
-	//for linux:
-	cmd := exec.Command("es/parse_docs.py", docxPath)
+	var cmd *exec.Cmd
+	pscriptPath := viper.GetString("elasticsearch.python-script")
+	pythonPath := viper.GetString("elasticsearch.python-path")
+	if strings.ToLower(viper.GetString("mdb.os")) == "windows" {
+		cmd = exec.Command(pythonPath, pscriptPath, docxPath)
+	} else {
+		cmd = exec.Command(pscriptPath, docxPath)
+	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
