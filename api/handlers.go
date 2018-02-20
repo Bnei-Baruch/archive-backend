@@ -904,25 +904,25 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 	switch r.Language {
 	case consts.LANG_HEBREW:
 		banner = &Banner{
-			Section:   "אירועים",
-			Header:    "כנס קבלה לעם העולמי",
-			SubHeader: "פברואר 2018",
-			Url:       "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA",
+			//Section:   "אירועים",
+			Header:    "הפרויקט של החיים שלנו",
+			SubHeader: "הארכיון",
+			Url: "http://www.kab1.com/he",
 		}
 
 	case consts.LANG_RUSSIAN:
 		banner = &Banner{
-			Section:   "Конгрессы",
-			Header:    "Международный каббалистический конгресс",
-			SubHeader: "Февраль 2018",
-			Url:       "http://www.kabbalah.info/rus/content/view/frame/162465",
+			//Section:   "Конгрессы",
+			Header:    "Проект Нашей Жизни",
+			SubHeader: "АРХИВ",
+			Url: "http://www.kab1.com/ru",
 		}
 	default:
 		banner = &Banner{
-			Section:   "Events",
-			Header:    "World Kabbalah Convention in Israel",
-			SubHeader: "Feb. 2018",
-			Url:       "http://www.kabbalah.info/engkab/kabbalah-worldwide/convention2018",
+			//Section:   "Events",
+			Header:    "The Project of Our Life",
+			SubHeader: "THE ARCHIVE",
+			Url: "http://www.kab1.com",
 		}
 	}
 
