@@ -917,6 +917,15 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 			SubHeader: "АРХИВ",
 			Url: "http://www.kab1.com/ru",
 		}
+
+	case consts.LANG_SPANISH:
+		banner = &Banner{
+			//Section:   "Конгрессы",
+			Header:    "Proyecto Nuestra Vida",
+			SubHeader: "EL ARCHIVO",
+			Url: "http://www.kab1.com/es",
+		}
+
 	default:
 		banner = &Banner{
 			//Section:   "Events",

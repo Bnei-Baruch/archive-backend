@@ -22,8 +22,10 @@ WITH RECURSIVE rec_sources AS (
   SELECT
     s.id, s.uid, s.parent_id, s.position, s.type_id,
     coalesce((SELECT name FROM source_i18n WHERE source_id = s.id AND language = '%s'),
+			 (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'en'),
              (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'he')) "name",
     coalesce((SELECT description FROM source_i18n WHERE source_id = s.id AND language = '%s'),
+			 (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'en'),
              (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'he')) "description",
     1 "depth"
   FROM sources s
@@ -32,8 +34,10 @@ WITH RECURSIVE rec_sources AS (
   SELECT
     s.id, s.uid, s.parent_id, s.position, s.type_id,
     coalesce((SELECT name FROM source_i18n WHERE source_id = s.id AND language = '%s'),
+			 (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'en'),
              (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'he')) "name",
     coalesce((SELECT description FROM source_i18n WHERE source_id = s.id AND language = '%s'),
+			 (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'en'),
              (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'he')) "description",
     depth + 1
   FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
@@ -47,8 +51,10 @@ const AUTHORS_SOURCES_SQL = `
 SELECT
   a.code,
   coalesce((SELECT name FROM author_i18n WHERE author_id = a.id AND language = '%s'),
+		   (SELECT name FROM author_i18n WHERE author_id = a.id AND language = 'en'),
            (SELECT name FROM author_i18n WHERE author_id = a.id AND language = 'he')) "name",
   coalesce((SELECT full_name FROM author_i18n WHERE author_id = a.id AND language = '%s'),
+		   (SELECT full_name FROM author_i18n WHERE author_id = a.id AND language = 'en'),
            (SELECT full_name FROM author_i18n WHERE author_id = a.id AND language = 'he')) "full_name",
   (SELECT array_agg(source_id) FROM authors_sources WHERE author_id = a.id GROUP BY author_id) "sources"
 FROM authors a;
@@ -63,6 +69,7 @@ WITH RECURSIVE rec_tags AS (
   SELECT
     t.id, t.uid, t.parent_id,
     coalesce((SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = '%s'),
+			 (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'en'),
              (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'he')) "label",
     1 "depth"
   FROM tags t
@@ -71,6 +78,7 @@ WITH RECURSIVE rec_tags AS (
   SELECT
     t.id, t.uid, t.parent_id,
     coalesce((SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = '%s'),
+			 (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'en'),
              (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'he')) "label",
     depth + 1
   FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
