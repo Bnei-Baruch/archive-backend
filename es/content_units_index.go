@@ -51,6 +51,7 @@ func defaultContentUnitSql() string {
 }
 
 func (index *ContentUnitsIndex) ReindexAll() error {
+    log.Infof("Content Units Index - Reindex all.")
 	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
 		return err
 	}
@@ -58,6 +59,7 @@ func (index *ContentUnitsIndex) ReindexAll() error {
 }
 
 func (index *ContentUnitsIndex) Add(scope Scope) error {
+    log.Infof("Content Units Index - Add. Scope: %+v.", scope)
 	// We only add content units when the scope is content unit, otherwise we need to update.
 	if scope.ContentUnitUID != "" {
 		if err := index.addToIndex(Scope{ContentUnitUID: scope.ContentUnitUID}, []string{}); err != nil {
@@ -73,6 +75,7 @@ func (index *ContentUnitsIndex) Add(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) Update(scope Scope) error {
+    log.Infof("Content Units Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
 	if err != nil {
 		return err
@@ -81,6 +84,7 @@ func (index *ContentUnitsIndex) Update(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) Delete(scope Scope) error {
+    log.Infof("Content Units Index - Delete. Scope: %+v.", scope)
 	// We only delete content units when content unit is deleted, otherwise we just update.
 	if scope.ContentUnitUID != "" {
 		if _, err := index.removeFromIndex(Scope{ContentUnitUID: scope.ContentUnitUID}); err != nil {
@@ -178,7 +182,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		return err
 	}
 
-	log.Infof("Adding %d units.", count)
+    log.Infof("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
 
 	offset := 0
 	limit := 1000
@@ -214,6 +218,15 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 }
 
 func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
+    source, err := elasticScope.Source()
+    if err != nil {
+        return []string{}, err
+    }
+    jsonBytes, err := json.Marshal(source)
+    if err != nil {
+        return []string{}, err
+    }
+    log.Infof("Content Untis Index - Removing from index. Scope: %s", string(jsonBytes))
 	removed := make(map[string]bool)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
@@ -240,7 +253,7 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 		}
 	}
 	if len(removed) == 0 {
-		fmt.Println("Nothing was delete.")
+		fmt.Println("Content Units Index - Nothing was delete.")
 		return []string{}, nil
 	}
 	keys := make([]string, len(removed))
@@ -375,6 +388,15 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
+        vCopy := v
+        if len(vCopy.Transcript) > 30 {
+            vCopy.Transcript = fmt.Sprintf("%s...", vCopy.Transcript[:30])
+        }
+        vBytes, err := json.Marshal(vCopy)
+        if err != nil {
+            return err
+        }
+        log.Infof("Content Units Index - Add content unit %s to index %s", string(vBytes), name)
 		resp, err := mdb.ESC.Index().
 			Index(name).
 			Type("content_units").

@@ -38,6 +38,7 @@ func defaultCollectionsSql() string {
 }
 
 func (index *CollectionsIndex) ReindexAll() error {
+    log.Infof("Collections Index - Reindex all.")
 	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
 		return err
 	}
@@ -45,6 +46,7 @@ func (index *CollectionsIndex) ReindexAll() error {
 }
 
 func (index *CollectionsIndex) Add(scope Scope) error {
+    log.Infof("Collections Index - Add. Scope: %+v.", scope)
 	// We only add content units when content unit is added, otherwise we need to update.
 	if scope.CollectionUID != "" {
 		if err := index.addToIndex(Scope{CollectionUID: scope.CollectionUID}, []string{}); err != nil {
@@ -60,6 +62,7 @@ func (index *CollectionsIndex) Add(scope Scope) error {
 }
 
 func (index *CollectionsIndex) Update(scope Scope) error {
+    log.Infof("Collections Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
 	if err != nil {
 		return err
@@ -68,6 +71,7 @@ func (index *CollectionsIndex) Update(scope Scope) error {
 }
 
 func (index *CollectionsIndex) Delete(scope Scope) error {
+    log.Infof("Collections Index - Delete. Scope: %+v.", scope)
 	// We only delete content units when content unit is deleted, otherwise we just update.
 	if scope.CollectionUID != "" {
 		if _, err := index.removeFromIndex(Scope{CollectionUID: scope.CollectionUID}); err != nil {
@@ -83,7 +87,7 @@ func (index *CollectionsIndex) Delete(scope Scope) error {
 }
 
 func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) error {
-	// TODO: Work not done! Missing tags and sources scopes!
+	// TODO: Work not done! Missing tags and sources scopes! <--- Is this still true?!
 	sqlScope := defaultCollectionsSql()
 	uids := removedUIDs
 	if scope.CollectionUID != "" {
@@ -160,7 +164,7 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
 		return err
 	}
-	log.Infof("Adding %d collections.", count)
+    log.Infof("Collections Index - Adding %d collections. Scope: %s.", count, sqlScope)
 	offset := 0
 	limit := 10
 	for offset < int(count) {
@@ -207,6 +211,15 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 }
 
 func (index *CollectionsIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
+    source, err := elasticScope.Source()
+    if err != nil {
+        return []string{}, err
+    }
+    jsonBytes, err := json.Marshal(source)
+    if err != nil {
+        return []string{}, err
+    }
+    log.Infof("Collections Index - Removing from index. Scope: %s", string(jsonBytes))
 	removed := make(map[string]bool)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
@@ -233,7 +246,7 @@ func (index *CollectionsIndex) removeFromIndexQuery(elasticScope elastic.Query) 
 		}
 	}
 	if len(removed) == 0 {
-		log.Info("Nothing was delete.")
+		log.Info("Colelctions Index - Nothing was delete.")
 		return []string{}, nil
 	}
 	keys := make([]string, len(removed))
@@ -314,6 +327,11 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
+        vBytes, err := json.Marshal(v)
+        if err != nil {
+            return err
+        }
+        log.Infof("Collections Index - Add collection %s to index %s", string(vBytes), name)
 		resp, err := mdb.ESC.Index().
 			Index(name).
 			Type("collections").
