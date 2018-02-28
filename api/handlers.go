@@ -907,7 +907,7 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 			//Section:   "אירועים",
 			Header:    "הפרויקט של החיים שלנו",
 			SubHeader: "הארכיון",
-			Url: "http://www.kab1.com/he",
+			Url:       "http://www.kab1.com/he",
 		}
 
 	case consts.LANG_RUSSIAN:
@@ -915,7 +915,7 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 			//Section:   "Конгрессы",
 			Header:    "Проект Нашей Жизни",
 			SubHeader: "АРХИВ",
-			Url: "http://www.kab1.com/ru",
+			Url:       "http://www.kab1.com/ru",
 		}
 
 	case consts.LANG_SPANISH:
@@ -923,7 +923,7 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 			//Section:   "Конгрессы",
 			Header:    "Proyecto Nuestra Vida",
 			SubHeader: "EL ARCHIVO",
-			Url: "http://www.kab1.com/es",
+			Url:       "http://www.kab1.com/es",
 		}
 
 	default:
@@ -931,7 +931,7 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 			//Section:   "Events",
 			Header:    "The Project of Our Life",
 			SubHeader: "THE ARCHIVE",
-			Url: "http://www.kab1.com",
+			Url:       "http://www.kab1.com",
 		}
 	}
 
@@ -1530,12 +1530,13 @@ func mdbToFile(file *mdbmodels.File) (*File, error) {
 	}
 
 	f := &File{
-		ID:       file.UID,
-		Name:     file.Name,
-		Size:     file.Size,
-		Type:     file.Type,
-		SubType:  file.SubType,
-		Duration: props.Duration,
+		ID:        file.UID,
+		Name:      file.Name,
+		Size:      file.Size,
+		Type:      file.Type,
+		SubType:   file.SubType,
+		Duration:  props.Duration,
+		VideoSize: props.VideoSize,
 	}
 
 	if file.Language.Valid {
