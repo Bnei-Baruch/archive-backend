@@ -98,14 +98,14 @@ var ALL_KNOWN_LANGS = [...]string{
 }
 
 var LANG_ORDER = map[string][]string{
-	"":              {LANG_ENGLISH},
-	LANG_ENGLISH:    {LANG_ENGLISH},
-	LANG_HEBREW:     {LANG_HEBREW, LANG_ENGLISH},
-	LANG_RUSSIAN:    {LANG_RUSSIAN, LANG_ENGLISH},
-    // Set English as first language to solve problem
-    // of search like: "Yeshivat Haverim"
-    // This is problematic, but should solve showing
-    // Germal results for this query.
+	"":           {LANG_ENGLISH},
+	LANG_ENGLISH: {LANG_ENGLISH},
+	LANG_HEBREW:  {LANG_HEBREW, LANG_ENGLISH},
+	LANG_RUSSIAN: {LANG_RUSSIAN, LANG_ENGLISH},
+	// Set English as first language to solve problem
+	// of search like: "Yeshivat Haverim"
+	// This is problematic, but should solve showing
+	// Germal results for this query.
 	LANG_SPANISH:    {LANG_ENGLISH, LANG_SPANISH},
 	LANG_ITALIAN:    {LANG_ENGLISH, LANG_ITALIAN},
 	LANG_GERMAN:     {LANG_ENGLISH, LANG_GERMAN},

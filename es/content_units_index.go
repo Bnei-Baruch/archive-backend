@@ -14,7 +14,6 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/olivere/elastic.v5"
 
@@ -28,14 +27,12 @@ func MakeContentUnitsIndex(namespace string) *ContentUnitsIndex {
 	cui := new(ContentUnitsIndex)
 	cui.baseName = consts.ES_UNITS_INDEX
 	cui.namespace = namespace
-	//cui.docFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
 	return cui
 }
 
 type ContentUnitsIndex struct {
 	BaseIndex
 	indexData *IndexData
-	//docFolder string
 }
 
 func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
@@ -52,6 +49,7 @@ func defaultContentUnitSql() string {
 }
 
 func (index *ContentUnitsIndex) ReindexAll() error {
+	log.Infof("Content Units Index - Reindex all.")
 	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
 		return err
 	}
@@ -59,6 +57,7 @@ func (index *ContentUnitsIndex) ReindexAll() error {
 }
 
 func (index *ContentUnitsIndex) Add(scope Scope) error {
+	log.Infof("Content Units Index - Add. Scope: %+v.", scope)
 	// We only add content units when the scope is content unit, otherwise we need to update.
 	if scope.ContentUnitUID != "" {
 		if err := index.addToIndex(Scope{ContentUnitUID: scope.ContentUnitUID}, []string{}); err != nil {
@@ -74,6 +73,7 @@ func (index *ContentUnitsIndex) Add(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) Update(scope Scope) error {
+	log.Infof("Content Units Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
 	if err != nil {
 		return err
@@ -82,6 +82,7 @@ func (index *ContentUnitsIndex) Update(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) Delete(scope Scope) error {
+	log.Infof("Content Units Index - Delete. Scope: %+v.", scope)
 	// We only delete content units when content unit is deleted, otherwise we just update.
 	if scope.ContentUnitUID != "" {
 		if _, err := index.removeFromIndex(Scope{ContentUnitUID: scope.ContentUnitUID}); err != nil {
@@ -186,7 +187,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		return err
 	}
 
-	log.Infof("Adding %d units.", count)
+	log.Infof("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
 
 	offset := 0
 	limit := 1000
@@ -222,6 +223,15 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 }
 
 func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
+	source, err := elasticScope.Source()
+	if err != nil {
+		return []string{}, err
+	}
+	jsonBytes, err := json.Marshal(source)
+	if err != nil {
+		return []string{}, err
+	}
+	log.Infof("Content Untis Index - Removing from index. Scope: %s", string(jsonBytes))
 	removed := make(map[string]bool)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
@@ -248,7 +258,7 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 		}
 	}
 	if len(removed) == 0 {
-		fmt.Println("Nothing was delete.")
+		fmt.Println("Content Units Index - Nothing was delete.")
 		return []string{}, nil
 	}
 	keys := make([]string, len(removed))
@@ -261,28 +271,23 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
 	docxPath := path.Join(mdb.DocFolder, docxFilename)
-	//log.Infof("Path of .docx file is: %s", docxPath)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
-		return "", nil
+		return "", errors.Wrapf(err, "os.Stat %s", docxPath)
 	}
 
 	var cmd *exec.Cmd
-	pscriptPath := viper.GetString("elasticsearch.python-script")
-	pythonPath := viper.GetString("elasticsearch.python-path")
-	if strings.ToLower(viper.GetString("mdb.os")) == "windows" {
-		cmd = exec.Command(pythonPath, pscriptPath, docxPath)
+	if strings.ToLower(mdb.Os) == "windows" {
+		cmd = exec.Command(mdb.PythonPath, mdb.ParseDocsBin, docxPath)
 	} else {
-		cmd = exec.Command(pscriptPath, docxPath)
+		cmd = exec.Command(mdb.ParseDocsBin, docxPath)
 	}
-
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		//log.Errorf("DOCX PARSING ERROR: %s", err)
-		log.Warnf("parse_docs.py %s\nstdout: %s\nstderr: %s", docxPath, stdout.String(), stderr.String())
+		log.Warnf("[%s %s]\nstdout: [%s]\nstderr: [%s]\nError: %+v\n", mdb.ParseDocsBin, docxPath, stdout.String(), stderr.String(), err)
 		return "", errors.Wrapf(err, "cmd.Run %s", uid)
 	}
 	return stdout.String(), nil
@@ -366,18 +371,20 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 			if byLang, ok := index.indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
-					fileName, err := LoadDoc(val[0])
+					fileName, err := LoadDocFilename(val[0])
 					if err != nil {
-						log.Warnf("Error retrieving doc from DB: %s", val[0])
+						log.Errorf("Error retrieving doc from DB: %s", val[0])
 					} else {
-						err = DownloadAndConvert([][]string{[]string{val[0], fileName}})
+						err = DownloadAndConvert([][]string{{val[0], fileName}})
 						if err != nil {
-							log.Warnf("Error downloading or converting doc: %s", val[0])
+							log.Errorf("Error downloading or converting doc: %s", val[0])
+							log.Errorf("Error %+v", err)
 						} else {
 							unit.Transcript, err = index.parseDocx(val[0])
-							unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
 							if err != nil {
-								log.Warnf("Error parsing docx: %s", val[0])
+								log.Errorf("Error parsing docx: %s", val[0])
+							} else {
+								unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
 							}
 						}
 					}
@@ -391,6 +398,15 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
+		vCopy := v
+		if len(vCopy.Transcript) > 30 {
+			vCopy.Transcript = fmt.Sprintf("%s...", vCopy.Transcript[:30])
+		}
+		vBytes, err := json.Marshal(vCopy)
+		if err != nil {
+			return err
+		}
+		log.Infof("Content Units Index - Add content unit %s to index %s", string(vBytes), name)
 		resp, err := mdb.ESC.Index().
 			Index(name).
 			Type("content_units").

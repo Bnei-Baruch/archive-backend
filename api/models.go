@@ -188,14 +188,15 @@ type ContentUnit struct {
 }
 
 type File struct {
-	ID       string  `json:"id"`
-	Name     string  `json:"name"`
-	Size     int64   `json:"size"`
-	Duration float64 `json:"duration,omitempty"`
-	Language string  `json:"language,omitempty"`
-	MimeType string  `json:"mimetype,omitempty"`
-	Type     string  `json:"type,omitempty"`
-	SubType  string  `json:"subtype,omitempty"`
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Size      int64   `json:"size"`
+	Duration  float64 `json:"duration,omitempty"`
+	Language  string  `json:"language,omitempty"`
+	MimeType  string  `json:"mimetype,omitempty"`
+	Type      string  `json:"type,omitempty"`
+	SubType   string  `json:"subtype,omitempty"`
+	VideoSize string  `json:"video_size,omitempty"`
 }
 
 type Source struct {
@@ -245,4 +246,10 @@ type Banner struct {
 	SubHeader string `json:"sub_header"`
 	Url       string `json:"url"`
 	Image     string `json:"image"`
+}
+
+type SemiQuasiData struct {
+	Authors    []*Author    `json:"sources"`
+	Tags       []*Tag       `json:"tags"`
+	Publishers []*Publisher `json:"publishers"`
 }

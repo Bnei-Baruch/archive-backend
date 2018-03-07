@@ -16,12 +16,14 @@ test-docx-folder="es/testdocx"
 
 [elasticsearch]
 url="http://127.0.0.1:9200"
+parse-docs-bin="es/parse_docs.py"
 docx-folder="/tmp/mdb-docx/"
 soffice-bin="/usr/bin/soffice"
 #for windows:
 #soffice-bin="C://Program Files//LibreOffice 5//program//soffice.exe"
-#python-script = "C://Users//[USERNAME]//go//src//github.com//Bnei-Baruch//archive-backend//es//parse_docs.py"
+#parse-docs-bin = "C://Users//[USERNAME]//go//src//github.com//Bnei-Baruch//archive-backend//es//parse_docs.py"
 #python-path="C://Python27//python.exe"
+cdn-url=""
 
 [nats]
 url="nats://localhost:4222"
@@ -40,3 +42,5 @@ url="https://archive.kbb1.com/assets/api/"
 [test]
 mdb-url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 url-template="postgres://localhost/%s?sslmode=disable&user=postgres"
+test-docx-folder="/home/kolmanv/mdb-docx-test/"
+test-cdn-url="http://localhost"
