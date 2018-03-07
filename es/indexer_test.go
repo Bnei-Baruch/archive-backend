@@ -371,7 +371,7 @@ func addContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, 
 	return mdbContentUnit.UID, nil
 }
 
-func addContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source) (string, error) {
+func addContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source, author mdbmodels.Author, insertAuthor bool) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
 		cup, err := mdbmodels.ContentUnits(mdb.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
@@ -393,6 +393,10 @@ func addContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source) (st
 	if err != nil {
 		if err == sql.ErrNoRows {
 			err = src.Insert(mdb.DB)
+			if err != nil {
+				return "", err
+			}
+			err = src.AddAuthors(mdb.DB, insertAuthor, &author)
 			if err != nil {
 				return "", err
 			}
@@ -421,7 +425,7 @@ func removeContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source) 
 		return "", errors.New("cu.MDB_UID is empty")
 	}
 
-	_, err := mdbmodels.FindTag(mdb.DB, src.ID)
+	_, err := mdbmodels.FindSource(mdb.DB, src.ID)
 	if err != nil {
 		return "", err
 	}
@@ -683,17 +687,25 @@ func (suite *IndexerSuite) ucut(cu ContentUnit, lang string, tag mdbmodels.Tag, 
 	return uid
 }
 
-func (suite *IndexerSuite) ucus(cu ContentUnit, lang string, src mdbmodels.Source, add bool) string {
+func (suite *IndexerSuite) acus(cu ContentUnit, lang string, src mdbmodels.Source, author mdbmodels.Author, insertAuthor bool) string {
 	r := require.New(suite.T())
 
 	var err error
 	var uid string
 
-	if add {
-		uid, err = addContentUnitSource(cu, lang, src)
-	} else {
-		uid, err = removeContentUnitSource(cu, lang, src)
-	}
+	uid, err = addContentUnitSource(cu, lang, src, author, insertAuthor)
+	r.Nil(err)
+	return uid
+}
+
+func (suite *IndexerSuite) rcus(cu ContentUnit, lang string, src mdbmodels.Source) string {
+	r := require.New(suite.T())
+
+	var err error
+	var uid string
+
+	uid, err = removeContentUnitSource(cu, lang, src)
+
 	r.Nil(err)
 	return uid
 }
@@ -952,6 +964,7 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	indexNameHe := IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_HEBREW)
 	indexNameRu := IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_RUSSIAN)
 	indexer := MakeIndexer("test", []string{consts.ES_UNITS_INDEX})
+
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll())
 	r.Nil(indexer.RefreshAll())
@@ -984,20 +997,19 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, false)
 
 	fmt.Println("Add a source to content unit and validate.")
-	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, TypeID: 1, UID: "ALlyoveA"}, true)
-	//r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	r.Nil(indexer.SourceUpdate(cu1UID))
+	suite.acus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, TypeID: 1, UID: "ALlyoveA"}, mdbmodels.Author{ID: 1}, true)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	suite.validateContentUnitSources(indexNameEn, indexer, []string{"ALlyoveA"})
 	fmt.Println("Add second source to content unit and validate.")
-	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: "1vCj4qN9"}, true)
+	suite.acus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: "1vCj4qN9"}, mdbmodels.Author{ID: 1}, false)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	suite.validateContentUnitSources(indexNameEn, indexer, []string{"ALlyoveA", "1vCj4qN9"})
 	fmt.Println("Remove one source from content unit and validate.")
-	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, TypeID: 1, UID: "L2jMWyce"}, false)
+	suite.rcus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, TypeID: 1, UID: "L2jMWyce"})
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	suite.validateContentUnitSources(indexNameEn, indexer, []string{"1vCj4qN9"})
 	fmt.Println("Remove the second source.")
-	suite.ucus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: "1vCj4qN9"}, false)
+	suite.rcus(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: "1vCj4qN9"})
 
 	fmt.Println("Make content unit not published and validate.")
 	//dumpDB("TestContentUnitsIndex, BeforeDB")
