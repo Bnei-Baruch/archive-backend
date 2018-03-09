@@ -145,6 +145,8 @@ https://www.python.org/downloads/
     Update 'soffice-bin' value with soffice.exe full path in config.toml, [elasticsearch] section:
     "C://Program Files//LibreOffice 5//program//soffice.exe"
 
+7. Copy to config.toml the required commented-out lines from config.sample.toml that are related to Windows.
+
 ## License
 
 MIT

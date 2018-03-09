@@ -120,6 +120,13 @@ func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) er
 		}
 		uids = append(uids, moreUIDs...)
 	}
+	if scope.SourceUID != "" {
+		moreUIDs, err := contentUnitsScopeBySource(index.db, scope.SourceUID)
+		if err != nil {
+			return err
+		}
+		uids = append(uids, moreUIDs...)
+	}
 	if len(uids) == 0 {
 		return nil
 	}
@@ -270,7 +277,12 @@ func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 		return "", errors.Wrapf(err, "os.Stat %s", docxPath)
 	}
 
-	cmd := exec.Command(parseDocsBin, docxPath)
+	var cmd *exec.Cmd
+	if strings.ToLower(operatingSystem) == "windows" {
+		cmd = exec.Command(pythonPath, parseDocsBin, docxPath)
+	} else {
+		cmd = exec.Command(parseDocsBin, docxPath)
+	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout

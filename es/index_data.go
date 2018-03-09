@@ -78,7 +78,7 @@ WITH RECURSIVE rec_sources AS (
 )
 SELECT
   cu.uid,
-  array_agg(DISTINCT item)
+  array_agg(DISTINCT item) FILTER (WHERE item IS NOT NULL AND item <> '')
 FROM content_units_sources cus
     INNER JOIN rec_sources AS rs ON cus.source_id = rs.id
     INNER JOIN content_units AS cu ON cus.content_unit_id = cu.id

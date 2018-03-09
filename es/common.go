@@ -17,13 +17,17 @@ import (
 )
 
 var (
-	sofficeBin   string
-	docFolder    string
-	parseDocsBin string
-	cdnUrl       string
+	sofficeBin      string
+	docFolder       string
+	parseDocsBin    string
+	cdnUrl          string
+    pythonPath      string
+    operatingSystem string
 )
 
 func InitVars() {
+	pythonPath = viper.GetString("elasticsearch.python-path")
+	operatingSystem = viper.GetString("elasticsearch.os")
 	sofficeBin = viper.GetString("elasticsearch.soffice-bin")
 	if sofficeBin == "" {
 		panic("Soffice binary should be set in config.")
@@ -116,6 +120,21 @@ func CollectionsScopeByContentUnit(mdb *sql.DB, cuUID string) ([]string, error) 
 	uids := make([]string, len(collections))
 	for i, collection := range collections {
 		uids[i] = collection.UID
+	}
+	return uids, nil
+}
+
+func contentUnitsScopeBySource(mdb *sql.DB, sourceUID string) ([]string, error) {
+	sources, err := mdbmodels.ContentUnits(mdb,
+		qm.InnerJoin("content_units_sources AS cus ON cus.content_unit_id = id"),
+		qm.InnerJoin("sources AS s ON s.id = cus.source_id"),
+		qm.Where("s.uid = ?", sourceUID)).All()
+	if err != nil {
+		return nil, err
+	}
+	uids := make([]string, len(sources))
+	for i, sources := range sources {
+		uids[i] = sources.UID
 	}
 	return uids, nil
 }
