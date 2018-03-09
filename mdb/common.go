@@ -22,6 +22,8 @@ var (
 	DocFolder    string
 	ParseDocsBin string
 	CDNUrl       string
+	PythonPath   string
+	Os           string
 )
 
 func Init() time.Time {
@@ -65,6 +67,11 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	esversion, err := ESC.ElasticsearchVersion(url)
 	utils.Must(err)
 	log.Infof("Elasticsearch version %s", esversion)
+
+	viper.SetDefault("elasticsearch.python-path", "C:\\Python27\\python.exe") //for Windows OS only
+	viper.SetDefault("mdb.os", "linux")
+	PythonPath = viper.GetString("elasticsearch.python-path")
+	Os = viper.GetString("mdb.os")
 
 	SofficeBin = viper.GetString("elasticsearch.soffice-bin")
 	if SofficeBin == "" {

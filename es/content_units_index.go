@@ -27,14 +27,12 @@ func MakeContentUnitsIndex(namespace string) *ContentUnitsIndex {
 	cui := new(ContentUnitsIndex)
 	cui.baseName = consts.ES_UNITS_INDEX
 	cui.namespace = namespace
-	cui.docFolder = path.Join(mdb.DocFolder)
 	return cui
 }
 
 type ContentUnitsIndex struct {
 	BaseIndex
 	indexData *IndexData
-	docFolder string
 }
 
 func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
@@ -51,7 +49,7 @@ func defaultContentUnitSql() string {
 }
 
 func (index *ContentUnitsIndex) ReindexAll() error {
-    log.Infof("Content Units Index - Reindex all.")
+	log.Infof("Content Units Index - Reindex all.")
 	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
 		return err
 	}
@@ -59,7 +57,7 @@ func (index *ContentUnitsIndex) ReindexAll() error {
 }
 
 func (index *ContentUnitsIndex) Add(scope Scope) error {
-    log.Infof("Content Units Index - Add. Scope: %+v.", scope)
+	log.Infof("Content Units Index - Add. Scope: %+v.", scope)
 	// We only add content units when the scope is content unit, otherwise we need to update.
 	if scope.ContentUnitUID != "" {
 		if err := index.addToIndex(Scope{ContentUnitUID: scope.ContentUnitUID}, []string{}); err != nil {
@@ -75,7 +73,7 @@ func (index *ContentUnitsIndex) Add(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) Update(scope Scope) error {
-    log.Infof("Content Units Index - Update. Scope: %+v.", scope)
+	log.Infof("Content Units Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
 	if err != nil {
 		return err
@@ -84,7 +82,7 @@ func (index *ContentUnitsIndex) Update(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) Delete(scope Scope) error {
-    log.Infof("Content Units Index - Delete. Scope: %+v.", scope)
+	log.Infof("Content Units Index - Delete. Scope: %+v.", scope)
 	// We only delete content units when content unit is deleted, otherwise we just update.
 	if scope.ContentUnitUID != "" {
 		if _, err := index.removeFromIndex(Scope{ContentUnitUID: scope.ContentUnitUID}); err != nil {
@@ -115,6 +113,13 @@ func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) er
 	}
 	if scope.CollectionUID != "" {
 		moreUIDs, err := contentUnitsScopeByCollection(scope.CollectionUID)
+		if err != nil {
+			return err
+		}
+		uids = append(uids, moreUIDs...)
+	}
+	if scope.SourceUID != "" {
+		moreUIDs, err := contentUnitsScopeBySource(scope.SourceUID)
 		if err != nil {
 			return err
 		}
@@ -182,7 +187,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		return err
 	}
 
-    log.Infof("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
+	log.Infof("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
 
 	offset := 0
 	limit := 1000
@@ -218,15 +223,15 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 }
 
 func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
-    source, err := elasticScope.Source()
-    if err != nil {
-        return []string{}, err
-    }
-    jsonBytes, err := json.Marshal(source)
-    if err != nil {
-        return []string{}, err
-    }
-    log.Infof("Content Untis Index - Removing from index. Scope: %s", string(jsonBytes))
+	source, err := elasticScope.Source()
+	if err != nil {
+		return []string{}, err
+	}
+	jsonBytes, err := json.Marshal(source)
+	if err != nil {
+		return []string{}, err
+	}
+	log.Infof("Content Untis Index - Removing from index. Scope: %s", string(jsonBytes))
 	removed := make(map[string]bool)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
@@ -265,12 +270,17 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 
 func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
-	docxPath := path.Join(index.docFolder, docxFilename)
+	docxPath := path.Join(mdb.DocFolder, docxFilename)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
 		return "", errors.Wrapf(err, "os.Stat %s", docxPath)
 	}
 
-	cmd := exec.Command(mdb.ParseDocsBin, docxPath)
+	var cmd *exec.Cmd
+	if strings.ToLower(mdb.Os) == "windows" {
+		cmd = exec.Command(mdb.PythonPath, mdb.ParseDocsBin, docxPath)
+	} else {
+		cmd = exec.Command(mdb.ParseDocsBin, docxPath)
+	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -388,15 +398,15 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
-        vCopy := v
-        if len(vCopy.Transcript) > 30 {
-            vCopy.Transcript = fmt.Sprintf("%s...", vCopy.Transcript[:30])
-        }
-        vBytes, err := json.Marshal(vCopy)
-        if err != nil {
-            return err
-        }
-        log.Infof("Content Units Index - Add content unit %s to index %s", string(vBytes), name)
+		vCopy := v
+		if len(vCopy.Transcript) > 30 {
+			vCopy.Transcript = fmt.Sprintf("%s...", vCopy.Transcript[:30])
+		}
+		vBytes, err := json.Marshal(vCopy)
+		if err != nil {
+			return err
+		}
+		log.Infof("Content Units Index - Add content unit %s to index %s", string(vBytes), name)
 		resp, err := mdb.ESC.Index().
 			Index(name).
 			Type("content_units").
