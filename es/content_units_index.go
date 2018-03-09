@@ -3,6 +3,7 @@ package es
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -23,18 +24,17 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-func MakeContentUnitsIndex(namespace string) *ContentUnitsIndex {
+func MakeContentUnitsIndex(namespace string, db *sql.DB, esc *elastic.Client) *ContentUnitsIndex {
 	cui := new(ContentUnitsIndex)
 	cui.baseName = consts.ES_UNITS_INDEX
 	cui.namespace = namespace
-	cui.docFolder = path.Join(mdb.DocFolder)
+	cui.db = db
+	cui.esc = esc
 	return cui
 }
 
 type ContentUnitsIndex struct {
 	BaseIndex
-	indexData *IndexData
-	docFolder string
 }
 
 func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
@@ -51,7 +51,7 @@ func defaultContentUnitSql() string {
 }
 
 func (index *ContentUnitsIndex) ReindexAll() error {
-    log.Infof("Content Units Index - Reindex all.")
+	log.Infof("Content Units Index - Reindex all.")
 	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func (index *ContentUnitsIndex) ReindexAll() error {
 }
 
 func (index *ContentUnitsIndex) Add(scope Scope) error {
-    log.Infof("Content Units Index - Add. Scope: %+v.", scope)
+	log.Infof("Content Units Index - Add. Scope: %+v.", scope)
 	// We only add content units when the scope is content unit, otherwise we need to update.
 	if scope.ContentUnitUID != "" {
 		if err := index.addToIndex(Scope{ContentUnitUID: scope.ContentUnitUID}, []string{}); err != nil {
@@ -75,7 +75,7 @@ func (index *ContentUnitsIndex) Add(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) Update(scope Scope) error {
-    log.Infof("Content Units Index - Update. Scope: %+v.", scope)
+	log.Infof("Content Units Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
 	if err != nil {
 		return err
@@ -84,7 +84,7 @@ func (index *ContentUnitsIndex) Update(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) Delete(scope Scope) error {
-    log.Infof("Content Units Index - Delete. Scope: %+v.", scope)
+	log.Infof("Content Units Index - Delete. Scope: %+v.", scope)
 	// We only delete content units when content unit is deleted, otherwise we just update.
 	if scope.ContentUnitUID != "" {
 		if _, err := index.removeFromIndex(Scope{ContentUnitUID: scope.ContentUnitUID}); err != nil {
@@ -107,14 +107,14 @@ func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) er
 		uids = append(uids, scope.ContentUnitUID)
 	}
 	if scope.FileUID != "" {
-		moreUIDs, err := contentUnitsScopeByFile(scope.FileUID)
+		moreUIDs, err := contentUnitsScopeByFile(index.db, scope.FileUID)
 		if err != nil {
 			return err
 		}
 		uids = append(uids, moreUIDs...)
 	}
 	if scope.CollectionUID != "" {
-		moreUIDs, err := contentUnitsScopeByCollection(scope.CollectionUID)
+		moreUIDs, err := contentUnitsScopeByCollection(index.db, scope.CollectionUID)
 		if err != nil {
 			return err
 		}
@@ -141,7 +141,7 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	}
 	if scope.CollectionUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("collection", scope.CollectionUID))
-		moreUIDs, err := contentUnitsScopeByCollection(scope.CollectionUID)
+		moreUIDs, err := contentUnitsScopeByCollection(index.db, scope.CollectionUID)
 		if err != nil {
 			return []string{}, err
 		}
@@ -174,7 +174,7 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 
 func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 	var count int64
-	err := mdbmodels.NewQuery(mdb.DB,
+	err := mdbmodels.NewQuery(index.db,
 		qm.Select("COUNT(1)"),
 		qm.From("content_units as cu"),
 		qm.Where(sqlScope)).QueryRow().Scan(&count)
@@ -182,13 +182,13 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		return err
 	}
 
-    log.Infof("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
+	log.Infof("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
 
 	offset := 0
 	limit := 1000
 	for offset < int(count) {
 		var units []*mdbmodels.ContentUnit
-		err := mdbmodels.NewQuery(mdb.DB,
+		err := mdbmodels.NewQuery(index.db,
 			qm.From("content_units as cu"),
 			qm.Load("ContentUnitI18ns"),
 			qm.Load("CollectionsContentUnits"),
@@ -201,13 +201,12 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		}
 		log.Infof("Adding %d units (offset: %d).", len(units), offset)
 
-		index.indexData = new(IndexData)
-		err = index.indexData.Load(sqlScope)
+		indexData, err := MakeIndexData(index.db, sqlScope)
 		if err != nil {
 			return err
 		}
 		for _, unit := range units {
-			if err := index.indexUnit(unit); err != nil {
+			if err := index.indexUnit(unit, indexData); err != nil {
 				return err
 			}
 		}
@@ -218,19 +217,19 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 }
 
 func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
-    source, err := elasticScope.Source()
-    if err != nil {
-        return []string{}, err
-    }
-    jsonBytes, err := json.Marshal(source)
-    if err != nil {
-        return []string{}, err
-    }
-    log.Infof("Content Untis Index - Removing from index. Scope: %s", string(jsonBytes))
+	source, err := elasticScope.Source()
+	if err != nil {
+		return []string{}, err
+	}
+	jsonBytes, err := json.Marshal(source)
+	if err != nil {
+		return []string{}, err
+	}
+	log.Infof("Content Untis Index - Removing from index. Scope: %s", string(jsonBytes))
 	removed := make(map[string]bool)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
-		searchRes, err := mdb.ESC.Search(indexName).Query(elasticScope).Do(context.TODO())
+		searchRes, err := index.esc.Search(indexName).Query(elasticScope).Do(context.TODO())
 		if err != nil {
 			return []string{}, err
 		}
@@ -242,7 +241,7 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 			}
 			removed[cu.MDB_UID] = true
 		}
-		delRes, err := mdb.ESC.DeleteByQuery(indexName).
+		delRes, err := index.esc.DeleteByQuery(indexName).
 			Query(elasticScope).
 			Do(context.TODO())
 		if err != nil {
@@ -265,19 +264,20 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 
 func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	docxFilename := fmt.Sprintf("%s.docx", uid)
-	docxPath := path.Join(index.docFolder, docxFilename)
+	docxPath := path.Join(docFolder, docxFilename)
 	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
+		log.Warnf("Could not find file to parse %s", docxPath)
 		return "", errors.Wrapf(err, "os.Stat %s", docxPath)
 	}
 
-	cmd := exec.Command(mdb.ParseDocsBin, docxPath)
+	cmd := exec.Command(parseDocsBin, docxPath)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		log.Warnf("[%s %s]\nstdout: [%s]\nstderr: [%s]\nError: %+v\n", mdb.ParseDocsBin, docxPath, stdout.String(), stderr.String(), err)
+		log.Warnf("[%s %s]\nstdout: [%s]\nstderr: [%s]\nError: %+v\n", parseDocsBin, docxPath, stdout.String(), stderr.String(), err)
 		return "", errors.Wrapf(err, "cmd.Run %s", uid)
 	}
 	return stdout.String(), nil
@@ -299,7 +299,7 @@ func collectionsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentUn
 	return ret
 }
 
-func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
+func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *IndexData) error {
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]ContentUnit)
 	for _, i18n := range cu.R.ContentUnitI18ns {
@@ -334,7 +334,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 				}
 
 				if duration, ok := props["duration"]; ok {
-					unit.Duration = uint16(math.Max(0, duration.(float64)))
+					unit.Duration = uint64(math.Max(0, duration.(float64)))
 				}
 
 				if originalLanguage, ok := props["original_language"]; ok {
@@ -342,26 +342,26 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 				}
 			}
 
-			if val, ok := index.indexData.Sources[cu.UID]; ok {
+			if val, ok := indexData.Sources[cu.UID]; ok {
 				unit.Sources = val
 				unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("source", val)...)
 			}
-			if val, ok := index.indexData.Tags[cu.UID]; ok {
+			if val, ok := indexData.Tags[cu.UID]; ok {
 				unit.Tags = val
 				unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("tag", val)...)
 			}
-			if val, ok := index.indexData.Persons[cu.UID]; ok {
+			if val, ok := indexData.Persons[cu.UID]; ok {
 				unit.Persons = val
 				unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("person", val)...)
 			}
-			if val, ok := index.indexData.Translations[cu.UID]; ok {
+			if val, ok := indexData.Translations[cu.UID]; ok {
 				unit.Translations = val[1]
 				unit.TypedUIDs = append(unit.TypedUIDs, uidsToTypedUIDs("file", val[0])...)
 			}
-			if byLang, ok := index.indexData.Transcripts[cu.UID]; ok {
+			if byLang, ok := indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
-					fileName, err := LoadDocFilename(val[0])
+					fileName, err := LoadDocFilename(index.db, val[0])
 					if err != nil {
 						log.Errorf("Error retrieving doc from DB: %s", val[0])
 					} else {
@@ -388,16 +388,16 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
-        vCopy := v
-        if len(vCopy.Transcript) > 30 {
-            vCopy.Transcript = fmt.Sprintf("%s...", vCopy.Transcript[:30])
-        }
-        vBytes, err := json.Marshal(vCopy)
-        if err != nil {
-            return err
-        }
-        log.Infof("Content Units Index - Add content unit %s to index %s", string(vBytes), name)
-		resp, err := mdb.ESC.Index().
+		vCopy := v
+		if len(vCopy.Transcript) > 30 {
+			vCopy.Transcript = fmt.Sprintf("%s...", vCopy.Transcript[:30])
+		}
+		vBytes, err := json.Marshal(vCopy)
+		if err != nil {
+			return err
+		}
+		log.Infof("Content Units Index - Add content unit %s to index %s", string(vBytes), name)
+		resp, err := index.esc.Index().
 			Index(name).
 			Type("content_units").
 			BodyJson(v).

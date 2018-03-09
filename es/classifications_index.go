@@ -2,8 +2,9 @@ package es
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
-    "encoding/json"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
@@ -11,14 +12,15 @@ import (
 	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
-func MakeClassificationsIndex(namespace string) *ClassificationsIndex {
+func MakeClassificationsIndex(namespace string, db *sql.DB, esc *elastic.Client) *ClassificationsIndex {
 	ci := new(ClassificationsIndex)
 	ci.baseName = consts.ES_CLASSIFICATIONS_INDEX
 	ci.namespace = namespace
+	ci.db = db
+	ci.esc = esc
 	return ci
 }
 
@@ -38,12 +40,12 @@ func (index *ClassificationsIndex) ReindexAll() error {
 }
 
 func (index *ClassificationsIndex) Add(scope Scope) error {
-    log.Info("Classifications Index - Add. Scope: %+v.", scope)
+	log.Info("Classifications Index - Add. Scope: %+v.", scope)
 	return index.addToIndex(scope)
 }
 
 func (index *ClassificationsIndex) Update(scope Scope) error {
-    log.Info("Classifications Index - Update. Scope: %+v.", scope)
+	log.Info("Classifications Index - Update. Scope: %+v.", scope)
 	if err := index.Delete(scope); err != nil {
 		return err
 	}
@@ -51,7 +53,7 @@ func (index *ClassificationsIndex) Update(scope Scope) error {
 }
 
 func (index *ClassificationsIndex) Delete(scope Scope) error {
-    log.Info("Classifications Index - Delete. Scope: %+v.", scope)
+	log.Info("Classifications Index - Delete. Scope: %+v.", scope)
 	if scope.TagUID != "" {
 		if err := index.removeFromIndexQuery(elastic.NewTermsQuery("mdb_uid", scope.TagUID)); err != nil {
 			return err
@@ -76,13 +78,13 @@ func (index *ClassificationsIndex) addToIndex(scope Scope) error {
 }
 
 func (index *ClassificationsIndex) addTagsToIndexSql(sqlScope string) error {
-	tags, err := mdbmodels.Tags(mdb.DB,
+	tags, err := mdbmodels.Tags(index.db,
 		qm.Load("TagI18ns"),
 		qm.Where(sqlScope)).All()
 	if err != nil {
 		return errors.Wrap(err, "Fetch tags from mdb")
 	}
-    log.Infof("Classifications Index - Adding %d tags. Scope: %s.", len(tags), sqlScope)
+	log.Infof("Classifications Index - Adding %d tags. Scope: %s.", len(tags), sqlScope)
 
 	for _, tag := range tags {
 		if !tag.ParentID.Valid {
@@ -97,13 +99,13 @@ func (index *ClassificationsIndex) addTagsToIndexSql(sqlScope string) error {
 }
 
 func (index *ClassificationsIndex) addSourcesToIndexSql(sqlScope string) error {
-	sources, err := mdbmodels.Sources(mdb.DB,
+	sources, err := mdbmodels.Sources(index.db,
 		qm.Load("SourceI18ns"),
 		qm.Where(sqlScope)).All()
 	if err != nil {
 		return errors.Wrap(err, "Fetch sources from mdb.")
 	}
-    log.Infof("Classifications Index - Adding %d sources. Scope: %s.", len(sources), sqlScope)
+	log.Infof("Classifications Index - Adding %d sources. Scope: %s.", len(sources), sqlScope)
 
 	for _, source := range sources {
 		if err := index.indexSource(source); err != nil {
@@ -114,18 +116,18 @@ func (index *ClassificationsIndex) addSourcesToIndexSql(sqlScope string) error {
 }
 
 func (index *ClassificationsIndex) removeFromIndexQuery(elasticScope elastic.Query) error {
-    source, err := elasticScope.Source()
-    if err != nil {
-        return err
-    }
-    jsonBytes, err := json.Marshal(source)
-    if err != nil {
-        return err
-    }
-    log.Infof("Classifications Index - Removing from index. Scope: %s", string(jsonBytes))
+	source, err := elasticScope.Source()
+	if err != nil {
+		return err
+	}
+	jsonBytes, err := json.Marshal(source)
+	if err != nil {
+		return err
+	}
+	log.Infof("Classifications Index - Removing from index. Scope: %s", string(jsonBytes))
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
-		res, err := mdb.ESC.DeleteByQuery(indexName).
+		res, err := index.esc.DeleteByQuery(indexName).
 			Query(elasticScope).
 			Do(context.TODO())
 		if err != nil {
@@ -153,12 +155,12 @@ func (index *ClassificationsIndex) indexTag(t *mdbmodels.Tag) error {
 				NameSuggest: i18n.Label.String,
 			}
 			name := index.indexName(i18n.Language)
-            cBytes, err := json.Marshal(c)
-            if err != nil {
-                return err
-            }
-            log.Infof("Classifications Index - Add tag %s to index %s", string(cBytes), name)
-			resp, err := mdb.ESC.Index().
+			cBytes, err := json.Marshal(c)
+			if err != nil {
+				return err
+			}
+			log.Infof("Classifications Index - Add tag %s to index %s", string(cBytes), name)
+			resp, err := index.esc.Index().
 				Index(name).
 				Type("tags").
 				BodyJson(c).
@@ -189,12 +191,12 @@ func (index *ClassificationsIndex) indexSource(s *mdbmodels.Source) error {
 				c.DescriptionSuggest = i18n.Description.String
 			}
 			name := index.indexName(i18n.Language)
-            cBytes, err := json.Marshal(c)
-            if err != nil {
-                return err
-            }
-            log.Infof("Classifications Index - Add source %s to index %s", string(cBytes), name)
-			resp, err := mdb.ESC.Index().
+			cBytes, err := json.Marshal(c)
+			if err != nil {
+				return err
+			}
+			log.Infof("Classifications Index - Add source %s to index %s", string(cBytes), name)
+			resp, err := index.esc.Index().
 				Index(name).
 				Type("sources").
 				BodyJson(c).

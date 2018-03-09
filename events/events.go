@@ -11,8 +11,8 @@ import (
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/spf13/viper"
 
+	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/es"
-	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -25,8 +25,8 @@ func RunListener() {
 	var err error
 
 	log.Info("Initialize data stores")
-	mdb.Init()
-	defer mdb.Shutdown()
+	common.Init()
+	defer common.Shutdown()
 
 	log.Info("Initialize connection to nats")
 	natsURL := viper.GetString("nats.url")
@@ -49,9 +49,9 @@ func RunListener() {
 
 	log.Info("Initialize search engine indexer")
 	if viper.GetBool("server.fake-indexer") {
-		indexer = es.MakeFakeIndexer()
+		indexer = es.MakeFakeIndexer(common.DB, common.ESC)
 	} else {
-		indexer = es.MakeProdIndexer()
+		indexer = es.MakeProdIndexer(common.DB, common.ESC)
 	}
 
 	log.Info("Initialize indexer queue")

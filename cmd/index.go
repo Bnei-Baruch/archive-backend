@@ -2,9 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 )
@@ -45,13 +48,27 @@ func indexFn(cmd *cobra.Command, args []string) {
 }
 
 func indexClassificationsFn(cmd *cobra.Command, args []string) {
-	es.IndexCmd(consts.ES_CLASSIFICATIONS_INDEX)
+	IndexCmd(consts.ES_CLASSIFICATIONS_INDEX)
 }
 
 func indexUnitsFn(cmd *cobra.Command, args []string) {
-	es.IndexCmd(consts.ES_UNITS_INDEX)
+	IndexCmd(consts.ES_UNITS_INDEX)
 }
 
 func indexCollectionsFn(cmd *cobra.Command, args []string) {
-	es.IndexCmd(consts.ES_COLLECTIONS_INDEX)
+	IndexCmd(consts.ES_COLLECTIONS_INDEX)
+}
+
+func IndexCmd(index string) {
+	clock := common.Init()
+	indexer := es.MakeIndexer("prod", []string{index}, common.DB, common.ESC)
+	err := indexer.ReindexAll()
+	if err != nil {
+		log.Error(err)
+	}
+	common.Shutdown()
+	if err == nil {
+		log.Info("Success")
+		log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+	}
 }

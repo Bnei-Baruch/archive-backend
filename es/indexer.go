@@ -1,9 +1,11 @@
 package es
 
 import (
-    "strings"
+	"database/sql"
+	"strings"
 
 	log "github.com/Sirupsen/logrus"
+	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )
@@ -12,29 +14,29 @@ type Indexer struct {
 	indices []Index
 }
 
-func MakeProdIndexer() *Indexer {
+func MakeProdIndexer(mdb *sql.DB, esc *elastic.Client) *Indexer {
 	return MakeIndexer("prod", []string{
 		consts.ES_CLASSIFICATIONS_INDEX,
 		consts.ES_UNITS_INDEX,
-		consts.ES_COLLECTIONS_INDEX})
+		consts.ES_COLLECTIONS_INDEX}, mdb, esc)
 }
 
-func MakeFakeIndexer() *Indexer {
-	return MakeIndexer("fake", []string{})
+func MakeFakeIndexer(mdb *sql.DB, esc *elastic.Client) *Indexer {
+	return MakeIndexer("fake", []string{}, mdb, esc)
 }
 
 // Receives namespace and list of indexes names.
-func MakeIndexer(namespace string, names []string) *Indexer {
-    log.Infof("Indexer - Make indexer - %s - %s", namespace, strings.Join(names, ", "))
+func MakeIndexer(namespace string, names []string, mdb *sql.DB, esc *elastic.Client) *Indexer {
+	log.Infof("Indexer - Make indexer - %s - %s", namespace, strings.Join(names, ", "))
 	indexer := new(Indexer)
 	indexer.indices = make([]Index, len(names))
 	for i, name := range names {
 		if name == consts.ES_CLASSIFICATIONS_INDEX {
-			indexer.indices[i] = MakeClassificationsIndex(namespace)
+			indexer.indices[i] = MakeClassificationsIndex(namespace, mdb, esc)
 		} else if name == consts.ES_UNITS_INDEX {
-			indexer.indices[i] = MakeContentUnitsIndex(namespace)
+			indexer.indices[i] = MakeContentUnitsIndex(namespace, mdb, esc)
 		} else if name == consts.ES_COLLECTIONS_INDEX {
-			indexer.indices[i] = MakeCollectionsIndex(namespace)
+			indexer.indices[i] = MakeCollectionsIndex(namespace, mdb, esc)
 		}
 	}
 	return indexer
@@ -61,7 +63,7 @@ func (indexer *Indexer) ReindexAll() error {
 }
 
 func (indexer *Indexer) RefreshAll() error {
-    log.Info("Indexer - Refresh (sync new indexed documents) all indices.")
+	log.Info("Indexer - Refresh (sync new indexed documents) all indices.")
 	for _, index := range indexer.indices {
 		index.RefreshIndex()
 	}
@@ -69,7 +71,7 @@ func (indexer *Indexer) RefreshAll() error {
 }
 
 func (indexer *Indexer) CreateIndexes() error {
-    log.Info("Indexer - Create new indices in elastic.")
+	log.Info("Indexer - Create new indices in elastic.")
 	for _, index := range indexer.indices {
 		if err := index.CreateIndex(); err != nil {
 			return err
@@ -79,7 +81,7 @@ func (indexer *Indexer) CreateIndexes() error {
 }
 
 func (indexer *Indexer) DeleteIndexes() error {
-    log.Info("Indexer - Delete indices from elastic.")
+	log.Info("Indexer - Delete indices from elastic.")
 	for _, index := range indexer.indices {
 		if err := index.DeleteIndex(); err != nil {
 			return err
@@ -90,7 +92,7 @@ func (indexer *Indexer) DeleteIndexes() error {
 
 // Set of MDB event handlers to incrementally change all indexes.
 func (indexer *Indexer) CollectionAdd(uid string) error {
-    log.Info("Indexer - Index collection add event: %s", uid)
+	log.Info("Indexer - Index collection add event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Add(Scope{CollectionUID: uid}); err != nil {
 			return err
@@ -100,7 +102,7 @@ func (indexer *Indexer) CollectionAdd(uid string) error {
 }
 
 func (indexer *Indexer) CollectionUpdate(uid string) error {
-    log.Info("Indexer - Index collection upadate event: %s", uid)
+	log.Info("Indexer - Index collection upadate event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Update(Scope{CollectionUID: uid}); err != nil {
 			return err
@@ -110,7 +112,7 @@ func (indexer *Indexer) CollectionUpdate(uid string) error {
 }
 
 func (indexer *Indexer) CollectionDelete(uid string) error {
-    log.Info("Indexer - Index collection delete event: %s", uid)
+	log.Info("Indexer - Index collection delete event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Delete(Scope{CollectionUID: uid}); err != nil {
 			return err
@@ -120,7 +122,7 @@ func (indexer *Indexer) CollectionDelete(uid string) error {
 }
 
 func (indexer *Indexer) ContentUnitAdd(uid string) error {
-    log.Info("Indexer - Index content unit add event: %s", uid)
+	log.Info("Indexer - Index content unit add event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Add(Scope{ContentUnitUID: uid}); err != nil {
 			return err
@@ -130,7 +132,7 @@ func (indexer *Indexer) ContentUnitAdd(uid string) error {
 }
 
 func (indexer *Indexer) ContentUnitUpdate(uid string) error {
-    log.Info("Indexer - Index content unit update  event: %s", uid)
+	log.Info("Indexer - Index content unit update  event: %s", uid)
 	for _, index := range indexer.indices {
 		// TODO: Optimize update to update elastic and not delete and then
 		// add. It might be a problem on bulk updates, i.e., of someone added
@@ -146,7 +148,7 @@ func (indexer *Indexer) ContentUnitUpdate(uid string) error {
 }
 
 func (indexer *Indexer) ContentUnitDelete(uid string) error {
-    log.Info("Indexer - Index content unit delete event: %s", uid)
+	log.Info("Indexer - Index content unit delete event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Delete(Scope{ContentUnitUID: uid}); err != nil {
 			return err
@@ -156,7 +158,7 @@ func (indexer *Indexer) ContentUnitDelete(uid string) error {
 }
 
 func (indexer *Indexer) FileAdd(uid string) error {
-    log.Info("Indexer - Index file add event: %s", uid)
+	log.Info("Indexer - Index file add event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Add(Scope{FileUID: uid}); err != nil {
 			return err
@@ -166,7 +168,7 @@ func (indexer *Indexer) FileAdd(uid string) error {
 }
 
 func (indexer *Indexer) FileUpdate(uid string) error {
-    log.Info("Indexer - Index file update event: %s", uid)
+	log.Info("Indexer - Index file update event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Update(Scope{FileUID: uid}); err != nil {
 			return err
@@ -176,7 +178,7 @@ func (indexer *Indexer) FileUpdate(uid string) error {
 }
 
 func (indexer *Indexer) FileDelete(uid string) error {
-    log.Info("Indexer - Index file delete event: %s", uid)
+	log.Info("Indexer - Index file delete event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Delete(Scope{FileUID: uid}); err != nil {
 			return err
@@ -186,7 +188,7 @@ func (indexer *Indexer) FileDelete(uid string) error {
 }
 
 func (indexer *Indexer) SourceAdd(uid string) error {
-    log.Info("Indexer - Index source add event: %s", uid)
+	log.Info("Indexer - Index source add event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Add(Scope{SourceUID: uid}); err != nil {
 			return err
@@ -196,7 +198,7 @@ func (indexer *Indexer) SourceAdd(uid string) error {
 }
 
 func (indexer *Indexer) SourceUpdate(uid string) error {
-    log.Info("Indexer - Index source update event: %s", uid)
+	log.Info("Indexer - Index source update event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Update(Scope{SourceUID: uid}); err != nil {
 			return err
@@ -206,7 +208,7 @@ func (indexer *Indexer) SourceUpdate(uid string) error {
 }
 
 func (indexer *Indexer) TagAdd(uid string) error {
-    log.Info("Indexer - Index tag add event: %s", uid)
+	log.Info("Indexer - Index tag add event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Add(Scope{TagUID: uid}); err != nil {
 			return err
@@ -216,7 +218,7 @@ func (indexer *Indexer) TagAdd(uid string) error {
 }
 
 func (indexer *Indexer) TagUpdate(uid string) error {
-    log.Info("Indexer - Index tag update  event: %s", uid)
+	log.Info("Indexer - Index tag update  event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Update(Scope{TagUID: uid}); err != nil {
 			return err
@@ -226,7 +228,7 @@ func (indexer *Indexer) TagUpdate(uid string) error {
 }
 
 func (indexer *Indexer) PersonAdd(uid string) error {
-    log.Info("Indexer - Index person add event: %s", uid)
+	log.Info("Indexer - Index person add event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Add(Scope{PersonUID: uid}); err != nil {
 			return err
@@ -236,7 +238,7 @@ func (indexer *Indexer) PersonAdd(uid string) error {
 }
 
 func (indexer *Indexer) PersonUpdate(uid string) error {
-    log.Info("Indexer - Index person update  event: %s", uid)
+	log.Info("Indexer - Index person update  event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Update(Scope{PersonUID: uid}); err != nil {
 			return err
@@ -246,7 +248,7 @@ func (indexer *Indexer) PersonUpdate(uid string) error {
 }
 
 func (indexer *Indexer) PersonDelete(uid string) error {
-    log.Info("Indexer - Index person delete event: %s", uid)
+	log.Info("Indexer - Index person delete event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Delete(Scope{PersonUID: uid}); err != nil {
 			return err
@@ -256,7 +258,7 @@ func (indexer *Indexer) PersonDelete(uid string) error {
 }
 
 func (indexer *Indexer) PublisherAdd(uid string) error {
-    log.Info("Indexer - Index publisher add event: %s", uid)
+	log.Info("Indexer - Index publisher add event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Add(Scope{PublisherUID: uid}); err != nil {
 			return err
@@ -266,7 +268,7 @@ func (indexer *Indexer) PublisherAdd(uid string) error {
 }
 
 func (indexer *Indexer) PublisherUpdate(uid string) error {
-    log.Info("Indexer - Index publisher update event: %s", uid)
+	log.Info("Indexer - Index publisher update event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Update(Scope{PublisherUID: uid}); err != nil {
 			return err

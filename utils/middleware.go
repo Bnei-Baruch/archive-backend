@@ -17,11 +17,12 @@ import (
 	"gopkg.in/olivere/elastic.v5"
 )
 
-// Set MDB & ES clients in context
-func DataStoresMiddleware(mbdDB *sql.DB, esc *elastic.Client) gin.HandlerFunc {
+// Set MDB, ES & LOGGER clients in context
+func DataStoresMiddleware(mbdDB *sql.DB, esc *elastic.Client, logger interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set("MDB_DB", mbdDB)
 		c.Set("ES_CLIENT", esc)
+		c.Set("LOGGER", logger)
 		c.Next()
 	}
 }

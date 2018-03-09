@@ -1,9 +1,7 @@
-package mdb
+package common
 
 import (
 	"database/sql"
-	"os"
-	"path"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -12,16 +10,16 @@ import (
 	"github.com/volatiletech/sqlboiler/boil"
 	"gopkg.in/olivere/elastic.v5"
 
+	"github.com/Bnei-Baruch/archive-backend/es"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 var (
-	DB           *sql.DB
-	ESC          *elastic.Client
-	SofficeBin   string
-	DocFolder    string
-	ParseDocsBin string
-	CDNUrl       string
+	DB     *sql.DB
+	ESC    *elastic.Client
+	LOGGER *search.SearchLogger
 )
 
 func Init() time.Time {
@@ -46,9 +44,8 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	boil.SetDB(DB)
 	boil.DebugMode = viper.GetString("server.boiler-mode") == "debug"
 	log.Info("Initializing type registries")
-	utils.Must(InitTypeRegistries(DB))
+	utils.Must(mdb.InitTypeRegistries(DB))
 
-	// MOVE THIS CODE UNDER es PACKAGE.
 	log.Info("Setting up connection to ElasticSearch")
 	url := viper.GetString("elasticsearch.url")
 	ESC, err = elastic.NewClient(
@@ -62,33 +59,13 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	)
 	utils.Must(err)
 
+	LOGGER = search.MakeSearchLogger(ESC)
+
 	esversion, err := ESC.ElasticsearchVersion(url)
 	utils.Must(err)
 	log.Infof("Elasticsearch version %s", esversion)
 
-	SofficeBin = viper.GetString("elasticsearch.soffice-bin")
-	if SofficeBin == "" {
-		panic("Soffice binary should be set in config.")
-	}
-	if _, err := os.Stat(SofficeBin); os.IsNotExist(err) {
-		panic("Soffice binary not found.")
-	}
-
-	ParseDocsBin = viper.GetString("elasticsearch.parse-docs-bin")
-	if ParseDocsBin == "" {
-		panic("parse_docs.py binary should be set in config.")
-	}
-	if _, err := os.Stat(ParseDocsBin); os.IsNotExist(err) {
-		panic("parse_docs.py not found.")
-	}
-
-	DocFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
-	utils.Must(os.MkdirAll(DocFolder, 0777))
-
-	CDNUrl = viper.GetString("elasticsearch.cdn-url")
-	if CDNUrl == "" {
-		panic("cdn url should be set in config.")
-	}
+	es.InitVars()
 
 	return clock
 }

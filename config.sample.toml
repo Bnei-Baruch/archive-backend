@@ -32,5 +32,4 @@ url="https://archive.kbb1.com/assets/api/"
 [test]
 mdb-url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 url-template="postgres://localhost/%s?sslmode=disable&user=postgres"
-test-docx-folder="/home/kolmanv/mdb-docx-test/"
-test-cdn-url="http://localhost"
+test-docx-folder="/tmp/mdb-docx-test/"

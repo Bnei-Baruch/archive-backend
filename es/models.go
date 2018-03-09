@@ -27,7 +27,7 @@ type ContentUnit struct {
 	ContentType             string      `json:"content_type"`
 	CollectionsContentTypes []string    `json:"collections_content_types,omitempty"`
 	EffectiveDate           *utils.Date `json:"effective_date,omitempty"`
-	Duration                uint16      `json:"duration,omitempty"`
+	Duration                uint64      `json:"duration,omitempty"`
 	OriginalLanguage        string      `json:"original_language,omitempty"`
 	Translations            []string    `json:"translations,omitempty"`
 	Tags                    []string    `json:"tags,omitempty"`
@@ -40,7 +40,7 @@ type ContentUnit struct {
 type File struct {
 	MDB_UID  string      `json:"mdb_uid"`
 	Name     string      `json:"name"`
-	Size     int64       `json:"size"`
+	Size     uint64      `json:"size"`
 	URL      string      `json:"url"`
 	Secure   int         `json:"secure"`
 	FilmDate *utils.Date `json:"film_date"`
