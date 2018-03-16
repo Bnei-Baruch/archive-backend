@@ -21,8 +21,8 @@ var (
 	docFolder       string
 	parseDocsBin    string
 	cdnUrl          string
-    pythonPath      string
-    operatingSystem string
+	pythonPath      string
+	operatingSystem string
 )
 
 func InitVars() {
