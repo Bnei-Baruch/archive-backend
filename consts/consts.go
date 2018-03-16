@@ -184,3 +184,4 @@ var FILTERS = map[string]string{
 const ES_CLASSIFICATIONS_INDEX = "classifications"
 const ES_UNITS_INDEX = "units"
 const ES_COLLECTIONS_INDEX = "collections"
+const ES_SOURCES_INDEX = "sources"

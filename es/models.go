@@ -59,3 +59,12 @@ type Classification struct {
 	DescriptionSuggest string `json:"description_suggest,omitempty"`
 	Type               string `json:"classification_type"`
 }
+
+type Source struct {
+	MDB_UID     string   `json:"mdb_uid"`
+	Language    string   `json:"language"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Authors     []string `json:"authors,omitempty"`
+	Content     string   `json:"content"`
+}
