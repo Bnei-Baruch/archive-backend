@@ -78,6 +78,10 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 				multiSearchService.Add(request)
 			}
 			mr, err := multiSearchService.Do(ctx)
+			if err != nil {
+				log.Warnf("Error in suggest %+v", err)
+				return err
+			}
 
 			sRes := (*elastic.SearchResult)(nil)
 			for _, r := range mr.Responses {

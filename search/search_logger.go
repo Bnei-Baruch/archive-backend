@@ -3,7 +3,7 @@ package search
 import (
 	"context"
 	"encoding/json"
-    "io"
+	"io"
 	"time"
 
 	"github.com/pkg/errors"
@@ -61,32 +61,32 @@ func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int
 }
 
 func (searchLogger *SearchLogger) GetAllQueries() ([]SearchLog, error) {
-    var ret []SearchLog
-    var searchResult *elastic.SearchResult
-    for true {
-        if searchResult != nil && searchResult.Hits != nil {
-            for _, h := range searchResult.Hits.Hits {
-                sl := SearchLog{}
-                json.Unmarshal(*h.Source, &sl)
-                ret = append(ret, sl)
-            }
-        }
-        var err error
-        scrollClient := searchLogger.esc.Scroll().
-            Index("search_logs").
-            Query(elastic.NewMatchAllQuery()).
-            Scroll("1m").
-            Size(100)
-        if searchResult != nil {
-            scrollClient = scrollClient.ScrollId(searchResult.ScrollId)
-        }
-        searchResult, err = scrollClient.Do(context.TODO())
-        if err != nil {
-            if err == io.EOF {
-                break
-            }
-            return nil, err
-        }
-    }
-    return ret, nil
+	var ret []SearchLog
+	var searchResult *elastic.SearchResult
+	for true {
+		if searchResult != nil && searchResult.Hits != nil {
+			for _, h := range searchResult.Hits.Hits {
+				sl := SearchLog{}
+				json.Unmarshal(*h.Source, &sl)
+				ret = append(ret, sl)
+			}
+		}
+		var err error
+		scrollClient := searchLogger.esc.Scroll().
+			Index("search_logs").
+			Query(elastic.NewMatchAllQuery()).
+			Scroll("1m").
+			Size(100)
+		if searchResult != nil {
+			scrollClient = scrollClient.ScrollId(searchResult.ScrollId)
+		}
+		searchResult, err = scrollClient.Do(context.TODO())
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+	}
+	return ret, nil
 }
