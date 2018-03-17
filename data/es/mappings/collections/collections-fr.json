@@ -13,6 +13,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "french"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "french"
                         }
                     }, 
                     "type": "text", 
@@ -39,6 +43,10 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
+                            "analyzer": "french"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
                             "analyzer": "french"
                         }
                     }, 

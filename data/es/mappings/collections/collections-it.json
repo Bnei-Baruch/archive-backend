@@ -13,6 +13,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "italian"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "italian"
                         }
                     }, 
                     "type": "text", 
@@ -39,6 +43,10 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
+                            "analyzer": "italian"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
                             "analyzer": "italian"
                         }
                     }, 

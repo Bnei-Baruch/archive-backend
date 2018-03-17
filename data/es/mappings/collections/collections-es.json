@@ -13,6 +13,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "spanish"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "spanish"
                         }
                     }, 
                     "type": "text", 
@@ -39,6 +43,10 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
+                            "analyzer": "spanish"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
                             "analyzer": "spanish"
                         }
                     }, 

@@ -13,6 +13,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "lithuanian"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "lithuanian"
                         }
                     }, 
                     "type": "text", 
@@ -39,6 +43,10 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
+                            "analyzer": "lithuanian"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
                             "analyzer": "lithuanian"
                         }
                     }, 
