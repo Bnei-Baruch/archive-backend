@@ -1,13 +1,10 @@
 package es
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
-	"os"
-	"os/exec"
 	"path"
 	"strings"
 	"time"
@@ -268,31 +265,6 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 	return keys, nil
 }
 
-func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
-	docxFilename := fmt.Sprintf("%s.docx", uid)
-	docxPath := path.Join(mdb.DocFolder, docxFilename)
-	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
-		return "", errors.Wrapf(err, "os.Stat %s", docxPath)
-	}
-
-	var cmd *exec.Cmd
-	if strings.ToLower(mdb.Os) == "windows" {
-		cmd = exec.Command(mdb.PythonPath, mdb.ParseDocsBin, docxPath)
-	} else {
-		cmd = exec.Command(mdb.ParseDocsBin, docxPath)
-	}
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if err != nil {
-		log.Warnf("[%s %s]\nstdout: [%s]\nstderr: [%s]\nError: %+v\n", mdb.ParseDocsBin, docxPath, stdout.String(), stderr.String(), err)
-		return "", errors.Wrapf(err, "cmd.Run %s", uid)
-	}
-	return stdout.String(), nil
-}
-
 func collectionsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	ret := make([]string, len(collectionsContentUnits))
 	for i, ccu := range collectionsContentUnits {
@@ -380,7 +352,9 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit) error {
 							log.Errorf("Error downloading or converting doc: %s", val[0])
 							log.Errorf("Error %+v", err)
 						} else {
-							unit.Transcript, err = index.parseDocx(val[0])
+							docxFilename := fmt.Sprintf("%s.docx", val[0])
+							docxPath := path.Join(mdb.DocFolder, docxFilename)
+							unit.Transcript, err = index.ParseDocx(docxPath)
 							if err != nil {
 								log.Errorf("Error parsing docx: %s", val[0])
 							} else {

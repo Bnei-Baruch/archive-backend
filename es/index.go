@@ -1,10 +1,15 @@
 package es
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"strings"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
@@ -119,4 +124,26 @@ func (index *BaseIndex) RefreshIndexByLang(lang string) error {
 	_, err := mdb.ESC.Refresh(index.indexName(lang)).Do(context.TODO())
 	// fmt.Printf("\n\n\nShards: %+v \n\n\n", shards)
 	return err
+}
+
+func (index *BaseIndex) ParseDocx(docxPath string) (string, error) {
+	if _, err := os.Stat(docxPath); os.IsNotExist(err) {
+		return "", errors.Wrapf(err, "os.Stat %s", docxPath)
+	}
+	var cmd *exec.Cmd
+	if strings.ToLower(mdb.Os) == "windows" {
+		cmd = exec.Command(mdb.PythonPath, mdb.ParseDocsBin, docxPath)
+	} else {
+		cmd = exec.Command(mdb.ParseDocsBin, docxPath)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		log.Warnf("[%s %s]\nstdout: [%s]\nstderr: [%s]\nError: %+v\n", mdb.ParseDocsBin, docxPath, stdout.String(), stderr.String(), err)
+		return "", errors.Wrapf(err, "cmd.Run %s", docxPath)
+	}
+	return stdout.String(), nil
 }

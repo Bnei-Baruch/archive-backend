@@ -176,11 +176,6 @@ func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]s
 	return keys, nil
 }
 
-func (index *SourcesIndex) parseDocx(uid string) (string, error) {
-	//TBD - make single generic func
-	return "", errors.New("Not implemented yet")
-}
-
 func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) {
 	uidPath := path.Join(mdb.SourcesFolder, uid)
 	jsonPath := path.Join(uidPath, "index.json")
@@ -219,7 +214,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 			if err != nil {
 				return errors.Errorf("Error retrieving docx path for source %s and language %s", mdbSource.UID, i18n.Language)
 			}
-			content, err := index.parseDocx(fPath)
+			content, err := index.ParseDocx(fPath)
 			if err != nil {
 				return errors.Errorf("Error parsing docx for source %s and language %s", mdbSource.UID, i18n.Language)
 			}
