@@ -186,7 +186,6 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 
 func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 	// Create documents in each language with available translation
-	//TBD: authors
 	i18nMap := make(map[string]Source)
 	for _, i18n := range mdbSource.R.SourceI18ns {
 		if i18n.Name.Valid && i18n.Name.String != "" {
@@ -211,7 +210,18 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 			}
 			source.Content = content
 
-			//TBD: authors
+			for _, a := range mdbSource.R.Authors {
+				for _, ai18n := range a.R.AuthorI18ns {
+					if ai18n.Language == i18n.Language {
+						if ai18n.Name.Valid && ai18n.Name.String != "" {
+							source.Authors = append(source.Authors, ai18n.Name.String)
+						}
+						if ai18n.FullName.Valid && ai18n.FullName.String != "" {
+							source.Authors = append(source.Authors, ai18n.FullName.String)
+						}
+					}
+				}
+			}
 
 			i18nMap[i18n.Language] = source
 		}
