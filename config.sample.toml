@@ -18,6 +18,7 @@ test-docx-folder="es/testdocx"
 url="http://127.0.0.1:9200"
 parse-docs-bin="es/parse_docs.py"
 docx-folder="/tmp/mdb-docx/"
+sources-folder="/tmp/sources-folder"
 soffice-bin="/usr/bin/soffice"
 #for windows:
 #soffice-bin="C://Program Files//LibreOffice 5//program//soffice.exe"

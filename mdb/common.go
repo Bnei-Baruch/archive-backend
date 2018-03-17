@@ -16,14 +16,15 @@ import (
 )
 
 var (
-	DB           *sql.DB
-	ESC          *elastic.Client
-	SofficeBin   string
-	DocFolder    string
-	ParseDocsBin string
-	CDNUrl       string
-	PythonPath   string
-	Os           string
+	DB            *sql.DB
+	ESC           *elastic.Client
+	SofficeBin    string
+	DocFolder     string
+	ParseDocsBin  string
+	SourcesFolder string
+	CDNUrl        string
+	PythonPath    string
+	Os            string
 )
 
 func Init() time.Time {
@@ -91,6 +92,9 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 
 	DocFolder = path.Join(viper.GetString("elasticsearch.docx-folder"))
 	utils.Must(os.MkdirAll(DocFolder, 0777))
+
+	SourcesFolder = path.Join(viper.GetString("elasticsearch.sources-folder"))
+	utils.Must(os.MkdirAll(SourcesFolder, 0777))
 
 	CDNUrl = viper.GetString("elasticsearch.cdn-url")
 	if CDNUrl == "" {

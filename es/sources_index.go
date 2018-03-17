@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"path"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
@@ -180,8 +182,21 @@ func (index *SourcesIndex) parseDocx(uid string) (string, error) {
 }
 
 func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) {
-	//TBD
-	return "", errors.New("Not implemented yet")
+	uidPath := path.Join(mdb.SourcesFolder, uid)
+	jsonPath := path.Join(uidPath, "index.json")
+	jsonCnt, err := ioutil.ReadFile(jsonPath)
+	if err != nil {
+		return "", fmt.Errorf("Unable to read from file %s. Error: %+v", jsonPath, err)
+	}
+	var m map[string]map[string]string
+	err = json.Unmarshal(jsonCnt, &m)
+	if err != nil {
+		return "", err
+	}
+	if val, ok := m[lang]; ok {
+		return path.Join(uidPath, val["docx"]), nil
+	}
+	return "", errors.New("Docx not found in index.json")
 }
 
 func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
@@ -200,11 +215,11 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 				source.Description = i18n.Description.String
 			}
 
-			docxPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
+			fPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
 			if err != nil {
 				return errors.Errorf("Error retrieving docx path for source %s and language %s", mdbSource.UID, i18n.Language)
 			}
-			content, err := index.parseDocx(docxPath)
+			content, err := index.parseDocx(fPath)
 			if err != nil {
 				return errors.Errorf("Error parsing docx for source %s and language %s", mdbSource.UID, i18n.Language)
 			}
