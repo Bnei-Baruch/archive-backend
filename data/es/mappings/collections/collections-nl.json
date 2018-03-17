@@ -13,6 +13,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "dutch"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "dutch"
                         }
                     }, 
                     "type": "text", 
@@ -39,6 +43,10 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
+                            "analyzer": "dutch"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
                             "analyzer": "dutch"
                         }
                     }, 

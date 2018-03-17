@@ -13,6 +13,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "russian"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "russian"
                         }
                     }, 
                     "type": "text", 
@@ -39,6 +43,10 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
+                            "analyzer": "russian"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
                             "analyzer": "russian"
                         }
                     }, 
