@@ -129,12 +129,12 @@ func createContentUnitsQuery(q Query) elastic.Query {
 				elastic.NewMatchQuery("description.analyzed", q.Term).Boost(1.2),
 				elastic.NewMatchQuery("transcript.analyzed", q.Term),
 			).MinimumNumberShouldMatch(1),
-        ).Should(
+		).Should(
 			elastic.NewBoolQuery().Should(
 				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(1.5),
 				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
 				elastic.NewMatchPhraseQuery("transcript.analyzed", q.Term).Slop(100),
-            ).MinimumNumberShouldMatch(0),
+			).MinimumNumberShouldMatch(0),
 		)
 	}
 	for _, exactTerm := range q.ExactTerms {
@@ -144,7 +144,7 @@ func createContentUnitsQuery(q Query) elastic.Query {
 				elastic.NewMatchPhraseQuery("description", exactTerm).Boost(1.2),
 				elastic.NewMatchPhraseQuery("transcript", exactTerm),
 			).MinimumNumberShouldMatch(1),
-        ).Should(
+		).Should(
 			elastic.NewBoolQuery().Should(
 				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(1.5),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
@@ -175,9 +175,9 @@ func createContentUnitsQuery(q Query) elastic.Query {
 		}
 	}
 	return elastic.NewFunctionScoreQuery().Query(query).
-        AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
-        AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
-        // AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("description.length").Modifier("reciprocal").Missing(1))
+		AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
+		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
+	// AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("description.length").Modifier("reciprocal").Missing(1))
 }
 
 func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query, sortBy string, from int, size int, preference string) {
@@ -228,7 +228,7 @@ func createCollectionsQuery(q Query) elastic.Query {
 				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(1.5),
 				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100),
 			).MinimumNumberShouldMatch(0),
-        )
+		)
 	}
 	for _, exactTerm := range q.ExactTerms {
 		query = query.Must(
@@ -241,7 +241,7 @@ func createCollectionsQuery(q Query) elastic.Query {
 				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(1.5),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100),
 			).MinimumNumberShouldMatch(1),
-        )
+		)
 	}
 	contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
 	filterByContentType := false
@@ -267,10 +267,10 @@ func createCollectionsQuery(q Query) elastic.Query {
 			query.Filter(contentTypeQuery)
 		}
 	}
-    return elastic.NewFunctionScoreQuery().Query(query.Boost(1.2)).
-        AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
-        AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
-        // AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("description.length").Modifier("reciprocal").Missing(1))
+	return elastic.NewFunctionScoreQuery().Query(query.Boost(1.2)).
+		AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
+		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
+	// AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("description.length").Modifier("reciprocal").Missing(1))
 }
 
 func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, sortBy string, from int, size int, preference string) {
@@ -336,7 +336,7 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 }
 
 func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) (*elastic.SearchResult, error) {
-    log.Infof("%+v %+v", r1, r2)
+	log.Infof("%+v %+v", r1, r2)
 	if r1.Hits.TotalHits == 0 {
 		r2.Hits.Hits = r2.Hits.Hits[from:utils.Min(from+size, len(r2.Hits.Hits))]
 		return r2, nil
@@ -405,14 +405,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	for i := 0; i < len(query.LanguageOrder); i++ {
 		cuR := mr.Responses[i]
 		cR := mr.Responses[i+len(query.LanguageOrder)]
-        if cuR.Error != nil {
-            log.Warnf("%+v", cuR.Error)
-            return nil, errors.New("Failed multi get.")
-        }
-        if cR.Error != nil {
-            log.Warnf("%+v", cR.Error)
-            return nil, errors.New("Failed multi get.")
-        }
+		if cuR.Error != nil {
+			log.Warnf("%+v", cuR.Error)
+			return nil, errors.New("Failed multi get.")
+		}
+		if cR.Error != nil {
+			log.Warnf("%+v", cR.Error)
+			return nil, errors.New("Failed multi get.")
+		}
 		if haveHits(cuR) || haveHits(cR) {
 			log.Debugf("Joining:\n%+v\n\n%+v\n\n\n", cuR.Hits, cR.Hits)
 			ret, err := joinResponses(cuR, cR, sortBy, from, size)
