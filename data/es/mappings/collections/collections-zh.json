@@ -13,6 +13,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "cjk"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "cjk"
                         }
                     }, 
                     "type": "text", 
@@ -39,6 +43,10 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
+                            "analyzer": "cjk"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
                             "analyzer": "cjk"
                         }
                     }, 

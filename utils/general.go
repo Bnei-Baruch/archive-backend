@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 // panic if err != nil
@@ -82,4 +84,30 @@ func Pprint(l interface{}) string {
 		s = append(s, fmt.Sprintf("%+v", i))
 	}
 	return strings.Join(s, "\n\t")
+}
+
+func Join(l []interface{}, separator string) string {
+	var ret []string
+	for _, v := range l {
+		ret = append(ret, fmt.Sprintf("%+v", v))
+	}
+	return strings.Join(ret, separator)
+}
+
+func PrintMap(m interface{}) (string, error) {
+	mValue := reflect.ValueOf(m)
+	if mValue.Kind() != reflect.Map {
+		return "", errors.New("Input is not map.")
+	}
+	var values []string
+	for _, k := range mValue.MapKeys() {
+		v := mValue.MapIndex(k)
+		vValue := reflect.ValueOf(v)
+		if vValue.Kind() == reflect.Slice {
+			values = append(values, fmt.Sprintf("%+v:[%s]", k, Join(is(v), ",")))
+		} else {
+			values = append(values, fmt.Sprintf("%+v:%+v", k, v))
+		}
+	}
+	return strings.Join(values, ","), nil
 }

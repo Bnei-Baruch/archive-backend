@@ -10,6 +10,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "german"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "german"
                         }
                     }, 
                     "type": "text", 
@@ -58,6 +62,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "german"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "german"
                         }
                     }, 
                     "type": "text", 
@@ -67,6 +75,10 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
+                            "analyzer": "german"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
                             "analyzer": "german"
                         }
                     }, 

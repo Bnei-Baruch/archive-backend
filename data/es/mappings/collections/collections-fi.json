@@ -13,6 +13,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "finnish"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "finnish"
                         }
                     }, 
                     "type": "text", 
@@ -39,6 +43,10 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
+                            "analyzer": "finnish"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
                             "analyzer": "finnish"
                         }
                     }, 

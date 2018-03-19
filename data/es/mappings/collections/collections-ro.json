@@ -13,6 +13,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "romanian"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "romanian"
                         }
                     }, 
                     "type": "text", 
@@ -39,6 +43,10 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
+                            "analyzer": "romanian"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
                             "analyzer": "romanian"
                         }
                     }, 
