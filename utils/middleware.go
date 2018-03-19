@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
@@ -24,6 +25,24 @@ func DataStoresMiddleware(mbdDB *sql.DB, esc *elastic.Client, logger interface{}
 		c.Set("ES_CLIENT", esc)
 		c.Set("LOGGER", logger)
 		c.Next()
+	}
+}
+
+func LoggerMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.RequestURI() // some evil middleware modify this values
+
+		c.Next()
+
+		log.WithFields(log.Fields{
+			"status":     c.Writer.Status(),
+			"method":     c.Request.Method,
+			"path":       path,
+			"latency":    time.Now().Sub(start),
+			"ip":         c.ClientIP(),
+			"user-agent": c.Request.UserAgent(),
+		}).Info()
 	}
 }
 
