@@ -104,8 +104,9 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 		err := mdbmodels.NewQuery(mdb.DB,
 			qm.From("sources as source"),
 			qm.Load("SourceI18ns"),
-			qm.Load("Author"),
-			qm.Load("AuthorI18ns"),
+			qm.Load("Authors"),
+			//qm.Load("AuthorsSources"),
+			//qm.Load("AuthorsSources.Author"),
 			qm.Where(sqlScope),
 			qm.Offset(offset),
 			qm.Limit(limit)).Bind(&sources)
@@ -203,7 +204,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 			source := Source{
 				MDB_UID:  mdbSource.UID,
 				Language: i18n.Language, //TBD check if needed
-				Title:    i18n.Name.String,
+				Name:     i18n.Name.String,
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
