@@ -409,6 +409,10 @@ func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
 	query := ParseQuery(c.Query("q"))
+	query.Deb = false
+	if c.Query("deb") == "true" {
+		query.Deb = true
+	}
 	log.Debugf("Parsed Query: %#v", query)
 	if len(query.Term) == 0 && len(query.Filters) == 0 && len(query.ExactTerms) == 0 {
 		NewBadRequestError(errors.New("Can't search with no terms and no filters.")).Abort(c)

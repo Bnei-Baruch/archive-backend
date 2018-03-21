@@ -7,6 +7,7 @@ type Query struct {
 	ExactTerms    []string
 	Filters       map[string][]string
 	LanguageOrder []string
+	Deb           bool
 }
 
 type Engine interface {
