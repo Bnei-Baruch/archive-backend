@@ -705,6 +705,10 @@ func updateSource(source Source, lang string) (string, error) {
 		mdbSource = mdbmodels.Source{
 			UID:    GenerateUID(8),
 			TypeID: 2,
+			Name:   source.Name,
+		}
+		if source.Description != "" {
+			mdbSource.Description = null.NewString(source.Description, source.Description != "")
 		}
 		if err := mdbSource.Insert(mdb.DB); err != nil {
 			return "", err
@@ -738,16 +742,26 @@ func updateSource(source Source, lang string) (string, error) {
 	if err := mdbSourceI18n.Update(mdb.DB); err != nil {
 		return "", err
 	}
+
+	//add folder for source files
+	uidPath := path.Join(mdb.SourcesFolder, mdbSource.UID)
+	if _, err := os.Stat(uidPath); os.IsNotExist(err) {
+		err = os.Mkdir(uidPath, os.FileMode(0522))
+		if err != nil {
+			return "", err
+		}
+	}
+
 	return mdbSource.UID, nil
 }
 
-func updateSourceFileContent(uid string, lang string, content string) error {
+func updateSourceFileContent(uid string, lang string) error {
 
 	uidPath := path.Join(mdb.SourcesFolder, uid)
 	jsonPath := path.Join(uidPath, "index.json")
-	contentFileName := fmt.Sprintf("sample-content-$s.docx", lang)
+	contentFileName := fmt.Sprintf("sample-content-%s.docx", lang)
 	contentPath := path.Join(uidPath, contentFileName)
-	var m map[string]map[string]string
+	m := make(map[string]map[string]string)
 
 	if _, err := os.Stat(jsonPath); err == nil {
 		jsonCnt, err := ioutil.ReadFile(jsonPath)
@@ -773,7 +787,12 @@ func updateSourceFileContent(uid string, lang string, content string) error {
 		return fmt.Errorf("Unable to write into file %s. Error: %+v", jsonPath, err)
 	}
 
-	err = ioutil.WriteFile(contentPath, []byte(content), 0666)
+	fileToCopy := viper.GetString("test.test-source-content-docx")
+	data, err := ioutil.ReadFile(fileToCopy)
+	if err != nil {
+		return fmt.Errorf("Unable to read file %s. Error: %+v", fileToCopy, err)
+	}
+	err = ioutil.WriteFile(contentPath, data, 0644)
 	if err != nil {
 		return fmt.Errorf("Unable to write into file %s. Error: %+v", contentPath, err)
 	}
@@ -935,9 +954,9 @@ func (suite *IndexerSuite) us(source Source, lang string) string {
 }
 
 //update source file content
-func (suite *IndexerSuite) usfc(uid string, lang string, content string) {
+func (suite *IndexerSuite) usfc(uid string, lang string) {
 	r := require.New(suite.T())
-	err := updateSourceFileContent(uid, lang, content)
+	err := updateSourceFileContent(uid, lang)
 	r.Nil(err)
 }
 
@@ -1086,6 +1105,57 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *I
 		types[k] = cu.CollectionsContentTypes
 	}
 	suite.validateMaps(expectedTypes, types)
+}
+
+func (suite *IndexerSuite) validateSourceNames(indexName string, indexer *Indexer, expectedNames []string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	names := make([]string, len(res.Hits.Hits))
+	for i, hit := range res.Hits.Hits {
+		var cu Source
+		json.Unmarshal(*hit.Source, &cu)
+		names[i] = cu.Name
+	}
+	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
+	r.ElementsMatch(expectedNames, names)
+}
+
+func (suite *IndexerSuite) validateSourceAuthors(indexName string, indexer *Indexer, expectedAuthors []string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	authors := make([]string, 0)
+	for _, hit := range res.Hits.Hits {
+		var source Source
+		json.Unmarshal(*hit.Source, &source)
+		for _, a := range source.Authors {
+			authors = append(authors, a)
+		}
+	}
+	r.Equal(len(expectedAuthors), len(authors))
+	r.ElementsMatch(expectedAuthors, authors)
+}
+
+func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *Indexer, expectedContent string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = mdb.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	var content string
+	var source Source
+	json.Unmarshal(*res.Hits.Hits[0].Source, &source)
+	content = source.Content
+
+	r.Equal(expectedContent, content)
 }
 
 func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
@@ -1339,28 +1409,37 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 
 	fmt.Printf("\n\n\nAdding source.\n\n")
 	source1UID := suite.us(Source{Name: "test-name-1", Description: "test-description-1"}, consts.LANG_ENGLISH)
+	suite.us(Source{MDB_UID: source1UID, Name: "שם-בדיקה-1", Description: "תיאור-בדיקה-1"}, consts.LANG_HEBREW)
 
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
-	/*indexNameEn := IndexName("test", consts.ES_SOURCES_INDEX, consts.LANG_ENGLISH)
+	indexNameEn := IndexName("test", consts.ES_SOURCES_INDEX, consts.LANG_ENGLISH)
 	indexNameHe := IndexName("test", consts.ES_SOURCES_INDEX, consts.LANG_HEBREW)
-	indexNameRu := IndexName("test", consts.ES_SOURCES_INDEX, consts.LANG_RUSSIAN)*/
 	indexer := MakeIndexer("test", []string{consts.ES_SOURCES_INDEX})
 
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll())
 	r.Nil(indexer.RefreshAll())
 
-	//add authors
-	suite.asa(Source{MDB_UID: source1UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name", FullName: null.String{String: "Test Full Name", Valid: true}}, true, true)
-	suite.asa(Source{MDB_UID: source1UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם לבדיקה", FullName: null.String{String: "שם מלא לבדיקה", Valid: true}}, true, true)
-	//TBD
-	//suite.validateSourceAuthors(indexNameEn, indexer, []string{"Test Name", "Test Full Name"})
-	//suite.validateSourceAuthors(indexNameHe, indexer, []string{"שם לבדיקה", "שם מלא לבדיקה"})
+	fmt.Printf("\n\n\nValidate we have source with 2 languages.\n\n")
+	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1"})
+	suite.validateSourceNames(indexNameHe, indexer, []string{"שם-בדיקה-1"})
 
-	//TBD remove authors and test
+	fmt.Println("Add 2 authors and validate.")
+	suite.asa(Source{MDB_UID: source1UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name", ID: 3, Code: "t1", FullName: null.String{String: "Test Full Name", Valid: true}}, true, true)
+	suite.asa(Source{MDB_UID: source1UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם לבדיקה", ID: 4, Code: "t2", FullName: null.String{String: "שם מלא לבדיקה", Valid: true}}, true, true)
+	r.Nil(indexer.SourceUpdate(source1UID))
+	suite.validateSourceAuthors(indexNameEn, indexer, []string{"Test Name", "Test Full Name"})
+	suite.validateSourceAuthors(indexNameHe, indexer, []string{"שם לבדיקה", "שם מלא לבדיקה"})
 
-	suite.usfc(source1UID, consts.LANG_ENGLISH, "TEST CONTENT")
-	//TBD validate content
+	fmt.Println("Remove 1 author and validate.")
+	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
+	r.Nil(indexer.SourceUpdate(source1UID))
+	suite.validateSourceAuthors(indexNameEn, indexer, []string{})
+
+	fmt.Println("Add content file and validate.")
+	suite.usfc(source1UID, consts.LANG_ENGLISH)
+	r.Nil(indexer.SourceUpdate(source1UID))
+	suite.validateSourceFile(indexNameEn, indexer, "TEST CONTENT")
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())

@@ -11,8 +11,10 @@ url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 
 [test]
 test-docx-folder="es/testdocx"
+test-source-content-docx="/es/TEST-CONTENT.docx"
 #for windows:
 #test-docx-folder="C://Users//[USERNAME]//go//src//github.com//Bnei-Baruch//archive-backend//es//testdocx"
+#test-source-content-docx="C://Users//[USERNAME]//go//src//github.com//Bnei-Baruch//archive-backend//es//TEST-CONTENT.docx"
 
 [elasticsearch]
 url="http://127.0.0.1:9200"
