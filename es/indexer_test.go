@@ -200,6 +200,10 @@ func (suite *IndexerSuite) SetupSuite() {
 	testingsDocxPath := viper.GetString("test.test-docx-folder")
 	viper.Set("elasticsearch.docx-folder", testingsDocxPath)
 
+	fmt.Println("Replace sources folder with temp. path.")
+	testingsSourcesFolder := viper.GetString("test.test-sources-folder")
+	viper.Set("elasticsearch.sources-folder", testingsSourcesFolder)
+
 	fmt.Println("Replace cdn-url with test.")
 	suite.serverResponses = make(map[string]string)
 	handler := func(w http.ResponseWriter, r *http.Request) {
