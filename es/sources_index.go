@@ -2,9 +2,11 @@ package es
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path"
 
 	log "github.com/Sirupsen/logrus"
@@ -61,7 +63,7 @@ func (index *SourcesIndex) Update(scope Scope) error {
 		return err
 	}
 	if len(removed) > 0 && removed[0] == scope.SourceUID {
-		sqlScope := fmt.Sprintf("c.uid = %s", scope.SourceUID)
+		sqlScope := fmt.Sprintf("source.uid = '%s'", scope.SourceUID)
 		if err := index.addToIndexSql(sqlScope); err != nil {
 			return errors.Wrap(err, "Sources index addToIndexSql")
 		}
@@ -105,7 +107,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 			qm.From("sources as source"),
 			qm.Load("SourceI18ns"),
 			qm.Load("Authors"),
-			//qm.Load("AuthorsSources"),
+			//qm.Load("AuthorI18ns"),
 			//qm.Load("AuthorsSources.Author"),
 			qm.Where(sqlScope),
 			qm.Offset(offset),
@@ -170,7 +172,7 @@ func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]s
 		fmt.Println("Sources Index - Nothing was delete.")
 		return []string{}, nil
 	}
-	keys := make([]string, len(removed))
+	keys := make([]string, 0)
 	for k := range removed {
 		keys = append(keys, k)
 	}
@@ -190,7 +192,10 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 		return "", err
 	}
 	if val, ok := m[lang]; ok {
-		return path.Join(uidPath, val["docx"]), nil
+		docxPath := path.Join(uidPath, val["docx"])
+		if _, err := os.Stat(docxPath); err == nil {
+			return path.Join(docxPath), nil
+		}
 	}
 	return "", errors.New("Docx not found in index.json")
 }
@@ -202,9 +207,9 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 		if i18n.Name.Valid && i18n.Name.String != "" {
 
 			source := Source{
-				MDB_UID:  mdbSource.UID,
-				Language: i18n.Language, //TBD check if needed
-				Name:     i18n.Name.String,
+				MDB_UID: mdbSource.UID,
+				//Language: i18n.Language,
+				Name: i18n.Name.String,
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
@@ -213,24 +218,30 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 
 			fPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
 			if err != nil {
-				return errors.Errorf("Error retrieving docx path for source %s and language %s", mdbSource.UID, i18n.Language)
+				log.Errorf("Error retrieving docx path for source %s and language %s", mdbSource.UID, i18n.Language)
+				//return errors.Errorf("Error retrieving docx path for source %s and language %s", mdbSource.UID, i18n.Language)
+			} else {
+				content, err := index.ParseDocx(fPath)
+				if err != nil {
+					return errors.Errorf("Error parsing docx for source %s and language %s", mdbSource.UID, i18n.Language)
+				}
+				source.Content = content
 			}
-			content, err := index.ParseDocx(fPath)
-			if err != nil {
-				return errors.Errorf("Error parsing docx for source %s and language %s", mdbSource.UID, i18n.Language)
-			}
-			source.Content = content
 
 			for _, a := range mdbSource.R.Authors {
-				for _, ai18n := range a.R.AuthorI18ns {
-					if ai18n.Language == i18n.Language {
-						if ai18n.Name.Valid && ai18n.Name.String != "" {
-							source.Authors = append(source.Authors, ai18n.Name.String)
-						}
-						if ai18n.FullName.Valid && ai18n.FullName.String != "" {
-							source.Authors = append(source.Authors, ai18n.FullName.String)
-						}
+
+				ai18n, err := mdbmodels.FindAuthorI18n(mdb.DB, a.ID, i18n.Language)
+				if err != nil {
+					if err == sql.ErrNoRows {
+						continue
 					}
+					return err
+				}
+				if ai18n.Name.Valid && ai18n.Name.String != "" {
+					source.Authors = append(source.Authors, ai18n.Name.String)
+				}
+				if ai18n.FullName.Valid && ai18n.FullName.String != "" {
+					source.Authors = append(source.Authors, ai18n.FullName.String)
 				}
 			}
 
@@ -248,7 +259,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 		log.Infof("Sources Index - Add source %s to index %s", string(vBytes), name)
 		resp, err := mdb.ESC.Index().
 			Index(name).
-			Type("content_units").
+			Type("sources").
 			BodyJson(v).
 			Do(context.TODO())
 		if err != nil {

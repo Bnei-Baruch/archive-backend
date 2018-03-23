@@ -62,7 +62,6 @@ type Classification struct {
 
 type Source struct {
 	MDB_UID     string   `json:"mdb_uid"`
-	Language    string   `json:"language"`
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Authors     []string `json:"authors,omitempty"`
