@@ -13,6 +13,10 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "persian"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
+                            "analyzer": "persian"
                         }
                     }, 
                     "type": "text", 
@@ -39,6 +43,10 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
+                            "analyzer": "persian"
+                        }, 
+                        "length": {
+                            "type": "token_count", 
                             "analyzer": "persian"
                         }
                     }, 

@@ -1,9 +1,11 @@
 package es
 
 import (
+	"database/sql"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
+	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )
@@ -12,31 +14,31 @@ type Indexer struct {
 	indices []Index
 }
 
-func MakeProdIndexer() *Indexer {
+func MakeProdIndexer(mdb *sql.DB, esc *elastic.Client) *Indexer {
 	return MakeIndexer("prod", []string{
 		consts.ES_CLASSIFICATIONS_INDEX,
 		consts.ES_UNITS_INDEX,
-		consts.ES_COLLECTIONS_INDEX})
+		consts.ES_COLLECTIONS_INDEX}, mdb, esc)
 }
 
-func MakeFakeIndexer() *Indexer {
-	return MakeIndexer("fake", []string{})
+func MakeFakeIndexer(mdb *sql.DB, esc *elastic.Client) *Indexer {
+	return MakeIndexer("fake", []string{}, mdb, esc)
 }
 
 // Receives namespace and list of indexes names.
-func MakeIndexer(namespace string, names []string) *Indexer {
+func MakeIndexer(namespace string, names []string, mdb *sql.DB, esc *elastic.Client) *Indexer {
 	log.Infof("Indexer - Make indexer - %s - %s", namespace, strings.Join(names, ", "))
 	indexer := new(Indexer)
 	indexer.indices = make([]Index, len(names))
 	for i, name := range names {
 		if name == consts.ES_CLASSIFICATIONS_INDEX {
-			indexer.indices[i] = MakeClassificationsIndex(namespace)
+			indexer.indices[i] = MakeClassificationsIndex(namespace, mdb, esc)
 		} else if name == consts.ES_UNITS_INDEX {
-			indexer.indices[i] = MakeContentUnitsIndex(namespace)
+			indexer.indices[i] = MakeContentUnitsIndex(namespace, mdb, esc)
 		} else if name == consts.ES_COLLECTIONS_INDEX {
-			indexer.indices[i] = MakeCollectionsIndex(namespace)
+			indexer.indices[i] = MakeCollectionsIndex(namespace, mdb, esc)
 		} else if name == consts.ES_SOURCES_INDEX {
-			indexer.indices[i] = MakeSourcesIndex(namespace)
+			indexer.indices[i] = MakeSourcesIndex(namespace, mdb, esc)
 		}
 	}
 	return indexer

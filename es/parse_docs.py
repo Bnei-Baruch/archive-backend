@@ -10,4 +10,3 @@ with open(sys.argv[1], 'rb') as f:
         sys.stdout.flush()
     # text = '\n'.join([p.text for p in document.paragraphs])
     # print(text.encode('utf-8'))
-

@@ -9,7 +9,7 @@ import (
 	"gopkg.in/gin-gonic/gin.v1"
 
 	"github.com/Bnei-Baruch/archive-backend/api"
-	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/Bnei-Baruch/archive-backend/version"
 )
@@ -26,8 +26,8 @@ func init() {
 
 func serverFn(cmd *cobra.Command, args []string) {
 	log.Infof("Starting Archive backend server version %s", version.Version)
-	mdb.Init()
-	defer mdb.Shutdown()
+	common.Init()
+	defer common.Shutdown()
 
 	// Setup Rollbar
 	rollbar.Token = viper.GetString("server.rollbar-token")
@@ -38,7 +38,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 	gin.SetMode(viper.GetString("server.mode"))
 	router := gin.New()
 	router.Use(
-		utils.DataStoresMiddleware(mdb.DB, mdb.ESC),
+		utils.DataStoresMiddleware(common.DB, common.ESC, common.LOGGER),
 		utils.ErrorHandlingMiddleware(),
 		cors.Default(),
 		utils.RecoveryMiddleware())

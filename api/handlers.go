@@ -409,6 +409,10 @@ func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
 	query := ParseQuery(c.Query("q"))
+	query.Deb = false
+	if c.Query("deb") == "true" {
+		query.Deb = true
+	}
 	log.Debugf("Parsed Query: %#v", query)
 	if len(query.Term) == 0 && len(query.Filters) == 0 && len(query.ExactTerms) == 0 {
 		NewBadRequestError(errors.New("Can't search with no terms and no filters.")).Abort(c)
@@ -427,16 +431,18 @@ func SearchHandler(c *gin.Context) {
 		}
 	}
 
-	pageSizeVal := consts.API_DEFAULT_PAGE_SIZE
+	size := consts.API_DEFAULT_PAGE_SIZE
 	pageSize := c.Query("page_size")
 	if pageSize != "" {
-		pageSizeVal, err = strconv.Atoi(pageSize)
+		size, err = strconv.Atoi(pageSize)
 		if err != nil {
 			NewBadRequestError(errors.New("page_size expects a positive number")).Abort(c)
 			return
 		}
-		pageSizeVal = utils.Min(pageSizeVal, consts.API_MAX_PAGE_SIZE)
+		size = utils.Min(size, consts.API_MAX_PAGE_SIZE)
 	}
+
+	from := (pageNoVal - 1) * size
 
 	sortByVal := consts.SORT_BY_RELEVANCE
 	sortBy := c.Query("sort_by")
@@ -450,6 +456,7 @@ func SearchHandler(c *gin.Context) {
 
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
+	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	se := search.NewESEngine(esc, db)
 
 	// Detect input language
@@ -461,13 +468,23 @@ func SearchHandler(c *gin.Context) {
 		context.TODO(),
 		query,
 		sortByVal,
-		(pageNoVal-1)*pageSizeVal,
-		pageSizeVal,
+		from,
+		size,
 		preference,
 	)
 	if err == nil {
+		// TODO: How does this slows the search query?!
+		// Consider logging in parallel!
+		err := logger.LogSearch(query, sortByVal, from, size, res)
+		if err != nil {
+			log.Warnf("Error logging search: %+v %+v", err, res)
+		}
 		c.JSON(http.StatusOK, res)
 	} else {
+		logErr := logger.LogSearchError(query, sortByVal, from, size, err)
+		if logErr != nil {
+			log.Warnf("Erro logging search error: %+v %+v", logErr, err)
+		}
 		NewInternalError(err).Abort(c)
 	}
 }

@@ -3,6 +3,7 @@ package es
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,10 +12,10 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/archive-backend/mdb"
 )
 
 type Scope struct {
@@ -40,6 +41,8 @@ type Index interface {
 type BaseIndex struct {
 	namespace string
 	baseName  string
+	db        *sql.DB
+	esc       *elastic.Client
 }
 
 func IndexName(namespace string, name string, lang string) string {
@@ -73,7 +76,7 @@ func (index *BaseIndex) CreateIndex() error {
 		}
 
 		// Create index.
-		res, err := mdb.ESC.CreateIndex(name).BodyJson(bodyJson).Do(context.TODO())
+		res, err := index.esc.CreateIndex(name).BodyJson(bodyJson).Do(context.TODO())
 		if err != nil {
 			return errors.Wrap(err, "Create index")
 		}
@@ -95,12 +98,12 @@ func (index *BaseIndex) DeleteIndex() error {
 
 func (index *BaseIndex) deleteIndexByLang(lang string) error {
 	i18nName := index.indexName(lang)
-	exists, err := mdb.ESC.IndexExists(i18nName).Do(context.TODO())
+	exists, err := index.esc.IndexExists(i18nName).Do(context.TODO())
 	if err != nil {
 		return err
 	}
 	if exists {
-		res, err := mdb.ESC.DeleteIndex(i18nName).Do(context.TODO())
+		res, err := index.esc.DeleteIndex(i18nName).Do(context.TODO())
 		if err != nil {
 			return errors.Wrap(err, "Delete index")
 		}
@@ -121,7 +124,7 @@ func (index *BaseIndex) RefreshIndex() error {
 }
 
 func (index *BaseIndex) RefreshIndexByLang(lang string) error {
-	_, err := mdb.ESC.Refresh(index.indexName(lang)).Do(context.TODO())
+	_, err := index.esc.Refresh(index.indexName(lang)).Do(context.TODO())
 	// fmt.Printf("\n\n\nShards: %+v \n\n\n", shards)
 	return err
 }
@@ -131,10 +134,10 @@ func (index *BaseIndex) ParseDocx(docxPath string) (string, error) {
 		return "", errors.Wrapf(err, "os.Stat %s", docxPath)
 	}
 	var cmd *exec.Cmd
-	if strings.ToLower(mdb.Os) == "windows" {
-		cmd = exec.Command(mdb.PythonPath, mdb.ParseDocsBin, docxPath)
+	if strings.ToLower(operatingSystem) == "windows" {
+		cmd = exec.Command(pythonPath, parseDocsBin, docxPath)
 	} else {
-		cmd = exec.Command(mdb.ParseDocsBin, docxPath)
+		cmd = exec.Command(parseDocsBin, docxPath)
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -142,7 +145,7 @@ func (index *BaseIndex) ParseDocx(docxPath string) (string, error) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		log.Warnf("[%s %s]\nstdout: [%s]\nstderr: [%s]\nError: %+v\n", mdb.ParseDocsBin, docxPath, stdout.String(), stderr.String(), err)
+		log.Warnf("[%s %s]\nstdout: [%s]\nstderr: [%s]\nError: %+v\n", parseDocsBin, docxPath, stdout.String(), stderr.String(), err)
 		return "", errors.Wrapf(err, "cmd.Run %s", docxPath)
 	}
 	return stdout.String(), nil

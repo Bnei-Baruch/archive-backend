@@ -180,6 +180,10 @@ UNITS_TEMPLATE = {
               "type": "text",
               "analyzer": lambda lang: StandardAnalyzer[lang],
             },
+            "length": {
+              "type": "token_count",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
           },
         },
         "description": {
@@ -188,6 +192,10 @@ UNITS_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+            "length": {
+              "type": "token_count",
               "analyzer": lambda lang: StandardAnalyzer[lang],
             },
           },
@@ -231,7 +239,11 @@ UNITS_TEMPLATE = {
             "analyzed": {
               "type": "text",
               "analyzer": lambda lang: StandardAnalyzer[lang],
-            }
+            },
+            "length": {
+              "type": "token_count",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
           },
         },
       },
@@ -362,6 +374,10 @@ COLLECTIONS_TEMPLATE = {
               "type": "text",
               "analyzer": lambda lang: StandardAnalyzer[lang],
             },
+            "length": {
+              "type": "token_count",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
           },
         },
         "description": {
@@ -370,6 +386,10 @@ COLLECTIONS_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+            "length": {
+              "type": "token_count",
               "analyzer": lambda lang: StandardAnalyzer[lang],
             },
           },

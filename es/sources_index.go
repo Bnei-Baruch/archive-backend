@@ -15,14 +15,15 @@ import (
 	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
-func MakeSourcesIndex(namespace string) *SourcesIndex {
+func MakeSourcesIndex(namespace string, db *sql.DB, esc *elastic.Client) *SourcesIndex {
 	si := new(SourcesIndex)
 	si.baseName = consts.ES_SOURCES_INDEX
 	si.namespace = namespace
+	si.db = db
+	si.esc = esc
 	return si
 }
 
@@ -89,7 +90,7 @@ func (index *SourcesIndex) Delete(scope Scope) error {
 
 func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 	var count int64
-	err := mdbmodels.NewQuery(mdb.DB,
+	err := mdbmodels.NewQuery(index.db,
 		qm.Select("COUNT(1)"),
 		qm.From("sources as source"),
 		qm.Where(sqlScope)).QueryRow().Scan(&count)
@@ -103,7 +104,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 	limit := 1000
 	for offset < int(count) {
 		var sources []*mdbmodels.Source
-		err := mdbmodels.NewQuery(mdb.DB,
+		err := mdbmodels.NewQuery(index.db,
 			qm.From("sources as source"),
 			qm.Load("SourceI18ns"),
 			qm.Load("Authors"),
@@ -146,7 +147,7 @@ func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]s
 	removed := make(map[string]bool)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
-		searchRes, err := mdb.ESC.Search(indexName).Query(elasticScope).Do(context.TODO())
+		searchRes, err := index.esc.Search(indexName).Query(elasticScope).Do(context.TODO())
 		if err != nil {
 			return []string{}, err
 		}
@@ -158,7 +159,7 @@ func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]s
 			}
 			removed[source.MDB_UID] = true
 		}
-		delRes, err := mdb.ESC.DeleteByQuery(indexName).
+		delRes, err := index.esc.DeleteByQuery(indexName).
 			Query(elasticScope).
 			Do(context.TODO())
 		if err != nil {
@@ -180,7 +181,7 @@ func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]s
 }
 
 func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) {
-	uidPath := path.Join(mdb.SourcesFolder, uid)
+	uidPath := path.Join(SourcesFolder, uid)
 	jsonPath := path.Join(uidPath, "index.json")
 	jsonCnt, err := ioutil.ReadFile(jsonPath)
 	if err != nil {
@@ -230,7 +231,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 
 			for _, a := range mdbSource.R.Authors {
 
-				ai18n, err := mdbmodels.FindAuthorI18n(mdb.DB, a.ID, i18n.Language)
+				ai18n, err := mdbmodels.FindAuthorI18n(index.db, a.ID, i18n.Language)
 				if err != nil {
 					if err == sql.ErrNoRows {
 						continue
@@ -257,7 +258,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 			return err
 		}
 		log.Infof("Sources Index - Add source %s to index %s", string(vBytes), name)
-		resp, err := mdb.ESC.Index().
+		resp, err := index.esc.Index().
 			Index(name).
 			Type("sources").
 			BodyJson(v).

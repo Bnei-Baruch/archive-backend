@@ -13,25 +13,11 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/volatiletech/sqlboiler/queries"
-
-	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/utils"
 )
-
-func ConvertDocx() {
-	clock := mdb.Init()
-
-	utils.Must(convertDocx())
-
-	mdb.Shutdown()
-	log.Info("Success")
-	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
-}
 
 func DownloadAndConvert(docBatch [][]string) error {
 	var convertDocs []string
@@ -45,8 +31,8 @@ func DownloadAndConvert(docBatch [][]string) error {
 
 		docFilename := fmt.Sprintf("%s%s", uid, filepath.Ext(name))
 		docxFilename := fmt.Sprintf("%s.docx", uid)
-		docPath := path.Join(mdb.DocFolder, docFilename)
-		docxPath := path.Join(mdb.DocFolder, docxFilename)
+		docPath := path.Join(docFolder, docFilename)
+		docxPath := path.Join(docFolder, docxFilename)
 		if _, err := os.Stat(docxPath); !os.IsNotExist(err) {
 			continue
 		}
@@ -56,7 +42,7 @@ func DownloadAndConvert(docBatch [][]string) error {
 		}
 
 		// Download doc.
-		resp, err := http.Get(fmt.Sprintf("%s/%s", mdb.CDNUrl, uid))
+		resp, err := http.Get(fmt.Sprintf("%s/%s", cdnUrl, uid))
 		if err != nil {
 			log.Warnf("Error downloading, Error: %+v", err)
 			return err
@@ -88,30 +74,30 @@ func DownloadAndConvert(docBatch [][]string) error {
 
 	if len(convertDocs) > 0 {
 		sofficeMutex.Lock()
-		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", mdb.DocFolder}, convertDocs...)
+		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", docFolder}, convertDocs...)
 		log.Infof("Command [%s]", strings.Join(args, " "))
-		cmd := exec.Command(mdb.SofficeBin, args...)
+		cmd := exec.Command(sofficeBin, args...)
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 		err := cmd.Run()
 		sofficeMutex.Unlock()
-		if _, ok := err.(*exec.ExitError); err != nil || ok {
-			log.Errorf("soffice is '%s'. Error: %s", mdb.SofficeBin, err)
+		if err != nil {
+			log.Errorf("soffice is '%s'. Error: %s", sofficeBin, err)
 			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
-			return errors.Wrapf(err, "Execute soffice")
+			return errors.Wrapf(err, "Execute soffice.")
 		}
 	}
 
 	return nil
 }
 
-func LoadDocFilename(fileUID string) (string, error) {
+func LoadDocFilename(db *sql.DB, fileUID string) (string, error) {
 
 	var fileName string
 
-	err := queries.Raw(mdb.DB, `
+	err := queries.Raw(db, `
 SELECT name
 FROM files
 WHERE name ~ '.docx?' AND
@@ -129,8 +115,8 @@ WHERE name ~ '.docx?' AND
 
 var sofficeMutex = &sync.Mutex{}
 
-func loadDocs() ([][]string, error) {
-	rows, err := queries.Raw(mdb.DB, `
+func loadDocs(db *sql.DB) ([][]string, error) {
+	rows, err := queries.Raw(db, `
 SELECT uid, name
 FROM files
 WHERE name ~ '.docx?' AND
@@ -165,7 +151,7 @@ func loadMap(rows *sql.Rows) ([][]string, error) {
 	return m, nil
 }
 
-func convertDocx() error {
+func ConvertDocx(db *sql.DB) error {
 	var workersWG sync.WaitGroup
 	docsCH := make(chan []string)
 	workersWG.Add(1)
@@ -174,7 +160,7 @@ func convertDocx() error {
 	go func(wg *sync.WaitGroup) {
 		defer close(docsCH)
 		defer wg.Done()
-		docs, err := loadDocs()
+		docs, err := loadDocs(db)
 		if err != nil {
 			loadErr = errors.Wrap(err, "Fetch docs from mdb")
 			return

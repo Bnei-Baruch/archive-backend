@@ -2,6 +2,7 @@ package es
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -18,10 +19,12 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-func MakeCollectionsIndex(namespace string) *CollectionsIndex {
+func MakeCollectionsIndex(namespace string, db *sql.DB, esc *elastic.Client) *CollectionsIndex {
 	ci := new(CollectionsIndex)
 	ci.baseName = consts.ES_COLLECTIONS_INDEX
 	ci.namespace = namespace
+	ci.db = db
+	ci.esc = esc
 	return ci
 }
 
@@ -38,7 +41,7 @@ func defaultCollectionsSql() string {
 }
 
 func (index *CollectionsIndex) ReindexAll() error {
-    log.Infof("Collections Index - Reindex all.")
+	log.Infof("Collections Index - Reindex all.")
 	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
 		return err
 	}
@@ -46,7 +49,7 @@ func (index *CollectionsIndex) ReindexAll() error {
 }
 
 func (index *CollectionsIndex) Add(scope Scope) error {
-    log.Infof("Collections Index - Add. Scope: %+v.", scope)
+	log.Infof("Collections Index - Add. Scope: %+v.", scope)
 	// We only add content units when content unit is added, otherwise we need to update.
 	if scope.CollectionUID != "" {
 		if err := index.addToIndex(Scope{CollectionUID: scope.CollectionUID}, []string{}); err != nil {
@@ -62,7 +65,7 @@ func (index *CollectionsIndex) Add(scope Scope) error {
 }
 
 func (index *CollectionsIndex) Update(scope Scope) error {
-    log.Infof("Collections Index - Update. Scope: %+v.", scope)
+	log.Infof("Collections Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
 	if err != nil {
 		return err
@@ -71,7 +74,7 @@ func (index *CollectionsIndex) Update(scope Scope) error {
 }
 
 func (index *CollectionsIndex) Delete(scope Scope) error {
-    log.Infof("Collections Index - Delete. Scope: %+v.", scope)
+	log.Infof("Collections Index - Delete. Scope: %+v.", scope)
 	// We only delete content units when content unit is deleted, otherwise we just update.
 	if scope.CollectionUID != "" {
 		if _, err := index.removeFromIndex(Scope{CollectionUID: scope.CollectionUID}); err != nil {
@@ -94,14 +97,14 @@ func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) err
 		uids = append(uids, scope.CollectionUID)
 	}
 	if scope.FileUID != "" {
-		moreUIDs, err := collectionsScopeByFile(scope.FileUID)
+		moreUIDs, err := CollectionsScopeByFile(index.db, scope.FileUID)
 		if err != nil {
 			return errors.Wrap(err, "collections index addToIndex collectionsScopeByFile")
 		}
 		uids = append(uids, moreUIDs...)
 	}
 	if scope.ContentUnitUID != "" {
-		moreUIDs, err := collectionsScopeByContentUnit(scope.ContentUnitUID)
+		moreUIDs, err := CollectionsScopeByContentUnit(index.db, scope.ContentUnitUID)
 		if err != nil {
 			return errors.Wrap(err, "collections index addToIndex collectionsScopeByContentUnit")
 		}
@@ -131,7 +134,7 @@ func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	}
 	if scope.ContentUnitUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("content_unit", scope.ContentUnitUID))
-		moreUIDs, err := collectionsScopeByContentUnit(scope.ContentUnitUID)
+		moreUIDs, err := CollectionsScopeByContentUnit(index.db, scope.ContentUnitUID)
 		if err != nil {
 			return []string{}, err
 		}
@@ -158,18 +161,18 @@ func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
 
 func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 	var count int64
-	if err := mdbmodels.NewQuery(mdb.DB,
+	if err := mdbmodels.NewQuery(index.db,
 		qm.Select("count(*)"),
 		qm.From("collections as c"),
 		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
 		return err
 	}
-    log.Infof("Collections Index - Adding %d collections. Scope: %s.", count, sqlScope)
+	log.Infof("Collections Index - Adding %d collections. Scope: %s.", count, sqlScope)
 	offset := 0
 	limit := 10
 	for offset < int(count) {
 		var collections []*mdbmodels.Collection
-		err := mdbmodels.NewQuery(mdb.DB,
+		err := mdbmodels.NewQuery(index.db,
 			qm.From("collections as c"),
 			qm.Load("CollectionI18ns"),
 			qm.Load("CollectionsContentUnits"),
@@ -183,8 +186,6 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 		}
 		log.Infof("Adding %d collections (offset %d).", len(collections), offset)
 
-		index.indexData = new(IndexData)
-
 		var cuUIDs []string
 		for _, c := range collections {
 			for _, ccu := range c.R.CollectionsContentUnits {
@@ -196,7 +197,8 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 			contentUnitsSqlScope = fmt.Sprintf(
 				"%s AND cu.uid in (%s)", contentUnitsSqlScope, strings.Join(cuUIDs, ","))
 		}
-		err = index.indexData.Load(contentUnitsSqlScope)
+
+		index.indexData, err = MakeIndexData(index.db, contentUnitsSqlScope)
 		if err != nil {
 			return err
 		}
@@ -211,19 +213,19 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 }
 
 func (index *CollectionsIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
-    source, err := elasticScope.Source()
-    if err != nil {
-        return []string{}, err
-    }
-    jsonBytes, err := json.Marshal(source)
-    if err != nil {
-        return []string{}, err
-    }
-    log.Infof("Collections Index - Removing from index. Scope: %s", string(jsonBytes))
+	source, err := elasticScope.Source()
+	if err != nil {
+		return []string{}, err
+	}
+	jsonBytes, err := json.Marshal(source)
+	if err != nil {
+		return []string{}, err
+	}
+	log.Infof("Collections Index - Removing from index. Scope: %s", string(jsonBytes))
 	removed := make(map[string]bool)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
-		searchRes, err := mdb.ESC.Search(indexName).Query(elasticScope).Do(context.TODO())
+		searchRes, err := index.esc.Search(indexName).Query(elasticScope).Do(context.TODO())
 		if err != nil {
 			return []string{}, err
 		}
@@ -235,7 +237,7 @@ func (index *CollectionsIndex) removeFromIndexQuery(elasticScope elastic.Query) 
 			}
 			removed[c.MDB_UID] = true
 		}
-		delRes, err := mdb.ESC.DeleteByQuery(indexName).
+		delRes, err := index.esc.DeleteByQuery(indexName).
 			Query(elasticScope).
 			Do(context.TODO())
 		if err != nil {
@@ -327,12 +329,12 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
-        vBytes, err := json.Marshal(v)
-        if err != nil {
-            return err
-        }
-        log.Infof("Collections Index - Add collection %s to index %s", string(vBytes), name)
-		resp, err := mdb.ESC.Index().
+		vBytes, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		log.Infof("Collections Index - Add collection %s to index %s", string(vBytes), name)
+		resp, err := index.esc.Index().
 			Index(name).
 			Type("collections").
 			BodyJson(v).
