@@ -38,6 +38,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 	gin.SetMode(viper.GetString("server.mode"))
 	router := gin.New()
 	router.Use(
+		utils.LoggerMiddleware(),
 		utils.DataStoresMiddleware(common.DB, common.ESC, common.LOGGER),
 		utils.ErrorHandlingMiddleware(),
 		cors.Default(),

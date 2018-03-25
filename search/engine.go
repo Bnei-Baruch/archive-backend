@@ -59,7 +59,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 		classType := classTypes[i]
 		g.Go(func() error {
 
-			// Call ES
+			// Create MultiSearch request
 			multiSearchService := e.esc.MultiSearch()
 			for _, index := range indices {
 				searchSource := elastic.NewSearchSource().
@@ -77,12 +77,22 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 					Index(index)
 				multiSearchService.Add(request)
 			}
+
+
+			// Actual call to elastic
 			mr, err := multiSearchService.Do(ctx)
 			if err != nil {
-				log.Warnf("Error in suggest %+v", err)
-				return err
+				// don't kill entire request if ctx was cancelled
+				if ue, ok := err.(*url.Error); ok {
+					if ue.Err == context.DeadlineExceeded || ue.Err == context.Canceled {
+						log.Warnf("ES suggestions %s: ctx cancelled", classType)
+						return nil
+					}
+				}
+				return errors.Wrapf(err, "ES suggestions %s", classType)
 			}
 
+			// Process response
 			sRes := (*elastic.SearchResult)(nil)
 			for _, r := range mr.Responses {
 				if r != nil && SuggestionHasOptions(r.Suggest) {
@@ -93,17 +103,6 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 
 			if sRes == nil && len(mr.Responses) > 0 {
 				sRes = mr.Responses[0]
-			}
-
-			if err != nil {
-				// don't kill entire request if ctx was cancelled
-				if ue, ok := err.(*url.Error); ok {
-					if ue.Err == context.DeadlineExceeded || ue.Err == context.Canceled {
-						log.Warnf("ES search %s: ctx cancelled", classType)
-						return nil
-					}
-				}
-				return errors.Wrapf(err, "ES search %s", classType)
 			}
 
 			resp = append(resp, sRes)
