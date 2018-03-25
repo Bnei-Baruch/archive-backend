@@ -123,11 +123,13 @@ func createContentUnitsQuery(q Query) elastic.Query {
 	query := elastic.NewBoolQuery()
 	if q.Term != "" {
 		query = query.Must(
-			elastic.NewBoolQuery().Should(
-				elastic.NewMatchQuery("name.analyzed", q.Term).Boost(1.5),
-				elastic.NewMatchQuery("description.analyzed", q.Term).Boost(1.2),
-				elastic.NewMatchQuery("transcript.analyzed", q.Term),
-			).MinimumNumberShouldMatch(1),
+			// Don't calculate score here, as we use sloped score below.
+			elastic.NewConstantScoreQuery(
+				elastic.NewBoolQuery().Should(
+					elastic.NewMatchQuery("name.analyzed", q.Term),
+					elastic.NewMatchQuery("description.analyzed", q.Term),
+					elastic.NewMatchQuery("transcript.analyzed", q.Term),
+				).MinimumNumberShouldMatch(1)).Boost(1),
 		).Should(
 			elastic.NewBoolQuery().Should(
 				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(1.5),
@@ -138,16 +140,18 @@ func createContentUnitsQuery(q Query) elastic.Query {
 	}
 	for _, exactTerm := range q.ExactTerms {
 		query = query.Must(
-			elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Boost(1.5),
-				elastic.NewMatchPhraseQuery("description", exactTerm).Boost(1.2),
-				elastic.NewMatchPhraseQuery("transcript", exactTerm),
-			).MinimumNumberShouldMatch(1),
+			// Don't calculate score here, as we use sloped score below.
+			elastic.NewConstantScoreQuery(
+				elastic.NewBoolQuery().Should(
+					elastic.NewMatchPhraseQuery("name", exactTerm),
+					elastic.NewMatchPhraseQuery("description", exactTerm),
+					elastic.NewMatchPhraseQuery("transcript", exactTerm),
+				).MinimumNumberShouldMatch(1)).Boost(1),
 		).Should(
 			elastic.NewBoolQuery().Should(
 				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(1.5),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
-				elastic.NewMatchPhraseQuery("transcript", exactTerm),
+				elastic.NewMatchPhraseQuery("transcript", exactTerm).Slop(100),
 			).MinimumNumberShouldMatch(0),
 		)
 	}
@@ -174,9 +178,9 @@ func createContentUnitsQuery(q Query) elastic.Query {
 		}
 	}
 	return elastic.NewFunctionScoreQuery().Query(query).
-		AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
+		// AddScoreFunc(elastic.NewScriptFunction(elastic.NewScript("return _score / (doc['name.length'].value ? doc['name.length'].value : 1);"))).
+		// AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
-	// AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("description.length").Modifier("reciprocal").Missing(1))
 }
 
 func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query, sortBy string, from int, size int, preference string) {
@@ -199,7 +203,8 @@ func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query,
 		)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
-			Size(size)
+			Size(size).
+			Explain(query.Deb)
 		switch sortBy {
 		case consts.SORT_BY_OLDER_TO_NEWER:
 			searchSource = searchSource.Sort("effective_date", true)
@@ -218,10 +223,12 @@ func createCollectionsQuery(q Query) elastic.Query {
 	query := elastic.NewBoolQuery()
 	if q.Term != "" {
 		query = query.Must(
-			elastic.NewBoolQuery().Should(
-				elastic.NewMatchQuery("name.analyzed", q.Term).Boost(1.5),
-				elastic.NewMatchQuery("description.analyzed", q.Term),
-			).MinimumNumberShouldMatch(1),
+			// Don't calculate score here, as we use sloped score below.
+			elastic.NewConstantScoreQuery(
+				elastic.NewBoolQuery().Should(
+					elastic.NewMatchQuery("name.analyzed", q.Term),
+					elastic.NewMatchQuery("description.analyzed", q.Term),
+				).MinimumNumberShouldMatch(1)).Boost(1),
 		).Should(
 			elastic.NewBoolQuery().Should(
 				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(1.5),
@@ -231,10 +238,12 @@ func createCollectionsQuery(q Query) elastic.Query {
 	}
 	for _, exactTerm := range q.ExactTerms {
 		query = query.Must(
-			elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Boost(1.5),
-				elastic.NewMatchPhraseQuery("description", exactTerm),
-			).MinimumNumberShouldMatch(1),
+			// Don't calculate score here, as we use sloped score below.
+			elastic.NewConstantScoreQuery(
+				elastic.NewBoolQuery().Should(
+					elastic.NewMatchPhraseQuery("name", exactTerm),
+					elastic.NewMatchPhraseQuery("description", exactTerm),
+				).MinimumNumberShouldMatch(1)).Boost(1),
 		).Should(
 			elastic.NewBoolQuery().Should(
 				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(1.5),
@@ -266,10 +275,9 @@ func createCollectionsQuery(q Query) elastic.Query {
 			query.Filter(contentTypeQuery)
 		}
 	}
-	return elastic.NewFunctionScoreQuery().Query(query.Boost(1.2)).
-		AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
+	return elastic.NewFunctionScoreQuery().Query(query).
+		// AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
-	// AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("description.length").Modifier("reciprocal").Missing(1))
 }
 
 func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, sortBy string, from int, size int, preference string) {
@@ -290,7 +298,8 @@ func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, 
 		)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
-			Size(size)
+			Size(size).
+			Explain(query.Deb)
 		switch sortBy {
 		case consts.SORT_BY_OLDER_TO_NEWER:
 			searchSource = searchSource.Sort("effective_date", true)
