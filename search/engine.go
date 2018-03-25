@@ -64,20 +64,19 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 			for _, index := range indices {
 				searchSource := elastic.NewSearchSource().
 					Suggester(elastic.NewCompletionSuggester("classification_name").
-					Field("name_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
+						Field("name_suggest").
+						Text(query.Term).
+						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
 					Suggester(elastic.NewCompletionSuggester("classification_description").
-					Field("description_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
+						Field("description_suggest").
+						Text(query.Term).
+						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
 
 				request := elastic.NewSearchRequest().
 					SearchSource(searchSource).
 					Index(index)
 				multiSearchService.Add(request)
 			}
-
 
 			// Actual call to elastic
 			mr, err := multiSearchService.Do(ctx)
@@ -194,13 +193,13 @@ func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query,
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
 			Highlight(elastic.NewHighlight().Fields(
-			elastic.NewHighlighterField("name"),
-			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("transcript"),
-			elastic.NewHighlighterField("name.analyzed"),
-			elastic.NewHighlighterField("description.analyzed"),
-			elastic.NewHighlighterField("transcript.analyzed"),
-		)).
+				elastic.NewHighlighterField("name"),
+				elastic.NewHighlighterField("description"),
+				elastic.NewHighlighterField("transcript"),
+				elastic.NewHighlighterField("name.analyzed"),
+				elastic.NewHighlighterField("description.analyzed"),
+				elastic.NewHighlighterField("transcript.analyzed"),
+			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
@@ -291,11 +290,11 @@ func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, 
 		searchSource := elastic.NewSearchSource().
 			Query(createCollectionsQuery(query)).
 			Highlight(elastic.NewHighlight().Fields(
-			elastic.NewHighlighterField("name"),
-			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("name.analyzed"),
-			elastic.NewHighlighterField("description.analyzed"),
-		)).
+				elastic.NewHighlighterField("name"),
+				elastic.NewHighlighterField("description"),
+				elastic.NewHighlighterField("name.analyzed"),
+				elastic.NewHighlighterField("description.analyzed"),
+			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
