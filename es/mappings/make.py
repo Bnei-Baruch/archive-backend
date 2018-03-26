@@ -472,14 +472,6 @@ SOURCES_TEMPLATE = {
             },
           },
         },
-        "original_language": {
-          "type": "keyword",
-          "index": False,
-        },
-        "translations": {
-          "type": "keyword",
-          "index": False,
-        },
         "authors": {
           "type": "keyword",
           "index": False,

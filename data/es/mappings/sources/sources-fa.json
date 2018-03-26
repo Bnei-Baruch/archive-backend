@@ -5,6 +5,19 @@
                 "enabled": false
             }, 
             "properties": {
+                "content": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "persian"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "mdb_uid": {
+                    "type": "keyword"
+                }, 
                 "description": {
                     "fields": {
                         "analyzed": {
@@ -15,14 +28,7 @@
                     "type": "text", 
                     "analyzer": "phonetic_analyzer"
                 }, 
-                "translations": {
-                    "index": false, 
-                    "type": "keyword"
-                }, 
-                "mdb_uid": {
-                    "type": "keyword"
-                }, 
-                "content": {
+                "name": {
                     "fields": {
                         "analyzed": {
                             "type": "text", 
@@ -35,20 +41,6 @@
                 "authors": {
                     "index": false, 
                     "type": "keyword"
-                }, 
-                "original_language": {
-                    "index": false, 
-                    "type": "keyword"
-                }, 
-                "name": {
-                    "fields": {
-                        "analyzed": {
-                            "type": "text", 
-                            "analyzer": "persian"
-                        }
-                    }, 
-                    "type": "text", 
-                    "analyzer": "phonetic_analyzer"
                 }
             }
         }
