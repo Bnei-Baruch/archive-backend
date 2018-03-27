@@ -1414,6 +1414,9 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	fmt.Printf("\n\n\nAdding source.\n\n")
 	source1UID := suite.us(es.Source{Name: "test-name-1", Description: "test-description-1"}, consts.LANG_ENGLISH)
 	suite.us(es.Source{MDB_UID: source1UID, Name: "שם-בדיקה-1", Description: "תיאור-בדיקה-1"}, consts.LANG_HEBREW)
+	fmt.Printf("\n\n\nAdding content files for each language.\n\n")
+	suite.usfc(source1UID, consts.LANG_ENGLISH)
+	suite.usfc(source1UID, consts.LANG_HEBREW)
 
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
 	indexNameEn := es.IndexName("test", consts.ES_SOURCES_INDEX, consts.LANG_ENGLISH)
@@ -1428,8 +1431,13 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1"})
 	suite.validateSourceNames(indexNameHe, indexer, []string{"שם-בדיקה-1"})
 
+	fmt.Println("Validate source files.")
+	suite.validateSourceFile(indexNameEn, indexer, "TEST CONTENT")
+	suite.validateSourceFile(indexNameHe, indexer, "TEST CONTENT")
+
 	fmt.Println("Validate adding source incrementally.")
 	source2UID := suite.us(es.Source{Name: "test-name-2", Description: "test-description-2"}, consts.LANG_ENGLISH)
+	suite.usfc(source2UID, consts.LANG_ENGLISH)
 	r.Nil(indexer.SourceAdd(source2UID))
 	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2"})
 
@@ -1444,11 +1452,6 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	suite.rsa(es.Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
 	r.Nil(indexer.SourceUpdate(source1UID))
 	suite.validateSourceAuthors(indexNameEn, indexer, []string{})
-
-	fmt.Println("Add content file and validate.")
-	suite.usfc(source1UID, consts.LANG_ENGLISH)
-	r.Nil(indexer.SourceUpdate(source1UID))
-	suite.validateSourceFile(indexNameEn, indexer, "TEST CONTENT")
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())
