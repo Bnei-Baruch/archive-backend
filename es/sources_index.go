@@ -58,14 +58,16 @@ func (index *SourcesIndex) Add(scope Scope) error {
 
 func (index *SourcesIndex) Update(scope Scope) error {
 	log.Infof("Sources Index - Update. Scope: %+v.", scope)
-	removed, err := index.removeFromIndexQuery(elastic.NewTermsQuery("mdb_uid", scope.SourceUID))
-	if err != nil {
-		return err
-	}
-	if len(removed) > 0 && removed[0] == scope.SourceUID {
-		sqlScope := fmt.Sprintf("source.uid = '%s'", scope.SourceUID)
-		if err := index.addToIndexSql(sqlScope); err != nil {
-			return errors.Wrap(err, "Sources index addToIndexSql")
+	if scope.SourceUID != "" {
+		removed, err := index.removeFromIndexQuery(elastic.NewTermsQuery("mdb_uid", scope.SourceUID))
+		if err != nil {
+			return err
+		}
+		if len(removed) > 0 && removed[0] == scope.SourceUID {
+			sqlScope := fmt.Sprintf("source.uid = '%s'", scope.SourceUID)
+			if err := index.addToIndexSql(sqlScope); err != nil {
+				return errors.Wrap(err, "Sources index addToIndexSql")
+			}
 		}
 	}
 	return nil
@@ -210,8 +212,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 
 			fPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
 			if err != nil {
-				log.Errorf("Error retrieving docx path for source %s and language %s", mdbSource.UID, i18n.Language)
-				//return errors.Errorf("Error retrieving docx path for source %s and language %s", mdbSource.UID, i18n.Language)
+				return errors.Errorf("Error retrieving docx path for source %s and language %s", mdbSource.UID, i18n.Language)
 			} else {
 				content, err := index.ParseDocx(fPath)
 				if err != nil {
