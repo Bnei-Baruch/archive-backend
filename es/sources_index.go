@@ -29,7 +29,6 @@ func MakeSourcesIndex(namespace string, db *sql.DB, esc *elastic.Client) *Source
 
 type SourcesIndex struct {
 	BaseIndex
-	//indexData *IndexData
 }
 
 func (index *SourcesIndex) ReindexAll() error {
@@ -108,8 +107,6 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 			qm.From("sources as source"),
 			qm.Load("SourceI18ns"),
 			qm.Load("Authors"),
-			//qm.Load("AuthorI18ns"),
-			//qm.Load("AuthorsSources.Author"),
 			qm.Where(sqlScope),
 			qm.Offset(offset),
 			qm.Limit(limit)).Bind(&sources)
@@ -118,11 +115,6 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 		}
 		log.Infof("Adding %d sources (offset: %d).", len(sources), offset)
 
-		/*index.indexData = new(IndexData)
-		err = index.indexData.Load(sqlScope)
-		if err != nil {
-			return err
-		}*/
 		for _, source := range sources {
 			if err := index.indexSource(source); err != nil {
 				return err
@@ -209,8 +201,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 
 			source := Source{
 				MDB_UID: mdbSource.UID,
-				//Language: i18n.Language,
-				Name: i18n.Name.String,
+				Name:    i18n.Name.String,
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
