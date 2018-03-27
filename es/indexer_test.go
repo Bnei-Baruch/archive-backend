@@ -1428,6 +1428,11 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1"})
 	suite.validateSourceNames(indexNameHe, indexer, []string{"שם-בדיקה-1"})
 
+	fmt.Println("Validate adding source incrementally.")
+	source2UID := suite.us(es.Source{Name: "test-name-2", Description: "test-description-2"}, consts.LANG_ENGLISH)
+	r.Nil(indexer.SourceAdd(source2UID))
+	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2"})
+
 	fmt.Println("Add 2 authors and validate.")
 	suite.asa(es.Source{MDB_UID: source1UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name", ID: 3, Code: "t1", FullName: null.String{String: "Test Full Name", Valid: true}}, true, true)
 	suite.asa(es.Source{MDB_UID: source1UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם לבדיקה", ID: 4, Code: "t2", FullName: null.String{String: "שם מלא לבדיקה", Valid: true}}, true, true)

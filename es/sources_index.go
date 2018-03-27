@@ -43,7 +43,7 @@ func (index *SourcesIndex) Add(scope Scope) error {
 	log.Infof("Sources Index - Add. Scope: %+v.", scope)
 	// We only add sources when the scope is source, otherwise we need to update.
 	if scope.SourceUID != "" {
-		sqlScope := fmt.Sprintf("c.uid = %s", scope.SourceUID)
+		sqlScope := fmt.Sprintf("source.uid = '%s'", scope.SourceUID)
 		if err := index.addToIndexSql(sqlScope); err != nil {
 			return errors.Wrap(err, "Sources index addToIndexSql")
 		}
