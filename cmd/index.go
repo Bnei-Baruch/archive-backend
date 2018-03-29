@@ -36,11 +36,18 @@ var indexCollectionsCmd = &cobra.Command{
 	Run:   indexCollectionsFn,
 }
 
+var indexSourcesCmd = &cobra.Command{
+	Use:   "sources",
+	Short: "Index sources in ES",
+	Run:   indexSourcesFn,
+}
+
 func init() {
 	RootCmd.AddCommand(indexCmd)
 	indexCmd.AddCommand(indexClassificationsCmd)
 	indexCmd.AddCommand(indexUnitsCmd)
 	indexCmd.AddCommand(indexCollectionsCmd)
+	indexCmd.AddCommand(indexSourcesCmd)
 }
 
 func indexFn(cmd *cobra.Command, args []string) {
@@ -57,6 +64,10 @@ func indexUnitsFn(cmd *cobra.Command, args []string) {
 
 func indexCollectionsFn(cmd *cobra.Command, args []string) {
 	IndexCmd(consts.ES_COLLECTIONS_INDEX)
+}
+
+func indexSourcesFn(cmd *cobra.Command, args []string) {
+	IndexCmd(consts.ES_SOURCES_INDEX)
 }
 
 func IndexCmd(index string) {
