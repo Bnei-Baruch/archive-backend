@@ -64,13 +64,13 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 			for _, index := range indices {
 				searchSource := elastic.NewSearchSource().
 					Suggester(elastic.NewCompletionSuggester("classification_name").
-					Field("name_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
+						Field("name_suggest").
+						Text(query.Term).
+						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
 					Suggester(elastic.NewCompletionSuggester("classification_description").
-					Field("description_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
+						Field("description_suggest").
+						Text(query.Term).
+						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
 
 				request := elastic.NewSearchRequest().
 					SearchSource(searchSource).
@@ -195,13 +195,13 @@ func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query,
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
 			Highlight(elastic.NewHighlight().Fields(
-			elastic.NewHighlighterField("name"),
-			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("transcript"),
-			elastic.NewHighlighterField("name.analyzed"),
-			elastic.NewHighlighterField("description.analyzed"),
-			elastic.NewHighlighterField("transcript.analyzed"),
-		)).
+				elastic.NewHighlighterField("name"),
+				elastic.NewHighlighterField("description"),
+				elastic.NewHighlighterField("transcript"),
+				elastic.NewHighlighterField("name.analyzed"),
+				elastic.NewHighlighterField("description.analyzed"),
+				elastic.NewHighlighterField("transcript.analyzed"),
+			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
@@ -292,11 +292,11 @@ func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, 
 		searchSource := elastic.NewSearchSource().
 			Query(createCollectionsQuery(query)).
 			Highlight(elastic.NewHighlight().Fields(
-			elastic.NewHighlighterField("name"),
-			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("name.analyzed"),
-			elastic.NewHighlighterField("description.analyzed"),
-		)).
+				elastic.NewHighlighterField("name"),
+				elastic.NewHighlighterField("description"),
+				elastic.NewHighlighterField("name.analyzed"),
+				elastic.NewHighlighterField("description.analyzed"),
+			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
@@ -307,6 +307,82 @@ func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, 
 		case consts.SORT_BY_NEWER_TO_OLDER:
 			searchSource = searchSource.Sort("effective_date", false)
 		}
+		request := elastic.NewSearchRequest().
+			SearchSource(searchSource).
+			Index(index).
+			Preference(preference)
+		mss.Add(request)
+	}
+}
+
+func createSourcesQuery(q Query) elastic.Query {
+	query := elastic.NewBoolQuery()
+	if q.Term != "" {
+		query = query.Must(
+			// Don't calculate score here, as we use sloped score below.
+			elastic.NewConstantScoreQuery(
+				elastic.NewBoolQuery().Should(
+					elastic.NewMatchQuery("name.analyzed", q.Term),
+					elastic.NewMatchQuery("description.analyzed", q.Term),
+					elastic.NewMatchQuery("content.analyzed", q.Term),
+					elastic.NewMatchQuery("authors.analyzed", q.Term),
+				).MinimumNumberShouldMatch(1)).Boost(1),
+		).Should(
+			elastic.NewBoolQuery().Should(
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(1.5),
+				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
+				elastic.NewMatchPhraseQuery("content.analyzed", q.Term).Slop(100),
+				elastic.NewMatchPhraseQuery("authors.analyzed", q.Term).Slop(100),
+			).MinimumNumberShouldMatch(0),
+		)
+	}
+	for _, exactTerm := range q.ExactTerms {
+		query = query.Must(
+			// Don't calculate score here, as we use sloped score below.
+			elastic.NewConstantScoreQuery(
+				elastic.NewBoolQuery().Should(
+					elastic.NewMatchPhraseQuery("name", exactTerm),
+					elastic.NewMatchPhraseQuery("description", exactTerm),
+					elastic.NewMatchPhraseQuery("content", exactTerm),
+					elastic.NewMatchPhraseQuery("authors", exactTerm),
+				).MinimumNumberShouldMatch(1)).Boost(1),
+		).Should(
+			elastic.NewBoolQuery().Should(
+				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(1.5),
+				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
+				elastic.NewMatchPhraseQuery("content.analyzed", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("authors.analyzed", exactTerm).Slop(100),
+			).MinimumNumberShouldMatch(1),
+		)
+	}
+	return elastic.NewFunctionScoreQuery().Query(query)
+	//.AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
+}
+
+func AddSourcesSearchRequests(mss *elastic.MultiSearchService, query Query, from int, size int, preference string) {
+	sources_indices := make([]string, len(query.LanguageOrder))
+	for i := range query.LanguageOrder {
+		sources_indices[i] = es.IndexName("prod", consts.ES_SOURCES_INDEX, query.LanguageOrder[i])
+	}
+	fetchSourceContext := elastic.NewFetchSourceContext(true).
+		Include("mdb_uid")
+	for _, index := range sources_indices {
+		searchSource := elastic.NewSearchSource().
+			Query(createSourcesQuery(query)).
+			Highlight(elastic.NewHighlight().Fields(
+				elastic.NewHighlighterField("name"),
+				elastic.NewHighlighterField("description"),
+				elastic.NewHighlighterField("authors"),
+				elastic.NewHighlighterField("content"),
+				elastic.NewHighlighterField("name.analyzed"),
+				elastic.NewHighlighterField("description.analyzed"),
+				elastic.NewHighlighterField("authors.analyzed"),
+				elastic.NewHighlighterField("content.analyzed"),
+			)).
+			FetchSourceContext(fetchSourceContext).
+			From(from).
+			Size(size).
+			Explain(query.Deb)
 		request := elastic.NewSearchRequest().
 			SearchSource(searchSource).
 			Index(index).
@@ -396,6 +472,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	AddContentUnitsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
 	// Collections
 	AddCollectionsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
+	// Sources
+	AddSourcesSearchRequests(multiSearchService, query, 0, from+size, preference)
 
 	// Do search.
 	mr, err := multiSearchService.Do(context.TODO())
