@@ -39,8 +39,14 @@
                     "analyzer": "phonetic_analyzer"
                 }, 
                 "authors": {
-                    "index": false, 
-                    "type": "keyword"
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "norwegian"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
                 }
             }
         }

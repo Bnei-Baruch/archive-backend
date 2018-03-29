@@ -473,8 +473,14 @@ SOURCES_TEMPLATE = {
           },
         },
         "authors": {
-          "type": "keyword",
-          "index": False,
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            }
+          },
         },
         "content": {
           "type": "text",
