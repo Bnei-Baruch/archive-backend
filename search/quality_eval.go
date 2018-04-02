@@ -40,10 +40,53 @@ type EvalResults struct {
 	ServerErrorWeighted float64      `json:"server_error_weighted"`
 }
 
+// Search quality enum. Order important, the lower (higher integer) the better.
+const (
+    SQ_SERVER_ERROR = iota
+    SQ_UNKNOWN      = iota
+    SQ_REGULAR      = iota
+    SQ_GOOD         = iota
+)
+
+var SEARCH_QUALITY_NAME = map[uint32]string{
+	SQ_GOOD:         "Good",
+	SQ_REGULAR:      "Regular",
+	SQ_UNKNOWN:      "Unknown",
+    SQ_SERVER_ERROR: "ServerError",
+}
+
+// Compare results classification.
+const (
+    CR_WIN   = iota
+    CR_LOSS  = iota
+    CR_SAME  = iota
+    CR_ERROR = iota
+)
+
+var COMPARE_RESULTS_NAME = map[uint32]string {
+    CR_WIN:   "Win",
+    CR_LOSS:  "Loss",
+    CR_SAME:  "Same",
+    CR_ERROR: "Error",
+}
+
 type EvalResult struct {
-	SearchQuality string `json:"quality"`
+	SearchQuality uint32 `json:"search_quality"`
 	Rank          uint64 `json:"rank"`
 	err           error  `json:"error"`
+}
+
+// Returns compare results classification constant.
+func CompareResults(base EvalResult, exp EvalResult) uint32 {
+    if base.SearchQuality == SQ_SERVER_ERROR || exp.SearchQuality == SQ_SERVER_ERROR {
+        return CR_ERROR
+    } else if base.SearchQuality == exp.SearchQuality {
+        return CR_SAME
+    } else if base.SearchQuality < exp.SearchQuality {
+        return CR_WIN  // Experiment is better
+    } else {
+        return CR_LOSS  // Base is better
+    }
 }
 
 func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
@@ -93,23 +136,23 @@ func ParseUidExpectation(e string) (string, error) {
 
 func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	r := EvalResult{}
-	r.SearchQuality = "Unknown"
+	r.SearchQuality = SQ_UNKNOWN
 
 	uid, err := ParseUidExpectation(q.Expectation)
 	if err != nil || uid == "" {
 		log.Warnf("Bad Expectation %+v, [%s]", err, uid)
-		r.SearchQuality = "Unknown"
+		r.SearchQuality = SQ_UNKNOWN
 		r.err = err
 		return r
 	}
 
-	urlTemplate := "%s/search?q=%s&language=%s&page_no=1&page_size=10&sort_by=relevance"
+	urlTemplate := "%s/search?q=%s&language=%s&page_no=1&page_size=10&sort_by=relevance&deb=true"
 	url := fmt.Sprintf(urlTemplate, serverUrl, url.QueryEscape(q.Query), q.Language)
 	log.Infof("Url: %s", url)
 	resp, err := http.Get(url)
 	if err != nil {
 		log.Warnf("Error %+v", err)
-		r.SearchQuality = "ServerError"
+		r.SearchQuality = SQ_SERVER_ERROR
 		r.err = err
 		return r
 	}
@@ -120,7 +163,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 		}
 		errMsg := fmt.Sprintf("Status not ok (%d), body: %s", resp.StatusCode, string(bodyBytes))
 		log.Warn(errMsg)
-		r.SearchQuality = "ServerError"
+		r.SearchQuality = SQ_SERVER_ERROR
 		r.err = errors.New(errMsg)
 		return r
 	}
@@ -128,7 +171,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	defer resp.Body.Close()
 	if err := json.NewDecoder(resp.Body).Decode(&searchResult); err != nil {
 		log.Warnf("Error decoding %+v", err)
-		r.SearchQuality = "ServerError"
+		r.SearchQuality = SQ_SERVER_ERROR
 		r.err = err
 		return r
 	}
@@ -136,7 +179,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 		mdbUid := MdbUid{}
 		if err := json.Unmarshal(*hit.Source, &mdbUid); err != nil {
 			log.Warnf("Error unmarshling source %+v", err)
-			r.SearchQuality = "ServerError"
+			r.SearchQuality = SQ_SERVER_ERROR
 			r.err = err
 			return r
 		}
@@ -144,9 +187,9 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 		if mdbUid.MdbUid == uid {
 			r.Rank = uint64(i + 1)
 			if i <= 2 {
-				r.SearchQuality = "Good"
+				r.SearchQuality = SQ_GOOD
 			} else {
-				r.SearchQuality = "Regular"
+				r.SearchQuality = SQ_REGULAR
 			}
 			break
 		}
@@ -160,17 +203,16 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, error) {
 	ret := EvalResults{}
 	for _, q := range queries {
 		r := EvaluateQuery(q, serverUrl)
-		log.Infof("Rsult: %+v", r)
-		if r.SearchQuality == "Good" {
+		if r.SearchQuality == SQ_GOOD {
 			ret.RecallUnique++
 			ret.RecallWeighted += float64(q.Weight)
-		} else if r.SearchQuality == "Regular" {
+		} else if r.SearchQuality == SQ_REGULAR {
 			ret.RegularUnique++
 			ret.RegularWeighted += float64(q.Weight)
-		} else if r.SearchQuality == "Unknown" {
+		} else if r.SearchQuality == SQ_UNKNOWN {
 			ret.UnknownUnique++
 			ret.UnknownWeighted += float64(q.Weight)
-		} else if r.SearchQuality == "ServerError" {
+		} else if r.SearchQuality == SQ_SERVER_ERROR {
 			ret.ServerErrorUnique++
 			ret.ServerErrorWeighted += float64(q.Weight)
 		}
