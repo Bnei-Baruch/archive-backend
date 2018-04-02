@@ -119,7 +119,8 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 
 		for _, source := range sources {
 			if err := index.indexSource(source); err != nil {
-				return err
+				log.Warnf("*** Unable to index source '%s' (uid: %s). Error is: %v. ***", source.Name, source.UID, err)
+				//return err
 			}
 		}
 		offset += limit
@@ -197,8 +198,10 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 
 func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 	// Create documents in each language with available translation
+	hasDocxForSomeLanguage := false
 	i18nMap := make(map[string]Source)
 	for _, i18n := range mdbSource.R.SourceI18ns {
+
 		if i18n.Name.Valid && i18n.Name.String != "" {
 
 			source := Source{
@@ -212,13 +215,16 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 
 			fPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
 			if err != nil {
-				return errors.Errorf("Error retrieving docx path for source %s and language %s", mdbSource.UID, i18n.Language)
+				log.Warnf("Unable to retrieving docx path for source %s with language %s", mdbSource.UID, i18n.Language)
+				continue
+				//return errors.Errorf("Error retrieving docx path for source %s and language %s", mdbSource.UID, i18n.Language)
 			} else {
 				content, err := index.ParseDocx(fPath)
 				if err != nil {
 					return errors.Errorf("Error parsing docx for source %s and language %s", mdbSource.UID, i18n.Language)
 				}
 				source.Content = content
+				hasDocxForSomeLanguage = true
 			}
 
 			for _, a := range mdbSource.R.Authors {
@@ -242,14 +248,14 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 		}
 	}
 
+	if !hasDocxForSomeLanguage {
+		return errors.Errorf("No docx files found for source %s", mdbSource.UID)
+	}
+
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
-		vBytes, err := json.Marshal(v)
-		if err != nil {
-			return err
-		}
-		log.Infof("Sources Index - Add source %s to index %s", string(vBytes), name)
+		log.Infof("Sources Index - Add source %s to index %s", mdbSource.UID, name)
 		resp, err := index.esc.Index().
 			Index(name).
 			Type("sources").
