@@ -7,7 +7,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	log "github.com/Sirupsen/logrus"
 
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
@@ -32,7 +31,6 @@ func init() {
 }
 
 func initConfig() {
-    log.Infof("Debug! initConfig.")
 	if err := utils.InitConfig(cfgFile, ""); err != nil {
 		panic(errors.Wrapf(err, "Could not read config, using: %s", viper.ConfigFileUsed()))
 	}

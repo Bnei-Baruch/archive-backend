@@ -128,15 +128,14 @@ func createContentUnitsQuery(q Query) elastic.Query {
 					elastic.NewMatchQuery("name.analyzed", q.Term),
 					elastic.NewMatchQuery("description.analyzed", q.Term),
 					elastic.NewMatchQuery("transcript.analyzed", q.Term),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0.0),
 		).Should(
-            elastic.NewDisMaxQuery().Query(
-			// elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(1.5),
+			elastic.NewDisMaxQuery().Query(
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
 				elastic.NewMatchPhraseQuery("transcript.analyzed", q.Term).Slop(100),
 			),
-			// ).MinimumNumberShouldMatch(1),
 		)
 	}
 	for _, exactTerm := range q.ExactTerms {
@@ -147,15 +146,14 @@ func createContentUnitsQuery(q Query) elastic.Query {
 					elastic.NewMatchPhraseQuery("name", exactTerm),
 					elastic.NewMatchPhraseQuery("description", exactTerm),
 					elastic.NewMatchPhraseQuery("transcript", exactTerm),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0.0),
 		).Should(
-            elastic.NewDisMaxQuery().Query(
-			// elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(1.5),
+			elastic.NewDisMaxQuery().Query(
+				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
 				elastic.NewMatchPhraseQuery("transcript", exactTerm).Slop(100),
 			),
-			// ).MinimumNumberShouldMatch(0),
 		)
 	}
 	contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
@@ -181,9 +179,7 @@ func createContentUnitsQuery(q Query) elastic.Query {
 		}
 	}
 	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
-		// AddScoreFunc(elastic.NewScriptFunction(elastic.NewScript("return _score / (doc['name.length'].value ? doc['name.length'].value : 1);"))).
-		// AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
-		AddScoreFunc(elastic.NewWeightFactorFunction(10.0)).
+		AddScoreFunc(elastic.NewWeightFactorFunction(3.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
 }
 
@@ -232,14 +228,13 @@ func createCollectionsQuery(q Query) elastic.Query {
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchQuery("name.analyzed", q.Term),
 					elastic.NewMatchQuery("description.analyzed", q.Term),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0.0),
 		).Should(
-            elastic.NewDisMaxQuery().Query(
-			// elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(1.5),
+			elastic.NewDisMaxQuery().Query(
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100),
 			),
-			// ).MinimumNumberShouldMatch(1),
 		)
 	}
 	for _, exactTerm := range q.ExactTerms {
@@ -249,14 +244,13 @@ func createCollectionsQuery(q Query) elastic.Query {
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchPhraseQuery("name", exactTerm),
 					elastic.NewMatchPhraseQuery("description", exactTerm),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0.0),
 		).Should(
-            elastic.NewDisMaxQuery().Query(
-			// elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(1.5),
+			elastic.NewDisMaxQuery().Query(
+				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100),
-            ),
-			// ).MinimumNumberShouldMatch(0),
+			),
 		)
 	}
 	contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
@@ -284,8 +278,8 @@ func createCollectionsQuery(q Query) elastic.Query {
 		}
 	}
 	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
-		// AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
-		AddScoreFunc(elastic.NewWeightFactorFunction(10.0)).
+		Boost(1.4). // Boost collections index.
+		AddScoreFunc(elastic.NewWeightFactorFunction(3.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
 }
 

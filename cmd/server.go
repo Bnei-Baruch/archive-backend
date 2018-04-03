@@ -23,9 +23,8 @@ var serverCmd = &cobra.Command{
 var bindAddress string
 
 func init() {
-    log.Infof("Init server!")
-    serverCmd.PersistentFlags().StringVar(&bindAddress, "bind_address", "", "Bind address for server.")
-    viper.BindPFlag("server.bind-address", serverCmd.PersistentFlags().Lookup("bind_address"))
+	serverCmd.PersistentFlags().StringVar(&bindAddress, "bind_address", "", "Bind address for server.")
+	viper.BindPFlag("server.bind-address", serverCmd.PersistentFlags().Lookup("bind_address"))
 	RootCmd.AddCommand(serverCmd)
 }
 
