@@ -199,7 +199,7 @@ func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query,
 	for _, index := range content_units_indices {
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
-			Highlight(elastic.NewHighlight().Fields(
+			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
 			elastic.NewHighlighterField("name"),
 			elastic.NewHighlighterField("description"),
 			elastic.NewHighlighterField("transcript"),
@@ -305,7 +305,7 @@ func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, 
 	for _, index := range collections_indices {
 		searchSource := elastic.NewSearchSource().
 			Query(createCollectionsQuery(query)).
-			Highlight(elastic.NewHighlight().Fields(
+			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
 			elastic.NewHighlighterField("name"),
 			elastic.NewHighlighterField("description"),
 			elastic.NewHighlighterField("name.analyzed"),
