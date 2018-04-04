@@ -200,10 +200,10 @@ func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query,
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name"),
+			elastic.NewHighlighterField("name").NumOfFragments(0),
 			elastic.NewHighlighterField("description"),
 			elastic.NewHighlighterField("transcript"),
-			elastic.NewHighlighterField("name.analyzed"),
+			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
 			elastic.NewHighlighterField("description.analyzed"),
 			elastic.NewHighlighterField("transcript.analyzed"),
 		)).
@@ -306,9 +306,9 @@ func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, 
 		searchSource := elastic.NewSearchSource().
 			Query(createCollectionsQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name"),
+			elastic.NewHighlighterField("name").NumOfFragments(0),
 			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("name.analyzed"),
+			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
 			elastic.NewHighlighterField("description.analyzed"),
 		)).
 			FetchSourceContext(fetchSourceContext).
