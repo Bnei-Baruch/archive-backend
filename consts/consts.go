@@ -166,6 +166,7 @@ const (
 	FILTER_AUTHOR                    = "author"
 	FILTER_UNITS_CONTENT_TYPES       = "units_content_types"
 	FILTER_COLLECTIONS_CONTENT_TYPES = "collections_content_types"
+	FILTER_SECTION_SOURCES           = "filter_section_sources"
 )
 
 // Use to identify and map request filters
@@ -178,6 +179,7 @@ var FILTERS = map[string]string{
 	FILTER_AUTHOR:                    "sources",
 	FILTER_UNITS_CONTENT_TYPES:       "content_type",
 	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
+	FILTER_SECTION_SOURCES:           "filter_section_sources",
 }
 
 // ElasticSearch 'es'

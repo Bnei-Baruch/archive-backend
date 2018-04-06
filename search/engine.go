@@ -363,6 +363,7 @@ func AddSourcesSearchRequests(mss *elastic.MultiSearchService, query Query, from
 	sources_indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
 		sources_indices[i] = es.IndexName("prod", consts.ES_SOURCES_INDEX, query.LanguageOrder[i])
+		log.Infof("adding index to sources_indices: %s", es.IndexName("prod", consts.ES_SOURCES_INDEX, query.LanguageOrder[i]))
 	}
 	fetchSourceContext := elastic.NewFetchSourceContext(true).
 		Include("mdb_uid")
@@ -422,10 +423,10 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 
 func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) (*elastic.SearchResult, error) {
 	log.Infof("%+v %+v", r1, r2)
-	if r1.Hits.TotalHits == 0 {
+	if r1 == nil || r1.Hits == nil || r1.Hits.TotalHits == 0 {
 		r2.Hits.Hits = r2.Hits.Hits[from:utils.Min(from+size, len(r2.Hits.Hits))]
 		return r2, nil
-	} else if r2.Hits.TotalHits == 0 {
+	} else if r2 == nil || r2.Hits == nil || r2.Hits.TotalHits == 0 {
 		r1.Hits.Hits = r1.Hits.Hits[from:utils.Min(from+size, len(r1.Hits.Hits))]
 		return r1, nil
 	}
@@ -468,12 +469,30 @@ func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy st
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
 	log.Infof("Query: %+v sort by: %s, from: %d, size: %d", query, sortBy, from, size)
 	multiSearchService := e.esc.MultiSearch()
-	// Content Units
-	AddContentUnitsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
-	// Collections
-	AddCollectionsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
-	// Sources
-	AddSourcesSearchRequests(multiSearchService, query, 0, from+size, preference)
+
+	var indexesCount int
+	if len(query.Filters) == 0 {
+		log.Info("No section selected. Searching in all indexes.")
+		indexesCount = 3
+	} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
+		log.Info("Sources section selected. Searching only in sources.")
+		indexesCount = 1
+	} else {
+		log.Info("Non sources section selected. Searching only in content units and collections.")
+		indexesCount = 2
+	}
+
+	if indexesCount >= 2 {
+		// Content Units
+		AddContentUnitsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
+		// Collections
+		AddCollectionsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
+	}
+
+	if indexesCount == 1 || indexesCount == 3 {
+		// Sources
+		AddSourcesSearchRequests(multiSearchService, query, 0, from+size, preference)
+	}
 
 	// Do search.
 	mr, err := multiSearchService.Do(context.TODO())
@@ -482,30 +501,49 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		return nil, errors.Wrap(err, "ES error.")
 	}
 
-	if len(mr.Responses) != 2*len(query.LanguageOrder) {
+	if len(mr.Responses) != indexesCount*len(query.LanguageOrder) {
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
-			len(mr.Responses), 2*len(query.LanguageOrder)))
+			len(mr.Responses), indexesCount*len(query.LanguageOrder)))
 	}
 
 	// Interleave content units and collection results by language.
 	// Then go over responses and choose first not empty retults list.
 	for i := 0; i < len(query.LanguageOrder); i++ {
-		cuR := mr.Responses[i]
-		cR := mr.Responses[i+len(query.LanguageOrder)]
-		if cuR.Error != nil {
-			log.Warnf("%+v", cuR.Error)
-			return nil, errors.New("Failed multi get.")
+
+		var cuR *elastic.SearchResult
+		var cR *elastic.SearchResult
+		var sR *elastic.SearchResult
+		var joinedR *elastic.SearchResult
+
+		if indexesCount >= 2 {
+			cuR = mr.Responses[i]
+			if cuR.Error != nil {
+				log.Warnf("%+v", cuR.Error)
+				return nil, errors.New("Failed multi get.")
+			}
+			cR = mr.Responses[i+len(query.LanguageOrder)]
+			if cR.Error != nil {
+				log.Warnf("%+v", cR.Error)
+				return nil, errors.New("Failed multi get.")
+			}
 		}
-		if cR.Error != nil {
-			log.Warnf("%+v", cR.Error)
-			return nil, errors.New("Failed multi get.")
+
+		if indexesCount == 1 || indexesCount == 3 {
+			sR = mr.Responses[i+(len(query.LanguageOrder)*(indexesCount-1))]
+			if sR.Error != nil {
+				log.Warnf("%+v", sR.Error)
+				return nil, errors.New("Failed multi get.")
+			}
 		}
+
 		if haveHits(cuR) || haveHits(cR) {
-			log.Debugf("Joining:\n%+v\n\n%+v\n\n\n", cuR.Hits, cR.Hits)
-			ret, err := joinResponses(cuR, cR, sortBy, from, size)
-			log.Debugf("Res: %+v", ret.Hits)
-			return ret, err
+			joinedR, err = joinResponses(cuR, cR, sortBy, from, size)
+			if err != nil {
+				return joinedR, err
+			}
 		}
+		joinedR, err = joinResponses(joinedR, sR, sortBy, from, size)
+		return joinedR, err
 	}
 
 	if len(mr.Responses) > 0 {
