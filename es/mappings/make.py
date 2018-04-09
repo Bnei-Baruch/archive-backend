@@ -511,11 +511,11 @@ def Resolve(lang, value):
 
 
 for lang in LANG_GROUPS[ALL]:
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'units', 'unit-%s.json' % lang), 'w') as f:
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'units', 'units-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, UNITS_TEMPLATE), f, indent=4)
   with open(os.path.join('.', 'data', 'es', 'mappings', 'classifications', 'classifications-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, CLASSIFICATIONS_TEMPLATE), f, indent=4)
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'collections', 'collection-%s.json' % lang), 'w') as f:
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'collections', 'collections-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, COLLECTIONS_TEMPLATE), f, indent=4)
   with open(os.path.join('.', 'data', 'es', 'mappings', 'sources', 'sources-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, SOURCES_TEMPLATE), f, indent=4)
