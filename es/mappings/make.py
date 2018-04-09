@@ -413,6 +413,7 @@ COLLECTIONS_TEMPLATE = {
   },
 }
 
+<<<<<<< HEAD
 SOURCES_TEMPLATE = {
   "settings": {
     "index": {
@@ -498,6 +499,66 @@ SOURCES_TEMPLATE = {
 }
 
 
+=======
+SEARCH_LOGS_TEMPLATE = {
+    "mappings": {
+        "search_logs": {
+            "properties": {
+                "search_id": {
+                    "type": "keyword",
+                },
+                "created": {
+                    "type": "date",
+                },
+                "query": {
+                    "type": "object",
+                },
+                "from": {
+                    "type": "integer",
+                },
+                "size": {
+                    "type": "integer",
+                },
+                "results": {
+                    "type": "object",
+                },
+                "sort_by": {
+                    "type": "keyword",
+                },
+                "error": {
+                    "type": "object",
+                },
+            },
+        },
+        "search_clicks": {
+            "properties": {
+                "created": {
+                    "type": "date",
+                },
+                "mdb_uid": {
+                    "type": "keyword",
+                },
+                "index": {
+                    "type": "keyword",
+                },
+                "type": {
+                    "type": "keyword",
+                },
+                "rank": {
+                    "type": "integer",
+                },
+                "search_id": {
+                    "type": "keyword",
+                },
+            },
+            "_parent": {
+                "type": "search_logs",
+            }
+        }
+    },
+}
+
+>>>>>>> fd2cc40e2ba1f5e4270739a78e4b6ee42fa27953
 def Resolve(lang, value):
   if isinstance(value, dict):
     l = [(k, Resolve(lang, v)) for (k, v) in value.iteritems()]
@@ -519,3 +580,6 @@ for lang in LANG_GROUPS[ALL]:
     json.dump(Resolve(lang, COLLECTIONS_TEMPLATE), f, indent=4)
   with open(os.path.join('.', 'data', 'es', 'mappings', 'sources', 'sources-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, SOURCES_TEMPLATE), f, indent=4)
+# Without languages
+with open(os.path.join('.', 'data', 'es', 'mappings', 'search_logs.json', 'w') as f:
+  json.dump(Resolve('xx', SEARCH_LOGS_TEMPLATE), f, indent=4)

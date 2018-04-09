@@ -450,6 +450,8 @@ func SearchHandler(c *gin.Context) {
 		sortByVal = sortBy
 	}
 
+	searchId := c.Query("search_id")
+
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
 	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
 	preference := fmt.Sprintf("%x", md5.Sum([]byte(c.ClientIP())))
@@ -475,18 +477,36 @@ func SearchHandler(c *gin.Context) {
 	if err == nil {
 		// TODO: How does this slows the search query?!
 		// Consider logging in parallel!
-		err := logger.LogSearch(query, sortByVal, from, size, res)
+		err := logger.LogSearch(query, sortByVal, from, size, searchId, res)
 		if err != nil {
 			log.Warnf("Error logging search: %+v %+v", err, res)
 		}
 		c.JSON(http.StatusOK, res)
 	} else {
-		logErr := logger.LogSearchError(query, sortByVal, from, size, err)
+		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, err)
 		if logErr != nil {
 			log.Warnf("Erro logging search error: %+v %+v", logErr, err)
 		}
 		NewInternalError(err).Abort(c)
 	}
+}
+
+func ClickHandler(c *gin.Context) {
+	mdbUid := c.Query("mdb_uid")
+	index := c.Query("index")
+	index_type := c.Query("type")
+	rank, err := strconv.Atoi(c.Query("rank"))
+	if err != nil || rank < 0 {
+		NewBadRequestError(errors.New("rank expects a positive number")).Abort(c)
+		return
+	}
+	searchId := c.Query("search_id")
+	logger := c.MustGet("LOGGER").(*search.SearchLogger)
+	if err = logger.LogClick(mdbUid, index, index_type, rank, searchId); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{})
 }
 
 func AutocompleteHandler(c *gin.Context) {

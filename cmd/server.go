@@ -20,7 +20,11 @@ var serverCmd = &cobra.Command{
 	Run:   serverFn,
 }
 
+var bindAddress string
+
 func init() {
+	serverCmd.PersistentFlags().StringVar(&bindAddress, "bind_address", "", "Bind address for server.")
+	viper.BindPFlag("server.bind-address", serverCmd.PersistentFlags().Lookup("bind_address"))
 	RootCmd.AddCommand(serverCmd)
 }
 
@@ -38,6 +42,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 	gin.SetMode(viper.GetString("server.mode"))
 	router := gin.New()
 	router.Use(
+		utils.LoggerMiddleware(),
 		utils.DataStoresMiddleware(common.DB, common.ESC, common.LOGGER),
 		utils.ErrorHandlingMiddleware(),
 		cors.Default(),

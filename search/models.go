@@ -3,11 +3,11 @@ package search
 import "context"
 
 type Query struct {
-	Term          string
-	ExactTerms    []string
-	Filters       map[string][]string
-	LanguageOrder []string
-	Deb           bool
+	Term          string              `json:"term,omitempty"`
+	ExactTerms    []string            `json:"exact_terms,omitempty"`
+	Filters       map[string][]string `json:"filters,omitempty"`
+	LanguageOrder []string            `json:"language_order",omitempty`
+	Deb           bool                `json:"deb",omitempty`
 }
 
 type Engine interface {

@@ -59,7 +59,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 		classType := classTypes[i]
 		g.Go(func() error {
 
-			// Call ES
+			// Create MultiSearch request
 			multiSearchService := e.esc.MultiSearch()
 			for _, index := range indices {
 				searchSource := elastic.NewSearchSource().
@@ -77,12 +77,21 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 					Index(index)
 				multiSearchService.Add(request)
 			}
+
+			// Actual call to elastic
 			mr, err := multiSearchService.Do(ctx)
 			if err != nil {
-				log.Warnf("Error in suggest %+v", err)
-				return err
+				// don't kill entire request if ctx was cancelled
+				if ue, ok := err.(*url.Error); ok {
+					if ue.Err == context.DeadlineExceeded || ue.Err == context.Canceled {
+						log.Warnf("ES suggestions %s: ctx cancelled", classType)
+						return nil
+					}
+				}
+				return errors.Wrapf(err, "ES suggestions %s", classType)
 			}
 
+			// Process response
 			sRes := (*elastic.SearchResult)(nil)
 			for _, r := range mr.Responses {
 				if r != nil && SuggestionHasOptions(r.Suggest) {
@@ -93,17 +102,6 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 
 			if sRes == nil && len(mr.Responses) > 0 {
 				sRes = mr.Responses[0]
-			}
-
-			if err != nil {
-				// don't kill entire request if ctx was cancelled
-				if ue, ok := err.(*url.Error); ok {
-					if ue.Err == context.DeadlineExceeded || ue.Err == context.Canceled {
-						log.Warnf("ES search %s: ctx cancelled", classType)
-						return nil
-					}
-				}
-				return errors.Wrapf(err, "ES search %s", classType)
 			}
 
 			resp = append(resp, sRes)
@@ -121,39 +119,41 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 }
 
 func createContentUnitsQuery(q Query) elastic.Query {
-	query := elastic.NewBoolQuery()
+	boolQuery := elastic.NewBoolQuery()
 	if q.Term != "" {
-		query = query.Must(
+		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchQuery("name.analyzed", q.Term),
 					elastic.NewMatchQuery("description.analyzed", q.Term),
 					elastic.NewMatchQuery("transcript.analyzed", q.Term),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0.0),
 		).Should(
-			elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(1.5),
+			elastic.NewDisMaxQuery().Query(
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
 				elastic.NewMatchPhraseQuery("transcript.analyzed", q.Term).Slop(100),
-			).MinimumNumberShouldMatch(0),
+			),
 		)
 	}
 	for _, exactTerm := range q.ExactTerms {
-		query = query.Must(
+		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchPhraseQuery("name", exactTerm),
 					elastic.NewMatchPhraseQuery("description", exactTerm),
 					elastic.NewMatchPhraseQuery("transcript", exactTerm),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0.0),
 		).Should(
-			elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(1.5),
+			elastic.NewDisMaxQuery().Query(
+				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
 				elastic.NewMatchPhraseQuery("transcript", exactTerm).Slop(100),
-			).MinimumNumberShouldMatch(0),
+			),
 		)
 	}
 	contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
@@ -165,22 +165,27 @@ func createContentUnitsQuery(q Query) elastic.Query {
 		}
 		switch filter {
 		case consts.FILTERS[consts.FILTER_START_DATE]:
-			query.Filter(elastic.NewRangeQuery("effective_date").Gte(values[0]).Format("yyyy-MM-dd"))
+			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Gte(values[0]).Format("yyyy-MM-dd"))
 		case consts.FILTERS[consts.FILTER_END_DATE]:
-			query.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
+			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
 		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
 			contentTypeQuery.Should(elastic.NewTermsQuery(filter, s...))
 			filterByContentType = true
 		default:
-			query.Filter(elastic.NewTermsQuery(filter, s...))
+			boolQuery.Filter(elastic.NewTermsQuery(filter, s...))
 		}
 		if filterByContentType {
-			query.Filter(contentTypeQuery)
+			boolQuery.Filter(contentTypeQuery)
 		}
 	}
-	return elastic.NewFunctionScoreQuery().Query(query).
-		// AddScoreFunc(elastic.NewScriptFunction(elastic.NewScript("return _score / (doc['name.length'].value ? doc['name.length'].value : 1);"))).
-		// AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
+	var query elastic.Query
+	query = boolQuery
+	if q.Term == "" && len(q.ExactTerms) == 0 {
+		// No potential score from string matching.
+		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
+	}
+	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
+		AddScoreFunc(elastic.NewWeightFactorFunction(3.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
 }
 
@@ -194,11 +199,11 @@ func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query,
 	for _, index := range content_units_indices {
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
-			Highlight(elastic.NewHighlight().Fields(
-				elastic.NewHighlighterField("name"),
+			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
+				elastic.NewHighlighterField("name").NumOfFragments(0),
 				elastic.NewHighlighterField("description"),
 				elastic.NewHighlighterField("transcript"),
-				elastic.NewHighlighterField("name.analyzed"),
+				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
 				elastic.NewHighlighterField("description.analyzed"),
 				elastic.NewHighlighterField("transcript.analyzed"),
 			)).
@@ -221,35 +226,37 @@ func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query,
 }
 
 func createCollectionsQuery(q Query) elastic.Query {
-	query := elastic.NewBoolQuery()
+	boolQuery := elastic.NewBoolQuery()
 	if q.Term != "" {
-		query = query.Must(
+		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchQuery("name.analyzed", q.Term),
 					elastic.NewMatchQuery("description.analyzed", q.Term),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0.0),
 		).Should(
-			elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(1.5),
+			elastic.NewDisMaxQuery().Query(
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100),
-			).MinimumNumberShouldMatch(0),
+			),
 		)
 	}
 	for _, exactTerm := range q.ExactTerms {
-		query = query.Must(
+		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchPhraseQuery("name", exactTerm),
 					elastic.NewMatchPhraseQuery("description", exactTerm),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0.0),
 		).Should(
-			elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(1.5),
+			elastic.NewDisMaxQuery().Query(
+				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100),
-			).MinimumNumberShouldMatch(1),
+			),
 		)
 	}
 	contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
@@ -261,23 +268,30 @@ func createCollectionsQuery(q Query) elastic.Query {
 		}
 		switch filter {
 		case consts.FILTERS[consts.FILTER_START_DATE]:
-			query.Filter(elastic.NewRangeQuery("effective_date").Gte(values[0]).Format("yyyy-MM-dd"))
+			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Gte(values[0]).Format("yyyy-MM-dd"))
 		case consts.FILTERS[consts.FILTER_END_DATE]:
-			query.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
+			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
 		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]:
 			// Skip, do nothing (filtring on content units).
 		case consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
 			contentTypeQuery.Should(elastic.NewTermsQuery("content_type", s...))
 			filterByContentType = true
 		default:
-			query.Filter(elastic.NewTermsQuery(filter, s...))
+			boolQuery.Filter(elastic.NewTermsQuery(filter, s...))
 		}
 		if filterByContentType {
-			query.Filter(contentTypeQuery)
+			boolQuery.Filter(contentTypeQuery)
 		}
 	}
-	return elastic.NewFunctionScoreQuery().Query(query).
-		// AddScoreFunc(elastic.NewFieldValueFactorFunction().Field("name.length").Modifier("reciprocal").Missing(1)).
+	var query elastic.Query
+	query = boolQuery
+	if q.Term == "" && len(q.ExactTerms) == 0 {
+		// No potential score from string matching.
+		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
+	}
+	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
+		Boost(1.4). // Boost collections index.
+		AddScoreFunc(elastic.NewWeightFactorFunction(3.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
 }
 
@@ -291,10 +305,10 @@ func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, 
 	for _, index := range collections_indices {
 		searchSource := elastic.NewSearchSource().
 			Query(createCollectionsQuery(query)).
-			Highlight(elastic.NewHighlight().Fields(
-				elastic.NewHighlighterField("name"),
+			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
+				elastic.NewHighlighterField("name").NumOfFragments(0),
 				elastic.NewHighlighterField("description"),
-				elastic.NewHighlighterField("name.analyzed"),
+				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
 				elastic.NewHighlighterField("description.analyzed"),
 			)).
 			FetchSourceContext(fetchSourceContext).

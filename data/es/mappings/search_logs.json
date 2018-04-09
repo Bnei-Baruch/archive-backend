@@ -1,0 +1,57 @@
+{
+    "mappings": {
+        "search_logs": {
+            "properties": {
+                "from": {
+                    "type": "integer"
+                }, 
+                "created": {
+                    "type": "date"
+                }, 
+                "results": {
+                    "type": "object"
+                }, 
+                "sort_by": {
+                    "type": "keyword"
+                }, 
+                "error": {
+                    "type": "object"
+                }, 
+                "query": {
+                    "type": "object"
+                }, 
+                "search_id": {
+                    "type": "keyword"
+                }, 
+                "size": {
+                    "type": "integer"
+                }
+            }
+        }, 
+        "search_clicks": {
+            "_parent": {
+                "type": "search_logs"
+            }, 
+            "properties": {
+                "index": {
+                    "type": "keyword"
+                }, 
+                "created": {
+                    "type": "date"
+                }, 
+                "rank": {
+                    "type": "integer"
+                }, 
+                "mdb_uid": {
+                    "type": "keyword"
+                }, 
+                "type": {
+                    "type": "keyword"
+                }, 
+                "search_id": {
+                    "type": "keyword"
+                }
+            }
+        }
+    }
+}
