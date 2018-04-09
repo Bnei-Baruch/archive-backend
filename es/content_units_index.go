@@ -378,7 +378,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 					var err error
 					fileName, err := LoadDocFilename(index.db, val[0])
 					if err != nil {
-						log.Errorf("Error retrieving doc from DB: %s", val[0])
+						log.Errorf("Error retrieving doc from DB: %s. Error: %+v", val[0], err)
 					} else {
 						err = DownloadAndConvert([][]string{{val[0], fileName}})
 						if err != nil {
