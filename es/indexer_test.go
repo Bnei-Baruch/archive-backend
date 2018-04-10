@@ -269,12 +269,6 @@ func updateCollection(c es.Collection, cuUID string, removeContentUnitUID string
 		if err != nil {
 			return "", err
 		}
-		if c.ContentType != "" {
-			cp.TypeID = mdb.CONTENT_TYPE_REGISTRY.ByName[c.ContentType].ID
-		}
-		if err := cp.Update(common.DB); err != nil {
-			return "", err
-		}
 		mdbCollection = *cp
 	} else {
 		mdbCollection = mdbmodels.Collection{
@@ -285,6 +279,41 @@ func updateCollection(c es.Collection, cuUID string, removeContentUnitUID string
 			return "", err
 		}
 	}
+	if c.ContentType != "" {
+		mdbCollection.TypeID = mdb.CONTENT_TYPE_REGISTRY.ByName[c.ContentType].ID
+	}
+	mdbCollection.Secure = int16(0)
+	mdbCollection.Published = true
+	if err := mdbCollection.Update(common.DB); err != nil {
+		return "", err
+	}
+	// I18N
+	var mdbCollectionI18n mdbmodels.CollectionI18n
+	lang := consts.LANG_ENGLISH
+	ci18np, err := mdbmodels.FindCollectionI18n(common.DB, mdbCollection.ID, lang)
+	if err == sql.ErrNoRows {
+		mdbCollectionI18n = mdbmodels.CollectionI18n{
+			CollectionID: mdbCollection.ID,
+			Language:     lang,
+		}
+		if err := mdbCollectionI18n.Insert(common.DB); err != nil {
+			return "", err
+		}
+	} else if err != nil {
+		return "", err
+	} else {
+		mdbCollectionI18n = *ci18np
+	}
+	if c.Name != "" {
+		mdbCollectionI18n.Name = null.NewString(c.Name, c.Name != "")
+	}
+	if c.Description != "" {
+		mdbCollectionI18n.Description = null.NewString(c.Description, c.Description != "")
+	}
+	if err := mdbCollectionI18n.Update(common.DB); err != nil {
+		return "", err
+	}
+
 	cu, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cuUID)).One()
 	if err != nil {
 		return "", err
@@ -622,6 +651,21 @@ func updateFile(f es.File, cuUID string) (string, error) {
 }
 
 func deleteCollection(UID string) error {
+	collectionsI18ns, err := mdbmodels.CollectionI18ns(common.DB,
+		qm.InnerJoin("collections on collections.id = collection_i18n.collection_id"),
+		qm.WhereIn("collections.uid = ?", UID)).All()
+	if err != nil {
+		return errors.Wrap(err, "deleteCollections, select cu i18n.")
+	}
+	idsI := make([]interface{}, len(collectionsI18ns))
+	for i, v := range collectionsI18ns {
+		idsI[i] = v.CollectionID
+	}
+	if len(collectionsI18ns) > 0 {
+		if err := mdbmodels.CollectionI18ns(common.DB, qm.WhereIn("collection_id in ?", idsI...)).DeleteAll(); err != nil {
+			return errors.Wrap(err, "deleteCollections, delete cu i18n.")
+		}
+	}
 	ccu, err := mdbmodels.CollectionsContentUnits(common.DB,
 		qm.InnerJoin("collections on collections.id = collections_content_units.collection_id"),
 		qm.Where("collections.uid = ?", UID)).All()
@@ -630,6 +674,16 @@ func deleteCollection(UID string) error {
 	}
 	ccu.DeleteAll(common.DB)
 	return mdbmodels.Collections(common.DB, qm.Where("uid = ?", UID)).DeleteAll()
+}
+
+func deleteCollections(UIDs []string) error {
+	for _, uid := range UIDs {
+		err := deleteCollection(uid)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func deleteContentUnits(UIDs []string) error {
@@ -684,6 +738,10 @@ func deleteContentUnits(UIDs []string) error {
 		if err := mdbmodels.CollectionsContentUnits(common.DB,
 			qm.WhereIn("collection_id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
 			return errors.Wrap(err, "deleteContentUnits, delete ccu.")
+		}
+		if err := mdbmodels.CollectionI18ns(common.DB,
+			qm.WhereIn("collection_id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
+			return errors.Wrap(err, "deleteContentUnitw, delete c i18n.")
 		}
 		if err := mdbmodels.Collections(common.DB,
 			qm.WhereIn("id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
@@ -758,6 +816,24 @@ func (suite *IndexerSuite) ucuf(cu es.ContentUnit, lang string, file mdbmodels.F
 	}
 	r.Nil(err)
 	return uid
+}
+
+func (suite *IndexerSuite) validateCollectionsContentUnits(indexName string, indexer *es.Indexer, expectedCUs map[string][]string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	cus := make(map[string][]string)
+	for _, hit := range res.Hits.Hits {
+		var c es.Collection
+		json.Unmarshal(*hit.Source, &c)
+		uids, err := es.TypedUIDsToUids("content_unit", c.TypedUIDs)
+		r.Nil(err)
+		cus[c.MDB_UID] = uids
+	}
+	suite.validateMaps(expectedCUs, cus)
 }
 
 func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *es.Indexer, expectedNames []string) {
@@ -866,6 +942,7 @@ func (suite *IndexerSuite) validateMaps(e map[string][]string, a map[string][]st
 	}
 }
 
+// Searches content units index and validates their types with expected types.
 func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *es.Indexer, expectedTypes map[string][]string) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
@@ -922,20 +999,24 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 	})
 
 	fmt.Printf("\n\n\nValidate we have successfully added a content type.\n\n")
-	//es.DumpDB(common.DB, "Before DB")
-	//es.DumpIndexes(common.ESC, "Before Indexes")
+	//r.Nil(es.DumpDB(common.DB, "Before DB"))
+	//r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_UNITS_INDEX))
 	c1UID := suite.uc(es.Collection{ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID, "")
 	r.Nil(indexer.CollectionAdd(c1UID))
-	//es.DumpDB(common.DB, "After DB")
-	//es.DumpIndexes(common.ESC, "After Indexes")
+	//r.Nil(es.DumpDB(common.DB, "After DB"))
+	//r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_UNITS_INDEX))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {consts.CT_SPECIAL_LESSON},
 	})
 
 	fmt.Printf("\n\n\nValidate we have successfully updated a content type.\n\n")
+	// r.Nil(es.DumpDB(common.DB, "Before DB"))
 	suite.uc(es.Collection{MDB_UID: c2UID, ContentType: consts.CT_MEALS}, cu2UID, "")
+	// r.Nil(es.DumpDB(common.DB, "After DB"))
+	// r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_UNITS_INDEX))
 	r.Nil(indexer.CollectionUpdate(c2UID))
+	// r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_UNITS_INDEX))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {consts.CT_MEALS},
@@ -943,23 +1024,23 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 
 	fmt.Printf("\n\n\nValidate we have successfully deleted a content type.\n\n")
 	r.Nil(deleteCollection(c2UID))
-	// es.DumpDB(common.DB, "Before")
-	// es.DumpIndexes(common.ESC, "Before")
+	// r.Nil(es.DumpDB(common.DB, "Before"))
+	// r.Nil(es.DumpIndexes(common.ESC, "Before", consts.ES_UNITS_INDEX))
 	r.Nil(indexer.CollectionDelete(c2UID))
-	// es.DumpDB(common.DB, "After")
-	// es.DumpIndexes(common.ESC, "After")
+	// r.Nil(es.DumpDB(common.DB, "After"))
+	// r.Nil(es.DumpIndexes(common.ESC, "After", consts.ES_UNITS_INDEX))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {},
 	})
 
 	fmt.Printf("\n\n\nUpdate collection, remove one unit and add another.\n\n")
-	es.DumpDB(common.DB, "Before DB")
+	// r.Nil(es.DumpDB(common.DB, "Before DB"))
 	suite.uc(es.Collection{MDB_UID: c3UID} /* Add */, cu2UID /* Remove */, cu1UID)
-	es.DumpDB(common.DB, "After DB")
-	es.DumpIndexes(common.ESC, "Before Indexes")
+	// r.Nil(es.DumpDB(common.DB, "After DB"))
+	// r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_UNITS_INDEX))
 	r.Nil(indexer.CollectionUpdate(c3UID))
-	es.DumpIndexes(common.ESC, "After Indexes")
+	// r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_UNITS_INDEX))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {consts.CT_DAILY_LESSON},
@@ -1007,7 +1088,7 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	file := mdbmodels.File{ID: 1, Name: "heb_o_rav_2017-05-25_lesson_achana_n1_p0.doc", UID: "dEvgPVpr", Language: null.String{"he", true}, Secure: 0, Published: true}
 	suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	//es.DumpIndexes(common.ESC, "DumpIndexes after adding transcript")
+	//r.Nil(es.DumpIndexes(common.ESC, "DumpIndexes after adding transcript", consts.ES_UNITS_INDEX))
 	suite.validateContentUnitFiles(indexNameHe, indexer, []string{"he"}, null.Int{len(transcriptContent), true})
 	fmt.Println("Remove a file from content unit and validate.")
 	suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, false)
@@ -1043,12 +1124,12 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	suite.rcus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: "1vCj4qN9"})
 
 	fmt.Println("Make content unit not published and validate.")
-	//es.DumpDB(common.DB, "TestContentUnitsIndex, BeforeDB")
-	//es.DumpIndexes(common.ESC, "TestContentUnitsIndex, BeforeIndexes")
+	//r.Nil(es.DumpDB(common.DB, "TestContentUnitsIndex, BeforeDB"))
+	//r.Nil(es.DumpIndexes(common.ESC, "TestContentUnitsIndex, BeforeIndexes", consts.ES_UNITS_INDEX))
 	suite.ucu(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, false, true)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	//es.DumpDB(common.DB, "TestContentUnitsIndex, AfterDB")
-	//es.DumpIndexes(common.ESC, "TestContentUnitsIndex, AfterIndexes")
+	//r.Nil(es.DumpDB(common.DB, "TestContentUnitsIndex, AfterDB"))
+	//r.Nil(es.DumpIndexes(common.ESC, "TestContentUnitsIndex, AfterIndexes", consts.ES_UNITS_INDEX))
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something else"})
 	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
 	suite.validateContentUnitNames(indexNameRu, indexer, []string{})
@@ -1133,4 +1214,50 @@ func (suite *IndexerSuite) TestCollectionsScopeByFile() {
 	uids, err := es.CollectionsScopeByFile(common.DB, f1UID)
 	r.Nil(err)
 	r.ElementsMatch([]string{c2UID, c1UID}, uids)
+}
+
+func (suite *IndexerSuite) TestCollectionsIndex() {
+	// Add test for collection for multiple content units.
+	r := require.New(suite.T())
+	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
+	cu1UID := suite.ucu(es.ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
+	c1UID := suite.uc(es.Collection{Name: "c1", ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID, "")
+	c2UID := suite.uc(es.Collection{Name: "c2", ContentType: consts.CT_CONGRESS}, cu1UID, "")
+	c3UID := suite.uc(es.Collection{Name: "c3", ContentType: consts.CT_DAILY_LESSON}, cu1UID, "")
+
+	fmt.Printf("\n\n\nReindexing everything.\n\n")
+	indexName := es.IndexName("test", consts.ES_COLLECTIONS_INDEX, consts.LANG_ENGLISH)
+	indexer := es.MakeIndexer("test", []string{consts.ES_COLLECTIONS_INDEX}, common.DB, common.ESC)
+	// Index existing DB data.
+	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.RefreshAll())
+
+	fmt.Printf("\n\n\nValidate we have 2 searchable collections with proper content units.\n\n")
+	r.Nil(es.DumpDB(common.DB, "Before validation"))
+	r.Nil(es.DumpIndexes(common.ESC, "Before validation", consts.ES_COLLECTIONS_INDEX))
+	suite.validateCollectionsContentUnits(indexName, indexer, map[string][]string{
+		c1UID: {cu1UID},
+		c2UID: {cu1UID},
+	})
+
+	fmt.Println("Update collection content unit and validate.")
+	cu2UID := suite.ucu(es.ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
+	r.Nil(indexer.ContentUnitAdd(cu2UID))
+	suite.uc(es.Collection{MDB_UID: c2UID}, cu2UID, "")
+	r.Nil(indexer.CollectionUpdate(c2UID))
+	suite.validateCollectionsContentUnits(indexName, indexer, map[string][]string{
+		c1UID: {cu1UID},
+		c2UID: {cu1UID, cu2UID},
+	})
+
+	fmt.Println("Delete collections, reindex and validate we have 0 searchable units.")
+	r.Nil(deleteCollections([]string{c1UID, c2UID, c3UID}))
+	r.Nil(indexer.ReindexAll())
+	suite.validateCollectionsContentUnits(indexName, indexer, map[string][]string{})
+
+	//fmt.Println("Restore docx-folder path to original.")
+	//mdb.DocFolder = originalDocxPath
+
+	// Remove test indexes.
+	r.Nil(indexer.DeleteIndexes())
 }

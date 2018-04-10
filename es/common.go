@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/olivere/elastic.v5"
@@ -60,6 +62,20 @@ func uidsToTypedUIDs(t string, uids []string) []string {
 		ret[i] = uidToTypedUID(t, uid)
 	}
 	return ret
+}
+
+func TypedUIDsToUids(t string, typedUIDs []string) ([]string, error) {
+	ret := make([]string, 0)
+	for _, typedUid := range typedUIDs {
+		parts := strings.Split(typedUid, ":")
+		if len(parts) != 2 {
+			return []string{}, errors.New(fmt.Sprintf("Bad typed uid %s expected 'type:value'.", typedUIDs))
+		}
+		if parts[0] == t {
+			ret = append(ret, parts[1])
+		}
+	}
+	return ret, nil
 }
 
 // Scopes - for detection of changes
@@ -142,7 +158,7 @@ func contentUnitsScopeBySource(mdb *sql.DB, sourceUID string) ([]string, error) 
 // DEBUG FUNCTIONS
 
 func DumpDB(mdb *sql.DB, title string) error {
-	fmt.Printf("\n\n ------------------- %s ------------------- \n\n", title)
+	fmt.Printf("\n\n ------------------- %s DUMP DB ------------------- \n\n", title)
 	units, err := mdbmodels.ContentUnits(mdb).All()
 	if err != nil {
 		return err
@@ -170,6 +186,15 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, c)
 	}
 
+	ci18ns, err := mdbmodels.CollectionI18ns(mdb).All()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n\nCOLLECTION_I18N\n-------------\n\n")
+	for i, ci18n := range ci18ns {
+		fmt.Printf("%d: %+v\n", i, ci18n)
+	}
+
 	ccus, err := mdbmodels.CollectionsContentUnits(mdb).All()
 	if err != nil {
 		return err
@@ -188,16 +213,16 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, file)
 	}
 
-	fmt.Printf("\n\n ------------------- END OF %s ------------------- \n\n", title)
+	fmt.Printf("\n\n ------------------- END OF %s DUMP DB ------------------- \n\n", title)
 	return nil
 }
 
-func DumpIndexes(esc *elastic.Client, title string) error {
-	fmt.Printf("\n\n ------------------- %s ------------------- \n\n", title)
-	indexName := IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_ENGLISH)
+func DumpIndexes(esc *elastic.Client, title string, indexType string) error {
+	fmt.Printf("\n\n ------------------- %s DUMP INDEXES ------------------- \n\n", title)
+	indexName := IndexName("test", indexType, consts.LANG_ENGLISH)
 	fmt.Printf("\n\n\nINDEX %s\n\n", indexName)
 	// No need here to specify mdb, docFolder and parseDocsBin.
-	indexer := MakeIndexer("test", []string{consts.ES_UNITS_INDEX}, nil, esc)
+	indexer := MakeIndexer("test", []string{indexType}, nil, esc)
 	if err := indexer.RefreshAll(); err != nil {
 		return err
 	}
@@ -210,6 +235,6 @@ func DumpIndexes(esc *elastic.Client, title string) error {
 		json.Unmarshal(*hit.Source, &cu)
 		fmt.Printf("%d: %+v\n", i, cu)
 	}
-	fmt.Printf("\n\n ------------------- END OF %s ------------------- \n\n", title)
+	fmt.Printf("\n\n ------------------- END OF %s DUMP INDEXES ------------------- \n\n", title)
 	return err
 }

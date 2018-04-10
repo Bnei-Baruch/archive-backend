@@ -90,18 +90,10 @@ func (index *CollectionsIndex) Delete(scope Scope) error {
 }
 
 func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) error {
-	// TODO: Work not done! Missing tags and sources scopes! <--- Is this still true?!
 	sqlScope := defaultCollectionsSql()
 	uids := removedUIDs
 	if scope.CollectionUID != "" {
 		uids = append(uids, scope.CollectionUID)
-	}
-	if scope.FileUID != "" {
-		moreUIDs, err := CollectionsScopeByFile(index.db, scope.FileUID)
-		if err != nil {
-			return errors.Wrap(err, "collections index addToIndex collectionsScopeByFile")
-		}
-		uids = append(uids, moreUIDs...)
 	}
 	if scope.ContentUnitUID != "" {
 		moreUIDs, err := CollectionsScopeByContentUnit(index.db, scope.ContentUnitUID)
@@ -246,9 +238,13 @@ func (index *CollectionsIndex) removeFromIndexQuery(elasticScope elastic.Query) 
 		if delRes.Deleted > 0 {
 			log.Infof("Deleted %d documents from %s.\n", delRes.Deleted, indexName)
 		}
+		if delRes.Deleted != int64(len(searchRes.Hits.Hits)) {
+			return []string{}, errors.New(fmt.Sprintf("Expected to remove %d documents, removed only %d",
+				len(searchRes.Hits.Hits), delRes.Deleted))
+		}
 	}
 	if len(removed) == 0 {
-		log.Info("Colelctions Index - Nothing was delete.")
+		log.Info("Collections Index - Nothing was delete.")
 		return []string{}, nil
 	}
 	keys := make([]string, len(removed))
