@@ -503,8 +503,7 @@ func ClickHandler(c *gin.Context) {
 	searchId := c.Query("search_id")
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	if err = logger.LogClick(mdbUid, index, index_type, rank, searchId); err != nil {
-		NewBadRequestError(err).Abort(c)
-		return
+        log.Warnf("Error logging click: %+v", err)
 	}
 	c.JSON(http.StatusOK, gin.H{})
 }
