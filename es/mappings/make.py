@@ -413,7 +413,6 @@ COLLECTIONS_TEMPLATE = {
   },
 }
 
-<<<<<<< HEAD
 SOURCES_TEMPLATE = {
   "settings": {
     "index": {
@@ -499,7 +498,6 @@ SOURCES_TEMPLATE = {
 }
 
 
-=======
 SEARCH_LOGS_TEMPLATE = {
     "mappings": {
         "search_logs": {
@@ -558,7 +556,6 @@ SEARCH_LOGS_TEMPLATE = {
     },
 }
 
->>>>>>> fd2cc40e2ba1f5e4270739a78e4b6ee42fa27953
 def Resolve(lang, value):
   if isinstance(value, dict):
     l = [(k, Resolve(lang, v)) for (k, v) in value.iteritems()]
