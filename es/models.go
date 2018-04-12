@@ -66,4 +66,5 @@ type Source struct {
 	Description string   `json:"description"`
 	Authors     []string `json:"authors,omitempty"`
 	Content     string   `json:"content"`
+	Sources     []string `json:"sources"`
 }

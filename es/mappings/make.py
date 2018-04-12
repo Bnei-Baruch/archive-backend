@@ -492,6 +492,9 @@ SOURCES_TEMPLATE = {
             }
           },
         },
+        "sources": {
+          "type": "keyword",
+        }
       },
     },
   },
@@ -578,5 +581,5 @@ for lang in LANG_GROUPS[ALL]:
   with open(os.path.join('.', 'data', 'es', 'mappings', 'sources', 'sources-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, SOURCES_TEMPLATE), f, indent=4)
 # Without languages
-with open(os.path.join('.', 'data', 'es', 'mappings', 'search_logs.json', 'w') as f:
+with open(os.path.join('.', 'data', 'es', 'mappings', 'search_logs.json'), 'w') as f:
   json.dump(Resolve('xx', SEARCH_LOGS_TEMPLATE), f, indent=4)

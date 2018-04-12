@@ -115,10 +115,24 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 		if err != nil {
 			return errors.Wrap(err, "Fetch sources from mdb")
 		}
+
+		parentsMap, err := loadSources(index.db, sqlScope)
+		if err != nil {
+			return errors.Wrap(err, "Fetch sources parents from mdb")
+		}
+
 		log.Infof("Adding %d sources (offset: %d).", len(sources), offset)
 
 		for _, source := range sources {
-			if err := index.indexSource(source); err != nil {
+
+			var parents []string
+
+			if parents, ok := parentsMap[source.UID]; !ok {
+				err = errors.Errorf("Source %s not found in parentsMap: %+v", source.UID, parents)
+				return err
+			}
+
+			if err := index.indexSource(source, parents); err != nil {
 				log.Warnf("*** Unable to index source '%s' (uid: %s). Error is: %v. ***", source.Name, source.UID, err)
 				//return err
 			}
@@ -127,6 +141,12 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 	}
 
 	return nil
+}
+
+func loadSources(db *sql.DB, sqlScope string) (map[string][]string, error) {
+	indexData := &IndexData{DB: db}
+	sources, err := indexData.loadSources(sqlScope)
+	return sources, err
 }
 
 func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
@@ -196,7 +216,7 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 	return "", errors.New("Docx not found in index.json")
 }
 
-func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
+func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap []string) error {
 	// Create documents in each language with available translation
 	hasDocxForSomeLanguage := false
 	i18nMap := make(map[string]Source)
@@ -207,6 +227,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source) error {
 			source := Source{
 				MDB_UID: mdbSource.UID,
 				Name:    i18n.Name.String,
+				Sources: parentsMap,
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
