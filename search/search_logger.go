@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+    "strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -76,7 +77,7 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, indexTyp
 	return nil
 }
 
-func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, res interface{}) error {
+func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, res *elastic.SearchResult) error {
 	return searchLogger.logSearch(query, sortBy, from, size, searchId, res, nil)
 }
 
@@ -84,11 +85,38 @@ func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, fro
 	return searchLogger.logSearch(query, sortBy, from, size, searchId, nil, searchErr)
 }
 
-func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, res interface{}, searchErr interface{}) error {
+func (searchLogger *SearchLogger) fixHighlight(h *elastic.SearchHitHighlight) *elastic.SearchHitHighlight {
+    if h == nil {
+        return nil
+    }
+    hRet := make(elastic.SearchHitHighlight, 0)
+    for fieldName, highlights := range *h {
+        fixedFieldName := strings.Replace(fieldName, ".", "_", -1)
+        hRet[fixedFieldName] = highlights
+    }
+    return &hRet
+}
+
+func (searchLogger *SearchLogger) fixResults(res *elastic.SearchResult) *elastic.SearchResult {
+    if res.Hits != nil && res.Hits.Hits != nil && len(res.Hits.Hits) > 0 {
+        hitsCopy := make([]*elastic.SearchHit, len(res.Hits.Hits))
+        for i, h := range res.Hits.Hits {
+            hCopy := *h
+            hCopy.Highlight = *searchLogger.fixHighlight(&hCopy.Highlight)
+            hitsCopy[i] = &hCopy
+        }
+        resCopy := *res
+        resCopy.Hits.Hits = hitsCopy
+        return &resCopy
+    }
+    return res
+}
+
+func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, res *elastic.SearchResult, searchErr interface{}) error {
 	sl := SearchLog{
 		Created:  time.Now(),
 		Query:    query,
-		Results:  res,
+		Results:  searchLogger.fixResults(res),
 		Error:    searchErr,
 		SortBy:   sortBy,
 		From:     uint64(from),
