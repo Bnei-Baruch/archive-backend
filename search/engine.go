@@ -369,8 +369,18 @@ func createSourcesQuery(q Query) elastic.Query {
 			).MinimumNumberShouldMatch(1),
 		)
 	}
+
+	for filter, values := range q.Filters {
+		if filter == consts.FILTERS[consts.FILTER_SOURCE] {
+			s := make([]interface{}, len(values))
+			for i, v := range values {
+				s[i] = v
+			}
+			query.Filter(elastic.NewTermsQuery(filter, s...))
+		}
+	}
+
 	return elastic.NewFunctionScoreQuery().Query(query)
-	//.AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
 }
 
 func AddSourcesSearchRequests(mss *elastic.MultiSearchService, query Query, from int, size int, preference string) {

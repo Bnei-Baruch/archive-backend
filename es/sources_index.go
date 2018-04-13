@@ -10,7 +10,9 @@ import (
 	"path"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/queries"
 	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/olivere/elastic.v5"
 
@@ -116,7 +118,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 			return errors.Wrap(err, "Fetch sources from mdb")
 		}
 
-		parentsMap, err := loadSources(index.db, sqlScope)
+		parentsMap, err := index.loadSources(index.db) //Note: getting all sources path, not by scope
 		if err != nil {
 			return errors.Wrap(err, "Fetch sources parents from mdb")
 		}
@@ -124,15 +126,9 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 		log.Infof("Adding %d sources (offset: %d).", len(sources), offset)
 
 		for _, source := range sources {
-
-			var parents []string
-
 			if parents, ok := parentsMap[source.UID]; !ok {
-				err = errors.Errorf("Source %s not found in parentsMap: %+v", source.UID, parents)
-				return err
-			}
-
-			if err := index.indexSource(source, parents); err != nil {
+				log.Warnf("Source %s not found in parentsMap: %+v", source.UID, parents)
+			} else if err := index.indexSource(source, parents); err != nil {
 				log.Warnf("*** Unable to index source '%s' (uid: %s). Error is: %v. ***", source.Name, source.UID, err)
 				//return err
 			}
@@ -143,10 +139,47 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 	return nil
 }
 
-func loadSources(db *sql.DB, sqlScope string) (map[string][]string, error) {
-	indexData := &IndexData{DB: db}
-	sources, err := indexData.loadSources(sqlScope)
-	return sources, err
+func (index *SourcesIndex) loadSources(db *sql.DB) (map[string][]string, error) {
+	rows, err := queries.Raw(db, fmt.Sprintf(`
+		WITH RECURSIVE rec_sources AS (
+			SELECT
+			  s.id,
+			  s.uid,
+			  s.position,
+			  ARRAY [a.code, s.uid] "path"
+			FROM sources s INNER JOIN authors_sources aas ON s.id = aas.source_id
+			  INNER JOIN authors a ON a.id = aas.author_id
+			UNION
+			SELECT
+			  s.id,
+			  s.uid,
+			  s.position,
+			  rs.path || s.uid
+			FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
+		  )
+		  select uid, path from rec_sources;`)).Query()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Load sources")
+	}
+	defer rows.Close()
+
+	m := make(map[string][]string)
+
+	for rows.Next() {
+		var uid string
+		var values pq.StringArray
+		err := rows.Scan(&uid, &values)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		m[uid] = values
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows.Err()")
+	}
+
+	return m, nil
 }
 
 func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
