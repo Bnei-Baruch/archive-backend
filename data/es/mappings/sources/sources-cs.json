@@ -5,7 +5,7 @@
                 "enabled": false
             }, 
             "properties": {
-                "content": {
+                "description": {
                     "fields": {
                         "analyzed": {
                             "type": "text", 
@@ -18,7 +18,20 @@
                 "mdb_uid": {
                     "type": "keyword"
                 }, 
-                "description": {
+                "content": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "czech"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "sources": {
+                    "type": "keyword"
+                }, 
+                "authors": {
                     "fields": {
                         "analyzed": {
                             "type": "text", 
@@ -29,16 +42,6 @@
                     "analyzer": "phonetic_analyzer"
                 }, 
                 "name": {
-                    "fields": {
-                        "analyzed": {
-                            "type": "text", 
-                            "analyzer": "czech"
-                        }
-                    }, 
-                    "type": "text", 
-                    "analyzer": "phonetic_analyzer"
-                }, 
-                "authors": {
                     "fields": {
                         "analyzed": {
                             "type": "text", 
