@@ -38,7 +38,7 @@ func (index *SourcesIndex) ReindexAll() error {
 	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
 		return err
 	}
-	return index.addToIndexSql("1=1")
+	return index.addToIndexSql("1=1") // SQL to always match any source
 }
 
 func (index *SourcesIndex) Add(scope Scope) error {
@@ -129,8 +129,8 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 			if parents, ok := parentsMap[source.UID]; !ok {
 				log.Warnf("Source %s not found in parentsMap: %+v", source.UID, parents)
 			} else if err := index.indexSource(source, parents); err != nil {
-				log.Warnf("*** Unable to index source '%s' (uid: %s). Error is: %v. ***", source.Name, source.UID, err)
-				//return err
+				log.Warnf("Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
+				return err
 			}
 		}
 		offset += limit
@@ -269,13 +269,13 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap [
 
 			fPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
 			if err != nil {
-				log.Warnf("Unable to retrieving docx path for source %s with language %s", mdbSource.UID, i18n.Language)
+				log.Warnf("Unable to retrieving docx path for source %s with language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
 				continue
-				//return errors.Errorf("Error retrieving docx path for source %s and language %s", mdbSource.UID, i18n.Language)
 			} else {
 				content, err := index.ParseDocx(fPath)
 				if err != nil {
-					return errors.Errorf("Error parsing docx for source %s and language %s", mdbSource.UID, i18n.Language)
+					log.Warnf("Error parsing docx for source %s and language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
+					continue
 				}
 				source.Content = content
 				hasDocxForSomeLanguage = true
