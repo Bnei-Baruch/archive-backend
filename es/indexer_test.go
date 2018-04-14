@@ -1440,6 +1440,7 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	suite.usfc(source2UID, consts.LANG_ENGLISH)
 	r.Nil(indexer.SourceAdd(source2UID))
 	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2"})
+	suite.validateSourceFile(indexNameEn, indexer, "TEST CONTENT")
 
 	fmt.Println("Add 2 authors and validate.")
 	suite.asa(es.Source{MDB_UID: source1UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name", ID: 3, Code: "t1", FullName: null.String{String: "Test Full Name", Valid: true}}, true, true)
@@ -1452,6 +1453,8 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	suite.rsa(es.Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
 	r.Nil(indexer.SourceUpdate(source1UID))
 	suite.validateSourceAuthors(indexNameEn, indexer, []string{})
+
+	//TBD delete sources from DB and test
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())
