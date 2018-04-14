@@ -343,8 +343,8 @@ func createSourcesQuery(q Query) elastic.Query {
 				).MinimumNumberShouldMatch(1)).Boost(1),
 		).Should(
 			elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(1.5),
-				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.5),
 				elastic.NewMatchPhraseQuery("content.analyzed", q.Term).Slop(100),
 				elastic.NewMatchPhraseQuery("authors.analyzed", q.Term).Slop(100),
 			).MinimumNumberShouldMatch(0),
@@ -387,22 +387,21 @@ func AddSourcesSearchRequests(mss *elastic.MultiSearchService, query Query, from
 	sources_indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
 		sources_indices[i] = es.IndexName("prod", consts.ES_SOURCES_INDEX, query.LanguageOrder[i])
-		log.Infof("adding index to sources_indices: %s", es.IndexName("prod", consts.ES_SOURCES_INDEX, query.LanguageOrder[i]))
 	}
 	fetchSourceContext := elastic.NewFetchSourceContext(true).
 		Include("mdb_uid")
 	for _, index := range sources_indices {
 		searchSource := elastic.NewSearchSource().
 			Query(createSourcesQuery(query)).
-			Highlight(elastic.NewHighlight().Fields(
-				elastic.NewHighlighterField("name"),
-				elastic.NewHighlighterField("description"),
-				elastic.NewHighlighterField("authors"),
-				elastic.NewHighlighterField("content"),
-				elastic.NewHighlighterField("name.analyzed"),
-				elastic.NewHighlighterField("description.analyzed"),
-				elastic.NewHighlighterField("authors.analyzed"),
-				elastic.NewHighlighterField("content.analyzed"),
+			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
+				elastic.NewHighlighterField("name").NumOfFragments(0),
+				elastic.NewHighlighterField("description").NumOfFragments(0),
+				elastic.NewHighlighterField("authors").NumOfFragments(0),
+				elastic.NewHighlighterField("content").NumOfFragments(0),
+				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("authors.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("content.analyzed").NumOfFragments(0),
 			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
@@ -447,13 +446,15 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 
 func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) (*elastic.SearchResult, error) {
 	log.Infof("%+v %+v", r1, r2)
-	if r1 == nil || r1.Hits == nil || r1.Hits.TotalHits == 0 {
+
+	if !haveHits(r1) {
 		r2.Hits.Hits = r2.Hits.Hits[from:utils.Min(from+size, len(r2.Hits.Hits))]
 		return r2, nil
-	} else if r2 == nil || r2.Hits == nil || r2.Hits.TotalHits == 0 {
+	} else if !haveHits(r2) {
 		r1.Hits.Hits = r1.Hits.Hits[from:utils.Min(from+size, len(r1.Hits.Hits))]
 		return r1, nil
 	}
+
 	result := elastic.SearchResult(*r1)
 	result.Hits.TotalHits += r2.Hits.TotalHits
 	if sortBy == consts.SORT_BY_RELEVANCE {
