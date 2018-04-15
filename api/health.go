@@ -15,7 +15,7 @@ func HealthCheckHandler(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second)
 	defer cancel()
 
-	mdb := c.MustGet("MDB").(*sql.DB)
+	mdb := c.MustGet("MDB_DB").(*sql.DB)
 
 	// Uncomment once this lib/pq PR is merged
 	// https://github.com/lib/pq/pull/737
