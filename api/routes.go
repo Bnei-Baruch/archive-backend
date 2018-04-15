@@ -5,6 +5,8 @@ import (
 )
 
 func SetupRoutes(router *gin.Engine) {
+	router.GET("/health_check", HealthCheckHandler)
+
 	router.GET("/collections", CollectionsHandler)
 	router.POST("/collections", CollectionsHandler)
 	router.GET("/collections/:uid", CollectionHandler)
