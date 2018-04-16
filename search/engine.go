@@ -33,6 +33,10 @@ func NewESEngine(esc *elastic.Client, db *sql.DB) *ESEngine {
 	return &ESEngine{esc: esc, mdb: db}
 }
 
+func (e *ESEngine) AddIntents(query *Query) error {
+	return nil
+}
+
 func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 	for _, v := range ss {
 		for _, s := range v {
