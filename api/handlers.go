@@ -1587,8 +1587,9 @@ func mdbToFile(file *mdbmodels.File) (*File, error) {
 }
 
 func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.CollectionI18n, error) {
+	i18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(ids))
 	if len(ids) == 0 {
-		return make(map[int64]map[string]*mdbmodels.CollectionI18n, 0), nil
+		return i18nsMap, nil
 	}
 
 	// Load from DB
@@ -1601,7 +1602,7 @@ func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]
 	}
 
 	// Group by collection and language
-	i18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(ids))
+
 	for _, x := range i18ns {
 		v, ok := i18nsMap[x.CollectionID]
 		if !ok {
@@ -1629,6 +1630,11 @@ func setCI18n(c *Collection, language string, i18ns map[string]*mdbmodels.Collec
 }
 
 func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.ContentUnitI18n, error) {
+	i18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(ids))
+	if len(ids) == 0 {
+		return i18nsMap, nil
+	}
+
 	// Load from DB
 	i18ns, err := mdbmodels.ContentUnitI18ns(db,
 		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...),
@@ -1639,7 +1645,6 @@ func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string
 	}
 
 	// Group by content unit and language
-	i18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(ids))
 	for _, x := range i18ns {
 		v, ok := i18nsMap[x.ContentUnitID]
 		if !ok {
@@ -1653,6 +1658,11 @@ func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string
 }
 
 func loadCUFiles(db *sql.DB, ids []int64) (map[int64][]*mdbmodels.File, error) {
+	filesMap := make(map[int64][]*mdbmodels.File, len(ids))
+	if len(ids) == 0 {
+		return filesMap, nil
+	}
+
 	// Load from DB
 	allFiles, err := mdbmodels.Files(db,
 		SECURE_PUBLISHED_MOD,
@@ -1663,7 +1673,6 @@ func loadCUFiles(db *sql.DB, ids []int64) (map[int64][]*mdbmodels.File, error) {
 	}
 
 	// Group by content unit
-	filesMap := make(map[int64][]*mdbmodels.File, len(ids))
 	for _, x := range allFiles {
 		v, ok := filesMap[x.ContentUnitID.Int64]
 		if ok {
