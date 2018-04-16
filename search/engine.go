@@ -397,7 +397,7 @@ func AddSourcesSearchRequests(mss *elastic.MultiSearchService, query Query, from
 				elastic.NewHighlighterField("name").NumOfFragments(0),
 				elastic.NewHighlighterField("description").NumOfFragments(0),
 				elastic.NewHighlighterField("authors").NumOfFragments(0),
-				elastic.NewHighlighterField("content").NumOfFragments(0),
+				elastic.NewHighlighterField("content"),
 				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
 				elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
 				elastic.NewHighlighterField("authors.analyzed").NumOfFragments(0),
