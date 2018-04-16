@@ -401,7 +401,7 @@ func AddSourcesSearchRequests(mss *elastic.MultiSearchService, query Query, from
 				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
 				elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
 				elastic.NewHighlighterField("authors.analyzed").NumOfFragments(0),
-				elastic.NewHighlighterField("content.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("content.analyzed"),
 			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
