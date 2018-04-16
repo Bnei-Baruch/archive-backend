@@ -1152,7 +1152,7 @@ func handlePublishers(db *sql.DB, r PublishersRequest) (*PublishersResponse, *Ht
 		}
 
 		// i18ns
-		for _, l := range consts.LANG_ORDER[r.Language] {
+		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
 			for _, i18n := range p.R.PublisherI18ns {
 				if i18n.Language == l {
 					if !pp.Name.Valid && i18n.Name.Valid {
@@ -1594,7 +1594,7 @@ func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]
 	// Load from DB
 	i18ns, err := mdbmodels.CollectionI18ns(db,
 		qm.WhereIn("collection_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(consts.LANG_ORDER[language])...)).
+		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
 		All()
 	if err != nil {
 		return nil, errors.Wrap(err, "Load collections i18ns from DB")
@@ -1615,7 +1615,7 @@ func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]
 }
 
 func setCI18n(c *Collection, language string, i18ns map[string]*mdbmodels.CollectionI18n) {
-	for _, l := range consts.LANG_ORDER[language] {
+	for _, l := range consts.I18N_LANG_ORDER[language] {
 		li18n, ok := i18ns[l]
 		if ok {
 			if c.Name == "" && li18n.Name.Valid {
@@ -1632,7 +1632,7 @@ func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string
 	// Load from DB
 	i18ns, err := mdbmodels.ContentUnitI18ns(db,
 		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(consts.LANG_ORDER[language])...)).
+		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
 		All()
 	if err != nil {
 		return nil, errors.Wrap(err, "Load content units i18ns from DB")
@@ -1678,7 +1678,7 @@ func loadCUFiles(db *sql.DB, ids []int64) (map[int64][]*mdbmodels.File, error) {
 }
 
 func setCUI18n(cu *ContentUnit, language string, i18ns map[string]*mdbmodels.ContentUnitI18n) {
-	for _, l := range consts.LANG_ORDER[language] {
+	for _, l := range consts.I18N_LANG_ORDER[language] {
 		li18n, ok := i18ns[l]
 		if ok {
 			if cu.Name == "" && li18n.Name.Valid {
