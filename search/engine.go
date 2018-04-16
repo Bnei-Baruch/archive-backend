@@ -497,7 +497,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	var indexesCount int
 	if len(query.Filters) == 0 {
-		log.Info("No section selected. Searching in all indexes.")
+		log.Info("No section or filter selected. Searching in all indexes.")
+		indexesCount = 3
+	} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SOURCE]]; ok {
+		log.Info("Searching by source filter. Searching in all indexes.")
 		indexesCount = 3
 	} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
 		log.Info("Sources section selected. Searching only in sources.")
