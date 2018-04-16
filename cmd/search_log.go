@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -66,17 +67,22 @@ func initLogger() *search.SearchLogger {
 }
 
 func queriesFn(cmd *cobra.Command, args []string) {
-    logger := initLogger()
+	logger := initLogger()
 	queries, err := logger.GetAllQueries()
 	utils.Must(err)
 	log.Infof("Found %d queries.", len(queries))
 	log.Info("#\tSearchId\tCreated\tTerm\tExact\tFilters\tLanguages\tFrom\tSize\tSortBy\tError")
-	for i, sl := range queries {
+	sortedQueries := make(search.CreatedSearchLogs, 0, len(queries))
+	for _, q := range queries {
+		sortedQueries = append(sortedQueries, q)
+	}
+	sort.Sort(sortedQueries)
+	for i, sl := range sortedQueries {
 		filters, err := utils.PrintMap(sl.Query.Filters)
 		utils.Must(err)
 		log.Infof("%5d\t%16s\t%20s\t%40s\t%5s\t%5s\t%10s\t%5d\t%5d\t%10s\t%6t",
 			i+1,
-            sl.SearchId,
+			sl.SearchId,
 			sl.Created.Format("2006-01-02 15:04:05"),
 			sl.Query.Term,
 			strings.Join(sl.Query.ExactTerms, ","),
@@ -87,19 +93,24 @@ func queriesFn(cmd *cobra.Command, args []string) {
 }
 
 func clicksFn(cmd *cobra.Command, args []string) {
-    logger := initLogger()
+	logger := initLogger()
 	clicks, err := logger.GetAllClicks()
 	utils.Must(err)
 	log.Infof("Found %d clicks.", len(clicks))
 	log.Info("#\tSearchId\tCreated\tRank\tMdbUid\tIndex\tType")
-	for i, sq := range clicks {
-		log.Infof("%5d\t%16s\t%20s\t%3d\t%10s\t%10s\t%10s",
+	sortedClicks := make(search.CreatedSearchClicks, 0, len(clicks))
+	for _, q := range clicks {
+		sortedClicks = append(sortedClicks, q)
+	}
+	sort.Sort(sortedClicks)
+	for i, sq := range sortedClicks {
+		log.Infof("%5d\t%16s\t%20s\t%3d\t%10s\t%20s\t%17s",
 			i+1,
-            sq.SearchId,
+			sq.SearchId,
 			sq.Created.Format("2006-01-02 15:04:05"),
-            sq.Rank,
-            sq.MdbUid,
-            sq.Index,
-            sq.Type)
+			sq.Rank,
+			sq.MdbUid,
+			sq.Index,
+			sq.Type)
 	}
 }

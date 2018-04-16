@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-    "strings"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -29,6 +29,34 @@ type SearchClick struct {
 	Type     string    `json:"type",omitempty`
 	Rank     uint32    `json:"rank",omitempty`
 	SearchId string    `json:"search_id",omitempty`
+}
+
+type CreatedSearchLogs []SearchLog
+
+func (csl CreatedSearchLogs) Len() int {
+	return len(csl)
+}
+
+func (csl CreatedSearchLogs) Less(i, j int) bool {
+	return csl[i].Created.Before(csl[j].Created)
+}
+
+func (csl CreatedSearchLogs) Swap(i, j int) {
+	csl[i], csl[j] = csl[j], csl[i]
+}
+
+type CreatedSearchClicks []SearchClick
+
+func (csc CreatedSearchClicks) Len() int {
+	return len(csc)
+}
+
+func (csc CreatedSearchClicks) Less(i, j int) bool {
+	return csc[i].Created.Before(csc[j].Created)
+}
+
+func (csc CreatedSearchClicks) Swap(i, j int) {
+	csc[i], csc[j] = csc[j], csc[i]
 }
 
 type SearchLogger struct {
@@ -86,30 +114,30 @@ func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, fro
 }
 
 func (searchLogger *SearchLogger) fixHighlight(h *elastic.SearchHitHighlight) *elastic.SearchHitHighlight {
-    if h == nil {
-        return nil
-    }
-    hRet := make(elastic.SearchHitHighlight, 0)
-    for fieldName, highlights := range *h {
-        fixedFieldName := strings.Replace(fieldName, ".", "_", -1)
-        hRet[fixedFieldName] = highlights
-    }
-    return &hRet
+	if h == nil {
+		return nil
+	}
+	hRet := make(elastic.SearchHitHighlight, 0)
+	for fieldName, highlights := range *h {
+		fixedFieldName := strings.Replace(fieldName, ".", "_", -1)
+		hRet[fixedFieldName] = highlights
+	}
+	return &hRet
 }
 
 func (searchLogger *SearchLogger) fixResults(res *elastic.SearchResult) *elastic.SearchResult {
-    if res.Hits != nil && res.Hits.Hits != nil && len(res.Hits.Hits) > 0 {
-        hitsCopy := make([]*elastic.SearchHit, len(res.Hits.Hits))
-        for i, h := range res.Hits.Hits {
-            hCopy := *h
-            hCopy.Highlight = *searchLogger.fixHighlight(&hCopy.Highlight)
-            hitsCopy[i] = &hCopy
-        }
-        resCopy := *res
-        resCopy.Hits.Hits = hitsCopy
-        return &resCopy
-    }
-    return res
+	if res.Hits != nil && res.Hits.Hits != nil && len(res.Hits.Hits) > 0 {
+		hitsCopy := make([]*elastic.SearchHit, len(res.Hits.Hits))
+		for i, h := range res.Hits.Hits {
+			hCopy := *h
+			hCopy.Highlight = *searchLogger.fixHighlight(&hCopy.Highlight)
+			hitsCopy[i] = &hCopy
+		}
+		resCopy := *res
+		resCopy.Hits.Hits = hitsCopy
+		return &resCopy
+	}
+	return res
 }
 
 func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, res *elastic.SearchResult, searchErr interface{}) error {
@@ -151,7 +179,7 @@ func (searchLogger *SearchLogger) GetAllQueries() ([]SearchLog, error) {
 		var err error
 		scrollClient := searchLogger.esc.Scroll().
 			Index("search_logs").
-            Type("search_logs").
+			Type("search_logs").
 			Query(elastic.NewMatchAllQuery()).
 			Scroll("1m").
 			Size(100)
@@ -183,7 +211,7 @@ func (searchLogger *SearchLogger) GetAllClicks() ([]SearchClick, error) {
 		var err error
 		scrollClient := searchLogger.esc.Scroll().
 			Index("search_logs").
-            Type("search_clicks").
+			Type("search_clicks").
 			Query(elastic.NewMatchAllQuery()).
 			Scroll("1m").
 			Size(100)
