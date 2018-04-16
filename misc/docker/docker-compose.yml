@@ -8,3 +8,11 @@ services:
     ports:
       - 9200:9200
       - 9300:9300
+
+  db:
+    image: postgres:9
+    restart: always
+    environment:
+      POSTGRES_DB: mdb
+    ports:
+      - 5432:5432
