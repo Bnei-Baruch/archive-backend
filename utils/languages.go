@@ -167,7 +167,7 @@ func DetectLanguage(text string, interfaceLanguage string, acceptLanguage string
 
 	if !bestTag.IsRoot() {
 		if l, ok := GO_TO_MDB[bestTag]; ok {
-			if order, ok := consts.LANG_ORDER[l]; ok {
+			if order, ok := consts.SEARCH_LANG_ORDER[l]; ok {
 				log.Debugf("DetectLanguage: best language is %s", l)
 				return order
 			}
@@ -175,5 +175,5 @@ func DetectLanguage(text string, interfaceLanguage string, acceptLanguage string
 	}
 
 	log.Debug("DetectLanguage: using default language")
-	return consts.LANG_ORDER[interfaceLanguage]
+	return consts.SEARCH_LANG_ORDER[interfaceLanguage]
 }
