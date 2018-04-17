@@ -61,22 +61,6 @@ func (index *ContentUnitsIndex) ReindexAll() error {
 	return index.addToIndexSql(defaultContentUnitSql())
 }
 
-func (index *ContentUnitsIndex) Add(scope Scope) error {
-	log.Infof("Content Units Index - Add. Scope: %+v.", scope)
-	// We only add content units when the scope is content unit, otherwise we need to update.
-	if scope.ContentUnitUID != "" {
-		if err := index.addToIndex(Scope{ContentUnitUID: scope.ContentUnitUID}, []string{}); err != nil {
-			return err
-		}
-		scope.ContentUnitUID = ""
-	}
-	emptyScope := Scope{}
-	if scope != emptyScope {
-		return index.Update(scope)
-	}
-	return nil
-}
-
 func (index *ContentUnitsIndex) Update(scope Scope) error {
 	log.Infof("Content Units Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
@@ -84,22 +68,6 @@ func (index *ContentUnitsIndex) Update(scope Scope) error {
 		return err
 	}
 	return index.addToIndex(scope, removed)
-}
-
-func (index *ContentUnitsIndex) Delete(scope Scope) error {
-	log.Infof("Content Units Index - Delete. Scope: %+v.", scope)
-	// We only delete content units when content unit is deleted, otherwise we just update.
-	if scope.ContentUnitUID != "" {
-		if _, err := index.removeFromIndex(Scope{ContentUnitUID: scope.ContentUnitUID}); err != nil {
-			return err
-		}
-		scope.ContentUnitUID = ""
-	}
-	emptyScope := Scope{}
-	if scope != emptyScope {
-		return index.Update(scope)
-	}
-	return nil
 }
 
 func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) error {
@@ -142,7 +110,7 @@ func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) er
 }
 
 func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
-	var typedUIDs []string
+    typedUIDs := make([]string, 0)
 	if scope.ContentUnitUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("content_unit", scope.ContentUnitUID))
 	}
@@ -255,17 +223,17 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 			Query(elasticScope).
 			Do(context.TODO())
 		if err != nil {
-			return []string{}, errors.Wrapf(err, "Remove from index %s %+v\n", indexName, elasticScope)
+			return []string{}, errors.Wrapf(err, "Content Units Index - Remove from index %s %+v\n", indexName, elasticScope)
 		}
 		if delRes.Deleted > 0 {
-			fmt.Printf("Deleted %d documents from %s.\n", delRes.Deleted, indexName)
+			fmt.Printf("Content Units Index - Deleted %d documents from %s.\n", delRes.Deleted, indexName)
 		}
 	}
 	if len(removed) == 0 {
 		fmt.Println("Content Units Index - Nothing was delete.")
 		return []string{}, nil
 	}
-	keys := make([]string, len(removed))
+	keys := make([]string, 0)
 	for k := range removed {
 		keys = append(keys, k)
 	}

@@ -39,21 +39,16 @@ func (index *ClassificationsIndex) ReindexAll() error {
 	return index.addSourcesToIndexSql("TRUE")
 }
 
-func (index *ClassificationsIndex) Add(scope Scope) error {
-	log.Info("Classifications Index - Add. Scope: %+v.", scope)
-	return index.addToIndex(scope)
-}
-
 func (index *ClassificationsIndex) Update(scope Scope) error {
 	log.Info("Classifications Index - Update. Scope: %+v.", scope)
-	if err := index.Delete(scope); err != nil {
+	if err := index.removeFromIndex(scope); err != nil {
 		return err
 	}
 	return index.addToIndex(scope)
 }
 
-func (index *ClassificationsIndex) Delete(scope Scope) error {
-	log.Info("Classifications Index - Delete. Scope: %+v.", scope)
+func (index *ClassificationsIndex) removeFromIndex(scope Scope) error {
+	log.Info("Classifications Index - removeFromIndex. Scope: %+v.", scope)
 	if scope.TagUID != "" {
 		if err := index.removeFromIndexQuery(elastic.NewTermsQuery("mdb_uid", scope.TagUID)); err != nil {
 			return err

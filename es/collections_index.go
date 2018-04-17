@@ -48,22 +48,6 @@ func (index *CollectionsIndex) ReindexAll() error {
 	return index.addToIndexSql(defaultCollectionsSql())
 }
 
-func (index *CollectionsIndex) Add(scope Scope) error {
-	log.Infof("Collections Index - Add. Scope: %+v.", scope)
-	// We only add content units when content unit is added, otherwise we need to update.
-	if scope.CollectionUID != "" {
-		if err := index.addToIndex(Scope{CollectionUID: scope.CollectionUID}, []string{}); err != nil {
-			return err
-		}
-		scope.CollectionUID = ""
-	}
-	emptyScope := Scope{}
-	if scope != emptyScope {
-		return index.Update(scope)
-	}
-	return nil
-}
-
 func (index *CollectionsIndex) Update(scope Scope) error {
 	log.Infof("Collections Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
@@ -71,22 +55,6 @@ func (index *CollectionsIndex) Update(scope Scope) error {
 		return err
 	}
 	return index.addToIndex(scope, removed)
-}
-
-func (index *CollectionsIndex) Delete(scope Scope) error {
-	log.Infof("Collections Index - Delete. Scope: %+v.", scope)
-	// We only delete content units when content unit is deleted, otherwise we just update.
-	if scope.CollectionUID != "" {
-		if _, err := index.removeFromIndex(Scope{CollectionUID: scope.CollectionUID}); err != nil {
-			return err
-		}
-		scope.CollectionUID = ""
-	}
-	emptyScope := Scope{}
-	if scope != emptyScope {
-		return index.Update(scope)
-	}
-	return nil
 }
 
 func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) error {
@@ -117,7 +85,7 @@ func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) err
 }
 
 func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
-	var typedUIDs []string
+    typedUIDs := make([]string, 0)
 	if scope.CollectionUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("collection", scope.CollectionUID))
 	}
@@ -178,7 +146,7 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 		}
 		log.Infof("Adding %d collections (offset %d).", len(collections), offset)
 
-		var cuUIDs []string
+        cuUIDs := make([]string, 0)
 		for _, c := range collections {
 			for _, ccu := range c.R.CollectionsContentUnits {
 				cuUIDs = append(cuUIDs, fmt.Sprintf("'%s'", ccu.R.ContentUnit.UID))
@@ -247,7 +215,7 @@ func (index *CollectionsIndex) removeFromIndexQuery(elasticScope elastic.Query) 
 		log.Info("Collections Index - Nothing was delete.")
 		return []string{}, nil
 	}
-	keys := make([]string, len(removed))
+	keys := make([]string, 0)
 	for k := range removed {
 		keys = append(keys, k)
 	}
@@ -261,7 +229,7 @@ func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsConte
 			m[mdb.CONTENT_TYPE_REGISTRY.ByID[ccu.R.ContentUnit.TypeID].Name] = true
 		}
 	}
-	var keys []string
+    keys := make([]string, 0)
 	for k := range m {
 		keys = append(keys, k)
 	}

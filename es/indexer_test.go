@@ -1007,7 +1007,7 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 	//r.Nil(es.DumpDB(common.DB, "Before DB"))
 	//r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_UNITS_INDEX))
 	c1UID := suite.uc(es.Collection{ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID, "")
-	r.Nil(indexer.CollectionAdd(c1UID))
+	r.Nil(indexer.CollectionUpdate(c1UID))
 	//r.Nil(es.DumpDB(common.DB, "After DB"))
 	//r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_UNITS_INDEX))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
@@ -1031,7 +1031,7 @@ func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
 	r.Nil(deleteCollection(c2UID))
 	// r.Nil(es.DumpDB(common.DB, "Before"))
 	// r.Nil(es.DumpIndexes(common.ESC, "Before", consts.ES_UNITS_INDEX))
-	r.Nil(indexer.CollectionDelete(c2UID))
+	r.Nil(indexer.CollectionUpdate(c2UID))
 	// r.Nil(es.DumpDB(common.DB, "After"))
 	// r.Nil(es.DumpIndexes(common.ESC, "After", consts.ES_UNITS_INDEX))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
@@ -1159,7 +1159,7 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	var cu3UID string
 	cu3UID = suite.ucu(es.ContentUnit{Name: "third something"}, consts.LANG_ENGLISH, true, true)
 	UIDs = append(UIDs, cu3UID)
-	r.Nil(indexer.ContentUnitAdd(cu3UID))
+	r.Nil(indexer.ContentUnitUpdate(cu3UID))
 	suite.validateContentUnitNames(indexNameEn, indexer,
 		[]string{"something", "something else", "third something"})
 
@@ -1169,8 +1169,13 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	suite.validateContentUnitNames(indexNameEn, indexer,
 		[]string{"something", "something else", "updated third something"})
 
-	fmt.Println("Delete content unit and validate.")
-	r.Nil(indexer.ContentUnitDelete(cu2UID))
+	fmt.Println("Delete content unit and validate nothing changes as the database did not change!")
+	r.Nil(indexer.ContentUnitUpdate(cu2UID))
+	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else", "updated third something"})
+
+	fmt.Println("Now actually delete the content unit also from database.")
+	r.Nil(deleteContentUnits([]string{cu2UID}))
+	r.Nil(indexer.ContentUnitUpdate(cu2UID))
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "updated third something"})
 
 	fmt.Println("Delete units, reindex and validate we have 0 searchable units.")
@@ -1247,7 +1252,7 @@ func (suite *IndexerSuite) TestCollectionsIndex() {
 
 	fmt.Println("Update collection content unit and validate.")
 	cu2UID := suite.ucu(es.ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
-	r.Nil(indexer.ContentUnitAdd(cu2UID))
+	r.Nil(indexer.ContentUnitUpdate(cu2UID))
 	suite.uc(es.Collection{MDB_UID: c2UID}, cu2UID, "")
 	r.Nil(indexer.CollectionUpdate(c2UID))
 	suite.validateCollectionsContentUnits(indexName, indexer, map[string][]string{

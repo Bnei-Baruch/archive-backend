@@ -19,6 +19,21 @@ import (
 var indexer *es.Indexer
 var indexerQueue WorkQueue
 
+func shutDown(signalChan chan os.Signal, sc stan.Conn, indexerQueue WorkQueue, cleanupDone chan bool) {
+    for _ = range signalChan {
+        log.Info("Shutting down...")
+
+        log.Info("Closing connection to nats")
+        // Do not unsubscribe a durable on exit, except if asked to.
+        sc.Close()
+
+        log.Info("Closing indexer queue")
+        indexerQueue.Close()
+
+        cleanupDone <- true
+    }
+}
+
 func RunListener() {
 	log.SetLevel(log.InfoLevel)
 
@@ -62,20 +77,7 @@ func RunListener() {
 	signalChan := make(chan os.Signal, 1)
 	cleanupDone := make(chan bool)
 	signal.Notify(signalChan, os.Interrupt)
-	go func() {
-		for range signalChan {
-			log.Info("Shutting down...")
-
-			log.Info("Closing connection to nats")
-			// Do not unsubscribe a durable on exit, except if asked to.
-			sc.Close()
-
-			log.Info("Closing indexer queue")
-			indexerQueue.Close()
-
-			cleanupDone <- true
-		}
-	}()
+	go func() { shutDown(signalChan, sc, indexerQueue, cleanupDone ) }()
 
 	log.Info("Press Ctrl+C to terminate")
 	<-cleanupDone

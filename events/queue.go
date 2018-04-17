@@ -33,40 +33,40 @@ func (q *IndexerQueue) Init() {
 	q.jobs = make(chan WorkTask, 10000)
 	q.ctx, q.cancel = context.WithCancel(context.Background())
 
-	// start worker here
+	// Start worker here.
 	go func() {
 		defer q.wg.Done()
 
 		for {
 			select {
 			case <-q.ctx.Done():
-				log.Info("worker: ctx.Done")
+				log.Info("IndexerQueue.Init(%d) - Worker: ctx.Done.", len(q.jobs))
 				return
 
 			case job := <-q.jobs:
 				job.Do()
 				if q.ctx.Err() != nil {
-					log.Info("worker: context cancelled")
+					log.Info("IndexerQueue.Init(%d) - Worker: Context cancelled.", len(q.jobs))
 					return
 				}
 			}
 		}
 	}()
 
-	// add the worker to the waiting group
+	// Add the worker to the waiting group.
 	q.wg.Add(1)
 }
 
 func (q *IndexerQueue) Close() {
-	log.Info("close jobs channel")
+	log.Info("IndexerQueue.Close(%d) - Close jobs channel.", len(q.jobs))
 	close(q.jobs)
 
-	log.Info("cancel worker context")
+	log.Info("IndexerQueue.Close(closed) - Cancel worker context.")
 	q.cancel()
 
-	log.Info("wait for worker to finish")
+	log.Info("IndexerQueue.Close(closed) - Wait for worker to finish.")
 	if !WaitTimeout(&q.wg, 5*time.Second) {
-		log.Warn("WaitGroup closed by timeout")
+		log.Warn("IndexerQueue.Close(closed) - WaitGroup closed by timeout.")
 	}
 }
 
@@ -74,8 +74,9 @@ func (q *IndexerQueue) Enqueue(task WorkTask) {
 	for {
 		select {
 		case <-time.After(2 * time.Second):
-			log.Warn("IndexerQueue.Enqueue timeout")
+			log.Warn("IndexerQueue.Enqueue(%d) - Enqueue timeout.", len(q.jobs))
 		case q.jobs <- task:
+            log.Infof("IndexerQueue.Enqueue(%d) - Task was added to queue: %+v", len(q.jobs), task)
 			return
 		}
 	}
@@ -89,22 +90,21 @@ type IndexerTask struct {
 func (t IndexerTask) Do() {
 	clock := time.Now()
 
-	// don't panic !
+	fp := strings.Split(runtime.FuncForPC(reflect.ValueOf(t.F).Pointer()).Name(), ".")
+	fName := fp[len(fp)-1]
+
+	// Don't panic !
 	defer func() {
 		if rval := recover(); rval != nil {
-			log.Errorf("IndexerTask.Do panic: %s", rval)
+			log.Errorf("IndexerTask.Do - %s panic: %s", fName, rval)
 			debug.PrintStack()
 		}
 	}()
 
 	err := t.F(t.S)
-
-	fp := strings.Split(runtime.FuncForPC(reflect.ValueOf(t.F).Pointer()).Name(), ".")
-	fName := fp[len(fp)-1]
-	log.Infof("%s took %s", fName, time.Now().Sub(clock).String())
-
+    log.Infof("IndexerTask.Do - %s took %s", fName, time.Now().Sub(clock).String())
 	if err != nil {
-		log.Errorf("IndexerTask.Do %s: %s", fName, err.Error())
+        log.Errorf("IndexerTask.Do - %s: %s", fName, err.Error())
 	}
 }
 
