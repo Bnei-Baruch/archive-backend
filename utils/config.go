@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"strings"
+
 	"github.com/spf13/viper"
 )
 
@@ -15,6 +17,7 @@ func InitConfig(cfgFile string, cfgPath string) error {
 	} else {
 		viper.SetConfigFile(cfgFile)
 	}
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
 	return viper.ReadInConfig()
 }
