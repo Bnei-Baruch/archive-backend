@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/nats-io/go-nats-streaming"
@@ -20,7 +19,7 @@ var indexer *es.Indexer
 var indexerQueue WorkQueue
 
 func shutDown(signalChan chan os.Signal, sc stan.Conn, indexerQueue WorkQueue, cleanupDone chan bool) {
-	for _ = range signalChan {
+	for range signalChan {
 		log.Info("Shutting down...")
 
 		log.Info("Closing connection to nats")
@@ -59,7 +58,7 @@ func RunListener() {
 	} else {
 		startOpt = stan.DeliverAllAvailable()
 	}
-	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt)
+	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt, stan.SetManualAckMode())
 	utils.Must(err)
 
 	log.Info("Initialize search engine indexer")
@@ -85,9 +84,10 @@ func RunListener() {
 
 // Data struct for unmarshaling data from nats
 type Data struct {
-	ID      string                 `json:"id"`
-	Type    string                 `json:"type"`
-	Payload map[string]interface{} `json:"payload"`
+	ID                  string                 `json:"id"`
+	Type                string                 `json:"type"`
+	ReplicationLocation string                 `json:"rloc"`
+	Payload             map[string]interface{} `json:"payload"`
 }
 
 type MessageHandler func(d Data)
@@ -147,11 +147,29 @@ func msgHandler(msg *stan.Msg) {
 	handler, ok := messageHandlers[d.Type]
 	if !ok {
 		log.Errorf("Unknown event type: %v", d)
+		return
 	}
 
-	// DIRTY HACK !!!
-	// delay handler until our read replica will be synced (hopefully)
-	time.Sleep(500 * time.Millisecond)
+	if d.ReplicationLocation != "" {
+		log.Infof("Replication location: %s", d.ReplicationLocation)
+		var synced bool
+		err := common.DB.
+			QueryRow("SELECT pg_last_xlog_replay_location() >= pg_lsn($1);", d.ReplicationLocation).
+			Scan(&synced)
+		if err != nil {
+			log.Errorf("Check replica is synced: %+v", err)
+			return
+		}
+		if !synced {
+			log.Infof("Replica not synced: %s", d.ReplicationLocation)
+			// sleep maybe ?
+			//time.Sleep(500 * time.Millisecond)
+			return
+		}
+	}
+
+	// Acknowledge the message
+	msg.Ack()
 
 	log.Infof("Handling %+v", d)
 	handler(d)
