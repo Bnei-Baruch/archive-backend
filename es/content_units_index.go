@@ -110,7 +110,7 @@ func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) er
 }
 
 func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
-    typedUIDs := make([]string, 0)
+	typedUIDs := make([]string, 0)
 	if scope.ContentUnitUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("content_unit", scope.ContentUnitUID))
 	}
@@ -177,7 +177,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		if err != nil {
 			return errors.Wrap(err, "Fetch units from mdb")
 		}
-		log.Infof("Adding %d units (offset: %d).", len(units), offset)
+		log.Infof("Content Units Index - Adding %d units (offset: %d).", len(units), offset)
 
 		indexData, err := MakeIndexData(index.db, sqlScope)
 		if err != nil {
@@ -260,8 +260,8 @@ func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		log.Warnf("[%s %s]\nstdout: [%s]\nstderr: [%s]\nError: %+v\n", parseDocsBin, docxPath, stdout.String(), stderr.String(), err)
-		return "", errors.Wrapf(err, "cmd.Run %s", uid)
+		log.Warnf("Content Units Index - [%s %s]\nstdout: [%s]\nstderr: [%s]\nError: %+v\n", parseDocsBin, docxPath, stdout.String(), stderr.String(), err)
+		return "", errors.Wrapf(err, "Content Units Index - cmd.Run %s", uid)
 	}
 	return stdout.String(), nil
 }
@@ -346,16 +346,18 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 					var err error
 					fileName, err := LoadDocFilename(index.db, val[0])
 					if err != nil {
-						log.Errorf("Error retrieving doc from DB: %s. Error: %+v", val[0], err)
+						log.Errorf("Content Units Index - Error retrieving doc from DB: %s. Error: %+v", val[0], err)
+					} else if fileName == "" {
+						log.Warnf("Content Units Index - Could not get transcript filename for %s, maybe it is not published or not secure.  Skipping.", val[0])
 					} else {
 						err = DownloadAndConvert([][]string{{val[0], fileName}})
 						if err != nil {
-							log.Errorf("Error downloading or converting doc: %s", val[0])
-							log.Errorf("Error %+v", err)
+							log.Errorf("Content Units Index - Error downloading or converting doc: %s", val[0])
+							log.Errorf("Content Units Index - Error %+v", err)
 						} else {
 							unit.Transcript, err = index.parseDocx(val[0])
 							if err != nil {
-								log.Errorf("Error parsing docx: %s", val[0])
+								log.Errorf("Content Units Index - Error parsing docx: %s", val[0])
 							} else {
 								unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
 							}
@@ -386,10 +388,10 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 			BodyJson(v).
 			Do(context.TODO())
 		if err != nil {
-			return errors.Wrapf(err, "Index unit %s %s", name, cu.UID)
+			return errors.Wrapf(err, "Content Units Index - Index unit %s %s", name, cu.UID)
 		}
 		if !resp.Created {
-			return errors.Errorf("Not created: unit %s %s", name, cu.UID)
+			return errors.Errorf("Content Units Index - Not created: unit %s %s", name, cu.UID)
 		}
 	}
 

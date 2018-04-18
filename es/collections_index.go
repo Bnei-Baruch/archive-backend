@@ -85,7 +85,7 @@ func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) err
 }
 
 func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
-    typedUIDs := make([]string, 0)
+	typedUIDs := make([]string, 0)
 	if scope.CollectionUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("collection", scope.CollectionUID))
 	}
@@ -146,7 +146,7 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 		}
 		log.Infof("Adding %d collections (offset %d).", len(collections), offset)
 
-        cuUIDs := make([]string, 0)
+		cuUIDs := make([]string, 0)
 		for _, c := range collections {
 			for _, ccu := range c.R.CollectionsContentUnits {
 				cuUIDs = append(cuUIDs, fmt.Sprintf("'%s'", ccu.R.ContentUnit.UID))
@@ -229,7 +229,7 @@ func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsConte
 			m[mdb.CONTENT_TYPE_REGISTRY.ByID[ccu.R.ContentUnit.TypeID].Name] = true
 		}
 	}
-    keys := make([]string, 0)
+	keys := make([]string, 0)
 	for k := range m {
 		keys = append(keys, k)
 	}

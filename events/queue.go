@@ -76,7 +76,7 @@ func (q *IndexerQueue) Enqueue(task WorkTask) {
 		case <-time.After(2 * time.Second):
 			log.Warn("IndexerQueue.Enqueue(%d) - Enqueue timeout.", len(q.jobs))
 		case q.jobs <- task:
-            log.Infof("IndexerQueue.Enqueue(%d) - Task was added to queue: %+v", len(q.jobs), task)
+			log.Infof("IndexerQueue.Enqueue(%d) - Task was added to queue: %+v", len(q.jobs), task)
 			return
 		}
 	}
@@ -102,9 +102,9 @@ func (t IndexerTask) Do() {
 	}()
 
 	err := t.F(t.S)
-    log.Infof("IndexerTask.Do - %s took %s", fName, time.Now().Sub(clock).String())
+	log.Infof("IndexerTask.Do - %s took %s", fName, time.Now().Sub(clock).String())
 	if err != nil {
-        log.Errorf("IndexerTask.Do - %s: %s", fName, err.Error())
+		log.Errorf("IndexerTask.Do - %s: %s", fName, err.Error())
 	}
 }
 
