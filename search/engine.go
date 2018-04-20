@@ -570,8 +570,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				return joinedR, err
 			}
 		}
-		joinedR, err = joinResponses(joinedR, sR, sortBy, from, size)
-		return joinedR, err
+		if haveHits(joinedR) || haveHits(sR) {
+			joinedR, err = joinResponses(joinedR, sR, sortBy, from, size)
+			return joinedR, err
+		}
 	}
 
 	if len(mr.Responses) > 0 {
