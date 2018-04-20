@@ -537,7 +537,7 @@ func addContentUnitFile(cu es.ContentUnit, lang string, file mdbmodels.File) (st
 		return "", err
 	}
 
-	return mdbContentUnit.UID, nil
+	return file.UID, nil
 }
 
 func removeContentUnitFile(cu es.ContentUnit, lang string, file mdbmodels.File) (string, error) {
@@ -562,7 +562,7 @@ func removeContentUnitFile(cu es.ContentUnit, lang string, file mdbmodels.File) 
 		return "", err
 	}
 
-	return mdbContentUnit.UID, nil
+	return file.UID, nil
 }
 
 func updateContentUnit(cu es.ContentUnit, lang string, published bool, secure bool) (string, error) {
@@ -918,12 +918,14 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *e
 		r.ElementsMatch(expectedLangs, langs)
 	}
 
-	// Get transcript
+	// Get transcript,
 	transcriptLengths := make([]int, 0)
 	for _, hit := range res.Hits.Hits {
 		var cu es.ContentUnit
 		json.Unmarshal(*hit.Source, &cu)
-		transcriptLengths = append(transcriptLengths, len(cu.Transcript))
+        if cu.Transcript != "" {
+            transcriptLengths = append(transcriptLengths, len(cu.Transcript))
+        }
 	}
 
 	if expectedTranscriptLength.Valid {
@@ -1091,12 +1093,16 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	transcriptContent := "1234"
 	suite.serverResponses["/dEvgPVpr"] = transcriptContent
 	file := mdbmodels.File{ID: 1, Name: "heb_o_rav_2017-05-25_lesson_achana_n1_p0.doc", UID: "dEvgPVpr", Language: null.String{"he", true}, Secure: 0, Published: true}
-	suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	//r.Nil(es.DumpIndexes(common.ESC, "DumpIndexes after adding transcript", consts.ES_UNITS_INDEX))
+    f1UID := suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
+	r.Nil(indexer.FileUpdate(f1UID))
+	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
 	suite.validateContentUnitFiles(indexNameHe, indexer, []string{"he"}, null.Int{len(transcriptContent), true})
 	fmt.Println("Remove a file from content unit and validate.")
 	suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, false)
+	r.Nil(indexer.FileUpdate(f1UID))
+	r.Nil(es.DumpDB(common.DB, "DumpDB"))
+	r.Nil(es.DumpIndexes(common.ESC, "DumpIndexes", consts.ES_UNITS_INDEX))
+	suite.validateContentUnitFiles(indexNameHe, indexer, []string{}, null.Int{-1, false})
 
 	fmt.Println("Add a tag to content unit and validate.")
 	suite.ucut(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, true)

@@ -116,6 +116,11 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	}
 	if scope.FileUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("file", scope.FileUID))
+		moreUIDs, err := contentUnitsScopeByFile(index.db, scope.FileUID)
+		if err != nil {
+			return []string{}, err
+		}
+        typedUIDs = append(typedUIDs, uidsToTypedUIDs("content_unit", moreUIDs)...)
 	}
 	if scope.CollectionUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("collection", scope.CollectionUID))
@@ -130,6 +135,11 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	}
 	if scope.SourceUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("source", scope.SourceUID))
+		moreUIDs, err := contentUnitsScopeBySource(index.db, scope.SourceUID)
+		if err != nil {
+			return []string{}, err
+		}
+		typedUIDs = append(typedUIDs, uidsToTypedUIDs("content_unit", moreUIDs)...)
 	}
 	if scope.PersonUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("person", scope.PersonUID))
@@ -356,6 +366,9 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 							log.Errorf("Content Units Index - Error %+v", err)
 						} else {
 							unit.Transcript, err = index.parseDocx(val[0])
+                            if unit.Transcript == "" {
+                                log.Warnf("Content Units Index - Transcript empty: %s", val[0])
+                            }
 							if err != nil {
 								log.Errorf("Content Units Index - Error parsing docx: %s", val[0])
 							} else {
@@ -373,6 +386,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
+        // Copy for logging purposes only.
 		vCopy := v
 		if len(vCopy.Transcript) > 30 {
 			vCopy.Transcript = fmt.Sprintf("%s...", vCopy.Transcript[:30])
