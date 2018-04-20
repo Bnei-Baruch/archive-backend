@@ -61,22 +61,6 @@ func (index *ContentUnitsIndex) ReindexAll() error {
 	return index.addToIndexSql(defaultContentUnitSql())
 }
 
-func (index *ContentUnitsIndex) Add(scope Scope) error {
-	log.Infof("Content Units Index - Add. Scope: %+v.", scope)
-	// We only add content units when the scope is content unit, otherwise we need to update.
-	if scope.ContentUnitUID != "" {
-		if err := index.addToIndex(Scope{ContentUnitUID: scope.ContentUnitUID}, []string{}); err != nil {
-			return err
-		}
-		scope.ContentUnitUID = ""
-	}
-	emptyScope := Scope{}
-	if scope != emptyScope {
-		return index.Update(scope)
-	}
-	return nil
-}
-
 func (index *ContentUnitsIndex) Update(scope Scope) error {
 	log.Infof("Content Units Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
@@ -84,22 +68,6 @@ func (index *ContentUnitsIndex) Update(scope Scope) error {
 		return err
 	}
 	return index.addToIndex(scope, removed)
-}
-
-func (index *ContentUnitsIndex) Delete(scope Scope) error {
-	log.Infof("Content Units Index - Delete. Scope: %+v.", scope)
-	// We only delete content units when content unit is deleted, otherwise we just update.
-	if scope.ContentUnitUID != "" {
-		if _, err := index.removeFromIndex(Scope{ContentUnitUID: scope.ContentUnitUID}); err != nil {
-			return err
-		}
-		scope.ContentUnitUID = ""
-	}
-	emptyScope := Scope{}
-	if scope != emptyScope {
-		return index.Update(scope)
-	}
-	return nil
 }
 
 func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) error {
@@ -142,12 +110,17 @@ func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) er
 }
 
 func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
-	var typedUIDs []string
+	typedUIDs := make([]string, 0)
 	if scope.ContentUnitUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("content_unit", scope.ContentUnitUID))
 	}
 	if scope.FileUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("file", scope.FileUID))
+		moreUIDs, err := contentUnitsScopeByFile(index.db, scope.FileUID)
+		if err != nil {
+			return []string{}, err
+		}
+        typedUIDs = append(typedUIDs, uidsToTypedUIDs("content_unit", moreUIDs)...)
 	}
 	if scope.CollectionUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("collection", scope.CollectionUID))
@@ -162,6 +135,11 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	}
 	if scope.SourceUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("source", scope.SourceUID))
+		moreUIDs, err := contentUnitsScopeBySource(index.db, scope.SourceUID)
+		if err != nil {
+			return []string{}, err
+		}
+		typedUIDs = append(typedUIDs, uidsToTypedUIDs("content_unit", moreUIDs)...)
 	}
 	if scope.PersonUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("person", scope.PersonUID))
@@ -209,7 +187,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		if err != nil {
 			return errors.Wrap(err, "Fetch units from mdb")
 		}
-		log.Infof("Adding %d units (offset: %d).", len(units), offset)
+		log.Infof("Content Units Index - Adding %d units (offset: %d).", len(units), offset)
 
 		indexData, err := MakeIndexData(index.db, sqlScope)
 		if err != nil {
@@ -255,17 +233,17 @@ func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query)
 			Query(elasticScope).
 			Do(context.TODO())
 		if err != nil {
-			return []string{}, errors.Wrapf(err, "Remove from index %s %+v\n", indexName, elasticScope)
+			return []string{}, errors.Wrapf(err, "Content Units Index - Remove from index %s %+v\n", indexName, elasticScope)
 		}
 		if delRes.Deleted > 0 {
-			fmt.Printf("Deleted %d documents from %s.\n", delRes.Deleted, indexName)
+			fmt.Printf("Content Units Index - Deleted %d documents from %s.\n", delRes.Deleted, indexName)
 		}
 	}
 	if len(removed) == 0 {
 		fmt.Println("Content Units Index - Nothing was delete.")
 		return []string{}, nil
 	}
-	keys := make([]string, len(removed))
+	keys := make([]string, 0)
 	for k := range removed {
 		keys = append(keys, k)
 	}
@@ -292,8 +270,8 @@ func (index *ContentUnitsIndex) parseDocx(uid string) (string, error) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		log.Warnf("[%s %s]\nstdout: [%s]\nstderr: [%s]\nError: %+v\n", parseDocsBin, docxPath, stdout.String(), stderr.String(), err)
-		return "", errors.Wrapf(err, "cmd.Run %s", uid)
+		log.Warnf("Content Units Index - [%s %s]\nstdout: [%s]\nstderr: [%s]\nError: %+v\n", parseDocsBin, docxPath, stdout.String(), stderr.String(), err)
+		return "", errors.Wrapf(err, "Content Units Index - cmd.Run %s", uid)
 	}
 	return stdout.String(), nil
 }
@@ -378,16 +356,21 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 					var err error
 					fileName, err := LoadDocFilename(index.db, val[0])
 					if err != nil {
-						log.Errorf("Error retrieving doc from DB: %s. Error: %+v", val[0], err)
+						log.Errorf("Content Units Index - Error retrieving doc from DB: %s. Error: %+v", val[0], err)
+					} else if fileName == "" {
+						log.Warnf("Content Units Index - Could not get transcript filename for %s, maybe it is not published or not secure.  Skipping.", val[0])
 					} else {
 						err = DownloadAndConvert([][]string{{val[0], fileName}})
 						if err != nil {
-							log.Errorf("Error downloading or converting doc: %s", val[0])
-							log.Errorf("Error %+v", err)
+							log.Errorf("Content Units Index - Error downloading or converting doc: %s", val[0])
+							log.Errorf("Content Units Index - Error %+v", err)
 						} else {
 							unit.Transcript, err = index.parseDocx(val[0])
+                            if unit.Transcript == "" {
+                                log.Warnf("Content Units Index - Transcript empty: %s", val[0])
+                            }
 							if err != nil {
-								log.Errorf("Error parsing docx: %s", val[0])
+								log.Errorf("Content Units Index - Error parsing docx: %s", val[0])
 							} else {
 								unit.TypedUIDs = append(unit.TypedUIDs, uidToTypedUID("file", val[0]))
 							}
@@ -403,6 +386,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
+        // Copy for logging purposes only.
 		vCopy := v
 		if len(vCopy.Transcript) > 30 {
 			vCopy.Transcript = fmt.Sprintf("%s...", vCopy.Transcript[:30])
@@ -418,10 +402,10 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 			BodyJson(v).
 			Do(context.TODO())
 		if err != nil {
-			return errors.Wrapf(err, "Index unit %s %s", name, cu.UID)
+			return errors.Wrapf(err, "Content Units Index - Index unit %s %s", name, cu.UID)
 		}
 		if !resp.Created {
-			return errors.Errorf("Not created: unit %s %s", name, cu.UID)
+			return errors.Errorf("Content Units Index - Not created: unit %s %s", name, cu.UID)
 		}
 	}
 
