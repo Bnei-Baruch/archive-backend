@@ -118,7 +118,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 			return errors.Wrap(err, "Fetch sources from mdb")
 		}
 
-		parentsMap, err := index.loadSources(index.db) //Note: getting all sources path, not by scope
+		parentsMap, err := index.loadSources(index.db) // Note: getting all sources path, not by scope.
 		if err != nil {
 			return errors.Wrap(err, "Fetch sources parents from mdb")
 		}
@@ -148,7 +148,7 @@ func (index *SourcesIndex) loadSources(db *sql.DB) (map[string][]string, error) 
 			  s.position,
 			  ARRAY [a.code, s.uid] "path"
 			FROM sources s INNER JOIN authors_sources aas ON s.id = aas.source_id
-			  INNER JOIN authors a ON a.id = aas.author_id
+				INNER JOIN authors a ON a.id = aas.author_id
 			UNION
 			SELECT
 			  s.id,
@@ -229,7 +229,7 @@ func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]s
 }
 
 func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) {
-	uidPath := path.Join(SourcesFolder, uid)
+	uidPath := path.Join(sourcesFolder, uid)
 	jsonPath := path.Join(uidPath, "index.json")
 	jsonCnt, err := ioutil.ReadFile(jsonPath)
 	if err != nil {

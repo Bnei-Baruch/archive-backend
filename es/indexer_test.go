@@ -699,6 +699,33 @@ func deleteContentUnits(UIDs []string) error {
 	return mdbmodels.ContentUnits(common.DB, qm.WhereIn("uid in ?", UIDsI...)).DeleteAll()
 }
 
+func deleteSources(UIDs []string) error {
+	if len(UIDs) == 0 {
+		return nil
+	}
+	UIDsI := make([]interface{}, len(UIDs))
+	for i, v := range UIDs {
+		UIDsI[i] = v
+	}
+	sourcesI18ns, err := mdbmodels.SourceI18ns(common.DB,
+		qm.InnerJoin("sources on sources.id = source_i18n.source_id"),
+		qm.WhereIn("sources.uid in ?", UIDsI...)).All()
+	if err != nil {
+		return errors.Wrap(err, "deleteSources, select source i18n.")
+	}
+	idsI := make([]interface{}, len(sourcesI18ns))
+	for i, v := range sourcesI18ns {
+		idsI[i] = v.SourceID
+	}
+	if len(sourcesI18ns) > 0 {
+		if err := mdbmodels.SourceI18ns(common.DB, qm.WhereIn("source_id in ?", idsI...)).DeleteAll(); err != nil {
+			return errors.Wrap(err, "deleteSources, delete source i18n.")
+		}
+	}
+
+	return mdbmodels.Sources(common.DB, qm.WhereIn("uid in ?", UIDsI...)).DeleteAll()
+}
+
 func updateSource(source es.Source, lang string) (string, error) {
 	var mdbSource mdbmodels.Source
 	if source.MDB_UID != "" {
@@ -719,10 +746,6 @@ func updateSource(source es.Source, lang string) (string, error) {
 		if err := mdbSource.Insert(common.DB); err != nil {
 			return "", err
 		}
-	}
-
-	if err := mdbSource.Update(common.DB); err != nil {
-		return "", err
 	}
 	var mdbSourceI18n mdbmodels.SourceI18n
 	source18np, err := mdbmodels.FindSourceI18n(common.DB, mdbSource.ID, lang)
@@ -750,7 +773,8 @@ func updateSource(source es.Source, lang string) (string, error) {
 	}
 
 	//add folder for source files
-	uidPath := path.Join(es.SourcesFolder, mdbSource.UID)
+	sourcesFolder := viper.GetString("elasticsearch.sources-folder")
+	uidPath := path.Join(sourcesFolder, mdbSource.UID)
 	if _, err := os.Stat(uidPath); os.IsNotExist(err) {
 		err = os.Mkdir(uidPath, os.FileMode(0522))
 		if err != nil {
@@ -763,7 +787,8 @@ func updateSource(source es.Source, lang string) (string, error) {
 
 func updateSourceFileContent(uid string, lang string) error {
 
-	uidPath := path.Join(es.SourcesFolder, uid)
+	sourcesFolder := viper.GetString("elasticsearch.sources-folder")
+	uidPath := path.Join(sourcesFolder, uid)
 	jsonPath := path.Join(uidPath, "index.json")
 	contentFileName := fmt.Sprintf("sample-content-%s.docx", lang)
 	contentPath := path.Join(uidPath, contentFileName)
@@ -1414,6 +1439,8 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	fmt.Printf("\n\n\nAdding source.\n\n")
 	source1UID := suite.us(es.Source{Name: "test-name-1", Description: "test-description-1"}, consts.LANG_ENGLISH)
 	suite.us(es.Source{MDB_UID: source1UID, Name: "שם-בדיקה-1", Description: "תיאור-בדיקה-1"}, consts.LANG_HEBREW)
+	suite.asa(es.Source{MDB_UID: source1UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name", ID: 3, Code: "t1", FullName: null.String{String: "Test Full Name", Valid: true}}, true, true)
+	suite.asa(es.Source{MDB_UID: source1UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם לבדיקה", ID: 4, Code: "t2", FullName: null.String{String: "שם מלא לבדיקה", Valid: true}}, true, true)
 	fmt.Printf("\n\n\nAdding content files for each language.\n\n")
 	suite.usfc(source1UID, consts.LANG_ENGLISH)
 	suite.usfc(source1UID, consts.LANG_HEBREW)
@@ -1435,26 +1462,41 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	suite.validateSourceFile(indexNameEn, indexer, "TEST CONTENT")
 	suite.validateSourceFile(indexNameHe, indexer, "TEST CONTENT")
 
-	fmt.Println("Validate adding source incrementally.")
+	fmt.Println("Validate adding source without file and author - should not index.")
 	source2UID := suite.us(es.Source{Name: "test-name-2", Description: "test-description-2"}, consts.LANG_ENGLISH)
+	suite.us(es.Source{MDB_UID: source2UID, Name: "שם-בדיקה-2", Description: "תיאור-בדיקה-2"}, consts.LANG_HEBREW)
+	r.Nil(indexer.SourceAdd(source2UID))
+	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1"})
+
+	fmt.Println("Validate adding source with file but without author - should not index.")
 	suite.usfc(source2UID, consts.LANG_ENGLISH)
+	suite.usfc(source2UID, consts.LANG_HEBREW)
+	r.Nil(indexer.SourceAdd(source2UID))
+	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1"})
+
+	fmt.Println("Validate adding source with file and author and validate.")
+	suite.asa(es.Source{MDB_UID: source2UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 5, Code: "t3", FullName: null.String{String: "Test Full Name 2", Valid: true}}, true, true)
+	suite.asa(es.Source{MDB_UID: source2UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם נוסף לבדיקה", ID: 6, Code: "t4", FullName: null.String{String: "שם מלא נוסף לבדיקה", Valid: true}}, true, true)
 	r.Nil(indexer.SourceAdd(source2UID))
 	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2"})
+	suite.validateSourceAuthors(indexNameEn, indexer, []string{"Test Name", "Test Full Name", "Test Name 2", "Test Full Name 2"})
+	suite.validateSourceAuthors(indexNameHe, indexer, []string{"שם נוסף לבדיקה", "שם מלא נוסף לבדיקה", "שם לבדיקה", "שם מלא לבדיקה"})
 	suite.validateSourceFile(indexNameEn, indexer, "TEST CONTENT")
 
-	fmt.Println("Add 2 authors and validate.")
-	suite.asa(es.Source{MDB_UID: source1UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name", ID: 3, Code: "t1", FullName: null.String{String: "Test Full Name", Valid: true}}, true, true)
-	suite.asa(es.Source{MDB_UID: source1UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם לבדיקה", ID: 4, Code: "t2", FullName: null.String{String: "שם מלא לבדיקה", Valid: true}}, true, true)
-	r.Nil(indexer.SourceUpdate(source1UID))
-	suite.validateSourceAuthors(indexNameEn, indexer, []string{"Test Name", "Test Full Name"})
-	suite.validateSourceAuthors(indexNameHe, indexer, []string{"שם לבדיקה", "שם מלא לבדיקה"})
-
 	fmt.Println("Remove 1 author and validate.")
-	suite.rsa(es.Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
-	r.Nil(indexer.SourceUpdate(source1UID))
-	suite.validateSourceAuthors(indexNameEn, indexer, []string{})
+	suite.rsa(es.Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 5})
+	r.Nil(indexer.SourceUpdate(source2UID))
+	suite.validateSourceAuthors(indexNameEn, indexer, []string{"Test Name", "Test Full Name"})
 
-	//TBD delete sources from DB and test
+	fmt.Println("Delete sources from DB, reindex and validate we have 0 sources.")
+	suite.rsa(es.Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
+	suite.rsa(es.Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 4})
+	suite.rsa(es.Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 6})
+	UIDs := []string{source1UID, source2UID}
+	r.Nil(deleteSources(UIDs))
+	r.Nil(indexer.ReindexAll())
+	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
+	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())

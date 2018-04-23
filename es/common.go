@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	SourcesFolder   string
+	sourcesFolder   string
 	sofficeBin      string
 	docFolder       string
 	parseDocsBin    string
@@ -46,8 +46,8 @@ func InitVars() {
 	}
 	docFolder = viper.GetString("elasticsearch.docx-folder")
 	utils.Must(os.MkdirAll(docFolder, 0777))
-	SourcesFolder = path.Join(viper.GetString("elasticsearch.sources-folder"))
-	utils.Must(os.MkdirAll(SourcesFolder, 0777))
+	sourcesFolder = path.Join(viper.GetString("elasticsearch.sources-folder"))
+	utils.Must(os.MkdirAll(sourcesFolder, 0777))
 	cdnUrl = viper.GetString("elasticsearch.cdn-url")
 	if cdnUrl == "" {
 		panic("cdn url should be set in config.")
