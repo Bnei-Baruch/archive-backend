@@ -19,6 +19,7 @@ type ListRequest struct {
 	StartIndex int    `json:"start_index" form:"start_index" binding:"omitempty,min=1"`
 	StopIndex  int    `json:"stop_index" form:"stop_index" binding:"omitempty,min=1"`
 	OrderBy    string `json:"order_by" form:"order_by" binding:"omitempty"`
+	GroupBy    string `json:"-"`
 }
 
 type ListResponse struct {

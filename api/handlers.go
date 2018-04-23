@@ -1018,6 +1018,14 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	}
 
 	// order, limit, offset
+
+	// Special case for collection pages.
+	// We need to order by ccu position first
+	if len(r.CollectionsFilter.Collections) == 1 {
+		r.GroupBy = "id, ccu.position"
+		r.OrderBy = "ccu.position desc, (coalesce(properties->>'film_date', created_at::text))::date desc, created_at desc"
+	}
+
 	_, offset, err := appendListMods(&mods, r.ListRequest)
 	if err != nil {
 		return nil, NewBadRequestError(err)
@@ -1237,8 +1245,12 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 // It returns the limit, offset and error if any
 func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
 
-	// group by id to remove duplicates
-	*mods = append(*mods, qm.GroupBy("id"))
+	// group to remove duplicates
+	if r.GroupBy == "" {
+		*mods = append(*mods, qm.GroupBy("id"))
+	} else {
+		*mods = append(*mods, qm.GroupBy(r.GroupBy))
+	}
 
 	if r.OrderBy == "" {
 		*mods = append(*mods,
