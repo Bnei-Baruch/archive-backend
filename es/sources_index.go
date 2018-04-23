@@ -61,7 +61,7 @@ func (index *SourcesIndex) Add(scope Scope) error {
 func (index *SourcesIndex) Update(scope Scope) error {
 	log.Infof("Sources Index - Update. Scope: %+v.", scope)
 	if scope.SourceUID != "" {
-		removed, err := index.removeFromIndexQuery(elastic.NewTermsQuery("mdb_uid", scope.SourceUID))
+		removed, err := index.removeFromIndex(scope)
 		if err != nil {
 			return err
 		}
@@ -79,7 +79,7 @@ func (index *SourcesIndex) Delete(scope Scope) error {
 	log.Infof("Sources Index - Delete. Scope: %+v.", scope)
 	// We only delete sources when source is deleted, otherwise we just update.
 	if scope.SourceUID != "" {
-		if _, err := index.removeFromIndexQuery(elastic.NewTermsQuery("mdb_uid", scope.SourceUID)); err != nil {
+		if _, err := index.removeFromIndex(scope); err != nil {
 			return err
 		}
 		scope.SourceUID = ""
@@ -89,6 +89,16 @@ func (index *SourcesIndex) Delete(scope Scope) error {
 		return index.Update(scope)
 	}
 	return nil
+}
+
+func (index *SourcesIndex) removeFromIndex(scope Scope) ([]string, error) {
+
+	if scope.SourceUID != "" {
+		return index.removeFromIndexQuery(elastic.NewTermsQuery("mdb_uid", scope.SourceUID))
+	}
+
+	// Nothing to remove.
+	return []string{}, nil
 }
 
 func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
