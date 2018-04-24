@@ -141,6 +141,12 @@ type HomeResponse struct {
 	Banner             *Banner        `json:"banner"`
 }
 
+type StatsCUClassResponse struct {
+	Sources map[string]int64 `json:"sources"`
+	Tags    map[string]int64 `json:"tags"`
+	Persons map[string]int64 `json:"persons"`
+}
+
 func NewCollectionsResponse() *CollectionsResponse {
 	return &CollectionsResponse{Collections: make([]*Collection, 0)}
 }
@@ -151,6 +157,14 @@ func NewContentUnitsResponse() *ContentUnitsResponse {
 
 func NewPublishersResponse() *PublishersResponse {
 	return &PublishersResponse{Publishers: make([]*Publisher, 0)}
+}
+
+func NewStatsCUClassResponse() *StatsCUClassResponse {
+	return &StatsCUClassResponse{
+		Sources: make(map[string]int64),
+		Tags:    make(map[string]int64),
+		Persons: make(map[string]int64),
+	}
 }
 
 type Collection struct {
