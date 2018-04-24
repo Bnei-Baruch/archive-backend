@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -120,7 +120,7 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 		if err != nil {
 			return []string{}, err
 		}
-        typedUIDs = append(typedUIDs, uidsToTypedUIDs("content_unit", moreUIDs)...)
+		typedUIDs = append(typedUIDs, uidsToTypedUIDs("content_unit", moreUIDs)...)
 	}
 	if scope.CollectionUID != "" {
 		typedUIDs = append(typedUIDs, uidToTypedUID("collection", scope.CollectionUID))
@@ -366,9 +366,9 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 							log.Errorf("Content Units Index - Error %+v", err)
 						} else {
 							unit.Transcript, err = index.parseDocx(val[0])
-                            if unit.Transcript == "" {
-                                log.Warnf("Content Units Index - Transcript empty: %s", val[0])
-                            }
+							if unit.Transcript == "" {
+								log.Warnf("Content Units Index - Transcript empty: %s", val[0])
+							}
 							if err != nil {
 								log.Errorf("Content Units Index - Error parsing docx: %s", val[0])
 							} else {
@@ -386,7 +386,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
-        // Copy for logging purposes only.
+		// Copy for logging purposes only.
 		vCopy := v
 		if len(vCopy.Transcript) > 30 {
 			vCopy.Transcript = fmt.Sprintf("%s...", vCopy.Transcript[:30])

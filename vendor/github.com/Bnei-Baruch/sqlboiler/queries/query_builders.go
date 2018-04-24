@@ -7,13 +7,17 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/volatiletech/sqlboiler/strmangle"
+	"github.com/Bnei-Baruch/sqlboiler/strmangle"
 )
 
 var (
 	rgxIdentifier = regexp.MustCompile(`^(?i)"?[a-z_][_a-z0-9]*"?(?:\."?[_a-z][_a-z0-9]*"?)*$`)
 	rgxInClause   = regexp.MustCompile(`^(?i)(.*[\s|\)|\?])IN([\s|\(|\?].*)$`)
 )
+
+func BuildQuery(q *Query) (string, []interface{}) {
+	return buildQuery(q)
+}
 
 func buildQuery(q *Query) (string, []interface{}) {
 	var buf *bytes.Buffer

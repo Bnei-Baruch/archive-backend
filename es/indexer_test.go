@@ -18,12 +18,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Bnei-Baruch/sqlboiler/boil"
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/volatiletech/sqlboiler/boil"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/olivere/elastic.v5"
 	"gopkg.in/volatiletech/null.v6"
 
@@ -923,9 +923,9 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *e
 	for _, hit := range res.Hits.Hits {
 		var cu es.ContentUnit
 		json.Unmarshal(*hit.Source, &cu)
-        if cu.Transcript != "" {
-            transcriptLengths = append(transcriptLengths, len(cu.Transcript))
-        }
+		if cu.Transcript != "" {
+			transcriptLengths = append(transcriptLengths, len(cu.Transcript))
+		}
 	}
 
 	if expectedTranscriptLength.Valid {
@@ -1093,7 +1093,7 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	transcriptContent := "1234"
 	suite.serverResponses["/dEvgPVpr"] = transcriptContent
 	file := mdbmodels.File{ID: 1, Name: "heb_o_rav_2017-05-25_lesson_achana_n1_p0.doc", UID: "dEvgPVpr", Language: null.String{"he", true}, Secure: 0, Published: true}
-    f1UID := suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
+	f1UID := suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
 	r.Nil(indexer.FileUpdate(f1UID))
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
 	suite.validateContentUnitFiles(indexNameHe, indexer, []string{"he"}, null.Int{len(transcriptContent), true})

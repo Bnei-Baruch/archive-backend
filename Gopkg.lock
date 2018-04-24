@@ -2,6 +2,17 @@
 
 
 [[projects]]
+  branch = "master"
+  name = "github.com/Bnei-Baruch/sqlboiler"
+  packages = [
+    "boil",
+    "queries",
+    "queries/qm",
+    "strmangle"
+  ]
+  revision = "c0262723a40fe7bc0e33a8d92bb0d62ab368386d"
+
+[[projects]]
   name = "github.com/Sirupsen/logrus"
   packages = ["."]
   revision = "1deb2db2a6fff8a35532079061b903c3a25eed52"
@@ -202,17 +213,6 @@
   revision = "e7201282ae8da26cd97aed2e516f75c0bd91bb93"
 
 [[projects]]
-  name = "github.com/volatiletech/sqlboiler"
-  packages = [
-    "boil",
-    "queries",
-    "queries/qm",
-    "strmangle"
-  ]
-  revision = "6b95e5d3d7840a737841e2eb446e1c82641f8393"
-  version = "v2.6.0"
-
-[[projects]]
   name = "golang.org/x/net"
   packages = ["context"]
   revision = "fe686d45ea04bc1bd4eff6a52865ce8757320325"
@@ -282,6 +282,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "568ba233c6c5c6798b1d034ef5f1097a0e8d6918327d37423d486e81fa00e0f2"
+  inputs-digest = "6c5b644541b2024109e63f9a02ecbea7c4d768182f25aaba939e85169e7c29b4"
   solver-name = "gps-cdcl"
   solver-version = 1
