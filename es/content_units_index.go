@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"

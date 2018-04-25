@@ -6,9 +6,9 @@ This is a modified version of the github.com/Bnei-Baruch/mdb/api/registry.go
 */
 
 import (
+	"github.com/Bnei-Baruch/sqlboiler/boil"
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
-	"github.com/volatiletech/sqlboiler/boil"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )

@@ -18,12 +18,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Bnei-Baruch/sqlboiler/boil"
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/volatiletech/sqlboiler/boil"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/olivere/elastic.v5"
 	"gopkg.in/volatiletech/null.v6"
 

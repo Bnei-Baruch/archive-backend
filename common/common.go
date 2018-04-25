@@ -4,10 +4,10 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/Bnei-Baruch/sqlboiler/boil"
 	log "github.com/Sirupsen/logrus"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
-	"github.com/volatiletech/sqlboiler/boil"
 	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/es"

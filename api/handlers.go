@@ -12,12 +12,12 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Bnei-Baruch/sqlboiler/boil"
+	"github.com/Bnei-Baruch/sqlboiler/queries"
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"github.com/volatiletech/sqlboiler/boil"
-	"github.com/volatiletech/sqlboiler/queries"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v5"
 
@@ -585,6 +585,16 @@ func SemiQuasiDataHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func StatsCUClassHandler(c *gin.Context) {
+	var r ContentUnitsRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	resp, err := handleStatsCUClass(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
 func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
@@ -1017,6 +1027,14 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	}
 
 	// order, limit, offset
+
+	// Special case for collection pages.
+	// We need to order by ccu position first
+	if len(r.CollectionsFilter.Collections) == 1 {
+		r.GroupBy = "id, ccu.position"
+		r.OrderBy = "ccu.position desc, (coalesce(properties->>'film_date', created_at::text))::date desc, created_at desc"
+	}
+
 	_, offset, err := appendListMods(&mods, r.ListRequest)
 	if err != nil {
 		return nil, NewBadRequestError(err)
@@ -1232,12 +1250,116 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 	return sqd, nil
 }
 
+func handleStatsCUClass(db *sql.DB, r ContentUnitsRequest) (*StatsCUClassResponse, *HttpError) {
+	mods := []qm.QueryMod{
+		qm.Select("id"),
+		SECURE_PUBLISHED_MOD,
+	}
+
+	// filters
+	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendSourcesFilterMods(db, &mods, r.SourcesFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			return nil, e
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendCollectionsFilterMods(db, &mods, r.CollectionsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
+
+	qq := fmt.Sprintf(`with fcu as (%s)
+select
+  's',
+  s.uid,
+  count(cus.content_unit_id)
+from sources s
+  inner join content_units_sources cus on s.id = cus.source_id
+  inner join fcu on cus.content_unit_id = fcu.id
+group by s.id
+union
+select
+  't',
+  t.uid,
+  count(cut.content_unit_id)
+from tags t
+  inner join content_units_tags cut on t.id = cut.tag_id
+  inner join fcu on cut.content_unit_id = fcu.id
+group by t.id
+union
+select
+  'p',
+  p.uid,
+  count(cup.content_unit_id)
+from persons p
+  inner join content_units_persons cup on p.id = cup.person_id
+  inner join fcu on cup.content_unit_id = fcu.id
+group by p.id`, q[:len(q)-1])
+
+	rows, err := queries.Raw(db, qq, args...).Query()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	resp := NewStatsCUClassResponse()
+
+	for rows.Next() {
+		var typ, key string
+		var val int64
+		if err := rows.Scan(&typ, &key, &val); err != nil {
+			return nil, NewInternalError(err)
+		}
+
+		switch typ {
+		case "s":
+			resp.Sources[key] += val
+		case "t":
+			resp.Tags[key] += val
+		case "p":
+			resp.Persons[key] += val
+		default:
+			return nil, NewInternalError(errors.Errorf("Unknown classification notation: %s", typ))
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	return resp, nil
+}
+
 // appendListMods compute and appends the OrderBy, Limit and Offset query mods.
 // It returns the limit, offset and error if any
 func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
 
-	// group by id to remove duplicates
-	*mods = append(*mods, qm.GroupBy("id"))
+	// group to remove duplicates
+	if r.GroupBy == "" {
+		*mods = append(*mods, qm.GroupBy("id"))
+	} else {
+		*mods = append(*mods, qm.GroupBy(r.GroupBy))
+	}
 
 	if r.OrderBy == "" {
 		*mods = append(*mods,
