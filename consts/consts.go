@@ -187,3 +187,11 @@ const ES_CLASSIFICATIONS_INDEX = "classifications"
 const ES_UNITS_INDEX = "units"
 const ES_COLLECTIONS_INDEX = "collections"
 const ES_SOURCES_INDEX = "sources"
+
+type SEARCH_STATUS int
+
+const (
+	NO_FILTER SEARCH_STATUS = iota
+	ONLY_SOURCES
+	WITHOUT_SOURCES
+)

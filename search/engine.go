@@ -189,7 +189,8 @@ func createContentUnitsQuery(q Query) elastic.Query {
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
 }
 
-func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query, sortBy string, from int, size int, preference string) {
+func GetContentUnitsSearchRequests(query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
+	requests := make([]*elastic.SearchRequest, 0)
 	content_units_indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
 		content_units_indices[i] = es.IndexName("prod", consts.ES_UNITS_INDEX, query.LanguageOrder[i])
@@ -221,8 +222,9 @@ func AddContentUnitsSearchRequests(mss *elastic.MultiSearchService, query Query,
 			SearchSource(searchSource).
 			Index(index).
 			Preference(preference)
-		mss.Add(request)
+		requests = append(requests, request)
 	}
+	return requests
 }
 
 func createCollectionsQuery(q Query) elastic.Query {
@@ -295,7 +297,8 @@ func createCollectionsQuery(q Query) elastic.Query {
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
 }
 
-func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, sortBy string, from int, size int, preference string) {
+func GetCollectionsSearchRequests(query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
+	requests := make([]*elastic.SearchRequest, 0)
 	collections_indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
 		collections_indices[i] = es.IndexName("prod", consts.ES_COLLECTIONS_INDEX, query.LanguageOrder[i])
@@ -325,8 +328,9 @@ func AddCollectionsSearchRequests(mss *elastic.MultiSearchService, query Query, 
 			SearchSource(searchSource).
 			Index(index).
 			Preference(preference)
-		mss.Add(request)
+		requests = append(requests, request)
 	}
+	return requests
 }
 
 func createSourcesQuery(q Query) elastic.Query {
@@ -383,8 +387,9 @@ func createSourcesQuery(q Query) elastic.Query {
 	return elastic.NewFunctionScoreQuery().Query(query)
 }
 
-func AddSourcesSearchRequests(mss *elastic.MultiSearchService, query Query, from int, size int, preference string) {
+func GetSourcesSearchRequests(query Query, from int, size int, preference string) []*elastic.SearchRequest {
 	sources_indices := make([]string, len(query.LanguageOrder))
+	requests := make([]*elastic.SearchRequest, 0)
 	for i := range query.LanguageOrder {
 		sources_indices[i] = es.IndexName("prod", consts.ES_SOURCES_INDEX, query.LanguageOrder[i])
 	}
@@ -411,8 +416,9 @@ func AddSourcesSearchRequests(mss *elastic.MultiSearchService, query Query, from
 			SearchSource(searchSource).
 			Index(index).
 			Preference(preference)
-		mss.Add(request)
+		requests = append(requests, request)
 	}
+	return requests
 }
 
 func haveHits(r *elastic.SearchResult) bool {
@@ -444,7 +450,26 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 	}
 }
 
-func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) (*elastic.SearchResult, error) {
+func joinResponses(sortBy string, from int, size int, results ...*elastic.SearchResult) (*elastic.SearchResult, error) {
+
+	var joinedResults *elastic.SearchResult
+	var err error
+
+	for _, result := range results {
+		if joinedResults == nil {
+			joinedResults = result
+		} else {
+			joinedResults, err = joinTwoResponses(joinedResults, result, sortBy, from, size)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return joinedResults, nil
+}
+
+func joinTwoResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) (*elastic.SearchResult, error) {
 	log.Infof("%+v %+v", r1, r2)
 
 	if !haveHits(r1) {
@@ -494,32 +519,31 @@ func joinResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy st
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
 	log.Infof("Query: %+v sort by: %s, from: %d, size: %d", query, sortBy, from, size)
 	multiSearchService := e.esc.MultiSearch()
+	requests := make([]*elastic.SearchRequest, 0)
+	requestsByIndex := make(map[string][]*elastic.SearchRequest)
 
-	var indexesCount int
-	if len(query.Filters) == 0 {
-		log.Info("No section or filter selected. Searching in all indexes.")
-		indexesCount = 3
-	} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SOURCE]]; ok {
-		log.Info("Searching by source filter. Searching in all indexes.")
-		indexesCount = 3
-	} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
-		log.Info("Sources section selected. Searching only in sources.")
-		indexesCount = 1
-	} else {
-		log.Info("Non sources section selected. Searching only in content units and collections.")
-		indexesCount = 2
+	status := consts.NO_FILTER
+	if len(query.Filters) > 0 {
+		if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
+			status = consts.ONLY_SOURCES
+		} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SOURCE]]; ok {
+			status = consts.NO_FILTER
+		} else {
+			status = consts.WITHOUT_SOURCES
+		}
 	}
 
-	if indexesCount >= 2 {
-		// Content Units
-		AddContentUnitsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
-		// Collections
-		AddCollectionsSearchRequests(multiSearchService, query, sortBy, 0, from+size, preference)
+	if status != consts.ONLY_SOURCES {
+		requestsByIndex[consts.ES_UNITS_INDEX] = append(requests, GetContentUnitsSearchRequests(query, sortBy, 0, from+size, preference)...)
+		requestsByIndex[consts.ES_COLLECTIONS_INDEX] = append(requests, GetCollectionsSearchRequests(query, sortBy, 0, from+size, preference)...)
 	}
 
-	if indexesCount == 1 || indexesCount == 3 {
-		// Sources
-		AddSourcesSearchRequests(multiSearchService, query, 0, from+size, preference)
+	if status != consts.WITHOUT_SOURCES {
+		requestsByIndex[consts.ES_SOURCES_INDEX] = append(requests, GetSourcesSearchRequests(query, 0, from+size, preference)...)
+	}
+
+	for _, k := range requestsByIndex {
+		multiSearchService.Add(k...)
 	}
 
 	// Do search.
@@ -529,51 +553,32 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		return nil, errors.Wrap(err, "ES error.")
 	}
 
-	if len(mr.Responses) != indexesCount*len(query.LanguageOrder) {
+	if len(mr.Responses) != len(requestsByIndex)*len(query.LanguageOrder) {
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
-			len(mr.Responses), indexesCount*len(query.LanguageOrder)))
+			len(mr.Responses), len(requestsByIndex)*len(query.LanguageOrder)))
 	}
 
-	// Interleave content units and collection results by language.
+	var results []*elastic.SearchResult
+
+	// Interleave results by language.
 	// Then go over responses and choose first not empty retults list.
 	for i := 0; i < len(query.LanguageOrder); i++ {
 
-		var cuR *elastic.SearchResult
-		var cR *elastic.SearchResult
-		var sR *elastic.SearchResult
-		var joinedR *elastic.SearchResult
-
-		if indexesCount >= 2 {
-			cuR = mr.Responses[i]
-			if cuR.Error != nil {
-				log.Warnf("%+v", cuR.Error)
-				return nil, errors.New("Failed multi get.")
-			}
-			cR = mr.Responses[i+len(query.LanguageOrder)]
-			if cR.Error != nil {
-				log.Warnf("%+v", cR.Error)
-				return nil, errors.New("Failed multi get.")
-			}
+		currentResults := mr.Responses[i+(len(query.LanguageOrder)*(len(requestsByIndex)-1))]
+		if currentResults.Error != nil {
+			log.Warnf("%+v", currentResults.Error)
+			return nil, errors.New("Failed multi get.")
 		}
 
-		if indexesCount == 1 || indexesCount == 3 {
-			sR = mr.Responses[i+(len(query.LanguageOrder)*(indexesCount-1))]
-			if sR.Error != nil {
-				log.Warnf("%+v", sR.Error)
-				return nil, errors.New("Failed multi get.")
-			}
+		if haveHits(currentResults) {
+			results = append(results, currentResults)
 		}
+	}
 
-		if haveHits(cuR) || haveHits(cR) {
-			joinedR, err = joinResponses(cuR, cR, sortBy, from, size)
-			if err != nil {
-				return joinedR, err
-			}
-		}
-		if haveHits(joinedR) || haveHits(sR) {
-			joinedR, err = joinResponses(joinedR, sR, sortBy, from, size)
-			return joinedR, err
-		}
+	ret, err := joinResponses(sortBy, from, size, results...)
+	if ret != nil && ret.Hits != nil {
+		log.Debugf("Res: %+v", ret.Hits)
+		return ret, err
 	}
 
 	if len(mr.Responses) > 0 {
