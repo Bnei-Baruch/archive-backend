@@ -12,14 +12,17 @@ import (
 )
 
 type SearchLog struct {
-	Created  time.Time   `json:"created",omitempty`
-	Query    Query       `json:"query"`
-	Results  interface{} `json:"results,omitempty"`
-	Error    interface{} `json:"error,omitempty"`
-	SortBy   string      `json:"sort_by,omitempty"`
-	From     uint64      `json:"from"`
-	Size     uint64      `json:"size,omitempty"`
-	SearchId string      `json:"search_id"`
+	Created     time.Time   `json:"created",omitempty`
+	Query       Query       `json:"query"`
+	QueryResult interface{} `json:"query_result,omitempty"`
+	Error       interface{} `json:"error,omitempty"`
+	SortBy      string      `json:"sort_by,omitempty"`
+	From        uint64      `json:"from"`
+	Size        uint64      `json:"size,omitempty"`
+	SearchId    string      `json:"search_id"`
+
+	// Deprecated field.
+	Results interface{} `json:"results,omitempty"`
 }
 
 type SearchClick struct {
@@ -105,7 +108,7 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, indexTyp
 	return nil
 }
 
-func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, res *elastic.SearchResult) error {
+func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, res *QueryResult) error {
 	return searchLogger.logSearch(query, sortBy, from, size, searchId, res, nil)
 }
 
@@ -125,31 +128,34 @@ func (searchLogger *SearchLogger) fixHighlight(h *elastic.SearchHitHighlight) *e
 	return &hRet
 }
 
-func (searchLogger *SearchLogger) fixResults(res *elastic.SearchResult) *elastic.SearchResult {
-	if res.Hits != nil && res.Hits.Hits != nil && len(res.Hits.Hits) > 0 {
-		hitsCopy := make([]*elastic.SearchHit, len(res.Hits.Hits))
-		for i, h := range res.Hits.Hits {
+// Should not change the input, should copy hit and fix highlight fields.
+func (searchLogger *SearchLogger) fixResults(res *QueryResult) *QueryResult {
+	if res.SearchResult.Hits != nil && res.SearchResult.Hits.Hits != nil && len(res.SearchResult.Hits.Hits) > 0 {
+		hitsCopy := make([]*elastic.SearchHit, len(res.SearchResult.Hits.Hits))
+		for i, h := range res.SearchResult.Hits.Hits {
 			hCopy := *h
 			hCopy.Highlight = *searchLogger.fixHighlight(&hCopy.Highlight)
 			hitsCopy[i] = &hCopy
 		}
+		searchResultCopy := *res.SearchResult
+		searchResultCopy.Hits.Hits = hitsCopy
 		resCopy := *res
-		resCopy.Hits.Hits = hitsCopy
+		resCopy.SearchResult = &searchResultCopy
 		return &resCopy
 	}
 	return res
 }
 
-func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, res *elastic.SearchResult, searchErr interface{}) error {
+func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, res *QueryResult, searchErr interface{}) error {
 	sl := SearchLog{
-		Created:  time.Now(),
-		Query:    query,
-		Results:  searchLogger.fixResults(res),
-		Error:    searchErr,
-		SortBy:   sortBy,
-		From:     uint64(from),
-		Size:     uint64(size),
-		SearchId: searchId,
+		Created:     time.Now(),
+		Query:       query,
+		QueryResult: searchLogger.fixResults(res),
+		Error:       searchErr,
+		SortBy:      sortBy,
+		From:        uint64(from),
+		Size:        uint64(size),
+		SearchId:    searchId,
 	}
 	resp, err := searchLogger.esc.Index().
 		Index("search_logs").

@@ -219,3 +219,11 @@ var FILTERS = map[string]string{
 const ES_CLASSIFICATIONS_INDEX = "classifications"
 const ES_UNITS_INDEX = "units"
 const ES_COLLECTIONS_INDEX = "collections"
+
+// Classicication index consts.
+const (
+	SOURCES_INDEX_TYPE         = "sources"
+	TAGS_INDEX_TYPE            = "tags"
+	SOURCE_CLASSIFICATION_TYPE = "source"
+	TAG_CLASSIFICATION_TYPE    = "tag"
+)
