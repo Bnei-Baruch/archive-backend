@@ -45,7 +45,7 @@ func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 }
 
 func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}, error) {
-	// figure out index names from language order
+	// Figure out index names from language order.
 	indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
 		indices[i] = es.IndexName("prod", consts.ES_CLASSIFICATIONS_INDEX, query.LanguageOrder[i])
@@ -516,7 +516,7 @@ func joinTwoResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy
 	return &result, nil
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (interface{}, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*elastic.SearchResult, error) {
 	log.Infof("Query: %+v sort by: %s, from: %d, size: %d", query, sortBy, from, size)
 	multiSearchService := e.esc.MultiSearch()
 	requests := make([]*elastic.SearchRequest, 0)

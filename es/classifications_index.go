@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -39,21 +39,16 @@ func (index *ClassificationsIndex) ReindexAll() error {
 	return index.addSourcesToIndexSql("TRUE")
 }
 
-func (index *ClassificationsIndex) Add(scope Scope) error {
-	log.Info("Classifications Index - Add. Scope: %+v.", scope)
-	return index.addToIndex(scope)
-}
-
 func (index *ClassificationsIndex) Update(scope Scope) error {
-	log.Info("Classifications Index - Update. Scope: %+v.", scope)
-	if err := index.Delete(scope); err != nil {
+	log.Infof("Classifications Index - Update. Scope: %+v.", scope)
+	if err := index.removeFromIndex(scope); err != nil {
 		return err
 	}
 	return index.addToIndex(scope)
 }
 
-func (index *ClassificationsIndex) Delete(scope Scope) error {
-	log.Info("Classifications Index - Delete. Scope: %+v.", scope)
+func (index *ClassificationsIndex) removeFromIndex(scope Scope) error {
+	log.Infof("Classifications Index - removeFromIndex. Scope: %+v.", scope)
 	if scope.TagUID != "" {
 		if err := index.removeFromIndexQuery(elastic.NewTermsQuery("mdb_uid", scope.TagUID)); err != nil {
 			return err
@@ -82,7 +77,7 @@ func (index *ClassificationsIndex) addTagsToIndexSql(sqlScope string) error {
 		qm.Load("TagI18ns"),
 		qm.Where(sqlScope)).All()
 	if err != nil {
-		return errors.Wrap(err, "Fetch tags from mdb")
+		return errors.Wrap(err, "Classifications Index - Fetch tags from mdb.")
 	}
 	log.Infof("Classifications Index - Adding %d tags. Scope: %s.", len(tags), sqlScope)
 
@@ -103,7 +98,7 @@ func (index *ClassificationsIndex) addSourcesToIndexSql(sqlScope string) error {
 		qm.Load("SourceI18ns"),
 		qm.Where(sqlScope)).All()
 	if err != nil {
-		return errors.Wrap(err, "Fetch sources from mdb.")
+		return errors.Wrap(err, "Classifications Index - Fetch sources from mdb.")
 	}
 	log.Infof("Classifications Index - Adding %d sources. Scope: %s.", len(sources), sqlScope)
 
@@ -131,10 +126,10 @@ func (index *ClassificationsIndex) removeFromIndexQuery(elasticScope elastic.Que
 			Query(elasticScope).
 			Do(context.TODO())
 		if err != nil {
-			return errors.Wrapf(err, "Remove from index %s %+v\n", indexName, elasticScope)
+			return errors.Wrapf(err, "Classifications Index - Remove from index %s %+v\n", indexName, elasticScope)
 		}
 		if res.Deleted > 0 {
-			fmt.Printf("Deleted %d documents from %s.\n", res.Deleted, indexName)
+			fmt.Printf("Classifications Index - Deleted %d documents from %s.\n", res.Deleted, indexName)
 		}
 		// If not exists Deleted will be 0.
 		// if resp.Deleted != int64(len(uids)) {
@@ -166,10 +161,10 @@ func (index *ClassificationsIndex) indexTag(t *mdbmodels.Tag) error {
 				BodyJson(c).
 				Do(context.TODO())
 			if err != nil {
-				return errors.Wrapf(err, "Index tag %s %s", name, t.UID)
+				return errors.Wrapf(err, "Classifications Index - Index tag %s %s", name, t.UID)
 			}
 			if !resp.Created {
-				return errors.Errorf("Not created: tag %s %s", name, t.UID)
+				return errors.Errorf("Classifications Index - Not created: tag %s %s", name, t.UID)
 			}
 		}
 	}
@@ -202,10 +197,10 @@ func (index *ClassificationsIndex) indexSource(s *mdbmodels.Source) error {
 				BodyJson(c).
 				Do(context.TODO())
 			if err != nil {
-				return errors.Wrapf(err, "Index source %s %s.", name, s.UID)
+				return errors.Wrapf(err, "Classifications Index - Index source %s %s.", name, s.UID)
 			}
 			if !resp.Created {
-				return errors.Errorf("Not created: source %s %s.", name, s.UID)
+				return errors.Errorf("Classifications Index - Not created: source %s %s.", name, s.UID)
 			}
 		}
 	}

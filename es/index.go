@@ -30,9 +30,7 @@ type Scope struct {
 
 type Index interface {
 	ReindexAll() error
-	Add(scope Scope) error
 	Update(scope Scope) error
-	Delete(scope Scope) error
 	CreateIndex() error
 	DeleteIndex() error
 	RefreshIndex() error

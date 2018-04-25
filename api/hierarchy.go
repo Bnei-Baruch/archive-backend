@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/lib/pq"
-	"github.com/volatiletech/sqlboiler/queries"
 	"gopkg.in/gin-gonic/gin.v1"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"

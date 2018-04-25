@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/viper"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -23,11 +23,11 @@ var httpClient = &http.Client{
 }
 
 func CollectionCreate(d Data) {
-	putToIndexer(indexer.CollectionAdd, d.Payload["uid"].(string))
+	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
 }
 
 func CollectionDelete(d Data) {
-	putToIndexer(indexer.CollectionDelete, d.Payload["uid"].(string))
+	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
 }
 
 func CollectionUpdate(d Data) {
@@ -43,11 +43,11 @@ func CollectionContentUnitsChange(d Data) {
 }
 
 func ContentUnitCreate(d Data) {
-	putToIndexer(indexer.ContentUnitAdd, d.Payload["uid"].(string))
+	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitDelete(d Data) {
-	putToIndexer(indexer.ContentUnitDelete, d.Payload["uid"].(string))
+	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
 }
 
 func ContentUnitUpdate(d Data) {
@@ -100,7 +100,7 @@ func ContentUnitPublishersChange(d Data) {
 }
 
 func FilePublished(d Data) {
-	putToIndexer(indexer.FileAdd, d.Payload["uid"].(string))
+	putToIndexer(indexer.FileUpdate, d.Payload["uid"].(string))
 
 	uid := d.Payload["uid"].(string)
 	file, err := mdbmodels.FilesG(qm.Where("uid=?", uid)).One()
@@ -130,12 +130,12 @@ func FileReplace(d Data) {
 	oFile := d.Payload["old"].(map[string]interface{})
 	nFile := d.Payload["new"].(map[string]interface{})
 
-	putToIndexer(indexer.FileDelete, oFile["uid"].(string))
-	putToIndexer(indexer.FileAdd, nFile["uid"].(string))
+	putToIndexer(indexer.FileUpdate, oFile["uid"].(string))
+	putToIndexer(indexer.FileUpdate, nFile["uid"].(string))
 }
 
 func FileInsert(d Data) {
-	putToIndexer(indexer.FileAdd, d.Payload["uid"].(string))
+	putToIndexer(indexer.FileUpdate, d.Payload["uid"].(string))
 }
 
 func FileUpdate(d Data) {
@@ -145,7 +145,7 @@ func FileUpdate(d Data) {
 }
 
 func SourceCreate(d Data) {
-	putToIndexer(indexer.SourceAdd, d.Payload["uid"].(string))
+	putToIndexer(indexer.SourceUpdate, d.Payload["uid"].(string))
 }
 
 func SourceUpdate(d Data) {
@@ -153,7 +153,7 @@ func SourceUpdate(d Data) {
 }
 
 func TagCreate(d Data) {
-	putToIndexer(indexer.TagAdd, d.Payload["uid"].(string))
+	putToIndexer(indexer.TagUpdate, d.Payload["uid"].(string))
 }
 
 func TagUpdate(d Data) {
@@ -161,11 +161,11 @@ func TagUpdate(d Data) {
 }
 
 func PersonCreate(d Data) {
-	putToIndexer(indexer.PersonAdd, d.Payload["uid"].(string))
+	putToIndexer(indexer.PersonUpdate, d.Payload["uid"].(string))
 }
 
 func PersonDelete(d Data) {
-	putToIndexer(indexer.PersonDelete, d.Payload["uid"].(string))
+	putToIndexer(indexer.PersonUpdate, d.Payload["uid"].(string))
 }
 
 func PersonUpdate(d Data) {
@@ -173,7 +173,7 @@ func PersonUpdate(d Data) {
 }
 
 func PublisherCreate(d Data) {
-	putToIndexer(indexer.PublisherAdd, d.Payload["uid"].(string))
+	putToIndexer(indexer.PublisherUpdate, d.Payload["uid"].(string))
 }
 
 func PublisherUpdate(d Data) {

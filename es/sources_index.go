@@ -9,11 +9,11 @@ import (
 	"os"
 	"path"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries"
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"github.com/volatiletech/sqlboiler/queries"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -61,16 +61,17 @@ func (index *SourcesIndex) Add(scope Scope) error {
 func (index *SourcesIndex) Update(scope Scope) error {
 	log.Infof("Sources Index - Update. Scope: %+v.", scope)
 	if scope.SourceUID != "" {
-		removed, err := index.removeFromIndex(scope)
+		//removed, err := index.removeFromIndex(scope)
+		_, err := index.removeFromIndex(scope)
 		if err != nil {
 			return err
 		}
-		if len(removed) > 0 && removed[0] == scope.SourceUID {
-			sqlScope := fmt.Sprintf("source.uid = '%s'", scope.SourceUID)
-			if err := index.addToIndexSql(sqlScope); err != nil {
-				return errors.Wrap(err, "Sources index addToIndexSql")
-			}
+		//if len(removed) > 0 && removed[0] == scope.SourceUID {
+		sqlScope := fmt.Sprintf("source.uid = '%s'", scope.SourceUID)
+		if err := index.addToIndexSql(sqlScope); err != nil {
+			return errors.Wrap(err, "Sources index addToIndexSql")
 		}
+		//}
 	}
 	return nil
 }

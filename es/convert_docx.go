@@ -13,13 +13,19 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"github.com/volatiletech/sqlboiler/queries"
 )
 
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
 func DownloadAndConvert(docBatch [][]string) error {
+	log.Infof("DownloadAndConvert: %+v", docBatch)
 	var convertDocs []string
 	for _, docSource := range docBatch {
 		uid := docSource[0]
@@ -42,7 +48,7 @@ func DownloadAndConvert(docBatch [][]string) error {
 		}
 
 		// Download doc.
-		resp, err := http.Get(fmt.Sprintf("%s/%s", cdnUrl, uid))
+		resp, err := httpClient.Get(fmt.Sprintf("%s/%s", cdnUrl, uid))
 		if err != nil {
 			log.Warnf("Error downloading, Error: %+v", err)
 			return err
@@ -72,6 +78,7 @@ func DownloadAndConvert(docBatch [][]string) error {
 		}
 	}
 
+	log.Infof("Converting: %+v", convertDocs)
 	if len(convertDocs) > 0 {
 		sofficeMutex.Lock()
 		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", docFolder}, convertDocs...)
@@ -90,13 +97,13 @@ func DownloadAndConvert(docBatch [][]string) error {
 		}
 	}
 
+	log.Info("DownloadAndConvert done.")
 	return nil
 }
 
+// Will return empty string if no rows returned.
 func LoadDocFilename(db *sql.DB, fileUID string) (string, error) {
-
 	var fileName string
-
 	err := queries.Raw(db, `
 SELECT name
 FROM files
@@ -106,11 +113,13 @@ WHERE name ~ '.docx?' AND
 	secure=0 AND published IS TRUE
 	AND uid = $1;`, fileUID).QueryRow().Scan(&fileName)
 
-	if err != nil {
-		return "", errors.Wrapf(err, "Load doc %s", fileUID)
+	if err == sql.ErrNoRows {
+		return "", nil
+	} else if err != nil {
+		return "", errors.Wrapf(err, "LoadDocFilename - %s", fileUID)
+	} else {
+		return fileName, nil
 	}
-
-	return fileName, nil
 }
 
 var sofficeMutex = &sync.Mutex{}
