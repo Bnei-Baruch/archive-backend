@@ -1,6 +1,7 @@
 package search
 
 import (
+	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -14,7 +15,6 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
 )
 
 // Search quality enum. Order important, the lower (higher integer) the better.
@@ -247,9 +247,14 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 		r.err = errors.New(errMsg)
 		return r
 	}
-	searchResult := elastic.SearchResult{}
+	queryResult := QueryResult{}
 	defer resp.Body.Close()
-	if err := json.NewDecoder(resp.Body).Decode(&searchResult); err != nil {
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(resp.Body)
+	newStr := buf.String()
+	log.Infof("JSON: %s", newStr)
+	rrr := bytes.NewReader(buf.Bytes())
+	if err := json.NewDecoder(rrr).Decode(&queryResult); err != nil {
 		log.Warnf("Error decoding %+v", err)
 		for _ = range q.Expectations {
 			r.SearchQuality = append(r.SearchQuality, SQ_SERVER_ERROR)
@@ -258,10 +263,11 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 		r.err = err
 		return r
 	}
+	log.Infof("EvaluateQuery - searchResult: %+v", queryResult)
 	for j, e := range q.Expectations {
 		sq := SQ_UNKNOWN
 		rank := -1
-		for i, hit := range searchResult.Hits.Hits {
+		for i, hit := range queryResult.SearchResult.Hits.Hits {
 			mdbUid := MdbUid{}
 			if err := json.Unmarshal(*hit.Source, &mdbUid); err != nil {
 				log.Warnf("Error unmarshling source %+v", err)
