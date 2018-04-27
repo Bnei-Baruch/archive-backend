@@ -4,8 +4,8 @@
 package mdbmodels
 
 import (
-	"github.com/pkg/errors"
 	"github.com/Bnei-Baruch/sqlboiler/strmangle"
+	"github.com/pkg/errors"
 )
 
 // M type is for providing columns and column values to UpdateAll.

@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/Bnei-Baruch/sqlboiler/boil"
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/Bnei-Baruch/sqlboiler/strmangle"
+	"github.com/pkg/errors"
 )
 
 // SourceType is an object representing the database table.

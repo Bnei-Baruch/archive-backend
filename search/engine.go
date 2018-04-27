@@ -224,13 +224,17 @@ func (e *ESEngine) AddClassificationIntentSecondRound(h *elastic.SearchHit, inte
 }
 
 func (e *ESEngine) AddIntents(query *Query, preference string) error {
+	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
+		return nil
+	}
 	mssFirstRound := e.esc.MultiSearch()
 	potentialIntents := make([]Intent, 0)
 	for _, language := range query.LanguageOrder {
-		mssFirstRound.Add(SourcesIntentRequest(*query, language, preference))
-		potentialIntents = append(potentialIntents, Intent{I_SOURCE, language, nil})
+		// Order here provides the priority in results, i.e., tags are more importnt then sources.
 		mssFirstRound.Add(TagsIntentRequest(*query, language, preference))
 		potentialIntents = append(potentialIntents, Intent{I_TAG, language, nil})
+		mssFirstRound.Add(SourcesIntentRequest(*query, language, preference))
+		potentialIntents = append(potentialIntents, Intent{I_SOURCE, language, nil})
 	}
 	mr, err := mssFirstRound.Do(context.TODO())
 	if err != nil {
@@ -290,8 +294,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 					found = true
 					if h.Score != nil && *h.Score > 0 {
 						intentValue.MaxScore = h.Score
-						// if *intentValue.Score / *intentValue.MaxScore > 0.8 {
-						if *intentValue.Score > 0 {
+						if *intentValue.Score / *intentValue.MaxScore >= 0.2 {
 							if *intentValue.MaxScore < *intentValue.Score {
 								log.Warnf("ESEngine.AddIntents - Not expected score %f to be larger then max score %f for %s - %s.",
 									*intentValue.Score, *intentValue.MaxScore, intentValue.MDB_UID, intentValue.Name)
@@ -629,11 +632,20 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 		if haveHits(cuR) || haveHits(cR) {
 			ret, err := joinResponses(cuR, cR, sortBy, from, size)
-			return &QueryResult{ret, query.Intents}, errors.Wrap(err, "ESEngine.DoSearch - Failed joinResponses.")
+			// Filter intents by language
+			langIntents := make([]Intent, 0)
+			for _, intent := range query.Intents {
+				if intent.Language == query.LanguageOrder[i] {
+					langIntents = append(langIntents, intent)
+				}
+			}
+			return &QueryResult{ret, langIntents}, errors.Wrap(err, "ESEngine.DoSearch - Failed joinResponses.")
 		}
 	}
 
 	if len(mr.Responses) > 0 {
+		// This happens when there are no responses with hits.
+		// Note, we don't filter here intents by language.
 		return &QueryResult{mr.Responses[0], query.Intents}, nil
 	} else {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - No responses from multi search.")
