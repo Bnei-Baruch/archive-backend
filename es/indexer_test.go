@@ -1256,6 +1256,25 @@ func (suite *IndexerSuite) validateSourceAuthors(indexName string, indexer *es.I
 	r.ElementsMatch(expectedAuthors, authors)
 }
 
+func (suite *IndexerSuite) validateSourcesFullPath(indexName string, indexer *es.Indexer, expectedSources []string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	sources := make([]string, 0)
+	for _, hit := range res.Hits.Hits {
+		var src es.Source
+		json.Unmarshal(*hit.Source, &src)
+		for _, s := range src.Sources {
+			sources = append(sources, s)
+		}
+	}
+	r.Equal(len(expectedSources), len(sources))
+	r.ElementsMatch(expectedSources, sources)
+}
+
 func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Indexer, expectedContent string) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
@@ -1559,6 +1578,9 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	suite.validateSourceFile(indexNameEn, indexer, "TEST CONTENT")
 	suite.validateSourceFile(indexNameHe, indexer, "TEST CONTENT")
 
+	fmt.Println("Validate source full path.")
+	suite.validateSourcesFullPath(indexNameEn, indexer, []string{source1UID, "t1", "t2"})
+
 	fmt.Println("Validate adding source without file and author - should not index.")
 	source2UID := suite.us(es.Source{Name: "test-name-2", Description: "test-description-2"}, consts.LANG_ENGLISH)
 	suite.us(es.Source{MDB_UID: source2UID, Name: "שם-בדיקה-2", Description: "תיאור-בדיקה-2"}, consts.LANG_HEBREW)
@@ -1579,6 +1601,7 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	suite.validateSourceAuthors(indexNameEn, indexer, []string{"Test Name", "Test Full Name", "Test Name 2", "Test Full Name 2"})
 	suite.validateSourceAuthors(indexNameHe, indexer, []string{"שם נוסף לבדיקה", "שם מלא נוסף לבדיקה", "שם לבדיקה", "שם מלא לבדיקה"})
 	suite.validateSourceFile(indexNameEn, indexer, "TEST CONTENT")
+	suite.validateSourcesFullPath(indexNameEn, indexer, []string{source1UID, source2UID, "t1", "t2", "t3", "t4"})
 
 	fmt.Println("Remove 1 author and validate.")
 	suite.rsa(es.Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 5})

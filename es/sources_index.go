@@ -157,9 +157,14 @@ func (index *SourcesIndex) loadSources(db *sql.DB) (map[string][]string, error) 
 			  s.id,
 			  s.uid,
 			  s.position,
-			  ARRAY [a.code, s.uid] "path"
-			FROM sources s INNER JOIN authors_sources aas ON s.id = aas.source_id
+			  array_append(au.authors, s.uid) "path"
+			FROM sources s JOIN
+    
+    		(select source_id,  array_agg(a.code) as authors 
+    		from authors_sources aas 
 				INNER JOIN authors a ON a.id = aas.author_id
+   			 group by source_id ) au ON au.source_id = s.id
+    
 			UNION
 			SELECT
 			  s.id,
