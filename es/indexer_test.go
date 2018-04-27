@@ -16,6 +16,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -1218,6 +1219,7 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 		types[k] = cu.CollectionsContentTypes
 	}
 	suite.validateMaps(expectedTypes, types)
+
 }
 
 func (suite *IndexerSuite) validateSourceNames(indexName string, indexer *es.Indexer, expectedNames []string) {
@@ -1275,19 +1277,21 @@ func (suite *IndexerSuite) validateSourcesFullPath(indexName string, indexer *es
 	r.ElementsMatch(expectedSources, sources)
 }
 
-func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Indexer, expectedContent string) {
+func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Indexer, expectedContentsByNames map[string]string) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
 	var res *elastic.SearchResult
 	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
-	var content string
-	var source es.Source
-	json.Unmarshal(*res.Hits.Hits[0].Source, &source)
-	content = source.Content
+	contentsByNames := make(map[string]string)
+	for _, hit := range res.Hits.Hits {
+		var src es.Source
+		json.Unmarshal(*hit.Source, &src)
+		contentsByNames[src.Name] = src.Content
+	}
 
-	r.Equal(expectedContent, content)
+	r.True(reflect.DeepEqual(expectedContentsByNames, contentsByNames))
 }
 
 func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
@@ -1575,8 +1579,12 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	suite.validateSourceNames(indexNameHe, indexer, []string{"שם-בדיקה-1"})
 
 	fmt.Println("Validate source files.")
-	suite.validateSourceFile(indexNameEn, indexer, "TEST CONTENT")
-	suite.validateSourceFile(indexNameHe, indexer, "TEST CONTENT")
+	suite.validateSourceFile(indexNameEn, indexer, map[string]string{
+		"test-name-1": "TEST CONTENT",
+	})
+	suite.validateSourceFile(indexNameHe, indexer, map[string]string{
+		"שם-בדיקה-1": "TEST CONTENT",
+	})
 
 	fmt.Println("Validate source full path.")
 	suite.validateSourcesFullPath(indexNameEn, indexer, []string{source1UID, "t1", "t2"})
@@ -1600,7 +1608,11 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2"})
 	suite.validateSourceAuthors(indexNameEn, indexer, []string{"Test Name", "Test Full Name", "Test Name 2", "Test Full Name 2"})
 	suite.validateSourceAuthors(indexNameHe, indexer, []string{"שם נוסף לבדיקה", "שם מלא נוסף לבדיקה", "שם לבדיקה", "שם מלא לבדיקה"})
-	suite.validateSourceFile(indexNameEn, indexer, "TEST CONTENT")
+
+	suite.validateSourceFile(indexNameEn, indexer, map[string]string{
+		"test-name-1": "TEST CONTENT",
+		"test-name-2": "TEST CONTENT",
+	})
 	suite.validateSourcesFullPath(indexNameEn, indexer, []string{source1UID, source2UID, "t1", "t2", "t3", "t4"})
 
 	fmt.Println("Remove 1 author and validate.")
@@ -1615,8 +1627,8 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	UIDs := []string{source1UID, source2UID}
 	r.Nil(deleteSources(UIDs))
 	r.Nil(indexer.ReindexAll())
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
-	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
+	suite.validateSourceNames(indexNameEn, indexer, []string{})
+	suite.validateSourceNames(indexNameHe, indexer, []string{})
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())
