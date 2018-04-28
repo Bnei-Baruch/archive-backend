@@ -53,21 +53,33 @@ var COMPARE_RESULTS_NAME = map[int]string{
 const (
 	ET_CONTENT_UNITS = iota
 	ET_COLLECTIONS   = iota
+	ET_LESSONS       = iota
+	ET_PROGRAMS      = iota
 )
 
 var EXPECTATION_URL_PATH = map[int]string{
 	ET_CONTENT_UNITS: "cu",
 	ET_COLLECTIONS:   "c",
+	ET_LESSONS:       "lessons",
+	ET_PROGRAMS:      "programs",
 }
 
 var EXPECTATION_HIT_TYPE = map[int]string{
 	ET_CONTENT_UNITS: "content_units",
 	ET_COLLECTIONS:   "collections",
+	ET_LESSONS:       "intent", // Special hit type. Should be handled as intent.
+	ET_PROGRAMS:      "intent", // Special hit type. Should be handled as intent.
+}
+
+type Filter struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 type Expectation struct {
-	Type int    `json:"type"`
-	Uid  string `json:"uid"`
+	Type    int      `json:"type"`
+	Uid     string   `json:"uid,omitempty"`
+	Filters []Filter `json:"filters,omitempty"`
 }
 
 type EvalQuery struct {
@@ -188,29 +200,45 @@ func ParseExpectation(e string) (Expectation, error) {
 	}
 	p := u.RequestURI()
 	idx := strings.Index(p, "?")
+	q := "" // The query part, i.e., .../he/lessons?source=bs_L2jMWyce_kB3eD83I => source=bs_L2jMWyce_kB3eD83I
 	if idx >= 0 {
+		q = p[idx+1:]
 		p = p[:idx]
 	}
-	uid := path.Base(p)
-	typeString := path.Base(path.Dir(p))
+	// Last part .../he/programs/cu/AsNLozeK => AsNLozeK   or   /he/lessons => lessons
+	uidOrSection := path.Base(p)
+	// One before last part .../he/programs/cu/AsNLozeK => cu
+	contentUnitOrCollection := path.Base(path.Dir(p))
 	t := -1
-	if typeString == EXPECTATION_URL_PATH[ET_CONTENT_UNITS] {
+	switch contentUnitOrCollection {
+	case EXPECTATION_URL_PATH[ET_LESSONS]:
+		t = ET_LESSONS
+	case EXPECTATION_URL_PATH[ET_PROGRAMS]:
+		t = ET_PROGRAMS
+	}
+	if t != -1 {
+		queryParts := strings.Split(q, ",")
+		filters := make([]Filter, len(queryParts))
+		for i, qp := range queryParts {
+			nameValue := strings.Split(qp, "=")
+			if len(nameValue) > 0 {
+				filters[i].Name = nameValue[0]
+				if len(nameValue) > 1 {
+					filters[i].Value = nameValue[1]
+				}
+			}
+		}
+		return Expectation{t, "", filters}, nil
+	}
+	switch uidOrSection {
+	case EXPECTATION_URL_PATH[ET_CONTENT_UNITS]:
 		t = ET_CONTENT_UNITS
-	} else if typeString == EXPECTATION_URL_PATH[ET_COLLECTIONS] {
+	case EXPECTATION_URL_PATH[ET_COLLECTIONS]:
 		t = ET_COLLECTIONS
+	default:
+		return Expectation{}, errors.New("ParseExpectation - Could not parse expectation.")
 	}
-	if t == -1 {
-		return Expectation{}, errors.New("Could not parse expectation")
-	}
-	return Expectation{t, uid}, nil
-}
-
-func ParseUidExpectation(e string) (string, error) {
-	u, err := url.Parse(e)
-	if err != nil {
-		return "", err
-	}
-	return path.Base(u.RequestURI()), nil
+	return Expectation{t, uidOrSection, nil}, nil
 }
 
 func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
