@@ -67,8 +67,8 @@ var EXPECTATION_URL_PATH = map[int]string{
 var EXPECTATION_HIT_TYPE = map[int]string{
 	ET_CONTENT_UNITS: "content_units",
 	ET_COLLECTIONS:   "collections",
-	ET_LESSONS:       "intent", // Special hit type. Should be handled as intent.
-	ET_PROGRAMS:      "intent", // Special hit type. Should be handled as intent.
+	ET_LESSONS:       "intent-lessons",  // Special hit type. Should be handled as intent.
+	ET_PROGRAMS:      "intent-programs", // Special hit type. Should be handled as intent.
 }
 
 type Filter struct {
@@ -80,6 +80,12 @@ type Expectation struct {
 	Type    int      `json:"type"`
 	Uid     string   `json:"uid,omitempty"`
 	Filters []Filter `json:"filters,omitempty"`
+}
+
+type Loss struct {
+	Expectation Expectation `json:"expectation,omitempty"`
+	Unique      float64     `json:"unique,omitempty"`
+	Weighted    float64     `json:"weighted,omitempty"`
 }
 
 type EvalQuery struct {
@@ -209,8 +215,9 @@ func ParseExpectation(e string) (Expectation, error) {
 	uidOrSection := path.Base(p)
 	// One before last part .../he/programs/cu/AsNLozeK => cu
 	contentUnitOrCollection := path.Base(path.Dir(p))
+	log.Infof("ParseExpectation - %s ==> %s %s %s", e, uidOrSection, contentUnitOrCollection, q)
 	t := -1
-	switch contentUnitOrCollection {
+	switch uidOrSection {
 	case EXPECTATION_URL_PATH[ET_LESSONS]:
 		t = ET_LESSONS
 	case EXPECTATION_URL_PATH[ET_PROGRAMS]:
@@ -230,7 +237,7 @@ func ParseExpectation(e string) (Expectation, error) {
 		}
 		return Expectation{t, "", filters}, nil
 	}
-	switch uidOrSection {
+	switch contentUnitOrCollection {
 	case EXPECTATION_URL_PATH[ET_CONTENT_UNITS]:
 		t = ET_CONTENT_UNITS
 	case EXPECTATION_URL_PATH[ET_COLLECTIONS]:
@@ -324,6 +331,17 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	return r
 }
 
+func roundD(val float64) int {
+	if val < 0 {
+		return int(val - 1.0)
+	}
+	return int(val)
+}
+
+func float64ToPercent(val float64) string {
+	return fmt.Sprintf("%.2f%%", float64(roundD(val*10000))/float64(100))
+}
+
 func Eval(queries []EvalQuery, serverUrl string) (EvalResults, error) {
 	log.Infof("Evaluating %d queries.", len(queries))
 	ret := EvalResults{}
@@ -353,5 +371,38 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, error) {
 	for k, v := range ret.WeightedMap {
 		ret.WeightedMap[k] = v / float64(ret.TotalWeighted)
 	}
+
+	// Print detailed loss (Unknown) analysis
+	losses := make(map[int][]Loss)
+	for i, q := range queries {
+		for j, sq := range ret.Results[i].SearchQuality {
+			e := q.Expectations[j]
+			if sq == SQ_UNKNOWN {
+				if _, ok := losses[e.Type]; !ok {
+					losses[e.Type] = make([]Loss, 0)
+				}
+				loss := Loss{e, 1 / float64(len(q.Expectations)), float64(q.Weight) / float64(len(q.Expectations))}
+				losses[e.Type] = append(losses[e.Type], loss)
+			}
+		}
+	}
+
+	log.Infof("Found %d losses.", len(losses))
+	for eType, lList := range losses {
+		totalUnique := float64(0)
+		totalWeighted := float64(0)
+		for _, l := range lList {
+			totalUnique += l.Unique
+			totalWeighted += l.Weighted
+		}
+		log.Infof("%s - %.2f/%.2f ", EXPECTATION_HIT_TYPE[eType],
+			float64ToPercent(totalUnique/float64(ret.TotalUnique)),
+			float64ToPercent(totalWeighted/float64(ret.TotalWeighted)))
+		for _, l := range lList {
+			log.Infof("\t%.2f/%.2f - %+v", float64ToPercent(l.Unique/float64(ret.TotalUnique)),
+				float64ToPercent(l.Weighted/float64(ret.TotalWeighted)), l.Expectation)
+		}
+	}
+
 	return ret, nil
 }
