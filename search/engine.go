@@ -224,7 +224,9 @@ func (e *ESEngine) AddClassificationIntentSecondRound(h *elastic.SearchHit, inte
 }
 
 func (e *ESEngine) AddIntents(query *Query, preference string) error {
-	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
+    // Dark launch intents, only if query.Deb is true.
+    // Remove query.Deb check when intents quality is good.
+	if len(query.Term) == 0 && len(query.ExactTerms) == 0 || !query.Deb {
 		return nil
 	}
 	mssFirstRound := e.esc.MultiSearch()

@@ -1,7 +1,6 @@
 package search
 
 import (
-	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -219,7 +218,6 @@ func ParseExpectation(e string) (Expectation, error) {
 	uidOrSection := path.Base(p)
 	// One before last part .../he/programs/cu/AsNLozeK => cu
 	contentUnitOrCollection := path.Base(path.Dir(p))
-	log.Infof("ParseExpectation - %s ==> %s %s %s", e, uidOrSection, contentUnitOrCollection, q)
 	t := -1
 	switch uidOrSection {
 	case EXPECTATION_URL_PATH[ET_LESSONS]:
@@ -290,12 +288,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	}
 	queryResult := QueryResult{}
 	defer resp.Body.Close()
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
-	newStr := buf.String()
-	log.Infof("JSON: %s", newStr)
-	rrr := bytes.NewReader(buf.Bytes())
-	if err := json.NewDecoder(rrr).Decode(&queryResult); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&queryResult); err != nil {
 		log.Warnf("Error decoding %+v", err)
 		for _ = range q.Expectations {
 			r.SearchQuality = append(r.SearchQuality, SQ_SERVER_ERROR)

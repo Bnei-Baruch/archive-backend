@@ -73,7 +73,7 @@ func runSxS(evalSet []search.EvalQuery, baseUrl string, expUrl string) (
 	return baseResults, baseLosses, expResults, baseLosses, nil
 }
 
-func printResults(results search.EvalResults, losses map[int][]search.Loss) {
+func printResults(results search.EvalResults) {
 	log.Infof("Unique queries: %d", results.TotalUnique)
 	log.Infof("Weighted queries: %d", results.TotalWeighted)
 	log.Infof("Errors: %d", results.TotalErrors)
@@ -87,7 +87,9 @@ func printResults(results search.EvalResults, losses map[int][]search.Loss) {
 		weighted := results.WeightedMap[k]
 		log.Infof("%-15s Unique/Weighted: %7s/%7s", search.SEARCH_QUALITY_NAME[k], float64ToPercent(unique), float64ToPercent(weighted))
 	}
+}
 
+func printLosses(results search.EvalResults, losses map[int][]search.Loss) {
 	log.Infof("Found %d loss types (Unknown).", len(losses))
 	var lKeys []int
 	for k, _ := range losses {
@@ -124,9 +126,13 @@ func evalFn(cmd *cobra.Command, args []string) {
 		baseResults, baseLosses, expResults, expLosses, err := runSxS(evalSet, baseServerUrl, serverUrl)
 		utils.Must(err)
 		log.Infof("Base:")
-		printResults(baseResults, baseLosses)
+        printResults(baseResults)
 		log.Infof("Exp:")
-		printResults(expResults, expLosses)
+		printResults(expResults)
+		log.Infof("Base:")
+		printLosses(baseResults, baseLosses)
+		log.Infof("Exp:")
+		printLosses(expResults, expLosses)
 		if len(baseResults.Results) != len(expResults.Results) {
 			log.Errorf("Expected same number of results for exp and base, got base - %d and exp - %d.",
 				len(baseResults.Results), len(expResults.Results))
@@ -173,7 +179,9 @@ func evalFn(cmd *cobra.Command, args []string) {
 	} else {
 		results, losses, err := search.Eval(evalSet, serverUrl)
 		utils.Must(err)
-		printResults(results, losses)
+		printResults(results)
+        printLosses(results, losses)
+
 	}
 	utils.Must(err)
 	log.Infof("Done evaluating queries.")
