@@ -43,34 +43,37 @@ func float64ToPercent(val float64) string {
 	return fmt.Sprintf("%.2f%%", float64(roundD(val*10000))/float64(100))
 }
 
-func runSxS(evalSet []search.EvalQuery, baseUrl string, expUrl string) (search.EvalResults, search.EvalResults, error) {
+func runSxS(evalSet []search.EvalQuery, baseUrl string, expUrl string) (
+	search.EvalResults, map[int][]search.Loss, search.EvalResults, map[int][]search.Loss, error) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	var baseResults search.EvalResults
+	var baseLosses map[int][]search.Loss
 	var baseErr error
 	go func() {
 		defer wg.Done()
-		baseResults, baseErr = search.Eval(evalSet, baseUrl)
+		baseResults, baseLosses, baseErr = search.Eval(evalSet, baseUrl)
 	}()
 
 	var expResults search.EvalResults
+	var expLosses map[int][]search.Loss
 	var expErr error
 	go func() {
 		defer wg.Done()
-		expResults, expErr = search.Eval(evalSet, expUrl)
+		expResults, expLosses, expErr = search.Eval(evalSet, expUrl)
 	}()
 	wg.Wait()
 	if baseErr != nil {
-		return search.EvalResults{}, search.EvalResults{}, baseErr
+		return search.EvalResults{}, nil, search.EvalResults{}, nil, baseErr
 	}
 	if expErr != nil {
-		return search.EvalResults{}, search.EvalResults{}, expErr
+		return search.EvalResults{}, nil, search.EvalResults{}, nil, expErr
 	}
-	return baseResults, expResults, nil
+	return baseResults, baseLosses, expResults, baseLosses, nil
 }
 
-func printResults(results search.EvalResults) {
+func printResults(results search.EvalResults, losses map[int][]search.Loss) {
 	log.Infof("Unique queries: %d", results.TotalUnique)
 	log.Infof("Weighted queries: %d", results.TotalWeighted)
 	log.Infof("Errors: %d", results.TotalErrors)
@@ -84,6 +87,29 @@ func printResults(results search.EvalResults) {
 		weighted := results.WeightedMap[k]
 		log.Infof("%-15s Unique/Weighted: %7s/%7s", search.SEARCH_QUALITY_NAME[k], float64ToPercent(unique), float64ToPercent(weighted))
 	}
+
+	log.Infof("Found %d loss types (Unknown).", len(losses))
+	var lKeys []int
+	for k, _ := range losses {
+		lKeys = append(lKeys, k)
+	}
+	sort.Ints(lKeys)
+	for _, eType := range lKeys {
+		lList := losses[eType]
+		totalUnique := float64(0)
+		totalWeighted := float64(0)
+		for _, l := range lList {
+			totalUnique += l.Unique
+			totalWeighted += l.Weighted
+		}
+		log.Infof("%s - %7s/%7s ", search.EXPECTATION_HIT_TYPE[eType],
+			float64ToPercent(totalUnique/float64(results.TotalUnique)),
+			float64ToPercent(totalWeighted/float64(results.TotalWeighted)))
+		for _, l := range lList {
+			log.Infof("\t%7s/%7s - [%s] %s %+v", float64ToPercent(l.Unique/float64(results.TotalUnique)),
+				float64ToPercent(l.Weighted/float64(results.TotalWeighted)), l.Query.Query, l.Query.Bucket, l.Expectation)
+		}
+	}
 }
 
 func Round(f float64) float64 {
@@ -95,12 +121,12 @@ func evalFn(cmd *cobra.Command, args []string) {
 	evalSet, err := search.ReadEvalSet(evalSetPath)
 	utils.Must(err)
 	if baseServerUrl != "" {
-		baseResults, expResults, err := runSxS(evalSet, baseServerUrl, serverUrl)
+		baseResults, baseLosses, expResults, expLosses, err := runSxS(evalSet, baseServerUrl, serverUrl)
 		utils.Must(err)
 		log.Infof("Base:")
-		printResults(baseResults)
+		printResults(baseResults, baseLosses)
 		log.Infof("Exp:")
-		printResults(expResults)
+		printResults(expResults, expLosses)
 		if len(baseResults.Results) != len(expResults.Results) {
 			log.Errorf("Expected same number of results for exp and base, got base - %d and exp - %d.",
 				len(baseResults.Results), len(expResults.Results))
@@ -145,9 +171,9 @@ func evalFn(cmd *cobra.Command, args []string) {
 		}
 
 	} else {
-		results, err := search.Eval(evalSet, serverUrl)
+		results, losses, err := search.Eval(evalSet, serverUrl)
 		utils.Must(err)
-		printResults(results)
+		printResults(results, losses)
 	}
 	utils.Must(err)
 	log.Infof("Done evaluating queries.")

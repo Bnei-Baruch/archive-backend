@@ -55,6 +55,7 @@ const (
 	ET_COLLECTIONS   = iota
 	ET_LESSONS       = iota
 	ET_PROGRAMS      = iota
+	ET_SOURCES       = iota
 )
 
 var EXPECTATION_URL_PATH = map[int]string{
@@ -62,6 +63,7 @@ var EXPECTATION_URL_PATH = map[int]string{
 	ET_COLLECTIONS:   "c",
 	ET_LESSONS:       "lessons",
 	ET_PROGRAMS:      "programs",
+	ET_SOURCES:       "sources",
 }
 
 var EXPECTATION_HIT_TYPE = map[int]string{
@@ -69,6 +71,7 @@ var EXPECTATION_HIT_TYPE = map[int]string{
 	ET_COLLECTIONS:   "collections",
 	ET_LESSONS:       "intent-lessons",  // Special hit type. Should be handled as intent.
 	ET_PROGRAMS:      "intent-programs", // Special hit type. Should be handled as intent.
+	ET_SOURCES:       "sources",
 }
 
 type Filter struct {
@@ -84,6 +87,7 @@ type Expectation struct {
 
 type Loss struct {
 	Expectation Expectation `json:"expectation,omitempty"`
+	Query       EvalQuery   `json:"query,omitempty"`
 	Unique      float64     `json:"unique,omitempty"`
 	Weighted    float64     `json:"weighted,omitempty"`
 }
@@ -192,9 +196,9 @@ type MdbUid struct {
 // Examples:
 // https://archive.kbb1.com/he/programs/cu/AsNLozeK ==> (content_units, AsNLozeK)
 // https://archive.kbb1.com/he/programs/c/fLWpcUjQ  ==> (collections  , fLWpcUjQ)
-// Later we will need to add filters and landing pages, Examples:
 // https://archive.kbb1.com/he/lessons?source=bs_L2jMWyce_kB3eD83I       ==> (lessons,  nil, source=bs_L2jMWyce_kB3eD83I)
 // https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (programs, nil, topic=g3ml0jum_1nyptSIo_RWqjxgkj)
+// https://archive.kbb1.com/he/sources/kB3eD83I ==> (sources, kB3eD83I)
 // All events sub pages and years:
 // https://archive.kbb1.com/he/events/meals
 // https://archive.kbb1.com/he/events/friends-gatherings
@@ -242,6 +246,8 @@ func ParseExpectation(e string) (Expectation, error) {
 		t = ET_CONTENT_UNITS
 	case EXPECTATION_URL_PATH[ET_COLLECTIONS]:
 		t = ET_COLLECTIONS
+	case EXPECTATION_URL_PATH[ET_SOURCES]:
+		t = ET_SOURCES
 	default:
 		return Expectation{}, errors.New("ParseExpectation - Could not parse expectation.")
 	}
@@ -331,18 +337,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	return r
 }
 
-func roundD(val float64) int {
-	if val < 0 {
-		return int(val - 1.0)
-	}
-	return int(val)
-}
-
-func float64ToPercent(val float64) string {
-	return fmt.Sprintf("%.2f%%", float64(roundD(val*10000))/float64(100))
-}
-
-func Eval(queries []EvalQuery, serverUrl string) (EvalResults, error) {
+func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, error) {
 	log.Infof("Evaluating %d queries.", len(queries))
 	ret := EvalResults{}
 	ret.UniqueMap = make(map[int]float64)
@@ -381,28 +376,11 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, error) {
 				if _, ok := losses[e.Type]; !ok {
 					losses[e.Type] = make([]Loss, 0)
 				}
-				loss := Loss{e, 1 / float64(len(q.Expectations)), float64(q.Weight) / float64(len(q.Expectations))}
+				loss := Loss{e, q, 1 / float64(len(q.Expectations)), float64(q.Weight) / float64(len(q.Expectations))}
 				losses[e.Type] = append(losses[e.Type], loss)
 			}
 		}
 	}
 
-	log.Infof("Found %d losses.", len(losses))
-	for eType, lList := range losses {
-		totalUnique := float64(0)
-		totalWeighted := float64(0)
-		for _, l := range lList {
-			totalUnique += l.Unique
-			totalWeighted += l.Weighted
-		}
-		log.Infof("%s - %.2f/%.2f ", EXPECTATION_HIT_TYPE[eType],
-			float64ToPercent(totalUnique/float64(ret.TotalUnique)),
-			float64ToPercent(totalWeighted/float64(ret.TotalWeighted)))
-		for _, l := range lList {
-			log.Infof("\t%.2f/%.2f - %+v", float64ToPercent(l.Unique/float64(ret.TotalUnique)),
-				float64ToPercent(l.Weighted/float64(ret.TotalWeighted)), l.Expectation)
-		}
-	}
-
-	return ret, nil
+	return ret, losses, nil
 }
