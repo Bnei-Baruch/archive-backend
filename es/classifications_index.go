@@ -145,7 +145,7 @@ func (index *ClassificationsIndex) indexTag(t *mdbmodels.Tag) error {
 		if i18n.Label.Valid && i18n.Label.String != "" {
 			c := Classification{
 				MDB_UID:     t.UID,
-				Type:        "tag",
+				Type:        consts.TAG_CLASSIFICATION_TYPE,
 				Name:        i18n.Label.String,
 				NameSuggest: i18n.Label.String,
 			}
@@ -157,7 +157,7 @@ func (index *ClassificationsIndex) indexTag(t *mdbmodels.Tag) error {
 			log.Infof("Classifications Index - Add tag %s to index %s", string(cBytes), name)
 			resp, err := index.esc.Index().
 				Index(name).
-				Type("tags").
+				Type(consts.TAGS_INDEX_TYPE).
 				BodyJson(c).
 				Do(context.TODO())
 			if err != nil {
@@ -177,7 +177,7 @@ func (index *ClassificationsIndex) indexSource(s *mdbmodels.Source) error {
 		if i18n.Name.Valid && i18n.Name.String != "" {
 			c := Classification{
 				MDB_UID:     s.UID,
-				Type:        "source",
+				Type:        consts.SOURCE_CLASSIFICATION_TYPE,
 				Name:        i18n.Name.String,
 				NameSuggest: i18n.Name.String,
 			}
@@ -193,7 +193,7 @@ func (index *ClassificationsIndex) indexSource(s *mdbmodels.Source) error {
 			log.Infof("Classifications Index - Add source %s to index %s", string(cBytes), name)
 			resp, err := index.esc.Index().
 				Index(name).
-				Type("sources").
+				Type(consts.SOURCES_INDEX_TYPE).
 				BodyJson(c).
 				Do(context.TODO())
 			if err != nil {

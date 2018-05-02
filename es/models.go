@@ -1,11 +1,22 @@
 package es
 
 import (
+	"gopkg.in/olivere/elastic.v5"
+
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type EffectiveDate struct {
 	EffectiveDate *utils.Date `json:"effective_date"`
+}
+
+type ClassificationIntent struct {
+	MDB_UID        string                    `json:"mdb_uid"`
+	Name           string                    `json:"name"`
+	Score          *float64                  `json:"score,omitempty"`
+	Explanation    elastic.SearchExplanation `json:"explanation,omitempty"`
+	MaxScore       *float64                  `json:"max_score,omitempty"`
+	MaxExplanation elastic.SearchExplanation `json:"max_explanation,omitempty"`
 }
 
 type Collection struct {

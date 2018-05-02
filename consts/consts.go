@@ -223,6 +223,14 @@ const ES_UNITS_INDEX = "units"
 const ES_COLLECTIONS_INDEX = "collections"
 const ES_SOURCES_INDEX = "sources"
 
+// Classicication index consts.
+const (
+	SOURCES_INDEX_TYPE         = "sources"
+	TAGS_INDEX_TYPE            = "tags"
+	SOURCE_CLASSIFICATION_TYPE = "source"
+	TAG_CLASSIFICATION_TYPE    = "tag"
+)
+
 type SEARCH_STATUS int
 
 const (

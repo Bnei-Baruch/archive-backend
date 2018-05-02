@@ -475,8 +475,7 @@ func SearchHandler(c *gin.Context) {
 		preference,
 	)
 	if err == nil {
-		// TODO: How does this slows the search query?!
-		// Consider logging in parallel!
+		// TODO: How does this slows the search query? Consider logging in parallel.
 		err := logger.LogSearch(query, sortByVal, from, size, searchId, res)
 		if err != nil {
 			log.Warnf("Error logging search: %+v %+v", err, res)

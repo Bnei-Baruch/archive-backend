@@ -19,7 +19,7 @@ var indexer *es.Indexer
 var indexerQueue WorkQueue
 
 func shutDown(signalChan chan os.Signal, sc stan.Conn, indexerQueue WorkQueue, cleanupDone chan bool) {
-	for range signalChan {
+	for _ = range signalChan {
 		log.Info("Shutting down...")
 
 		log.Info("Closing connection to nats")
