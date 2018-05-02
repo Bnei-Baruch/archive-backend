@@ -141,7 +141,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 				log.Warnf("Source %s not found in parentsMap: %+v", source.UID, parents)
 			} else if err := index.indexSource(source, parents); err != nil {
 				log.Warnf("Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
-				return err
+				//return err
 			}
 		}
 		offset += limit
