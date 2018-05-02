@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"sort"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -23,6 +24,52 @@ type ESEngine struct {
 	esc *elastic.Client
 	// TODO: Is mdb required here?
 	mdb *sql.DB
+}
+
+type byRelevance []*elastic.SearchHit
+type byNewerToOlder []*elastic.SearchHit
+type byOlderToNewer []*elastic.SearchHit
+
+func (s byRelevance) Len() int {
+	return len(s)
+}
+func (s byRelevance) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s byRelevance) Less(i, j int) bool {
+	res, err := compareHits(s[i], s[j], consts.SORT_BY_RELEVANCE)
+	if err != nil {
+		panic(fmt.Sprintf("compareHits error: %s", err))
+	}
+	return res
+}
+
+func (s byNewerToOlder) Len() int {
+	return len(s)
+}
+func (s byNewerToOlder) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s byNewerToOlder) Less(i, j int) bool {
+	res, err := compareHits(s[i], s[j], consts.SORT_BY_NEWER_TO_OLDER)
+	if err != nil {
+		panic(fmt.Sprintf("compareHits error: %s", err))
+	}
+	return res
+}
+
+func (s byOlderToNewer) Len() int {
+	return len(s)
+}
+func (s byOlderToNewer) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s byOlderToNewer) Less(i, j int) bool {
+	res, err := compareHits(s[i], s[j], consts.SORT_BY_OLDER_TO_NEWER)
+	if err != nil {
+		panic(fmt.Sprintf("compareHits error: %s", err))
+	}
+	return res
 }
 
 var classTypes = [...]string{"source", "tag"}
@@ -346,12 +393,12 @@ func createSourcesQuery(q Query) elastic.Query {
 					elastic.NewMatchQuery("authors.analyzed", q.Term),
 				).MinimumNumberShouldMatch(1)).Boost(1),
 		).Should(
-			elastic.NewBoolQuery().Should(
+			elastic.NewDisMaxQuery().Query(
 				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.5),
+				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
 				elastic.NewMatchPhraseQuery("content.analyzed", q.Term).Slop(100),
 				elastic.NewMatchPhraseQuery("authors.analyzed", q.Term).Slop(100),
-			).MinimumNumberShouldMatch(0),
+			),
 		)
 	}
 	for _, exactTerm := range q.ExactTerms {
@@ -365,12 +412,12 @@ func createSourcesQuery(q Query) elastic.Query {
 					elastic.NewMatchPhraseQuery("authors", exactTerm),
 				).MinimumNumberShouldMatch(1)).Boost(1),
 		).Should(
-			elastic.NewBoolQuery().Should(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(1.5),
+			elastic.NewDisMaxQuery().Query(
+				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
 				elastic.NewMatchPhraseQuery("content.analyzed", exactTerm).Slop(100),
 				elastic.NewMatchPhraseQuery("authors.analyzed", exactTerm).Slop(100),
-			).MinimumNumberShouldMatch(1),
+			),
 		)
 	}
 
@@ -383,8 +430,10 @@ func createSourcesQuery(q Query) elastic.Query {
 			query.Filter(elastic.NewTermsQuery(filter, s...))
 		}
 	}
-
-	return elastic.NewFunctionScoreQuery().Query(query)
+	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
+		Boost(1.2). // Boost sources index.
+		// No time decay for sources. Sources are above time and space.
+		AddScoreFunc(elastic.NewWeightFactorFunction(4.0))
 }
 
 func GetSourcesSearchRequests(query Query, from int, size int, preference string) []*elastic.SearchRequest {
@@ -427,7 +476,7 @@ func haveHits(r *elastic.SearchResult) bool {
 
 func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (bool, error) {
 	if sortBy == consts.SORT_BY_RELEVANCE {
-		return *(h1.Score) >= *(h2.Score), nil
+		return *(h1.Score) > *(h2.Score), nil
 	} else {
 		var ed1, ed2 es.EffectiveDate
 		if err := json.Unmarshal(*h1.Source, &ed1); err != nil {
@@ -443,77 +492,63 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 			ed2.EffectiveDate = &utils.Date{time.Time{}}
 		}
 		if sortBy == consts.SORT_BY_OLDER_TO_NEWER {
-			return !ed1.EffectiveDate.Time.After(ed2.EffectiveDate.Time), nil
+			return ed2.EffectiveDate.Time.After(ed1.EffectiveDate.Time), nil
 		} else {
-			return ed1.EffectiveDate.Time.After(ed2.EffectiveDate.Time), nil
+			return ed2.EffectiveDate.Time.Before(ed1.EffectiveDate.Time), nil
 		}
 	}
 }
 
 func joinResponses(sortBy string, from int, size int, results ...*elastic.SearchResult) (*elastic.SearchResult, error) {
 
-	var joinedResults *elastic.SearchResult
-	var err error
-
+	// Concatenate all result hits to single slice.
+	concatenated := make([]*elastic.SearchHit, 0)
 	for _, result := range results {
-		if joinedResults == nil {
-			joinedResults = result
-		} else {
-			joinedResults, err = joinTwoResponses(joinedResults, result, sortBy, from, size)
-			if err != nil {
-				return nil, err
+		concatenated = append(concatenated, result.Hits.Hits...)
+	}
+
+	fmt.Printf("Hit Results: ")
+	for _, sr := range concatenated {
+		fmt.Printf("uid: %s score: %f || ", sr.Uid, *sr.Score)
+	}
+	fmt.Println()
+
+	// Apply sorting.
+	if sortBy == consts.SORT_BY_RELEVANCE {
+		sort.Stable(byRelevance(concatenated))
+	} else if sortBy == consts.SORT_BY_OLDER_TO_NEWER {
+		sort.Stable(byOlderToNewer(concatenated))
+	} else if sortBy == consts.SORT_BY_NEWER_TO_OLDER {
+		sort.Stable(byNewerToOlder(concatenated))
+	}
+
+	// Filter by relevant page.
+	concatenated = concatenated[from:utils.Min(from+size, len(concatenated))]
+
+	result := results[0]
+
+	// Get hits count and max score
+	totalHits := int64(0)
+	var maxScore float64
+	if result.Hits.MaxScore != nil {
+		maxScore = *result.Hits.MaxScore
+	} else {
+		maxScore = 0
+	}
+	for _, result := range results {
+		totalHits += result.Hits.TotalHits
+		if sortBy == consts.SORT_BY_RELEVANCE {
+			if result.Hits.MaxScore != nil {
+				maxScore = math.Max(maxScore, *result.Hits.MaxScore)
 			}
 		}
 	}
 
-	return joinedResults, nil
-}
+	result.Hits.Hits = concatenated
+	result.Hits.TotalHits = totalHits
+	result.Hits.MaxScore = &maxScore
 
-func joinTwoResponses(r1 *elastic.SearchResult, r2 *elastic.SearchResult, sortBy string, from int, size int) (*elastic.SearchResult, error) {
-	log.Infof("%+v %+v", r1, r2)
-
-	if !haveHits(r1) {
-		r2.Hits.Hits = r2.Hits.Hits[from:utils.Min(from+size, len(r2.Hits.Hits))]
-		return r2, nil
-	} else if !haveHits(r2) {
-		r1.Hits.Hits = r1.Hits.Hits[from:utils.Min(from+size, len(r1.Hits.Hits))]
-		return r1, nil
-	}
-
-	result := elastic.SearchResult(*r1)
-	result.Hits.TotalHits += r2.Hits.TotalHits
-	if sortBy == consts.SORT_BY_RELEVANCE {
-		result.Hits.MaxScore = new(float64)
-		*result.Hits.MaxScore = math.Max(*result.Hits.MaxScore, *r2.Hits.MaxScore)
-	}
-	var hits []*elastic.SearchHit
-
-	// Merge using compareHits
-	i1, i2 := int(0), int(0)
-	for i1 < len(r1.Hits.Hits) || i2 < len(r2.Hits.Hits) {
-		if i1 == len(r1.Hits.Hits) {
-			hits = append(hits, r2.Hits.Hits[i2:]...)
-			break
-		}
-		if i2 == len(r2.Hits.Hits) {
-			hits = append(hits, r1.Hits.Hits[i1:]...)
-			break
-		}
-		h1Larger, err := compareHits(r1.Hits.Hits[i1], r2.Hits.Hits[i2], sortBy)
-		if err != nil {
-			return nil, err
-		}
-		if h1Larger {
-			hits = append(hits, r1.Hits.Hits[i1])
-			i1++
-		} else {
-			hits = append(hits, r2.Hits.Hits[i2])
-			i2++
-		}
-	}
-
-	result.Hits.Hits = hits[from:utils.Min(from+size, len(hits))]
-	return &result, nil
+	return result, nil
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*elastic.SearchResult, error) {
@@ -560,11 +595,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	var results []*elastic.SearchResult
 
-	// Interleave results by language.
-	// Then go over responses and choose first not empty retults list.
-	for i := 0; i < len(query.LanguageOrder); i++ {
+	for i := 0; i < len(mr.Responses); i += len(query.LanguageOrder) {
 
-		currentResults := mr.Responses[i+(len(query.LanguageOrder)*(len(requestsByIndex)-1))]
+		currentResults := mr.Responses[i]
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
 			return nil, errors.New("Failed multi get.")
@@ -576,13 +609,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	ret, err := joinResponses(sortBy, from, size, results...)
+
 	if ret != nil && ret.Hits != nil {
-		log.Debugf("Res: %+v", ret.Hits)
+		log.Infof("Res: %+v", ret.Hits)
 		return ret, err
 	}
 
 	if len(mr.Responses) > 0 {
-		return mr.Responses[0], nil
+		return mr.Responses[0], err
 	} else {
 		return nil, errors.Wrap(err, "No responses from multi search.")
 	}
