@@ -1,5 +1,6 @@
 package api
 
+
 import (
 	"context"
 	"crypto/md5"
@@ -405,6 +406,40 @@ func ParseQuery(q string) search.Query {
 	return search.Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Filters: filters}
 }
 
+// Search helpers, are passed to ESEngine. Those function defined here to
+// avoid cycle dependency of api ==> search ==> api
+
+// Returns true is content units of specific type exists for specified source or/and tag (topic).
+func checkContentUnits(mdb *sql.DB, contentUnitType string, lang string, tagUid string, sourceUid string) (error, bool) {
+    sf := SourcesFilter{}
+    if sourceUid != "" {
+        sf.Sources = []string{sourceUid}
+    }
+    tf := TagsFilter{}
+    if tagUid != "" {
+        tf.Tags = []string{tagUid}
+    }
+    cur := ContentUnitsRequest{
+        ContentTypesFilter: ContentTypesFilter{
+            ContentTypes: []string{contentUnitType},
+        },
+        ListRequest: ListRequest{
+            BaseRequest: BaseRequest{Language: lang},
+            PageSize: 1,
+            PageNumber: 1,
+        },
+        SourcesFilter: sf,
+        TagsFilter:    tf,
+    }
+    log.Infof("cur: %+v", cur)
+    resp, err := handleContentUnits(mdb, cur)
+    log.Infof("checkContentUnits: %+v err: %+v", resp, err)
+    if err != nil {
+        return err, false
+    }
+    return nil, resp.Total > 0
+}
+
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
@@ -459,7 +494,7 @@ func SearchHandler(c *gin.Context) {
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
-	se := search.NewESEngine(esc, db)
+	se := search.NewESEngine(esc, db, checkContentUnits)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -516,7 +551,7 @@ func AutocompleteHandler(c *gin.Context) {
 
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	se := search.NewESEngine(esc, db)
+	se := search.NewESEngine(esc, db, checkContentUnits)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
@@ -1509,6 +1544,8 @@ func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter)
 	if len(f.Tags) == 0 {
 		return nil
 	}
+
+    log.Infof("TAGS!!!! %+v", f.Tags)
 
 	// find all nested tag_ids
 	q := `WITH RECURSIVE rec_tags AS (
