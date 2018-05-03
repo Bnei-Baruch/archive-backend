@@ -181,6 +181,7 @@ type Collection struct {
 	Genres          []string       `json:"genres,omitempty"`
 	DefaultLanguage string         `json:"default_language,omitempty"`
 	HolidayID       string         `json:"holiday_id,omitempty"`
+	SourceID        string         `json:"source_id,omitempty"`
 	ContentUnits    []*ContentUnit `json:"content_units,omitempty"`
 }
 

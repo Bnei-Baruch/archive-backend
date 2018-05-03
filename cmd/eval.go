@@ -126,7 +126,7 @@ func evalFn(cmd *cobra.Command, args []string) {
 		baseResults, baseLosses, expResults, expLosses, err := runSxS(evalSet, baseServerUrl, serverUrl)
 		utils.Must(err)
 		log.Infof("Base:")
-        printResults(baseResults)
+		printResults(baseResults)
 		log.Infof("Exp:")
 		printResults(expResults)
 		log.Infof("Base:")
@@ -180,7 +180,7 @@ func evalFn(cmd *cobra.Command, args []string) {
 		results, losses, err := search.Eval(evalSet, serverUrl)
 		utils.Must(err)
 		printResults(results)
-        printLosses(results, losses)
+		printLosses(results, losses)
 
 	}
 	utils.Must(err)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -19,6 +20,7 @@ import (
 )
 
 var (
+	sourcesFolder   string
 	sofficeBin      string
 	docFolder       string
 	parseDocsBin    string
@@ -29,7 +31,7 @@ var (
 
 func InitVars() {
 	pythonPath = viper.GetString("elasticsearch.python-path")
-	operatingSystem = viper.GetString("elasticsearch.os")
+	operatingSystem = viper.GetString("mdb.os")
 	sofficeBin = viper.GetString("elasticsearch.soffice-bin")
 	if sofficeBin == "" {
 		panic("Soffice binary should be set in config.")
@@ -46,6 +48,8 @@ func InitVars() {
 	}
 	docFolder = viper.GetString("elasticsearch.docx-folder")
 	utils.Must(os.MkdirAll(docFolder, 0777))
+	sourcesFolder = path.Join(viper.GetString("elasticsearch.sources-folder"))
+	utils.Must(os.MkdirAll(sourcesFolder, 0777))
 	cdnUrl = viper.GetString("elasticsearch.cdn-url")
 	if cdnUrl == "" {
 		panic("cdn url should be set in config.")
