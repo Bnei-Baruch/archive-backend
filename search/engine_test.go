@@ -96,6 +96,15 @@ func SearchResult(hits []SRR) *elastic.SearchResult {
 	return res
 }
 
+func (suite *EngineSuite) TestJoinResponsesNoResults() {
+	fmt.Printf("\n------ TestJoinResponsesNoResults ------\n\n")
+	r := require.New(suite.T())
+	results := make([]*elastic.SearchResult, 0)
+	ret, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 1, results...)
+	r.Nil(err)
+	r.Nil(ret)
+}
+
 func (suite *EngineSuite) TestJoinResponsesTakeFirstOnEqual() {
 	fmt.Printf("\n------ TestJoinResponsesTakeFirstOnEqual ------\n\n")
 	r := require.New(suite.T())
