@@ -612,8 +612,8 @@ func createSourcesQuery(q Query) elastic.Query {
 			elastic.NewDisMaxQuery().Query(
 				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
-				elastic.NewMatchPhraseQuery("content.analyzed", exactTerm).Slop(100),
-				elastic.NewMatchPhraseQuery("authors.analyzed", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("content", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("authors", exactTerm).Slop(100),
 			),
 		)
 	}
