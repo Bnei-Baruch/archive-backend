@@ -835,7 +835,7 @@ func updateSource(source es.Source, lang string) (string, error) {
 	sourcesFolder := viper.GetString("elasticsearch.sources-folder")
 	uidPath := path.Join(sourcesFolder, mdbSource.UID)
 	if _, err := os.Stat(uidPath); os.IsNotExist(err) {
-		err = os.Mkdir(uidPath, os.FileMode(0522))
+		err = os.Mkdir(uidPath, os.FileMode(0775))
 		if err != nil {
 			return "", err
 		}
@@ -845,7 +845,6 @@ func updateSource(source es.Source, lang string) (string, error) {
 }
 
 func updateSourceFileContent(uid string, lang string) error {
-
 	sourcesFolder := viper.GetString("elasticsearch.sources-folder")
 	uidPath := path.Join(sourcesFolder, uid)
 	jsonPath := path.Join(uidPath, "index.json")
