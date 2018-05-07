@@ -121,4 +121,3 @@ func (index *BaseIndex) RefreshIndexByLang(lang string) error {
 	// fmt.Printf("\n\n\nShards: %+v \n\n\n", shards)
 	return err
 }
-

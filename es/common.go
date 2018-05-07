@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-    "runtime"
+	"runtime"
 	"strings"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -19,44 +19,44 @@ import (
 )
 
 var (
-	sourcesFolder   string
-	sofficeBin      string
-	docFolder       string
-	parseDocsBin    string
-	cdnUrl          string
-	pythonPath      string
+	sourcesFolder string
+	sofficeBin    string
+	docFolder     string
+	parseDocsBin  string
+	cdnUrl        string
+	pythonPath    string
 )
 
 func DocFolder() (error, string) {
-    return InitConfigFolder("elasticsearch.docx-folder", &docFolder)
+	return InitConfigFolder("elasticsearch.docx-folder", &docFolder)
 }
 
 func SourcesFolder() (error, string) {
-    return InitConfigFolder("elasticsearch.sources-folder", &sourcesFolder)
+	return InitConfigFolder("elasticsearch.sources-folder", &sourcesFolder)
 }
 
 func InitConfigFolder(configKey string, value *string) (error, string) {
-    if *value != "" {
-        return nil, *value
-    }
-    path := viper.GetString(configKey)
-    if _, err := os.Stat(path); err != nil {
-        if os.IsNotExist(err) {
-            err := os.MkdirAll(docFolder, 0777)
-            if err != nil {
-                *value = path
-            }
-            return err, path
-        } else {
-            return err, path
-        }
-    }
-    *value = path
-    return nil, path
+	if *value != "" {
+		return nil, *value
+	}
+	path := viper.GetString(configKey)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			err := os.MkdirAll(docFolder, 0777)
+			if err != nil {
+				*value = path
+			}
+			return err, path
+		} else {
+			return err, path
+		}
+	}
+	*value = path
+	return nil, path
 }
 
 func IsWindows() bool {
-    return runtime.GOOS == "windows"
+	return runtime.GOOS == "windows"
 }
 
 func InitVars() {

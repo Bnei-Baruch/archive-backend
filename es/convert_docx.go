@@ -37,10 +37,10 @@ func DownloadAndConvert(docBatch [][]string) error {
 
 		docFilename := fmt.Sprintf("%s%s", uid, filepath.Ext(name))
 		docxFilename := fmt.Sprintf("%s.docx", uid)
-        err, folder := DocFolder()
-        if err != nil {
-            return err
-        }
+		err, folder := DocFolder()
+		if err != nil {
+			return err
+		}
 		docPath := path.Join(folder, docFilename)
 		docxPath := path.Join(folder, docxFilename)
 		if _, err := os.Stat(docxPath); !os.IsNotExist(err) {
@@ -85,14 +85,18 @@ func DownloadAndConvert(docBatch [][]string) error {
 	log.Infof("Converting: %+v", convertDocs)
 	if len(convertDocs) > 0 {
 		sofficeMutex.Lock()
-		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", docFolder}, convertDocs...)
+		err, folder := DocFolder()
+		if err != nil {
+			return err
+		}
+		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", folder}, convertDocs...)
 		log.Infof("Command [%s]", strings.Join(args, " "))
 		cmd := exec.Command(sofficeBin, args...)
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
-		err := cmd.Run()
+		err = cmd.Run()
 		sofficeMutex.Unlock()
 		if err != nil {
 			log.Errorf("soffice is '%s'. Error: %s", sofficeBin, err)

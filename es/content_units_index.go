@@ -337,7 +337,11 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 							log.Errorf("Content Units Index - Error %+v", err)
 						} else {
 							docxFilename := fmt.Sprintf("%s.docx", val[0])
-							docxPath := path.Join(docFolder, docxFilename)
+							err, folder := DocFolder()
+							if err != nil {
+								return err
+							}
+							docxPath := path.Join(folder, docxFilename)
 							unit.Transcript, err = ParseDocx(docxPath)
 							if unit.Transcript == "" {
 								log.Warnf("Content Units Index - Transcript empty: %s", val[0])

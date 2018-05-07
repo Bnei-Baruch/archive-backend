@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-    "strings"
+	"strings"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -53,15 +53,15 @@ func (index *SourcesIndex) Update(scope Scope) error {
 
 func (index *SourcesIndex) addToIndex(scope Scope, removedUIDs []string) error {
 	uids := removedUIDs
-    if scope.SourceUID != "" {
-        uids = append(uids, scope.SourceUID)
-    }
+	if scope.SourceUID != "" {
+		uids = append(uids, scope.SourceUID)
+	}
 	quoted := make([]string, len(uids))
 	for i, uid := range uids {
 		quoted[i] = fmt.Sprintf("'%s'", uid)
 	}
-    sqlScope := fmt.Sprintf("source.uid IN (%s)", strings.Join(quoted, ","))
-    return index.addToIndexSql(sqlScope)
+	sqlScope := fmt.Sprintf("source.uid IN (%s)", strings.Join(quoted, ","))
+	return index.addToIndexSql(sqlScope)
 }
 
 func (index *SourcesIndex) removeFromIndex(scope Scope) ([]string, error) {
@@ -215,7 +215,11 @@ func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]s
 }
 
 func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) {
-	uidPath := path.Join(sourcesFolder, uid)
+	err, folder := SourcesFolder()
+	if err != nil {
+		return "", err
+	}
+	uidPath := path.Join(folder, uid)
 	jsonPath := path.Join(uidPath, "index.json")
 	jsonCnt, err := ioutil.ReadFile(jsonPath)
 	if err != nil {
@@ -232,7 +236,7 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 			return path.Join(docxPath), nil
 		}
 	}
-	return "", errors.New("SourcesIndex.getDocxPath - Docx not found in index.json")
+	return "", errors.New("SourcesIndex.getDocxPath - Docx not found in index.json.")
 }
 
 func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap []string) error {
@@ -240,35 +244,30 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap [
 	hasDocxForSomeLanguage := false
 	i18nMap := make(map[string]Source)
 	for _, i18n := range mdbSource.R.SourceI18ns {
-
 		if i18n.Name.Valid && i18n.Name.String != "" {
-
 			source := Source{
 				MDB_UID: mdbSource.UID,
 				Name:    i18n.Name.String,
 				Sources: parentsMap,
 			}
-
 			if i18n.Description.Valid && i18n.Description.String != "" {
 				source.Description = i18n.Description.String
 			}
-
 			fPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
 			if err != nil {
-				log.Warnf("SourcesIndex.indexSource - Unable to retrieving docx path for source %s with language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
-				continue
+				log.Warnf("SourcesIndex.indexSource - Unable to retrieving docx path for source %s with language %s.  Skipping indexing.", mdbSource.UID, i18n.Language)
 			} else {
+				// Found docx.
 				content, err := ParseDocx(fPath)
-				if err != nil {
+				if err == nil {
+					source.Content = content
+					hasDocxForSomeLanguage = true
+				} else {
 					log.Warnf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
-					continue
 				}
-				source.Content = content
-				hasDocxForSomeLanguage = true
 			}
 
 			for _, a := range mdbSource.R.Authors {
-
 				ai18n, err := mdbmodels.FindAuthorI18n(index.db, a.ID, i18n.Language)
 				if err != nil {
 					if err == sql.ErrNoRows {
@@ -283,13 +282,12 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap [
 					source.Authors = append(source.Authors, ai18n.FullName.String)
 				}
 			}
-
 			i18nMap[i18n.Language] = source
 		}
 	}
 
 	if !hasDocxForSomeLanguage {
-		log.Warnf("Sources Index - No docx files found for source %s", mdbSource.UID)
+		log.Warnf("SourcesIndex.indexSource - No docx files found for source %s", mdbSource.UID)
 	}
 
 	// Index each document in its language index
