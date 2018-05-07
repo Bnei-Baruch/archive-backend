@@ -7,7 +7,6 @@ rollbar-environment="development"
 
 [mdb]
 url="postgres://localhost/mdb?sslmode=disable&user=postgres"
-os="linux"  # "linux" or "windows"
 
 [test]
 test-source-content-docx="/es/TEST-CONTENT.docx"

@@ -37,8 +37,12 @@ func DownloadAndConvert(docBatch [][]string) error {
 
 		docFilename := fmt.Sprintf("%s%s", uid, filepath.Ext(name))
 		docxFilename := fmt.Sprintf("%s.docx", uid)
-		docPath := path.Join(docFolder, docFilename)
-		docxPath := path.Join(docFolder, docxFilename)
+        err, folder := DocFolder()
+        if err != nil {
+            return err
+        }
+		docPath := path.Join(folder, docFilename)
+		docxPath := path.Join(folder, docxFilename)
 		if _, err := os.Stat(docxPath); !os.IsNotExist(err) {
 			continue
 		}

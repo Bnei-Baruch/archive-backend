@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
+    "runtime"
 	"strings"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -16,7 +16,6 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
-	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 var (
@@ -26,12 +25,42 @@ var (
 	parseDocsBin    string
 	cdnUrl          string
 	pythonPath      string
-	operatingSystem string
 )
+
+func DocFolder() (error, string) {
+    return InitConfigFolder("elasticsearch.docx-folder", &docFolder)
+}
+
+func SourcesFolder() (error, string) {
+    return InitConfigFolder("elasticsearch.sources-folder", &sourcesFolder)
+}
+
+func InitConfigFolder(configKey string, value *string) (error, string) {
+    if *value != "" {
+        return nil, *value
+    }
+    path := viper.GetString(configKey)
+    if _, err := os.Stat(path); err != nil {
+        if os.IsNotExist(err) {
+            err := os.MkdirAll(docFolder, 0777)
+            if err != nil {
+                *value = path
+            }
+            return err, path
+        } else {
+            return err, path
+        }
+    }
+    *value = path
+    return nil, path
+}
+
+func IsWindows() bool {
+    return runtime.GOOS == "windows"
+}
 
 func InitVars() {
 	pythonPath = viper.GetString("elasticsearch.python-path")
-	operatingSystem = viper.GetString("mdb.os")
 	sofficeBin = viper.GetString("elasticsearch.soffice-bin")
 	if sofficeBin == "" {
 		panic("Soffice binary should be set in config.")
@@ -46,10 +75,6 @@ func InitVars() {
 	if _, err := os.Stat(parseDocsBin); os.IsNotExist(err) {
 		panic("parse_docs.py not found.")
 	}
-	docFolder = viper.GetString("elasticsearch.docx-folder")
-	utils.Must(os.MkdirAll(docFolder, 0777))
-	sourcesFolder = path.Join(viper.GetString("elasticsearch.sources-folder"))
-	utils.Must(os.MkdirAll(sourcesFolder, 0777))
 	cdnUrl = viper.GetString("elasticsearch.cdn-url")
 	if cdnUrl == "" {
 		panic("cdn url should be set in config.")
@@ -225,7 +250,6 @@ func DumpIndexes(esc *elastic.Client, title string, indexType string) error {
 	fmt.Printf("\n\n ------------------- %s DUMP INDEXES ------------------- \n\n", title)
 	indexName := IndexName("test", indexType, consts.LANG_ENGLISH)
 	fmt.Printf("\n\n\nINDEX %s\n\n", indexName)
-	// No need here to specify mdb, docFolder and parseDocsBin.
 	indexer := MakeIndexer("test", []string{indexType}, nil, esc)
 	if err := indexer.RefreshAll(); err != nil {
 		return err

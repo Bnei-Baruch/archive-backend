@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+    "strings"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -34,66 +35,36 @@ type SourcesIndex struct {
 }
 
 func (index *SourcesIndex) ReindexAll() error {
-	log.Infof("Sources Index - Reindex all.")
+	log.Infof("SourcesIndex.Reindex All.")
 	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
 		return err
 	}
 	return index.addToIndexSql("1=1") // SQL to always match any source
 }
 
-func (index *SourcesIndex) Add(scope Scope) error {
-	log.Infof("Sources Index - Add. Scope: %+v.", scope)
-	// We only add sources when the scope is source, otherwise we need to update.
-	if scope.SourceUID != "" {
-		sqlScope := fmt.Sprintf("source.uid = '%s'", scope.SourceUID)
-		if err := index.addToIndexSql(sqlScope); err != nil {
-			return errors.Wrap(err, "Sources index addToIndexSql")
-		}
-		scope.SourceUID = ""
-	}
-	emptyScope := Scope{}
-	if scope != emptyScope {
-		return index.Update(scope)
-	}
-	return nil
-}
-
 func (index *SourcesIndex) Update(scope Scope) error {
-	log.Infof("Sources Index - Update. Scope: %+v.", scope)
-	if scope.SourceUID != "" {
-		//removed, err := index.removeFromIndex(scope)
-		_, err := index.removeFromIndex(scope)
-		if err != nil {
-			return err
-		}
-		//if len(removed) > 0 && removed[0] == scope.SourceUID {
-		sqlScope := fmt.Sprintf("source.uid = '%s'", scope.SourceUID)
-		if err := index.addToIndexSql(sqlScope); err != nil {
-			return errors.Wrap(err, "Sources index addToIndexSql")
-		}
-		//}
+	log.Infof("SourcesIndex.Update - Scope: %+v.", scope)
+	removed, err := index.removeFromIndex(scope)
+	if err != nil {
+		return err
 	}
-	return nil
+	return index.addToIndex(scope, removed)
 }
 
-func (index *SourcesIndex) Delete(scope Scope) error {
-	log.Infof("Sources Index - Delete. Scope: %+v.", scope)
-	// We only delete sources when source is deleted, otherwise we just update.
-	if scope.SourceUID != "" {
-		if _, err := index.removeFromIndex(scope); err != nil {
-			return err
-		}
-		scope.SourceUID = ""
+func (index *SourcesIndex) addToIndex(scope Scope, removedUIDs []string) error {
+	uids := removedUIDs
+    if scope.SourceUID != "" {
+        uids = append(uids, scope.SourceUID)
+    }
+	quoted := make([]string, len(uids))
+	for i, uid := range uids {
+		quoted[i] = fmt.Sprintf("'%s'", uid)
 	}
-	emptyScope := Scope{}
-	if scope != emptyScope {
-		return index.Update(scope)
-	}
-	return nil
+    sqlScope := fmt.Sprintf("source.uid IN (%s)", strings.Join(quoted, ","))
+    return index.addToIndexSql(sqlScope)
 }
 
 func (index *SourcesIndex) removeFromIndex(scope Scope) ([]string, error) {
-
 	if scope.SourceUID != "" {
 		return index.removeFromIndexQuery(elastic.NewTermsQuery("mdb_uid", scope.SourceUID))
 	}
@@ -112,7 +83,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 		return err
 	}
 
-	log.Infof("Sources Index - Adding %d sources. Scope: %s", count, sqlScope)
+	log.Infof("SourcesIndex.addToIndexSql - Sources Index - Adding %d sources. Scope: %s", count, sqlScope)
 
 	offset := 0
 	limit := 1000
@@ -126,22 +97,21 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 			qm.Offset(offset),
 			qm.Limit(limit)).Bind(&sources)
 		if err != nil {
-			return errors.Wrap(err, "Fetch sources from mdb")
+			return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources from mdb")
 		}
 
 		parentsMap, err := index.loadSources(index.db) // Note: getting all sources path, not by scope.
 		if err != nil {
-			return errors.Wrap(err, "Fetch sources parents from mdb")
+			return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources parents from mdb")
 		}
 
-		log.Infof("Adding %d sources (offset: %d).", len(sources), offset)
+		log.Infof("SourcesIndex.addToIndexSql - Adding %d sources (offset: %d).", len(sources), offset)
 
 		for _, source := range sources {
 			if parents, ok := parentsMap[source.UID]; !ok {
-				log.Warnf("Source %s not found in parentsMap: %+v", source.UID, parents)
+				log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in parentsMap: %+v", source.UID, parents)
 			} else if err := index.indexSource(source, parents); err != nil {
-				log.Warnf("Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
-				//return err
+				log.Warnf("SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
 			}
 		}
 		offset += limit
@@ -176,7 +146,7 @@ func (index *SourcesIndex) loadSources(db *sql.DB) (map[string][]string, error) 
 		  select uid, path from rec_sources;`)).Query()
 
 	if err != nil {
-		return nil, errors.Wrap(err, "Load sources")
+		return nil, errors.Wrap(err, "SourcesIndex.loadSources - Query failed.")
 	}
 	defer rows.Close()
 
@@ -192,7 +162,7 @@ func (index *SourcesIndex) loadSources(db *sql.DB) (map[string][]string, error) 
 		m[uid] = values
 	}
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "rows.Err()")
+		return nil, errors.Wrap(err, "SourcesIndex.loadSources - rows.Err()")
 	}
 
 	return m, nil
@@ -207,7 +177,7 @@ func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]s
 	if err != nil {
 		return []string{}, err
 	}
-	log.Infof("Sources Index - Removing from index. Scope: %s", string(jsonBytes))
+	log.Infof("SourcesIndex.removeFromIndexQuery - Removing from index. Scope: %s", string(jsonBytes))
 	removed := make(map[string]bool)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
@@ -227,14 +197,14 @@ func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]s
 			Query(elasticScope).
 			Do(context.TODO())
 		if err != nil {
-			return []string{}, errors.Wrapf(err, "Remove from index %s %+v\n", indexName, elasticScope)
+			return []string{}, errors.Wrapf(err, "SourcesIndex.removeFromIndexQuery - Remove from index %s %+v\n", indexName, elasticScope)
 		}
 		if delRes.Deleted > 0 {
-			fmt.Printf("Deleted %d documents from %s.\n", delRes.Deleted, indexName)
+			fmt.Printf("SourcesIndex.removeFromIndexQuery - Deleted %d documents from %s.\n", delRes.Deleted, indexName)
 		}
 	}
 	if len(removed) == 0 {
-		fmt.Println("Sources Index - Nothing was delete.")
+		fmt.Println("SourcesIndex.removeFromIndexQuery - Nothing was delete.")
 		return []string{}, nil
 	}
 	keys := make([]string, 0)
@@ -249,7 +219,7 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 	jsonPath := path.Join(uidPath, "index.json")
 	jsonCnt, err := ioutil.ReadFile(jsonPath)
 	if err != nil {
-		return "", fmt.Errorf("Unable to read from file %s. Error: %+v", jsonPath, err)
+		return "", fmt.Errorf("SourcesIndex.getDocxPath - Unable to read from file %s. Error: %+v", jsonPath, err)
 	}
 	var m map[string]map[string]string
 	err = json.Unmarshal(jsonCnt, &m)
@@ -262,7 +232,7 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 			return path.Join(docxPath), nil
 		}
 	}
-	return "", errors.New("Docx not found in index.json")
+	return "", errors.New("SourcesIndex.getDocxPath - Docx not found in index.json")
 }
 
 func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap []string) error {
@@ -285,12 +255,12 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap [
 
 			fPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
 			if err != nil {
-				log.Warnf("Unable to retrieving docx path for source %s with language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
+				log.Warnf("SourcesIndex.indexSource - Unable to retrieving docx path for source %s with language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
 				continue
 			} else {
-				content, err := index.ParseDocx(fPath)
+				content, err := ParseDocx(fPath)
 				if err != nil {
-					log.Warnf("Error parsing docx for source %s and language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
+					log.Warnf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
 					continue
 				}
 				source.Content = content
@@ -319,7 +289,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap [
 	}
 
 	if !hasDocxForSomeLanguage {
-		return errors.Errorf("No docx files found for source %s", mdbSource.UID)
+		log.Warnf("Sources Index - No docx files found for source %s", mdbSource.UID)
 	}
 
 	// Index each document in its language index
@@ -332,10 +302,10 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap [
 			BodyJson(v).
 			Do(context.TODO())
 		if err != nil {
-			return errors.Wrapf(err, "Source %s %s", name, mdbSource.UID)
+			return errors.Wrapf(err, "Sources Index - Source %s %s", name, mdbSource.UID)
 		}
 		if !resp.Created {
-			return errors.Errorf("Not created: source %s %s", name, mdbSource.UID)
+			return errors.Errorf("Sources Index - Not created: source %s %s", name, mdbSource.UID)
 		}
 	}
 
