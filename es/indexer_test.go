@@ -832,7 +832,7 @@ func updateSource(source es.Source, lang string) (string, error) {
 	}
 
 	//add folder for source files
-	err, folder := es.SourcesFolder()
+	folder, err := es.SourcesFolder()
 	if err != nil {
 		return "", err
 	}
@@ -848,7 +848,7 @@ func updateSource(source es.Source, lang string) (string, error) {
 }
 
 func updateSourceFileContent(uid string, lang string) error {
-	err, folder := es.SourcesFolder()
+	folder, err := es.SourcesFolder()
 	if err != nil {
 		return err
 	}

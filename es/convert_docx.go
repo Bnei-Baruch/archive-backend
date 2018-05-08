@@ -37,7 +37,7 @@ func DownloadAndConvert(docBatch [][]string) error {
 
 		docFilename := fmt.Sprintf("%s%s", uid, filepath.Ext(name))
 		docxFilename := fmt.Sprintf("%s.docx", uid)
-		err, folder := DocFolder()
+		folder, err := DocFolder()
 		if err != nil {
 			return err
 		}
@@ -85,7 +85,7 @@ func DownloadAndConvert(docBatch [][]string) error {
 	log.Infof("Converting: %+v", convertDocs)
 	if len(convertDocs) > 0 {
 		sofficeMutex.Lock()
-		err, folder := DocFolder()
+		folder, err := DocFolder()
 		if err != nil {
 			return err
 		}

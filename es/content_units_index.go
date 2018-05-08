@@ -337,7 +337,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 							log.Errorf("Content Units Index - Error %+v", err)
 						} else {
 							docxFilename := fmt.Sprintf("%s.docx", val[0])
-							err, folder := DocFolder()
+							folder, err := DocFolder()
 							if err != nil {
 								return err
 							}

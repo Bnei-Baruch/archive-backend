@@ -215,7 +215,7 @@ func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]s
 }
 
 func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) {
-	err, folder := SourcesFolder()
+	folder, err := SourcesFolder()
 	if err != nil {
 		return "", err
 	}

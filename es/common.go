@@ -27,18 +27,19 @@ var (
 	pythonPath    string
 )
 
-func DocFolder() (error, string) {
+func DocFolder() (string, error) {
 	return InitConfigFolder("elasticsearch.docx-folder", &docFolder)
 }
 
-func SourcesFolder() (error, string) {
+func SourcesFolder() (string, error) {
 	return InitConfigFolder("elasticsearch.sources-folder", &sourcesFolder)
 }
 
-func InitConfigFolder(configKey string, value *string) (error, string) {
+func InitConfigFolder(configKey string, value *string) (string, error) {
 	if *value != "" {
-		return nil, *value
+		return *value, nil
 	}
+
 	path := viper.GetString(configKey)
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
@@ -46,13 +47,13 @@ func InitConfigFolder(configKey string, value *string) (error, string) {
 			if err != nil {
 				*value = path
 			}
-			return err, path
+			return path, err
 		} else {
-			return err, path
+			return path, err
 		}
 	}
 	*value = path
-	return nil, path
+	return *value, nil
 }
 
 func IsWindows() bool {
