@@ -1,0 +1,81 @@
+{
+    "mappings": {
+        "sources": {
+            "_all": {
+                "enabled": false
+            }, 
+            "properties": {
+                "description": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "french"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "mdb_uid": {
+                    "type": "keyword"
+                }, 
+                "content": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "french"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "sources": {
+                    "type": "keyword"
+                }, 
+                "authors": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "french"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "name": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "french"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }
+            }
+        }
+    }, 
+    "settings": {
+        "index": {
+            "analysis": {
+                "filter": {
+                    "custom_phonetic": {
+                        "encoder": "beider_morse", 
+                        "type": "phonetic", 
+                        "languageset": "french", 
+                        "replace": true
+                    }
+                }, 
+                "analyzer": {
+                    "phonetic_analyzer": {
+                        "filter": [
+                            "standard", 
+                            "lowercase", 
+                            "custom_phonetic"
+                        ], 
+                        "tokenizer": "standard"
+                    }
+                }
+            }
+        }
+    }
+}

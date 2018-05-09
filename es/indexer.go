@@ -37,6 +37,8 @@ func MakeIndexer(namespace string, names []string, mdb *sql.DB, esc *elastic.Cli
 			indexer.indices[i] = MakeContentUnitsIndex(namespace, mdb, esc)
 		} else if name == consts.ES_COLLECTIONS_INDEX {
 			indexer.indices[i] = MakeCollectionsIndex(namespace, mdb, esc)
+		} else if name == consts.ES_SOURCES_INDEX {
+			indexer.indices[i] = MakeSourcesIndex(namespace, mdb, esc)
 		}
 	}
 	return indexer

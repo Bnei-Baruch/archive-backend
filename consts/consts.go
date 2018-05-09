@@ -22,6 +22,7 @@ const (
 	CT_UNITY_DAY          = "UNITY_DAY"
 	CT_CLIPS              = "CLIPS"
 	CT_ARTICLES           = "ARTICLES"
+	CT_LESSONS_SERIES     = "LESSONS_SERIES"
 
 	// Content Unit Types
 	CT_LESSON_PART           = "LESSON_PART"
@@ -201,6 +202,7 @@ const (
 	FILTER_AUTHOR                    = "author"
 	FILTER_UNITS_CONTENT_TYPES       = "units_content_types"
 	FILTER_COLLECTIONS_CONTENT_TYPES = "collections_content_types"
+	FILTER_SECTION_SOURCES           = "filter_section_sources"
 )
 
 // Use to identify and map request filters
@@ -213,12 +215,14 @@ var FILTERS = map[string]string{
 	FILTER_AUTHOR:                    "sources",
 	FILTER_UNITS_CONTENT_TYPES:       "content_type",
 	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
+	FILTER_SECTION_SOURCES:           "filter_section_sources",
 }
 
 // ElasticSearch 'es'
 const ES_CLASSIFICATIONS_INDEX = "classifications"
 const ES_UNITS_INDEX = "units"
 const ES_COLLECTIONS_INDEX = "collections"
+const ES_SOURCES_INDEX = "sources"
 
 // Classicication index consts.
 const (
@@ -226,4 +230,12 @@ const (
 	TAGS_INDEX_TYPE            = "tags"
 	SOURCE_CLASSIFICATION_TYPE = "source"
 	TAG_CLASSIFICATION_TYPE    = "tag"
+)
+
+type SEARCH_STATUS int
+
+const (
+	NO_FILTER SEARCH_STATUS = iota
+	ONLY_SOURCES
+	WITHOUT_SOURCES
 )

@@ -16,6 +16,7 @@
 #   sudo bin/elasticsearch-plugin install analysis-icu
 
 import json
+import os
 
 # List of all languages
 ENGLISH = "en"
@@ -412,6 +413,94 @@ COLLECTIONS_TEMPLATE = {
   },
 }
 
+SOURCES_TEMPLATE = {
+  "settings": {
+    "index": {
+      "analysis": {
+        "analyzer": {
+          "phonetic_analyzer": {
+            "tokenizer": "standard",
+            "filter": [
+              "standard",
+              "lowercase",
+              lambda lang: IsCyrillic(lang, 'icu_transliterate'),
+              "custom_phonetic",
+            ],
+          },
+        },
+        "filter": {
+          "icu_transliterate": lambda lang: IsCyrillic(lang, {
+            "type": "icu_transform",
+            "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
+          }),
+          "custom_phonetic": {
+            "type": "phonetic",
+            "encoder": "beider_morse",
+            "replace": True,
+            "languageset": BeiderMorseLanguageset,
+          },
+        },
+      },
+    },
+  },
+  "mappings": {
+    "sources": {
+      "_all": {
+        "enabled": False,
+      },
+      "properties": {
+        "mdb_uid": {
+          "type": "keyword",
+        },
+        "name": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+          },
+        },
+        "description": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+          },
+        },
+        "authors": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            }
+          },
+        },
+        "content": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            }
+          },
+        },
+        "sources": {
+          "type": "keyword",
+        }
+      },
+    },
+  },
+}
+
+
 SEARCH_LOGS_TEMPLATE = {
     "mappings": {
         "search_logs": {
@@ -483,11 +572,14 @@ def Resolve(lang, value):
 
 
 for lang in LANG_GROUPS[ALL]:
-  with open('./data/es/mappings/units/units-%s.json' % lang, 'w') as f:
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'units', 'units-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, UNITS_TEMPLATE), f, indent=4)
-  with open('./data/es/mappings/classifications/classifications-%s.json' % lang, 'w') as f:
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'classifications', 'classifications-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, CLASSIFICATIONS_TEMPLATE), f, indent=4)
-  with open('./data/es/mappings/collections/collections-%s.json' % lang, 'w') as f:
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'collections', 'collections-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, COLLECTIONS_TEMPLATE), f, indent=4)
-with open('./data/es/mappings/search_logs.json', 'w') as f:
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'sources', 'sources-%s.json' % lang), 'w') as f:
+    json.dump(Resolve(lang, SOURCES_TEMPLATE), f, indent=4)
+# Without languages
+with open(os.path.join('.', 'data', 'es', 'mappings', 'search_logs.json'), 'w') as f:
   json.dump(Resolve('xx', SEARCH_LOGS_TEMPLATE), f, indent=4)

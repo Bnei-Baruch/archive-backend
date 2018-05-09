@@ -7,19 +7,23 @@ rollbar-environment="development"
 
 [mdb]
 url="postgres://localhost/mdb?sslmode=disable&user=postgres"
-os="linux"  # "linux" or "windows"
 
 [test]
+test-source-content-docx="/es/TEST-CONTENT.docx"
+test-sources-folder="/tmp/test-sources-folder"
 mdb-url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 url-template="postgres://localhost/%s?sslmode=disable&user=postgres"
 test-docx-folder="/tmp/mdb-docx-test/"
 #for windows:
 #test-docx-folder="C://Users//[USERNAME]//go//src//github.com//Bnei-Baruch//archive-backend//es//testdocx"
+#test-source-content-docx="C://Users//[USERNAME]//go//src//github.com//Bnei-Baruch//archive-backend//es//TEST-CONTENT.docx"
+#test-sources-folder="C://test-sources-folder"
 
 [elasticsearch]
 url="http://127.0.0.1:9200"
 parse-docs-bin="es/parse_docs.py"
 docx-folder="/tmp/mdb-docx/"
+sources-folder="/tmp/sources-folder"
 soffice-bin="/usr/bin/soffice"
 cdn-url=""
 #for windows:
