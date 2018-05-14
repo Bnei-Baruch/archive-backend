@@ -1,6 +1,5 @@
 package api
 
-
 import (
 	"context"
 	"crypto/md5"
@@ -409,35 +408,41 @@ func ParseQuery(q string) search.Query {
 // Search helpers, are passed to ESEngine. Those function defined here to
 // avoid cycle dependency of api ==> search ==> api
 
-// Returns true is content units of specific type exists for specified source or/and tag (topic).
-func checkContentUnits(mdb *sql.DB, contentUnitType string, lang string, tagUid string, sourceUid string) (error, bool) {
-    sf := SourcesFilter{}
-    if sourceUid != "" {
-        sf.Sources = []string{sourceUid}
-    }
-    tf := TagsFilter{}
-    if tagUid != "" {
-        tf.Tags = []string{tagUid}
-    }
-    cur := ContentUnitsRequest{
-        ContentTypesFilter: ContentTypesFilter{
-            ContentTypes: []string{contentUnitType},
-        },
-        ListRequest: ListRequest{
-            BaseRequest: BaseRequest{Language: lang},
-            PageSize: 1,
-            PageNumber: 1,
-        },
-        SourcesFilter: sf,
-        TagsFilter:    tf,
-    }
-    log.Infof("cur: %+v", cur)
-    resp, err := handleContentUnits(mdb, cur)
-    log.Infof("checkContentUnits: %+v err: %+v", resp, err)
-    if err != nil {
-        return err, false
-    }
-    return nil, resp.Total > 0
+// Returns two maps one for tags, other for sources mapping uid to boolean indicating that content unit exists for specified source or/and tag (topic).
+func checkContentUnits(mdb *sql.DB, contentUnitType string, lang string, tagUids []string, sourceUids []string) (error, map[string]bool, map[string]bool) {
+	cur := ContentUnitsRequest{
+		ContentTypesFilter: ContentTypesFilter{
+			ContentTypes: []string{contentUnitType},
+		},
+		ListRequest: ListRequest{
+			BaseRequest: BaseRequest{Language: lang},
+		},
+		SourcesFilter: SourcesFilter{Sources: sourceUids},
+		TagsFilter:    TagsFilter{Tags: tagUids},
+	}
+	log.Infof("cur: %+v", cur)
+	resp, err := handleStatsCUClass(mdb, cur)
+	log.Infof("checkContentUnits: %+v err: %+v", resp, err)
+	if err != nil {
+		return err, nil, nil
+	}
+	tagsRet := make(map[string]bool)
+	for _, tagUid := range tagUids {
+		if count, ok := resp.Tags[tagUid]; ok {
+			tagsRet[tagUid] = count > 0
+		} else {
+			return errors.New(fmt.Sprintf("checkContentUnits - Did not find tag uid: %s in handleStatsCUClass.", tagUid)), nil, nil
+		}
+	}
+	sourcesRet := make(map[string]bool)
+	for _, sourceUid := range sourceUids {
+		if count, ok := resp.Sources[sourceUid]; ok {
+			sourcesRet[sourceUid] = count > 0
+		} else {
+			return errors.New(fmt.Sprintf("checkContentUnits - Did not find source uid: %s in handleStatsCUClass.", sourceUid)), nil, nil
+		}
+	}
+	return nil, tagsRet, sourcesRet
 }
 
 func SearchHandler(c *gin.Context) {
@@ -517,6 +522,8 @@ func SearchHandler(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, res)
 	} else {
+		// TODO: Remove following line, we should not log this.
+		log.Infof("Error on search: %+v", err)
 		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, err)
 		if logErr != nil {
 			log.Warnf("Erro logging search error: %+v %+v", logErr, err)
@@ -625,6 +632,8 @@ func StatsCUClassHandler(c *gin.Context) {
 	if c.Bind(&r) != nil {
 		return
 	}
+
+	log.Infof("Request: %+v", r)
 
 	resp, err := handleStatsCUClass(c.MustGet("MDB_DB").(*sql.DB), r)
 	concludeRequest(c, resp, err)
@@ -1545,9 +1554,7 @@ func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter)
 		return nil
 	}
 
-    log.Infof("TAGS!!!! %+v", f.Tags)
-
-	// find all nested tag_ids
+	// Find all nested tag_ids.
 	q := `WITH RECURSIVE rec_tags AS (
             SELECT t.id FROM tags t WHERE t.uid = ANY($1)
             UNION

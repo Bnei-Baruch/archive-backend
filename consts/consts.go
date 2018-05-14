@@ -235,7 +235,27 @@ const (
 type SEARCH_STATUS int
 
 const (
-	NO_FILTER SEARCH_STATUS = iota
-	ONLY_SOURCES
-	WITHOUT_SOURCES
+	NO_FILTER       SEARCH_STATUS = iota
+	ONLY_SOURCES                  = iota
+	WITHOUT_SOURCES               = iota
 )
+
+const (
+	INTENT_PROGRAMS = "programs"
+	INTENT_LESSONS  = "lessons"
+)
+
+var INTENT_INDEX_BY_CT = map[string]string{
+	CT_LESSON_PART:           INTENT_LESSONS,
+	CT_VIDEO_PROGRAM_CHAPTER: INTENT_PROGRAMS,
+}
+
+const (
+	INTENT_TAG    = 0
+	INTENT_SOURCE = 1
+)
+
+var INTENT_HIT_TYPE = map[int]string{
+	INTENT_TAG:    "intent-tag",
+	INTENT_SOURCE: "intent-source",
+}

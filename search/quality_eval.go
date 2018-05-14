@@ -57,7 +57,7 @@ const (
 	ET_SOURCES       = iota
 )
 
-var EXPECTATION_URL_PATH = map[int]string {
+var EXPECTATION_URL_PATH = map[int]string{
 	ET_CONTENT_UNITS: "cu",
 	ET_COLLECTIONS:   "c",
 	ET_LESSONS:       "lessons",
@@ -65,7 +65,7 @@ var EXPECTATION_URL_PATH = map[int]string {
 	ET_SOURCES:       "sources",
 }
 
-var EXPECTATION_HIT_TYPE = map[int]string {
+var EXPECTATION_HIT_TYPE = map[int]string{
 	ET_CONTENT_UNITS: "content_units",
 	ET_COLLECTIONS:   "collections",
 	ET_LESSONS:       "intent-lessons",  // Special hit type. Should be handled as intent.
@@ -322,16 +322,16 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 				}
 				break
 			}
-        }
-        // We need to add program/lesson to intent before validating expectation.
-        // Check intents
-        // for _, intent := range queryResult.Intents {
-        //     if classificationIntent, ok := intent.Value.(es.ClassificationIntent); ok {
-        //         intent.Type == I_SOURCE && e.Type == == consts.SOURCE_CLASSIFICATION_TYPE
-        //     }
-        //     if e.Type == ET_LESSONS && intent.Type == I_TAG {
-        //     }
-        // }
+		}
+		// We need to add program/lesson to intent before validating expectation.
+		// Check intents
+		// for _, intent := range queryResult.Intents {
+		//     if classificationIntent, ok := intent.Value.(es.ClassificationIntent); ok {
+		//         intent.Type == consts.INTENT_SOURCE && e.Type == == consts.SOURCE_CLASSIFICATION_TYPE
+		//     }
+		//     if e.Type == ET_LESSONS && intent.Type == consts.INTENT_TAG {
+		//     }
+		// }
 		r.SearchQuality = append(r.SearchQuality, sq)
 		r.Rank = append(r.Rank, rank)
 	}
