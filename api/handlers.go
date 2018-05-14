@@ -430,16 +430,12 @@ func checkContentUnits(mdb *sql.DB, contentUnitType string, lang string, tagUids
 	for _, tagUid := range tagUids {
 		if count, ok := resp.Tags[tagUid]; ok {
 			tagsRet[tagUid] = count > 0
-		} else {
-			return errors.New(fmt.Sprintf("checkContentUnits - Did not find tag uid: %s in handleStatsCUClass.", tagUid)), nil, nil
 		}
 	}
 	sourcesRet := make(map[string]bool)
 	for _, sourceUid := range sourceUids {
 		if count, ok := resp.Sources[sourceUid]; ok {
 			sourcesRet[sourceUid] = count > 0
-		} else {
-			return errors.New(fmt.Sprintf("checkContentUnits - Did not find source uid: %s in handleStatsCUClass.", sourceUid)), nil, nil
 		}
 	}
 	return nil, tagsRet, sourcesRet
