@@ -41,6 +41,7 @@ func NewStatsTree() *StatsTree {
 	return st
 }
 
+// TODO: add comment here
 func (st *StatsTree) accumulate() {
 	// s starts as all leaf nodes
 	s := make([]int64, 0)
@@ -73,6 +74,7 @@ func (st *StatsTree) accumulate() {
 	}
 }
 
+// TODO: add comment here
 func (st *StatsTree) flatten() map[string]Histogram {
 	byUID := make(map[string]Histogram, len(st.byID))
 	for _, v := range st.byID {

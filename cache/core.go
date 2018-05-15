@@ -33,6 +33,8 @@ func NewCacheManagerImpl(mdb *sql.DB, refreshIntervals map[string]time.Duration)
 	cm.ssc = NewSearchStatsCacheImpl(mdb)
 	cm.refresh(cm.ssc)
 
+	// Convert time.Duration to int64
+	// So we would have refresh intervals in integer multiple of a second
 	cm.refreshIntervals = make(map[string]int64, len(refreshIntervals))
 	for k, v := range refreshIntervals {
 		cm.refreshIntervals[k] = int64(v.Truncate(time.Second).Seconds())
