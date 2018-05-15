@@ -44,3 +44,6 @@ url1="http://files.kabbalahmedia.info/api/v1/get"
 
 [assets_service]
 url="https://archive.kbb1.com/assets/api/"
+
+[cache]
+refresh-search-stats="5m"
