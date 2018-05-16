@@ -141,6 +141,11 @@ type HomeResponse struct {
 	Banner             *Banner        `json:"banner"`
 }
 
+type TagsDashboardResponse struct {
+	PromotedContentUnits []*ContentUnit `json:"promoted_units"`
+	LatestContentUnits   []*ContentUnit `json:"latest_units"`
+}
+
 type StatsCUClassResponse struct {
 	Sources map[string]int64 `json:"sources"`
 	Tags    map[string]int64 `json:"tags"`
@@ -157,6 +162,13 @@ func NewContentUnitsResponse() *ContentUnitsResponse {
 
 func NewPublishersResponse() *PublishersResponse {
 	return &PublishersResponse{Publishers: make([]*Publisher, 0)}
+}
+
+func NewTagsDashboardResponse() *TagsDashboardResponse {
+	return &TagsDashboardResponse{
+		PromotedContentUnits: make([]*ContentUnit, 0),
+		LatestContentUnits:   make([]*ContentUnit, 0),
+	}
 }
 
 func NewStatsCUClassResponse() *StatsCUClassResponse {
