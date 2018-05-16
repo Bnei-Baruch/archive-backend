@@ -267,6 +267,7 @@ func (suite *IndexerSuite) SetupTest() {
 	// Delete test directory
 	os.RemoveAll(viper.GetString("test.test-docx-folder"))
 	utils.Must(os.MkdirAll(viper.GetString("test.test-docx-folder"), 0777))
+	tils.Must(os.MkdirAll(viper.GetString("test.test-sources-folder"), 0777))
 }
 
 func updateCollection(c es.Collection, cuUID string, removeContentUnitUID string) (string, error) {
