@@ -5,6 +5,8 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type Refreshable interface {
@@ -65,5 +67,6 @@ func (cm *CacheManagerImpl) refresh(p Provider) {
 	log.Infof("Refreshing %s", p)
 	if err := p.Refresh(); err != nil {
 		log.Errorf("Refresh %s: %s", p, err.Error())
+		utils.LogError(err)
 	}
 }
