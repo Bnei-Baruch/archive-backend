@@ -1,4 +1,4 @@
-Language,Query,Weight,Bucket,#1,#2,#3,#4,#5,Suggest,Comment
+Language,Query,Weight,Bucket,#1,#2,#3,#4,#5,Grammar queries,Comment
 he,542,5772,מספר תכנית (חיים חדשים),https://archive.kbb1.com/he/programs/cu/AsNLozeK,,,,,,
 he,707,5772,מספר תכנית (חיים חדשים),https://archive.kbb1.com/he/programs/cu/fMJtiizU,,,,,,
 he,103,5772,מספר תכנית (חיים חדשים),https://archive.kbb1.com/he/programs?program=%7CDx8UewbL,https://archive.kbb1.com/he/programs/cu/VrwG8S4o,,,,,"All results are 103fm, should be more various"
@@ -6,7 +6,7 @@ he,209,5772,מספר תכנית (חיים חדשים),https://archive.kbb1.com/h
 he,פתיחה,2371,מאמר בקבלה,https://archive.kbb1.com/he/lessons?source=bs_L2jMWyce_kB3eD83I,https://archive.kbb1.com/he/sources/kB3eD83I,https://archive.kbb1.com/he/lessons/cu/lktYc6eC,,,,"If date older then week, article goes first."
 he,הקדמה לספר הזוהר,2371,מאמר בקבלה,https://archive.kbb1.com/he/lessons?source=bs_L2jMWyce_ALlyoveA,https://archive.kbb1.com/he/sources/ALlyoveA,https://archive.kbb1.com/he/lessons/cu/ujFce7WX?language=he,,,,unclear which one is the correct....
 he,מתן תורה,2371,מאמר בקבלה,https://archive.kbb1.com/he/lessons?source=bs_qMeV5M3Y_2bscFWf4,https://archive.kbb1.com/he/sources/2bscFWf4,https://archive.kbb1.com/he/lessons/cu/cDfMlyqU,,,,
-he,מאמר השלום,2371,מאמר בקבלה,https://archive.kbb1.com/he/lessons?source=bs_qMeV5M3Y_28Cmp7gl,https://archive.kbb1.com/he/sources/28Cmp7gl,https://archive.kbb1.com/he/lessons/cu/eK9Jqxup?language=he,,,,
+he,מאמר השלום,2371,מאמר בקבלה,https://archive.kbb1.com/he/lessons?source=bs_qMeV5M3Y_28Cmp7gl,https://archive.kbb1.com/he/sources/28Cmp7gl,https://archive.kbb1.com/he/lessons/cu/eK9Jqxup?language=he,,,1,
 he,מבוא לספר הזוהר,2371,מאמר בקבלה,https://archive.kbb1.com/he/lessons?source=bs_L2jMWyce_tswzgnWk,https://archive.kbb1.com/he/sources/tswzgnWk,https://archive.kbb1.com/he/lessons/cu/TP0R1939,,,,
 he,מקובלים כותבים,1666,תכנית טלוויזיה,https://archive.kbb1.com/he/programs/c/fLWpcUjQ,,,,,,unrelated results
 he,עולמות נפגשים,1666,תכנית טלוויזיה,https://archive.kbb1.com/he/programs/c/FOOoTpLR,,,,,,
@@ -15,21 +15,21 @@ he,הפתרון,1666,תכנית טלוויזיה,https://archive.kbb1.com/he/pro
 he,מורים דרך,1666,תכנית טלוויזיה,https://archive.kbb1.com/he/programs/c/JMkKQ7ZZ,,,,,,unrelated results
 he,חיים חדשים,1586,חיים חדשים,https://archive.kbb1.com/he/programs/c/zf4lLwyI,,,,,,groups
 he,חיים,1586,חיים חדשים,https://archive.kbb1.com/he/programs/c/zf4lLwyI,,,,,,groups
-he,תוכנית חיים חדשים,1586,חיים חדשים,https://archive.kbb1.com/he/programs/c/zf4lLwyI,,,,,,groups
+he,תוכנית חיים חדשים,1586,חיים חדשים,https://archive.kbb1.com/he/programs/c/zf4lLwyI,,,,,1,groups
 he,אין עוד מלבדו,1513,נושא בקבלה,https://archive.kbb1.com/he/sources/hFeGidcS,https://archive.kbb1.com/he/lessons?source=bs_qMUUn22b_hFeGidcS,missing this issue by congresses,,,,unclear what is good
 he,ערבות זולת נשמות,1513,נושא בקבלה,?,,,,,,unclear what is good
 he,תפיסת המציאות,1513,נושא בקבלה,https://archive.kbb1.com/he/lessons/cu/fQ9F5Rrn,https://archive.kbb1.com/he/lessons?topic=0db5BBS3_fF9Awl9y_VmPWCNvo,https://archive.kbb1.com/he/programs?topic=0db5BBS3_fF9Awl9y_VmPWCNvo,,,,unclear what is good
 he,אהבת חברים,1513,נושא בקבלה,can't find latest lesson,https://archive.kbb1.com/he/sources/jXgT6Pa1,https://archive.kbb1.com/he/programs/cu/JnlqMWvo,,,,unclear what is good
 he,זוהר,1235,זוהר,https://archive.kbb1.com/he/lessons/cu/skGMOXD8,https://archive.kbb1.com/he/sources/AwGBQX2L,,,,,groups
 he,זוהר לעם,1235,זוהר,https://archive.kbb1.com/he/lessons/cu/skGMOXD8,https://archive.kbb1.com/he/sources/AwGBQX2L,,,,,groups
-he,ספר הזוהר,1235,זוהר,https://archive.kbb1.com/he/sources/AwGBQX2L,,,,,,groups
+he,ספר הזוהר,1235,זוהר,https://archive.kbb1.com/he/sources/AwGBQX2L,,,,,1,groups
 he,אותיות דרב המנונא סבא,1235,זוהר,https://archive.kbb1.com/he/sources/M07beI2F,https://archive.kbb1.com/he/lessons?source=rh_AwGBQX2L_cSyh3vQM_43BXTx3C_M07beI2F,,,,,groups too old
 he,זוהר לעם הקדמת ספר הזוהר,1235,זוהר,https://archive.kbb1.com/he/sources/AwGBQX2L,https://archive.kbb1.com/he/lessons?source=rh_AwGBQX2L_cSyh3vQM_43BXTx3C,,,,,groups too old
 he,ליל הכלה,1235,זוהר,https://archive.kbb1.com/he/sources/jnB9Pwgl,https://archive.kbb1.com/he/events/c/9DJ1NO35?language=he,https://archive.kbb1.com/he/lessons/cu/7DWcJ3wb,https://archive.kbb1.com/he/programs/cu/Y1x3GKhP,,,groups too old
 he,לילה דכלא,1235,זוהר,https://archive.kbb1.com/he/sources/jnB9Pwgl,https://archive.kbb1.com/he/events/c/9DJ1NO35?language=he,https://archive.kbb1.com/he/lessons/cu/7DWcJ3wb,https://archive.kbb1.com/he/programs/cu/Y1x3GKhP,,,groups too old
 he,"תע""ס",1212,"תע""ס",https://archive.kbb1.com/he/sources/xtKmrbb9?page=1,https://archive.kbb1.com/he/lessons/latest?language=he&ap=2,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,,,,groups Should show by default the last lesson?
-he,תלמוד עשר הספירות,1212,"תע""ס",https://archive.kbb1.com/he/sources/9xNFLSSp?page=1,https://archive.kbb1.com/he/lessons/latest?language=he&ap=2,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,,,,groups Should show by default the last lesson?
-he,תעס,1212,"תע""ס",https://archive.kbb1.com/he/sources/9xNFLSSp?page=1,https://archive.kbb1.com/he/lessons/latest?language=he&ap=2,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,,,,groups 2003 lesson is first
+he,תלמוד עשר הספירות,1212,"תע""ס",https://archive.kbb1.com/he/sourcesxtKmrbb9,https://archive.kbb1.com/he/lessons/latest?language=he&ap=2,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,,,,groups Should show by default the last lesson?
+he,תעס,1212,"תע""ס",https://archive.kbb1.com/he/sourcesxtKmrbb9,https://archive.kbb1.com/he/lessons/latest?language=he&ap=2,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,,,,groups 2003 lesson is first
 he,הסתכלות פנימית,1212,"תע""ס",https://archive.kbb1.com/he/sources/9xNFLSSp?page=13,https://archive.kbb1.com/he/lessons/latest?language=he&ap=2,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,,,,groups Should show by default the last lesson?
 he,"תע""ס כרך א' חלק ב'",1212,"תע""ס",https://archive.kbb1.com/he/sources/XlukqLH8?page=37,https://archive.kbb1.com/he/lessons/latest?language=he&ap=2,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,,,,groups not finding chapter
 he,"תע""ס כרך א",1212,"תע""ס",https://archive.kbb1.com/he/sources/9xNFLSSp?page=1,https://archive.kbb1.com/he/lessons/latest?language=he&ap=2,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,,,,groups not finding part
@@ -39,11 +39,11 @@ he,בראשית,882,תנך,https://archive.kbb1.com/he/sources/NslF3LJh,https://
 he,פרשת שבוע,882,תנך,Current parashat hashavua,https://archive.kbb1.com/he/programs/c/FMekSMpp,https://archive.kbb1.com/he/programs/c/yGQYLsbV,https://archive.kbb1.com/he/programs/c/4D87X3Oo,,,groups
 he,ויצא,882,תנך,https://archive.kbb1.com/he/sources/pCllz58I,https://archive.kbb1.com/he/lessons/cu/ZWV7sRUB,https://archive.kbb1.com/he/programs/cu/RPHaK0bQ,https://archive.kbb1.com/he/programs/cu/ZEG4FXf4,,,groups
 he,פרשת השבוע במדבר,882,תנך,https://archive.kbb1.com/he/lessons/cu/Oy9AIPNu,https://archive.kbb1.com/he/lessons/cu/Oy9AIPNu,https://archive.kbb1.com/he/programs/cu/WYbNrqMa,https://archive.kbb1.com/he/programs/cu/czD5IOia,,,groups
-he,כנס,809,כנס,https://archive.kbb1.com/he/events,,,,,,groups
-he,כנס מוסקבה,809,כנס,https://archive.kbb1.com/he/events?location=Russia%7CMoscow,,,,,,
+he,כנס,809,כנס,https://archive.kbb1.com/he/events,,,,,1,groups
+he,כנס מוסקבה,809,כנס,https://archive.kbb1.com/he/events?location=Russia%7CMoscow,,,,,1,
 he,ערבה,809,כנס,https://archive.kbb1.com/he/events?location=Israel%7CArava,,,,,,groups
-he,כנס ערבה,809,כנס,https://archive.kbb1.com/he/events?location=Israel%7CArava,,,,,,groups
-he,כנס ניו ג'רזי,809,כנס,https://archive.kbb1.com/he/events?location=United%20States%7CNew%20Jersey,,,,,,groups
+he,כנס ערבה,809,כנס,https://archive.kbb1.com/he/events?location=Israel%7CArava,,,,,1,groups
+he,כנס ניו ג'רזי,809,כנס,https://archive.kbb1.com/he/events?location=United%20States%7CNew%20Jersey,,,,,1,groups
 he,שבת,783,מושג בקבלה,Group Shabat topic (no lessons at all0,,,,,,
 he,מחסום,783,מושג בקבלה,Source articles with this term,Short clips of Rav,,,,,לא במקומות הראשונים
 he,מעשר,783,מושג בקבלה,Short clips of Rav,,,,,,תוצאות לא קשורות
@@ -54,7 +54,7 @@ he,פורים,711,חגים,https://archive.kbb1.com/he/events/c/BTc81T71?languag
 he,יום כיפור,711,חגים,https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_oXRmGfzj,https://archive.kbb1.com/he/programs/cu/Wzhb9v1Z?language=he,,,,,מדור חגים groups
 he,שמעתי,633,ספר קבלה,https://archive.kbb1.com/he/sources/qMUUn22b,https://archive.kbb1.com/he/lessons?source=bs_qMUUn22b,,,,,groups - books
 he,שלבי הסולם,633,ספר קבלה,https://archive.kbb1.com/he/sources/jXgT6Pa1,we should have the library according to the book ordered,,,,,groups - books
-he,כתבי בעל הסולם,633,ספר קבלה,https://archive.kbb1.com/he/sources,we should have the library according to the book ordered,,,,,groups - books
+he,כתבי בעל הסולם,633,ספר קבלה,https://archive.kbb1.com/he/sources,we should have the library according to the book ordered,,,,1,groups - books
 he,תהילים,633,ספר קבלה,missing book,group with all programs with king David > Psalms,https://archive.kbb1.com/he/programs/cu/pay6i9Ts?language=he,https://archive.kbb1.com/he/programs/c/4J0HCOhJ,,,groups - books
 he,זוגיות,481,נושא חינוך אינטגראלי,https://archive.kbb1.com/he/programs?topic=VUpFlBnu_pXpozaXB_BdfLfqsa,https://archive.kbb1.com/he/programs/cu/U52m4xoG,,,,,
 he,ילדים,481,נושא חינוך אינטגראלי,https://archive.kbb1.com/he/programs?program=children%7C,,,,,,
@@ -69,31 +69,31 @@ he,רמחל,263,מקובל,missing content in library,https://archive.kbb1.com/h
 he,בעל הסולם,263,מקובל,https://archive.kbb1.com/he/sources,https://archive.kbb1.com/he/programs/cu/maMk3db9?language=he,https://archive.kbb1.com/he/programs/cu/AdgO5KVE?language=he,,,,group - mekorot
 he,משה,263,מקובל,https://archive.kbb1.com/he/programs/cu/gC2tRWrH,missing content in library,https://archive.kbb1.com/he/programs/cu/AsNLozeK,,,,group - mekorot
 he,לייטמן,263,מקובל,https://archive.kbb1.com/he/sources,missing biography,,,,,group - mekorot
-he,סעודה,246,סעודות,https://archive.kbb1.com/he/events/meals,,,,,,
-he,סעודות,246,סעודות,https://archive.kbb1.com/he/events/meals,,,,,,
-he,טיש,246,סעודות,https://archive.kbb1.com/he/events/cu/WhlWTpbB?language=he,missing sub group of TISH,,,,,
-he,סעוד,246,סעודות,https://archive.kbb1.com/he/events/meals,,,,,,
-he,סעודת ראש חודש,246,סעודות,missing sub group of Rosh Hodesh Meal,,,,,,
+he,סעודה,246,סעודות,https://archive.kbb1.com/he/events/meals,,,,,1,
+he,סעודות,246,סעודות,https://archive.kbb1.com/he/events/meals,,,,,1,
+he,טיש,246,סעודות,https://archive.kbb1.com/he/events/cu/WhlWTpbB?language=he,missing sub group of TISH,,,,1,
+he,סעוד,246,סעודות,https://archive.kbb1.com/he/events/meals,,,,,1,
+he,סעודת ראש חודש,246,סעודות,missing sub group of Rosh Hodesh Meal,,,,,1,
 he,1988,212,שנה,group rabash articles by year 1988,,,,,,Should be lessons and articles for this year of RAbash
 he,2010,212,שנה,https://archive.kbb1.com/he/events?year=2010,https://archive.kbb1.com/he/events/holidays?year=2010,https://archive.kbb1.com/he/events/unity-days?year=2010,,,,Should show congress? grouped material
 he,2013,212,שנה,https://archive.kbb1.com/he/events?year=2013,,,,,,Should show congress? grouped material
 he,2005,212,שנה,https://archive.kbb1.com/he/events?year=2005,,,,,,Should show congress? grouped material
-he,ישיבת חברים,210,ישיבת חברים,https://archive.kbb1.com/he/events/friends-gatherings,,,,,,
-he,ישיבת החברים,210,ישיבת חברים,https://archive.kbb1.com/he/events/friends-gatherings,,,,,,
-he,ישיבת,210,ישיבת חברים,https://archive.kbb1.com/he/events/friends-gatherings,,,,,,
-he,ישיבת החברים העולמית,210,ישיבת חברים,https://archive.kbb1.com/he/events/friends-gatherings,,,,,,
+he,ישיבת חברים,210,ישיבת חברים,https://archive.kbb1.com/he/events/friends-gatherings,,,,,1,
+he,ישיבת החברים,210,ישיבת חברים,https://archive.kbb1.com/he/events/friends-gatherings,,,,,1,
+he,ישיבת,210,ישיבת חברים,https://archive.kbb1.com/he/events/friends-gatherings,,,,,1,
+he,ישיבת החברים העולמית,210,ישיבת חברים,https://archive.kbb1.com/he/events/friends-gatherings,,,,,1,
 he,שיחות,208,שיעור קבלה כללי,https://archive.kbb1.com/he/programs?program=%7Ce7yLP2D2,https://archive.kbb1.com/he/programs/c/YvPmFc3Z,,,,,
-he,שיעור ווירטואלי,208,שיעור קבלה כללי,https://archive.kbb1.com/he/lectures/c/VwCQ0OBq,https://archive.kbb1.com/he/lectures/c/pjoTcgvx,,,,,
-he,שיעור למתחילים,208,שיעור קבלה כללי,https://archive.kbb1.com/he/lectures/c/VwCQ0OBq,https://archive.kbb1.com/he/lectures/c/pjoTcgvx,,,,,
+he,שיעור ווירטואלי,208,שיעור קבלה כללי,https://archive.kbb1.com/he/lectures/c/VwCQ0OBq,https://archive.kbb1.com/he/lectures/c/pjoTcgvx,,,,1,
+he,שיעור למתחילים,208,שיעור קבלה כללי,https://archive.kbb1.com/he/lectures/c/VwCQ0OBq,https://archive.kbb1.com/he/lectures/c/pjoTcgvx,,,,1,
 he,הרצאה,208,שיעור קבלה כללי,https://archive.kbb1.com/he/lectures,,,,,,
 he,מרשמלו,200,תכניות ילדים,https://archive.kbb1.com/he/programs?program=%7CJRR182e6,,,,,,
-he,שיעור ילדים,200,תכניות ילדים,group with rav kids lessons,group with the latest kids lessons if available,,,,,
+he,שיעור ילדים,200,תכניות ילדים,group with rav kids lessons,group with the latest kids lessons if available,,,,1,
 he,משחק ילדים,200,תכניות ילדים,https://archive.kbb1.com/he/programs?program=%7CzQ1D7FeD,,,,,,
 he,מאירה והחברים,200,תכניות ילדים,https://archive.kbb1.com/he/programs?program=%7CGGNcvo1Y,,,,,,
-he,שרטוטים,199,שיעור בוקר,https://archive.kbb1.com/he/lessons,,,,,,אין שרטוטים?
-he,שיעור בוקר,199,שיעור בוקר,https://archive.kbb1.com/he/lessons,,,,,,
-he,קיצור משיעור הקבלה היומי,199,שיעור בוקר,group with morning lesson tastes,,,,,,
-he,קטעים נבחרים,199,שיעור בוקר,group with morning lesson tastes,,,,,,no uid
+he,שרטוטים,199,שיעור בוקר,https://archive.kbb1.com/he/lessons,,,,,1,אין שרטוטים?
+he,שיעור בוקר,199,שיעור בוקר,https://archive.kbb1.com/he/lessons,,,,,1,
+he,קיצור משיעור הקבלה היומי,199,שיעור בוקר,group with morning lesson tastes,,,,,1,
+he,קטעים נבחרים,199,שיעור בוקר,group with morning lesson tastes,,,,,1,no uid
 he,חיים חדשים זוגיות,179,חיים חדשים + נושא,group with topic and new life,https://archive.kbb1.com/he/programs/cu/U52m4xoG,https://archive.kbb1.com/he/programs/cu/JIJqiB7M,https://archive.kbb1.com/he/programs/cu/Xrk8LEb5,,,
 he,חיים חדשים משפחה,179,חיים חדשים + נושא,group with topic and new life,https://archive.kbb1.com/he/programs/cu/gPGEY3cl,,,,,
 he,חיים חדשים נוער,179,חיים חדשים + נושא,group with topic and new life,https://archive.kbb1.com/he/programs/cu/5BlnVH4Q,,,,,
@@ -102,11 +102,11 @@ he,חיים חדשים קטעים נבחרים,179,חיים חדשים + נוש�
 he,סביבה טובה,158,אתר,http://kabbalahgroup.info/internet/he/users/login,,,,,,תוכנית + נושא
 he,בלוג,158,אתר,http://laitman.co.il/,,,,,,בלוג הקלטות
 he,רדיו,158,אתר,http://icecast.kab.tv/radiozohar2014.mp3,,,,,,הקלטות רדיו 103
-he,הכנה לישיבת החברים,155,הכנות,https://archive.kbb1.com/he/lessons/cu/Fs4Pajlx,Rabash social writings regarding Yeshivat Haverim,,,,,
-he,הכנה לשיעור,155,הכנות,https://archive.kbb1.com/he/lessons/latest?language=he,,,,,,
-he,הכנה לכנס רומניה,155,הכנות,"group with lessons before the congress, with the preparations",https://archive.kbb1.com/he/lessons/cu/Cf8xzLNH,,,,,
-he,הכנה לשינה,155,הכנות,Quotes of lessons with recommendations of Rav regarding this,,,,,,
-he,הכנה לפסח,155,הכנות,https://archive.kbb1.com/he/events/c/PWOJ9aPK?language=he,,,,,,
+he,הכנה לישיבת החברים,155,הכנות,https://archive.kbb1.com/he/lessons/cu/Fs4Pajlx,Rabash social writings regarding Yeshivat Haverim,,,,1,
+he,הכנה לשיעור,155,הכנות,https://archive.kbb1.com/he/lessons/latest?language=he,,,,,1,
+he,הכנה לכנס רומניה,155,הכנות,"group with lessons before the congress, with the preparations",https://archive.kbb1.com/he/lessons/cu/Cf8xzLNH,,,,1,
+he,הכנה לשינה,155,הכנות,Quotes of lessons with recommendations of Rav regarding this,,,,,1,
+he,הכנה לפסח,155,הכנות,https://archive.kbb1.com/he/events/c/PWOJ9aPK?language=he,,,,,1,
 he,קבוצה צעירה,148,קבוצה מהכלי,https://archive.kbb1.com/he/programs/cu/dhwDY32y?language=he,Group young group lessons,,,,,
 he,מוסקבה,148,קבוצה מהכלי,https://archive.kbb1.com/he/events?location=Russia%7CMoscow,Group lectures with moscow group,,,,,
 he,צרפת,148,קבוצה מהכלי,https://archive.kbb1.com/he/events?location=France,,,,,,
@@ -127,11 +127,11 @@ he,נשים,104,נשים,Group Women Lessons,Group Women YH,https://archive.kbb1
 he,סדנאות נשים,104,נשים,Group women workshops,,,,,,מדור נשים groups
 he,שיעור נשים,104,נשים,Group Women Lessons,,,,,,מדור נשים groups
 he,תפקיד האישה,104,נשים,https://archive.kbb1.com/he/lectures/cu/VwqLxdyT,,,,,,מדור נשים groups
-he,אגרת נ,82,אגרות,https://archive.kbb1.com/he/sources/ib0w1sqv,https://archive.kbb1.com/he/sources/cT6IAU0f,,,,,
-he,אגרת,82,אגרות,https://archive.kbb1.com/he/sources/9ZIJ9CkI,https://archive.kbb1.com/he/sources/VUcyhrcS,,,,,
-he,אגרות,82,אגרות,https://archive.kbb1.com/he/sources/DVSS0xAR,https://archive.kbb1.com/he/sources/b8SHlrfH,,,,,
-he,"אגרת ט""ז",82,אגרות,https://archive.kbb1.com/he/sources/OHNHBjqH,https://archive.kbb1.com/he/sources/0UXdbMmk,,,,,
-he,אגרת טז,82,אגרות,https://archive.kbb1.com/he/sources/OHNHBjqH,https://archive.kbb1.com/he/sources/0UXdbMmk,,,,,
+he,אגרת נ,82,אגרות,https://archive.kbb1.com/he/sources/ib0w1sqv,https://archive.kbb1.com/he/sources/cT6IAU0f,,,,1,
+he,אגרת,82,אגרות,https://archive.kbb1.com/he/sources/9ZIJ9CkI,https://archive.kbb1.com/he/sources/VUcyhrcS,,,,1,
+he,אגרות,82,אגרות,https://archive.kbb1.com/he/sources/DVSS0xAR,https://archive.kbb1.com/he/sources/b8SHlrfH,,,,1,
+he,"אגרת ט""ז",82,אגרות,https://archive.kbb1.com/he/sources/OHNHBjqH,https://archive.kbb1.com/he/sources/0UXdbMmk,,,,1,
+he,אגרת טז,82,אגרות,https://archive.kbb1.com/he/sources/OHNHBjqH,https://archive.kbb1.com/he/sources/0UXdbMmk,,,,1,
 he,הנקודה שבלב,66,ספר הפצה,https://archive.kbb1.com/he/programs?program=%7CJZkZxLgv,http://66books.co.il/shop/%D7%94%D7%A0%D7%A7%D7%95%D7%93%D7%94-%D7%A9%D7%91%D7%9C%D7%91/,,,,,
 he,מבט לקבלה,66,ספר הפצה,https://archive.kbb1.com/he/programs/cu/24gMqvTk,https://archive.kbb1.com/he/programs/cu/24gMqvTk?language=he,http://66books.co.il/shop/%D7%9E%D7%91%D7%98-%D7%9C%D7%A7%D7%91%D7%9C%D7%94-epub-%D7%92%D7%99%D7%A8%D7%A1%D7%90-%D7%9C%D7%A0%D7%99%D7%99%D7%93/,http://www.kab.co.il/heb/content/view/frame/2373?/heb/content/view/full/2373&main,,,
 he,הכל יחסים,66,ספר הפצה,?,,,,,,
@@ -144,9 +144,9 @@ he,צבי ינאי,56,אורח,https://www.youtube.com/watch?v=0fIVBPk14KE,http:
 he,גיל קופטש,56,אורח,https://archive.kbb1.com/he/programs/c/4D87X3Oo,https://archive.kbb1.com/he/programs/cu/es60Vfio?language=he,https://archive.kbb1.com/he/programs/cu/vTCcgK1w?language=he,https://archive.kbb1.com/he/lessons/cu/xlxAzvjI?language=he,,,
 he,תיאטרון,26,תאטרון,Group theater sections,,,,,,
 he,תאטרון,26,תאטרון,Group theater sections,,,,,,
-he,"הקלטות רב""ש",24,"הקלטות רב""ש",Group with Rabash lessons,,,,,,
-he,"שיעורי רב""ש",24,"הקלטות רב""ש",Group with Rabash lessons,,,,,,
-he,הקלטות רבש,24,"הקלטות רב""ש",Group with Rabash lessons,,,,,,
+he,"הקלטות רב""ש",24,"הקלטות רב""ש",Group with Rabash lessons,,,,,1,
+he,"שיעורי רב""ש",24,"הקלטות רב""ש",Group with Rabash lessons,,,,,1,
+he,הקלטות רבש,24,"הקלטות רב""ש",Group with Rabash lessons,,,,,1,
 he,בדרך לאמת,23,וידאו הפצה,Movie with rav_,,,,,,
 he,דרום,23,וידאו הפצה,movie missing,,,,,,
 he,יורצהייט,22,ייורצאייט,group yortziat,,,,,,
