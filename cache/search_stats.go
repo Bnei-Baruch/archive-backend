@@ -41,9 +41,11 @@ func NewStatsTree() *StatsTree {
 	return st
 }
 
-// TODO: add comment here
+// accumulate merge Histograms bottom up so that
+// parent nodes's Histogram will be the overall sum of its children.
+// We do that in code because we don't really know how to do that with SQL.
 func (st *StatsTree) accumulate() {
-	// s starts as all leaf nodes
+	// put all leaf nodes in s
 	s := make([]int64, 0)
 	for k, v := range st.byID {
 		if len(v.children) == 0 {
@@ -51,10 +53,11 @@ func (st *StatsTree) accumulate() {
 		}
 	}
 
-	// while we have some parents to collapse
+	// while we have some nodes to merge
 	for len(s) > 0 {
+		// loop through this generation of nodes
+		// merge parents histograms and collect next generation
 		parents := make(map[int64]bool)
-
 		for i := range s {
 			node := st.byID[s[i]]
 			if node.parentID != 0 {
@@ -64,7 +67,7 @@ func (st *StatsTree) accumulate() {
 			}
 		}
 
-		// map -> slice (next gen of parents)
+		// convert next generation of nodes map to slice (parents of current generation)
 		s = make([]int64, len(parents))
 		i := 0
 		for k := range parents {
@@ -74,7 +77,9 @@ func (st *StatsTree) accumulate() {
 	}
 }
 
-// TODO: add comment here
+// flatten return a flat uid => Histogram lookup table.
+// It's usually the only interesting result to use
+// as the tree structure is not really needed once accumulated.
 func (st *StatsTree) flatten() map[string]Histogram {
 	byUID := make(map[string]Histogram, len(st.byID))
 	for _, v := range st.byID {
