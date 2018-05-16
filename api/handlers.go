@@ -1238,7 +1238,7 @@ ORDER BY max_film_date DESC`
 	return data, nil
 }
 
-func handleTagDashboard(db *sql.DB, r ItemRequest) ([]CollectionUpdateStatus, *HttpError) {
+func handleTagDashboard(db *sql.DB, r ItemRequest) (*TagsDashboardResponse, *HttpError) {
 	// CU ids query
 	q := `select id
 from (
@@ -1283,9 +1283,14 @@ where rownum < 6;`
 		return nil, NewInternalError(err)
 	}
 
+	if len(cuIDs) == 0 {
+		return NewTagsDashboardResponse(), nil
+	}
+
 	// data query
 	units, err := mdbmodels.ContentUnits(db,
 		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
+		qm.OrderBy("(coalesce(properties->>'film_date', created_at::text))::date desc, created_at desc"),
 		qm.Load("CollectionsContentUnits", "CollectionsContentUnits.Collection")).
 		All()
 	if err != nil {
@@ -1298,7 +1303,9 @@ where rownum < 6;`
 		return nil, ex
 	}
 
-	return data, nil
+	return &TagsDashboardResponse{
+		LatestContentUnits: cus,
+	}, nil
 }
 
 func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError) {
