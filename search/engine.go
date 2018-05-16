@@ -285,9 +285,9 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 	for _, language := range query.LanguageOrder {
 		// Order here provides the priority in results, i.e., tags are more importnt then sources.
 		mssFirstRound.Add(TagsIntentRequest(*query, language, preference))
-		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TAG, language, nil})
+		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
 		mssFirstRound.Add(SourcesIntentRequest(*query, language, preference))
-		potentialIntents = append(potentialIntents, Intent{consts.INTENT_SOURCE, language, nil})
+		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
 	mr, err := mssFirstRound.Do(context.TODO())
 	if err != nil {
@@ -304,9 +304,9 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		}
 		var intentRequestFunc IntentRequestFunc
 		switch potentialIntents[i].Type {
-		case consts.INTENT_SOURCE:
+		case consts.INTENT_TYPE_SOURCE:
 			intentRequestFunc = SourcesIntentRequest
-		case consts.INTENT_TAG:
+		case consts.INTENT_TYPE_TAG:
 			intentRequestFunc = TagsIntentRequest
 		default:
 			log.Errorf("ESEngine.AddIntents - First round bad type: %+v", potentialIntents[i])
@@ -340,7 +340,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 	// contentUnitsChecks[lesson/program][language][tag/source][uid - of tag or source] => {error, exist}
 	type ErrorOrMapByType struct {
 		Error     error
-		MapByType map[int]map[string]bool
+		MapByType map[string]map[string]bool
 	}
 	contentUnitsChecks := make(map[string]map[string]ErrorOrMapByType)
 	checkContentUnitsTypes := []string{consts.CT_LESSON_PART, consts.CT_VIDEO_PROGRAM_CHAPTER}
@@ -351,7 +351,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		mapByLanguage := contentUnitsChecks[contentUnitType]
 		for _, intent := range finalIntents {
 			if _, ok := mapByLanguage[intent.Language]; !ok {
-				mapByLanguage[intent.Language] = ErrorOrMapByType{nil, make(map[int]map[string]bool)}
+				mapByLanguage[intent.Language] = ErrorOrMapByType{nil, make(map[string]map[string]bool)}
 			}
 			errorOrMapByType := mapByLanguage[intent.Language]
 			if _, ok := errorOrMapByType.MapByType[intent.Type]; !ok {
@@ -375,10 +375,10 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 				tagUids := make([]string, 0)
 				for intentType, uidMap := range errorOrMapByType.MapByType {
 					for uid := range uidMap {
-						if intentType == consts.INTENT_SOURCE {
+						if intentType == consts.INTENT_TYPE_SOURCE {
 							sourceUids = append(sourceUids, uid)
 						}
-						if intentType == consts.INTENT_TAG {
+						if intentType == consts.INTENT_TYPE_TAG {
 							tagUids = append(tagUids, uid)
 						}
 					}
@@ -397,8 +397,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 					checkMapMutex.Lock()
 					defer checkMapMutex.Unlock()
 					errorOrMapByType.Error = err
-					errorOrMapByType.MapByType[consts.INTENT_TAG] = tagsExistMap
-					errorOrMapByType.MapByType[consts.INTENT_SOURCE] = sourcesExistMap
+					errorOrMapByType.MapByType[consts.INTENT_TYPE_TAG] = tagsExistMap
+					errorOrMapByType.MapByType[consts.INTENT_TYPE_SOURCE] = sourcesExistMap
 				}(contentUnitType, language, tagUids, sourceUids, &errorOrMapByType)
 			}
 		}
@@ -516,8 +516,8 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			intentHit := &elastic.SearchHit{}
 			intentHit.Explanation = &intentValue.Explanation
 			intentHit.Score = &boostedScore
-			intentHit.Index = consts.INTENT_INDEX_BY_CT[intentValue.ContentType]
-			intentHit.Type = consts.INTENT_HIT_TYPE[intent.Type]
+			intentHit.Index = consts.INTENT_INDEX_BY_TYPE[intent.Type]
+			intentHit.Type = consts.INTENT_HIT_TYPE_BY_CT[intentValue.ContentType]
 			source, err := json.Marshal(intentValue)
 			if err != nil {
 				return err, nil
@@ -934,23 +934,23 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	multiSearchService := e.esc.MultiSearch()
 	requestsByIndex := make(map[string][]*elastic.SearchRequest)
 
-	status := consts.NO_FILTER
+	searchFilter := consts.SEARCH_NO_FILTER
 	if len(query.Filters) > 0 {
 		if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
-			status = consts.ONLY_SOURCES
+			searchFilter = consts.SEARCH_FILTER_ONLY_SOURCES
 		} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SOURCE]]; ok {
-			status = consts.NO_FILTER
+			searchFilter = consts.SEARCH_NO_FILTER
 		} else {
-			status = consts.WITHOUT_SOURCES
+			searchFilter = consts.SEARCH_FILTER_WITHOUT_SOURCES
 		}
 	}
 
-	if status != consts.ONLY_SOURCES {
+	if searchFilter != consts.SEARCH_FILTER_ONLY_SOURCES {
 		requestsByIndex[consts.ES_UNITS_INDEX] = GetContentUnitsSearchRequests(query, sortBy, 0, from+size, preference)
 		requestsByIndex[consts.ES_COLLECTIONS_INDEX] = GetCollectionsSearchRequests(query, sortBy, 0, from+size, preference)
 	}
 
-	if status != consts.WITHOUT_SOURCES {
+	if searchFilter != consts.SEARCH_FILTER_WITHOUT_SOURCES {
 		requestsByIndex[consts.ES_SOURCES_INDEX] = GetSourcesSearchRequests(query, 0, from+size, preference)
 	}
 

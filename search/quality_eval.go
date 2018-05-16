@@ -14,6 +14,8 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+
+	"github.com/Bnei-Baruch/archive-backend/consts"
 )
 
 // Search quality enum. Order important, the lower (higher integer) the better.
@@ -68,8 +70,8 @@ var EXPECTATION_URL_PATH = map[int]string{
 var EXPECTATION_HIT_TYPE = map[int]string{
 	ET_CONTENT_UNITS: "content_units",
 	ET_COLLECTIONS:   "collections",
-	ET_LESSONS:       "intent-lessons",  // Special hit type. Should be handled as intent.
-	ET_PROGRAMS:      "intent-programs", // Special hit type. Should be handled as intent.
+	ET_LESSONS:       consts.INTENT_HIT_TYPE_LESSONS,
+	ET_PROGRAMS:      consts.INTENT_HIT_TYPE_PROGRAMS,
 	ET_SOURCES:       "sources",
 }
 
@@ -186,7 +188,7 @@ func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 	return ret, nil
 }
 
-type MdbUid struct {
+type HitSource struct {
 	MdbUid string `json:"mdb_uid"`
 }
 
@@ -302,8 +304,8 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 		sq := SQ_UNKNOWN
 		rank := -1
 		for i, hit := range queryResult.SearchResult.Hits.Hits {
-			mdbUid := MdbUid{}
-			if err := json.Unmarshal(*hit.Source, &mdbUid); err != nil {
+			hitSource := HitSource{}
+			if err := json.Unmarshal(*hit.Source, &hitSource); err != nil {
 				log.Warnf("Error unmarshling source %+v", err)
 				sq = SQ_SERVER_ERROR
 				rank = -1
@@ -311,9 +313,10 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 				break
 			}
 			if j == 0 {
-				log.Infof("[%s] [%s] type: %s mdb_uid: %s @%d", serverUrl, q.Query, hit.Type, mdbUid.MdbUid, i+1)
+				log.Infof("[%s] [%s] type: %s index: %s mdb_uid: %s @%d",
+					serverUrl, q.Query, hit.Type, hit.Index, hitSource.MdbUid, i+1)
 			}
-			if mdbUid.MdbUid == e.Uid && hit.Type == EXPECTATION_HIT_TYPE[e.Type] {
+			if hitSource.MdbUid == e.Uid && hit.Type == EXPECTATION_HIT_TYPE[e.Type] {
 				rank = i + 1
 				if i <= 2 {
 					sq = SQ_GOOD
@@ -323,15 +326,6 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 				break
 			}
 		}
-		// We need to add program/lesson to intent before validating expectation.
-		// Check intents
-		// for _, intent := range queryResult.Intents {
-		//     if classificationIntent, ok := intent.Value.(es.ClassificationIntent); ok {
-		//         intent.Type == consts.INTENT_SOURCE && e.Type == == consts.SOURCE_CLASSIFICATION_TYPE
-		//     }
-		//     if e.Type == ET_LESSONS && intent.Type == consts.INTENT_TAG {
-		//     }
-		// }
 		r.SearchQuality = append(r.SearchQuality, sq)
 		r.Rank = append(r.Rank, rank)
 	}

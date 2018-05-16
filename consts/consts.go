@@ -224,6 +224,15 @@ const ES_UNITS_INDEX = "units"
 const ES_COLLECTIONS_INDEX = "collections"
 const ES_SOURCES_INDEX = "sources"
 
+// Search filter.
+type SearchFilterType int
+
+const (
+	SEARCH_NO_FILTER              SearchFilterType = iota
+	SEARCH_FILTER_ONLY_SOURCES    SearchFilterType = iota
+	SEARCH_FILTER_WITHOUT_SOURCES SearchFilterType = iota
+)
+
 // Classicication index consts.
 const (
 	SOURCES_INDEX_TYPE         = "sources"
@@ -232,30 +241,23 @@ const (
 	TAG_CLASSIFICATION_TYPE    = "tag"
 )
 
-type SEARCH_STATUS int
-
+// Search intents
 const (
-	NO_FILTER       SEARCH_STATUS = iota
-	ONLY_SOURCES                  = iota
-	WITHOUT_SOURCES               = iota
+	INTENT_TYPE_TAG    = "tag"
+	INTENT_TYPE_SOURCE = "source"
+
+	INTENT_INDEX_TAG         = "intent-tag"
+	INTENT_INDEX_SOURCE      = "intent-source"
+	INTENT_HIT_TYPE_PROGRAMS = "programs"
+	INTENT_HIT_TYPE_LESSONS  = "lessons"
 )
 
-const (
-	INTENT_PROGRAMS = "programs"
-	INTENT_LESSONS  = "lessons"
-)
-
-var INTENT_INDEX_BY_CT = map[string]string{
-	CT_LESSON_PART:           INTENT_LESSONS,
-	CT_VIDEO_PROGRAM_CHAPTER: INTENT_PROGRAMS,
+var INTENT_INDEX_BY_TYPE = map[string]string{
+	INTENT_TYPE_TAG:    INTENT_INDEX_TAG,
+	INTENT_TYPE_SOURCE: INTENT_INDEX_SOURCE,
 }
 
-const (
-	INTENT_TAG    = 0
-	INTENT_SOURCE = 1
-)
-
-var INTENT_HIT_TYPE = map[int]string{
-	INTENT_TAG:    "intent-tag",
-	INTENT_SOURCE: "intent-source",
+var INTENT_HIT_TYPE_BY_CT = map[string]string{
+	CT_LESSON_PART:           INTENT_HIT_TYPE_LESSONS,
+	CT_VIDEO_PROGRAM_CHAPTER: INTENT_HIT_TYPE_PROGRAMS,
 }
