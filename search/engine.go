@@ -111,13 +111,13 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 			for _, index := range indices {
 				searchSource := elastic.NewSearchSource().
 					Suggester(elastic.NewCompletionSuggester("classification_name").
-					Field("name_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
+						Field("name_suggest").
+						Text(query.Term).
+						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
 					Suggester(elastic.NewCompletionSuggester("classification_description").
-					Field("description_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
+						Field("description_suggest").
+						Text(query.Term).
+						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
 
 				request := elastic.NewSearchRequest().
 					SearchSource(searchSource).
@@ -445,13 +445,13 @@ func GetContentUnitsSearchRequests(query Query, sortBy string, from int, size in
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name").NumOfFragments(0),
-			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("transcript"),
-			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("description.analyzed"),
-			elastic.NewHighlighterField("transcript.analyzed"),
-		)).
+				elastic.NewHighlighterField("name").NumOfFragments(0),
+				elastic.NewHighlighterField("description"),
+				elastic.NewHighlighterField("transcript"),
+				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("description.analyzed"),
+				elastic.NewHighlighterField("transcript.analyzed"),
+			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
@@ -553,11 +553,11 @@ func GetCollectionsSearchRequests(query Query, sortBy string, from int, size int
 		searchSource := elastic.NewSearchSource().
 			Query(createCollectionsQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name").NumOfFragments(0),
-			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("description.analyzed"),
-		)).
+				elastic.NewHighlighterField("name").NumOfFragments(0),
+				elastic.NewHighlighterField("description"),
+				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("description.analyzed"),
+			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
@@ -588,13 +588,15 @@ func createSourcesQuery(q Query) elastic.Query {
 					elastic.NewMatchQuery("description.analyzed", q.Term),
 					elastic.NewMatchQuery("content.analyzed", q.Term),
 					elastic.NewMatchQuery("authors.analyzed", q.Term),
+					elastic.NewMatchQuery("pathnames.analyzed", q.Term),
 				).MinimumNumberShouldMatch(1)).Boost(1),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.3),
 				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
 				elastic.NewMatchPhraseQuery("content.analyzed", q.Term).Slop(100),
 				elastic.NewMatchPhraseQuery("authors.analyzed", q.Term).Slop(100),
+				elastic.NewMatchPhraseQuery("pathnames.analyzed", q.Term).Slop(100).Boost(2.1),
 			),
 		)
 	}
@@ -607,6 +609,7 @@ func createSourcesQuery(q Query) elastic.Query {
 					elastic.NewMatchPhraseQuery("description", exactTerm),
 					elastic.NewMatchPhraseQuery("content", exactTerm),
 					elastic.NewMatchPhraseQuery("authors", exactTerm),
+					elastic.NewMatchPhraseQuery("pathnames", exactTerm),
 				).MinimumNumberShouldMatch(1)).Boost(1),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
@@ -614,6 +617,7 @@ func createSourcesQuery(q Query) elastic.Query {
 				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
 				elastic.NewMatchPhraseQuery("content", exactTerm).Slop(100),
 				elastic.NewMatchPhraseQuery("authors", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("pathnames", exactTerm).Slop(100).Boost(1.2),
 			),
 		)
 	}
@@ -628,7 +632,7 @@ func createSourcesQuery(q Query) elastic.Query {
 		}
 	}
 	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
-		Boost(1.2). // Boost sources index.
+		Boost(1.3). // Boost sources index.
 		// No time decay for sources. Sources are above time and space.
 		AddScoreFunc(elastic.NewWeightFactorFunction(4.0))
 }
@@ -645,15 +649,16 @@ func GetSourcesSearchRequests(query Query, from int, size int, preference string
 		searchSource := elastic.NewSearchSource().
 			Query(createSourcesQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name").NumOfFragments(0),
-			elastic.NewHighlighterField("description").NumOfFragments(0),
-			elastic.NewHighlighterField("authors").NumOfFragments(0),
-			elastic.NewHighlighterField("content"),
-			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("authors.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("content.analyzed"),
-		)).
+				elastic.NewHighlighterField("name").NumOfFragments(0),
+				elastic.NewHighlighterField("description").NumOfFragments(0),
+				elastic.NewHighlighterField("authors").NumOfFragments(0),
+				elastic.NewHighlighterField("pathnames").NumOfFragments(0),
+				elastic.NewHighlighterField("content"),
+				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("pathnames.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("content.analyzed"),
+			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
