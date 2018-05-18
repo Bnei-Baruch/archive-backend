@@ -70,7 +70,7 @@ func runSxS(evalSet []search.EvalQuery, baseUrl string, expUrl string) (
 	if expErr != nil {
 		return search.EvalResults{}, nil, search.EvalResults{}, nil, expErr
 	}
-	return baseResults, baseLosses, expResults, baseLosses, nil
+	return baseResults, baseLosses, expResults, expLosses, nil
 }
 
 func printResults(results search.EvalResults) {

@@ -14,6 +14,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )
@@ -74,6 +75,11 @@ var EXPECTATION_HIT_TYPE = map[int]string{
 	ET_PROGRAMS:      consts.INTENT_HIT_TYPE_PROGRAMS,
 	ET_SOURCES:       "sources",
 }
+
+const (
+	FILTER_NAME_SOURCE = "source"
+	FILTER_NAME_TOPIC  = "topic"
+)
 
 type Filter struct {
 	Name  string `json:"name"`
@@ -254,6 +260,34 @@ func ParseExpectation(e string) (Expectation, error) {
 	return Expectation{t, uidOrSection, nil}, nil
 }
 
+func FilterValueToUid(value string) string {
+	sl := strings.Split(value, "_")
+	if len(sl) == 0 {
+		return ""
+	}
+	return sl[len(sl)-1]
+}
+
+func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expectation) bool {
+	if hit.Type != EXPECTATION_HIT_TYPE[e.Type] {
+		return false
+	}
+
+	if e.Type == ET_LESSONS || e.Type == ET_PROGRAMS {
+		// For now we support only one filter (zero also means not match).
+		if len(e.Filters) == 0 || len(e.Filters) > 1 {
+			return false
+		}
+		// Match all filters
+		filter := e.Filters[0]
+		return ((filter.Name == FILTER_NAME_TOPIC && hit.Index == consts.INTENT_INDEX_TAG) ||
+			(filter.Name == FILTER_NAME_SOURCE && hit.Index == consts.INTENT_INDEX_SOURCE)) &&
+			FilterValueToUid(filter.Value) == hitSource.MdbUid
+	} else {
+		return hitSource.MdbUid == e.Uid
+	}
+}
+
 func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	r := EvalResult{}
 
@@ -263,7 +297,6 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 
 	urlTemplate := "%s/search?q=%s&language=%s&page_no=1&page_size=10&sort_by=relevance&deb=true"
 	url := fmt.Sprintf(urlTemplate, serverUrl, url.QueryEscape(q.Query), q.Language)
-	log.Infof("Url: %s", url)
 	resp, err := http.Get(url)
 	if err != nil {
 		log.Warnf("Error %+v", err)
@@ -299,8 +332,8 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 		r.err = err
 		return r
 	}
-	log.Infof("EvaluateQuery - searchResult: %+v", queryResult)
-	for j, e := range q.Expectations {
+	// log.Infof("EvaluateQuery - searchResult: %+v", queryResult)
+	for _, e := range q.Expectations {
 		sq := SQ_UNKNOWN
 		rank := -1
 		for i, hit := range queryResult.SearchResult.Hits.Hits {
@@ -312,11 +345,14 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 				r.err = err
 				break
 			}
-			if j == 0 {
-				log.Infof("[%s] [%s] type: %s index: %s mdb_uid: %s @%d",
-					serverUrl, q.Query, hit.Type, hit.Index, hitSource.MdbUid, i+1)
-			}
-			if hitSource.MdbUid == e.Uid && hit.Type == EXPECTATION_HIT_TYPE[e.Type] {
+			// if j == 0 {
+			// 	log.Infof("[%s] [%s] type: %s index: %s mdb_uid: %s @%d",
+			// 		serverUrl, q.Query, hit.Type, hit.Index, hitSource.MdbUid, i+1)
+			// }
+			// log.Infof("Match: %d Hit: Type:[%s] Uid:[%s] Index:[%s] Expectation: [%s] [%s] [%+v]",
+			//     HitMatchesExpectation(hit, hitSource, e), hit.Type, hitSource.MdbUid,
+			//     hit.Index, EXPECTATION_HIT_TYPE[e.Type], e.Uid, e.Filters)
+			if HitMatchesExpectation(hit, hitSource, e) {
 				rank = i + 1
 				if i <= 2 {
 					sq = SQ_GOOD
@@ -339,6 +375,7 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, e
 	ret.UniqueMap = make(map[int]float64)
 	ret.WeightedMap = make(map[int]float64)
 	for _, q := range queries {
+		log.Infof("(%d/%d) [%s]", i+1, len(queries), q.Query)
 		r := EvaluateQuery(q, serverUrl)
 		if len(r.SearchQuality) == 0 {
 			ret.UniqueMap[SQ_NO_EXPECTATION]++
