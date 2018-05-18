@@ -305,22 +305,6 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				}
 			}
 			source.Authors = authorsByLanguage[i18n.Language]
-
-			/*for _, a := range mdbSource.R.Authors {
-				ai18n, err := mdbmodels.FindAuthorI18n(index.db, a.ID, i18n.Language)
-				if err != nil {
-					if err == sql.ErrNoRows {
-						continue
-					}
-					return err
-				}
-				if ai18n.Name.Valid && ai18n.Name.String != "" {
-					source.Authors = append(source.Authors, ai18n.Name.String)
-				}
-				if ai18n.FullName.Valid && ai18n.FullName.String != "" {
-					source.Authors = append(source.Authors, ai18n.FullName.String)
-				}
-			}*/
 			i18nMap[i18n.Language] = source
 		}
 	}
