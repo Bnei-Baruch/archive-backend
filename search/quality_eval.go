@@ -374,7 +374,7 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, e
 	ret := EvalResults{}
 	ret.UniqueMap = make(map[int]float64)
 	ret.WeightedMap = make(map[int]float64)
-	for _, q := range queries {
+	for i, q := range queries {
 		log.Infof("(%d/%d) [%s]", i+1, len(queries), q.Query)
 		r := EvaluateQuery(q, serverUrl)
 		if len(r.SearchQuality) == 0 {
