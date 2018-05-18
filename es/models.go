@@ -77,7 +77,8 @@ type Source struct {
 	MDB_UID     string   `json:"mdb_uid"`
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
-	Authors     []string `json:"authors,omitempty"`
 	Content     string   `json:"content"`
 	Sources     []string `json:"sources"`
+	Authors	    []string `json:"authors"`
+	PathNames   []string `json:"pathnames"`
 }

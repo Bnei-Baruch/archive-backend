@@ -482,6 +482,16 @@ SOURCES_TEMPLATE = {
             }
           },
         },
+        "pathnames": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            }
+          },
+        },
         "content": {
           "type": "text",
           "analyzer": "phonetic_analyzer",

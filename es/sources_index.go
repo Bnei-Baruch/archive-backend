@@ -100,7 +100,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 			return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources from mdb")
 		}
 
-		parentsMap, err := index.loadSources(index.db) // Note: getting all sources path, not by scope.
+		codesMap, idsMap, authorsByLanguageMap, err := index.loadSources(index.db) // Note: getting all sources path, not by scope.
 		if err != nil {
 			return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources parents from mdb")
 		}
@@ -108,9 +108,13 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 		log.Infof("SourcesIndex.addToIndexSql - Adding %d sources (offset: %d).", len(sources), offset)
 
 		for _, source := range sources {
-			if parents, ok := parentsMap[source.UID]; !ok {
-				log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in parentsMap: %+v", source.UID, parents)
-			} else if err := index.indexSource(source, parents); err != nil {
+			if parents, ok := codesMap[source.UID]; !ok {
+				log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in codesMap: %+v", source.UID, codesMap)
+			} else if parentIds, ok := idsMap[source.UID]; !ok {
+				log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in idsMap: %+v", source.UID, idsMap)
+			} else if authors, ok := authorsByLanguageMap[source.UID]; !ok {
+				log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in authorsByLanguageMap: %+v", source.UID, idsMap)
+			} else if err := index.indexSource(source, parents, parentIds, authors); err != nil {
 				log.Warnf("SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
 			}
 		}
@@ -120,52 +124,71 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 	return nil
 }
 
-func (index *SourcesIndex) loadSources(db *sql.DB) (map[string][]string, error) {
+func (index *SourcesIndex) loadSources(db *sql.DB) (map[string][]string, map[string][]int64, map[string]map[string][]string, error) {
 	rows, err := queries.Raw(db, fmt.Sprintf(`
 		WITH RECURSIVE rec_sources AS (
 			SELECT
 			  s.id,
 			  s.uid,
 			  s.position,
-			  array_append(au.authors, s.uid) "path"
+    		  au.id as author_id,
+			  array_append(au.authors, s.uid) "path",
+    		  ARRAY [s.id] :: bigint [] "idspath"
 			FROM sources s JOIN
     
-    		(select source_id,  array_agg(a.code) as authors 
+    		(select source_id, name, a.id, array_agg(a.code) as authors, array_agg(a.name) as names
     		from authors_sources aas 
-				INNER JOIN authors a ON a.id = aas.author_id
-   			 group by source_id ) au ON au.source_id = s.id
+				INNER JOIN authors a ON a.id = aas.author_id             	
+   			 group by source_id, name, id ) au ON au.source_id = s.id
     
 			UNION
 			SELECT
 			  s.id,
 			  s.uid,
 			  s.position,
-			  rs.path || s.uid
+    		  author_id,
+			  rs.path || s.uid,
+    		  (rs.idspath || s.id) :: bigint []
 			FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
 		  )
-		  select uid, path from rec_sources;`)).Query()
+		  select uid, path, rs.idspath, an.language,
+          	case when an.full_name is null then ARRAY [an.name] else ARRAY [an.name, an.full_name] end
+           from rec_sources rs
+          join author_i18n an on an.author_id = rs.author_id;`)).Query()
 
 	if err != nil {
-		return nil, errors.Wrap(err, "SourcesIndex.loadSources - Query failed.")
+		return nil, nil, nil, errors.Wrap(err, "SourcesIndex.loadSources - Query failed.")
 	}
 	defer rows.Close()
 
-	m := make(map[string][]string)
+	codeMap := make(map[string][]string)
+	idMap := make(map[string][]int64)
+	authorsByLanguageMap := make(map[string]map[string][]string)
 
 	for rows.Next() {
 		var uid string
-		var values pq.StringArray
-		err := rows.Scan(&uid, &values)
+		var lang string
+		var authors pq.StringArray
+		var codeValues pq.StringArray
+		var idValues pq.Int64Array
+		err := rows.Scan(&uid, &codeValues, &idValues, &lang, &authors)
 		if err != nil {
-			return nil, errors.Wrap(err, "rows.Scan")
+			return nil, nil, nil, errors.Wrap(err, "rows.Scan")
 		}
-		m[uid] = values
+		if authorsByLanguageMap[uid] == nil {
+			authorsByLanguageMap[uid] = make(map[string][]string)
+		}
+		authorsByLanguageMap[uid][lang] = authors
+		if _, ok := codeMap[uid]; !ok {
+			codeMap[uid] = codeValues
+			idMap[uid] = idValues
+		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "SourcesIndex.loadSources - rows.Err()")
+		return nil, nil, nil, errors.Wrap(err, "SourcesIndex.loadSources - rows.Err()")
 	}
 
-	return m, nil
+	return codeMap, idMap, authorsByLanguageMap, nil
 }
 
 func (index *SourcesIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
@@ -239,7 +262,7 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 	return "", errors.New("SourcesIndex.getDocxPath - Docx not found in index.json.")
 }
 
-func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap []string) error {
+func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []string, parentIds []int64, authorsByLanguage map[string][]string) error {
 	// Create documents in each language with available translation
 	hasDocxForSomeLanguage := false
 	i18nMap := make(map[string]Source)
@@ -248,7 +271,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap [
 			source := Source{
 				MDB_UID: mdbSource.UID,
 				Name:    i18n.Name.String,
-				Sources: parentsMap,
+				Sources: parents,
 			}
 			if i18n.Description.Valid && i18n.Description.String != "" {
 				source.Description = i18n.Description.String
@@ -266,8 +289,24 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap [
 					log.Warnf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
 				}
 			}
+			for _, i := range parentIds {
+				ni18n, err := mdbmodels.FindSourceI18n(index.db, i, i18n.Language)
+				if err != nil {
+					if err == sql.ErrNoRows {
+						continue
+					}
+					return err
+				}
+				if ni18n.Name.Valid && ni18n.Name.String != "" {
+					source.PathNames = append(source.PathNames, ni18n.Name.String)
+				}
+				if ni18n.Description.Valid && ni18n.Description.String != "" {
+					source.PathNames = append(source.PathNames, ni18n.Description.String)
+				}
+			}
+			source.Authors = authorsByLanguage[i18n.Language]
 
-			for _, a := range mdbSource.R.Authors {
+			/*for _, a := range mdbSource.R.Authors {
 				ai18n, err := mdbmodels.FindAuthorI18n(index.db, a.ID, i18n.Language)
 				if err != nil {
 					if err == sql.ErrNoRows {
@@ -281,7 +320,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parentsMap [
 				if ai18n.FullName.Valid && ai18n.FullName.String != "" {
 					source.Authors = append(source.Authors, ai18n.FullName.String)
 				}
-			}
+			}*/
 			i18nMap[i18n.Language] = source
 		}
 	}
