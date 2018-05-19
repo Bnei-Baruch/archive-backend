@@ -126,35 +126,59 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 
 func (index *SourcesIndex) loadSources(db *sql.DB) (map[string][]string, map[string][]int64, map[string]map[string][]string, error) {
 	rows, err := queries.Raw(db, fmt.Sprintf(`
-		WITH RECURSIVE rec_sources AS (
-			SELECT
-			  s.id,
-			  s.uid,
-			  s.position,
-    		  au.id as author_id,
-			  array_append(au.authors, s.uid) "path",
-    		  ARRAY [s.id] :: bigint [] "idspath"
-			FROM sources s JOIN
-    
-    		(select source_id, name, a.id, array_agg(a.code) as authors, array_agg(a.name) as names
-    		from authors_sources aas 
-				INNER JOIN authors a ON a.id = aas.author_id             	
-   			 group by source_id, name, id ) au ON au.source_id = s.id
-    
-			UNION
-			SELECT
-			  s.id,
-			  s.uid,
-			  s.position,
-    		  author_id,
-			  rs.path || s.uid,
-    		  (rs.idspath || s.id) :: bigint []
-			FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
-		  )
-		  select uid, path, rs.idspath, an.language,
-          	case when an.full_name is null then ARRAY [an.name] else ARRAY [an.name, an.full_name] end
-           from rec_sources rs
-          join author_i18n an on an.author_id = rs.author_id;`)).Query()
+		WITH recursive rec_sources AS
+		(
+			   SELECT s.id,
+					  s.uid,
+					  array [s.uid] "path",
+					  array [s.id] :: bigint [] "idspath",
+					  authors,
+					  aun.language,
+					  aun.author_names
+			   FROM   sources s
+			   JOIN
+					  (
+							   SELECT   source_id,
+										array_agg(a.id),
+										array_agg(a.code) AS authors
+							   FROM     authors_sources aas
+							   JOIN     authors a
+							   ON       a.id = aas.author_id
+							   GROUP BY source_id) au
+			   ON     au.source_id = s.id
+			   JOIN
+					  (
+								SELECT    source_id,
+										  an.language,
+										  CASE
+													WHEN an.full_name IS NULL THEN array [an.name]
+													ELSE array [an.name, an.full_name]
+										  END AS author_names
+								FROM      authors_sources aas
+								JOIN      authors a
+								ON        a.id = aas.author_id
+								LEFT JOIN author_i18n an
+								ON        an.author_id=a.id ) aun
+			   ON     aun.source_id = s.id
+			   UNION
+			   SELECT     s.id,
+						  s.uid,
+						  (rs.path
+									 || s.uid) :: character(8)[],
+						  (rs.idspath
+									 || s.id) :: bigint [],
+						  rs.authors,
+						  rs.language,
+						  rs.author_names
+			   FROM       sources s
+			   INNER JOIN rec_sources rs
+			   ON         s.parent_id = rs.id )
+		SELECT uid,
+			   array_cat(path, authors) "path",
+			   idspath,
+			   language,
+			   author_names
+		FROM   rec_sources rs `)).Query()
 
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "SourcesIndex.loadSources - Query failed.")
