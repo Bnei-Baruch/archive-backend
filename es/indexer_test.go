@@ -838,7 +838,7 @@ func updateSource(source es.Source, lang string) (string, error) {
 	}
 	uidPath := path.Join(folder, mdbSource.UID)
 	if _, err := os.Stat(uidPath); os.IsNotExist(err) {
-		err = os.Mkdir(uidPath, os.FileMode(0775))
+		err = os.MkdirAll(uidPath, os.FileMode(0775))
 		if err != nil {
 			return "", err
 		}
