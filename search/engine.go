@@ -29,6 +29,7 @@ type ESEngine struct {
 type byRelevance []*elastic.SearchHit
 type byNewerToOlder []*elastic.SearchHit
 type byOlderToNewer []*elastic.SearchHit
+type bySourceFirst []*elastic.SearchHit
 
 func (s byRelevance) Len() int {
 	return len(s)
@@ -72,6 +73,17 @@ func (s byOlderToNewer) Less(i, j int) bool {
 	return res
 }
 
+func (s bySourceFirst) Len() int {
+	return len(s)
+}
+func (s bySourceFirst) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s bySourceFirst) Less(i, j int) bool {
+	res := s[i].Type == consts.SOURCES_INDEX_TYPE
+	return res
+}
+
 var classTypes = [...]string{consts.SOURCE_CLASSIFICATION_TYPE, consts.TAG_CLASSIFICATION_TYPE}
 
 // TODO: All interactions with ES should be throttled to prevent downstream pressure
@@ -111,13 +123,13 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 			for _, index := range indices {
 				searchSource := elastic.NewSearchSource().
 					Suggester(elastic.NewCompletionSuggester("classification_name").
-					Field("name_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
+						Field("name_suggest").
+						Text(query.Term).
+						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
 					Suggester(elastic.NewCompletionSuggester("classification_description").
-					Field("description_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
+						Field("description_suggest").
+						Text(query.Term).
+						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
 
 				request := elastic.NewSearchRequest().
 					SearchSource(searchSource).
@@ -445,13 +457,13 @@ func GetContentUnitsSearchRequests(query Query, sortBy string, from int, size in
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name").NumOfFragments(0),
-			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("transcript"),
-			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("description.analyzed"),
-			elastic.NewHighlighterField("transcript.analyzed"),
-		)).
+				elastic.NewHighlighterField("name").NumOfFragments(0),
+				elastic.NewHighlighterField("description"),
+				elastic.NewHighlighterField("transcript"),
+				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("description.analyzed"),
+				elastic.NewHighlighterField("transcript.analyzed"),
+			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
@@ -553,11 +565,11 @@ func GetCollectionsSearchRequests(query Query, sortBy string, from int, size int
 		searchSource := elastic.NewSearchSource().
 			Query(createCollectionsQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name").NumOfFragments(0),
-			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("description.analyzed"),
-		)).
+				elastic.NewHighlighterField("name").NumOfFragments(0),
+				elastic.NewHighlighterField("description"),
+				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("description.analyzed"),
+			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
@@ -645,15 +657,15 @@ func GetSourcesSearchRequests(query Query, from int, size int, preference string
 		searchSource := elastic.NewSearchSource().
 			Query(createSourcesQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name").NumOfFragments(0),
-			elastic.NewHighlighterField("description").NumOfFragments(0),
-			elastic.NewHighlighterField("authors").NumOfFragments(0),
-			elastic.NewHighlighterField("content"),
-			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("authors.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("content.analyzed"),
-		)).
+				elastic.NewHighlighterField("name").NumOfFragments(0),
+				elastic.NewHighlighterField("description").NumOfFragments(0),
+				elastic.NewHighlighterField("authors").NumOfFragments(0),
+				elastic.NewHighlighterField("content"),
+				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("authors.analyzed").NumOfFragments(0),
+				elastic.NewHighlighterField("content.analyzed"),
+			)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
@@ -713,6 +725,8 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 		sort.Stable(byOlderToNewer(concatenated))
 	} else if sortBy == consts.SORT_BY_NEWER_TO_OLDER {
 		sort.Stable(byNewerToOlder(concatenated))
+	} else if sortBy == consts.SORT_BY_SOURCE_FIRST {
+		sort.Stable(bySourceFirst(concatenated))
 	}
 
 	// Filter by relevant page.

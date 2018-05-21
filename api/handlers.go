@@ -449,6 +449,9 @@ func SearchHandler(c *gin.Context) {
 	if _, ok := consts.SORT_BY_VALUES[sortBy]; ok {
 		sortByVal = sortBy
 	}
+	if len(query.Term) == 0 {
+		sortByVal = consts.SORT_BY_SOURCE_FIRST
+	}
 
 	searchId := c.Query("search_id")
 

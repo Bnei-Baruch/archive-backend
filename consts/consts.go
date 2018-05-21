@@ -186,6 +186,7 @@ const (
 	SORT_BY_RELEVANCE      = "relevance"
 	SORT_BY_NEWER_TO_OLDER = "newertoolder"
 	SORT_BY_OLDER_TO_NEWER = "oldertonewer"
+	SORT_BY_SOURCE_FIRST   = "sourcefirst"
 )
 
 var SORT_BY_VALUES = map[string]bool{
