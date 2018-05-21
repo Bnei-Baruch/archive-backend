@@ -42,6 +42,7 @@ func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
 	})
 }
 
@@ -53,6 +54,7 @@ func defaultContentUnitSql() string {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
 	)
 }
 
