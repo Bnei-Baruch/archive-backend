@@ -34,7 +34,7 @@ type CollectionsIndex struct {
 }
 
 func defaultCollectionsSql() string {
-	return fmt.Sprintf("c.secure = 0 AND c.published IS TRUE AND c.type_id NOT IN (%d, %d, %d, %d, %d, %d)",
+	return fmt.Sprintf("c.secure = 0 AND c.published IS TRUE AND c.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)",
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SPECIAL_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIPS].ID,
