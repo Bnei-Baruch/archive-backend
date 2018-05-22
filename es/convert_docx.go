@@ -134,12 +134,17 @@ var sofficeMutex = &sync.Mutex{}
 
 func loadDocs(db *sql.DB) ([][]string, error) {
 	rows, err := queries.Raw(db, `
-SELECT uid, name
-FROM files
-WHERE name ~ '.docx?' AND
-    language NOT IN ('zz', 'xx') AND
-    content_unit_id IS NOT NULL AND
-    secure=0 AND published IS TRUE;`).Query()
+SELECT
+  f.uid,
+  f.name
+FROM files f
+  INNER JOIN content_units cu ON f.content_unit_id = cu.id AND
+                                 f.name ~ '.docx?$' AND
+                                 f.language NOT IN ('zz', 'xx') AND
+                                 f.secure = 0 AND
+                                 f.published IS TRUE AND
+                                 cu.secure = 0
+                                 AND cu.published IS TRUE;`).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load docs")
