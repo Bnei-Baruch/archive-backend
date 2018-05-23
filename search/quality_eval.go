@@ -457,11 +457,12 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, e
 	for i, q := range queries {
 		for j, sq := range ret.Results[i].SearchQuality {
 			e := q.Expectations[j]
+			goodExpectationsLen := GoodExpectations(q.Expectations)
 			if sq == SQ_UNKNOWN {
 				if _, ok := losses[e.Type]; !ok {
 					losses[e.Type] = make([]Loss, 0)
 				}
-				loss := Loss{e, q, 1 / float64(len(q.Expectations)), float64(q.Weight) / float64(len(q.Expectations))}
+				loss := Loss{e, q, 1 / float64(goodExpectationsLen), float64(q.Weight) / float64(goodExpectationsLen)}
 				losses[e.Type] = append(losses[e.Type], loss)
 			}
 		}
@@ -476,6 +477,24 @@ func ExpectationToString(e Expectation) string {
 		filters[i] = fmt.Sprintf("%s - %s", f.Name, f.Value)
 	}
 	return fmt.Sprintf("%s|%s|%s", EXPECTATION_TO_NAME[e.Type], e.Uid, strings.Join(filters, ":"))
+}
+
+func WriteResultsByExpectation(path string, queries []EvalQuery, results EvalResults) error {
+	records := [][]string{{"Language", "Query", "Weight", "Bucket", "Comment",
+		"Expectation", "Parsed", "SearchQuality", "Rank"}}
+	for i, q := range queries {
+		goodExpectationsLen := GoodExpectations(q.Expectations)
+		for j, sq := range results.Results[i].SearchQuality {
+			if GOOD_EXPECTATION[q.Expectations[j].Type] {
+				record := []string{q.Language, q.Query, fmt.Sprintf("%.2f", float64(q.Weight)/float64(goodExpectationsLen)),
+					q.Bucket, q.Comment, q.Expectations[j].Source, ExpectationToString(q.Expectations[j]),
+					SEARCH_QUALITY_NAME[sq], fmt.Sprintf("%d", results.Results[i].Rank[j])}
+				records = append(records, record)
+			}
+		}
+	}
+
+	return WriteToCsv(path, records)
 }
 
 func WriteResults(path string, queries []EvalQuery, results EvalResults) error {
