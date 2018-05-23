@@ -80,7 +80,7 @@ func (s bySourceFirst) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 func (s bySourceFirst) Less(i, j int) bool {
-	res := s[i].Type == consts.SOURCES_INDEX_TYPE
+	res := s[i].Type == consts.SOURCES_INDEX_TYPE && s[j].Type != consts.SOURCES_INDEX_TYPE
 	return res
 }
 
