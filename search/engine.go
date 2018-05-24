@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/url"
 	"sort"
+	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -20,10 +21,13 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
+type CheckContentUnitsFunc func(mdb *sql.DB, contentType string, lang string, tags []string, sources []string) (error, map[string]bool, map[string]bool)
+
 type ESEngine struct {
 	esc *elastic.Client
-	// TODO: Is mdb required here?
 	mdb *sql.DB
+
+	checkContentUnits CheckContentUnitsFunc
 }
 
 type byRelevance []*elastic.SearchHit
@@ -76,8 +80,8 @@ var classTypes = [...]string{consts.SOURCE_CLASSIFICATION_TYPE, consts.TAG_CLASS
 
 // TODO: All interactions with ES should be throttled to prevent downstream pressure
 
-func NewESEngine(esc *elastic.Client, db *sql.DB) *ESEngine {
-	return &ESEngine{esc: esc, mdb: db}
+func NewESEngine(esc *elastic.Client, db *sql.DB, checkContentUnits CheckContentUnitsFunc) *ESEngine {
+	return &ESEngine{esc: esc, mdb: db, checkContentUnits: checkContentUnits}
 }
 
 func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
@@ -191,7 +195,8 @@ func createSourcesIntentQuery(q Query) elastic.Query {
 			),
 		)
 	}
-	return boolQuery
+	return elastic.NewFunctionScoreQuery().Query(boolQuery).
+		Boost(2.0 * 4.0) // Title Boost * Time Boost
 }
 
 func createTagsIntentQuery(q Query) elastic.Query {
@@ -220,7 +225,8 @@ func createTagsIntentQuery(q Query) elastic.Query {
 			),
 		)
 	}
-	return boolQuery
+	return elastic.NewFunctionScoreQuery().Query(boolQuery).
+		Boost(2.0 * 4.0) // Title Boost * Time Boost
 }
 
 func TagsIntentRequest(query Query, language string, preference string) *elastic.SearchRequest {
@@ -271,9 +277,7 @@ func (e *ESEngine) AddClassificationIntentSecondRound(h *elastic.SearchHit, inte
 }
 
 func (e *ESEngine) AddIntents(query *Query, preference string) error {
-	// Dark launch intents, only if query.Deb is true.
-	// Remove query.Deb check when intents quality is good.
-	if len(query.Term) == 0 && len(query.ExactTerms) == 0 || !query.Deb {
+	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
 		return nil
 	}
 	mssFirstRound := e.esc.MultiSearch()
@@ -281,9 +285,9 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 	for _, language := range query.LanguageOrder {
 		// Order here provides the priority in results, i.e., tags are more importnt then sources.
 		mssFirstRound.Add(TagsIntentRequest(*query, language, preference))
-		potentialIntents = append(potentialIntents, Intent{I_TAG, language, nil})
+		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
 		mssFirstRound.Add(SourcesIntentRequest(*query, language, preference))
-		potentialIntents = append(potentialIntents, Intent{I_SOURCE, language, nil})
+		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
 	mr, err := mssFirstRound.Do(context.TODO())
 	if err != nil {
@@ -300,9 +304,9 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		}
 		var intentRequestFunc IntentRequestFunc
 		switch potentialIntents[i].Type {
-		case I_SOURCE:
+		case consts.INTENT_TYPE_SOURCE:
 			intentRequestFunc = SourcesIntentRequest
-		case I_TAG:
+		case consts.INTENT_TYPE_TAG:
 			intentRequestFunc = TagsIntentRequest
 		default:
 			log.Errorf("ESEngine.AddIntents - First round bad type: %+v", potentialIntents[i])
@@ -321,29 +325,117 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 			}
 		}
 	}
-	mr, err = mssSecondRound.Do(context.TODO())
-	for i := 0; i < len(finalIntents); i++ {
-		res := mr.Responses[i]
-		if res.Error != nil {
-			log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error)
-			return errors.New("ESEngine.AddIntents - Second Run Failed multi get (S).")
+
+	log.Infof("Final intents: %+v", finalIntents)
+
+	// Now we have potential tags (topics) and sources that match query.
+	// In second round we will go over all potential tags (topics) and sources and validate they match
+	// by searching their full name.
+	// In parallel we will check existense of lessons and programs for each tag (topic) and source as
+	// we don't want to show intent links that will lead to empty pages.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	// Following map required to check whether specific intent is acually actionable, i.e., has results in db.
+	// The map structure is:
+	// contentUnitsChecks[lesson/program][language][tag/source][uid - of tag or source] => {error, exist}
+	type ErrorOrMapByType struct {
+		Error     error
+		MapByType map[string]map[string]bool
+	}
+	contentUnitsChecks := make(map[string]map[string]ErrorOrMapByType)
+	checkContentUnitsTypes := []string{consts.CT_LESSON_PART, consts.CT_VIDEO_PROGRAM_CHAPTER}
+	for _, contentUnitType := range checkContentUnitsTypes {
+		if _, ok := contentUnitsChecks[contentUnitType]; !ok {
+			contentUnitsChecks[contentUnitType] = make(map[string]ErrorOrMapByType, 0)
 		}
-		intentValue := finalIntents[i].Value.(es.ClassificationIntent)
-		if haveHits(res) {
-			found := false
-			for _, h := range res.Hits.Hits {
-				var classificationIntent es.ClassificationIntent
-				if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
-					return err
+		mapByLanguage := contentUnitsChecks[contentUnitType]
+		for _, intent := range finalIntents {
+			if _, ok := mapByLanguage[intent.Language]; !ok {
+				mapByLanguage[intent.Language] = ErrorOrMapByType{nil, make(map[string]map[string]bool)}
+			}
+			errorOrMapByType := mapByLanguage[intent.Language]
+			if _, ok := errorOrMapByType.MapByType[intent.Type]; !ok {
+				errorOrMapByType.MapByType[intent.Type] = make(map[string]bool, 0)
+			}
+			intentValue, ok := intent.Value.(es.ClassificationIntent)
+			if !ok {
+				continue
+			}
+			errorOrMapByType.MapByType[intent.Type][intentValue.MDB_UID] = false
+		}
+	}
+	go func() {
+		defer wg.Done()
+		var dbWg sync.WaitGroup
+		var checkMapMutex = &sync.Mutex{}
+		log.Infof("Check map: %+v", contentUnitsChecks)
+		for contentUnitType, mapByLanguage := range contentUnitsChecks {
+			for language, errorOrMapByType := range mapByLanguage {
+				sourceUids := make([]string, 0)
+				tagUids := make([]string, 0)
+				for intentType, uidMap := range errorOrMapByType.MapByType {
+					for uid := range uidMap {
+						if intentType == consts.INTENT_TYPE_SOURCE {
+							sourceUids = append(sourceUids, uid)
+						}
+						if intentType == consts.INTENT_TYPE_TAG {
+							tagUids = append(tagUids, uid)
+						}
+					}
 				}
-				if query.Deb {
-					intentValue.MaxExplanation = *h.Explanation
-				}
-				if intentValue.MDB_UID == classificationIntent.MDB_UID {
-					found = true
-					if h.Score != nil && *h.Score > 0 {
-						intentValue.MaxScore = h.Score
-						if *intentValue.Score / *intentValue.MaxScore >= 0.2 {
+
+				dbWg.Add(1)
+				go func(contentUnitType string, language string, tagUids []string, sourceUids []string, errorOrMapByType *ErrorOrMapByType) {
+					defer dbWg.Done()
+					err, _, sourcesExistMap := e.checkContentUnits(e.mdb, contentUnitType, language, []string{}, sourceUids)
+					tagsExistMap := make(map[string]bool)
+					if err == nil {
+						err, tagsExistMap, _ = e.checkContentUnits(e.mdb, contentUnitType, language, tagUids, []string{})
+					}
+					log.Infof("ESEngine.AddIntents - Exist check for %s %s tags: %+v sources: %+v resTags: %+v regSources: %+v err: %+v",
+						contentUnitType, language, tagUids, sourceUids, tagsExistMap, sourcesExistMap, err)
+					checkMapMutex.Lock()
+					defer checkMapMutex.Unlock()
+					errorOrMapByType.Error = err
+					errorOrMapByType.MapByType[consts.INTENT_TYPE_TAG] = tagsExistMap
+					errorOrMapByType.MapByType[consts.INTENT_TYPE_SOURCE] = sourcesExistMap
+				}(contentUnitType, language, tagUids, sourceUids, &errorOrMapByType)
+			}
+		}
+		dbWg.Wait()
+	}()
+
+	secondRoundError := error(nil)
+	go func() {
+		defer wg.Done()
+		mr, err = mssSecondRound.Do(context.TODO())
+		for i := 0; i < len(finalIntents); i++ {
+			res := mr.Responses[i]
+			if res.Error != nil {
+				log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error)
+				secondRoundError = errors.New("ESEngine.AddIntents - Second Run Failed multi get (S).")
+				return
+			}
+			intentValue, intentOk := finalIntents[i].Value.(es.ClassificationIntent)
+			if !intentOk {
+				secondRoundError = errors.New(fmt.Sprintf("ESEngine.AddIntents - Unexpected intent value: %+v", finalIntents[i].Value))
+				return
+			}
+			if haveHits(res) {
+				found := false
+				for _, h := range res.Hits.Hits {
+					var classificationIntent es.ClassificationIntent
+					if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
+						secondRoundError = err
+						return
+					}
+					if query.Deb {
+						intentValue.MaxExplanation = *h.Explanation
+					}
+					if intentValue.MDB_UID == classificationIntent.MDB_UID {
+						found = true
+						if h.Score != nil && *h.Score > 0 {
+							intentValue.MaxScore = h.Score
 							if *intentValue.MaxScore < *intentValue.Score {
 								log.Warnf("ESEngine.AddIntents - Not expected score %f to be larger then max score %f for %s - %s.",
 									*intentValue.Score, *intentValue.MaxScore, intentValue.MDB_UID, intentValue.Name)
@@ -352,14 +444,90 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 						}
 					}
 				}
+				if !found {
+					log.Warnf("ESEngine.AddIntents - Did not find matching second run: %s - %s.",
+						intentValue.MDB_UID, intentValue.Name)
+				}
 			}
-			if !found {
-				log.Warnf("ESEngine.AddIntents - Did not find matching second run: %s - %s.",
-					intentValue.MDB_UID, intentValue.Name)
+		}
+	}()
+
+	// Wait for checks on db and wait for second round elastic requests.
+	wg.Wait()
+	for _, mapByLanguage := range contentUnitsChecks {
+		for _, errorOrMapByType := range mapByLanguage {
+			if errorOrMapByType.Error != nil {
+				return errorOrMapByType.Error
 			}
 		}
 	}
+	if secondRoundError != nil {
+		return secondRoundError
+	}
+
+	// Set content unit type and exists for intents that are in the query, i.e., those who passed the second round.
+	// If more then one content unit type exist for this intent, we will have to duplicate that intent.
+	moreIntents := make([]Intent, 0)
+	for intentIdx := range query.Intents {
+		for _, contentUnitType := range checkContentUnitsTypes {
+			if intentValue, ok := query.Intents[intentIdx].Value.(es.ClassificationIntent); ok {
+				intentP := &query.Intents[intentIdx]
+				intentValueP := &intentValue
+				if intentValue.ContentType != "" {
+					// We need to copy the intent as we have more than one existing content types for that intent.
+					moreIntents = append(moreIntents, query.Intents[intentIdx])
+					intentP = &moreIntents[len(moreIntents)-1]
+					copyIntentValue := intentP.Value.(es.ClassificationIntent)
+					intentValueP = &copyIntentValue
+				}
+				intentValueP.ContentType = contentUnitType
+				intentValueP.Exist = contentUnitsChecks[contentUnitType][query.Intents[intentIdx].Language].MapByType[query.Intents[intentIdx].Type][intentValue.MDB_UID]
+				// Assigne the changed intent value, as everything is by value in golang.
+				intentP.Value = *intentValueP
+			}
+		}
+	}
+	query.Intents = append(query.Intents, moreIntents...)
 	return nil
+}
+
+func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.SearchResult) {
+	srMap := make(map[string]*elastic.SearchResult)
+	for _, lang := range query.LanguageOrder {
+		sh := &elastic.SearchHits{TotalHits: 0}
+		sr := &elastic.SearchResult{Hits: sh}
+		srMap[lang] = sr
+	}
+	log.Infof("IntentsToResults - %d intents.", len(query.Intents))
+	for _, intent := range query.Intents {
+		// Convert intent to result with score.
+		intentValue := intent.Value.(es.ClassificationIntent)
+		if intentValue.Exist {
+			sh := srMap[intent.Language].Hits
+			sh.TotalHits++
+			// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
+			boostedScore := *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
+			if sh.MaxScore != nil {
+				maxScore := math.Max(*sh.MaxScore, boostedScore)
+				sh.MaxScore = &maxScore
+			} else {
+				sh.MaxScore = &boostedScore
+			}
+			intentHit := &elastic.SearchHit{}
+			intentHit.Explanation = &intentValue.Explanation
+			intentHit.Score = &boostedScore
+			intentHit.Index = consts.INTENT_INDEX_BY_TYPE[intent.Type]
+			intentHit.Type = consts.INTENT_HIT_TYPE_BY_CT[intentValue.ContentType]
+			source, err := json.Marshal(intentValue)
+			if err != nil {
+				return err, nil
+			}
+			intentHit.Source = (*json.RawMessage)(&source)
+			sh.Hits = append(sh.Hits, intentHit)
+			log.Infof("Added intent %s %d %s %f %d", intentValue.Name, intent.Type, intent.Language, boostedScore, intentValue.Exist)
+		}
+	}
+	return nil, srMap
 }
 
 func createContentUnitsQuery(q Query) elastic.Query {
@@ -755,29 +923,40 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	if err := e.AddIntents(&query, preference); err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
 	}
-	log.Infof("ESEngine.DoSearch - Query: %+v sort by: %s, from: %d, size: %d", query, sortBy, from, size)
+	// Print query to log. Without intents (takes too much space).
+	queryToPrint := query
+	queryToPrint.Intents = []Intent{}
+	log.Infof("ESEngine.DoSearch - Query: %+v sort by: %s, from: %d, size: %d", queryToPrint, sortBy, from, size)
+	for _, intent := range query.Intents {
+		if value, ok := intent.Value.(es.ClassificationIntent); ok {
+			value.Explanation = elastic.SearchExplanation{0.0, "Don't print.", nil}
+			value.MaxExplanation = value.Explanation
+			intent.Value = value
+		}
+		log.Infof("ESEngine.DoSearch - \tIntent: %+v", intent)
+	}
+
 	multiSearchService := e.esc.MultiSearch()
-	requests := make([]*elastic.SearchRequest, 0)
 	requestsByIndex := make(map[string][]*elastic.SearchRequest)
 
-	status := consts.NO_FILTER
+	searchFilter := consts.SEARCH_NO_FILTER
 	if len(query.Filters) > 0 {
 		if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
-			status = consts.ONLY_SOURCES
+			searchFilter = consts.SEARCH_FILTER_ONLY_SOURCES
 		} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SOURCE]]; ok {
-			status = consts.NO_FILTER
+			searchFilter = consts.SEARCH_NO_FILTER
 		} else {
-			status = consts.WITHOUT_SOURCES
+			searchFilter = consts.SEARCH_FILTER_WITHOUT_SOURCES
 		}
 	}
 
-	if status != consts.ONLY_SOURCES {
-		requestsByIndex[consts.ES_UNITS_INDEX] = append(requests, GetContentUnitsSearchRequests(query, sortBy, 0, from+size, preference)...)
-		requestsByIndex[consts.ES_COLLECTIONS_INDEX] = append(requests, GetCollectionsSearchRequests(query, sortBy, 0, from+size, preference)...)
+	if searchFilter != consts.SEARCH_FILTER_ONLY_SOURCES {
+		requestsByIndex[consts.ES_UNITS_INDEX] = GetContentUnitsSearchRequests(query, sortBy, 0, from+size, preference)
+		requestsByIndex[consts.ES_COLLECTIONS_INDEX] = GetCollectionsSearchRequests(query, sortBy, 0, from+size, preference)
 	}
 
-	if status != consts.WITHOUT_SOURCES {
-		requestsByIndex[consts.ES_SOURCES_INDEX] = append(requests, GetSourcesSearchRequests(query, 0, from+size, preference)...)
+	if searchFilter != consts.SEARCH_FILTER_WITHOUT_SOURCES {
+		requestsByIndex[consts.ES_SOURCES_INDEX] = GetSourcesSearchRequests(query, 0, from+size, preference)
 	}
 
 	for _, k := range requestsByIndex {
@@ -795,21 +974,47 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			len(mr.Responses), len(requestsByIndex)*len(query.LanguageOrder)))
 	}
 
-	results := make([]*elastic.SearchResult, 0)
+	resultsByLang := make(map[string][]*elastic.SearchResult)
 
-	for i := 0; i < len(mr.Responses); i += len(query.LanguageOrder) {
-		currentResults := mr.Responses[i]
+	// Responses are ordered by language by index, i.e., for languages [bg, ru, en] and indices [units, collections, sources]
+	// we will have [bg-units, ru-units, en-units, bg-collections, ru-collections, en-collections, bg-sources, ru-sources, en-sources]
+	// We want the first matching language that has at least any result.
+	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
 			return nil, errors.New("Failed multi get.")
 		}
 		if haveHits(currentResults) {
-			results = append(results, currentResults)
+			lang := query.LanguageOrder[i%len(query.LanguageOrder)]
+			if _, ok := resultsByLang[lang]; !ok {
+				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+			}
+			resultsByLang[lang] = append(resultsByLang[lang], currentResults)
+		}
+	}
+
+	err, intentResultsMap := e.IntentsToResults(&query)
+	if err != nil {
+		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents to results.")
+	}
+	for lang, intentResults := range intentResultsMap {
+		if haveHits(intentResults) {
+			if _, ok := resultsByLang[lang]; !ok {
+				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+			}
+			resultsByLang[lang] = append(resultsByLang[lang], intentResults)
+		}
+	}
+
+	results := make([]*elastic.SearchResult, 0)
+	for _, lang := range query.LanguageOrder {
+		if r, ok := resultsByLang[lang]; ok {
+			results = r
+			break
 		}
 	}
 
 	ret, err := joinResponses(sortBy, from, size, results...)
-
 	if ret != nil && ret.Hits != nil {
 		return &QueryResult{ret, query.Intents}, err
 	}

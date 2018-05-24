@@ -21,10 +21,13 @@ var evalCmd = &cobra.Command{
 var evalSetPath string
 var serverUrl string
 var baseServerUrl string
+var reportPath string
 
 func init() {
-	evalCmd.PersistentFlags().StringVar(&evalSetPath, "eval_set", "", "Path to tsv eval set.")
+	evalCmd.PersistentFlags().StringVar(&evalSetPath, "eval_set", "", "Path to csv eval set.")
 	evalCmd.MarkFlagRequired("eval_set")
+	evalCmd.PersistentFlags().StringVar(&reportPath, "report", "", "Path to csv report file.")
+	evalCmd.MarkFlagRequired("report")
 	evalCmd.PersistentFlags().StringVar(&serverUrl, "server", "", "URL of experimental archive backend to evaluate.")
 	evalCmd.MarkFlagRequired("server")
 	evalCmd.PersistentFlags().StringVar(&baseServerUrl, "base_server", "", "URL of base archive backend to evaluate.")
@@ -70,7 +73,7 @@ func runSxS(evalSet []search.EvalQuery, baseUrl string, expUrl string) (
 	if expErr != nil {
 		return search.EvalResults{}, nil, search.EvalResults{}, nil, expErr
 	}
-	return baseResults, baseLosses, expResults, baseLosses, nil
+	return baseResults, baseLosses, expResults, expLosses, nil
 }
 
 func printResults(results search.EvalResults) {
@@ -108,7 +111,7 @@ func printLosses(results search.EvalResults, losses map[int][]search.Loss) {
 			float64ToPercent(totalUnique/float64(results.TotalUnique)),
 			float64ToPercent(totalWeighted/float64(results.TotalWeighted)))
 		for _, l := range lList {
-			log.Infof("\t%7s/%7s - [%s] %s %+v", float64ToPercent(l.Unique/float64(results.TotalUnique)),
+			log.Infof("\t%7s/%7s - Query: [%s] Bucket: %s %+v", float64ToPercent(l.Unique/float64(results.TotalUnique)),
 				float64ToPercent(l.Weighted/float64(results.TotalWeighted)), l.Query.Query, l.Query.Bucket, l.Expectation)
 		}
 	}
@@ -175,13 +178,13 @@ func evalFn(cmd *cobra.Command, args []string) {
 				}
 			}
 		}
-
+		search.WriteResults(reportPath, evalSet, expResults)
 	} else {
 		results, losses, err := search.Eval(evalSet, serverUrl)
 		utils.Must(err)
 		printResults(results)
 		printLosses(results, losses)
-
+		search.WriteResults(reportPath, evalSet, results)
 	}
 	utils.Must(err)
 	log.Infof("Done evaluating queries.")

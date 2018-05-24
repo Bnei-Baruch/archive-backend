@@ -405,6 +405,42 @@ func ParseQuery(q string) search.Query {
 	return search.Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Filters: filters}
 }
 
+// Search helpers, are passed to ESEngine. Those function defined here to
+// avoid cycle dependency of api ==> search ==> api
+
+// Returns two maps one for tags, other for sources mapping uid to boolean indicating that content unit exists for specified source or/and tag (topic).
+func checkContentUnits(mdb *sql.DB, contentUnitType string, lang string, tagUids []string, sourceUids []string) (error, map[string]bool, map[string]bool) {
+	cur := ContentUnitsRequest{
+		ContentTypesFilter: ContentTypesFilter{
+			ContentTypes: []string{contentUnitType},
+		},
+		ListRequest: ListRequest{
+			BaseRequest: BaseRequest{Language: lang},
+		},
+		SourcesFilter: SourcesFilter{Sources: sourceUids},
+		TagsFilter:    TagsFilter{Tags: tagUids},
+	}
+	log.Infof("cur: %+v", cur)
+	resp, err := handleStatsCUClass(mdb, cur)
+	log.Infof("checkContentUnits: %+v err: %+v", resp, err)
+	if err != nil {
+		return err, nil, nil
+	}
+	tagsRet := make(map[string]bool)
+	for _, tagUid := range tagUids {
+		if count, ok := resp.Tags[tagUid]; ok {
+			tagsRet[tagUid] = count > 0
+		}
+	}
+	sourcesRet := make(map[string]bool)
+	for _, sourceUid := range sourceUids {
+		if count, ok := resp.Sources[sourceUid]; ok {
+			sourcesRet[sourceUid] = count > 0
+		}
+	}
+	return nil, tagsRet, sourcesRet
+}
+
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
@@ -459,7 +495,7 @@ func SearchHandler(c *gin.Context) {
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
-	se := search.NewESEngine(esc, db)
+	se := search.NewESEngine(esc, db, checkContentUnits)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -482,6 +518,8 @@ func SearchHandler(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, res)
 	} else {
+		// TODO: Remove following line, we should not log this.
+		log.Infof("Error on search: %+v", err)
 		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, err)
 		if logErr != nil {
 			log.Warnf("Erro logging search error: %+v %+v", logErr, err)
@@ -516,7 +554,7 @@ func AutocompleteHandler(c *gin.Context) {
 
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	se := search.NewESEngine(esc, db)
+	se := search.NewESEngine(esc, db, checkContentUnits)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
@@ -590,6 +628,8 @@ func StatsCUClassHandler(c *gin.Context) {
 	if c.Bind(&r) != nil {
 		return
 	}
+
+	log.Infof("Request: %+v", r)
 
 	resp, err := handleStatsCUClass(c.MustGet("MDB_DB").(*sql.DB), r)
 	concludeRequest(c, resp, err)
@@ -1510,7 +1550,7 @@ func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter)
 		return nil
 	}
 
-	// find all nested tag_ids
+	// Find all nested tag_ids.
 	q := `WITH RECURSIVE rec_tags AS (
             SELECT t.id FROM tags t WHERE t.uid = ANY($1)
             UNION
