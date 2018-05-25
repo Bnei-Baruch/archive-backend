@@ -781,7 +781,33 @@ func deleteSources(UIDs []string) error {
 			return errors.Wrap(err, "deleteSources, delete source i18n.")
 		}
 	}
-
+	// Delete authors_sources and authors
+	sources, err := mdbmodels.Sources(common.DB, qm.WhereIn("sources.uid in ?", UIDsI...)).All()
+	if err != nil {
+		return err
+	}
+	sourcesIdsI := make([]interface{}, 0)
+	for _, s := range sources {
+		sourcesIdsI = append(sourcesIdsI, s.ID)
+	}
+	authors, err := mdbmodels.Authors(common.DB,
+		qm.InnerJoin("authors_sources on authors_sources.author_id = authors.id"),
+		qm.WhereIn("authors_sources.source_id in ?", sourcesIdsI...)).All()
+	if err != nil {
+		return errors.Wrap(err, "Select authors")
+	}
+	if len(authors) > 0 {
+		for _, s := range sources {
+			err = s.RemoveAuthors(common.DB, authors...)
+			if err != nil {
+				return errors.Wrap(err, "RemoveAuthors")
+			}
+		}
+		err = authors.DeleteAll(common.DB)
+		if err != nil {
+			return errors.Wrap(err, "deleteSources, delete authors.")
+		}
+	}
 	return mdbmodels.Sources(common.DB, qm.WhereIn("uid in ?", UIDsI...)).DeleteAll()
 }
 
@@ -1444,19 +1470,22 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	suite.ucut(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, false)
 
 	fmt.Println("Add a source to content unit and validate.")
-	suite.acus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, TypeID: 1, UID: "ALlyoveA"}, mdbmodels.Author{ID: 1}, true)
+	sourceUID1 := "ALlyoveA"
+	sourceUID2 := "1vCj4qN9"
+	sourceUIDs := []string{sourceUID1, sourceUID2}
+	suite.acus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, TypeID: 1, UID: sourceUID1}, mdbmodels.Author{ID: 1}, true)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitSources(indexNameEn, indexer, []string{"ALlyoveA"})
+	suite.validateContentUnitSources(indexNameEn, indexer, []string{sourceUID1})
 	fmt.Println("Add second source to content unit and validate.")
-	suite.acus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: "1vCj4qN9"}, mdbmodels.Author{ID: 1}, false)
+	suite.acus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: sourceUID2}, mdbmodels.Author{ID: 1}, false)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitSources(indexNameEn, indexer, []string{"ALlyoveA", "1vCj4qN9"})
+	suite.validateContentUnitSources(indexNameEn, indexer, sourceUIDs)
 	fmt.Println("Remove one source from content unit and validate.")
-	suite.rcus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, TypeID: 1, UID: "L2jMWyce"})
+	suite.rcus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, TypeID: 1, UID: sourceUID1})
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitSources(indexNameEn, indexer, []string{"1vCj4qN9"})
+	suite.validateContentUnitSources(indexNameEn, indexer, []string{sourceUID2})
 	fmt.Println("Remove the second source.")
-	suite.rcus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: "1vCj4qN9"})
+	suite.rcus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: sourceUID2})
 
 	fmt.Println("Make content unit not published and validate.")
 	//r.Nil(es.DumpDB(common.DB, "TestContentUnitsIndex, BeforeDB"))
@@ -1510,6 +1539,7 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 
 	fmt.Println("Delete units, reindex and validate we have 0 searchable units.")
 	r.Nil(deleteContentUnits(UIDs))
+	r.Nil(deleteSources(sourceUIDs))
 	r.Nil(indexer.ReindexAll())
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
 
@@ -1561,6 +1591,10 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 
 	r := require.New(suite.T())
 
+	indexNameEn := es.IndexName("test", consts.ES_SOURCES_INDEX, consts.LANG_ENGLISH)
+	indexNameHe := es.IndexName("test", consts.ES_SOURCES_INDEX, consts.LANG_HEBREW)
+	indexer := es.MakeIndexer("test", []string{consts.ES_SOURCES_INDEX}, common.DB, common.ESC)
+
 	fmt.Printf("\n\n\nAdding source.\n\n")
 	source1UID := suite.us(es.Source{Name: "test-name-1", Description: "test-description-1"}, consts.LANG_ENGLISH)
 	suite.us(es.Source{MDB_UID: source1UID, Name: "שם-בדיקה-1", Description: "תיאור-בדיקה-1"}, consts.LANG_HEBREW)
@@ -1571,9 +1605,6 @@ func (suite *IndexerSuite) TestSourcesIndex() {
 	suite.usfc(source1UID, consts.LANG_HEBREW)
 
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
-	indexNameEn := es.IndexName("test", consts.ES_SOURCES_INDEX, consts.LANG_ENGLISH)
-	indexNameHe := es.IndexName("test", consts.ES_SOURCES_INDEX, consts.LANG_HEBREW)
-	indexer := es.MakeIndexer("test", []string{consts.ES_SOURCES_INDEX}, common.DB, common.ESC)
 
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll())

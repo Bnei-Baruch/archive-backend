@@ -85,6 +85,16 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 
 	log.Infof("SourcesIndex.addToIndexSql - Sources Index - Adding %d sources. Scope: %s", count, sqlScope)
 
+	// TODO: Make this scope specific.
+	// Loading all sources path in all languages.
+	// codesMap from uid => codes
+	// idsMap from uid => id
+	// authorsByLanguageMap from uid => lang => authors
+	codesMap, idsMap, authorsByLanguageMap, err := index.loadSources(index.db)
+	if err != nil {
+		return errors.Wrap(err, "addToIndexSql - loadSources.")
+	}
+
 	offset := 0
 	limit := 1000
 	for offset < int(count) {
@@ -98,11 +108,6 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 			qm.Limit(limit)).Bind(&sources)
 		if err != nil {
 			return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources from mdb")
-		}
-
-		codesMap, idsMap, authorsByLanguageMap, err := index.loadSources(index.db) // Note: getting all sources path, not by scope.
-		if err != nil {
-			return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources parents from mdb")
 		}
 
 		log.Infof("SourcesIndex.addToIndexSql - Adding %d sources (offset: %d).", len(sources), offset)
@@ -202,9 +207,17 @@ func (index *SourcesIndex) loadSources(db *sql.DB) (map[string][]string, map[str
 		if authorsByLanguageMap[uid] == nil {
 			authorsByLanguageMap[uid] = make(map[string][]string)
 		}
-		authorsByLanguageMap[uid][lang] = authors
+		stringAuthors := make([]string, 0)
+		for _, ns := range authors {
+			stringAuthors = append(stringAuthors, ns)
+		}
+		stringCodeValues := make([]string, 0)
+		for _, ns := range codeValues {
+			stringCodeValues = append(stringCodeValues, ns)
+		}
+		authorsByLanguageMap[uid][lang] = stringAuthors
 		if _, ok := codeMap[uid]; !ok {
-			codeMap[uid] = codeValues
+			codeMap[uid] = stringCodeValues
 			idMap[uid] = idValues
 		}
 	}

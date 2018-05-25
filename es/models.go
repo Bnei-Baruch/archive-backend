@@ -79,6 +79,6 @@ type Source struct {
 	Description string   `json:"description"`
 	Content     string   `json:"content"`
 	Sources     []string `json:"sources"`
-	Authors	    []string `json:"authors"`
+	Authors     []string `json:"authors"`
 	PathNames   []string `json:"pathnames"`
 }
