@@ -129,37 +129,54 @@ def BeiderMorseLanguageset(lang):
 def IsCyrillic(lang, something):
   return something if lang in LANG_GROUPS[CYRILLIC] else None
 
-
-UNITS_TEMPLATE = {
-  "settings": {
-    "index": {
-      "analysis": {
-        "analyzer": {
-          "phonetic_analyzer": {
-            "tokenizer": "standard",
-            "filter": [
-              "standard",
-              "lowercase",
-              lambda lang: IsCyrillic(lang, 'icu_transliterate'),
-              "custom_phonetic",
-            ],
-          },
+SETTINGS = {
+  "index": {
+    "analysis": {
+      "analyzer": {
+        "phonetic_analyzer": {
+          "tokenizer": "standard",
+          "char_filter": ["quotes"],
+          "filter": [
+            "standard",
+            "lowercase",
+            lambda lang: IsCyrillic(lang, 'icu_transliterate'),
+            "custom_phonetic",
+          ],
         },
-        "filter": {
-          "icu_transliterate": lambda lang: IsCyrillic(lang, {
-            "type": "icu_transform",
-            "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
-          }),
-          "custom_phonetic": {
-            "type": "phonetic",
-            "encoder": "beider_morse",
-            "replace": True,
-            "languageset": BeiderMorseLanguageset,
-          },
+      },
+      "char_filter": {
+        "quotes": {
+          "type": "mapping",
+          "mappings": [
+            "\\u0091=>\\u0027",
+            "\\u0092=>\\u0027",
+            "\\u2018=>\\u0027",
+            "\\u2019=>\\u0027",
+            "\\u201B=>\\u0027",
+            "\\u0022=>\\u0027",
+            "\\u201C=>\\u0027",
+            "\\u201D=>\\u0027",
+          ],
+        },
+      },
+      "filter": {
+        "icu_transliterate": lambda lang: IsCyrillic(lang, {
+          "type": "icu_transform",
+          "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
+        }),
+        "custom_phonetic": {
+          "type": "phonetic",
+          "encoder": "beider_morse",
+          "replace": True,
+          "languageset": BeiderMorseLanguageset,
         },
       },
     },
   },
+}
+
+UNITS_TEMPLATE = {
+  "settings": SETTINGS,
   "mappings": {
     "content_units": {
       "_all": {
@@ -180,10 +197,6 @@ UNITS_TEMPLATE = {
               "type": "text",
               "analyzer": lambda lang: StandardAnalyzer[lang],
             },
-            "length": {
-              "type": "token_count",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
           },
         },
         "description": {
@@ -192,10 +205,6 @@ UNITS_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-            "length": {
-              "type": "token_count",
               "analyzer": lambda lang: StandardAnalyzer[lang],
             },
           },
@@ -240,10 +249,6 @@ UNITS_TEMPLATE = {
               "type": "text",
               "analyzer": lambda lang: StandardAnalyzer[lang],
             },
-            "length": {
-              "type": "token_count",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
           },
         },
       },
@@ -252,6 +257,7 @@ UNITS_TEMPLATE = {
 }
 
 CLASSIFICATIONS_TEMPLATE = {
+  "settings": SETTINGS,
   "mappings": {
     "tags": {
       "_all": {
@@ -266,7 +272,13 @@ CLASSIFICATIONS_TEMPLATE = {
         },
         "name": {
           "type": "text",
-          "analyzer": lambda lang: StandardAnalyzer[lang],
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+          },
         },
         "name_suggest": {
           "type": "completion",
@@ -293,7 +305,13 @@ CLASSIFICATIONS_TEMPLATE = {
         },
         "name": {
           "type": "text",
-          "analyzer": lambda lang: StandardAnalyzer[lang],
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+          },
         },
         "name_suggest": {
           "type": "completion",
@@ -325,35 +343,7 @@ CLASSIFICATIONS_TEMPLATE = {
 }
 
 COLLECTIONS_TEMPLATE = {
-  "settings": {
-    "index": {
-      "analysis": {
-        "analyzer": {
-          "phonetic_analyzer": {
-            "tokenizer": "standard",
-            "filter": [
-              "standard",
-              "lowercase",
-              lambda lang: IsCyrillic(lang, 'icu_transliterate'),
-              "custom_phonetic",
-            ],
-          },
-        },
-        "filter": {
-          "icu_transliterate": lambda lang: IsCyrillic(lang, {
-            "type": "icu_transform",
-            "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
-          }),
-          "custom_phonetic": {
-            "type": "phonetic",
-            "encoder": "beider_morse",
-            "replace": True,
-            "languageset": BeiderMorseLanguageset,
-          },
-        },
-      },
-    },
-  },
+  "settings": SETTINGS,
   "mappings": {
     "collections": {
       "_all": {
@@ -374,10 +364,6 @@ COLLECTIONS_TEMPLATE = {
               "type": "text",
               "analyzer": lambda lang: StandardAnalyzer[lang],
             },
-            "length": {
-              "type": "token_count",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
           },
         },
         "description": {
@@ -386,10 +372,6 @@ COLLECTIONS_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-            "length": {
-              "type": "token_count",
               "analyzer": lambda lang: StandardAnalyzer[lang],
             },
           },
@@ -414,35 +396,7 @@ COLLECTIONS_TEMPLATE = {
 }
 
 SOURCES_TEMPLATE = {
-  "settings": {
-    "index": {
-      "analysis": {
-        "analyzer": {
-          "phonetic_analyzer": {
-            "tokenizer": "standard",
-            "filter": [
-              "standard",
-              "lowercase",
-              lambda lang: IsCyrillic(lang, 'icu_transliterate'),
-              "custom_phonetic",
-            ],
-          },
-        },
-        "filter": {
-          "icu_transliterate": lambda lang: IsCyrillic(lang, {
-            "type": "icu_transform",
-            "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
-          }),
-          "custom_phonetic": {
-            "type": "phonetic",
-            "encoder": "beider_morse",
-            "replace": True,
-            "languageset": BeiderMorseLanguageset,
-          },
-        },
-      },
-    },
-  },
+  "settings": SETTINGS,
   "mappings": {
     "sources": {
       "_all": {

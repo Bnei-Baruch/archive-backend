@@ -10,10 +10,6 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "bulgarian"
-                        }, 
-                        "length": {
-                            "type": "token_count", 
-                            "analyzer": "bulgarian"
                         }
                     }, 
                     "type": "text", 
@@ -62,10 +58,6 @@
                         "analyzed": {
                             "type": "text", 
                             "analyzer": "bulgarian"
-                        }, 
-                        "length": {
-                            "type": "token_count", 
-                            "analyzer": "bulgarian"
                         }
                     }, 
                     "type": "text", 
@@ -75,10 +67,6 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
-                            "analyzer": "bulgarian"
-                        }, 
-                        "length": {
-                            "type": "token_count", 
                             "analyzer": "bulgarian"
                         }
                     }, 
@@ -103,6 +91,21 @@
                         "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC"
                     }
                 }, 
+                "char_filter": {
+                    "quotes": {
+                        "type": "mapping", 
+                        "mappings": [
+                            "\\u0091=>\\u0027", 
+                            "\\u0092=>\\u0027", 
+                            "\\u2018=>\\u0027", 
+                            "\\u2019=>\\u0027", 
+                            "\\u201B=>\\u0027", 
+                            "\\u0022=>\\u0027", 
+                            "\\u201C=>\\u0027", 
+                            "\\u201D=>\\u0027"
+                        ]
+                    }
+                }, 
                 "analyzer": {
                     "phonetic_analyzer": {
                         "filter": [
@@ -110,6 +113,9 @@
                             "lowercase", 
                             "icu_transliterate", 
                             "custom_phonetic"
+                        ], 
+                        "char_filter": [
+                            "quotes"
                         ], 
                         "tokenizer": "standard"
                     }
