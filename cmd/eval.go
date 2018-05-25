@@ -22,12 +22,15 @@ var evalSetPath string
 var serverUrl string
 var baseServerUrl string
 var reportPath string
+var flatReportPath string
 
 func init() {
 	evalCmd.PersistentFlags().StringVar(&evalSetPath, "eval_set", "", "Path to csv eval set.")
 	evalCmd.MarkFlagRequired("eval_set")
-	evalCmd.PersistentFlags().StringVar(&reportPath, "report", "", "Path to csv report file.")
+	evalCmd.PersistentFlags().StringVar(&reportPath, "report", "", "Path to csv report file per query.")
 	evalCmd.MarkFlagRequired("report")
+	evalCmd.PersistentFlags().StringVar(&flatReportPath, "flat_report", "", "Path to csv report file per expectation.")
+	evalCmd.MarkFlagRequired("flat_report")
 	evalCmd.PersistentFlags().StringVar(&serverUrl, "server", "", "URL of experimental archive backend to evaluate.")
 	evalCmd.MarkFlagRequired("server")
 	evalCmd.PersistentFlags().StringVar(&baseServerUrl, "base_server", "", "URL of base archive backend to evaluate.")
@@ -179,12 +182,14 @@ func evalFn(cmd *cobra.Command, args []string) {
 			}
 		}
 		search.WriteResults(reportPath, evalSet, expResults)
+		search.WriteResultsByExpectation(flatReportPath, evalSet, expResults)
 	} else {
 		results, losses, err := search.Eval(evalSet, serverUrl)
 		utils.Must(err)
 		printResults(results)
 		printLosses(results, losses)
 		search.WriteResults(reportPath, evalSet, results)
+		search.WriteResultsByExpectation(flatReportPath, evalSet, results)
 	}
 	utils.Must(err)
 	log.Infof("Done evaluating queries.")
