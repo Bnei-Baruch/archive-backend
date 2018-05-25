@@ -614,6 +614,18 @@ func RecentlyUpdatedHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func TagDashboardHandler(c *gin.Context) {
+	var r ItemRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	r.UID = c.Param("uid")
+
+	resp, err := handleTagDashboard(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
 func SemiQuasiDataHandler(c *gin.Context) {
 	var r BaseRequest
 	if c.Bind(&r) != nil {
@@ -1264,6 +1276,76 @@ ORDER BY max_film_date DESC`
 	}
 
 	return data, nil
+}
+
+func handleTagDashboard(db *sql.DB, r ItemRequest) (*TagsDashboardResponse, *HttpError) {
+	// CU ids query
+	q := `select id
+from (
+       select
+         cu.id,
+         row_number()
+         over (
+           partition by cu.type_id
+           order by (coalesce(cu.properties ->> 'film_date', cu.created_at :: TEXT)) :: DATE DESC, cu.created_at DESC )
+           as rownum
+       from tags t
+         inner join content_units_tags cut on t.id = cut.tag_id
+         inner join content_units cu on cut.content_unit_id = cu.id and cu.secure = 0 and cu.published is true
+       where t.id in (WITH RECURSIVE rec_tags AS (
+         SELECT t.id
+         FROM tags t
+         WHERE t.uid = $1
+         UNION
+         SELECT t.id
+         FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
+       )
+       SELECT distinct id
+       FROM rec_tags)) as tmp
+where rownum < 6;`
+
+	rows, err := queries.Raw(db, q, r.UID).Query()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	cuIDs := make([]int64, 0)
+	for rows.Next() {
+		var myId int64
+		err := rows.Scan(&myId)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		cuIDs = append(cuIDs, myId)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	if len(cuIDs) == 0 {
+		return NewTagsDashboardResponse(), nil
+	}
+
+	// data query
+	units, err := mdbmodels.ContentUnits(db,
+		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
+		qm.OrderBy("(coalesce(properties->>'film_date', created_at::text))::date desc, created_at desc"),
+		qm.Load("CollectionsContentUnits", "CollectionsContentUnits.Collection")).
+		All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// response
+	cus, ex := prepareCUs(db, units, r.Language)
+	if ex != nil {
+		return nil, ex
+	}
+
+	return &TagsDashboardResponse{
+		LatestContentUnits: cus,
+	}, nil
 }
 
 func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError) {
