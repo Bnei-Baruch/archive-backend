@@ -1728,6 +1728,7 @@ func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 		DefaultLanguage: props.DefaultLanguage,
 		HolidayID:       props.HolidayTag,
 		SourceID:        props.Source,
+		Number:          props.Number,
 	}
 
 	if !props.FilmDate.IsZero() {
