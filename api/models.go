@@ -83,11 +83,16 @@ type PublishersFilter struct {
 	Publishers []string `json:"publishers" form:"publisher" binding:"omitempty,dive,len=8"`
 }
 
+type KmediaIDsFilter struct {
+	IDs []string `json:"kmedia_ids" form:"kmedia_id" binding:"omitempty"`
+}
+
 type CollectionsRequest struct {
 	ListRequest
 	IDsFilter
 	ContentTypesFilter
 	DateRangeFilter
+	KmediaIDsFilter
 	WithUnits bool `json:"with_units" form:"with_units"`
 }
 
@@ -106,6 +111,7 @@ type ContentUnitsRequest struct {
 	GenresProgramsFilter
 	CollectionsFilter
 	PublishersFilter
+	KmediaIDsFilter
 }
 
 type ContentUnitsResponse struct {
@@ -194,6 +200,7 @@ type Collection struct {
 	DefaultLanguage string         `json:"default_language,omitempty"`
 	HolidayID       string         `json:"holiday_id,omitempty"`
 	SourceID        string         `json:"source_id,omitempty"`
+	Number          int            `json:"number,omitempty"`
 	ContentUnits    []*ContentUnit `json:"content_units,omitempty"`
 }
 

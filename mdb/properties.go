@@ -15,6 +15,7 @@ type CollectionProperties struct {
 	DefaultLanguage string    `json:"default_language"`
 	HolidayTag      string    `json:"holiday_tag"`
 	Source          string    `json:"source"`
+	Number          int       `json:"number"`
 }
 
 type ContentUnitProperties struct {
