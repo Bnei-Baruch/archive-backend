@@ -660,6 +660,9 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
+	if err := appendKmediaIDsFilterMods(&mods, r.KmediaIDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 
 	// count query
 	var total int64
@@ -1065,6 +1068,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		return nil, NewInternalError(err)
 	}
 	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendKmediaIDsFilterMods(&mods, r.KmediaIDsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 
@@ -1742,6 +1748,16 @@ AND cu.secure = 0 AND cu.published IS TRUE AND cup.publisher_id = ANY(?))`
 	return nil
 }
 
+func appendKmediaIDsFilterMods(mods *[]qm.QueryMod, f KmediaIDsFilter) error {
+	if utils.IsEmpty(f.IDs) {
+		return nil
+	}
+
+	*mods = append(*mods, qm.WhereIn("properties->>'kmedia_id' IN ?", utils.ConvertArgsString(f.IDs)...))
+
+	return nil
+}
+
 // concludeRequest responds with JSON of given response or aborts the request with the given error.
 func concludeRequest(c *gin.Context, resp interface{}, err *HttpError) {
 	if err == nil {
@@ -1768,6 +1784,7 @@ func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 		DefaultLanguage: props.DefaultLanguage,
 		HolidayID:       props.HolidayTag,
 		SourceID:        props.Source,
+		Number:          props.Number,
 	}
 
 	if !props.FilmDate.IsZero() {
