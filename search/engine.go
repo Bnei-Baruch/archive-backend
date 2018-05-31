@@ -175,11 +175,11 @@ func createSourcesIntentQuery(q Query) elastic.Query {
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
-				elastic.NewMatchQuery("name", q.Term),
+				elastic.NewMatchQuery("name.analyzed", q.Term),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", q.Term).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100),
 			),
 		)
 	}
@@ -187,11 +187,11 @@ func createSourcesIntentQuery(q Query) elastic.Query {
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
-				elastic.NewMatchPhraseQuery("name", exactTerm),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100),
 			),
 		)
 	}
@@ -205,11 +205,11 @@ func createTagsIntentQuery(q Query) elastic.Query {
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
-				elastic.NewMatchQuery("name", q.Term),
+				elastic.NewMatchQuery("name.analyzed", q.Term),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", q.Term).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100),
 			),
 		)
 	}
@@ -217,11 +217,11 @@ func createTagsIntentQuery(q Query) elastic.Query {
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
-				elastic.NewMatchPhraseQuery("name", exactTerm),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100),
 			),
 		)
 	}
@@ -555,16 +555,16 @@ func createContentUnitsQuery(q Query) elastic.Query {
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
-					elastic.NewMatchPhraseQuery("name", exactTerm),
-					elastic.NewMatchPhraseQuery("description", exactTerm),
-					elastic.NewMatchPhraseQuery("transcript", exactTerm),
+					elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("description.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("transcript.analyzed", exactTerm),
 				).MinimumNumberShouldMatch(1),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
-				elastic.NewMatchPhraseQuery("transcript", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("description.analyzed", exactTerm).Slop(100).Boost(1.2),
+				elastic.NewMatchPhraseQuery("transcript.analyzed", exactTerm).Slop(100),
 			),
 		)
 	}
@@ -597,8 +597,8 @@ func createContentUnitsQuery(q Query) elastic.Query {
 		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
 	}
 	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
-		AddScoreFunc(elastic.NewWeightFactorFunction(3.0)).
-		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
+		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
+		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))
 }
 
 func GetContentUnitsSearchRequests(query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
@@ -613,12 +613,12 @@ func GetContentUnitsSearchRequests(query Query, sortBy string, from int, size in
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name").NumOfFragments(0),
-			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("transcript"),
 			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
 			elastic.NewHighlighterField("description.analyzed"),
 			elastic.NewHighlighterField("transcript.analyzed"),
+			// elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+			// elastic.NewHighlighterField("description.analyzed"),
+			// elastic.NewHighlighterField("transcript.analyzed"),
 		)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
@@ -662,14 +662,14 @@ func createCollectionsQuery(q Query) elastic.Query {
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
-					elastic.NewMatchPhraseQuery("name", exactTerm),
-					elastic.NewMatchPhraseQuery("description", exactTerm),
+					elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("description.analyzed", exactTerm),
 				).MinimumNumberShouldMatch(1),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("description.analyzed", exactTerm).Slop(100),
 			),
 		)
 	}
@@ -704,9 +704,9 @@ func createCollectionsQuery(q Query) elastic.Query {
 		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
 	}
 	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
-		Boost(1.4). // Boost collections index.
-		AddScoreFunc(elastic.NewWeightFactorFunction(3.0)).
-		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
+		Boost(1.5). // Boost collections index.
+		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
+		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))
 }
 
 func GetCollectionsSearchRequests(query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
@@ -721,10 +721,10 @@ func GetCollectionsSearchRequests(query Query, sortBy string, from int, size int
 		searchSource := elastic.NewSearchSource().
 			Query(createCollectionsQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name").NumOfFragments(0),
-			elastic.NewHighlighterField("description"),
 			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
 			elastic.NewHighlighterField("description.analyzed"),
+			// elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+			// elastic.NewHighlighterField("description.analyzed"),
 		)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
@@ -753,18 +753,17 @@ func createSourcesQuery(q Query) elastic.Query {
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchQuery("name.analyzed", q.Term),
+					elastic.NewMatchQuery("full_name.analyzed", q.Term),
 					elastic.NewMatchQuery("description.analyzed", q.Term),
 					elastic.NewMatchQuery("content.analyzed", q.Term),
-					elastic.NewMatchQuery("authors.analyzed", q.Term),
-					elastic.NewMatchQuery("pathnames.analyzed", q.Term),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.3),
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("full_name.analyzed", q.Term).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
 				elastic.NewMatchPhraseQuery("content.analyzed", q.Term).Slop(100),
-				elastic.NewMatchPhraseQuery("authors.analyzed", q.Term).Slop(100),
-				elastic.NewMatchPhraseQuery("pathnames.analyzed", q.Term).Slop(100).Boost(2.1),
 			),
 		)
 	}
@@ -773,19 +772,18 @@ func createSourcesQuery(q Query) elastic.Query {
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
-					elastic.NewMatchPhraseQuery("name", exactTerm),
-					elastic.NewMatchPhraseQuery("description", exactTerm),
-					elastic.NewMatchPhraseQuery("content", exactTerm),
-					elastic.NewMatchPhraseQuery("authors", exactTerm),
-					elastic.NewMatchPhraseQuery("pathnames", exactTerm),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+					elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("full_name.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("description.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("content.analyzed", exactTerm),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
-				elastic.NewMatchPhraseQuery("content", exactTerm).Slop(100),
-				elastic.NewMatchPhraseQuery("authors", exactTerm).Slop(100),
-				elastic.NewMatchPhraseQuery("pathnames", exactTerm).Slop(100).Boost(1.2),
+				elastic.NewMatchPhraseQuery("namen.analyzed", exactTerm).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("full_name.analyzed", exactTerm).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("description.analyzed", exactTerm).Slop(100).Boost(1.2),
+				elastic.NewMatchPhraseQuery("content.analyzed", exactTerm).Slop(100),
 			),
 		)
 	}
@@ -802,7 +800,7 @@ func createSourcesQuery(q Query) elastic.Query {
 	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
 		Boost(1.3). // Boost sources index.
 		// No time decay for sources. Sources are above time and space.
-		AddScoreFunc(elastic.NewWeightFactorFunction(4.0))
+		AddScoreFunc(elastic.NewWeightFactorFunction(3.0))
 }
 
 func GetSourcesSearchRequests(query Query, from int, size int, preference string) []*elastic.SearchRequest {
@@ -817,15 +815,15 @@ func GetSourcesSearchRequests(query Query, from int, size int, preference string
 		searchSource := elastic.NewSearchSource().
 			Query(createSourcesQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name").NumOfFragments(0),
-			elastic.NewHighlighterField("description").NumOfFragments(0),
-			elastic.NewHighlighterField("authors").NumOfFragments(0),
-			elastic.NewHighlighterField("pathnames").NumOfFragments(0),
-			elastic.NewHighlighterField("content"),
 			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
 			elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
+			elastic.NewHighlighterField("authors.analyzed").NumOfFragments(0),
 			elastic.NewHighlighterField("pathnames.analyzed").NumOfFragments(0),
 			elastic.NewHighlighterField("content.analyzed"),
+			// elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+			// elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
+			// elastic.NewHighlighterField("pathnames.analyzed").NumOfFragments(0),
+			// elastic.NewHighlighterField("content.analyzed"),
 		)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).

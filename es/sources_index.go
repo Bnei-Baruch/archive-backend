@@ -343,6 +343,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				}
 			}
 			source.Authors = authorsByLanguage[i18n.Language]
+			source.FullName = append(source.Authors, source.PathNames...)
 			i18nMap[i18n.Language] = source
 		}
 	}

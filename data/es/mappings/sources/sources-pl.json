@@ -5,7 +5,7 @@
                 "enabled": false
             }, 
             "properties": {
-                "description": {
+                "path_names": {
                     "fields": {
                         "analyzed": {
                             "type": "text", 
@@ -15,7 +15,7 @@
                     "type": "text", 
                     "analyzer": "phonetic_analyzer"
                 }, 
-                "pathnames": {
+                "name": {
                     "fields": {
                         "analyzed": {
                             "type": "text", 
@@ -41,6 +41,16 @@
                 "sources": {
                     "type": "keyword"
                 }, 
+                "full_name": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "standard"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
                 "authors": {
                     "fields": {
                         "analyzed": {
@@ -51,7 +61,7 @@
                     "type": "text", 
                     "analyzer": "phonetic_analyzer"
                 }, 
-                "name": {
+                "description": {
                     "fields": {
                         "analyzed": {
                             "type": "text", 
@@ -66,6 +76,7 @@
     }, 
     "settings": {
         "index": {
+            "number_of_replicas": 0, 
             "analysis": {
                 "filter": {
                     "custom_phonetic": {
@@ -103,7 +114,8 @@
                         "tokenizer": "standard"
                     }
                 }
-            }
+            }, 
+            "number_of_shards": 1
         }
     }
 }

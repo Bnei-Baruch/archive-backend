@@ -129,8 +129,11 @@ def BeiderMorseLanguageset(lang):
 def IsCyrillic(lang, something):
   return something if lang in LANG_GROUPS[CYRILLIC] else None
 
+
 SETTINGS = {
   "index": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
     "analysis": {
       "analyzer": {
         "phonetic_analyzer": {
@@ -436,7 +439,17 @@ SOURCES_TEMPLATE = {
             }
           },
         },
-        "pathnames": {
+        "path_names": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            }
+          },
+        },
+        "full_name": {
           "type": "text",
           "analyzer": "phonetic_analyzer",
           "fields": {

@@ -78,6 +78,7 @@
     }, 
     "settings": {
         "index": {
+            "number_of_replicas": 0, 
             "analysis": {
                 "filter": {
                     "custom_phonetic": {
@@ -120,7 +121,8 @@
                         "tokenizer": "standard"
                     }
                 }
-            }
+            }, 
+            "number_of_shards": 1
         }
     }
 }
