@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/olivere/elastic.v5"
 
+	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/search"
@@ -20,6 +21,7 @@ var (
 	DB     *sql.DB
 	ESC    *elastic.Client
 	LOGGER *search.SearchLogger
+	CACHE  cache.CacheManager
 )
 
 func Init() time.Time {
@@ -67,10 +69,17 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 
 	es.InitVars()
 
+	viper.SetDefault("cache.refresh-search-stats", 5*time.Minute)
+	refreshIntervals := map[string]time.Duration {
+		"SearchStats": viper.GetDuration("cache.refresh-search-stats"),
+	}
+	CACHE = cache.NewCacheManagerImpl(DB, refreshIntervals)
+
 	return clock
 }
 
 func Shutdown() {
 	utils.Must(DB.Close())
 	ESC.Stop()
+	CACHE.Close()
 }

@@ -5,25 +5,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"runtime"
 	"runtime/debug"
-	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"github.com/stvp/rollbar"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/go-playground/validator.v8"
 	"gopkg.in/olivere/elastic.v5"
 )
 
 // Set MDB, ES & LOGGER clients in context
-func DataStoresMiddleware(mbdDB *sql.DB, esc *elastic.Client, logger interface{}) gin.HandlerFunc {
+func DataStoresMiddleware(mbdDB *sql.DB, esc *elastic.Client, logger, cm interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set("MDB_DB", mbdDB)
 		c.Set("ES_CLIENT", esc)
 		c.Set("LOGGER", logger)
+		c.Set("CACHE", cm)
 		c.Next()
 	}
 }
@@ -96,66 +94,6 @@ func BindErrorMessage(err error) string {
 	}
 }
 
-type stackTracer interface {
-	StackTrace() errors.StackTrace
-}
-
-func errorsToRollbarStack(st stackTracer) rollbar.Stack {
-	t := st.StackTrace()
-	rs := make(rollbar.Stack, len(t))
-	for i, f := range t {
-		// Program counter as it's computed internally in errors.Frame
-		pc := uintptr(f) - 1
-		fn := runtime.FuncForPC(pc)
-		if fn == nil {
-			rs[i] = rollbar.Frame{
-				Filename: "unknown",
-				Method:   "?",
-				Line:     0,
-			}
-			continue
-		}
-
-		// symtab info
-		file, line := fn.FileLine(pc)
-		name := fn.Name()
-
-		// trim compile time GOPATH from file name
-		fileWImportPath := trimGOPATH(name, file)
-
-		// Strip only method name from FQN
-		idx := strings.LastIndex(name, "/")
-		name = name[idx+1:]
-		idx = strings.Index(name, ".")
-		name = name[idx+1:]
-
-		rs[i] = rollbar.Frame{
-			Filename: fileWImportPath,
-			Method:   name,
-			Line:     line,
-		}
-	}
-
-	return rs
-}
-
-// Taken AS IS from errors pkg since it's not exported there.
-// Check out the source code with good comments on https://github.com/pkg/errors/blob/master/stack.go
-func trimGOPATH(name, file string) string {
-	const sep = "/"
-	goal := strings.Count(name, sep) + 2
-	i := len(file)
-	for n := 0; n < goal; n++ {
-		i = strings.LastIndex(file[:i], sep)
-		if i == -1 {
-			i = -len(sep)
-			break
-		}
-	}
-	file = file[i+len(sep):]
-	return file
-}
-
 // Handle all errors
 func ErrorHandlingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -203,20 +141,7 @@ func ErrorHandlingMiddleware() gin.HandlerFunc {
 				default:
 					// Log all other errors
 					log.Error(e.Err)
-					st, ok := e.Err.(stackTracer)
-					if ok {
-						fmt.Printf("%s: %+v\n", st, st.StackTrace())
-					}
-
-					// Log to rollbar if we have a token setup
-					if len(rollbar.Token) != 0 {
-						if ok {
-							rollbar.RequestErrorWithStack(rollbar.ERR, c.Request, e.Err,
-								errorsToRollbarStack(st))
-						} else {
-							rollbar.RequestError(rollbar.ERR, c.Request, e.Err)
-						}
-					}
+					LogRequestError(c.Request, e.Err)
 				}
 			}
 

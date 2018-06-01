@@ -23,6 +23,8 @@ const (
 	CT_CLIPS              = "CLIPS"
 	CT_ARTICLES           = "ARTICLES"
 	CT_LESSONS_SERIES     = "LESSONS_SERIES"
+	CT_SONGS              = "SONGS"
+	CT_BOOKS              = "BOOKS"
 
 	// Content Unit Types
 	CT_LESSON_PART           = "LESSON_PART"
@@ -42,6 +44,9 @@ const (
 	CT_KITEI_MAKOR           = "KITEI_MAKOR"
 	CT_PUBLICATION           = "PUBLICATION"
 	CT_LELO_MIKUD            = "LELO_MIKUD"
+	CT_SONG                  = "SONG"
+	CT_BOOK                  = "BOOK"
+	CT_BLOG_POST             = "BLOG_POST"
 
 	// Content Role types
 	CR_LECTURER = "LECTURER"

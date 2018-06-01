@@ -9,7 +9,7 @@ rollbar-environment="development"
 url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 
 [test]
-test-source-content-docx="/es/TEST-CONTENT.docx"
+test-source-content-docx="$GOPATH/src/github.com/Bnei-Baruch/archive-backend/es/TEST-CONTENT.docx"
 test-sources-folder="/tmp/test-sources-folder"
 mdb-url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 url-template="postgres://localhost/%s?sslmode=disable&user=postgres"
@@ -44,3 +44,6 @@ url1="http://files.kabbalahmedia.info/api/v1/get"
 
 [assets_service]
 url="https://archive.kbb1.com/assets/api/"
+
+[cache]
+refresh-search-stats="5m"

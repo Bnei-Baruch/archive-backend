@@ -213,6 +213,16 @@
   revision = "e7201282ae8da26cd97aed2e516f75c0bd91bb93"
 
 [[projects]]
+  name = "github.com/volatiletech/sqlboiler"
+  packages = [
+    "boil",
+    "queries",
+    "strmangle"
+  ]
+  revision = "7e0eca627f995e2476d637ada0c3b70ecb5d837c"
+  version = "v2.6.1"
+
+[[projects]]
   name = "golang.org/x/net"
   packages = ["context"]
   revision = "fe686d45ea04bc1bd4eff6a52865ce8757320325"
@@ -282,6 +292,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6c5b644541b2024109e63f9a02ecbea7c4d768182f25aaba939e85169e7c29b4"
+  inputs-digest = "e9b3d775db45210c3b64b91d8a9349bff091238b500e86602a964b5fc5d425e8"
   solver-name = "gps-cdcl"
   solver-version = 1
