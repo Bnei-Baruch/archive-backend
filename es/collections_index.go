@@ -141,8 +141,6 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 			qm.Load("CollectionI18ns"),
 			qm.Load("CollectionsContentUnits"),
 			qm.Load("CollectionsContentUnits.ContentUnit"),
-			// TODO: Why is that?! Why don't we load this? Do we need this? Remove if don't.
-			// qm.Load("CollectionsContentUnits.ContentUnit.ContentUnitI18ns"),
 			qm.Where(sqlScope),
 			qm.Offset(offset),
 			qm.Limit(limit)).Bind(&collections)

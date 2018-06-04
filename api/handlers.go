@@ -608,8 +608,6 @@ func StatsCUClassHandler(c *gin.Context) {
 		return
 	}
 
-	log.Infof("Request: %+v", r)
-
 	resp, err := handleStatsCUClass(c.MustGet("MDB_DB").(*sql.DB), r)
 	concludeRequest(c, resp, err)
 }
