@@ -573,6 +573,25 @@ func removeContentUnitFile(cu es.ContentUnit, lang string, file mdbmodels.File) 
 	return file.UID, nil
 }
 
+func setContentUnitType(cu es.ContentUnit, typeID int64) (string, error) {
+	var mdbContentUnit mdbmodels.ContentUnit
+	if cu.MDB_UID != "" {
+		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		if err != nil {
+			return "", err
+		}
+		mdbContentUnit = *cup
+	} else {
+		return "", errors.New("cu.MDB_UID is empty")
+	}
+	mdbContentUnit.TypeID = typeID
+
+	if err := mdbContentUnit.Update(common.DB); err != nil {
+		return "", err
+	}
+	return mdbContentUnit.UID, nil
+}
+
 func updateContentUnit(cu es.ContentUnit, lang string, published bool, secure bool) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
@@ -598,6 +617,7 @@ func updateContentUnit(cu es.ContentUnit, lang string, published bool, secure bo
 	if !published {
 		p = false
 	}
+
 	mdbContentUnit.Secure = s
 	mdbContentUnit.Published = p
 	if err := mdbContentUnit.Update(common.DB); err != nil {
@@ -1003,6 +1023,13 @@ func removeAuthorFromSource(source es.Source, mdbAuthor mdbmodels.Author) error 
 func (suite *IndexerSuite) ucu(cu es.ContentUnit, lang string, published bool, secure bool) string {
 	r := require.New(suite.T())
 	uid, err := updateContentUnit(cu, lang, published, secure)
+	r.Nil(err)
+	return uid
+}
+
+func (suite *IndexerSuite) setCUType(cu es.ContentUnit, typeId int64) string {
+	r := require.New(suite.T())
+	uid, err := setContentUnitType(cu, typeId)
 	r.Nil(err)
 	return uid
 }
@@ -1506,7 +1533,20 @@ func (suite *IndexerSuite) TestContentUnitsIndex() {
 	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
 	suite.validateContentUnitNames(indexNameRu, indexer, []string{})
 
-	fmt.Println("Secure and publish content units again and check we have 2 searchable content units.")
+	fmt.Println("Secure and publish content units, but set type to KITEI_MAKOR and validate.")
+	suite.ucu(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, true, true)
+	suite.setCUType(es.ContentUnit{MDB_UID: cu1UID}, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID)
+	r.Nil(indexer.ContentUnitUpdate(cu1UID))
+	suite.ucu(es.ContentUnit{MDB_UID: cu2UID}, consts.LANG_ENGLISH, true, true)
+	suite.setCUType(es.ContentUnit{MDB_UID: cu2UID}, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID)
+	r.Nil(indexer.ContentUnitUpdate(cu2UID))
+	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
+	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
+	suite.validateContentUnitNames(indexNameRu, indexer, []string{})
+
+	fmt.Println("Remove KITEI_MAKOR type and check we have 2 searchable content units.")
+	suite.setCUType(es.ContentUnit{MDB_UID: cu1UID}, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID)
+	suite.setCUType(es.ContentUnit{MDB_UID: cu2UID}, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID)
 	suite.ucu(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, true, true)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	suite.ucu(es.ContentUnit{MDB_UID: cu2UID}, consts.LANG_ENGLISH, true, true)
