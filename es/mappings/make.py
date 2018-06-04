@@ -130,6 +130,59 @@ def IsCyrillic(lang, something):
   return something if lang in LANG_GROUPS[CYRILLIC] else None
 
 
+RESULTS_TEMPLATE = {
+  "settings": {
+    "index": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+    },
+  },
+  "mappings": {
+    "result": {
+      "properties": {
+        "mdb_uid": {
+          "type": "keyword",
+        },
+        # Typed uids, are list of entities (uid and entity type) in MDB that
+        # this document depends on. For example: "content_unit:lHDLZWxq",
+        # "file:0uzDZVqV". We use this list to reindex the document if one
+        # the items in this list changes.
+        "typed_uids": {
+          "type": "keyword",
+        },
+        # Title, Description and Content are the typical result fields which
+        # should have the same tf/idf across all different retult types such
+        # as units, collections, sources, topics and others to follow.
+        "title": {
+          "type": "text",
+          "analyzer": lambda lang: StandardAnalyzer[lang],
+        },
+        "description": {
+          "type": "text",
+          "analyzer": lambda lang: StandardAnalyzer[lang],
+        },
+        "content": {
+          "type": "text",
+          "analyzer": lambda lang: StandardAnalyzer[lang],
+        },
+        # Effective date is relevant for units only (for now).
+        "effective_date": {
+          "type": "date",
+          "format": "strict_date",
+        },
+        # Content type and Collections content types are required for filters.
+        # They both used for Units and Collections only (for now).
+        "content_type": {
+          "type": "keyword",
+        },
+        "collections_content_types": {
+          "type": "keyword",
+        },
+      }
+    }
+  }
+}
+
 SETTINGS = {
   "index": {
     "number_of_shards": 1,
