@@ -15,15 +15,16 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v5"
 
+	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type ESEngine struct {
-	esc *elastic.Client
-	// TODO: Is mdb required here?
-	mdb *sql.DB
+	esc   *elastic.Client
+	mdb   *sql.DB
+	cache cache.CacheManager
 }
 
 type byRelevance []*elastic.SearchHit
@@ -86,10 +87,19 @@ func (s bySourceFirst) Less(i, j int) bool {
 
 var classTypes = [...]string{consts.SOURCE_CLASSIFICATION_TYPE, consts.TAG_CLASSIFICATION_TYPE}
 
+func debugPrintQuery(q elastic.Query) elastic.Query {
+	i, err := q.Source()
+	utils.Must(err)
+	json, err := json.MarshalIndent(i, "", "  ")
+	utils.Must(err)
+	log.Infof("Query:\n%s\n\n", (string(json)))
+	return q
+}
+
 // TODO: All interactions with ES should be throttled to prevent downstream pressure
 
-func NewESEngine(esc *elastic.Client, db *sql.DB) *ESEngine {
-	return &ESEngine{esc: esc, mdb: db}
+func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager) *ESEngine {
+	return &ESEngine{esc: esc, mdb: db, cache: cache}
 }
 
 func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
@@ -183,11 +193,11 @@ func createSourcesIntentQuery(q Query) elastic.Query {
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
-				elastic.NewMatchQuery("name", q.Term),
+				elastic.NewMatchQuery("name.analyzed", q.Term),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", q.Term).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100),
 			),
 		)
 	}
@@ -195,15 +205,16 @@ func createSourcesIntentQuery(q Query) elastic.Query {
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
-				elastic.NewMatchPhraseQuery("name", exactTerm),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100),
 			),
 		)
 	}
-	return boolQuery
+	return elastic.NewFunctionScoreQuery().Query(boolQuery).
+		Boost(2.0 * 3.0) // Title Boost * Time Boost
 }
 
 func createTagsIntentQuery(q Query) elastic.Query {
@@ -212,11 +223,11 @@ func createTagsIntentQuery(q Query) elastic.Query {
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
-				elastic.NewMatchQuery("name", q.Term),
+				elastic.NewMatchQuery("name.analyzed", q.Term),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", q.Term).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100),
 			),
 		)
 	}
@@ -224,15 +235,16 @@ func createTagsIntentQuery(q Query) elastic.Query {
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
-				elastic.NewMatchPhraseQuery("name", exactTerm),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100),
 			),
 		)
 	}
-	return boolQuery
+	return elastic.NewFunctionScoreQuery().Query(boolQuery).
+		Boost(2.0 * 3.0) // Title Boost * Time Boost
 }
 
 func TagsIntentRequest(query Query, language string, preference string) *elastic.SearchRequest {
@@ -283,9 +295,7 @@ func (e *ESEngine) AddClassificationIntentSecondRound(h *elastic.SearchHit, inte
 }
 
 func (e *ESEngine) AddIntents(query *Query, preference string) error {
-	// Dark launch intents, only if query.Deb is true.
-	// Remove query.Deb check when intents quality is good.
-	if len(query.Term) == 0 && len(query.ExactTerms) == 0 || !query.Deb {
+	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
 		return nil
 	}
 	mssFirstRound := e.esc.MultiSearch()
@@ -293,9 +303,9 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 	for _, language := range query.LanguageOrder {
 		// Order here provides the priority in results, i.e., tags are more importnt then sources.
 		mssFirstRound.Add(TagsIntentRequest(*query, language, preference))
-		potentialIntents = append(potentialIntents, Intent{I_TAG, language, nil})
+		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
 		mssFirstRound.Add(SourcesIntentRequest(*query, language, preference))
-		potentialIntents = append(potentialIntents, Intent{I_SOURCE, language, nil})
+		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
 	mr, err := mssFirstRound.Do(context.TODO())
 	if err != nil {
@@ -312,9 +322,9 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		}
 		var intentRequestFunc IntentRequestFunc
 		switch potentialIntents[i].Type {
-		case I_SOURCE:
+		case consts.INTENT_TYPE_SOURCE:
 			intentRequestFunc = SourcesIntentRequest
-		case I_TAG:
+		case consts.INTENT_TYPE_TAG:
 			intentRequestFunc = TagsIntentRequest
 		default:
 			log.Errorf("ESEngine.AddIntents - First round bad type: %+v", potentialIntents[i])
@@ -333,6 +343,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 			}
 		}
 	}
+
 	mr, err = mssSecondRound.Do(context.TODO())
 	for i := 0; i < len(finalIntents); i++ {
 		res := mr.Responses[i]
@@ -340,13 +351,16 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 			log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error)
 			return errors.New("ESEngine.AddIntents - Second Run Failed multi get (S).")
 		}
-		intentValue := finalIntents[i].Value.(es.ClassificationIntent)
+		intentValue, intentOk := finalIntents[i].Value.(es.ClassificationIntent)
+		if !intentOk {
+			return errors.New(fmt.Sprintf("ESEngine.AddIntents - Unexpected intent value: %+v", finalIntents[i].Value))
+		}
 		if haveHits(res) {
 			found := false
 			for _, h := range res.Hits.Hits {
 				var classificationIntent es.ClassificationIntent
 				if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
-					return err
+					return errors.Wrap(err, "ESEngine.AddIntents - Unmarshal classification intent filed.")
 				}
 				if query.Deb {
 					intentValue.MaxExplanation = *h.Explanation
@@ -355,13 +369,11 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 					found = true
 					if h.Score != nil && *h.Score > 0 {
 						intentValue.MaxScore = h.Score
-						if *intentValue.Score / *intentValue.MaxScore >= 0.2 {
-							if *intentValue.MaxScore < *intentValue.Score {
-								log.Warnf("ESEngine.AddIntents - Not expected score %f to be larger then max score %f for %s - %s.",
-									*intentValue.Score, *intentValue.MaxScore, intentValue.MDB_UID, intentValue.Name)
-							}
-							query.Intents = append(query.Intents, Intent{finalIntents[i].Type, finalIntents[i].Language, intentValue})
+						if *intentValue.MaxScore < *intentValue.Score {
+							log.Warnf("ESEngine.AddIntents - Not expected score %f to be larger then max score %f for %s - %s.",
+								*intentValue.Score, *intentValue.MaxScore, intentValue.MDB_UID, intentValue.Name)
 						}
+						query.Intents = append(query.Intents, Intent{finalIntents[i].Type, finalIntents[i].Language, intentValue})
 					}
 				}
 			}
@@ -371,7 +383,76 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 			}
 		}
 	}
+
+	// Set content unit type and exists for intents that are in the query, i.e., those who passed the second round.
+	// If more then one content unit type exist for this intent, we will have to duplicate that intent.
+	checkContentUnitsTypes := []string{consts.CT_LESSON_PART, consts.CT_VIDEO_PROGRAM_CHAPTER}
+	moreIntents := make([]Intent, 0)
+	for intentIdx := range query.Intents {
+		for _, contentUnitType := range checkContentUnitsTypes {
+			if intentValue, ok := query.Intents[intentIdx].Value.(es.ClassificationIntent); ok {
+				intentP := &query.Intents[intentIdx]
+				intentValueP := &intentValue
+				if intentValue.ContentType != "" {
+					// We need to copy the intent as we have more than one existing content types for that intent.
+					moreIntents = append(moreIntents, query.Intents[intentIdx])
+					intentP = &moreIntents[len(moreIntents)-1]
+					copyIntentValue := intentP.Value.(es.ClassificationIntent)
+					intentValueP = &copyIntentValue
+				}
+				intentValueP.ContentType = contentUnitType
+				if intentP.Type == consts.INTENT_TYPE_TAG {
+					intentValueP.Exist = e.cache.SearchStats().IsTagWithUnits(intentValueP.MDB_UID, contentUnitType)
+				} else if intentP.Type == consts.INTENT_TYPE_SOURCE {
+					intentValueP.Exist = e.cache.SearchStats().IsSourceWithUnits(intentValueP.MDB_UID, contentUnitType)
+				}
+				// Assigne the changed intent value, as everything is by value in golang.
+				intentP.Value = *intentValueP
+			}
+		}
+	}
+	query.Intents = append(query.Intents, moreIntents...)
 	return nil
+}
+
+func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.SearchResult) {
+	srMap := make(map[string]*elastic.SearchResult)
+	for _, lang := range query.LanguageOrder {
+		sh := &elastic.SearchHits{TotalHits: 0}
+		sr := &elastic.SearchResult{Hits: sh}
+		srMap[lang] = sr
+	}
+	log.Infof("IntentsToResults - %d intents.", len(query.Intents))
+	for _, intent := range query.Intents {
+		// Convert intent to result with score.
+		intentValue := intent.Value.(es.ClassificationIntent)
+        boostedScore := float64(0.0)
+		if intentValue.Exist {
+			sh := srMap[intent.Language].Hits
+			sh.TotalHits++
+			// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
+			boostedScore = *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
+			if sh.MaxScore != nil {
+				maxScore := math.Max(*sh.MaxScore, boostedScore)
+				sh.MaxScore = &maxScore
+			} else {
+				sh.MaxScore = &boostedScore
+			}
+			intentHit := &elastic.SearchHit{}
+			intentHit.Explanation = &intentValue.Explanation
+			intentHit.Score = &boostedScore
+			intentHit.Index = consts.INTENT_INDEX_BY_TYPE[intent.Type]
+			intentHit.Type = consts.INTENT_HIT_TYPE_BY_CT[intentValue.ContentType]
+			source, err := json.Marshal(intentValue)
+			if err != nil {
+				return err, nil
+			}
+			intentHit.Source = (*json.RawMessage)(&source)
+			sh.Hits = append(sh.Hits, intentHit)
+		}
+        log.Infof("Added intent %s %s %s boost score:%f exist:%t", intentValue.Name, intent.Type, intent.Language, boostedScore, intentValue.Exist)
+	}
+	return nil, srMap
 }
 
 func createContentUnitsQuery(q Query) elastic.Query {
@@ -399,16 +480,16 @@ func createContentUnitsQuery(q Query) elastic.Query {
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
-					elastic.NewMatchPhraseQuery("name", exactTerm),
-					elastic.NewMatchPhraseQuery("description", exactTerm),
-					elastic.NewMatchPhraseQuery("transcript", exactTerm),
+					elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("description.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("transcript.analyzed", exactTerm),
 				).MinimumNumberShouldMatch(1),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
-				elastic.NewMatchPhraseQuery("transcript", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("description.analyzed", exactTerm).Slop(100).Boost(1.2),
+				elastic.NewMatchPhraseQuery("transcript.analyzed", exactTerm).Slop(100),
 			),
 		)
 	}
@@ -441,8 +522,8 @@ func createContentUnitsQuery(q Query) elastic.Query {
 		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
 	}
 	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
-		AddScoreFunc(elastic.NewWeightFactorFunction(3.0)).
-		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
+		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
+		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))
 }
 
 func GetContentUnitsSearchRequests(query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
@@ -457,13 +538,13 @@ func GetContentUnitsSearchRequests(query Query, sortBy string, from int, size in
 		searchSource := elastic.NewSearchSource().
 			Query(createContentUnitsQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-				elastic.NewHighlighterField("name").NumOfFragments(0),
-				elastic.NewHighlighterField("description"),
-				elastic.NewHighlighterField("transcript"),
-				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-				elastic.NewHighlighterField("description.analyzed"),
-				elastic.NewHighlighterField("transcript.analyzed"),
-			)).
+			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+			elastic.NewHighlighterField("description.analyzed"),
+			elastic.NewHighlighterField("transcript.analyzed"),
+			// elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+			// elastic.NewHighlighterField("description.analyzed"),
+			// elastic.NewHighlighterField("transcript.analyzed"),
+		)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
@@ -506,14 +587,14 @@ func createCollectionsQuery(q Query) elastic.Query {
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
-					elastic.NewMatchPhraseQuery("name", exactTerm),
-					elastic.NewMatchPhraseQuery("description", exactTerm),
+					elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("description.analyzed", exactTerm),
 				).MinimumNumberShouldMatch(1),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("description.analyzed", exactTerm).Slop(100),
 			),
 		)
 	}
@@ -548,9 +629,9 @@ func createCollectionsQuery(q Query) elastic.Query {
 		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
 	}
 	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
-		Boost(1.4). // Boost collections index.
-		AddScoreFunc(elastic.NewWeightFactorFunction(3.0)).
-		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.9).Scale("300d"))
+		Boost(1.5). // Boost collections index.
+		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
+		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))
 }
 
 func GetCollectionsSearchRequests(query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
@@ -565,11 +646,11 @@ func GetCollectionsSearchRequests(query Query, sortBy string, from int, size int
 		searchSource := elastic.NewSearchSource().
 			Query(createCollectionsQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-				elastic.NewHighlighterField("name").NumOfFragments(0),
-				elastic.NewHighlighterField("description"),
-				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-				elastic.NewHighlighterField("description.analyzed"),
-			)).
+			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+			elastic.NewHighlighterField("description.analyzed"),
+			// elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+			// elastic.NewHighlighterField("description.analyzed"),
+		)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
@@ -597,16 +678,17 @@ func createSourcesQuery(q Query) elastic.Query {
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchQuery("name.analyzed", q.Term),
+					elastic.NewMatchQuery("full_name.analyzed", q.Term),
 					elastic.NewMatchQuery("description.analyzed", q.Term),
 					elastic.NewMatchQuery("content.analyzed", q.Term),
-					elastic.NewMatchQuery("authors.analyzed", q.Term),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
 				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("full_name.analyzed", q.Term).Slop(100).Boost(2.0),
 				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
 				elastic.NewMatchPhraseQuery("content.analyzed", q.Term).Slop(100),
-				elastic.NewMatchPhraseQuery("authors.analyzed", q.Term).Slop(100),
 			),
 		)
 	}
@@ -615,17 +697,18 @@ func createSourcesQuery(q Query) elastic.Query {
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
-					elastic.NewMatchPhraseQuery("name", exactTerm),
-					elastic.NewMatchPhraseQuery("description", exactTerm),
-					elastic.NewMatchPhraseQuery("content", exactTerm),
-					elastic.NewMatchPhraseQuery("authors", exactTerm),
-				).MinimumNumberShouldMatch(1)).Boost(1),
+					elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("full_name.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("description.analyzed", exactTerm),
+					elastic.NewMatchPhraseQuery("content.analyzed", exactTerm),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name", exactTerm).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description", exactTerm).Slop(100).Boost(1.2),
-				elastic.NewMatchPhraseQuery("content", exactTerm).Slop(100),
-				elastic.NewMatchPhraseQuery("authors", exactTerm).Slop(100),
+				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("full_name.analyzed", exactTerm).Slop(100).Boost(2.0),
+				elastic.NewMatchPhraseQuery("description.analyzed", exactTerm).Slop(100).Boost(1.2),
+				elastic.NewMatchPhraseQuery("content.analyzed", exactTerm).Slop(100),
 			),
 		)
 	}
@@ -640,9 +723,9 @@ func createSourcesQuery(q Query) elastic.Query {
 		}
 	}
 	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
-		Boost(1.2). // Boost sources index.
+		Boost(1.3). // Boost sources index.
 		// No time decay for sources. Sources are above time and space.
-		AddScoreFunc(elastic.NewWeightFactorFunction(4.0))
+		AddScoreFunc(elastic.NewWeightFactorFunction(3.0))
 }
 
 func GetSourcesSearchRequests(query Query, from int, size int, preference string) []*elastic.SearchRequest {
@@ -657,15 +740,16 @@ func GetSourcesSearchRequests(query Query, from int, size int, preference string
 		searchSource := elastic.NewSearchSource().
 			Query(createSourcesQuery(query)).
 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-				elastic.NewHighlighterField("name").NumOfFragments(0),
-				elastic.NewHighlighterField("description").NumOfFragments(0),
-				elastic.NewHighlighterField("authors").NumOfFragments(0),
-				elastic.NewHighlighterField("content"),
-				elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-				elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
-				elastic.NewHighlighterField("authors.analyzed").NumOfFragments(0),
-				elastic.NewHighlighterField("content.analyzed"),
-			)).
+			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+			elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
+			elastic.NewHighlighterField("authors.analyzed").NumOfFragments(0),
+			elastic.NewHighlighterField("pathnames.analyzed").NumOfFragments(0),
+			elastic.NewHighlighterField("content.analyzed"),
+			// elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+			// elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
+			// elastic.NewHighlighterField("pathnames.analyzed").NumOfFragments(0),
+			// elastic.NewHighlighterField("content.analyzed"),
+		)).
 			FetchSourceContext(fetchSourceContext).
 			From(from).
 			Size(size).
@@ -764,29 +848,40 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	if err := e.AddIntents(&query, preference); err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
 	}
-	log.Infof("ESEngine.DoSearch - Query: %+v sort by: %s, from: %d, size: %d", query, sortBy, from, size)
+	// Print query to log. Without intents (takes too much space).
+	queryToPrint := query
+	queryToPrint.Intents = []Intent{}
+	log.Infof("ESEngine.DoSearch - Query: %+v sort by: %s, from: %d, size: %d", queryToPrint, sortBy, from, size)
+	for _, intent := range query.Intents {
+		if value, ok := intent.Value.(es.ClassificationIntent); ok {
+			value.Explanation = elastic.SearchExplanation{0.0, "Don't print.", nil}
+			value.MaxExplanation = value.Explanation
+			intent.Value = value
+		}
+		log.Infof("ESEngine.DoSearch - \tIntent: %+v", intent)
+	}
+
 	multiSearchService := e.esc.MultiSearch()
-	requests := make([]*elastic.SearchRequest, 0)
 	requestsByIndex := make(map[string][]*elastic.SearchRequest)
 
-	status := consts.NO_FILTER
+	searchFilter := consts.SEARCH_NO_FILTER
 	if len(query.Filters) > 0 {
 		if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
-			status = consts.ONLY_SOURCES
+			searchFilter = consts.SEARCH_FILTER_ONLY_SOURCES
 		} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SOURCE]]; ok {
-			status = consts.NO_FILTER
+			searchFilter = consts.SEARCH_NO_FILTER
 		} else {
-			status = consts.WITHOUT_SOURCES
+			searchFilter = consts.SEARCH_FILTER_WITHOUT_SOURCES
 		}
 	}
 
-	if status != consts.ONLY_SOURCES {
-		requestsByIndex[consts.ES_UNITS_INDEX] = append(requests, GetContentUnitsSearchRequests(query, sortBy, 0, from+size, preference)...)
-		requestsByIndex[consts.ES_COLLECTIONS_INDEX] = append(requests, GetCollectionsSearchRequests(query, sortBy, 0, from+size, preference)...)
+	if searchFilter != consts.SEARCH_FILTER_ONLY_SOURCES {
+		requestsByIndex[consts.ES_UNITS_INDEX] = GetContentUnitsSearchRequests(query, sortBy, 0, from+size, preference)
+		requestsByIndex[consts.ES_COLLECTIONS_INDEX] = GetCollectionsSearchRequests(query, sortBy, 0, from+size, preference)
 	}
 
-	if status != consts.WITHOUT_SOURCES {
-		requestsByIndex[consts.ES_SOURCES_INDEX] = append(requests, GetSourcesSearchRequests(query, 0, from+size, preference)...)
+	if searchFilter != consts.SEARCH_FILTER_WITHOUT_SOURCES {
+		requestsByIndex[consts.ES_SOURCES_INDEX] = GetSourcesSearchRequests(query, 0, from+size, preference)
 	}
 
 	for _, k := range requestsByIndex {
@@ -804,21 +899,47 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			len(mr.Responses), len(requestsByIndex)*len(query.LanguageOrder)))
 	}
 
-	results := make([]*elastic.SearchResult, 0)
+	resultsByLang := make(map[string][]*elastic.SearchResult)
 
-	for i := 0; i < len(mr.Responses); i += len(query.LanguageOrder) {
-		currentResults := mr.Responses[i]
+	// Responses are ordered by language by index, i.e., for languages [bg, ru, en] and indices [units, collections, sources]
+	// we will have [bg-units, ru-units, en-units, bg-collections, ru-collections, en-collections, bg-sources, ru-sources, en-sources]
+	// We want the first matching language that has at least any result.
+	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
 			return nil, errors.New("Failed multi get.")
 		}
 		if haveHits(currentResults) {
-			results = append(results, currentResults)
+			lang := query.LanguageOrder[i%len(query.LanguageOrder)]
+			if _, ok := resultsByLang[lang]; !ok {
+				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+			}
+			resultsByLang[lang] = append(resultsByLang[lang], currentResults)
+		}
+	}
+
+	err, intentResultsMap := e.IntentsToResults(&query)
+	if err != nil {
+		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents to results.")
+	}
+	for lang, intentResults := range intentResultsMap {
+		if haveHits(intentResults) {
+			if _, ok := resultsByLang[lang]; !ok {
+				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+			}
+			resultsByLang[lang] = append(resultsByLang[lang], intentResults)
+		}
+	}
+
+	results := make([]*elastic.SearchResult, 0)
+	for _, lang := range query.LanguageOrder {
+		if r, ok := resultsByLang[lang]; ok {
+			results = r
+			break
 		}
 	}
 
 	ret, err := joinResponses(sortBy, from, size, results...)
-
 	if ret != nil && ret.Hits != nil {
 		return &QueryResult{ret, query.Intents}, err
 	}

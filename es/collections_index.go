@@ -30,7 +30,6 @@ func MakeCollectionsIndex(namespace string, db *sql.DB, esc *elastic.Client) *Co
 
 type CollectionsIndex struct {
 	BaseIndex
-	indexData *IndexData
 }
 
 func defaultCollectionsSql() string {
@@ -142,7 +141,6 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 			qm.Load("CollectionI18ns"),
 			qm.Load("CollectionsContentUnits"),
 			qm.Load("CollectionsContentUnits.ContentUnit"),
-			// qm.Load("CollectionsContentUnits.ContentUnit.ContentUnitI18ns"),
 			qm.Where(sqlScope),
 			qm.Offset(offset),
 			qm.Limit(limit)).Bind(&collections)
@@ -163,10 +161,6 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 				"%s AND cu.uid in (%s)", contentUnitsSqlScope, strings.Join(cuUIDs, ","))
 		}
 
-		index.indexData, err = MakeIndexData(index.db, contentUnitsSqlScope)
-		if err != nil {
-			return err
-		}
 		for _, collection := range collections {
 			if err := index.indexCollection(collection); err != nil {
 				return err

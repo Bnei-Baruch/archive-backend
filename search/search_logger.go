@@ -130,6 +130,9 @@ func (searchLogger *SearchLogger) fixHighlight(h *elastic.SearchHitHighlight) *e
 
 // Should not change the input, should copy hit and fix highlight fields.
 func (searchLogger *SearchLogger) fixResults(res *QueryResult) *QueryResult {
+	if res == nil {
+		return nil
+	}
 	if res.SearchResult.Hits != nil && res.SearchResult.Hits.Hits != nil && len(res.SearchResult.Hits.Hits) > 0 {
 		hitsCopy := make([]*elastic.SearchHit, len(res.SearchResult.Hits.Hits))
 		for i, h := range res.SearchResult.Hits.Hits {

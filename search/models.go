@@ -6,13 +6,8 @@ import (
 	"gopkg.in/olivere/elastic.v5"
 )
 
-const (
-	I_TAG    = 0
-	I_SOURCE = 1
-)
-
 type Intent struct {
-	Type     int         `json:"type"`
+	Type     string      `json:"type"`
 	Language string      `json:"language"`
 	Value    interface{} `json:"value,omitempty"`
 }

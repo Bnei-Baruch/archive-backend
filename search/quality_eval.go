@@ -14,6 +14,14 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"gopkg.in/olivere/elastic.v5"
+
+	"github.com/Bnei-Baruch/archive-backend/consts"
+)
+
+const (
+	EVAL_SET_EXPECTATION_FIRST_COLUMN = 4
+	EVAL_SET_EXPECTATION_LAST_COLUMN  = 8
 )
 
 // Search quality enum. Order important, the lower (higher integer) the better.
@@ -55,7 +63,32 @@ const (
 	ET_LESSONS       = iota
 	ET_PROGRAMS      = iota
 	ET_SOURCES       = iota
+	ET_EMPTY         = iota
+	ET_FAILED_PARSE  = iota
+	ET_BAD_STRUCTURE = iota
 )
+
+var GOOD_EXPECTATION = map[int]bool{
+	ET_CONTENT_UNITS: true,
+	ET_COLLECTIONS:   true,
+	ET_LESSONS:       true,
+	ET_PROGRAMS:      true,
+	ET_SOURCES:       true,
+	ET_EMPTY:         false,
+	ET_FAILED_PARSE:  false,
+	ET_BAD_STRUCTURE: false,
+}
+
+var EXPECTATION_TO_NAME = map[int]string{
+	ET_CONTENT_UNITS: "cu",
+	ET_COLLECTIONS:   "c",
+	ET_LESSONS:       "l",
+	ET_PROGRAMS:      "p",
+	ET_SOURCES:       "s",
+	ET_EMPTY:         "e",
+	ET_FAILED_PARSE:  "fp",
+	ET_BAD_STRUCTURE: "bs",
+}
 
 var EXPECTATION_URL_PATH = map[int]string{
 	ET_CONTENT_UNITS: "cu",
@@ -68,10 +101,15 @@ var EXPECTATION_URL_PATH = map[int]string{
 var EXPECTATION_HIT_TYPE = map[int]string{
 	ET_CONTENT_UNITS: "content_units",
 	ET_COLLECTIONS:   "collections",
-	ET_LESSONS:       "intent-lessons",  // Special hit type. Should be handled as intent.
-	ET_PROGRAMS:      "intent-programs", // Special hit type. Should be handled as intent.
+	ET_LESSONS:       consts.INTENT_HIT_TYPE_LESSONS,
+	ET_PROGRAMS:      consts.INTENT_HIT_TYPE_PROGRAMS,
 	ET_SOURCES:       "sources",
 }
+
+const (
+	FILTER_NAME_SOURCE = "source"
+	FILTER_NAME_TOPIC  = "topic"
+)
 
 type Filter struct {
 	Name  string `json:"name"`
@@ -82,6 +120,7 @@ type Expectation struct {
 	Type    int      `json:"type"`
 	Uid     string   `json:"uid,omitempty"`
 	Filters []Filter `json:"filters,omitempty"`
+	Source  string   `json:"source"`
 }
 
 type Loss struct {
@@ -130,6 +169,16 @@ func CompareResults(base int, exp int) int {
 	}
 }
 
+func GoodExpectations(expectations []Expectation) int {
+	ret := 0
+	for i := range expectations {
+		if GOOD_EXPECTATION[expectations[i].Type] {
+			ret++
+		}
+	}
+	return ret
+}
+
 func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 	f, err := os.Open(evalSetPath)
 	if err != nil {
@@ -154,14 +203,16 @@ func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 			continue
 		}
 		var expectations []Expectation
-		for i := 4; i <= 8; i++ {
-			e, err := ParseExpectation(line[i])
-			if err == nil {
-				expectations = append(expectations, e)
+		hasGoodExpectations := false
+		for i := EVAL_SET_EXPECTATION_FIRST_COLUMN; i <= EVAL_SET_EXPECTATION_LAST_COLUMN; i++ {
+			e := ParseExpectation(line[i])
+			expectations = append(expectations, e)
+			if GOOD_EXPECTATION[e.Type] {
 				expectationsCount++
+				hasGoodExpectations = true
 			}
 		}
-		if len(expectations) > 0 {
+		if hasGoodExpectations {
 			queriesWithExpectationsCount++
 		}
 		ret = append(ret, EvalQuery{
@@ -170,23 +221,15 @@ func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 			Weight:       w,
 			Bucket:       line[3],
 			Expectations: expectations,
-			Comment:      line[5],
+			Comment:      line[EVAL_SET_EXPECTATION_LAST_COLUMN+1],
 		})
 	}
 	log.Infof("Read %d queries, with total %d expectations. %d Queries had expectations.",
 		len(lines), expectationsCount, queriesWithExpectationsCount)
-	for _, q := range ret {
-		if len(q.Expectations) > 0 {
-			log.Infof("[%s]", q.Query)
-			for _, e := range q.Expectations {
-				log.Infof("\t(%s, %s)", EXPECTATION_HIT_TYPE[e.Type], e.Uid)
-			}
-		}
-	}
 	return ret, nil
 }
 
-type MdbUid struct {
+type HitSource struct {
 	MdbUid string `json:"mdb_uid"`
 }
 
@@ -202,10 +245,13 @@ type MdbUid struct {
 // https://archive.kbb1.com/he/events/meals
 // https://archive.kbb1.com/he/events/friends-gatherings
 // https://archive.kbb1.com/he/events?year=2013
-func ParseExpectation(e string) (Expectation, error) {
+func ParseExpectation(e string) Expectation {
+	if e == "" {
+		return Expectation{ET_EMPTY, "", nil, e}
+	}
 	u, err := url.Parse(e)
 	if err != nil {
-		return Expectation{}, err
+		return Expectation{ET_FAILED_PARSE, "", nil, e}
 	}
 	p := u.RequestURI()
 	idx := strings.Index(p, "?")
@@ -237,7 +283,7 @@ func ParseExpectation(e string) (Expectation, error) {
 				}
 			}
 		}
-		return Expectation{t, "", filters}, nil
+		return Expectation{t, "", filters, e}
 	}
 	switch contentUnitOrCollection {
 	case EXPECTATION_URL_PATH[ET_CONTENT_UNITS]:
@@ -247,27 +293,68 @@ func ParseExpectation(e string) (Expectation, error) {
 	case EXPECTATION_URL_PATH[ET_SOURCES]:
 		t = ET_SOURCES
 	default:
-		return Expectation{}, errors.New("ParseExpectation - Could not parse expectation.")
+		return Expectation{ET_BAD_STRUCTURE, "", nil, e}
 	}
-	return Expectation{t, uidOrSection, nil}, nil
+	return Expectation{t, uidOrSection, nil, e}
+}
+
+func FilterValueToUid(value string) string {
+	sl := strings.Split(value, "_")
+	if len(sl) == 0 {
+		return ""
+	}
+	return sl[len(sl)-1]
+}
+
+func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expectation) bool {
+	if hit.Type != EXPECTATION_HIT_TYPE[e.Type] {
+		return false
+	}
+
+	if e.Type == ET_LESSONS || e.Type == ET_PROGRAMS {
+		// For now we support only one filter (zero also means not match).
+		if len(e.Filters) == 0 || len(e.Filters) > 1 {
+			return false
+		}
+		// Match all filters
+		filter := e.Filters[0]
+		return ((filter.Name == FILTER_NAME_TOPIC && hit.Index == consts.INTENT_INDEX_TAG) ||
+			(filter.Name == FILTER_NAME_SOURCE && hit.Index == consts.INTENT_INDEX_SOURCE)) &&
+			FilterValueToUid(filter.Value) == hitSource.MdbUid
+	} else {
+		return hitSource.MdbUid == e.Uid
+	}
 }
 
 func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
-	r := EvalResult{}
+	r := EvalResult{
+		SearchQuality: make([]int, len(q.Expectations)),
+		Rank:          make([]int, len(q.Expectations)),
+		err:           nil,
+	}
 
-	if len(q.Expectations) == 0 {
+	hasGoodExpectation := false
+	for i := range q.Expectations {
+		r.SearchQuality[i] = SQ_NO_EXPECTATION
+		r.Rank[i] = -1
+		if GOOD_EXPECTATION[q.Expectations[i].Type] {
+			hasGoodExpectation = true
+		}
+	}
+	// Optimization, don't fetch query if no good expectations.
+	if !hasGoodExpectation {
 		return r
 	}
 
 	urlTemplate := "%s/search?q=%s&language=%s&page_no=1&page_size=10&sort_by=relevance&deb=true"
 	url := fmt.Sprintf(urlTemplate, serverUrl, url.QueryEscape(q.Query), q.Language)
-	log.Infof("Url: %s", url)
 	resp, err := http.Get(url)
 	if err != nil {
 		log.Warnf("Error %+v", err)
-		for _ = range q.Expectations {
-			r.SearchQuality = append(r.SearchQuality, SQ_SERVER_ERROR)
-			r.Rank = append(r.Rank, -1)
+		for i := range q.Expectations {
+			if GOOD_EXPECTATION[q.Expectations[i].Type] {
+				r.SearchQuality[i] = SQ_SERVER_ERROR
+			}
 		}
 		r.err = err
 		return r
@@ -279,9 +366,10 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 		}
 		errMsg := fmt.Sprintf("Status not ok (%d), body: %s", resp.StatusCode, string(bodyBytes))
 		log.Warn(errMsg)
-		for _ = range q.Expectations {
-			r.SearchQuality = append(r.SearchQuality, SQ_SERVER_ERROR)
-			r.Rank = append(r.Rank, -1)
+		for i := range q.Expectations {
+			if GOOD_EXPECTATION[q.Expectations[i].Type] {
+				r.SearchQuality[i] = SQ_SERVER_ERROR
+			}
 		}
 		r.err = errors.New(errMsg)
 		return r
@@ -290,61 +378,65 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	defer resp.Body.Close()
 	if err := json.NewDecoder(resp.Body).Decode(&queryResult); err != nil {
 		log.Warnf("Error decoding %+v", err)
-		for _ = range q.Expectations {
-			r.SearchQuality = append(r.SearchQuality, SQ_SERVER_ERROR)
-			r.Rank = append(r.Rank, -1)
+		for i := range q.Expectations {
+			if GOOD_EXPECTATION[q.Expectations[i].Type] {
+				r.SearchQuality[i] = SQ_SERVER_ERROR
+			}
 		}
 		r.err = err
 		return r
 	}
-	log.Infof("EvaluateQuery - searchResult: %+v", queryResult)
-	for j, e := range q.Expectations {
-		sq := SQ_UNKNOWN
-		rank := -1
-		for i, hit := range queryResult.SearchResult.Hits.Hits {
-			mdbUid := MdbUid{}
-			if err := json.Unmarshal(*hit.Source, &mdbUid); err != nil {
-				log.Warnf("Error unmarshling source %+v", err)
-				sq = SQ_SERVER_ERROR
-				rank = -1
-				r.err = err
-				break
-			}
-			if j == 0 {
-				log.Infof("[%s] [%s] type: %s mdb_uid: %s @%d", serverUrl, q.Query, hit.Type, mdbUid.MdbUid, i+1)
-			}
-			if mdbUid.MdbUid == e.Uid && hit.Type == EXPECTATION_HIT_TYPE[e.Type] {
-				rank = i + 1
-				if i <= 2 {
-					sq = SQ_GOOD
-				} else {
-					sq = SQ_REGULAR
+	for i := range q.Expectations {
+		if GOOD_EXPECTATION[q.Expectations[i].Type] {
+			sq := SQ_UNKNOWN
+			rank := -1
+			for j, hit := range queryResult.SearchResult.Hits.Hits {
+				hitSource := HitSource{}
+				if err := json.Unmarshal(*hit.Source, &hitSource); err != nil {
+					log.Warnf("Error unmarshling source %+v", err)
+					sq = SQ_SERVER_ERROR
+					rank = -1
+					r.err = err
+					break
 				}
-				break
+				if HitMatchesExpectation(hit, hitSource, q.Expectations[i]) {
+					rank = j + 1
+					if j <= 2 {
+						sq = SQ_GOOD
+					} else {
+						sq = SQ_REGULAR
+					}
+					break
+				}
 			}
+			r.SearchQuality[i] = sq
+			r.Rank[i] = rank
 		}
-		r.SearchQuality = append(r.SearchQuality, sq)
-		r.Rank = append(r.Rank, rank)
 	}
 
 	return r
 }
 
 func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, error) {
-	log.Infof("Evaluating %d queries.", len(queries))
+	log.Infof("Evaluating %d queries on %s.", len(queries), serverUrl)
 	ret := EvalResults{}
 	ret.UniqueMap = make(map[int]float64)
 	ret.WeightedMap = make(map[int]float64)
 	for _, q := range queries {
 		r := EvaluateQuery(q, serverUrl)
-		if len(r.SearchQuality) == 0 {
+		goodExpectations := GoodExpectations(q.Expectations)
+		if goodExpectations > 0 {
+			for i, sq := range r.SearchQuality {
+				if GOOD_EXPECTATION[q.Expectations[i].Type] {
+					ret.UniqueMap[sq] += 1 / float64(goodExpectations)
+					// Each expectation has equal weight for the query.
+					ret.WeightedMap[sq] += float64(q.Weight) / float64(goodExpectations)
+				}
+			}
+		} else {
+			// Meaning that the query has not any good expectation.
 			ret.UniqueMap[SQ_NO_EXPECTATION]++
 			ret.WeightedMap[SQ_NO_EXPECTATION] += float64(q.Weight)
-		}
-		for _, sq := range r.SearchQuality {
-			ret.UniqueMap[sq] += 1 / float64(len(q.Expectations))
-			// Each expectation has equal weight for the query.
-			ret.WeightedMap[sq] += float64(q.Weight) / float64(len(q.Expectations))
 		}
 		ret.TotalUnique++
 		ret.TotalWeighted += q.Weight
@@ -365,15 +457,85 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, e
 	for i, q := range queries {
 		for j, sq := range ret.Results[i].SearchQuality {
 			e := q.Expectations[j]
+			goodExpectationsLen := GoodExpectations(q.Expectations)
 			if sq == SQ_UNKNOWN {
 				if _, ok := losses[e.Type]; !ok {
 					losses[e.Type] = make([]Loss, 0)
 				}
-				loss := Loss{e, q, 1 / float64(len(q.Expectations)), float64(q.Weight) / float64(len(q.Expectations))}
+				loss := Loss{e, q, 1 / float64(goodExpectationsLen), float64(q.Weight) / float64(goodExpectationsLen)}
 				losses[e.Type] = append(losses[e.Type], loss)
 			}
 		}
 	}
 
 	return ret, losses, nil
+}
+
+func ExpectationToString(e Expectation) string {
+	filters := make([]string, len(e.Filters))
+	for i, f := range e.Filters {
+		filters[i] = fmt.Sprintf("%s - %s", f.Name, f.Value)
+	}
+	return fmt.Sprintf("%s|%s|%s", EXPECTATION_TO_NAME[e.Type], e.Uid, strings.Join(filters, ":"))
+}
+
+func WriteResultsByExpectation(path string, queries []EvalQuery, results EvalResults) error {
+	records := [][]string{{"Language", "Query", "Weight", "Bucket", "Comment",
+		"Expectation", "Parsed", "SearchQuality", "Rank"}}
+	for i, q := range queries {
+		goodExpectationsLen := GoodExpectations(q.Expectations)
+		for j, sq := range results.Results[i].SearchQuality {
+			if GOOD_EXPECTATION[q.Expectations[j].Type] {
+				record := []string{q.Language, q.Query, fmt.Sprintf("%.2f", float64(q.Weight)/float64(goodExpectationsLen)),
+					q.Bucket, q.Comment, q.Expectations[j].Source, ExpectationToString(q.Expectations[j]),
+					SEARCH_QUALITY_NAME[sq], fmt.Sprintf("%d", results.Results[i].Rank[j])}
+				records = append(records, record)
+			}
+		}
+	}
+
+	return WriteToCsv(path, records)
+}
+
+func WriteResults(path string, queries []EvalQuery, results EvalResults) error {
+	records := [][]string{{"Language", "Query", "Weight", "Bucket", "Comment"}}
+	for i := 0; i < EVAL_SET_EXPECTATION_LAST_COLUMN-EVAL_SET_EXPECTATION_FIRST_COLUMN+1; i++ {
+		records[0] = append(records[0], fmt.Sprintf("#%d", i+1))
+		records[0] = append(records[0], fmt.Sprintf("#%d Parsed", i+1))
+		records[0] = append(records[0], fmt.Sprintf("#%d SQ", i+1))
+		records[0] = append(records[0], fmt.Sprintf("#%d Rank", i+1))
+	}
+	for i, q := range queries {
+		record := []string{q.Language, q.Query, fmt.Sprintf("%d", q.Weight), q.Bucket, q.Comment}
+		for j, sq := range results.Results[i].SearchQuality {
+			record = append(record, q.Expectations[j].Source)
+			record = append(record, ExpectationToString(q.Expectations[j]))
+			record = append(record, SEARCH_QUALITY_NAME[sq])
+			record = append(record, fmt.Sprintf("%d", results.Results[i].Rank[j]))
+		}
+		records = append(records, record)
+	}
+
+	return WriteToCsv(path, records)
+}
+
+func WriteToCsv(path string, records [][]string) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	w := csv.NewWriter(file)
+
+	for _, record := range records {
+		if err := w.Write(record); err != nil {
+			return err
+		}
+	}
+
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return err
+	}
+	return nil
 }

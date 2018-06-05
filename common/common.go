@@ -70,7 +70,7 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	es.InitVars()
 
 	viper.SetDefault("cache.refresh-search-stats", 5*time.Minute)
-	refreshIntervals := map[string]time.Duration {
+	refreshIntervals := map[string]time.Duration{
 		"SearchStats": viper.GetDuration("cache.refresh-search-stats"),
 	}
 	CACHE = cache.NewCacheManagerImpl(DB, refreshIntervals)

@@ -21,6 +21,7 @@ import (
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v5"
 
+	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -462,7 +463,8 @@ func SearchHandler(c *gin.Context) {
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
-	se := search.NewESEngine(esc, db)
+	cache := c.MustGet("CACHE").(cache.CacheManager)
+	se := search.NewESEngine(esc, db, cache)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -485,6 +487,8 @@ func SearchHandler(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, res)
 	} else {
+		// TODO: Remove following line, we should not log this.
+		log.Infof("Error on search: %+v", err)
 		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, err)
 		if logErr != nil {
 			log.Warnf("Erro logging search error: %+v %+v", logErr, err)
@@ -519,7 +523,8 @@ func AutocompleteHandler(c *gin.Context) {
 
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	se := search.NewESEngine(esc, db)
+	cache := c.MustGet("CACHE").(cache.CacheManager)
+	se := search.NewESEngine(esc, db, cache)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
@@ -1601,7 +1606,7 @@ func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter)
 		return nil
 	}
 
-	// find all nested tag_ids
+	// Find all nested tag_ids.
 	q := `WITH RECURSIVE rec_tags AS (
             SELECT t.id FROM tags t WHERE t.uid = ANY($1)
             UNION

@@ -4,10 +4,10 @@ import (
 	"runtime"
 	"strings"
 
+	"fmt"
 	"github.com/pkg/errors"
 	"github.com/stvp/rollbar"
 	"net/http"
-	"fmt"
 )
 
 type stackTracer interface {

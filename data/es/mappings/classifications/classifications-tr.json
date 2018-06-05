@@ -6,8 +6,14 @@
             }, 
             "properties": {
                 "name": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "turkish"
+                        }
+                    }, 
                     "type": "text", 
-                    "analyzer": "turkish"
+                    "analyzer": "phonetic_analyzer"
                 }, 
                 "name_suggest": {
                     "contexts": [
@@ -50,8 +56,14 @@
                     "type": "keyword"
                 }, 
                 "name": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "turkish"
+                        }
+                    }, 
                     "type": "text", 
-                    "analyzer": "turkish"
+                    "analyzer": "phonetic_analyzer"
                 }, 
                 "name_suggest": {
                     "contexts": [
@@ -67,6 +79,49 @@
                     "type": "keyword"
                 }
             }
+        }
+    }, 
+    "settings": {
+        "index": {
+            "number_of_replicas": 0, 
+            "analysis": {
+                "filter": {
+                    "custom_phonetic": {
+                        "encoder": "beider_morse", 
+                        "type": "phonetic", 
+                        "replace": true
+                    }
+                }, 
+                "char_filter": {
+                    "quotes": {
+                        "type": "mapping", 
+                        "mappings": [
+                            "\\u0091=>\\u0027", 
+                            "\\u0092=>\\u0027", 
+                            "\\u2018=>\\u0027", 
+                            "\\u2019=>\\u0027", 
+                            "\\u201B=>\\u0027", 
+                            "\\u0022=>", 
+                            "\\u201C=>", 
+                            "\\u201D=>"
+                        ]
+                    }
+                }, 
+                "analyzer": {
+                    "phonetic_analyzer": {
+                        "filter": [
+                            "standard", 
+                            "lowercase", 
+                            "custom_phonetic"
+                        ], 
+                        "char_filter": [
+                            "quotes"
+                        ], 
+                        "tokenizer": "standard"
+                    }
+                }
+            }, 
+            "number_of_shards": 1
         }
     }
 }

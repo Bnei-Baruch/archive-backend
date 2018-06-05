@@ -5,7 +5,17 @@
                 "enabled": false
             }, 
             "properties": {
-                "description": {
+                "path_names": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "hebrew"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
+                "name": {
                     "fields": {
                         "analyzed": {
                             "type": "text", 
@@ -31,6 +41,16 @@
                 "sources": {
                     "type": "keyword"
                 }, 
+                "full_name": {
+                    "fields": {
+                        "analyzed": {
+                            "type": "text", 
+                            "analyzer": "hebrew"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "phonetic_analyzer"
+                }, 
                 "authors": {
                     "fields": {
                         "analyzed": {
@@ -41,7 +61,7 @@
                     "type": "text", 
                     "analyzer": "phonetic_analyzer"
                 }, 
-                "name": {
+                "description": {
                     "fields": {
                         "analyzed": {
                             "type": "text", 
@@ -56,6 +76,7 @@
     }, 
     "settings": {
         "index": {
+            "number_of_replicas": 0, 
             "analysis": {
                 "filter": {
                     "custom_phonetic": {
@@ -65,6 +86,21 @@
                         "replace": true
                     }
                 }, 
+                "char_filter": {
+                    "quotes": {
+                        "type": "mapping", 
+                        "mappings": [
+                            "\\u0091=>\\u0027", 
+                            "\\u0092=>\\u0027", 
+                            "\\u2018=>\\u0027", 
+                            "\\u2019=>\\u0027", 
+                            "\\u201B=>\\u0027", 
+                            "\\u0022=>", 
+                            "\\u201C=>", 
+                            "\\u201D=>"
+                        ]
+                    }
+                }, 
                 "analyzer": {
                     "phonetic_analyzer": {
                         "filter": [
@@ -72,10 +108,14 @@
                             "lowercase", 
                             "custom_phonetic"
                         ], 
+                        "char_filter": [
+                            "quotes"
+                        ], 
                         "tokenizer": "standard"
                     }
                 }
-            }
+            }, 
+            "number_of_shards": 1
         }
     }
 }

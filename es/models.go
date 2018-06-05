@@ -13,6 +13,8 @@ type EffectiveDate struct {
 type ClassificationIntent struct {
 	MDB_UID        string                    `json:"mdb_uid"`
 	Name           string                    `json:"name"`
+	ContentType    string                    `json:"content_type"`
+	Exist          bool                      `json:"exist"`
 	Score          *float64                  `json:"score,omitempty"`
 	Explanation    elastic.SearchExplanation `json:"explanation,omitempty"`
 	MaxScore       *float64                  `json:"max_score,omitempty"`
@@ -75,7 +77,9 @@ type Source struct {
 	MDB_UID     string   `json:"mdb_uid"`
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
-	Authors     []string `json:"authors,omitempty"`
 	Content     string   `json:"content"`
 	Sources     []string `json:"sources"`
+	Authors     []string `json:"authors"`
+	PathNames   []string `json:"path_names"`
+	FullName    []string `json:"full_name"`
 }
