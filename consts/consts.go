@@ -212,6 +212,7 @@ const (
 
 // Use to identify and map request filters
 // Maps request filter name to index field name.
+// TODO: Validate all keys and values are required. Seems some are not needed.
 var FILTERS = map[string]string{
 	FILTER_TAG:                       "tags",
 	FILTER_START_DATE:                "start_date",

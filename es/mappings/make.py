@@ -165,19 +165,28 @@ RESULTS_TEMPLATE = {
           "type": "text",
           "analyzer": lambda lang: StandardAnalyzer[lang],
         },
+
         # Effective date is relevant for units only (for now).
         "effective_date": {
           "type": "date",
           "format": "strict_date",
         },
-        # Content type and Collections content types are required for filters.
-        # They both used for Units and Collections only (for now).
-        "content_type": {
-          "type": "keyword",
-        },
-        "collections_content_types": {
-          "type": "keyword",
-        },
+
+        # Filter fields, used to apply filter before scoring.
+        "filters": {
+          # Used for Units and Collections.
+          "content_type": {
+            "type": "keyword",
+          },
+          # Used for Units and Collections.
+          "collections_content_types": {
+            "type": "keyword",
+          },
+          # Used for Sources.
+          "sources": {
+            "type": "keyword",
+          }
+        }
       }
     }
   }
