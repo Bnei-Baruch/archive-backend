@@ -38,7 +38,7 @@ func CollectionsHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), r)
+	resp, err := HandleCollections(c.MustGet("MDB_DB").(*sql.DB), r)
 	concludeRequest(c, resp, err)
 }
 
@@ -284,7 +284,7 @@ func LessonsHandler(c *gin.Context) {
 		return
 	}
 
-	// We're either in full lessons mode or lesson parts mode based on
+	// We're either in full lessonsT mode or lesson parts mode based on
 	// filters that apply only to lesson parts (content_units)
 
 	if utils.IsEmpty(r.Authors) &&
@@ -301,7 +301,7 @@ func LessonsHandler(c *gin.Context) {
 			DateRangeFilter: r.DateRangeFilter,
 			WithUnits:       true,
 		}
-		resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), cr)
+		resp, err := HandleCollections(c.MustGet("MDB_DB").(*sql.DB), cr)
 		concludeRequest(c, resp, err)
 	} else {
 		if r.OrderBy == "" {
@@ -539,7 +539,7 @@ func RecentlyUpdatedHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
-func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
+func HandleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
 	// filters
@@ -550,6 +550,9 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendKMediaIdFilterMods(&mods, r.KMediaIdFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 
@@ -1245,6 +1248,16 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	if f.EndDate != "" {
 		*mods = append(*mods, qm.Where("(properties->>'film_date')::date <= ?", e))
 	}
+
+	return nil
+}
+
+func appendKMediaIdFilterMods(mods *[]qm.QueryMod, f KMediaIdFilter) error {
+	if f.ID == 0 {
+		return nil
+	}
+
+	*mods = append(*mods, qm.Where("(properties->>'kmedia_id')::integer = ?", f.ID))
 
 	return nil
 }

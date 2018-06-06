@@ -15,6 +15,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/pkg/errors"
 	"regexp"
+	"encoding/xml"
 )
 
 var copyright = fmt.Sprintf("Bnei-Baruch Copyright 2008-%d", time.Now().Year())
@@ -185,13 +186,16 @@ func mapCU2ID(cuID string, db *sql.DB, c *gin.Context) (id int64, err error) {
 	return
 }
 
-type Dlang struct {
+type feedConfig struct {
 	DLANG string
 	Lang  string
 	DAYS  int64
+	CID   int64
+	DF    string
+	DT    string
 }
 
-type Translation struct {
+type translation struct {
 	LessonFrom string
 	Playlist   string
 	Download   string
@@ -199,7 +203,7 @@ type Translation struct {
 	Audio      string
 }
 
-var T = map[string]Translation{
+var T = map[string]translation{
 	"ENG": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
 	"HEB": {LessonFrom: "שיעור מתאריך", Playlist: "רשימת השמעה", Download: "הורדת השיעור", Video: "וידאו", Audio: "אודיו"},
 	"RUS": {LessonFrom: "Урок от", Playlist: "Плейлист:", Download: "Скачать:", Video: "видео", Audio: "аудио"},
@@ -233,25 +237,161 @@ var T = map[string]Translation{
 	"CZE": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
 }
 
-func FeedPodcast(c *gin.Context) {
-	var dlang Dlang
-	if c.Bind(&dlang) != nil {
+// wsxml.xml?CID=4016&DLANG=HEB&DF=2013-04-30&DT=2013-03-31
+func FeedWSXML(c *gin.Context) {
+	var config feedConfig
+	(&config).getConfig(c)
+	catalogId := config.CID
+	dateFrom := config.DF
+	dateTo := config.DT
+
+	if catalogId == 0 {
+		c.String(http.StatusOK, "<lessonsT />")
 		return
 	}
-	if dlang.DLANG == "" {
-		dlang = Dlang{DLANG: "ENG", Lang: consts.LANG_ENGLISH}
-	} else {
-		dlang.Lang = consts.CODE2LANG[dlang.DLANG]
-		if dlang.Lang == "" {
-			dlang = Dlang{DLANG: "ENG", Lang: consts.LANG_ENGLISH}
+	if len(dateTo) == 0 {
+		t := time.Now()
+		dateTo = t.Format("2006-01-02")
+	}
+	if len(dateFrom) == 0 {
+		t := time.Now().AddDate(0, -1, 0)
+		dateFrom = t.Format("2006-01-02")
+	}
+
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	r := CollectionsRequest{
+		ListRequest: ListRequest{
+			BaseRequest: BaseRequest{
+				Language: config.Lang,
+			},
+			StartIndex: 1,
+			StopIndex:  150,
+			OrderBy:    "properties->'filmdate' desc, created_at desc",
+		},
+		DateRangeFilter: DateRangeFilter{
+			StartDate: dateFrom,
+			EndDate:   dateTo,
+		},
+		KMediaIdFilter: KMediaIdFilter{
+			ID: catalogId,
+		},
+		WithUnits: true,
+	}
+	resp, herr := HandleCollections(db, r)
+	if herr != nil {
+		herr.Abort(c)
+	}
+	if len(resp.Collections) == 0 {
+		c.String(http.StatusOK, "<lessonsT />")
+		return
+	}
+
+	collection := resp.Collections[0]
+	items := collection.ContentUnits
+	cuids := make([]int64, len(items))
+	for idx, cu := range items {
+		id, err := mapCU2ID(cu.ID, db, c)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				// empty feed
+			} else {
+				NewInternalError(err).Abort(c)
+			}
+			return
+		}
+		cuids[idx] = id
+	}
+
+	fileMap, err := loadCUFiles(db, cuids)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	type fileT struct {
+		XMLName xml.Name `xml:"file"`
+
+		Type     string `xml:"type"`
+		Language string `xml:"language"`
+		Original int    `xml:"original"`
+		Path     string `xml:"path"`
+		Size     string `xml:"size"`
+		Length   string `xml:"length"`
+		Title    string `xml:"title"`
+	}
+
+	type filesT struct {
+		XMLName xml.Name `xml:"files"`
+
+		Files []fileT
+	}
+
+	type lessonT struct {
+		XMLName xml.Name `xml:"lesson"`
+
+		Title       string `xml:"title"`
+		Description string `xml:"description,omitempty"`
+		Link        string `xml:"link"`
+		Date        string `xml:"date"`
+		Language    string `xml:"language"`
+		Lecturer    string `xml:"lecturer"`
+		Files       filesT
+	}
+
+	type lessonsT struct {
+		XMLName xml.Name `xml:"lessons"`
+
+		Lesson []lessonT
+	}
+
+	lessons := lessonsT{
+		Lesson: make([]lessonT, len(collection.ContentUnits)),
+	}
+	for i, unit := range collection.ContentUnits {
+		t, _ := time.Parse("2006-Jan-02 15:04:05 -0700 MST", unit.FilmDate.String())
+		unitFiles := fileMap[cuids[i]]
+		lessons.Lesson[i] = lessonT{
+			Title:       unit.Name,
+			Description: unit.Description,
+			Link:        getHref("/"+config.Lang+"/lessonsT/cu/"+string(unit.ID), c),
+			Date:        t.Format(time.RFC1123Z),
+			Language:    consts.LANG2CODE[unit.OriginalLanguage],
+			Lecturer:    "",
+			Files: filesT{
+				Files: make([]fileT, len(unitFiles)),
+			},
+		}
+		for j, f := range unitFiles {
+			language := consts.LANG2CODE[f.Language.String]
+			original := 1
+			if f.Language.String != unit.OriginalLanguage {
+				original = 0
+			}
+			size := fmt.Sprintf("%.2f MB", convertSizeToMb(int64(f.Size)))
+			lessons.Lesson[i].Files.Files[j] = fileT{
+				Type:     f.Type,
+				Language: language,
+				Original: original,
+				Path:     "https://cdn.kabbalahmedia.info/" + f.UID,
+				Size:     size,
+				Length:   convertDuration(unit.Duration),
+				Title:    language + " " + size,
+			}
 		}
 	}
+	c.XML(http.StatusOK, lessons)
+
+}
+
+func FeedPodcast(c *gin.Context) {
+	var config feedConfig
+	(&config).getConfig(c)
 
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	cur := ContentUnitsRequest{
 		ListRequest: ListRequest{
 			BaseRequest: BaseRequest{
-				Language: dlang.Lang,
+				Language: config.Lang,
 			},
 			StartIndex: 1,
 			StopIndex:  150,
@@ -289,7 +429,7 @@ func FeedPodcast(c *gin.Context) {
 
 	feed := &feeds.Feed{
 		Title:          "שיעור הקבלה היומי",
-		Link:           getHref("/feeds/podcast.rss?DLANG="+dlang.DLANG, c),
+		Link:           getHref("/feeds/podcast.rss?DLANG="+config.DLANG, c),
 		Description:    "כאן תקבלו עדכונים יומיים של שיעורי קבלה. התכנים מבוססים על מקורות הקבלה האותנטיים בלבד",
 		Updated:        time.Now(),
 		Copyright:      copyright,
@@ -307,7 +447,7 @@ func FeedPodcast(c *gin.Context) {
 			return
 		}
 		for _, file := range files {
-			if file.MimeType.String != consts.MEDIA_MP3 || file.Language.String != dlang.Lang ||
+			if file.MimeType.String != consts.MEDIA_MP3 || file.Language.String != config.Lang ||
 				validFild.MatchString(file.Name) {
 				continue
 			}
@@ -332,35 +472,25 @@ func FeedPodcast(c *gin.Context) {
 		}
 	}
 
-	createFeed(feed, dlang.DLANG, true, c)
+	createFeed(feed, config.DLANG, true, c)
 }
 
 func FeedMorningLesson(c *gin.Context) {
 	var err error
-	var dlang Dlang
-	if c.Bind(&dlang) != nil {
-		return
-	}
-	if dlang.DLANG == "" {
-		dlang = Dlang{DLANG: "ENG", Lang: consts.LANG_ENGLISH}
-	} else {
-		dlang.Lang = consts.CODE2LANG[dlang.DLANG]
-		if dlang.Lang == "" {
-			dlang = Dlang{DLANG: "ENG", Lang: consts.LANG_ENGLISH}
-		}
-	}
-	t := T[dlang.DLANG]
+	var config feedConfig
+	(&config).getConfig(c)
+	t := T[config.DLANG]
 
 	feed := &feeds.Feed{
 		Title:       "Kabbalah Media Morning Lesson",
-		Link:        getHref("/feeds/morning_lesson.rss?DLANG="+dlang.DLANG, c),
+		Link:        getHref("/feeds/morning_lesson.rss?DLANG="+config.DLANG, c),
 		Description: "The last lesson from Kabbalamedia Archive",
 		Updated:     time.Now(),
 		Copyright:   copyright,
 	}
 
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	lessonParts, herr := handleLatestLesson(db, BaseRequest{Language: dlang.Lang}, true)
+	lessonParts, herr := handleLatestLesson(db, BaseRequest{Language: config.Lang}, true)
 	if herr != nil {
 		herr.Abort(c)
 	}
@@ -393,13 +523,13 @@ func FeedMorningLesson(c *gin.Context) {
 			NewInternalError(errors.Errorf("Illegal state: unit %s not in file map", cu.ID)).Abort(c)
 			return
 		}
-		video := showAsset(dlang.Lang, consts.MEDIA_MP4, files, cu.Duration, t.Video+" mp4")
-		audio := showAsset(dlang.Lang, consts.MEDIA_MP3, files, cu.Duration, t.Audio+" mp3")
+		video := showAsset(config.Lang, consts.MEDIA_MP4, files, cu.Duration, t.Video+" mp4")
+		audio := showAsset(config.Lang, consts.MEDIA_MP3, files, cu.Duration, t.Audio+" mp3")
 
 		listen += "<div class='title'>" + cu.Name + "</div>" + video + audio
 		download += "<div class='title'>" + cu.Name + "</div>" + video + audio
 	}
-	link := "https://archive.kbb1.com/ru/lessons/cu/" + lessonParts.ID
+	link := "https://archive.kbb1.com/ru/lessonsT/cu/" + lessonParts.ID
 	feed.Items = []*feeds.Item{
 		{
 			Title:       t.LessonFrom + " " + lessonParts.FilmDate.Format("02.01.2006"),
@@ -410,7 +540,7 @@ func FeedMorningLesson(c *gin.Context) {
 		},
 	}
 
-	createFeed(feed, dlang.DLANG, false, c)
+	createFeed(feed, config.DLANG, false, c)
 }
 
 // Script accepts two GET parameters:
@@ -418,21 +548,10 @@ func FeedMorningLesson(c *gin.Context) {
 // - DLANG - 3-letter language abbreviation. This is used to select container description only.
 //           Default: ENG
 func FeedRssVideo(c *gin.Context) {
-	//var err error
-	var dlang Dlang
-	if c.Bind(&dlang) != nil {
-		return
-	}
-	if dlang.DLANG == "" {
-		dlang = Dlang{DLANG: "ENG", Lang: consts.LANG_ENGLISH}
-	} else {
-		dlang.Lang = consts.CODE2LANG[dlang.DLANG]
-		if dlang.Lang == "" {
-			dlang = Dlang{DLANG: "ENG", Lang: consts.LANG_ENGLISH}
-		}
-	}
-	if dlang.DAYS < 1 || dlang.DAYS > 31 {
-		dlang.DAYS = 1
+	var config feedConfig
+	(&config).getConfig(c)
+	if config.DAYS < 1 || config.DAYS > 31 {
+		config.DAYS = 1
 	}
 
 	//t := T[dlang.DLANG]
@@ -461,21 +580,12 @@ func FeedRssVideo(c *gin.Context) {
 
 func FeedRssPhp(c *gin.Context) {
 	//var err error
-	var dlang Dlang
-	if c.Bind(&dlang) != nil {
-		return
-	}
-	if dlang.DLANG != "ENG" && dlang.Lang != "HEB" && dlang.Lang != "RUS" {
-		dlang = Dlang{DLANG: "ENG", Lang: consts.LANG_ENGLISH}
-	}
-
-	dlang.Lang = consts.CODE2LANG[dlang.DLANG]
-
-	//t := T[dlang.DLANG]
+	var config feedConfig
+	(&config).getConfig(c)
 
 	feed := &feeds.Feed{
 		Title:       "Bnei-Baruch Kabbalahmedia MP3 Podcast",
-		Link:        getHref("/rss.php?DLANG="+dlang.DLANG, c),
+		Link:        getHref("/rss.php?DLANG="+config.DLANG, c),
 		Description: "Here you will find all the latest Kabbalah articles, videos, audio, news, features, Bnei Baruch website updates and content additions.",
 		Updated:     time.Now(),
 		Copyright:   copyright,
@@ -486,7 +596,7 @@ func FeedRssPhp(c *gin.Context) {
 	cur := ContentUnitsRequest{
 		ListRequest: ListRequest{
 			BaseRequest: BaseRequest{
-				Language: dlang.Lang,
+				Language: config.Lang,
 			},
 			StartIndex: 1,
 			StopIndex:  20,
@@ -552,7 +662,7 @@ func FeedRssPhp(c *gin.Context) {
 		}
 	}
 
-	createFeed(feed, dlang.DLANG, false, c)
+	createFeed(feed, config.DLANG, false, c)
 }
 
 func showAsset(language string, mimeType string, files []*mdbmodels.File, duration float64, name string) (string) {
@@ -603,4 +713,20 @@ func convertDuration(duration float64) string {
 
 func getHref(href string, c *gin.Context) string {
 	return utils.ResolveScheme(c) + "://" + utils.ResolveHost(c) + href
+}
+
+func (config *feedConfig) getConfig(c *gin.Context) {
+	if c.Bind(config) != nil {
+		return
+	}
+	if config.DLANG == "" {
+		config.DLANG = "ENG"
+		config.Lang = consts.LANG_ENGLISH
+	} else {
+		config.Lang = consts.CODE2LANG[config.DLANG]
+		if config.Lang == "" {
+			config.DLANG = "ENG"
+			config.Lang = consts.LANG_ENGLISH
+		}
+	}
 }
