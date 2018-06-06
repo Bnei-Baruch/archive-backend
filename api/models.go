@@ -19,6 +19,7 @@ type ListRequest struct {
 	StartIndex int    `json:"start_index" form:"start_index" binding:"omitempty,min=1"`
 	StopIndex  int    `json:"stop_index" form:"stop_index" binding:"omitempty,min=1"`
 	OrderBy    string `json:"order_by" form:"order_by" binding:"omitempty"`
+	GroupBy    string `json:"-"`
 }
 
 type ListResponse struct {
@@ -86,6 +87,10 @@ type PublishersFilter struct {
 	Publishers []string `json:"publishers" form:"publisher" binding:"omitempty,dive,len=8"`
 }
 
+type KmediaIDsFilter struct {
+	IDs []string `json:"kmedia_ids" form:"kmedia_id" binding:"omitempty"`
+}
+
 type CollectionsRequest struct {
 	ListRequest
 	IDsFilter
@@ -110,6 +115,7 @@ type ContentUnitsRequest struct {
 	GenresProgramsFilter
 	CollectionsFilter
 	PublishersFilter
+	KmediaIDsFilter
 }
 
 type ContentUnitsResponse struct {
@@ -145,6 +151,17 @@ type HomeResponse struct {
 	Banner             *Banner        `json:"banner"`
 }
 
+type TagsDashboardResponse struct {
+	PromotedContentUnits []*ContentUnit `json:"promoted_units"`
+	LatestContentUnits   []*ContentUnit `json:"latest_units"`
+}
+
+type StatsCUClassResponse struct {
+	Sources map[string]int64 `json:"sources"`
+	Tags    map[string]int64 `json:"tags"`
+	Persons map[string]int64 `json:"persons"`
+}
+
 func NewCollectionsResponse() *CollectionsResponse {
 	return &CollectionsResponse{Collections: make([]*Collection, 0)}
 }
@@ -155,6 +172,21 @@ func NewContentUnitsResponse() *ContentUnitsResponse {
 
 func NewPublishersResponse() *PublishersResponse {
 	return &PublishersResponse{Publishers: make([]*Publisher, 0)}
+}
+
+func NewTagsDashboardResponse() *TagsDashboardResponse {
+	return &TagsDashboardResponse{
+		PromotedContentUnits: make([]*ContentUnit, 0),
+		LatestContentUnits:   make([]*ContentUnit, 0),
+	}
+}
+
+func NewStatsCUClassResponse() *StatsCUClassResponse {
+	return &StatsCUClassResponse{
+		Sources: make(map[string]int64),
+		Tags:    make(map[string]int64),
+		Persons: make(map[string]int64),
+	}
 }
 
 type Collection struct {
@@ -171,6 +203,8 @@ type Collection struct {
 	Genres          []string       `json:"genres,omitempty"`
 	DefaultLanguage string         `json:"default_language,omitempty"`
 	HolidayID       string         `json:"holiday_id,omitempty"`
+	SourceID        string         `json:"source_id,omitempty"`
+	Number          int            `json:"number,omitempty"`
 	ContentUnits    []*ContentUnit `json:"content_units,omitempty"`
 }
 
@@ -193,14 +227,15 @@ type ContentUnit struct {
 }
 
 type File struct {
-	ID       string  `json:"id"`
-	Name     string  `json:"name"`
-	Size     int64   `json:"size"`
-	Duration float64 `json:"duration,omitempty"`
-	Language string  `json:"language,omitempty"`
-	MimeType string  `json:"mimetype,omitempty"`
-	Type     string  `json:"type,omitempty"`
-	SubType  string  `json:"subtype,omitempty"`
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Size      int64   `json:"size"`
+	Duration  float64 `json:"duration,omitempty"`
+	Language  string  `json:"language,omitempty"`
+	MimeType  string  `json:"mimetype,omitempty"`
+	Type      string  `json:"type,omitempty"`
+	SubType   string  `json:"subtype,omitempty"`
+	VideoSize string  `json:"video_size,omitempty"`
 }
 
 type Source struct {
@@ -250,4 +285,10 @@ type Banner struct {
 	SubHeader string `json:"sub_header"`
 	Url       string `json:"url"`
 	Image     string `json:"image"`
+}
+
+type SemiQuasiData struct {
+	Authors    []*Author    `json:"sources"`
+	Tags       []*Tag       `json:"tags"`
+	Publishers []*Publisher `json:"publishers"`
 }

@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"gopkg.in/gin-gonic/gin.v1"
-	"github.com/volatiletech/sqlboiler/queries/qm"
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 
 	"github.com/Bnei-Baruch/archive-backend/feeds"
 	"github.com/Bnei-Baruch/archive-backend/utils"
@@ -246,7 +246,7 @@ func FeedWSXML(c *gin.Context) {
 	dateTo := config.DT
 
 	if catalogId == 0 {
-		c.String(http.StatusOK, "<lessonsT />")
+		c.String(http.StatusOK, "<lessons />")
 		return
 	}
 	if len(dateTo) == 0 {
@@ -282,7 +282,7 @@ func FeedWSXML(c *gin.Context) {
 		herr.Abort(c)
 	}
 	if len(resp.Collections) == 0 {
-		c.String(http.StatusOK, "<lessonsT />")
+		c.String(http.StatusOK, "<lessons />")
 		return
 	}
 
@@ -353,7 +353,7 @@ func FeedWSXML(c *gin.Context) {
 		lessons.Lesson[i] = lessonT{
 			Title:       unit.Name,
 			Description: unit.Description,
-			Link:        getHref("/"+config.Lang+"/lessonsT/cu/"+string(unit.ID), c),
+			Link:        getHref("/"+config.Lang+"/lessons/cu/"+string(unit.ID), c),
 			Date:        t.Format(time.RFC1123Z),
 			Language:    consts.LANG2CODE[unit.OriginalLanguage],
 			Lecturer:    "",
@@ -372,7 +372,7 @@ func FeedWSXML(c *gin.Context) {
 				Type:     f.Type,
 				Language: language,
 				Original: original,
-				Path:     "https://cdn.kabbalahmedia.info/" + f.UID,
+				Path:     fmt.Sprintf("%s%s", consts.CDN, f.UID),
 				Size:     size,
 				Length:   convertDuration(unit.Duration),
 				Title:    language + " " + size,
@@ -453,7 +453,7 @@ func FeedPodcast(c *gin.Context) {
 			}
 
 			// TODO: change title and description
-			url := "https://cdn.kabbalahmedia.info/" + file.UID
+			url := fmt.Sprintf("%s%s", consts.CDN,file.UID)
 			feed.Items = append(feed.Items, &feeds.Item{
 				Author: "info@kab.co.il",
 				Title:  cu.Name,
@@ -529,7 +529,7 @@ func FeedMorningLesson(c *gin.Context) {
 		listen += "<div class='title'>" + cu.Name + "</div>" + video + audio
 		download += "<div class='title'>" + cu.Name + "</div>" + video + audio
 	}
-	link := "https://archive.kbb1.com/ru/lessonsT/cu/" + lessonParts.ID
+	link := "https://archive.kbb1.com/ru/lessons/cu/" + lessonParts.ID
 	feed.Items = []*feeds.Item{
 		{
 			Title:       t.LessonFrom + " " + lessonParts.FilmDate.Format("02.01.2006"),
@@ -541,41 +541,6 @@ func FeedMorningLesson(c *gin.Context) {
 	}
 
 	createFeed(feed, config.DLANG, false, c)
-}
-
-// Script accepts two GET parameters:
-// - DAYS - number of 24-hour periods (1..31 inclusive, default: 1). I.e. 1 means last 24 hours, 2 - last 48 hours etc.
-// - DLANG - 3-letter language abbreviation. This is used to select container description only.
-//           Default: ENG
-func FeedRssVideo(c *gin.Context) {
-	var config feedConfig
-	(&config).getConfig(c)
-	if config.DAYS < 1 || config.DAYS > 31 {
-		config.DAYS = 1
-	}
-
-	//t := T[dlang.DLANG]
-	//
-	//feed := &feeds.Feed{
-	//	Title:       "Kabbalah Media Morning Lesson",
-	//	Link:        &feeds.Link{Href: getHref("/feeds/rss_video.rss?DAYS=1&DLANG="+dlang.DLANG, c)},
-	//	Description: "The last lesson from Kabbalamedia Archive",
-	//	Updated:     time.Now(),
-	//	Copyright:   copyright,
-	//}
-	//
-	//db := c.MustGet("MDB_DB").(*sql.DB)
-	//feed.Items = []*feeds.Item{
-	//	{
-	//		Title:       t.LessonFrom + " " + lessonParts.FilmDate.Format("02.01.2006"),
-	//		Id:          lessonParts.ID,
-	//		Link:        &feeds.Link{Href: "https://archive.kbb1.com/ru/lessons/cu/" + lessonParts.ID},
-	//		Description: &feeds.Description{Text: listen + download},
-	//		Created:     lessonParts.FilmDate.Time,
-	//	},
-	//}
-
-	//createFeed(feed, dlang.DLANG, c)
 }
 
 func FeedRssPhp(c *gin.Context) {
@@ -644,7 +609,7 @@ func FeedRssPhp(c *gin.Context) {
 				continue
 			}
 
-			url := "https://cdn.kabbalahmedia.info/" + file.UID
+			url := fmt.Sprintf("%s%s", consts.CDN,file.UID)
 			feed.Items = append(feed.Items, &feeds.Item{
 				Title: cu.Name,
 				Description: &feeds.Description{
@@ -676,7 +641,7 @@ func showAsset(language string, mimeType string, files []*mdbmodels.File, durati
 				title = fmt.Sprintf("mp4&nbsp;|&nbsp;%.2fMb&nbsp;|&nbsp;%s", size, convertDuration(duration))
 			}
 			return fmt.Sprintf(
-				`<a href="%s/%s" title="%s">%s</a>`,
+				`<a href="%s%s" title="%s">%s</a>`,
 				consts.CDN, file.UID, title, name)
 		}
 	}
@@ -695,7 +660,7 @@ func buildHtmlFromFile(language string, mimeType string, files []*mdbmodels.File
 				title = fmt.Sprintf("mp4&nbsp;|&nbsp;%.2fMb&nbsp;|&nbsp;%s", size, convertDuration(duration))
 			}
 			return fmt.Sprintf(
-				`<a href="%s/%s" title="%s">Открыть</a> | <a href="%s/%s" title="%s">Скачать</a>`,
+				`<a href="%s%s" title="%s">Открыть</a> | <a href="%s%s" title="%s">Скачать</a>`,
 				consts.CDN, file.UID, title, consts.CDN, file.UID, title)
 		}
 	}

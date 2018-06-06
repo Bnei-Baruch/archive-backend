@@ -16,6 +16,7 @@
 #   sudo bin/elasticsearch-plugin install analysis-icu
 
 import json
+import os
 
 # List of all languages
 ENGLISH = "en"
@@ -129,36 +130,56 @@ def IsCyrillic(lang, something):
   return something if lang in LANG_GROUPS[CYRILLIC] else None
 
 
-UNITS_TEMPLATE = {
-  "settings": {
-    "index": {
-      "analysis": {
-        "analyzer": {
-          "phonetic_analyzer": {
-            "tokenizer": "standard",
-            "filter": [
-              "standard",
-              "lowercase",
-              lambda lang: IsCyrillic(lang, 'icu_transliterate'),
-              "custom_phonetic",
-            ],
-          },
+SETTINGS = {
+  "index": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "analyzer": {
+        "phonetic_analyzer": {
+          "tokenizer": "standard",
+          "char_filter": ["quotes"],
+          "filter": [
+            "standard",
+            "lowercase",
+            lambda lang: IsCyrillic(lang, 'icu_transliterate'),
+            "custom_phonetic",
+          ],
         },
-        "filter": {
-          "icu_transliterate": lambda lang: IsCyrillic(lang, {
-            "type": "icu_transform",
-            "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
-          }),
-          "custom_phonetic": {
-            "type": "phonetic",
-            "encoder": "beider_morse",
-            "replace": True,
-            "languageset": BeiderMorseLanguageset,
-          },
+      },
+      "char_filter": {
+        "quotes": {
+          "type": "mapping",
+          "mappings": [
+            "\\u0091=>\\u0027",
+            "\\u0092=>\\u0027",
+            "\\u2018=>\\u0027",
+            "\\u2019=>\\u0027",
+            "\\u201B=>\\u0027",
+            "\\u0022=>",
+            "\\u201C=>",
+            "\\u201D=>",
+          ],
+        },
+      },
+      "filter": {
+        "icu_transliterate": lambda lang: IsCyrillic(lang, {
+          "type": "icu_transform",
+          "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
+        }),
+        "custom_phonetic": {
+          "type": "phonetic",
+          "encoder": "beider_morse",
+          "replace": True,
+          "languageset": BeiderMorseLanguageset,
         },
       },
     },
   },
+}
+
+UNITS_TEMPLATE = {
+  "settings": SETTINGS,
   "mappings": {
     "content_units": {
       "_all": {
@@ -230,7 +251,7 @@ UNITS_TEMPLATE = {
             "analyzed": {
               "type": "text",
               "analyzer": lambda lang: StandardAnalyzer[lang],
-            }
+            },
           },
         },
       },
@@ -239,6 +260,7 @@ UNITS_TEMPLATE = {
 }
 
 CLASSIFICATIONS_TEMPLATE = {
+  "settings": SETTINGS,
   "mappings": {
     "tags": {
       "_all": {
@@ -253,7 +275,13 @@ CLASSIFICATIONS_TEMPLATE = {
         },
         "name": {
           "type": "text",
-          "analyzer": lambda lang: StandardAnalyzer[lang],
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+          },
         },
         "name_suggest": {
           "type": "completion",
@@ -280,7 +308,13 @@ CLASSIFICATIONS_TEMPLATE = {
         },
         "name": {
           "type": "text",
-          "analyzer": lambda lang: StandardAnalyzer[lang],
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+          },
         },
         "name_suggest": {
           "type": "completion",
@@ -312,35 +346,7 @@ CLASSIFICATIONS_TEMPLATE = {
 }
 
 COLLECTIONS_TEMPLATE = {
-  "settings": {
-    "index": {
-      "analysis": {
-        "analyzer": {
-          "phonetic_analyzer": {
-            "tokenizer": "standard",
-            "filter": [
-              "standard",
-              "lowercase",
-              lambda lang: IsCyrillic(lang, 'icu_transliterate'),
-              "custom_phonetic",
-            ],
-          },
-        },
-        "filter": {
-          "icu_transliterate": lambda lang: IsCyrillic(lang, {
-            "type": "icu_transform",
-            "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
-          }),
-          "custom_phonetic": {
-            "type": "phonetic",
-            "encoder": "beider_morse",
-            "replace": True,
-            "languageset": BeiderMorseLanguageset,
-          },
-        },
-      },
-    },
-  },
+  "settings": SETTINGS,
   "mappings": {
     "collections": {
       "_all": {
@@ -392,6 +398,144 @@ COLLECTIONS_TEMPLATE = {
   },
 }
 
+SOURCES_TEMPLATE = {
+  "settings": SETTINGS,
+  "mappings": {
+    "sources": {
+      "_all": {
+        "enabled": False,
+      },
+      "properties": {
+        "mdb_uid": {
+          "type": "keyword",
+        },
+        "name": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+          },
+        },
+        "description": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            },
+          },
+        },
+        "authors": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            }
+          },
+        },
+        "path_names": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            }
+          },
+        },
+        "full_name": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            }
+          },
+        },
+        "content": {
+          "type": "text",
+          "analyzer": "phonetic_analyzer",
+          "fields": {
+            "analyzed": {
+              "type": "text",
+              "analyzer": lambda lang: StandardAnalyzer[lang],
+            }
+          },
+        },
+        "sources": {
+          "type": "keyword",
+        }
+      },
+    },
+  },
+}
+
+
+SEARCH_LOGS_TEMPLATE = {
+    "mappings": {
+        "search_logs": {
+            "properties": {
+                "search_id": {
+                    "type": "keyword",
+                },
+                "created": {
+                    "type": "date",
+                },
+                "query": {
+                    "type": "object",
+                },
+                "from": {
+                    "type": "integer",
+                },
+                "size": {
+                    "type": "integer",
+                },
+                "results": {
+                    "type": "object",
+                },
+                "sort_by": {
+                    "type": "keyword",
+                },
+                "error": {
+                    "type": "object",
+                },
+            },
+        },
+        "search_clicks": {
+            "properties": {
+                "created": {
+                    "type": "date",
+                },
+                "mdb_uid": {
+                    "type": "keyword",
+                },
+                "index": {
+                    "type": "keyword",
+                },
+                "type": {
+                    "type": "keyword",
+                },
+                "rank": {
+                    "type": "integer",
+                },
+                "search_id": {
+                    "type": "keyword",
+                },
+            },
+            "_parent": {
+                "type": "search_logs",
+            }
+        }
+    },
+}
+
 def Resolve(lang, value):
   if isinstance(value, dict):
     l = [(k, Resolve(lang, v)) for (k, v) in value.iteritems()]
@@ -405,9 +549,14 @@ def Resolve(lang, value):
 
 
 for lang in LANG_GROUPS[ALL]:
-  with open('./data/es/mappings/units/units-%s.json' % lang, 'w') as f:
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'units', 'units-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, UNITS_TEMPLATE), f, indent=4)
-  with open('./data/es/mappings/classifications/classifications-%s.json' % lang, 'w') as f:
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'classifications', 'classifications-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, CLASSIFICATIONS_TEMPLATE), f, indent=4)
-  with open('./data/es/mappings/collections/collections-%s.json' % lang, 'w') as f:
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'collections', 'collections-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, COLLECTIONS_TEMPLATE), f, indent=4)
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'sources', 'sources-%s.json' % lang), 'w') as f:
+    json.dump(Resolve(lang, SOURCES_TEMPLATE), f, indent=4)
+# Without languages
+with open(os.path.join('.', 'data', 'es', 'mappings', 'search_logs.json'), 'w') as f:
+  json.dump(Resolve('xx', SEARCH_LOGS_TEMPLATE), f, indent=4)

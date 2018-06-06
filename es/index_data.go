@@ -4,15 +4,16 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"github.com/volatiletech/sqlboiler/queries"
 
-	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
 )
 
 type IndexData struct {
+	DB           *sql.DB
 	Sources      map[string][]string
 	Tags         map[string][]string
 	Persons      map[string][]string
@@ -20,7 +21,13 @@ type IndexData struct {
 	Transcripts  map[string]map[string][]string
 }
 
-func (indexData *IndexData) Load(sqlScope string) error {
+func MakeIndexData(db *sql.DB, sqlScope string) (*IndexData, error) {
+	indexData := &IndexData{DB: db}
+	err := indexData.load(sqlScope)
+	return indexData, err
+}
+
+func (indexData *IndexData) load(sqlScope string) error {
 	var err error
 
 	indexData.Sources, err = indexData.loadSources(sqlScope)
@@ -52,7 +59,7 @@ func (indexData *IndexData) Load(sqlScope string) error {
 }
 
 func (indexData *IndexData) loadSources(sqlScope string) (map[string][]string, error) {
-	rows, err := queries.Raw(mdb.DB, fmt.Sprintf(`
+	rows, err := queries.Raw(indexData.DB, fmt.Sprintf(`
 WITH RECURSIVE rec_sources AS (
   SELECT
     s.id,
@@ -71,7 +78,7 @@ WITH RECURSIVE rec_sources AS (
 )
 SELECT
   cu.uid,
-  array_agg(DISTINCT item)
+  array_agg(DISTINCT item) FILTER (WHERE item IS NOT NULL AND item <> '')
 FROM content_units_sources cus
     INNER JOIN rec_sources AS rs ON cus.source_id = rs.id
     INNER JOIN content_units AS cu ON cus.content_unit_id = cu.id
@@ -88,7 +95,7 @@ GROUP BY cu.uid;`, sqlScope)).Query()
 }
 
 func (indexData *IndexData) loadTags(sqlScope string) (map[string][]string, error) {
-	rows, err := queries.Raw(mdb.DB, fmt.Sprintf(`
+	rows, err := queries.Raw(indexData.DB, fmt.Sprintf(`
 WITH RECURSIVE rec_tags AS (
   SELECT
     t.id,
@@ -122,7 +129,7 @@ GROUP BY cu.uid;`, sqlScope)).Query()
 }
 
 func (indexData *IndexData) loadPersons(sqlScope string) (map[string][]string, error) {
-	rows, err := queries.Raw(mdb.DB, fmt.Sprintf(`
+	rows, err := queries.Raw(indexData.DB, fmt.Sprintf(`
 SELECT
   cu.uid,
   array_agg(p.uid)
@@ -141,7 +148,7 @@ GROUP BY cu.uid;`, sqlScope)).Query()
 }
 
 func (indexData *IndexData) loadTranslations(sqlScope string) (map[string][][]string, error) {
-	rows, err := queries.Raw(mdb.DB, fmt.Sprintf(`
+	rows, err := queries.Raw(indexData.DB, fmt.Sprintf(`
 SELECT
   cu.uid,
   array_agg(DISTINCT files.uid),
@@ -199,8 +206,8 @@ func (indexData *IndexData) rowsToIdToUIDsAndValues(rows *sql.Rows) (map[string]
 }
 
 func (indexData *IndexData) loadTranscripts(sqlScope string) (map[string]map[string][]string, error) {
-    kmID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID
-	rows, err := queries.Raw(mdb.DB, fmt.Sprintf(`
+	kmID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID
+	rows, err := queries.Raw(indexData.DB, fmt.Sprintf(`
 SELECT
     f.uid,
     f.name,

@@ -2,17 +2,85 @@ package es
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
-	"reflect"
+	"os"
+	"runtime"
 	"strings"
 
-	"github.com/volatiletech/sqlboiler/queries/qm"
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
+	"github.com/pkg/errors"
+	"github.com/spf13/viper"
+	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
+
+var (
+	sourcesFolder string
+	sofficeBin    string
+	docFolder     string
+	parseDocsBin  string
+	cdnUrl        string
+	pythonPath    string
+)
+
+func DocFolder() (string, error) {
+	return InitConfigFolder("elasticsearch.docx-folder", &docFolder)
+}
+
+func SourcesFolder() (string, error) {
+	return InitConfigFolder("elasticsearch.sources-folder", &sourcesFolder)
+}
+
+func InitConfigFolder(configKey string, value *string) (string, error) {
+	if *value != "" {
+		return *value, nil
+	}
+
+	path := viper.GetString(configKey)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			err := os.MkdirAll(docFolder, 0777)
+			if err != nil {
+				*value = path
+			}
+			return path, err
+		} else {
+			return path, err
+		}
+	}
+	*value = path
+	return *value, nil
+}
+
+func IsWindows() bool {
+	return runtime.GOOS == "windows"
+}
+
+func InitVars() {
+	pythonPath = viper.GetString("elasticsearch.python-path")
+	sofficeBin = viper.GetString("elasticsearch.soffice-bin")
+	if sofficeBin == "" {
+		panic("Soffice binary should be set in config.")
+	}
+	if _, err := os.Stat(sofficeBin); os.IsNotExist(err) {
+		panic("Soffice binary not found.")
+	}
+	parseDocsBin = viper.GetString("elasticsearch.parse-docs-bin")
+	if parseDocsBin == "" {
+		panic("parse_docs.py binary should be set in config.")
+	}
+	if _, err := os.Stat(parseDocsBin); os.IsNotExist(err) {
+		panic("parse_docs.py not found.")
+	}
+	cdnUrl = viper.GetString("elasticsearch.cdn-url")
+	if cdnUrl == "" {
+		panic("cdn url should be set in config.")
+	}
+}
 
 func uidToTypedUID(t string, uid string) string {
 	return fmt.Sprintf("%s:%s", t, uid)
@@ -26,11 +94,24 @@ func uidsToTypedUIDs(t string, uids []string) []string {
 	return ret
 }
 
+func TypedUIDsToUids(t string, typedUIDs []string) ([]string, error) {
+	ret := make([]string, 0)
+	for _, typedUid := range typedUIDs {
+		parts := strings.Split(typedUid, ":")
+		if len(parts) != 2 {
+			return []string{}, errors.New(fmt.Sprintf("Bad typed uid %s expected 'type:value'.", typedUIDs))
+		}
+		if parts[0] == t {
+			ret = append(ret, parts[1])
+		}
+	}
+	return ret, nil
+}
+
 // Scopes - for detection of changes
 
-func contentUnitsScopeByFile(fileUID string) ([]string, error) {
-	units, err := mdbmodels.ContentUnits(mdb.DB,
-		qm.Select("content_units.uid"),
+func contentUnitsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {
+	units, err := mdbmodels.ContentUnits(mdb,
 		qm.InnerJoin("files AS f on f.content_unit_id = content_units.id"),
 		qm.Where("f.uid = ?", fileUID)).All()
 	if err != nil {
@@ -43,13 +124,24 @@ func contentUnitsScopeByFile(fileUID string) ([]string, error) {
 	return uids, nil
 }
 
-func collectionsScopeByFile(fileUID string) ([]string, error) {
-	panic("collectionsScopeByFile not implemented.")
-	return []string{}, nil
+func CollectionsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {
+	collections, err := mdbmodels.Collections(mdb,
+		qm.InnerJoin("collections_content_units AS ccu ON ccu.collection_id = collections.id"),
+		qm.InnerJoin("content_units AS cu ON ccu.content_unit_id = cu.id"),
+		qm.InnerJoin("files AS f on f.content_unit_id = cu.id"),
+		qm.Where("f.uid = ?", fileUID)).All()
+	if err != nil {
+		return nil, err
+	}
+	uids := make([]string, len(collections))
+	for i, collection := range collections {
+		uids[i] = collection.UID
+	}
+	return uids, nil
 }
 
-func contentUnitsScopeByCollection(cUID string) ([]string, error) {
-	units, err := mdbmodels.ContentUnits(mdb.DB,
+func contentUnitsScopeByCollection(mdb *sql.DB, cUID string) ([]string, error) {
+	units, err := mdbmodels.ContentUnits(mdb,
 		qm.InnerJoin("collections_content_units AS ccu ON ccu.content_unit_id = content_units.id"),
 		qm.InnerJoin("collections AS c ON ccu.collection_id = c.id"),
 		qm.Where("c.uid = ?", cUID)).All()
@@ -63,36 +155,41 @@ func contentUnitsScopeByCollection(cUID string) ([]string, error) {
 	return uids, nil
 }
 
-func collectionsScopeByContentUnit(cuUID string) ([]string, error) {
-	panic("collectionsScopeByContentUnit not implemented.")
-	return []string{}, nil
+func CollectionsScopeByContentUnit(mdb *sql.DB, cuUID string) ([]string, error) {
+	collections, err := mdbmodels.Collections(mdb,
+		qm.InnerJoin("collections_content_units AS ccu ON ccu.collection_id = collections.id"),
+		qm.InnerJoin("content_units AS cu ON ccu.content_unit_id = cu.id"),
+		qm.Where("cu.uid = ?", cuUID)).All()
+	if err != nil {
+		return nil, err
+	}
+	uids := make([]string, len(collections))
+	for i, collection := range collections {
+		uids[i] = collection.UID
+	}
+	return uids, nil
 }
 
-func is(slice interface{}) []interface{} {
-	s := reflect.ValueOf(slice)
-	if s.Kind() != reflect.Slice {
-		panic("InterfaceSlice() given a non-slice type")
+func contentUnitsScopeBySource(mdb *sql.DB, sourceUID string) ([]string, error) {
+	sources, err := mdbmodels.ContentUnits(mdb,
+		qm.InnerJoin("content_units_sources AS cus ON cus.content_unit_id = id"),
+		qm.InnerJoin("sources AS s ON s.id = cus.source_id"),
+		qm.Where("s.uid = ?", sourceUID)).All()
+	if err != nil {
+		return nil, err
 	}
-	ret := make([]interface{}, s.Len())
-	for i := 0; i < s.Len(); i++ {
-		ret[i] = s.Index(i).Interface()
+	uids := make([]string, len(sources))
+	for i, sources := range sources {
+		uids[i] = sources.UID
 	}
-	return ret
-}
-
-func Pprint(l interface{}) string {
-	var s []string
-	for _, i := range is(l) {
-		s = append(s, fmt.Sprintf("%+v", i))
-	}
-	return strings.Join(s, "\n\t")
+	return uids, nil
 }
 
 // DEBUG FUNCTIONS
 
-func dumpDB(title string) error {
-	fmt.Printf("\n\n ------------------- %s ------------------- \n\n", title)
-	units, err := mdbmodels.ContentUnits(mdb.DB).All()
+func DumpDB(mdb *sql.DB, title string) error {
+	fmt.Printf("\n\n ------------------- %s DUMP DB ------------------- \n\n", title)
+	units, err := mdbmodels.ContentUnits(mdb).All()
 	if err != nil {
 		return err
 	}
@@ -101,7 +198,7 @@ func dumpDB(title string) error {
 		fmt.Printf("%d: %+v\n", i, unit)
 	}
 
-	i18ns, err := mdbmodels.ContentUnitI18ns(mdb.DB).All()
+	i18ns, err := mdbmodels.ContentUnitI18ns(mdb).All()
 	if err != nil {
 		return err
 	}
@@ -110,7 +207,7 @@ func dumpDB(title string) error {
 		fmt.Printf("%d: %+v\n", i, i18n)
 	}
 
-	collections, err := mdbmodels.Collections(mdb.DB).All()
+	collections, err := mdbmodels.Collections(mdb).All()
 	if err != nil {
 		return err
 	}
@@ -119,7 +216,16 @@ func dumpDB(title string) error {
 		fmt.Printf("%d: %+v\n", i, c)
 	}
 
-	ccus, err := mdbmodels.CollectionsContentUnits(mdb.DB).All()
+	ci18ns, err := mdbmodels.CollectionI18ns(mdb).All()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n\nCOLLECTION_I18N\n-------------\n\n")
+	for i, ci18n := range ci18ns {
+		fmt.Printf("%d: %+v\n", i, ci18n)
+	}
+
+	ccus, err := mdbmodels.CollectionsContentUnits(mdb).All()
 	if err != nil {
 		return err
 	}
@@ -128,19 +234,28 @@ func dumpDB(title string) error {
 		fmt.Printf("%d: %+v\n", i, ccu)
 	}
 
-	fmt.Printf("\n\n ------------------- END OF %s ------------------- \n\n", title)
+	files, err := mdbmodels.Files(mdb).All()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n\nFILES\n-------------\n\n")
+	for i, file := range files {
+		fmt.Printf("%d: %+v\n", i, file)
+	}
+
+	fmt.Printf("\n\n ------------------- END OF %s DUMP DB ------------------- \n\n", title)
 	return nil
 }
 
-func dumpIndexes(title string) error {
-	fmt.Printf("\n\n ------------------- %s ------------------- \n\n", title)
-	indexName := IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_ENGLISH)
+func DumpIndexes(esc *elastic.Client, title string, indexType string) error {
+	fmt.Printf("\n\n ------------------- %s DUMP INDEXES ------------------- \n\n", title)
+	indexName := IndexName("test", indexType, consts.LANG_ENGLISH)
 	fmt.Printf("\n\n\nINDEX %s\n\n", indexName)
-	indexer := MakeIndexer("test", []string{consts.ES_UNITS_INDEX})
+	indexer := MakeIndexer("test", []string{indexType}, nil, esc)
 	if err := indexer.RefreshAll(); err != nil {
 		return err
 	}
-	res, err := mdb.ESC.Search().Index(indexName).Do(context.TODO())
+	res, err := esc.Search().Index(indexName).Do(context.TODO())
 	if err != nil {
 		return err
 	}
@@ -149,6 +264,6 @@ func dumpIndexes(title string) error {
 		json.Unmarshal(*hit.Source, &cu)
 		fmt.Printf("%d: %+v\n", i, cu)
 	}
-	fmt.Printf("\n\n ------------------- END OF %s ------------------- \n\n", title)
+	fmt.Printf("\n\n ------------------- END OF %s DUMP INDEXES ------------------- \n\n", title)
 	return err
 }

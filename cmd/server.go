@@ -9,7 +9,7 @@ import (
 	"gopkg.in/gin-gonic/gin.v1"
 
 	"github.com/Bnei-Baruch/archive-backend/api"
-	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/Bnei-Baruch/archive-backend/version"
 )
@@ -20,14 +20,18 @@ var serverCmd = &cobra.Command{
 	Run:   serverFn,
 }
 
+var bindAddress string
+
 func init() {
+	serverCmd.PersistentFlags().StringVar(&bindAddress, "bind_address", "", "Bind address for server.")
+	viper.BindPFlag("server.bind-address", serverCmd.PersistentFlags().Lookup("bind_address"))
 	RootCmd.AddCommand(serverCmd)
 }
 
 func serverFn(cmd *cobra.Command, args []string) {
 	log.Infof("Starting Archive backend server version %s", version.Version)
-	mdb.Init()
-	defer mdb.Shutdown()
+	common.Init()
+	defer common.Shutdown()
 
 	// Setup Rollbar
 	rollbar.Token = viper.GetString("server.rollbar-token")
@@ -38,7 +42,8 @@ func serverFn(cmd *cobra.Command, args []string) {
 	gin.SetMode(viper.GetString("server.mode"))
 	router := gin.New()
 	router.Use(
-		utils.DataStoresMiddleware(mdb.DB, mdb.ESC),
+		utils.LoggerMiddleware(),
+		utils.DataStoresMiddleware(common.DB, common.ESC, common.LOGGER, common.CACHE),
 		utils.ErrorHandlingMiddleware(),
 		cors.Default(),
 		utils.RecoveryMiddleware())

@@ -1,11 +1,24 @@
 package es
 
 import (
+	"gopkg.in/olivere/elastic.v5"
+
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type EffectiveDate struct {
 	EffectiveDate *utils.Date `json:"effective_date"`
+}
+
+type ClassificationIntent struct {
+	MDB_UID        string                    `json:"mdb_uid"`
+	Name           string                    `json:"name"`
+	ContentType    string                    `json:"content_type"`
+	Exist          bool                      `json:"exist"`
+	Score          *float64                  `json:"score,omitempty"`
+	Explanation    elastic.SearchExplanation `json:"explanation,omitempty"`
+	MaxScore       *float64                  `json:"max_score,omitempty"`
+	MaxExplanation elastic.SearchExplanation `json:"max_explanation,omitempty"`
 }
 
 type Collection struct {
@@ -27,7 +40,7 @@ type ContentUnit struct {
 	ContentType             string      `json:"content_type"`
 	CollectionsContentTypes []string    `json:"collections_content_types,omitempty"`
 	EffectiveDate           *utils.Date `json:"effective_date,omitempty"`
-	Duration                uint16      `json:"duration,omitempty"`
+	Duration                uint64      `json:"duration,omitempty"`
 	OriginalLanguage        string      `json:"original_language,omitempty"`
 	Translations            []string    `json:"translations,omitempty"`
 	Tags                    []string    `json:"tags,omitempty"`
@@ -40,7 +53,7 @@ type ContentUnit struct {
 type File struct {
 	MDB_UID  string      `json:"mdb_uid"`
 	Name     string      `json:"name"`
-	Size     int64       `json:"size"`
+	Size     uint64      `json:"size"`
 	URL      string      `json:"url"`
 	Secure   int         `json:"secure"`
 	FilmDate *utils.Date `json:"film_date"`
@@ -58,4 +71,15 @@ type Classification struct {
 	Description        string `json:"description,omitempty"`
 	DescriptionSuggest string `json:"description_suggest,omitempty"`
 	Type               string `json:"classification_type"`
+}
+
+type Source struct {
+	MDB_UID     string   `json:"mdb_uid"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Content     string   `json:"content"`
+	Sources     []string `json:"sources"`
+	Authors     []string `json:"authors"`
+	PathNames   []string `json:"path_names"`
+	FullName    []string `json:"full_name"`
 }

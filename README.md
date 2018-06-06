@@ -138,13 +138,30 @@ https://www.python.org/downloads/
     python -m pip install python-docx
     ```
 
-6. Download and install OpenOffice
+6. Download and install LibreOffice (not OpenOffice!)
 
-    https://www.openoffice.org/download/
+    https://www.libreoffice.org/donate/dl/win-x86_64/5.4.5/en-US/LibreOffice_5.4.5_Win_x64.msi
 
-    We need soffice.exe that is located on C:\\Program Files (x86)\\OpenOffice 4\\program
+    Update 'soffice-bin' value with soffice.exe full path in config.toml, [elasticsearch] section:
+    "C://Program Files//LibreOffice 5//program//soffice.exe"
 
-    Update 'soffice-bin' value with soffice.exe location in config.toml, [elasticsearch] section.
+7. Copy to config.toml the required commented-out lines from config.sample.toml that are related to Windows.
+
+8. Updating assets:
+
+    In order to make correct data indexing you should update the ES mapping configuration files (JSON files in /data/es/mappings):
+
+    1. Exec. \es\mappings\make.py with python from the *root path* of the project. For example:
+        ```Shell
+        C:\Users\[USER]\go\src\github.com\Bnei-Baruch\archive-backend>python C:\Users\[USER]\go\src\github.com\Bnei-Baruch\archive-backend\es\mappings\make.py
+        ```
+    2. From the root path of the project, type:
+        ```Shell
+        go-bindata -debug data/...
+        ```
+    3. Edit bindata.go file (located in the root folder) and replace "package main" with "package bindata".
+    4. Move the modified bindata.go file to /bindata folder (delete old bindata.go from /bindata if exist and make sure the bindata.go is not exist any more in the root folder).
+    5. Repeat this steps any time make.py is changed and executed.
 
 ## License
 

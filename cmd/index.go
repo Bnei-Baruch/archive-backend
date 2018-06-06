@@ -1,10 +1,17 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
+	log "github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	"github.com/Bnei-Baruch/archive-backend/bindata"
+	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 )
@@ -33,11 +40,25 @@ var indexCollectionsCmd = &cobra.Command{
 	Run:   indexCollectionsFn,
 }
 
+var indexSourcesCmd = &cobra.Command{
+	Use:   "sources",
+	Short: "Index sources in ES",
+	Run:   indexSourcesFn,
+}
+
+var restartSearchLogsCmd = &cobra.Command{
+	Use:   "restart_search_logs",
+	Short: "Restarts search logs.",
+	Run:   restartSearchLogsFn,
+}
+
 func init() {
 	RootCmd.AddCommand(indexCmd)
 	indexCmd.AddCommand(indexClassificationsCmd)
 	indexCmd.AddCommand(indexUnitsCmd)
 	indexCmd.AddCommand(indexCollectionsCmd)
+	indexCmd.AddCommand(indexSourcesCmd)
+	indexCmd.AddCommand(restartSearchLogsCmd)
 }
 
 func indexFn(cmd *cobra.Command, args []string) {
@@ -45,13 +66,78 @@ func indexFn(cmd *cobra.Command, args []string) {
 }
 
 func indexClassificationsFn(cmd *cobra.Command, args []string) {
-	es.IndexCmd(consts.ES_CLASSIFICATIONS_INDEX)
+	IndexCmd(consts.ES_CLASSIFICATIONS_INDEX)
 }
 
 func indexUnitsFn(cmd *cobra.Command, args []string) {
-	es.IndexCmd(consts.ES_UNITS_INDEX)
+	IndexCmd(consts.ES_UNITS_INDEX)
 }
 
 func indexCollectionsFn(cmd *cobra.Command, args []string) {
-	es.IndexCmd(consts.ES_COLLECTIONS_INDEX)
+	IndexCmd(consts.ES_COLLECTIONS_INDEX)
+}
+
+func indexSourcesFn(cmd *cobra.Command, args []string) {
+	IndexCmd(consts.ES_SOURCES_INDEX)
+}
+
+func IndexCmd(index string) {
+	clock := common.Init()
+	defer common.Shutdown()
+	indexer := es.MakeIndexer("prod", []string{index}, common.DB, common.ESC)
+	err := indexer.ReindexAll()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	log.Info("Success")
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+}
+
+func restartSearchLogsFn(cmd *cobra.Command, args []string) {
+	clock := common.Init()
+	defer common.Shutdown()
+
+	name := "search_logs"
+	exists, err := common.ESC.IndexExists(name).Do(context.TODO())
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	if exists {
+		res, err := common.ESC.DeleteIndex(name).Do(context.TODO())
+		if err != nil {
+			log.Error(errors.Wrap(err, "Delete index"))
+			return
+		}
+		if !res.Acknowledged {
+			log.Error(errors.Errorf("Index deletion wasn't acknowledged: %s", name))
+			return
+		}
+	}
+
+	definition := fmt.Sprintf("data/es/mappings/%s.json", name)
+	// Read mappings and create index
+	mappings, err := bindata.Asset(definition)
+	if err != nil {
+		log.Error(errors.Wrapf(err, "Failed loading mapping %s", definition))
+		return
+	}
+	var bodyJson map[string]interface{}
+	if err = json.Unmarshal(mappings, &bodyJson); err != nil {
+		log.Error(errors.Wrap(err, "json.Unmarshal"))
+		return
+	}
+	// Create index.
+	res, err := common.ESC.CreateIndex(name).BodyJson(bodyJson).Do(context.TODO())
+	if err != nil {
+		log.Error(errors.Wrap(err, "Create index"))
+		return
+	}
+	if !res.Acknowledged {
+		log.Error(errors.Errorf("Index creation wasn't acknowledged: %s", name))
+		return
+	}
+	log.Info("Success")
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }

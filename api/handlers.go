@@ -12,15 +12,16 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Bnei-Baruch/sqlboiler/boil"
+	"github.com/Bnei-Baruch/sqlboiler/queries"
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"github.com/volatiletech/sqlboiler/boil"
-	"github.com/volatiletech/sqlboiler/queries"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v5"
 
+	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -284,7 +285,7 @@ func LessonsHandler(c *gin.Context) {
 		return
 	}
 
-	// We're either in full lessonsT mode or lesson parts mode based on
+	// We're either in full lessons mode or lesson parts mode based on
 	// filters that apply only to lesson parts (content_units)
 
 	if utils.IsEmpty(r.Authors) &&
@@ -409,6 +410,10 @@ func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
 	query := ParseQuery(c.Query("q"))
+	query.Deb = false
+	if c.Query("deb") == "true" {
+		query.Deb = true
+	}
 	log.Debugf("Parsed Query: %#v", query)
 	if len(query.Term) == 0 && len(query.Filters) == 0 && len(query.ExactTerms) == 0 {
 		NewBadRequestError(errors.New("Can't search with no terms and no filters.")).Abort(c)
@@ -427,22 +432,29 @@ func SearchHandler(c *gin.Context) {
 		}
 	}
 
-	pageSizeVal := consts.API_DEFAULT_PAGE_SIZE
+	size := consts.API_DEFAULT_PAGE_SIZE
 	pageSize := c.Query("page_size")
 	if pageSize != "" {
-		pageSizeVal, err = strconv.Atoi(pageSize)
+		size, err = strconv.Atoi(pageSize)
 		if err != nil {
 			NewBadRequestError(errors.New("page_size expects a positive number")).Abort(c)
 			return
 		}
-		pageSizeVal = utils.Min(pageSizeVal, consts.API_MAX_PAGE_SIZE)
+		size = utils.Min(size, consts.API_MAX_PAGE_SIZE)
 	}
+
+	from := (pageNoVal - 1) * size
 
 	sortByVal := consts.SORT_BY_RELEVANCE
 	sortBy := c.Query("sort_by")
 	if _, ok := consts.SORT_BY_VALUES[sortBy]; ok {
 		sortByVal = sortBy
 	}
+	if len(query.Term) == 0 {
+		sortByVal = consts.SORT_BY_SOURCE_FIRST
+	}
+
+	searchId := c.Query("search_id")
 
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
 	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
@@ -450,7 +462,9 @@ func SearchHandler(c *gin.Context) {
 
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	se := search.NewESEngine(esc, db)
+	logger := c.MustGet("LOGGER").(*search.SearchLogger)
+	cache := c.MustGet("CACHE").(cache.CacheManager)
+	se := search.NewESEngine(esc, db, cache)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -461,19 +475,46 @@ func SearchHandler(c *gin.Context) {
 		context.TODO(),
 		query,
 		sortByVal,
-		(pageNoVal-1)*pageSizeVal,
-		pageSizeVal,
+		from,
+		size,
 		preference,
 	)
 	if err == nil {
+		// TODO: How does this slows the search query? Consider logging in parallel.
+		err := logger.LogSearch(query, sortByVal, from, size, searchId, res)
+		if err != nil {
+			log.Warnf("Error logging search: %+v %+v", err, res)
+		}
 		c.JSON(http.StatusOK, res)
 	} else {
+		// TODO: Remove following line, we should not log this.
+		log.Infof("Error on search: %+v", err)
+		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, err)
+		if logErr != nil {
+			log.Warnf("Erro logging search error: %+v %+v", logErr, err)
+		}
 		NewInternalError(err).Abort(c)
 	}
 }
 
+func ClickHandler(c *gin.Context) {
+	mdbUid := c.Query("mdb_uid")
+	index := c.Query("index")
+	index_type := c.Query("type")
+	rank, err := strconv.Atoi(c.Query("rank"))
+	if err != nil || rank < 0 {
+		NewBadRequestError(errors.New("rank expects a positive number")).Abort(c)
+		return
+	}
+	searchId := c.Query("search_id")
+	logger := c.MustGet("LOGGER").(*search.SearchLogger)
+	if err = logger.LogClick(mdbUid, index, index_type, rank, searchId); err != nil {
+		log.Warnf("Error logging click: %+v", err)
+	}
+	c.JSON(http.StatusOK, gin.H{})
+}
+
 func AutocompleteHandler(c *gin.Context) {
-	log.Infof("Query: [%s]", c.Query("q"))
 	q := c.Query("q")
 	if q == "" {
 		NewBadRequestError(errors.New("Can't search for an empty term")).Abort(c)
@@ -482,11 +523,14 @@ func AutocompleteHandler(c *gin.Context) {
 
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	se := search.NewESEngine(esc, db)
+	cache := c.MustGet("CACHE").(cache.CacheManager)
+	se := search.NewESEngine(esc, db, cache)
 
 	// Detect input language
-	log.Debugf("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
+	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
 	order := utils.DetectLanguage(q, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
+
+	log.Infof("Query: [%s] Language Order: [%+v]", c.Query("q"), order)
 
 	// Have a 50ms deadline on the search engine call.
 	// It's autocomplete after all...
@@ -495,6 +539,7 @@ func AutocompleteHandler(c *gin.Context) {
 
 	res, err := se.GetSuggestions(ctx, search.Query{Term: q, LanguageOrder: order})
 	if err == nil {
+		log.Infof("Autocomplete: %+v", utils.Pprint(res))
 		c.JSON(http.StatusOK, res)
 	} else {
 		NewInternalError(err).Abort(c)
@@ -536,6 +581,37 @@ func HomePageHandler(c *gin.Context) {
 
 func RecentlyUpdatedHandler(c *gin.Context) {
 	resp, err := handleRecentlyUpdated(c.MustGet("MDB_DB").(*sql.DB))
+	concludeRequest(c, resp, err)
+}
+
+func TagDashboardHandler(c *gin.Context) {
+	var r ItemRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	r.UID = c.Param("uid")
+
+	resp, err := handleTagDashboard(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
+func SemiQuasiDataHandler(c *gin.Context) {
+	var r BaseRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+	resp, err := handleSemiQuasiData(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
+func StatsCUClassHandler(c *gin.Context) {
+	var r ContentUnitsRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	resp, err := handleStatsCUClass(c.MustGet("MDB_DB").(*sql.DB), r)
 	concludeRequest(c, resp, err)
 }
 
@@ -896,25 +972,34 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 	switch r.Language {
 	case consts.LANG_HEBREW:
 		banner = &Banner{
-			Section:   "אירועים",
-			Header:    "כנס קבלה לעם העולמי",
-			SubHeader: "פברואר 2018",
-			Url:       "http://www.kab.co.il/kabbalah/%D7%9B%D7%A0%D7%A1-%D7%A7%D7%91%D7%9C%D7%94-%D7%9C%D7%A2%D7%9D-%D7%94%D7%A2%D7%95%D7%9C%D7%9E%D7%99-2018-%D7%9B%D7%95%D7%9C%D7%A0%D7%95-%D7%9E%D7%A9%D7%A4%D7%97%D7%94-%D7%90%D7%97%D7%AA",
+			//Section:   "אירועים",
+			Header:    "הפרויקט של החיים שלנו",
+			SubHeader: "הארכיון",
+			Url:       "http://www.kab1.com/he",
 		}
 
 	case consts.LANG_RUSSIAN:
 		banner = &Banner{
-			Section:   "Конгрессы",
-			Header:    "Международный каббалистический конгресс",
-			SubHeader: "Февраль 2018",
-			Url:       "http://www.kabbalah.info/rus/content/view/frame/162465",
+			//Section:   "Конгрессы",
+			Header:    "Проект Нашей Жизни",
+			SubHeader: "АРХИВ",
+			Url:       "http://www.kab1.com/ru",
 		}
+
+	case consts.LANG_SPANISH:
+		banner = &Banner{
+			//Section:   "Конгрессы",
+			Header:    "Proyecto Nuestra Vida",
+			SubHeader: "EL ARCHIVO",
+			Url:       "http://www.kab1.com/es",
+		}
+
 	default:
 		banner = &Banner{
-			Section:   "Events",
-			Header:    "World Kabbalah Convention in Israel",
-			SubHeader: "Feb. 2018",
-			Url:       "http://www.kabbalah.info/engkab/kabbalah-worldwide/convention2018",
+			//Section:   "Events",
+			Header:    "The Project of Our Life",
+			SubHeader: "THE ARCHIVE",
+			Url:       "http://www.kab1.com",
 		}
 	}
 
@@ -953,6 +1038,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendKmediaIDsFilterMods(&mods, r.KmediaIDsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
@@ -965,6 +1053,14 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	}
 
 	// order, limit, offset
+
+	// Special case for collection pages.
+	// We need to order by ccu position first
+	if len(r.CollectionsFilter.Collections) == 1 {
+		r.GroupBy = "id, ccu.position"
+		r.OrderBy = "ccu.position desc, (coalesce(properties->>'film_date', created_at::text))::date desc, created_at desc"
+	}
+
 	_, offset, err := appendListMods(&mods, r.ListRequest)
 	if err != nil {
 		return nil, NewBadRequestError(err)
@@ -1098,7 +1194,7 @@ func handlePublishers(db *sql.DB, r PublishersRequest) (*PublishersResponse, *Ht
 		}
 
 		// i18ns
-		for _, l := range consts.LANG_ORDER[r.Language] {
+		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
 			for _, i18n := range p.R.PublisherI18ns {
 				if i18n.Language == l {
 					if !pp.Name.Valid && i18n.Name.Valid {
@@ -1156,12 +1252,210 @@ ORDER BY max_film_date DESC`
 	return data, nil
 }
 
+func handleTagDashboard(db *sql.DB, r ItemRequest) (*TagsDashboardResponse, *HttpError) {
+	// CU ids query
+	q := `select id
+from (
+       select
+         cu.id,
+         row_number()
+         over (
+           partition by cu.type_id
+           order by (coalesce(cu.properties ->> 'film_date', cu.created_at :: TEXT)) :: DATE DESC, cu.created_at DESC )
+           as rownum
+       from tags t
+         inner join content_units_tags cut on t.id = cut.tag_id
+         inner join content_units cu on cut.content_unit_id = cu.id and cu.secure = 0 and cu.published is true
+       where t.id in (WITH RECURSIVE rec_tags AS (
+         SELECT t.id
+         FROM tags t
+         WHERE t.uid = $1
+         UNION
+         SELECT t.id
+         FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
+       )
+       SELECT distinct id
+       FROM rec_tags)) as tmp
+where rownum < 6;`
+
+	rows, err := queries.Raw(db, q, r.UID).Query()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	cuIDs := make([]int64, 0)
+	for rows.Next() {
+		var myId int64
+		err := rows.Scan(&myId)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		cuIDs = append(cuIDs, myId)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	if len(cuIDs) == 0 {
+		return NewTagsDashboardResponse(), nil
+	}
+
+	// data query
+	units, err := mdbmodels.ContentUnits(db,
+		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
+		qm.OrderBy("(coalesce(properties->>'film_date', created_at::text))::date desc, created_at desc"),
+		qm.Load("CollectionsContentUnits", "CollectionsContentUnits.Collection")).
+		All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// response
+	cus, ex := prepareCUs(db, units, r.Language)
+	if ex != nil {
+		return nil, ex
+	}
+
+	return &TagsDashboardResponse{
+		LatestContentUnits: cus,
+	}, nil
+}
+
+func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError) {
+	sqd := new(SemiQuasiData)
+
+	res, err := handleSources(db, HierarchyRequest{BaseRequest: r})
+	if err != nil {
+		return nil, err
+	}
+	sqd.Authors = res.([]*Author)
+
+	res, err = handleTags(db, HierarchyRequest{BaseRequest: r})
+	if err != nil {
+		return nil, err
+	}
+	sqd.Tags = res.([]*Tag)
+
+	publishers, err := handlePublishers(db, PublishersRequest{ListRequest: ListRequest{BaseRequest: r}})
+	if err != nil {
+		return nil, err
+	}
+	sqd.Publishers = publishers.Publishers
+
+	return sqd, nil
+}
+
+func handleStatsCUClass(db *sql.DB, r ContentUnitsRequest) (*StatsCUClassResponse, *HttpError) {
+	mods := []qm.QueryMod{
+		qm.Select("id"),
+		SECURE_PUBLISHED_MOD,
+	}
+
+	// filters
+	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendSourcesFilterMods(db, &mods, r.SourcesFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			return nil, e
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendCollectionsFilterMods(db, &mods, r.CollectionsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
+
+	qq := fmt.Sprintf(`with fcu as (%s)
+select
+  's',
+  s.uid,
+  count(cus.content_unit_id)
+from sources s
+  inner join content_units_sources cus on s.id = cus.source_id
+  inner join fcu on cus.content_unit_id = fcu.id
+group by s.id
+union
+select
+  't',
+  t.uid,
+  count(cut.content_unit_id)
+from tags t
+  inner join content_units_tags cut on t.id = cut.tag_id
+  inner join fcu on cut.content_unit_id = fcu.id
+group by t.id
+union
+select
+  'p',
+  p.uid,
+  count(cup.content_unit_id)
+from persons p
+  inner join content_units_persons cup on p.id = cup.person_id
+  inner join fcu on cup.content_unit_id = fcu.id
+group by p.id`, q[:len(q)-1])
+
+	rows, err := queries.Raw(db, qq, args...).Query()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	resp := NewStatsCUClassResponse()
+
+	for rows.Next() {
+		var typ, key string
+		var val int64
+		if err := rows.Scan(&typ, &key, &val); err != nil {
+			return nil, NewInternalError(err)
+		}
+
+		switch typ {
+		case "s":
+			resp.Sources[key] += val
+		case "t":
+			resp.Tags[key] += val
+		case "p":
+			resp.Persons[key] += val
+		default:
+			return nil, NewInternalError(errors.Errorf("Unknown classification notation: %s", typ))
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	return resp, nil
+}
+
 // appendListMods compute and appends the OrderBy, Limit and Offset query mods.
 // It returns the limit, offset and error if any
 func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
 
-	// group by id to remove duplicates
-	*mods = append(*mods, qm.GroupBy("id"))
+	// group to remove duplicates
+	if r.GroupBy == "" {
+		*mods = append(*mods, qm.GroupBy("id"))
+	} else {
+		*mods = append(*mods, qm.GroupBy(r.GroupBy))
+	}
 
 	if r.OrderBy == "" {
 		*mods = append(*mods,
@@ -1322,7 +1616,7 @@ func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter)
 		return nil
 	}
 
-	// find all nested tag_ids
+	// Find all nested tag_ids.
 	q := `WITH RECURSIVE rec_tags AS (
             SELECT t.id FROM tags t WHERE t.uid = ANY($1)
             UNION
@@ -1432,6 +1726,16 @@ AND cu.secure = 0 AND cu.published IS TRUE AND cup.publisher_id = ANY(?))`
 	return nil
 }
 
+func appendKmediaIDsFilterMods(mods *[]qm.QueryMod, f KmediaIDsFilter) error {
+	if utils.IsEmpty(f.IDs) {
+		return nil
+	}
+
+	*mods = append(*mods, qm.WhereIn("properties->>'kmedia_id' IN ?", utils.ConvertArgsString(f.IDs)...))
+
+	return nil
+}
+
 // concludeRequest responds with JSON of given response or aborts the request with the given error.
 func concludeRequest(c *gin.Context, resp interface{}, err *HttpError) {
 	if err == nil {
@@ -1457,6 +1761,8 @@ func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 		Genres:          props.Genres,
 		DefaultLanguage: props.DefaultLanguage,
 		HolidayID:       props.HolidayTag,
+		SourceID:        props.Source,
+		Number:          props.Number,
 	}
 
 	if !props.FilmDate.IsZero() {
@@ -1499,12 +1805,13 @@ func mdbToFile(file *mdbmodels.File) (*File, error) {
 	}
 
 	f := &File{
-		ID:       file.UID,
-		Name:     file.Name,
-		Size:     file.Size,
-		Type:     file.Type,
-		SubType:  file.SubType,
-		Duration: props.Duration,
+		ID:        file.UID,
+		Name:      file.Name,
+		Size:      file.Size,
+		Type:      file.Type,
+		SubType:   file.SubType,
+		Duration:  props.Duration,
+		VideoSize: props.VideoSize,
 	}
 
 	if file.Language.Valid {
@@ -1518,21 +1825,22 @@ func mdbToFile(file *mdbmodels.File) (*File, error) {
 }
 
 func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.CollectionI18n, error) {
+	i18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(ids))
 	if len(ids) == 0 {
-		return make(map[int64]map[string]*mdbmodels.CollectionI18n, 0), nil
+		return i18nsMap, nil
 	}
 
 	// Load from DB
 	i18ns, err := mdbmodels.CollectionI18ns(db,
 		qm.WhereIn("collection_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(consts.LANG_ORDER[language])...)).
+		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
 		All()
 	if err != nil {
 		return nil, errors.Wrap(err, "Load collections i18ns from DB")
 	}
 
 	// Group by collection and language
-	i18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(ids))
+
 	for _, x := range i18ns {
 		v, ok := i18nsMap[x.CollectionID]
 		if !ok {
@@ -1546,7 +1854,7 @@ func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]
 }
 
 func setCI18n(c *Collection, language string, i18ns map[string]*mdbmodels.CollectionI18n) {
-	for _, l := range consts.LANG_ORDER[language] {
+	for _, l := range consts.I18N_LANG_ORDER[language] {
 		li18n, ok := i18ns[l]
 		if ok {
 			if c.Name == "" && li18n.Name.Valid {
@@ -1560,17 +1868,21 @@ func setCI18n(c *Collection, language string, i18ns map[string]*mdbmodels.Collec
 }
 
 func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.ContentUnitI18n, error) {
+	i18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(ids))
+	if len(ids) == 0 {
+		return i18nsMap, nil
+	}
+
 	// Load from DB
 	i18ns, err := mdbmodels.ContentUnitI18ns(db,
 		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(consts.LANG_ORDER[language])...)).
+		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
 		All()
 	if err != nil {
 		return nil, errors.Wrap(err, "Load content units i18ns from DB")
 	}
 
 	// Group by content unit and language
-	i18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(ids))
 	for _, x := range i18ns {
 		v, ok := i18nsMap[x.ContentUnitID]
 		if !ok {
@@ -1584,6 +1896,11 @@ func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string
 }
 
 func loadCUFiles(db *sql.DB, ids []int64) (map[int64][]*mdbmodels.File, error) {
+	filesMap := make(map[int64][]*mdbmodels.File, len(ids))
+	if len(ids) == 0 {
+		return filesMap, nil
+	}
+
 	// Load from DB
 	allFiles, err := mdbmodels.Files(db,
 		SECURE_PUBLISHED_MOD,
@@ -1594,7 +1911,6 @@ func loadCUFiles(db *sql.DB, ids []int64) (map[int64][]*mdbmodels.File, error) {
 	}
 
 	// Group by content unit
-	filesMap := make(map[int64][]*mdbmodels.File, len(ids))
 	for _, x := range allFiles {
 		v, ok := filesMap[x.ContentUnitID.Int64]
 		if ok {
@@ -1609,7 +1925,7 @@ func loadCUFiles(db *sql.DB, ids []int64) (map[int64][]*mdbmodels.File, error) {
 }
 
 func setCUI18n(cu *ContentUnit, language string, i18ns map[string]*mdbmodels.ContentUnitI18n) {
-	for _, l := range consts.LANG_ORDER[language] {
+	for _, l := range consts.I18N_LANG_ORDER[language] {
 		li18n, ok := i18ns[l]
 		if ok {
 			if cu.Name == "" && li18n.Name.Valid {
