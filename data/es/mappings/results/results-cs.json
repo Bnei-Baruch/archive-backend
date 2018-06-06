@@ -1,0 +1,48 @@
+{
+    "mappings": {
+        "result": {
+            "properties": {
+                "description": {
+                    "type": "text", 
+                    "analyzer": "czech"
+                }, 
+                "title": {
+                    "type": "text", 
+                    "analyzer": "czech"
+                }, 
+                "collections_content_types": {
+                    "type": "keyword"
+                }, 
+                "mdb_uid": {
+                    "type": "keyword"
+                }, 
+                "content": {
+                    "type": "text", 
+                    "analyzer": "czech"
+                }, 
+                "sources": {
+                    "type": "keyword"
+                }, 
+                "content_type": {
+                    "type": "keyword"
+                }, 
+                "effective_date": {
+                    "type": "date", 
+                    "format": "strict_date"
+                }, 
+                "typed_uids": {
+                    "type": "keyword"
+                }, 
+                "result_type": {
+                    "type": "keyword"
+                }
+            }
+        }
+    }, 
+    "settings": {
+        "index": {
+            "number_of_replicas": 0, 
+            "number_of_shards": 1
+        }
+    }
+}

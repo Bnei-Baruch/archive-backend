@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v5"
 
@@ -52,6 +53,16 @@ func (index *BaseIndex) indexName(lang string) string {
 func (index *BaseIndex) CreateIndex() error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		name := index.indexName(lang)
+		// Do nothing if index already exists.
+        exists, err := index.esc.IndexExists(name).Do(context.TODO())
+        if err != nil {
+            return err
+        }
+        if exists {
+            log.Infof("Index already exists (%+v), skipping.", name)
+            continue
+        }
+
 		definition := fmt.Sprintf("data/es/mappings/%s/%s-%s.json", index.baseName, index.baseName, lang)
 		// Read mappings and create index
 		mappings, err := bindata.Asset(definition)
@@ -63,11 +74,6 @@ func (index *BaseIndex) CreateIndex() error {
 			return errors.Wrap(err, "json.Unmarshal")
 		}
 
-		// Delete index if it's already exists.
-		if err = index.deleteIndexByLang(lang); err != nil {
-			return err
-		}
-
 		// Create index.
 		res, err := index.esc.CreateIndex(name).BodyJson(bodyJson).Do(context.TODO())
 		if err != nil {
@@ -76,6 +82,7 @@ func (index *BaseIndex) CreateIndex() error {
 		if !res.Acknowledged {
 			return errors.Errorf("Index creation wasn't acknowledged: %s", name)
 		}
+        log.Infof("Created index: %+v", name)
 	}
 	return nil
 }
@@ -121,3 +128,54 @@ func (index *BaseIndex) RefreshIndexByLang(lang string) error {
 	// fmt.Printf("\n\n\nShards: %+v \n\n\n", shards)
 	return err
 }
+
+func (index *BaseIndex) FilterByResultTypeQuery(resultType string) *elastic.BoolQuery {
+    return elastic.NewBoolQuery().Filter(elastic.NewTermsQuery(consts.ES_RESULT_TYPE, resultType))
+}
+
+func (index *BaseIndex) RemoveFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
+	source, err := elasticScope.Source()
+	if err != nil {
+		return []string{}, err
+	}
+	jsonBytes, err := json.Marshal(source)
+	if err != nil {
+		return []string{}, err
+	}
+	log.Infof("Content Untis Index - Removing from index. Scope: %s", string(jsonBytes))
+	removed := make(map[string]bool)
+	for _, lang := range consts.ALL_KNOWN_LANGS {
+		indexName := index.indexName(lang)
+		searchRes, err := index.esc.Search(indexName).Query(elasticScope).Do(context.TODO())
+		if err != nil {
+			return []string{}, err
+		}
+		for _, h := range searchRes.Hits.Hits {
+			var cu ContentUnit
+			err := json.Unmarshal(*h.Source, &cu)
+			if err != nil {
+				return []string{}, err
+			}
+			removed[cu.MDB_UID] = true
+		}
+		delRes, err := index.esc.DeleteByQuery(indexName).
+			Query(elasticScope).
+			Do(context.TODO())
+		if err != nil {
+			return []string{}, errors.Wrapf(err, "Content Units Index - Remove from index %s %+v\n", indexName, elasticScope)
+		}
+		if delRes.Deleted > 0 {
+			fmt.Printf("Content Units Index - Deleted %d documents from %s.\n", delRes.Deleted, indexName)
+		}
+	}
+	if len(removed) == 0 {
+		fmt.Println("Content Units Index - Nothing was delete.")
+		return []string{}, nil
+	}
+	keys := make([]string, 0)
+	for k := range removed {
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+

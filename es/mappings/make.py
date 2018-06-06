@@ -140,6 +140,10 @@ RESULTS_TEMPLATE = {
   "mappings": {
     "result": {
       "properties": {
+        # Document type, unit, collection, source, tag.
+        "result_type": {
+          "type": "keyword",
+        },
         "mdb_uid": {
           "type": "keyword",
         },
@@ -172,20 +176,18 @@ RESULTS_TEMPLATE = {
           "format": "strict_date",
         },
 
-        # Filter fields, used to apply filter before scoring.
-        "filters": {
-          # Used for Units and Collections.
-          "content_type": {
-            "type": "keyword",
-          },
-          # Used for Units and Collections.
-          "collections_content_types": {
-            "type": "keyword",
-          },
-          # Used for Sources.
-          "sources": {
-            "type": "keyword",
-          }
+        # Filter fields.
+        # Used by Units and Collections.
+        "content_type": {
+          "type": "keyword",
+        },
+        # Used by Units and Collections.
+        "collections_content_types": {
+          "type": "keyword",
+        },
+        # Used by Sources.
+        "sources": {
+          "type": "keyword",
         }
       }
     }
@@ -611,6 +613,9 @@ def Resolve(lang, value):
 
 
 for lang in LANG_GROUPS[ALL]:
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'results', 'results-%s.json' % lang), 'w') as f:
+    json.dump(Resolve(lang, RESULTS_TEMPLATE), f, indent=4)
+# Deprecated, delete everything when change ready.
   with open(os.path.join('.', 'data', 'es', 'mappings', 'units', 'units-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, UNITS_TEMPLATE), f, indent=4)
   with open(os.path.join('.', 'data', 'es', 'mappings', 'classifications', 'classifications-%s.json' % lang), 'w') as f:

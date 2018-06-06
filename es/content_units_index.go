@@ -23,7 +23,7 @@ import (
 
 func MakeContentUnitsIndex(namespace string, db *sql.DB, esc *elastic.Client) *ContentUnitsIndex {
 	cui := new(ContentUnitsIndex)
-	cui.baseName = consts.ES_UNITS_INDEX
+	cui.baseName = consts.ES_RESULTS_INDEX
 	cui.namespace = namespace
 	cui.db = db
 	cui.esc = esc
@@ -60,7 +60,7 @@ func defaultContentUnitSql() string {
 
 func (index *ContentUnitsIndex) ReindexAll() error {
 	log.Infof("Content Units Index - Reindex all.")
-	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
+	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_UNITS)); err != nil {
 		return err
 	}
 	return index.addToIndexSql(defaultContentUnitSql())
@@ -157,8 +157,9 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 		for i, typedUID := range typedUIDs {
 			typedUIDsI[i] = typedUID
 		}
-		elasticScope := elastic.NewTermsQuery("typed_uids", typedUIDsI...)
-		return index.removeFromIndexQuery(elasticScope)
+		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_UNITS).
+            Filter(elastic.NewTermsQuery("typed_uids", typedUIDsI...))
+		return index.RemoveFromIndexQuery(elasticScope)
 	} else {
 		// Nothing to remove.
 		return []string{}, nil
@@ -207,52 +208,6 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 	}
 
 	return nil
-}
-
-func (index *ContentUnitsIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
-	source, err := elasticScope.Source()
-	if err != nil {
-		return []string{}, err
-	}
-	jsonBytes, err := json.Marshal(source)
-	if err != nil {
-		return []string{}, err
-	}
-	log.Infof("Content Untis Index - Removing from index. Scope: %s", string(jsonBytes))
-	removed := make(map[string]bool)
-	for _, lang := range consts.ALL_KNOWN_LANGS {
-		indexName := index.indexName(lang)
-		searchRes, err := index.esc.Search(indexName).Query(elasticScope).Do(context.TODO())
-		if err != nil {
-			return []string{}, err
-		}
-		for _, h := range searchRes.Hits.Hits {
-			var cu ContentUnit
-			err := json.Unmarshal(*h.Source, &cu)
-			if err != nil {
-				return []string{}, err
-			}
-			removed[cu.MDB_UID] = true
-		}
-		delRes, err := index.esc.DeleteByQuery(indexName).
-			Query(elasticScope).
-			Do(context.TODO())
-		if err != nil {
-			return []string{}, errors.Wrapf(err, "Content Units Index - Remove from index %s %+v\n", indexName, elasticScope)
-		}
-		if delRes.Deleted > 0 {
-			fmt.Printf("Content Units Index - Deleted %d documents from %s.\n", delRes.Deleted, indexName)
-		}
-	}
-	if len(removed) == 0 {
-		fmt.Println("Content Units Index - Nothing was delete.")
-		return []string{}, nil
-	}
-	keys := make([]string, 0)
-	for k := range removed {
-		keys = append(keys, k)
-	}
-	return keys, nil
 }
 
 func collectionsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {

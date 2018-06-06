@@ -46,17 +46,10 @@ func MakeIndexer(namespace string, names []string, mdb *sql.DB, esc *elastic.Cli
 
 func (indexer *Indexer) ReindexAll() error {
 	log.Info("Indexer - Re-Indexing everything")
+    if err := indexer.CreateIndexes(); err != nil {
+        return err
+    }
 	for _, index := range indexer.indices {
-		// TODO: Check if indexing things in parallel will make things faster?
-		log.Info("Indexer - Deleting index.")
-		if err := index.DeleteIndex(); err != nil {
-			return err
-		}
-		log.Info("Indexer - Creating index.")
-		if err := index.CreateIndex(); err != nil {
-			return err
-		}
-		log.Info("Indexer - Reindexing")
 		if err := index.ReindexAll(); err != nil {
 			return err
 		}

@@ -225,6 +225,13 @@ var FILTERS = map[string]string{
 }
 
 // ElasticSearch 'es'
+const ES_RESULTS_INDEX = "results"
+
+// Result type
+const ES_RESULT_TYPE = "result_type"
+const ES_RESULT_TYPE_UNITS = "units"
+
+// Other indices are deprecated. Remove them when move to one index is done.
 const ES_CLASSIFICATIONS_INDEX = "classifications"
 const ES_UNITS_INDEX = "units"
 const ES_COLLECTIONS_INDEX = "collections"
