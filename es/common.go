@@ -82,19 +82,19 @@ func InitVars() {
 	}
 }
 
-func uidToTypedUID(t string, uid string) string {
+func keyValue(t string, uid string) string {
 	return fmt.Sprintf("%s:%s", t, uid)
 }
 
-func uidsToTypedUIDs(t string, uids []string) []string {
+func keyValues(t string, uids []string) []string {
 	ret := make([]string, len(uids))
 	for i, uid := range uids {
-		ret[i] = uidToTypedUID(t, uid)
+		ret[i] = keyValue(t, uid)
 	}
 	return ret
 }
 
-func TypedUIDsToUids(t string, typedUIDs []string) ([]string, error) {
+func KeyValuesToValues(t string, typedUIDs []string) ([]string, error) {
 	ret := make([]string, 0)
 	for _, typedUid := range typedUIDs {
 		parts := strings.Split(typedUid, ":")
@@ -247,11 +247,14 @@ func DumpDB(mdb *sql.DB, title string) error {
 	return nil
 }
 
-func DumpIndexes(esc *elastic.Client, title string, indexType string) error {
+func DumpIndexes(esc *elastic.Client, title string, resultType string) error {
 	fmt.Printf("\n\n ------------------- %s DUMP INDEXES ------------------- \n\n", title)
-	indexName := IndexName("test", indexType, consts.LANG_ENGLISH)
+	indexName := IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH)
 	fmt.Printf("\n\n\nINDEX %s\n\n", indexName)
-	indexer := MakeIndexer("test", []string{indexType}, nil, esc)
+	indexer, err := MakeIndexer("test", []string{resultType}, nil, esc)
+    if err != nil {
+        return err
+    }
 	if err := indexer.RefreshAll(); err != nil {
 		return err
 	}

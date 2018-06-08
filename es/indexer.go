@@ -2,9 +2,11 @@ package es
 
 import (
 	"database/sql"
+    "fmt"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -14,34 +16,37 @@ type Indexer struct {
 	indices []Index
 }
 
-func MakeProdIndexer(mdb *sql.DB, esc *elastic.Client) *Indexer {
-	return MakeIndexer("prod", []string{
-		consts.ES_CLASSIFICATIONS_INDEX,
-		consts.ES_UNITS_INDEX,
-		consts.ES_COLLECTIONS_INDEX}, mdb, esc)
+func MakeProdIndexer(mdb *sql.DB, esc *elastic.Client) (*Indexer, error) {
+	return MakeIndexer("prod", []string{consts.ES_RESULT_TYPE_UNITS}, mdb, esc)
 }
 
-func MakeFakeIndexer(mdb *sql.DB, esc *elastic.Client) *Indexer {
+func MakeFakeIndexer(mdb *sql.DB, esc *elastic.Client) (*Indexer, error) {
 	return MakeIndexer("fake", []string{}, mdb, esc)
 }
 
 // Receives namespace and list of indexes names.
-func MakeIndexer(namespace string, names []string, mdb *sql.DB, esc *elastic.Client) *Indexer {
+func MakeIndexer(namespace string, names []string, mdb *sql.DB, esc *elastic.Client) (*Indexer, error) {
 	log.Infof("Indexer - Make indexer - %s - %s", namespace, strings.Join(names, ", "))
 	indexer := new(Indexer)
 	indexer.indices = make([]Index, len(names))
 	for i, name := range names {
-		if name == consts.ES_CLASSIFICATIONS_INDEX {
-			indexer.indices[i] = MakeClassificationsIndex(namespace, mdb, esc)
-		} else if name == consts.ES_UNITS_INDEX {
-			indexer.indices[i] = MakeContentUnitsIndex(namespace, mdb, esc)
-		} else if name == consts.ES_COLLECTIONS_INDEX {
-			indexer.indices[i] = MakeCollectionsIndex(namespace, mdb, esc)
-		} else if name == consts.ES_SOURCES_INDEX {
-			indexer.indices[i] = MakeSourcesIndex(namespace, mdb, esc)
-		}
+        if name == consts.ES_RESULT_TYPE_UNITS {
+		    indexer.indices[i] = MakeContentUnitsIndex(namespace, mdb, esc)
+        } else {
+            return nil, errors.New(fmt.Sprintf("MakeIndexer - Invalid index name: %+v", name))
+        }
+
+		// if name == consts.ES_CLASSIFICATIONS_INDEX {
+		// 	indexer.indices[i] = MakeClassificationsIndex(namespace, mdb, esc)
+		// } else if name == consts.ES_UNITS_INDEX {
+		// 	indexer.indices[i] = MakeContentUnitsIndex(namespace, mdb, esc)
+		// } else if name == consts.ES_COLLECTIONS_INDEX {
+		// 	indexer.indices[i] = MakeCollectionsIndex(namespace, mdb, esc)
+		// } else if name == consts.ES_SOURCES_INDEX {
+		// 	indexer.indices[i] = MakeSourcesIndex(namespace, mdb, esc)
+		// }
 	}
-	return indexer
+	return indexer, nil
 }
 
 func (indexer *Indexer) ReindexAll() error {
@@ -66,7 +71,7 @@ func (indexer *Indexer) RefreshAll() error {
 }
 
 func (indexer *Indexer) CreateIndexes() error {
-	log.Info("Indexer - Create new indices in elastic.")
+    log.Infof("Indexer - Create new indices in elastic: %+v", indexer.indices)
 	for _, index := range indexer.indices {
 		if err := index.CreateIndex(); err != nil {
 			return err

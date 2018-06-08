@@ -154,6 +154,13 @@ RESULTS_TEMPLATE = {
         "typed_uids": {
           "type": "keyword",
         },
+        # List of keywords in format filter:value are required for correct
+        # filtering of this document by all different filters. Time is handled
+        # by effective_date.
+        # For example: content_type:DAILY_LESSON or tag:0db5BBS3
+        "filter_values": {
+          "type": "keyword",
+        },
         # Title, Description and Content are the typical result fields which
         # should have the same tf/idf across all different retult types such
         # as units, collections, sources, topics and others to follow.
@@ -175,20 +182,6 @@ RESULTS_TEMPLATE = {
           "type": "date",
           "format": "strict_date",
         },
-
-        # Filter fields.
-        # Used by Units and Collections.
-        "content_type": {
-          "type": "keyword",
-        },
-        # Used by Units and Collections.
-        "collections_content_types": {
-          "type": "keyword",
-        },
-        # Used by Sources.
-        "sources": {
-          "type": "keyword",
-        }
       }
     }
   }

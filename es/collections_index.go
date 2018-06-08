@@ -91,24 +91,24 @@ func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) err
 func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	typedUIDs := make([]string, 0)
 	if scope.CollectionUID != "" {
-		typedUIDs = append(typedUIDs, uidToTypedUID("collection", scope.CollectionUID))
+		typedUIDs = append(typedUIDs, keyValue("collection", scope.CollectionUID))
 	}
 	if scope.FileUID != "" {
-		typedUIDs = append(typedUIDs, uidToTypedUID("file", scope.FileUID))
+		typedUIDs = append(typedUIDs, keyValue("file", scope.FileUID))
 	}
 	if scope.ContentUnitUID != "" {
-		typedUIDs = append(typedUIDs, uidToTypedUID("content_unit", scope.ContentUnitUID))
+		typedUIDs = append(typedUIDs, keyValue("content_unit", scope.ContentUnitUID))
 		moreUIDs, err := CollectionsScopeByContentUnit(index.db, scope.ContentUnitUID)
 		if err != nil {
 			return []string{}, err
 		}
-		typedUIDs = append(typedUIDs, uidsToTypedUIDs("content_unit", moreUIDs)...)
+		typedUIDs = append(typedUIDs, keyValues("content_unit", moreUIDs)...)
 	}
 	if scope.TagUID != "" {
-		typedUIDs = append(typedUIDs, uidToTypedUID("tag", scope.TagUID))
+		typedUIDs = append(typedUIDs, keyValue("tag", scope.TagUID))
 	}
 	if scope.SourceUID != "" {
-		typedUIDs = append(typedUIDs, uidToTypedUID("source", scope.SourceUID))
+		typedUIDs = append(typedUIDs, keyValue("source", scope.SourceUID))
 	}
 	if len(typedUIDs) > 0 {
 		typedUIDsI := make([]interface{}, len(typedUIDs))
@@ -238,7 +238,7 @@ func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsConte
 func contentUnitsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	ret := make([]string, len(collectionsContentUnits))
 	for i, ccu := range collectionsContentUnits {
-		ret[i] = uidToTypedUID("content_unit", ccu.R.ContentUnit.UID)
+		ret[i] = keyValue("content_unit", ccu.R.ContentUnit.UID)
 	}
 	return ret
 }
@@ -248,7 +248,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 	i18nMap := make(map[string]Collection)
 	for _, i18n := range c.R.CollectionI18ns {
 		if i18n.Name.Valid && i18n.Name.String != "" {
-			typedUIDs := append([]string{uidToTypedUID("collection", c.UID)},
+			typedUIDs := append([]string{keyValue("collection", c.UID)},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
 			collection := Collection{
 				MDB_UID:                  c.UID,

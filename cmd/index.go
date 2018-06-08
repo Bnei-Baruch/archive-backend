@@ -22,11 +22,11 @@ var indexCmd = &cobra.Command{
 	Run:   indexFn,
 }
 
-var indexClassificationsCmd = &cobra.Command{
-	Use:   "classifications",
-	Short: "Index content units classifications in ES",
-	Run:   indexClassificationsFn,
-}
+// var indexClassificationsCmd = &cobra.Command{
+// 	Use:   "classifications",
+// 	Short: "Index content units classifications in ES",
+// 	Run:   indexClassificationsFn,
+// }
 
 var indexUnitsCmd = &cobra.Command{
 	Use:   "units",
@@ -34,17 +34,17 @@ var indexUnitsCmd = &cobra.Command{
 	Run:   indexUnitsFn,
 }
 
-var indexCollectionsCmd = &cobra.Command{
-	Use:   "collections",
-	Short: "Index content collections in ES",
-	Run:   indexCollectionsFn,
-}
-
-var indexSourcesCmd = &cobra.Command{
-	Use:   "sources",
-	Short: "Index sources in ES",
-	Run:   indexSourcesFn,
-}
+// var indexCollectionsCmd = &cobra.Command{
+// 	Use:   "collections",
+// 	Short: "Index content collections in ES",
+// 	Run:   indexCollectionsFn,
+// }
+//
+// var indexSourcesCmd = &cobra.Command{
+// 	Use:   "sources",
+// 	Short: "Index sources in ES",
+// 	Run:   indexSourcesFn,
+// }
 
 var restartSearchLogsCmd = &cobra.Command{
 	Use:   "restart_search_logs",
@@ -54,10 +54,10 @@ var restartSearchLogsCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(indexCmd)
-	indexCmd.AddCommand(indexClassificationsCmd)
+	// indexCmd.AddCommand(indexClassificationsCmd)
 	indexCmd.AddCommand(indexUnitsCmd)
-	indexCmd.AddCommand(indexCollectionsCmd)
-	indexCmd.AddCommand(indexSourcesCmd)
+	// indexCmd.AddCommand(indexCollectionsCmd)
+	// indexCmd.AddCommand(indexSourcesCmd)
 	indexCmd.AddCommand(restartSearchLogsCmd)
 }
 
@@ -65,27 +65,31 @@ func indexFn(cmd *cobra.Command, args []string) {
 	fmt.Println("Use one of the subcommands.")
 }
 
-func indexClassificationsFn(cmd *cobra.Command, args []string) {
-	IndexCmd(consts.ES_CLASSIFICATIONS_INDEX)
-}
+// func indexClassificationsFn(cmd *cobra.Command, args []string) {
+// 	IndexCmd(consts.ES_CLASSIFICATIONS_INDEX)
+// }
 
 func indexUnitsFn(cmd *cobra.Command, args []string) {
-	IndexCmd(consts.ES_UNITS_INDEX)
+	IndexCmd(consts.ES_RESULT_TYPE_UNITS)
 }
 
-func indexCollectionsFn(cmd *cobra.Command, args []string) {
-	IndexCmd(consts.ES_COLLECTIONS_INDEX)
-}
+// func indexCollectionsFn(cmd *cobra.Command, args []string) {
+// 	IndexCmd(consts.ES_COLLECTIONS_INDEX)
+// }
 
-func indexSourcesFn(cmd *cobra.Command, args []string) {
-	IndexCmd(consts.ES_SOURCES_INDEX)
-}
+// func indexSourcesFn(cmd *cobra.Command, args []string) {
+// 	IndexCmd(consts.ES_SOURCES_INDEX)
+// }
 
 func IndexCmd(index string) {
 	clock := common.Init()
 	defer common.Shutdown()
-	indexer := es.MakeIndexer("prod", []string{index}, common.DB, common.ESC)
-	err := indexer.ReindexAll()
+	indexer, err := es.MakeIndexer("prod", []string{index}, common.DB, common.ESC)
+    if err != nil {
+        log.Error(err)
+        return
+    }
+	err = indexer.ReindexAll()
 	if err != nil {
 		log.Error(err)
 		return

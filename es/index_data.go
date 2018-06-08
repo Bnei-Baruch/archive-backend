@@ -16,8 +16,8 @@ type IndexData struct {
 	DB           *sql.DB
 	Sources      map[string][]string
 	Tags         map[string][]string
-	Persons      map[string][]string
-	Translations map[string][][]string
+	// Persons      map[string][]string
+	// Translations map[string][][]string
 	Transcripts  map[string]map[string][]string
 }
 
@@ -40,15 +40,15 @@ func (indexData *IndexData) load(sqlScope string) error {
 		return err
 	}
 
-	indexData.Persons, err = indexData.loadPersons(sqlScope)
-	if err != nil {
-		return err
-	}
-
-	indexData.Translations, err = indexData.loadTranslations(sqlScope)
-	if err != nil {
-		return err
-	}
+	// indexData.Persons, err = indexData.loadPersons(sqlScope)
+	// if err != nil {
+	// 	return err
+	// }
+    //
+	// indexData.Translations, err = indexData.loadTranslations(sqlScope)
+	// if err != nil {
+	// 	return err
+	// }
 
 	indexData.Transcripts, err = indexData.loadTranscripts(sqlScope)
 	if err != nil {

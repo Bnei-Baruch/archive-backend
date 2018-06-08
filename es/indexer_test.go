@@ -264,7 +264,8 @@ func (suite *IndexerSuite) SetupTest() {
 	}
 	r.Nil(deleteContentUnits(uids))
 	// Remove test indexes.
-	indexer := es.MakeIndexer("test", []string{consts.ES_UNITS_INDEX, consts.ES_CLASSIFICATIONS_INDEX}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
+    r.Nil(err)
 	r.Nil(indexer.DeleteIndexes())
 	// Delete test directory
 	os.RemoveAll(viper.GetString("test.test-docx-folder"))
@@ -1109,7 +1110,7 @@ func (suite *IndexerSuite) validateCollectionsContentUnits(indexName string, ind
 	for _, hit := range res.Hits.Hits {
 		var c es.Collection
 		json.Unmarshal(*hit.Source, &c)
-		uids, err := es.TypedUIDsToUids("content_unit", c.TypedUIDs)
+		uids, err := es.KeyValuesToValues("content_unit", c.TypedUIDs)
 		r.Nil(err)
 		if val, ok := cus[c.MDB_UID]; ok {
 			r.Nil(errors.New(fmt.Sprintf(
@@ -1134,9 +1135,9 @@ func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *e
     }
 	names := make([]string, len(res.Hits.Hits))
 	for i, hit := range res.Hits.Hits {
-		var cu es.ContentUnit
+		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
-		names[i] = cu.Name
+		names[i] = cu.Title
 	}
 	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
 	r.ElementsMatch(expectedNames, names)
@@ -1151,11 +1152,11 @@ func (suite *IndexerSuite) validateContentUnitTags(indexName string, indexer *es
 	r.Nil(err)
 	tags := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
-		var cu es.ContentUnit
+		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
-		for _, t := range cu.Tags {
-			tags = append(tags, t)
-		}
+        hitTags, err := es.KeyValuesToValues("tag", cu.FilterValues)
+        r.Nil(err)
+        tags = append(tags, hitTags...)
 	}
 	r.Equal(len(expectedTags), len(tags))
 	r.ElementsMatch(expectedTags, tags)
@@ -1170,17 +1171,17 @@ func (suite *IndexerSuite) validateContentUnitSources(indexName string, indexer 
 	r.Nil(err)
 	sources := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
-		var cu es.ContentUnit
+		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
-		for _, s := range cu.Sources {
-			sources = append(sources, s)
-		}
+        hitSources, err := es.KeyValuesToValues("source", cu.FilterValues)
+        r.Nil(err)
+        sources = append(sources, hitSources...)
 	}
 	r.Equal(len(expectedSources), len(sources))
 	r.ElementsMatch(expectedSources, sources)
 }
 
-func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *es.Indexer, expectedLangs []string, expectedTranscriptLength null.Int) {
+func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *es.Indexer, expectedTranscriptLength null.Int) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
@@ -1188,27 +1189,27 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *e
 	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 
-	if len(expectedLangs) > 0 {
-		langs := make([]string, 0)
-		for _, hit := range res.Hits.Hits {
-			var cu es.ContentUnit
-			json.Unmarshal(*hit.Source, &cu)
-			for _, t := range cu.Translations {
-				langs = append(langs, t)
-			}
-		}
-
-		r.Equal(len(expectedLangs), len(langs))
-		r.ElementsMatch(expectedLangs, langs)
-	}
+	// if len(expectedLangs) > 0 {
+	// 	langs := make([]string, 0)
+	// 	for _, hit := range res.Hits.Hits {
+	// 		var cu es.Result
+	// 		json.Unmarshal(*hit.Source, &cu)
+	// 		for _, t := range cu.Translations {
+	// 			langs = append(langs, t)
+	// 		}
+	// 	}
+    //
+	// 	r.Equal(len(expectedLangs), len(langs))
+	// 	r.ElementsMatch(expectedLangs, langs)
+	// }
 
 	// Get transcript,
 	transcriptLengths := make([]int, 0)
 	for _, hit := range res.Hits.Hits {
-		var cu es.ContentUnit
+		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
-		if cu.Transcript != "" {
-			transcriptLengths = append(transcriptLengths, len(cu.Transcript))
+		if cu.Content != "" {
+			transcriptLengths = append(transcriptLengths, len(cu.Content))
 		}
 	}
 
@@ -1241,9 +1242,9 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 	var res *elastic.SearchResult
 	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
-	cus := make(map[string]es.ContentUnit)
+	cus := make(map[string]es.Result)
 	for _, hit := range res.Hits.Hits {
-		var cu es.ContentUnit
+		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
 		if val, ok := cus[cu.MDB_UID]; ok {
 			r.Nil(errors.New(fmt.Sprintf(
@@ -1254,7 +1255,9 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 	}
 	types := make(map[string][]string)
 	for k, cu := range cus {
-		types[k] = cu.CollectionsContentTypes
+        collectionsContentTypes, err := es.KeyValuesToValues("collections_content_type", cu.FilterValues)
+        r.Nil(err)
+		types[k] = collectionsContentTypes
 	}
 	suite.validateMaps(expectedTypes, types)
 

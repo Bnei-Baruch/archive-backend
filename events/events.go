@@ -63,9 +63,11 @@ func RunListener() {
 
 	log.Info("Initialize search engine indexer")
 	if viper.GetBool("server.fake-indexer") {
-		indexer = es.MakeFakeIndexer(common.DB, common.ESC)
+		indexer, err = es.MakeFakeIndexer(common.DB, common.ESC)
+        utils.Must(err)
 	} else {
-		indexer = es.MakeProdIndexer(common.DB, common.ESC)
+		indexer, err = es.MakeProdIndexer(common.DB, common.ESC)
+        utils.Must(err)
 	}
 
 	log.Info("Initialize indexer queue")

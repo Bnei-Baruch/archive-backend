@@ -39,7 +39,8 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	indexNameEn := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH)
 	indexNameHe := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_HEBREW)
 	indexNameRu := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_RUSSIAN)
-	indexer := es.MakeIndexer("test", []string{consts.ES_RESULTS_INDEX}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
+    r.Nil(err)
 
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll())
@@ -55,13 +56,13 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	f1UID := suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
 	r.Nil(indexer.FileUpdate(f1UID))
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
-	suite.validateContentUnitFiles(indexNameHe, indexer, []string{"he"}, null.Int{len(transcriptContent), true})
+	suite.validateContentUnitFiles(indexNameHe, indexer, null.Int{len(transcriptContent), true})
 	fmt.Println("Remove a file from content unit and validate.")
 	suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, false)
 	r.Nil(indexer.FileUpdate(f1UID))
 	r.Nil(es.DumpDB(common.DB, "DumpDB"))
-	r.Nil(es.DumpIndexes(common.ESC, "DumpIndexes", consts.ES_RESULTS_INDEX))
-	suite.validateContentUnitFiles(indexNameHe, indexer, []string{}, null.Int{-1, false})
+	r.Nil(es.DumpIndexes(common.ESC, "DumpIndexes", consts.ES_RESULT_TYPE_UNITS))
+	suite.validateContentUnitFiles(indexNameHe, indexer, null.Int{-1, false})
 
 	fmt.Println("Add a tag to content unit and validate.")
 	suite.ucut(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, true)
@@ -98,11 +99,11 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 
 	fmt.Println("Make content unit not published and validate.")
 	//r.Nil(es.DumpDB(common.DB, "TestContentUnitsIndex, BeforeDB"))
-	//r.Nil(es.DumpIndexes(common.ESC, "TestContentUnitsIndex, BeforeIndexes", consts.ES_RESULTS_INDEX))
+	//r.Nil(es.DumpIndexes(common.ESC, "TestContentUnitsIndex, BeforeIndexes", consts.ES_RESULT_TYPE_UNITS))
 	suite.ucu(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, false, true)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	//r.Nil(es.DumpDB(common.DB, "TestContentUnitsIndex, AfterDB"))
-	//r.Nil(es.DumpIndexes(common.ESC, "TestContentUnitsIndex, AfterIndexes", consts.ES_RESULTS_INDEX))
+	//r.Nil(es.DumpIndexes(common.ESC, "TestContentUnitsIndex, AfterIndexes", consts.ES_RESULT_TYPE_UNITS))
 	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something else"})
 	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
 	suite.validateContentUnitNames(indexNameRu, indexer, []string{})
@@ -177,7 +178,8 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
 	indexName := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH)
-	indexer := es.MakeIndexer("test", []string{consts.ES_RESULTS_INDEX}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
+    r.Nil(err)
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll())
 	r.Nil(indexer.RefreshAll())
@@ -191,11 +193,11 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 
 	fmt.Printf("\n\n\nValidate we have successfully added a content type.\n\n")
 	//r.Nil(es.DumpDB(common.DB, "Before DB"))
-	//r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_RESULTS_INDEX))
+	//r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_RESULT_TYPE_UNITS))
 	c1UID := suite.uc(es.Collection{ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID, "")
 	r.Nil(indexer.CollectionUpdate(c1UID))
 	//r.Nil(es.DumpDB(common.DB, "After DB"))
-	//r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_RESULTS_INDEX))
+	//r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_RESULT_TYPE_UNITS))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {consts.CT_SPECIAL_LESSON},
@@ -205,9 +207,9 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 	// r.Nil(es.DumpDB(common.DB, "Before DB"))
 	suite.uc(es.Collection{MDB_UID: c2UID, ContentType: consts.CT_MEALS}, cu2UID, "")
 	// r.Nil(es.DumpDB(common.DB, "After DB"))
-	// r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_RESULTS_INDEX))
+	// r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_RESULT_TYPE_UNITS))
 	r.Nil(indexer.CollectionUpdate(c2UID))
-	// r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_RESULTS_INDEX))
+	// r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_RESULT_TYPE_UNITS))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {consts.CT_MEALS},
@@ -216,10 +218,10 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 	fmt.Printf("\n\n\nValidate we have successfully deleted a content type.\n\n")
 	r.Nil(deleteCollection(c2UID))
 	// r.Nil(es.DumpDB(common.DB, "Before"))
-	// r.Nil(es.DumpIndexes(common.ESC, "Before", consts.ES_RESULTS_INDEX))
+	// r.Nil(es.DumpIndexes(common.ESC, "Before", consts.ES_RESULT_TYPE_UNITS))
 	r.Nil(indexer.CollectionUpdate(c2UID))
 	// r.Nil(es.DumpDB(common.DB, "After"))
-	// r.Nil(es.DumpIndexes(common.ESC, "After", consts.ES_RESULTS_INDEX))
+	// r.Nil(es.DumpIndexes(common.ESC, "After", consts.ES_RESULT_TYPE_UNITS))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {},
@@ -229,9 +231,9 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 	// r.Nil(es.DumpDB(common.DB, "Before DB"))
 	suite.uc(es.Collection{MDB_UID: c3UID} /* Add */, cu2UID /* Remove */, cu1UID)
 	// r.Nil(es.DumpDB(common.DB, "After DB"))
-	// r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_RESULTS_INDEX))
+	// r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_RESULT_TYPE_UNITS))
 	r.Nil(indexer.CollectionUpdate(c3UID))
-	// r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_RESULTS_INDEX))
+	// r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_RESULT_TYPE_UNITS))
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
 		cu2UID: {consts.CT_DAILY_LESSON},
