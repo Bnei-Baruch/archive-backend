@@ -3,35 +3,47 @@
         "result": {
             "properties": {
                 "description": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "hindi"
+                        }
+                    }, 
                     "type": "text", 
-                    "analyzer": "hindi"
+                    "analyzer": "standard"
                 }, 
                 "title": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "hindi"
+                        }
+                    }, 
                     "type": "text", 
-                    "analyzer": "hindi"
-                }, 
-                "collections_content_types": {
-                    "type": "keyword"
+                    "analyzer": "standard"
                 }, 
                 "mdb_uid": {
                     "type": "keyword"
                 }, 
                 "content": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "hindi"
+                        }
+                    }, 
                     "type": "text", 
-                    "analyzer": "hindi"
+                    "analyzer": "standard"
                 }, 
-                "sources": {
+                "typed_uids": {
                     "type": "keyword"
                 }, 
-                "content_type": {
+                "filter_values": {
                     "type": "keyword"
                 }, 
                 "effective_date": {
                     "type": "date", 
                     "format": "strict_date"
-                }, 
-                "typed_uids": {
-                    "type": "keyword"
                 }, 
                 "result_type": {
                     "type": "keyword"

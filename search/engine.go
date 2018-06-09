@@ -443,108 +443,15 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 	return nil, srMap
 }
 
-func createContentUnitsQuery(q Query) elastic.Query {
-	boolQuery := elastic.NewBoolQuery()
-	if q.Term != "" {
-		boolQuery = boolQuery.Must(
-			// Don't calculate score here, as we use sloped score below.
-			elastic.NewConstantScoreQuery(
-				elastic.NewBoolQuery().Should(
-					elastic.NewMatchQuery("name.analyzed", q.Term),
-					elastic.NewMatchQuery("description.analyzed", q.Term),
-					elastic.NewMatchQuery("transcript.analyzed", q.Term),
-				).MinimumNumberShouldMatch(1),
-			).Boost(0.0),
-		).Should(
-			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
-				elastic.NewMatchPhraseQuery("transcript.analyzed", q.Term).Slop(100),
-			),
-		)
-	}
-	for _, exactTerm := range q.ExactTerms {
-		boolQuery = boolQuery.Must(
-			// Don't calculate score here, as we use sloped score below.
-			elastic.NewConstantScoreQuery(
-				elastic.NewBoolQuery().Should(
-					elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
-					elastic.NewMatchPhraseQuery("description.analyzed", exactTerm),
-					elastic.NewMatchPhraseQuery("transcript.analyzed", exactTerm),
-				).MinimumNumberShouldMatch(1),
-			).Boost(0.0),
-		).Should(
-			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description.analyzed", exactTerm).Slop(100).Boost(1.2),
-				elastic.NewMatchPhraseQuery("transcript.analyzed", exactTerm).Slop(100),
-			),
-		)
-	}
-	contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
-	filterByContentType := false
-	for filter, values := range q.Filters {
-		s := make([]interface{}, len(values))
-		for i, v := range values {
-			s[i] = v
-		}
-		switch filter {
-		case consts.FILTERS[consts.FILTER_START_DATE]:
-			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Gte(values[0]).Format("yyyy-MM-dd"))
-		case consts.FILTERS[consts.FILTER_END_DATE]:
-			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
-		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
-			contentTypeQuery.Should(elastic.NewTermsQuery(filter, s...))
-			filterByContentType = true
-		default:
-			boolQuery.Filter(elastic.NewTermsQuery(filter, s...))
-		}
-		if filterByContentType {
-			boolQuery.Filter(contentTypeQuery)
-		}
-	}
-	var query elastic.Query
-	query = boolQuery
-	if q.Term == "" && len(q.ExactTerms) == 0 {
-		// No potential score from string matching.
-		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
-	}
-	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
-		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
-		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))
-}
-
-func GetContentUnitsSearchRequests(query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
+func GetSearchRequests(query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
 	requests := make([]*elastic.SearchRequest, 0)
-	content_units_indices := make([]string, len(query.LanguageOrder))
+	indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
-		content_units_indices[i] = es.IndexName("prod", consts.ES_UNITS_INDEX, query.LanguageOrder[i])
+		indices[i] = es.IndexName("prod", consts.ES_RESULTS_INDEX, query.LanguageOrder[i])
 	}
-	fetchSourceContext := elastic.NewFetchSourceContext(true).
-		Include("mdb_uid", "effective_date")
-	for _, index := range content_units_indices {
-		searchSource := elastic.NewSearchSource().
-			Query(createContentUnitsQuery(query)).
-			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("description.analyzed"),
-			elastic.NewHighlighterField("transcript.analyzed"),
-			// elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			// elastic.NewHighlighterField("description.analyzed"),
-			// elastic.NewHighlighterField("transcript.analyzed"),
-		)).
-			FetchSourceContext(fetchSourceContext).
-			From(from).
-			Size(size).
-			Explain(query.Deb)
-		switch sortBy {
-		case consts.SORT_BY_OLDER_TO_NEWER:
-			searchSource = searchSource.Sort("effective_date", true)
-		case consts.SORT_BY_NEWER_TO_OLDER:
-			searchSource = searchSource.Sort("effective_date", false)
-		}
+	for _, index := range indices {
 		request := elastic.NewSearchRequest().
-			SearchSource(searchSource).
+			SearchSource(ResultsSearchSource(query, sortBy, from, size)).
 			Index(index).
 			Preference(preference)
 		requests = append(requests, request)
@@ -831,21 +738,12 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
-	if err := e.AddIntents(&query, preference); err != nil {
-		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
-	}
-	// Print query to log. Without intents (takes too much space).
-	queryToPrint := query
-	queryToPrint.Intents = []Intent{}
-	log.Infof("ESEngine.DoSearch - Query: %+v sort by: %s, from: %d, size: %d", queryToPrint, sortBy, from, size)
-	for _, intent := range query.Intents {
-		if value, ok := intent.Value.(es.ClassificationIntent); ok {
-			value.Explanation = elastic.SearchExplanation{0.0, "Don't print.", nil}
-			value.MaxExplanation = value.Explanation
-			intent.Value = value
-		}
-		log.Infof("ESEngine.DoSearch - \tIntent: %+v", intent)
-	}
+    // TODO: Move intents to user results index.
+	// if err := e.AddIntents(&query, preference); err != nil {
+	// 	return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
+	// }
+
+	log.Infof("ESEngine.DoSearch - Query: %s sort by: %s, from: %d, size: %d", query.ToString(), sortBy, from, size)
 
 	multiSearchService := e.esc.MultiSearch()
 	requestsByIndex := make(map[string][]*elastic.SearchRequest)
@@ -862,13 +760,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	if searchFilter != consts.SEARCH_FILTER_ONLY_SOURCES {
-		requestsByIndex[consts.ES_UNITS_INDEX] = GetContentUnitsSearchRequests(query, sortBy, 0, from+size, preference)
-		requestsByIndex[consts.ES_COLLECTIONS_INDEX] = GetCollectionsSearchRequests(query, sortBy, 0, from+size, preference)
+		requestsByIndex[consts.ES_UNITS_INDEX] = GetSearchRequests(query, sortBy, 0, from+size, preference)
+		// requestsByIndex[consts.ES_COLLECTIONS_INDEX] = GetCollectionsSearchRequests(query, sortBy, 0, from+size, preference)
 	}
 
-	if searchFilter != consts.SEARCH_FILTER_WITHOUT_SOURCES {
-		requestsByIndex[consts.ES_SOURCES_INDEX] = GetSourcesSearchRequests(query, 0, from+size, preference)
-	}
+	// if searchFilter != consts.SEARCH_FILTER_WITHOUT_SOURCES {
+	// 	requestsByIndex[consts.ES_SOURCES_INDEX] = GetSourcesSearchRequests(query, 0, from+size, preference)
+	// }
 
 	for _, k := range requestsByIndex {
 		multiSearchService.Add(k...)
@@ -893,7 +791,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
-			return nil, errors.New("Failed multi get.")
+			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
 		if haveHits(currentResults) {
 			lang := query.LanguageOrder[i%len(query.LanguageOrder)]

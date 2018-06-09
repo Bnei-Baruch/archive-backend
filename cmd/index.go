@@ -22,6 +22,12 @@ var indexCmd = &cobra.Command{
 	Run:   indexFn,
 }
 
+var deleteResultsIndexCmd = &cobra.Command{
+    Use: "delete_results_index",
+    Short: "Delete results index.",
+    Run: deleteResultsIndexFn,
+}
+
 // var indexClassificationsCmd = &cobra.Command{
 // 	Use:   "classifications",
 // 	Short: "Index content units classifications in ES",
@@ -58,6 +64,7 @@ func init() {
 	indexCmd.AddCommand(indexUnitsCmd)
 	// indexCmd.AddCommand(indexCollectionsCmd)
 	// indexCmd.AddCommand(indexSourcesCmd)
+	indexCmd.AddCommand(deleteResultsIndexCmd)
 	indexCmd.AddCommand(restartSearchLogsCmd)
 }
 
@@ -94,6 +101,33 @@ func IndexCmd(index string) {
 		log.Error(err)
 		return
 	}
+	log.Info("Success")
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+}
+
+func deleteResultsIndexFn(cmd *cobra.Command, args []string) {
+	clock := common.Init()
+	defer common.Shutdown()
+
+	for _, lang := range consts.ALL_KNOWN_LANGS {
+        name := es.IndexName("prod", consts.ES_RESULTS_INDEX, lang)
+        exists, err := common.ESC.IndexExists(name).Do(context.TODO())
+        if err != nil {
+            log.Error(err)
+            return
+        }
+        if exists {
+            res, err := common.ESC.DeleteIndex(name).Do(context.TODO())
+            if err != nil {
+                log.Error(errors.Wrap(err, "Delete index"))
+                return
+            }
+            if !res.Acknowledged {
+                log.Error(errors.Errorf("Index deletion wasn't acknowledged: %s", name))
+                return
+            }
+        }
+    }
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }

@@ -3,35 +3,47 @@
         "result": {
             "properties": {
                 "description": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "standard"
+                        }
+                    }, 
                     "type": "text", 
                     "analyzer": "standard"
                 }, 
                 "title": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "standard"
+                        }
+                    }, 
                     "type": "text", 
                     "analyzer": "standard"
-                }, 
-                "collections_content_types": {
-                    "type": "keyword"
                 }, 
                 "mdb_uid": {
                     "type": "keyword"
                 }, 
                 "content": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "standard"
+                        }
+                    }, 
                     "type": "text", 
                     "analyzer": "standard"
                 }, 
-                "sources": {
+                "typed_uids": {
                     "type": "keyword"
                 }, 
-                "content_type": {
+                "filter_values": {
                     "type": "keyword"
                 }, 
                 "effective_date": {
                     "type": "date", 
                     "format": "strict_date"
-                }, 
-                "typed_uids": {
-                    "type": "keyword"
                 }, 
                 "result_type": {
                     "type": "keyword"

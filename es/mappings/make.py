@@ -68,7 +68,7 @@ LANG_GROUPS = {
 }
 
 # Units indexing
-StandardAnalyzer = {
+LanguageAnalyzer = {
   ENGLISH: "english",
   HEBREW: "hebrew",
   RUSSIAN: "russian",
@@ -166,15 +166,33 @@ RESULTS_TEMPLATE = {
         # as units, collections, sources, topics and others to follow.
         "title": {
           "type": "text",
-          "analyzer": lambda lang: StandardAnalyzer[lang],
+          "analyzer": "standard",
+          "fields": {
+            "language": {
+              "type": "text",
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
+            }
+          }
         },
         "description": {
           "type": "text",
-          "analyzer": lambda lang: StandardAnalyzer[lang],
+          "analyzer": "standard",
+          "fields": {
+            "language": {
+              "type": "text",
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
+            },
+          },
         },
         "content": {
           "type": "text",
-          "analyzer": lambda lang: StandardAnalyzer[lang],
+          "analyzer": "standard",
+          "fields": {
+            "language": {
+              "type": "text",
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
+            },
+          },
         },
 
         # Effective date is relevant for units only (for now).
@@ -255,7 +273,7 @@ UNITS_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             },
           },
         },
@@ -265,7 +283,7 @@ UNITS_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             },
           },
         },
@@ -307,7 +325,7 @@ UNITS_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             },
           },
         },
@@ -336,7 +354,7 @@ CLASSIFICATIONS_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             },
           },
         },
@@ -369,7 +387,7 @@ CLASSIFICATIONS_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             },
           },
         },
@@ -385,7 +403,7 @@ CLASSIFICATIONS_TEMPLATE = {
         },
         "description": {
           "type": "text",
-          "analyzer": lambda lang: StandardAnalyzer[lang],
+          "analyzer": lambda lang: LanguageAnalyzer[lang],
         },
         "description_suggest": {
           "type": "completion",
@@ -422,7 +440,7 @@ COLLECTIONS_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             },
           },
         },
@@ -432,7 +450,7 @@ COLLECTIONS_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             },
           },
         },
@@ -472,7 +490,7 @@ SOURCES_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             },
           },
         },
@@ -482,7 +500,7 @@ SOURCES_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             },
           },
         },
@@ -492,7 +510,7 @@ SOURCES_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             }
           },
         },
@@ -502,7 +520,7 @@ SOURCES_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             }
           },
         },
@@ -512,7 +530,7 @@ SOURCES_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             }
           },
         },
@@ -522,7 +540,7 @@ SOURCES_TEMPLATE = {
           "fields": {
             "analyzed": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             }
           },
         },

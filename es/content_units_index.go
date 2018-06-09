@@ -145,12 +145,12 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 		}
 		typedUIDs = append(typedUIDs, keyValues("content_unit", moreUIDs)...)
 	}
-	if scope.PersonUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("person", scope.PersonUID))
-	}
-	if scope.PublisherUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("publisher", scope.PublisherUID))
-	}
+	// if scope.PersonUID != "" {
+	// 	typedUIDs = append(typedUIDs, keyValue("person", scope.PersonUID))
+	// }
+	// if scope.PublisherUID != "" {
+	// 	typedUIDs = append(typedUIDs, keyValue("publisher", scope.PublisherUID))
+	// }
 	if len(typedUIDs) > 0 {
 		typedUIDsI := make([]interface{}, len(typedUIDs))
 		for i, typedUID := range typedUIDs {
@@ -332,7 +332,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 		log.Infof("Content Units Index - Add content unit %s to index %s", string(vBytes), name)
 		resp, err := index.esc.Index().
 			Index(name).
-			Type("content_units").
+			Type("result").
 			BodyJson(v).
 			Do(context.TODO())
 		if err != nil {
