@@ -2,7 +2,7 @@ package es
 
 import (
 	"database/sql"
-    "fmt"
+	"fmt"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
@@ -30,11 +30,13 @@ func MakeIndexer(namespace string, names []string, mdb *sql.DB, esc *elastic.Cli
 	indexer := new(Indexer)
 	indexer.indices = make([]Index, len(names))
 	for i, name := range names {
-        if name == consts.ES_RESULT_TYPE_UNITS {
-		    indexer.indices[i] = MakeContentUnitsIndex(namespace, mdb, esc)
-        } else {
-            return nil, errors.New(fmt.Sprintf("MakeIndexer - Invalid index name: %+v", name))
-        }
+		if name == consts.ES_RESULT_TYPE_UNITS {
+			indexer.indices[i] = MakeContentUnitsIndex(namespace, mdb, esc)
+		} else if name == consts.ES_RESULT_TYPE_SOURCES {
+			indexer.indices[i] = MakeSourcesIndex(namespace, mdb, esc)
+		} else {
+			return nil, errors.New(fmt.Sprintf("MakeIndexer - Invalid index name: %+v", name))
+		}
 
 		// if name == consts.ES_CLASSIFICATIONS_INDEX {
 		// 	indexer.indices[i] = MakeClassificationsIndex(namespace, mdb, esc)
@@ -51,9 +53,9 @@ func MakeIndexer(namespace string, names []string, mdb *sql.DB, esc *elastic.Cli
 
 func (indexer *Indexer) ReindexAll() error {
 	log.Info("Indexer - Re-Indexing everything")
-    if err := indexer.CreateIndexes(); err != nil {
-        return err
-    }
+	if err := indexer.CreateIndexes(); err != nil {
+		return err
+	}
 	for _, index := range indexer.indices {
 		if err := index.ReindexAll(); err != nil {
 			return err
@@ -71,7 +73,7 @@ func (indexer *Indexer) RefreshAll() error {
 }
 
 func (indexer *Indexer) CreateIndexes() error {
-    log.Infof("Indexer - Create new indices in elastic: %+v", indexer.indices)
+	log.Infof("Indexer - Create new indices in elastic: %+v", indexer.indices)
 	for _, index := range indexer.indices {
 		if err := index.CreateIndex(); err != nil {
 			return err
