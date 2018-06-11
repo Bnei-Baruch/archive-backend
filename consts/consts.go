@@ -230,6 +230,8 @@ const ES_RESULTS_INDEX = "results"
 // Result type
 const ES_RESULT_TYPE = "result_type"
 const ES_RESULT_TYPE_UNITS = "units"
+const ES_RESULT_TYPE_SOURCES = "sources"
+const ES_RESULT_TYPE_COLLECTIONS = "collections"
 
 // Other indices are deprecated. Remove them when move to one index is done.
 const ES_CLASSIFICATIONS_INDEX = "classifications"
