@@ -153,9 +153,8 @@ type TagsDashboardResponse struct {
 }
 
 type StatsCUClassResponse struct {
-	Sources map[string]int64 `json:"sources"`
-	Tags    map[string]int64 `json:"tags"`
-	Persons map[string]int64 `json:"persons"`
+	Sources map[string]int `json:"sources"`
+	Tags    map[string]int `json:"tags"`
 }
 
 func NewCollectionsResponse() *CollectionsResponse {
@@ -179,9 +178,8 @@ func NewTagsDashboardResponse() *TagsDashboardResponse {
 
 func NewStatsCUClassResponse() *StatsCUClassResponse {
 	return &StatsCUClassResponse{
-		Sources: make(map[string]int64),
-		Tags:    make(map[string]int64),
-		Persons: make(map[string]int64),
+		Sources: make(map[string]int),
+		Tags:    make(map[string]int),
 	}
 }
 

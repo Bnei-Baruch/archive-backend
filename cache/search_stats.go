@@ -45,6 +45,14 @@ func NewStatsTree() *StatsTree {
 // parent nodes's Histogram will be the overall sum of its children.
 // We do that in code because we don't really know how to do that with SQL.
 func (st *StatsTree) accumulate() {
+	// compute children since next step rely on it for correction
+	for k, v := range st.byID {
+		if v.parentID != 0 {
+			parent := st.byID[v.parentID]
+			parent.children = append(parent.children, k)
+		}
+	}
+
 	// put all leaf nodes in s
 	s := make([]int64, 0)
 	for k, v := range st.byID {
