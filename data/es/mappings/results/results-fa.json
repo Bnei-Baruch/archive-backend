@@ -2,6 +2,17 @@
     "mappings": {
         "result": {
             "properties": {
+                "title_suggest": {
+                    "contexts": [
+                        {
+                            "path": "result_type", 
+                            "type": "category", 
+                            "name": "result_type"
+                        }
+                    ], 
+                    "type": "completion", 
+                    "analyzer": "persian"
+                }, 
                 "description": {
                     "fields": {
                         "language": {

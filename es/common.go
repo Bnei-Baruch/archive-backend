@@ -108,6 +108,27 @@ func KeyValuesToValues(t string, typedUIDs []string) ([]string, error) {
 	return ret, nil
 }
 
+func (result* Result) ToString() string {
+    resultCopy := result
+    if len(resultCopy.Content) > 30 {
+        resultCopy.Content = fmt.Sprintf("%s...", resultCopy.Content[:30])
+    }
+    resultBytes, err := json.Marshal(resultCopy)
+    if err != nil {
+        return "<BAD Result>"
+    }
+    return string(resultBytes)
+}
+
+func Suffixes(title string) []string {
+    parts := strings.Split(title, " ")
+    ret := []string{}
+    for i, _ := range parts {
+        ret = append(ret, strings.Join(parts[i:], " "))
+    }
+    return ret
+}
+
 // Scopes - for detection of changes
 
 func contentUnitsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {

@@ -28,11 +28,11 @@ var deleteResultsIndexCmd = &cobra.Command{
     Run: deleteResultsIndexFn,
 }
 
-// var indexClassificationsCmd = &cobra.Command{
-// 	Use:   "classifications",
-// 	Short: "Index content units classifications in ES",
-// 	Run:   indexClassificationsFn,
-// }
+var indexTagsCmd = &cobra.Command{
+	Use:   "tags",
+	Short: "Index tags in ES",
+	Run:   indexTagsFn,
+}
 
 var indexUnitsCmd = &cobra.Command{
 	Use:   "units",
@@ -60,7 +60,7 @@ var restartSearchLogsCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(indexCmd)
-	// indexCmd.AddCommand(indexClassificationsCmd)
+	indexCmd.AddCommand(indexTagsCmd)
 	indexCmd.AddCommand(indexUnitsCmd)
 	// indexCmd.AddCommand(indexCollectionsCmd)
 	// indexCmd.AddCommand(indexSourcesCmd)
@@ -72,9 +72,9 @@ func indexFn(cmd *cobra.Command, args []string) {
 	fmt.Println("Use one of the subcommands.")
 }
 
-// func indexClassificationsFn(cmd *cobra.Command, args []string) {
-// 	IndexCmd(consts.ES_CLASSIFICATIONS_INDEX)
-// }
+func indexTagsFn(cmd *cobra.Command, args []string) {
+	IndexCmd(consts.ES_RESULT_TYPE_TAGS)
+}
 
 func indexUnitsFn(cmd *cobra.Command, args []string) {
 	IndexCmd(consts.ES_RESULT_TYPE_UNITS)

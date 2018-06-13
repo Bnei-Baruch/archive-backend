@@ -16,7 +16,7 @@ type Result struct {
     ResultType              string      `json:"result_type"`
 
     MDB_UID                 string      `json:"mdb_uid"`
-	TypedUIDs               []string    `json:"typed_uids"`
+	TypedUids               []string    `json:"typed_uids"`
     FilterValues            []string    `json:"filter_values"`
 
     // Result content fields.
@@ -25,6 +25,9 @@ type Result struct {
 	Content                 string      `json:"content,omitempty"`
 
 	EffectiveDate           *utils.Date `json:"effective_date,omitempty"`
+
+    // Suggest field for autocomplete.
+    TitleSuggest            []string    `json:"title_suggest"`
 }
 
 type ClassificationIntent struct {
