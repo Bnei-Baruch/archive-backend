@@ -18,7 +18,7 @@ type UnitsIndexerSuite struct {
     IndexerSuite
 }
 
-func TestIndexer(t *testing.T) {
+func TestUnitsIndexer(t *testing.T) {
 	suite.Run(t, new(UnitsIndexerSuite))
 }
 
