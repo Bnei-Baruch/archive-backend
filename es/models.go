@@ -12,19 +12,19 @@ type EffectiveDate struct {
 
 // For full description see make.py RESULTS TEMPLATE.
 type Result struct {
-    // Document type.
-    ResultType              string      `json:"result_type"`
+	// Document type.
+	ResultType string `json:"result_type"`
 
-    MDB_UID                 string      `json:"mdb_uid"`
-	TypedUIDs               []string    `json:"typed_uids"`
-    FilterValues            []string    `json:"filter_values"`
+	MDB_UID      string   `json:"mdb_uid"`
+	TypedUIDs    []string `json:"typed_uids"`
+	FilterValues []string `json:"filter_values"`
 
-    // Result content fields.
-	Title                   string      `json:"title"`
-	Description             string      `json:"description,omitempty"`
-	Content                 string      `json:"content,omitempty"`
+	// Result content fields.
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	Content     string `json:"content,omitempty"`
 
-	EffectiveDate           *utils.Date `json:"effective_date,omitempty"`
+	EffectiveDate *utils.Date `json:"effective_date,omitempty"`
 }
 
 type ClassificationIntent struct {
@@ -91,8 +91,10 @@ type Classification struct {
 }
 
 type Source struct {
-	MDB_UID     string   `json:"mdb_uid"`
-	Name        string   `json:"name"`
+	MDB_UID string `json:"mdb_uid"`
+	Name    string `json:"name"`
+
+	// Deprecated fields (since we use 'Result Template' in order to index the sources):
 	Description string   `json:"description"`
 	Content     string   `json:"content"`
 	Sources     []string `json:"sources"`
