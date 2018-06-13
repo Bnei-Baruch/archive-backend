@@ -1276,32 +1276,33 @@ func (suite *IndexerSuite) validateSourceNames(indexName string, indexer *es.Ind
 	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	names := make([]string, len(res.Hits.Hits))
-	for i, hit := range res.Hits.Hits {
-		var cu es.Source
-		json.Unmarshal(*hit.Source, &cu)
-		names[i] = cu.Name
-	}
-	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
-	r.ElementsMatch(expectedNames, names)
-}
+	matched := make([]string, 0)
 
-func (suite *IndexerSuite) validateSourceAuthors(indexName string, indexer *es.Indexer, expectedAuthors []string) {
-	r := require.New(suite.T())
-	err := indexer.RefreshAll()
-	r.Nil(err)
-	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
-	r.Nil(err)
-	authors := make([]string, 0)
-	for _, hit := range res.Hits.Hits {
-		var source es.Source
-		json.Unmarshal(*hit.Source, &source)
-		for _, a := range source.Authors {
-			authors = append(authors, a)
+	for i, hit := range res.Hits.Hits {
+		var src es.Result
+		json.Unmarshal(*hit.Source, &src)
+		names[i] = src.Title
+	}
+
+	for _, name := range names {
+		for _, expected := range expectedNames {
+			if strings.Contains(name, expected) {
+				exist := false
+				for _, m := range matched {
+					if m == expected {
+						exist = true
+						break
+					}
+				}
+				if !exist {
+					matched = append(matched, expected)
+				}
+			}
 		}
 	}
-	r.Equal(len(expectedAuthors), len(authors))
-	r.ElementsMatch(expectedAuthors, authors)
+
+	r.Equal(len(expectedNames), len(matched))
+	r.ElementsMatch(expectedNames, matched)
 }
 
 func (suite *IndexerSuite) validateSourcesFullPath(indexName string, indexer *es.Indexer, expectedSources []string) {
@@ -1313,14 +1314,16 @@ func (suite *IndexerSuite) validateSourcesFullPath(indexName string, indexer *es
 	r.Nil(err)
 	sources := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
-		var src es.Source
+		var src es.Result
 		json.Unmarshal(*hit.Source, &src)
-		for _, s := range src.Sources {
+		for _, s := range src.FilterValues {
 			sources = append(sources, s)
 		}
 	}
-	r.Equal(len(expectedSources), len(sources))
-	r.ElementsMatch(expectedSources, sources)
+	formatedSources, err := es.KeyValuesToValues("source", sources)
+	r.Nil(err)
+	r.Equal(len(expectedSources), len(formatedSources))
+	r.ElementsMatch(expectedSources, formatedSources)
 }
 
 func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Indexer, expectedContentsByNames map[string]string) {
@@ -1332,9 +1335,9 @@ func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Inde
 	r.Nil(err)
 	contentsByNames := make(map[string]string)
 	for _, hit := range res.Hits.Hits {
-		var src es.Source
+		var src es.Result
 		json.Unmarshal(*hit.Source, &src)
-		contentsByNames[src.Name] = src.Content
+		contentsByNames[src.MDB_UID] = src.Content
 	}
 
 	r.True(reflect.DeepEqual(expectedContentsByNames, contentsByNames))

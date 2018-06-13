@@ -301,7 +301,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				}*/
 			}
 			authors := authorsByLanguage[i18n.Language]
-			s := append(authors, append(pathNames, i18n.Name.String)...)
+			s := append(authors, pathNames...)
 			source.Title = strings.Join(s, " ")
 			i18nMap[i18n.Language] = source
 		}
