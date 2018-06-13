@@ -29,7 +29,7 @@ type TagsIndex struct {
 }
 
 func (index *TagsIndex) ReindexAll() error {
-	log.Info("Classifications Index - Reindexing all.")
+	log.Info("Tags Index - Reindexing all.")
 	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_TAGS)); err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func (index *TagsIndex) ReindexAll() error {
 }
 
 func (index *TagsIndex) Update(scope Scope) error {
-	log.Infof("Classifications Index - Update. Scope: %+v.", scope)
+	log.Infof("Tags Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
     if err != nil {
 		return err
@@ -61,7 +61,7 @@ func (index *TagsIndex) addToIndex(scope Scope, removedUIDs []string) error {
 }
 
 func (index *TagsIndex) removeFromIndex(scope Scope) ([]string, error) {
-	log.Infof("Classifications Index - removeFromIndex. Scope: %+v.", scope)
+	log.Infof("Tags Index - removeFromIndex. Scope: %+v.", scope)
 	if scope.TagUID != "" {
 		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_UNITS).
             Filter(elastic.NewTermsQuery("typed_uids", keyValue("tag", scope.TagUID)))
@@ -76,13 +76,13 @@ func (index *TagsIndex) addToIndexSql(sqlScope string) error {
 		qm.Load("TagI18ns"),
 		qm.Where(sqlScope)).All()
 	if err != nil {
-		return errors.Wrap(err, "Classifications Index - Fetch tags from mdb.")
+		return errors.Wrap(err, "Tags Index - Fetch tags from mdb.")
 	}
-	log.Infof("Classifications Index - Adding %d tags. Scope: %s.", len(tags), sqlScope)
+	log.Infof("Tags Index - Adding %d tags. Scope: %s.", len(tags), sqlScope)
 
 	for _, tag := range tags {
 		if !tag.ParentID.Valid {
-			log.Infof("Classifications Index - Skipping root tag [%s].", tag.UID)
+			log.Infof("Tags Index - Skipping root tag [%s].", tag.UID)
 			continue
 		}
 		if err := index.indexTag(tag); err != nil {
@@ -105,17 +105,17 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 				TitleSuggest: Suffixes(i18n.Label.String),
 			}
 			name := index.indexName(i18n.Language)
-			log.Infof("Classifications Index - Add tag %s to index %s", r.ToString(), name)
+			log.Infof("Tags Index - Add tag %s to index %s", r.ToString(), name)
 			resp, err := index.esc.Index().
 				Index(name).
 				Type("result").
 				BodyJson(r).
 				Do(context.TODO())
 			if err != nil {
-				return errors.Wrapf(err, "Classifications Index - Index tag %s %s", name, t.UID)
+				return errors.Wrapf(err, "Tags Index - Index tag %s %s", name, t.UID)
 			}
 			if !resp.Created {
-				return errors.Errorf("Classifications Index - Not created: tag %s %s", name, t.UID)
+				return errors.Errorf("Tags Index - Not created: tag %s %s", name, t.UID)
 			}
 		}
 	}

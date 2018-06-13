@@ -121,7 +121,7 @@ func (result* Result) ToString() string {
 }
 
 func Suffixes(title string) []string {
-    parts := strings.Split(title, " ")
+    parts := strings.Split(strings.TrimSpace(title), " ")
     ret := []string{}
     for i, _ := range parts {
         ret = append(ret, strings.Join(parts[i:], " "))
