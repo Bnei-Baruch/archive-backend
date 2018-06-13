@@ -12,27 +12,31 @@ type EffectiveDate struct {
 
 // For full description see make.py RESULTS TEMPLATE.
 type Result struct {
-    // Document type.
-    ResultType              string      `json:"result_type"`
+	// Document type.
+	ResultType string `json:"result_type"`
 
-    MDB_UID                 string      `json:"mdb_uid"`
-	TypedUids               []string    `json:"typed_uids"`
-    FilterValues            []string    `json:"filter_values"`
+	MDB_UID      string   `json:"mdb_uid"`
+	TypedUids    []string `json:"typed_uids"`
+	FilterValues []string `json:"filter_values"`
 
-    // Result content fields.
-	Title                   string      `json:"title"`
-	Description             string      `json:"description,omitempty"`
-	Content                 string      `json:"content,omitempty"`
+	// Result content fields.
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	Content     string `json:"content,omitempty"`
 
-	EffectiveDate           *utils.Date `json:"effective_date,omitempty"`
+	EffectiveDate *utils.Date `json:"effective_date,omitempty"`
 
-    // Suggest field for autocomplete.
-    TitleSuggest            []string    `json:"title_suggest"`
+	// Suggest field for autocomplete.
+	TitleSuggest []string `json:"title_suggest"`
 }
 
 type ClassificationIntent struct {
-	MDB_UID        string                    `json:"mdb_uid"`
-	Name           string                    `json:"name"`
+	// Fields from result.
+	ResultType string `json:"result_type"`
+	MDB_UID    string `json:"mdb_uid"`
+	Title      string `json:"title"`
+
+	// Intent fields.
 	ContentType    string                    `json:"content_type"`
 	Exist          bool                      `json:"exist"`
 	Score          *float64                  `json:"score,omitempty"`

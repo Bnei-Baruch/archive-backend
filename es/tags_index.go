@@ -39,7 +39,7 @@ func (index *TagsIndex) ReindexAll() error {
 func (index *TagsIndex) Update(scope Scope) error {
 	log.Infof("Tags Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
-    if err != nil {
+	if err != nil {
 		return err
 	}
 	return index.addToIndex(scope, removed)
@@ -48,7 +48,7 @@ func (index *TagsIndex) Update(scope Scope) error {
 func (index *TagsIndex) addToIndex(scope Scope, removedUIDs []string) error {
 	uids := removedUIDs
 	if scope.TagUID != "" {
-        uids = append(uids, scope.TagUID)
+		uids = append(uids, scope.TagUID)
 	}
 	if len(uids) == 0 {
 		return nil
@@ -64,11 +64,11 @@ func (index *TagsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	log.Infof("Tags Index - removeFromIndex. Scope: %+v.", scope)
 	if scope.TagUID != "" {
 		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_UNITS).
-            Filter(elastic.NewTermsQuery("typed_uids", keyValue("tag", scope.TagUID)))
+			Filter(elastic.NewTermsQuery("typed_uids", keyValue("tag", scope.TagUID)))
 		return index.RemoveFromIndexQuery(elasticScope)
 	}
-    // Nothing to remove.
-    return []string{}, nil
+	// Nothing to remove.
+	return []string{}, nil
 }
 
 func (index *TagsIndex) addToIndexSql(sqlScope string) error {
@@ -95,12 +95,12 @@ func (index *TagsIndex) addToIndexSql(sqlScope string) error {
 func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 	for i := range t.R.TagI18ns {
 		i18n := t.R.TagI18ns[i]
-		if i18n.Label.Valid && i18n.Label.String != "" {
+		if i18n.Label.Valid && strings.TrimSpace(i18n.Label.String) != "" {
 			r := Result{
-                ResultType:   consts.ES_RESULT_TYPE_TAGS,
+				ResultType:   consts.ES_RESULT_TYPE_TAGS,
 				MDB_UID:      t.UID,
-                TypedUids:    []string{keyValue("tag", t.UID)},
-                FilterValues: []string{keyValue("tag", t.UID)},
+				TypedUids:    []string{keyValue("tag", t.UID)},
+				FilterValues: []string{keyValue("tag", t.UID)},
 				Title:        i18n.Label.String,
 				TitleSuggest: Suffixes(i18n.Label.String),
 			}
@@ -121,4 +121,3 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 	}
 	return nil
 }
-

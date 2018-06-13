@@ -21,9 +21,9 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/Bnei-Baruch/sqlboiler/boil"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
+	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
@@ -265,7 +265,7 @@ func (suite *IndexerSuite) SetupTest() {
 	r.Nil(deleteContentUnits(uids))
 	// Remove test indexes.
 	indexer, err := es.MakeIndexer("test", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
-    r.Nil(err)
+	r.Nil(err)
 	r.Nil(indexer.DeleteIndexes())
 	// Delete test directory
 	os.RemoveAll(viper.GetString("test.test-docx-folder"))
@@ -1127,12 +1127,12 @@ func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *e
 	err := indexer.RefreshAll()
 	r.Nil(err)
 	var res *elastic.SearchResult
-    log.Infof("indexName: %+v", indexName)
+	log.Infof("indexName: %+v", indexName)
 	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
-    if err != nil {
-        log.Infof("Error: %+v", err.Error())
-        r.Nil(err)
-    }
+	if err != nil {
+		log.Infof("Error: %+v", err.Error())
+		r.Nil(err)
+	}
 	names := make([]string, len(res.Hits.Hits))
 	for i, hit := range res.Hits.Hits {
 		var cu es.Result
@@ -1154,9 +1154,9 @@ func (suite *IndexerSuite) validateContentUnitTags(indexName string, indexer *es
 	for _, hit := range res.Hits.Hits {
 		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
-        hitTags, err := es.KeyValuesToValues("tag", cu.FilterValues)
-        r.Nil(err)
-        tags = append(tags, hitTags...)
+		hitTags, err := es.KeyValuesToValues("tag", cu.FilterValues)
+		r.Nil(err)
+		tags = append(tags, hitTags...)
 	}
 	r.Equal(len(expectedTags), len(tags))
 	r.ElementsMatch(expectedTags, tags)
@@ -1173,9 +1173,9 @@ func (suite *IndexerSuite) validateContentUnitSources(indexName string, indexer 
 	for _, hit := range res.Hits.Hits {
 		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
-        hitSources, err := es.KeyValuesToValues("source", cu.FilterValues)
-        r.Nil(err)
-        sources = append(sources, hitSources...)
+		hitSources, err := es.KeyValuesToValues("source", cu.FilterValues)
+		r.Nil(err)
+		sources = append(sources, hitSources...)
 	}
 	r.Equal(len(expectedSources), len(sources))
 	r.ElementsMatch(expectedSources, sources)
@@ -1198,7 +1198,7 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *e
 	// 			langs = append(langs, t)
 	// 		}
 	// 	}
-    //
+	//
 	// 	r.Equal(len(expectedLangs), len(langs))
 	// 	r.ElementsMatch(expectedLangs, langs)
 	// }
@@ -1255,8 +1255,8 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 	}
 	types := make(map[string][]string)
 	for k, cu := range cus {
-        collectionsContentTypes, err := es.KeyValuesToValues("collections_content_type", cu.FilterValues)
-        r.Nil(err)
+		collectionsContentTypes, err := es.KeyValuesToValues("collections_content_type", cu.FilterValues)
+		r.Nil(err)
 		types[k] = collectionsContentTypes
 	}
 	suite.validateMaps(expectedTypes, types)

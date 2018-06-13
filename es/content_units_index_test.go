@@ -15,7 +15,7 @@ import (
 )
 
 type UnitsIndexerSuite struct {
-    IndexerSuite
+	IndexerSuite
 }
 
 func TestUnitsIndexer(t *testing.T) {
@@ -40,7 +40,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	indexNameHe := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_HEBREW)
 	indexNameRu := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_RUSSIAN)
 	indexer, err := es.MakeIndexer("test", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
-    r.Nil(err)
+	r.Nil(err)
 
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll())
@@ -179,7 +179,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
 	indexName := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH)
 	indexer, err := es.MakeIndexer("test", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
-    r.Nil(err)
+	r.Nil(err)
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll())
 	r.Nil(indexer.RefreshAll())
@@ -248,4 +248,3 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())
 }
-

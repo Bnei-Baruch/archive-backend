@@ -23,9 +23,9 @@ var indexCmd = &cobra.Command{
 }
 
 var deleteResultsIndexCmd = &cobra.Command{
-    Use: "delete_results_index",
-    Short: "Delete results index.",
-    Run: deleteResultsIndexFn,
+	Use:   "delete_results_index",
+	Short: "Delete results index.",
+	Run:   deleteResultsIndexFn,
 }
 
 var indexTagsCmd = &cobra.Command{
@@ -92,10 +92,10 @@ func IndexCmd(index string) {
 	clock := common.Init()
 	defer common.Shutdown()
 	indexer, err := es.MakeIndexer("prod", []string{index}, common.DB, common.ESC)
-    if err != nil {
-        log.Error(err)
-        return
-    }
+	if err != nil {
+		log.Error(err)
+		return
+	}
 	err = indexer.ReindexAll()
 	if err != nil {
 		log.Error(err)
@@ -110,24 +110,24 @@ func deleteResultsIndexFn(cmd *cobra.Command, args []string) {
 	defer common.Shutdown()
 
 	for _, lang := range consts.ALL_KNOWN_LANGS {
-        name := es.IndexName("prod", consts.ES_RESULTS_INDEX, lang)
-        exists, err := common.ESC.IndexExists(name).Do(context.TODO())
-        if err != nil {
-            log.Error(err)
-            return
-        }
-        if exists {
-            res, err := common.ESC.DeleteIndex(name).Do(context.TODO())
-            if err != nil {
-                log.Error(errors.Wrap(err, "Delete index"))
-                return
-            }
-            if !res.Acknowledged {
-                log.Error(errors.Errorf("Index deletion wasn't acknowledged: %s", name))
-                return
-            }
-        }
-    }
+		name := es.IndexName("prod", consts.ES_RESULTS_INDEX, lang)
+		exists, err := common.ESC.IndexExists(name).Do(context.TODO())
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		if exists {
+			res, err := common.ESC.DeleteIndex(name).Do(context.TODO())
+			if err != nil {
+				log.Error(errors.Wrap(err, "Delete index"))
+				return
+			}
+			if !res.Acknowledged {
+				log.Error(errors.Errorf("Index deletion wasn't acknowledged: %s", name))
+				return
+			}
+		}
+	}
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }

@@ -157,7 +157,7 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 			typedUidsI[i] = typedUID
 		}
 		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_UNITS).
-            Filter(elastic.NewTermsQuery("typed_uids", typedUidsI...))
+			Filter(elastic.NewTermsQuery("typed_uids", typedUidsI...))
 		return index.RemoveFromIndexQuery(elasticScope)
 	} else {
 		// Nothing to remove.
@@ -229,19 +229,19 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
 	for _, i18n := range cu.R.ContentUnitI18ns {
-		if i18n.Name.Valid && i18n.Name.String != "" {
+		if i18n.Name.Valid && strings.TrimSpace(i18n.Name.String) != "" {
 			typedUids := append([]string{keyValue("content_unit", cu.UID)},
 				collectionsTypedUids(cu.R.CollectionsContentUnits)...)
-            filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name)},
-                keyValues("collections_content_type", collectionsContentTypes(cu.R.CollectionsContentUnits))...)
+			filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name)},
+				keyValues("collections_content_type", collectionsContentTypes(cu.R.CollectionsContentUnits))...)
 
 			unit := Result{
-                ResultType:   consts.ES_RESULT_TYPE_UNITS,
+				ResultType:   consts.ES_RESULT_TYPE_UNITS,
 				MDB_UID:      cu.UID,
 				TypedUids:    typedUids,
-                FilterValues: filterValues,
+				FilterValues: filterValues,
 				Title:        i18n.Name.String,
-                TitleSuggest: Suffixes(i18n.Name.String),
+				TitleSuggest: Suffixes(i18n.Name.String),
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {

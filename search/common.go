@@ -8,7 +8,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/es"
 )
 
-func (query* Query) ToString() string {
+func (query *Query) ToString() string {
 	queryToPrint := query
 	for i := range queryToPrint.Intents {
 		if value, ok := queryToPrint.Intents[i].Value.(es.ClassificationIntent); ok {
@@ -17,5 +17,5 @@ func (query* Query) ToString() string {
 			queryToPrint.Intents[i].Value = value
 		}
 	}
-    return fmt.Sprintf("%+v", queryToPrint)
+	return fmt.Sprintf("%+v", queryToPrint)
 }
