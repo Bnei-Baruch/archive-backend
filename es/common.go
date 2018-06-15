@@ -108,6 +108,27 @@ func KeyValuesToValues(t string, typedUIDs []string) ([]string, error) {
 	return ret, nil
 }
 
+func (result *Result) ToString() string {
+	resultCopy := result
+	if len(resultCopy.Content) > 30 {
+		resultCopy.Content = fmt.Sprintf("%s...", resultCopy.Content[:30])
+	}
+	resultBytes, err := json.Marshal(resultCopy)
+	if err != nil {
+		return "<BAD Result>"
+	}
+	return string(resultBytes)
+}
+
+func Suffixes(title string) []string {
+	parts := strings.Split(strings.TrimSpace(title), " ")
+	ret := []string{}
+	for i, _ := range parts {
+		ret = append(ret, strings.Join(parts[i:], " "))
+	}
+	return ret
+}
+
 // Scopes - for detection of changes
 
 func contentUnitsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {
@@ -252,9 +273,9 @@ func DumpIndexes(esc *elastic.Client, title string, resultType string) error {
 	indexName := IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH)
 	fmt.Printf("\n\n\nINDEX %s\n\n", indexName)
 	indexer, err := MakeIndexer("test", []string{resultType}, nil, esc)
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 	if err := indexer.RefreshAll(); err != nil {
 		return err
 	}

@@ -200,6 +200,19 @@ RESULTS_TEMPLATE = {
           "type": "date",
           "format": "strict_date",
         },
+
+        # Suggest field for autocomplete.
+        "title_suggest": {
+          "type": "completion",
+          "analyzer": lambda lang: LanguageAnalyzer[lang],
+          "contexts": [
+            {
+              "name": "result_type",
+              "type": "category",
+              "path": "result_type",
+            },
+          ],
+        },
       }
     }
   }

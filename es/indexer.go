@@ -34,6 +34,8 @@ func MakeIndexer(namespace string, names []string, mdb *sql.DB, esc *elastic.Cli
 			indexer.indices[i] = MakeContentUnitsIndex(namespace, mdb, esc)
 		} else if name == consts.ES_RESULT_TYPE_SOURCES {
 			indexer.indices[i] = MakeSourcesIndex(namespace, mdb, esc)
+		} else if name == consts.ES_RESULT_TYPE_TAGS {
+			indexer.indices[i] = MakeTagsIndex(namespace, mdb, esc)
 		} else {
 			return nil, errors.New(fmt.Sprintf("MakeIndexer - Invalid index name: %+v", name))
 		}

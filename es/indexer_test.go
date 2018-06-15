@@ -51,11 +51,6 @@ type TestDBManager struct {
 const uidBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 const lettersBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-func TestIndexer(t *testing.T) {
-	suite.Run(t, new(UnitsIndexerSuite))
-	suite.Run(t, new(SourcesIndexerSuite))
-}
-
 func GenerateUID(n int) string {
 	b := make([]byte, n)
 	for i := range b {

@@ -2,8 +2,10 @@ package es_test
 
 import (
 	"fmt"
+	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -13,6 +15,10 @@ import (
 
 type SourcesIndexerSuite struct {
 	IndexerSuite
+}
+
+func TestSourcesIndexer(t *testing.T) {
+	suite.Run(t, new(UnitsIndexerSuite))
 }
 
 func (suite *SourcesIndexerSuite) TestSourcesIndex() {

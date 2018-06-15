@@ -54,14 +54,14 @@ func (index *BaseIndex) CreateIndex() error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		name := index.indexName(lang)
 		// Do nothing if index already exists.
-        exists, err := index.esc.IndexExists(name).Do(context.TODO())
-        if err != nil {
-            return err
-        }
-        if exists {
-            log.Infof("Index already exists (%+v), skipping.", name)
-            continue
-        }
+		exists, err := index.esc.IndexExists(name).Do(context.TODO())
+		if err != nil {
+			return err
+		}
+		if exists {
+			log.Infof("Index already exists (%+v), skipping.", name)
+			continue
+		}
 
 		definition := fmt.Sprintf("data/es/mappings/%s/%s-%s.json", index.baseName, index.baseName, lang)
 		// Read mappings and create index
@@ -82,7 +82,7 @@ func (index *BaseIndex) CreateIndex() error {
 		if !res.Acknowledged {
 			return errors.Errorf("Index creation wasn't acknowledged: %s", name)
 		}
-        log.Infof("Created index: %+v", name)
+		log.Infof("Created index: %+v", name)
 	}
 	return nil
 }
@@ -130,7 +130,7 @@ func (index *BaseIndex) RefreshIndexByLang(lang string) error {
 }
 
 func (index *BaseIndex) FilterByResultTypeQuery(resultType string) *elastic.BoolQuery {
-    return elastic.NewBoolQuery().Filter(elastic.NewTermsQuery(consts.ES_RESULT_TYPE, resultType))
+	return elastic.NewBoolQuery().Filter(elastic.NewTermsQuery(consts.ES_RESULT_TYPE, resultType))
 }
 
 func (index *BaseIndex) RemoveFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
@@ -178,4 +178,3 @@ func (index *BaseIndex) RemoveFromIndexQuery(elasticScope elastic.Query) ([]stri
 	}
 	return keys, nil
 }
-

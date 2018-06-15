@@ -232,6 +232,10 @@ const ES_RESULT_TYPE = "result_type"
 const ES_RESULT_TYPE_UNITS = "units"
 const ES_RESULT_TYPE_SOURCES = "sources"
 const ES_RESULT_TYPE_COLLECTIONS = "collections"
+const ES_RESULT_TYPE_TAGS = "tags"
+
+var ES_SEARCH_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_SOURCES}
+var ES_ALL_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_TAGS, ES_RESULT_TYPE_SOURCES}
 
 // Other indices are deprecated. Remove them when move to one index is done.
 const ES_CLASSIFICATIONS_INDEX = "classifications"
@@ -267,9 +271,15 @@ const (
 	INTENT_HIT_TYPE_LESSONS  = "lessons"
 )
 
+// Fake index for intents.
 var INTENT_INDEX_BY_TYPE = map[string]string{
 	INTENT_TYPE_TAG:    INTENT_INDEX_TAG,
 	INTENT_TYPE_SOURCE: INTENT_INDEX_SOURCE,
+}
+
+var RESULT_TYPE_BY_INDEX_TYPE = map[string]string{
+	INTENT_TYPE_TAG: ES_RESULT_TYPE_TAGS,
+	// INTENT_TYPE_SOURCE: ES_RESULT_TYPE_SOURCES,
 }
 
 var INTENT_HIT_TYPE_BY_CT = map[string]string{

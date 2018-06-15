@@ -175,95 +175,95 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 	return resp, nil
 }
 
-func createSourcesIntentQuery(q Query) elastic.Query {
-	boolQuery := elastic.NewBoolQuery()
-	if q.Term != "" {
-		boolQuery = boolQuery.Must(
-			// Don't calculate score here, as we use sloped score below.
-			elastic.NewConstantScoreQuery(
-				elastic.NewMatchQuery("name.analyzed", q.Term),
-			).Boost(0.0),
-		).Should(
-			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100),
-			),
-		)
-	}
-	for _, exactTerm := range q.ExactTerms {
-		boolQuery = boolQuery.Must(
-			// Don't calculate score here, as we use sloped score below.
-			elastic.NewConstantScoreQuery(
-				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
-			).Boost(0.0),
-		).Should(
-			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100),
-			),
-		)
-	}
-	return elastic.NewFunctionScoreQuery().Query(boolQuery).
-		Boost(2.0 * 3.0) // Title Boost * Time Boost
-}
+// func createSourcesIntentQuery(q Query) elastic.Query {
+// 	boolQuery := elastic.NewBoolQuery()
+// 	if q.Term != "" {
+// 		boolQuery = boolQuery.Must(
+// 			// Don't calculate score here, as we use sloped score below.
+// 			elastic.NewConstantScoreQuery(
+// 				elastic.NewMatchQuery("name.analyzed", q.Term),
+// 			).Boost(0.0),
+// 		).Should(
+// 			elastic.NewDisMaxQuery().Query(
+// 				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100),
+// 			),
+// 		)
+// 	}
+// 	for _, exactTerm := range q.ExactTerms {
+// 		boolQuery = boolQuery.Must(
+// 			// Don't calculate score here, as we use sloped score below.
+// 			elastic.NewConstantScoreQuery(
+// 				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
+// 			).Boost(0.0),
+// 		).Should(
+// 			elastic.NewDisMaxQuery().Query(
+// 				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100),
+// 			),
+// 		)
+// 	}
+// 	return elastic.NewFunctionScoreQuery().Query(boolQuery).
+// 		Boost(2.0 * 3.0) // Title Boost * Time Boost
+// }
+//
+// func createTagsIntentQuery(q Query) elastic.Query {
+// 	boolQuery := elastic.NewBoolQuery()
+// 	if q.Term != "" {
+// 		boolQuery = boolQuery.Must(
+// 			// Don't calculate score here, as we use sloped score below.
+// 			elastic.NewConstantScoreQuery(
+// 				elastic.NewMatchQuery("name.analyzed", q.Term),
+// 			).Boost(0.0),
+// 		).Should(
+// 			elastic.NewDisMaxQuery().Query(
+// 				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100),
+// 			),
+// 		)
+// 	}
+// 	for _, exactTerm := range q.ExactTerms {
+// 		boolQuery = boolQuery.Must(
+// 			// Don't calculate score here, as we use sloped score below.
+// 			elastic.NewConstantScoreQuery(
+// 				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
+// 			).Boost(0.0),
+// 		).Should(
+// 			elastic.NewDisMaxQuery().Query(
+// 				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100),
+// 			),
+// 		)
+// 	}
+// 	return elastic.NewFunctionScoreQuery().Query(boolQuery).
+// 		Boost(2.0 * 3.0) // Title Boost * Time Boost
+// }
 
-func createTagsIntentQuery(q Query) elastic.Query {
-	boolQuery := elastic.NewBoolQuery()
-	if q.Term != "" {
-		boolQuery = boolQuery.Must(
-			// Don't calculate score here, as we use sloped score below.
-			elastic.NewConstantScoreQuery(
-				elastic.NewMatchQuery("name.analyzed", q.Term),
-			).Boost(0.0),
-		).Should(
-			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100),
-			),
-		)
-	}
-	for _, exactTerm := range q.ExactTerms {
-		boolQuery = boolQuery.Must(
-			// Don't calculate score here, as we use sloped score below.
-			elastic.NewConstantScoreQuery(
-				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
-			).Boost(0.0),
-		).Should(
-			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100),
-			),
-		)
-	}
-	return elastic.NewFunctionScoreQuery().Query(boolQuery).
-		Boost(2.0 * 3.0) // Title Boost * Time Boost
-}
+// func TagsIntentRequest(query Query, language string, preference string) *elastic.SearchRequest {
+// 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "name")
+// 	searchSource := elastic.NewSearchSource().
+// 		Query(createTagsIntentQuery(query)).
+// 		FetchSourceContext(fetchSourceContext).
+// 		Explain(query.Deb)
+// 	return elastic.NewSearchRequest().
+// 		SearchSource(searchSource).
+// 		Index(es.IndexName("prod", consts.ES_CLASSIFICATIONS_INDEX, language)).
+// 		Type(consts.TAGS_INDEX_TYPE).
+// 		Preference(preference)
+// }
 
-func TagsIntentRequest(query Query, language string, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "name")
-	searchSource := elastic.NewSearchSource().
-		Query(createTagsIntentQuery(query)).
-		FetchSourceContext(fetchSourceContext).
-		Explain(query.Deb)
-	return elastic.NewSearchRequest().
-		SearchSource(searchSource).
-		Index(es.IndexName("prod", consts.ES_CLASSIFICATIONS_INDEX, language)).
-		Type(consts.TAGS_INDEX_TYPE).
-		Preference(preference)
-}
+// type IntentRequestFunc func(query Query, language string, preference string) *elastic.SearchRequest
 
-type IntentRequestFunc func(query Query, language string, preference string) *elastic.SearchRequest
+// func SourcesIntentRequest(query Query, language string, preference string) *elastic.SearchRequest {
+// 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "name")
+// 	searchSource := elastic.NewSearchSource().
+// 		Query(createSourcesIntentQuery(query)).
+// 		FetchSourceContext(fetchSourceContext).
+// 		Explain(query.Deb)
+// 	return elastic.NewSearchRequest().
+// 		SearchSource(searchSource).
+// 		Index(es.IndexName("prod", consts.ES_CLASSIFICATIONS_INDEX, language)).
+// 		Type(consts.SOURCES_INDEX_TYPE).
+// 		Preference(preference)
+// }
 
-func SourcesIntentRequest(query Query, language string, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "name")
-	searchSource := elastic.NewSearchSource().
-		Query(createSourcesIntentQuery(query)).
-		FetchSourceContext(fetchSourceContext).
-		Explain(query.Deb)
-	return elastic.NewSearchRequest().
-		SearchSource(searchSource).
-		Index(es.IndexName("prod", consts.ES_CLASSIFICATIONS_INDEX, language)).
-		Type(consts.SOURCES_INDEX_TYPE).
-		Preference(preference)
-}
-
-func (e *ESEngine) AddClassificationIntentSecondRound(h *elastic.SearchHit, intent Intent, query Query) (error, *Intent, *Query) {
+func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, query Query) (error, *Intent, *Query) {
 	var classificationIntent es.ClassificationIntent
 	if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
 		return err, nil, nil
@@ -271,11 +271,12 @@ func (e *ESEngine) AddClassificationIntentSecondRound(h *elastic.SearchHit, inte
 	if query.Deb {
 		classificationIntent.Explanation = *h.Explanation
 	}
+	log.Infof("Hit: %+v %+v", *h.Score, classificationIntent)
 	if h.Score != nil && *h.Score > 0 {
 		classificationIntent.Score = h.Score
 		// Search for specific classification by full name to evaluate max score.
 		query.Term = ""
-		query.ExactTerms = []string{classificationIntent.Name}
+		query.ExactTerms = []string{classificationIntent.Title}
 		intent.Value = classificationIntent
 		return nil, &intent, &query
 	}
@@ -286,19 +287,24 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
 		return nil
 	}
+
 	mssFirstRound := e.esc.MultiSearch()
 	potentialIntents := make([]Intent, 0)
 	for _, language := range query.LanguageOrder {
 		// Order here provides the priority in results, i.e., tags are more importnt then sources.
-		mssFirstRound.Add(TagsIntentRequest(*query, language, preference))
+		index := es.IndexName("prod", consts.ES_RESULTS_INDEX, language)
+		mssFirstRound.Add(NewResultsSearchRequest(
+			[]string{consts.ES_RESULT_TYPE_TAGS}, index, *query,
+			consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
-		mssFirstRound.Add(SourcesIntentRequest(*query, language, preference))
-		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
+		// mssFirstRound.Add(SourcesIntentRequest(*query, language, preference))
+		// potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
 	mr, err := mssFirstRound.Do(context.TODO())
 	if err != nil {
 		return errors.Wrap(err, "ESEngine.AddIntents - Error multisearch Do.")
 	}
+
 	// Build second request to evaluate how close the search is toward the full name.
 	mssSecondRound := e.esc.MultiSearch()
 	finalIntents := make([]Intent, 0)
@@ -308,24 +314,29 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 			log.Warnf("ESEngine.AddIntents - First Run %+v", res.Error)
 			return errors.New("ESEngine.AddIntents - First Run Failed multi get (S).")
 		}
-		var intentRequestFunc IntentRequestFunc
-		switch potentialIntents[i].Type {
-		case consts.INTENT_TYPE_SOURCE:
-			intentRequestFunc = SourcesIntentRequest
-		case consts.INTENT_TYPE_TAG:
-			intentRequestFunc = TagsIntentRequest
-		default:
-			log.Errorf("ESEngine.AddIntents - First round bad type: %+v", potentialIntents[i])
-			continue
-		}
+		// var intentRequestFunc IntentRequestFunc
+		// switch potentialIntents[i].Type {
+		// case consts.INTENT_TYPE_SOURCE:
+		// 	intentRequestFunc = SourcesIntentRequest
+		// case consts.INTENT_TYPE_TAG:
+		// 	intentRequestFunc = TagsIntentRequest
+		// default:
+		// 	log.Errorf("ESEngine.AddIntents - First round bad type: %+v", potentialIntents[i])
+		// 	continue
+		// }
 		if haveHits(res) {
 			for _, h := range res.Hits.Hits {
-				err, intent, secondRoundQuery := e.AddClassificationIntentSecondRound(h, potentialIntents[i], *query)
+				err, intent, secondRoundQuery := e.AddIntentSecondRound(h, potentialIntents[i], *query)
+				log.Infof("Adding second round for %+v %+v %+v", intent, secondRoundQuery, potentialIntents[i])
 				if err != nil {
 					return errors.Wrapf(err, "ESEngine.AddIntents - Error second run for intent %+v", potentialIntents[i])
 				}
 				if intent != nil {
-					mssSecondRound.Add(intentRequestFunc(*secondRoundQuery, intent.Language, preference))
+					mssSecondRound.Add(NewResultsSearchRequest(
+						[]string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
+						es.IndexName("prod", consts.ES_RESULTS_INDEX, intent.Language),
+						*secondRoundQuery, consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE,
+						preference))
 					finalIntents = append(finalIntents, *intent)
 				}
 			}
@@ -344,6 +355,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 			return errors.New(fmt.Sprintf("ESEngine.AddIntents - Unexpected intent value: %+v", finalIntents[i].Value))
 		}
 		if haveHits(res) {
+			log.Infof("Found Hits for %+v", intentValue)
 			found := false
 			for _, h := range res.Hits.Hits {
 				var classificationIntent es.ClassificationIntent
@@ -355,11 +367,12 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 				}
 				if intentValue.MDB_UID == classificationIntent.MDB_UID {
 					found = true
+					log.Infof("Max Score: %+v", *h.Score)
 					if h.Score != nil && *h.Score > 0 {
 						intentValue.MaxScore = h.Score
 						if *intentValue.MaxScore < *intentValue.Score {
 							log.Warnf("ESEngine.AddIntents - Not expected score %f to be larger then max score %f for %s - %s.",
-								*intentValue.Score, *intentValue.MaxScore, intentValue.MDB_UID, intentValue.Name)
+								*intentValue.Score, *intentValue.MaxScore, intentValue.MDB_UID, intentValue.Title)
 						}
 						query.Intents = append(query.Intents, Intent{finalIntents[i].Type, finalIntents[i].Language, intentValue})
 					}
@@ -367,7 +380,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 			}
 			if !found {
 				log.Warnf("ESEngine.AddIntents - Did not find matching second run: %s - %s.",
-					intentValue.MDB_UID, intentValue.Name)
+					intentValue.MDB_UID, intentValue.Title)
 			}
 		}
 	}
@@ -394,7 +407,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 				} else if intentP.Type == consts.INTENT_TYPE_SOURCE {
 					intentValueP.Exist = e.cache.SearchStats().IsSourceWithUnits(intentValueP.MDB_UID, contentUnitType)
 				}
-				// Assigne the changed intent value, as everything is by value in golang.
+				// Assign the changed intent value, as everything is by value in golang.
 				intentP.Value = *intentValueP
 			}
 		}
@@ -414,7 +427,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 	for _, intent := range query.Intents {
 		// Convert intent to result with score.
 		intentValue := intent.Value.(es.ClassificationIntent)
-        boostedScore := float64(0.0)
+		boostedScore := float64(0.0)
 		if intentValue.Exist {
 			sh := srMap[intent.Language].Hits
 			sh.TotalHits++
@@ -438,225 +451,209 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			intentHit.Source = (*json.RawMessage)(&source)
 			sh.Hits = append(sh.Hits, intentHit)
 		}
-        log.Infof("Added intent %s %s %s boost score:%f exist:%t", intentValue.Name, intent.Type, intent.Language, boostedScore, intentValue.Exist)
+		log.Infof("Added intent %s %s %s boost score:%f exist:%t", intentValue.Title, intent.Type, intent.Language, boostedScore, intentValue.Exist)
 	}
 	return nil, srMap
 }
 
-func GetSearchRequests(query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
-	requests := make([]*elastic.SearchRequest, 0)
-	indices := make([]string, len(query.LanguageOrder))
-	for i := range query.LanguageOrder {
-		indices[i] = es.IndexName("prod", consts.ES_RESULTS_INDEX, query.LanguageOrder[i])
-	}
-	for _, index := range indices {
-		request := elastic.NewSearchRequest().
-			SearchSource(ResultsSearchSource(query, sortBy, from, size)).
-			Index(index).
-			Preference(preference)
-		requests = append(requests, request)
-	}
-	return requests
-}
+// func createCollectionsQuery(q Query) elastic.Query {
+// 	boolQuery := elastic.NewBoolQuery()
+// 	if q.Term != "" {
+// 		boolQuery = boolQuery.Must(
+// 			// Don't calculate score here, as we use sloped score below.
+// 			elastic.NewConstantScoreQuery(
+// 				elastic.NewBoolQuery().Should(
+// 					elastic.NewMatchQuery("name.analyzed", q.Term),
+// 					elastic.NewMatchQuery("description.analyzed", q.Term),
+// 				).MinimumNumberShouldMatch(1),
+// 			).Boost(0.0),
+// 		).Should(
+// 			elastic.NewDisMaxQuery().Query(
+// 				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
+// 				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100),
+// 			),
+// 		)
+// 	}
+// 	for _, exactTerm := range q.ExactTerms {
+// 		boolQuery = boolQuery.Must(
+// 			// Don't calculate score here, as we use sloped score below.
+// 			elastic.NewConstantScoreQuery(
+// 				elastic.NewBoolQuery().Should(
+// 					elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
+// 					elastic.NewMatchPhraseQuery("description.analyzed", exactTerm),
+// 				).MinimumNumberShouldMatch(1),
+// 			).Boost(0.0),
+// 		).Should(
+// 			elastic.NewDisMaxQuery().Query(
+// 				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100).Boost(2.0),
+// 				elastic.NewMatchPhraseQuery("description.analyzed", exactTerm).Slop(100),
+// 			),
+// 		)
+// 	}
+// 	contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
+// 	filterByContentType := false
+// 	for filter, values := range q.Filters {
+// 		s := make([]interface{}, len(values))
+// 		for i, v := range values {
+// 			s[i] = v
+// 		}
+// 		switch filter {
+// 		case consts.FILTERS[consts.FILTER_START_DATE]:
+// 			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Gte(values[0]).Format("yyyy-MM-dd"))
+// 		case consts.FILTERS[consts.FILTER_END_DATE]:
+// 			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
+// 		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]:
+// 			// Skip, do nothing (filtring on content units).
+// 		case consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
+// 			contentTypeQuery.Should(elastic.NewTermsQuery("content_type", s...))
+// 			filterByContentType = true
+// 		default:
+// 			boolQuery.Filter(elastic.NewTermsQuery(filter, s...))
+// 		}
+// 		if filterByContentType {
+// 			boolQuery.Filter(contentTypeQuery)
+// 		}
+// 	}
+// 	var query elastic.Query
+// 	query = boolQuery
+// 	if q.Term == "" && len(q.ExactTerms) == 0 {
+// 		// No potential score from string matching.
+// 		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
+// 	}
+// 	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
+// 		Boost(1.5). // Boost collections index.
+// 		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
+// 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))
+// }
 
-func createCollectionsQuery(q Query) elastic.Query {
-	boolQuery := elastic.NewBoolQuery()
-	if q.Term != "" {
-		boolQuery = boolQuery.Must(
-			// Don't calculate score here, as we use sloped score below.
-			elastic.NewConstantScoreQuery(
-				elastic.NewBoolQuery().Should(
-					elastic.NewMatchQuery("name.analyzed", q.Term),
-					elastic.NewMatchQuery("description.analyzed", q.Term),
-				).MinimumNumberShouldMatch(1),
-			).Boost(0.0),
-		).Should(
-			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100),
-			),
-		)
-	}
-	for _, exactTerm := range q.ExactTerms {
-		boolQuery = boolQuery.Must(
-			// Don't calculate score here, as we use sloped score below.
-			elastic.NewConstantScoreQuery(
-				elastic.NewBoolQuery().Should(
-					elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
-					elastic.NewMatchPhraseQuery("description.analyzed", exactTerm),
-				).MinimumNumberShouldMatch(1),
-			).Boost(0.0),
-		).Should(
-			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name.analyzed", exactTerm).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description.analyzed", exactTerm).Slop(100),
-			),
-		)
-	}
-	contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
-	filterByContentType := false
-	for filter, values := range q.Filters {
-		s := make([]interface{}, len(values))
-		for i, v := range values {
-			s[i] = v
-		}
-		switch filter {
-		case consts.FILTERS[consts.FILTER_START_DATE]:
-			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Gte(values[0]).Format("yyyy-MM-dd"))
-		case consts.FILTERS[consts.FILTER_END_DATE]:
-			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
-		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]:
-			// Skip, do nothing (filtring on content units).
-		case consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
-			contentTypeQuery.Should(elastic.NewTermsQuery("content_type", s...))
-			filterByContentType = true
-		default:
-			boolQuery.Filter(elastic.NewTermsQuery(filter, s...))
-		}
-		if filterByContentType {
-			boolQuery.Filter(contentTypeQuery)
-		}
-	}
-	var query elastic.Query
-	query = boolQuery
-	if q.Term == "" && len(q.ExactTerms) == 0 {
-		// No potential score from string matching.
-		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
-	}
-	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
-		Boost(1.5). // Boost collections index.
-		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
-		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))
-}
+// func GetCollectionsSearchRequests(query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
+// 	requests := make([]*elastic.SearchRequest, 0)
+// 	collections_indices := make([]string, len(query.LanguageOrder))
+// 	for i := range query.LanguageOrder {
+// 		collections_indices[i] = es.IndexName("prod", consts.ES_COLLECTIONS_INDEX, query.LanguageOrder[i])
+// 	}
+// 	fetchSourceContext := elastic.NewFetchSourceContext(true).
+// 		Include("mdb_uid", "effective_date")
+// 	for _, index := range collections_indices {
+// 		searchSource := elastic.NewSearchSource().
+// 			Query(createCollectionsQuery(query)).
+// 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
+// 			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+// 			elastic.NewHighlighterField("description.analyzed"),
+// 			// elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+// 			// elastic.NewHighlighterField("description.analyzed"),
+// 		)).
+// 			FetchSourceContext(fetchSourceContext).
+// 			From(from).
+// 			Size(size).
+// 			Explain(query.Deb)
+// 		switch sortBy {
+// 		case consts.SORT_BY_OLDER_TO_NEWER:
+// 			searchSource = searchSource.Sort("effective_date", true)
+// 		case consts.SORT_BY_NEWER_TO_OLDER:
+// 			searchSource = searchSource.Sort("effective_date", false)
+// 		}
+// 		request := elastic.NewSearchRequest().
+// 			SearchSource(searchSource).
+// 			Index(index).
+// 			Preference(preference)
+// 		requests = append(requests, request)
+// 	}
+// 	return requests
+// }
 
-func GetCollectionsSearchRequests(query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
-	requests := make([]*elastic.SearchRequest, 0)
-	collections_indices := make([]string, len(query.LanguageOrder))
-	for i := range query.LanguageOrder {
-		collections_indices[i] = es.IndexName("prod", consts.ES_COLLECTIONS_INDEX, query.LanguageOrder[i])
-	}
-	fetchSourceContext := elastic.NewFetchSourceContext(true).
-		Include("mdb_uid", "effective_date")
-	for _, index := range collections_indices {
-		searchSource := elastic.NewSearchSource().
-			Query(createCollectionsQuery(query)).
-			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("description.analyzed"),
-			// elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			// elastic.NewHighlighterField("description.analyzed"),
-		)).
-			FetchSourceContext(fetchSourceContext).
-			From(from).
-			Size(size).
-			Explain(query.Deb)
-		switch sortBy {
-		case consts.SORT_BY_OLDER_TO_NEWER:
-			searchSource = searchSource.Sort("effective_date", true)
-		case consts.SORT_BY_NEWER_TO_OLDER:
-			searchSource = searchSource.Sort("effective_date", false)
-		}
-		request := elastic.NewSearchRequest().
-			SearchSource(searchSource).
-			Index(index).
-			Preference(preference)
-		requests = append(requests, request)
-	}
-	return requests
-}
-
-func createSourcesQuery(q Query) elastic.Query {
-	query := elastic.NewBoolQuery()
-	if q.Term != "" {
-		query = query.Must(
-			// Don't calculate score here, as we use sloped score below.
-			elastic.NewConstantScoreQuery(
-				elastic.NewBoolQuery().Should(
-					elastic.NewMatchQuery("name.analyzed", q.Term),
-					elastic.NewMatchQuery("full_name.analyzed", q.Term),
-					elastic.NewMatchQuery("description.analyzed", q.Term),
-					elastic.NewMatchQuery("content.analyzed", q.Term),
-				).MinimumNumberShouldMatch(1),
-			).Boost(0),
-		).Should(
-			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("full_name.analyzed", q.Term).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
-				elastic.NewMatchPhraseQuery("content.analyzed", q.Term).Slop(100),
-			),
-		)
-	}
-	for _, exactTerm := range q.ExactTerms {
-		query = query.Must(
-			// Don't calculate score here, as we use sloped score below.
-			elastic.NewConstantScoreQuery(
-				elastic.NewBoolQuery().Should(
-					elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
-					elastic.NewMatchPhraseQuery("full_name.analyzed", exactTerm),
-					elastic.NewMatchPhraseQuery("description.analyzed", exactTerm),
-					elastic.NewMatchPhraseQuery("content.analyzed", exactTerm),
-				).MinimumNumberShouldMatch(1),
-			).Boost(0),
-		).Should(
-			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("namen.analyzed", exactTerm).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("full_name.analyzed", exactTerm).Slop(100).Boost(2.0),
-				elastic.NewMatchPhraseQuery("description.analyzed", exactTerm).Slop(100).Boost(1.2),
-				elastic.NewMatchPhraseQuery("content.analyzed", exactTerm).Slop(100),
-			),
-		)
-	}
-
-	for filter, values := range q.Filters {
-		if filter == consts.FILTERS[consts.FILTER_SOURCE] {
-			s := make([]interface{}, len(values))
-			for i, v := range values {
-				s[i] = v
-			}
-			query.Filter(elastic.NewTermsQuery(filter, s...))
-		}
-	}
-	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
-		Boost(1.3). // Boost sources index.
-		// No time decay for sources. Sources are above time and space.
-		AddScoreFunc(elastic.NewWeightFactorFunction(3.0))
-}
-
-func GetSourcesSearchRequests(query Query, from int, size int, preference string) []*elastic.SearchRequest {
-	sources_indices := make([]string, len(query.LanguageOrder))
-	requests := make([]*elastic.SearchRequest, 0)
-	for i := range query.LanguageOrder {
-		sources_indices[i] = es.IndexName("prod", consts.ES_SOURCES_INDEX, query.LanguageOrder[i])
-	}
-	fetchSourceContext := elastic.NewFetchSourceContext(true).
-		Include("mdb_uid")
-	for _, index := range sources_indices {
-		searchSource := elastic.NewSearchSource().
-			Query(createSourcesQuery(query)).
-			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("authors.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("pathnames.analyzed").NumOfFragments(0),
-			elastic.NewHighlighterField("content.analyzed"),
-			// elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
-			// elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
-			// elastic.NewHighlighterField("pathnames.analyzed").NumOfFragments(0),
-			// elastic.NewHighlighterField("content.analyzed"),
-		)).
-			FetchSourceContext(fetchSourceContext).
-			From(from).
-			Size(size).
-			Explain(query.Deb)
-		request := elastic.NewSearchRequest().
-			SearchSource(searchSource).
-			Index(index).
-			Preference(preference)
-		requests = append(requests, request)
-	}
-	return requests
-}
+// func createSourcesQuery(q Query) elastic.Query {
+// 	query := elastic.NewBoolQuery()
+// 	if q.Term != "" {
+// 		query = query.Must(
+// 			// Don't calculate score here, as we use sloped score below.
+// 			elastic.NewConstantScoreQuery(
+// 				elastic.NewBoolQuery().Should(
+// 					elastic.NewMatchQuery("name.analyzed", q.Term),
+// 					elastic.NewMatchQuery("full_name.analyzed", q.Term),
+// 					elastic.NewMatchQuery("description.analyzed", q.Term),
+// 					elastic.NewMatchQuery("content.analyzed", q.Term),
+// 				).MinimumNumberShouldMatch(1),
+// 			).Boost(0),
+// 		).Should(
+// 			elastic.NewDisMaxQuery().Query(
+// 				elastic.NewMatchPhraseQuery("name.analyzed", q.Term).Slop(100).Boost(2.0),
+// 				elastic.NewMatchPhraseQuery("full_name.analyzed", q.Term).Slop(100).Boost(2.0),
+// 				elastic.NewMatchPhraseQuery("description.analyzed", q.Term).Slop(100).Boost(1.2),
+// 				elastic.NewMatchPhraseQuery("content.analyzed", q.Term).Slop(100),
+// 			),
+// 		)
+// 	}
+// 	for _, exactTerm := range q.ExactTerms {
+// 		query = query.Must(
+// 			// Don't calculate score here, as we use sloped score below.
+// 			elastic.NewConstantScoreQuery(
+// 				elastic.NewBoolQuery().Should(
+// 					elastic.NewMatchPhraseQuery("name.analyzed", exactTerm),
+// 					elastic.NewMatchPhraseQuery("full_name.analyzed", exactTerm),
+// 					elastic.NewMatchPhraseQuery("description.analyzed", exactTerm),
+// 					elastic.NewMatchPhraseQuery("content.analyzed", exactTerm),
+// 				).MinimumNumberShouldMatch(1),
+// 			).Boost(0),
+// 		).Should(
+// 			elastic.NewDisMaxQuery().Query(
+// 				elastic.NewMatchPhraseQuery("namen.analyzed", exactTerm).Slop(100).Boost(2.0),
+// 				elastic.NewMatchPhraseQuery("full_name.analyzed", exactTerm).Slop(100).Boost(2.0),
+// 				elastic.NewMatchPhraseQuery("description.analyzed", exactTerm).Slop(100).Boost(1.2),
+// 				elastic.NewMatchPhraseQuery("content.analyzed", exactTerm).Slop(100),
+// 			),
+// 		)
+// 	}
+//
+// 	for filter, values := range q.Filters {
+// 		if filter == consts.FILTERS[consts.FILTER_SOURCE] {
+// 			s := make([]interface{}, len(values))
+// 			for i, v := range values {
+// 				s[i] = v
+// 			}
+// 			query.Filter(elastic.NewTermsQuery(filter, s...))
+// 		}
+// 	}
+// 	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
+// 		Boost(1.3). // Boost sources index.
+// 		// No time decay for sources. Sources are above time and space.
+// 		AddScoreFunc(elastic.NewWeightFactorFunction(3.0))
+// }
+//
+// func GetSourcesSearchRequests(query Query, from int, size int, preference string) []*elastic.SearchRequest {
+// 	sources_indices := make([]string, len(query.LanguageOrder))
+// 	requests := make([]*elastic.SearchRequest, 0)
+// 	for i := range query.LanguageOrder {
+// 		sources_indices[i] = es.IndexName("prod", consts.ES_SOURCES_INDEX, query.LanguageOrder[i])
+// 	}
+// 	fetchSourceContext := elastic.NewFetchSourceContext(true).
+// 		Include("mdb_uid")
+// 	for _, index := range sources_indices {
+// 		searchSource := elastic.NewSearchSource().
+// 			Query(createSourcesQuery(query)).
+// 			Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
+// 			elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+// 			elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
+// 			elastic.NewHighlighterField("authors.analyzed").NumOfFragments(0),
+// 			elastic.NewHighlighterField("pathnames.analyzed").NumOfFragments(0),
+// 			elastic.NewHighlighterField("content.analyzed"),
+// 			// elastic.NewHighlighterField("name.analyzed").NumOfFragments(0),
+// 			// elastic.NewHighlighterField("description.analyzed").NumOfFragments(0),
+// 			// elastic.NewHighlighterField("pathnames.analyzed").NumOfFragments(0),
+// 			// elastic.NewHighlighterField("content.analyzed"),
+// 		)).
+// 			FetchSourceContext(fetchSourceContext).
+// 			From(from).
+// 			Size(size).
+// 			Explain(query.Deb)
+// 		request := elastic.NewSearchRequest().
+// 			SearchSource(searchSource).
+// 			Index(index).
+// 			Preference(preference)
+// 		requests = append(requests, request)
+// 	}
+// 	return requests
+// }
 
 func haveHits(r *elastic.SearchResult) bool {
 	return r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0
@@ -738,39 +735,41 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
-    // TODO: Move intents to user results index.
-	// if err := e.AddIntents(&query, preference); err != nil {
-	// 	return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
-	// }
+	if err := e.AddIntents(&query, preference); err != nil {
+		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
+	}
 
 	log.Infof("ESEngine.DoSearch - Query: %s sort by: %s, from: %d, size: %d", query.ToString(), sortBy, from, size)
 
 	multiSearchService := e.esc.MultiSearch()
-	requestsByIndex := make(map[string][]*elastic.SearchRequest)
+	// requestsByIndex := make(map[string][]*elastic.SearchRequest)
 
-	searchFilter := consts.SEARCH_NO_FILTER
-	if len(query.Filters) > 0 {
-		if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
-			searchFilter = consts.SEARCH_FILTER_ONLY_SOURCES
-		} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SOURCE]]; ok {
-			searchFilter = consts.SEARCH_NO_FILTER
-		} else {
-			searchFilter = consts.SEARCH_FILTER_WITHOUT_SOURCES
-		}
-	}
-
-	if searchFilter != consts.SEARCH_FILTER_ONLY_SOURCES {
-		requestsByIndex[consts.ES_UNITS_INDEX] = GetSearchRequests(query, sortBy, 0, from+size, preference)
-		// requestsByIndex[consts.ES_COLLECTIONS_INDEX] = GetCollectionsSearchRequests(query, sortBy, 0, from+size, preference)
-	}
-
-	// if searchFilter != consts.SEARCH_FILTER_WITHOUT_SOURCES {
-	// 	requestsByIndex[consts.ES_SOURCES_INDEX] = GetSourcesSearchRequests(query, 0, from+size, preference)
+	// TODO: Add support for filters for results.
+	// searchFilter := consts.SEARCH_NO_FILTER
+	// if len(query.Filters) > 0 {
+	// 	if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
+	// 		searchFilter = consts.SEARCH_FILTER_ONLY_SOURCES
+	// 	} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SOURCE]]; ok {
+	// 		searchFilter = consts.SEARCH_NO_FILTER
+	// 	} else {
+	// 		searchFilter = consts.SEARCH_FILTER_WITHOUT_SOURCES
+	// 	}
+	// }
+	//
+	// if searchFilter != consts.SEARCH_FILTER_ONLY_SOURCES {
+	// 	requestsByIndex[consts.ES_UNITS_INDEX] = GetSearchRequests(query, sortBy, 0, from+size, preference)
+	// 	// requestsByIndex[consts.ES_COLLECTIONS_INDEX] = GetCollectionsSearchRequests(query, sortBy, 0, from+size, preference)
+	// }
+	//
+	// // if searchFilter != consts.SEARCH_FILTER_WITHOUT_SOURCES {
+	// // 	requestsByIndex[consts.ES_SOURCES_INDEX] = GetSourcesSearchRequests(query, 0, from+size, preference)
+	// // }
+	//
+	// for _, k := range requestsByIndex {
+	// 	multiSearchService.Add(k...)
 	// }
 
-	for _, k := range requestsByIndex {
-		multiSearchService.Add(k...)
-	}
+	multiSearchService.Add(NewResultsSearchRequests(consts.ES_SEARCH_RESULT_TYPES, query, sortBy, 0, from+size, preference)...)
 
 	// Do search.
 	mr, err := multiSearchService.Do(context.TODO())
@@ -778,15 +777,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do.")
 	}
 
-	if len(mr.Responses) != len(requestsByIndex)*len(query.LanguageOrder) {
+	if len(mr.Responses) != len(query.LanguageOrder) {
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
-			len(mr.Responses), len(requestsByIndex)*len(query.LanguageOrder)))
+			len(mr.Responses), len(query.LanguageOrder)))
 	}
 
 	resultsByLang := make(map[string][]*elastic.SearchResult)
 
-	// Responses are ordered by language by index, i.e., for languages [bg, ru, en] and indices [units, collections, sources]
-	// we will have [bg-units, ru-units, en-units, bg-collections, ru-collections, en-collections, bg-sources, ru-sources, en-sources]
+	// Responses are ordered by language by index, i.e., for languages [bg, ru, en].
 	// We want the first matching language that has at least any result.
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
@@ -794,7 +792,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
 		if haveHits(currentResults) {
-			lang := query.LanguageOrder[i%len(query.LanguageOrder)]
+			lang := query.LanguageOrder[i]
 			if _, ok := resultsByLang[lang]; !ok {
 				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 			}

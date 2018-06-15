@@ -13,12 +13,12 @@ import (
 )
 
 type IndexData struct {
-	DB           *sql.DB
-	Sources      map[string][]string
-	Tags         map[string][]string
+	DB      *sql.DB
+	Sources map[string][]string
+	Tags    map[string][]string
 	// Persons      map[string][]string
 	// Translations map[string][][]string
-	Transcripts  map[string]map[string][]string
+	Transcripts map[string]map[string][]string
 }
 
 func MakeIndexData(db *sql.DB, sqlScope string) (*IndexData, error) {
@@ -44,7 +44,7 @@ func (indexData *IndexData) load(sqlScope string) error {
 	// if err != nil {
 	// 	return err
 	// }
-    //
+	//
 	// indexData.Translations, err = indexData.loadTranslations(sqlScope)
 	// if err != nil {
 	// 	return err

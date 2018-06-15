@@ -2,8 +2,10 @@ package es_test
 
 import (
 	"fmt"
+	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
@@ -14,6 +16,10 @@ import (
 
 type UnitsIndexerSuite struct {
 	IndexerSuite
+}
+
+func TestUnitsIndexer(t *testing.T) {
+	suite.Run(t, new(UnitsIndexerSuite))
 }
 
 func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {

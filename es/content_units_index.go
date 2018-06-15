@@ -114,50 +114,50 @@ func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) er
 }
 
 func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
-	typedUIDs := make([]string, 0)
+	typedUids := make([]string, 0)
 	if scope.ContentUnitUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("content_unit", scope.ContentUnitUID))
+		typedUids = append(typedUids, keyValue("content_unit", scope.ContentUnitUID))
 	}
 	if scope.FileUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("file", scope.FileUID))
+		typedUids = append(typedUids, keyValue("file", scope.FileUID))
 		moreUIDs, err := contentUnitsScopeByFile(index.db, scope.FileUID)
 		if err != nil {
 			return []string{}, err
 		}
-		typedUIDs = append(typedUIDs, keyValues("content_unit", moreUIDs)...)
+		typedUids = append(typedUids, keyValues("content_unit", moreUIDs)...)
 	}
 	if scope.CollectionUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("collection", scope.CollectionUID))
+		typedUids = append(typedUids, keyValue("collection", scope.CollectionUID))
 		moreUIDs, err := contentUnitsScopeByCollection(index.db, scope.CollectionUID)
 		if err != nil {
 			return []string{}, err
 		}
-		typedUIDs = append(typedUIDs, keyValues("content_unit", moreUIDs)...)
+		typedUids = append(typedUids, keyValues("content_unit", moreUIDs)...)
 	}
 	if scope.TagUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("tag", scope.TagUID))
+		typedUids = append(typedUids, keyValue("tag", scope.TagUID))
 	}
 	if scope.SourceUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("source", scope.SourceUID))
+		typedUids = append(typedUids, keyValue("source", scope.SourceUID))
 		moreUIDs, err := contentUnitsScopeBySource(index.db, scope.SourceUID)
 		if err != nil {
 			return []string{}, err
 		}
-		typedUIDs = append(typedUIDs, keyValues("content_unit", moreUIDs)...)
+		typedUids = append(typedUids, keyValues("content_unit", moreUIDs)...)
 	}
 	// if scope.PersonUID != "" {
-	// 	typedUIDs = append(typedUIDs, keyValue("person", scope.PersonUID))
+	// 	typedUids = append(typedUids, keyValue("person", scope.PersonUID))
 	// }
 	// if scope.PublisherUID != "" {
-	// 	typedUIDs = append(typedUIDs, keyValue("publisher", scope.PublisherUID))
+	// 	typedUids = append(typedUids, keyValue("publisher", scope.PublisherUID))
 	// }
-	if len(typedUIDs) > 0 {
-		typedUIDsI := make([]interface{}, len(typedUIDs))
-		for i, typedUID := range typedUIDs {
-			typedUIDsI[i] = typedUID
+	if len(typedUids) > 0 {
+		typedUidsI := make([]interface{}, len(typedUids))
+		for i, typedUID := range typedUids {
+			typedUidsI[i] = typedUID
 		}
 		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_UNITS).
-            Filter(elastic.NewTermsQuery("typed_uids", typedUIDsI...))
+			Filter(elastic.NewTermsQuery("typed_uids", typedUidsI...))
 		return index.RemoveFromIndexQuery(elasticScope)
 	} else {
 		// Nothing to remove.
@@ -217,7 +217,7 @@ func collectionsContentTypes(collectionsContentUnits mdbmodels.CollectionsConten
 	return ret
 }
 
-func collectionsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
+func collectionsTypedUids(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	ret := make([]string, len(collectionsContentUnits))
 	for i, ccu := range collectionsContentUnits {
 		ret[i] = keyValue("collection", ccu.R.Collection.UID)
@@ -229,18 +229,19 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
 	for _, i18n := range cu.R.ContentUnitI18ns {
-		if i18n.Name.Valid && i18n.Name.String != "" {
-			typedUIDs := append([]string{keyValue("content_unit", cu.UID)},
-				collectionsTypedUIDs(cu.R.CollectionsContentUnits)...)
-            filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name)},
-                keyValues("collections_content_type", collectionsContentTypes(cu.R.CollectionsContentUnits))...)
+		if i18n.Name.Valid && strings.TrimSpace(i18n.Name.String) != "" {
+			typedUids := append([]string{keyValue("content_unit", cu.UID)},
+				collectionsTypedUids(cu.R.CollectionsContentUnits)...)
+			filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name)},
+				keyValues("collections_content_type", collectionsContentTypes(cu.R.CollectionsContentUnits))...)
 
 			unit := Result{
-                ResultType:              consts.ES_RESULT_TYPE_UNITS,
-				MDB_UID:                 cu.UID,
-				TypedUIDs:               typedUIDs,
-                FilterValues:            filterValues,
-				Title:                   i18n.Name.String,
+				ResultType:   consts.ES_RESULT_TYPE_UNITS,
+				MDB_UID:      cu.UID,
+				TypedUids:    typedUids,
+				FilterValues: filterValues,
+				Title:        i18n.Name.String,
+				TitleSuggest: Suffixes(i18n.Name.String),
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
@@ -265,19 +266,19 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 
 			if val, ok := indexData.Sources[cu.UID]; ok {
 				unit.FilterValues = append(unit.FilterValues, keyValues("source", val)...)
-				unit.TypedUIDs = append(unit.TypedUIDs, keyValues("source", val)...)
+				unit.TypedUids = append(unit.TypedUids, keyValues("source", val)...)
 			}
 			if val, ok := indexData.Tags[cu.UID]; ok {
 				unit.FilterValues = append(unit.FilterValues, keyValues("tag", val)...)
-				unit.TypedUIDs = append(unit.TypedUIDs, keyValues("tag", val)...)
+				unit.TypedUids = append(unit.TypedUids, keyValues("tag", val)...)
 			}
 			// if val, ok := indexData.Persons[cu.UID]; ok {
 			// 	unit.Persons = val
-			// 	unit.TypedUIDs = append(unit.TypedUIDs, keyValues("person", val)...)
+			// 	unit.TypedUids = append(unit.TypedUids, keyValues("person", val)...)
 			// }
 			// if val, ok := indexData.Translations[cu.UID]; ok {
 			// 	unit.Translations = val[1]
-			// 	unit.TypedUIDs = append(unit.TypedUIDs, keyValues("file", val[0])...)
+			// 	unit.TypedUids = append(unit.TypedUids, keyValues("file", val[0])...)
 			// }
 			if byLang, ok := indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
@@ -306,7 +307,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 							if err != nil {
 								log.Errorf("Content Units Index - Error parsing docx: %s", val[0])
 							} else {
-								unit.TypedUIDs = append(unit.TypedUIDs, keyValue("file", val[0]))
+								unit.TypedUids = append(unit.TypedUids, keyValue("file", val[0]))
 							}
 						}
 					}
@@ -320,16 +321,8 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 	// Index each document in its language index
 	for k, v := range i18nMap {
 		name := index.indexName(k)
-		// Copy for logging purposes only.
-		vCopy := v
-		if len(vCopy.Content) > 30 {
-			vCopy.Content = fmt.Sprintf("%s...", vCopy.Content[:30])
-		}
-		vBytes, err := json.Marshal(vCopy)
-		if err != nil {
-			return err
-		}
-		log.Infof("Content Units Index - Add content unit %s to index %s", string(vBytes), name)
+
+		log.Infof("Content Units Index - Add content unit %s to index %s", v.ToString(), name)
 		resp, err := index.esc.Index().
 			Index(name).
 			Type("result").
