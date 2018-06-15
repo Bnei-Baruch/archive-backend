@@ -11,7 +11,6 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/golang/sync/errgroup"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v5"
 
@@ -73,16 +72,16 @@ func (s byOlderToNewer) Less(i, j int) bool {
 	return res
 }
 
-var classTypes = [...]string{consts.SOURCE_CLASSIFICATION_TYPE, consts.TAG_CLASSIFICATION_TYPE}
+// var classTypes = [...]string{consts.SOURCE_CLASSIFICATION_TYPE, consts.TAG_CLASSIFICATION_TYPE}
 
-func debugPrintQuery(q elastic.Query) elastic.Query {
-	i, err := q.Source()
-	utils.Must(err)
-	json, err := json.MarshalIndent(i, "", "  ")
-	utils.Must(err)
-	log.Infof("Query:\n%s\n\n", (string(json)))
-	return q
-}
+// func debugPrintQuery(q elastic.Query) elastic.Query {
+// 	i, err := q.Source()
+// 	utils.Must(err)
+// 	json, err := json.MarshalIndent(i, "", "  ")
+// 	utils.Must(err)
+// 	log.Infof("Query:\n%s\n\n", (string(json)))
+// 	return q
+// }
 
 // TODO: All interactions with ES should be throttled to prevent downstream pressure
 
@@ -101,78 +100,38 @@ func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 	return false
 }
 
-func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}, error) {
-	// Figure out index names from language order.
-	indices := make([]string, len(query.LanguageOrder))
-	for i := range query.LanguageOrder {
-		indices[i] = es.IndexName("prod", consts.ES_CLASSIFICATIONS_INDEX, query.LanguageOrder[i])
+func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference string) (interface{}, error) {
+	multiSearchService := e.esc.MultiSearch()
+	requests := NewResultsSuggestRequests([]string{consts.ES_RESULT_TYPE_TAGS}, query, preference)
+	multiSearchService.Add(requests...)
+
+	// Actual call to elastic
+	mr, err := multiSearchService.Do(ctx)
+	if err != nil {
+		// don't kill entire request if ctx was cancelled
+		if ue, ok := err.(*url.Error); ok {
+			if ue.Err == context.DeadlineExceeded || ue.Err == context.Canceled {
+				log.Warn("ESEngine.GetSuggestions - ctx cancelled")
+				return nil, nil
+			}
+		}
+		return nil, errors.Wrap(err, "ESEngine.GetSuggestions")
 	}
 
-	// We call ES in parallel. Each call with a different context query
-	// (classification type), i.e, tag, source, author...
-	g, ctx := errgroup.WithContext(ctx)
-	resp := make([]*elastic.SearchResult, 0)
-	for i := range classTypes {
-		classType := classTypes[i]
-		g.Go(func() error {
-
-			// Create MultiSearch request
-			multiSearchService := e.esc.MultiSearch()
-			for _, index := range indices {
-				searchSource := elastic.NewSearchSource().
-					Suggester(elastic.NewCompletionSuggester("classification_name").
-					Field("name_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
-					Suggester(elastic.NewCompletionSuggester("classification_description").
-					Field("description_suggest").
-					Text(query.Term).
-					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
-
-				request := elastic.NewSearchRequest().
-					SearchSource(searchSource).
-					Index(index)
-				multiSearchService.Add(request)
-			}
-
-			// Actual call to elastic
-			mr, err := multiSearchService.Do(ctx)
-			if err != nil {
-				// don't kill entire request if ctx was cancelled
-				if ue, ok := err.(*url.Error); ok {
-					if ue.Err == context.DeadlineExceeded || ue.Err == context.Canceled {
-						log.Warnf("ESEngine.GetSuggestions - %s: ctx cancelled", classType)
-						return nil
-					}
-				}
-				return errors.Wrapf(err, "ESEngine.GetSuggestions - %s", classType)
-			}
-
-			// Process response
-			sRes := (*elastic.SearchResult)(nil)
-			for _, r := range mr.Responses {
-				if r != nil && SuggestionHasOptions(r.Suggest) {
-					sRes = r
-					break
-				}
-			}
-
-			if sRes == nil && len(mr.Responses) > 0 {
-				sRes = mr.Responses[0]
-			}
-
-			resp = append(resp, sRes)
-
-			return nil
-		})
+	// Process response
+	sRes := (*elastic.SearchResult)(nil)
+	for _, r := range mr.Responses {
+		if r != nil && SuggestionHasOptions(r.Suggest) {
+			sRes = r
+			break
+		}
 	}
 
-	// Wait for first deadly error or all goroutines to finish
-	if err := g.Wait(); err != nil {
-		return nil, errors.Wrap(err, "ESEngine.GetSuggestions - ")
+	if sRes == nil && len(mr.Responses) > 0 {
+		sRes = mr.Responses[0]
 	}
 
-	return resp, nil
+	return sRes, nil
 }
 
 // func createSourcesIntentQuery(q Query) elastic.Query {
