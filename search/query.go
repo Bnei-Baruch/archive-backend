@@ -120,11 +120,13 @@ func NewResultsSearchRequest(result_types []string, index string, query Query, s
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title")
 	source := elastic.NewSearchSource().
 		Query(createResultsQuery(result_types, query)).
-		Highlight(elastic.NewHighlight().HighlighterType("unified").Fields(
-		elastic.NewHighlighterField("title").NumOfFragments(0),
-		elastic.NewHighlighterField("description"),
-		elastic.NewHighlighterField("content"),
-	)).
+		Highlight(
+		elastic.NewHighlight().HighlighterType("unified").Fields(
+			elastic.NewHighlighterField("title").NumOfFragments(0),
+			elastic.NewHighlighterField("description"),
+			elastic.NewHighlighterField("content"),
+		),
+	).
 		FetchSourceContext(fetchSourceContext).
 		From(from).
 		Size(size).
@@ -149,6 +151,35 @@ func NewResultsSearchRequests(result_types []string, query Query, sortBy string,
 	}
 	for _, index := range indices {
 		request := NewResultsSearchRequest(result_types, index, query, sortBy, from, size, preference)
+		requests = append(requests, request)
+	}
+	return requests
+}
+
+func NewResultsSuggestRequest(result_types []string, index string, query Query, preference string) *elastic.SearchRequest {
+	searchSource := elastic.NewSearchSource().
+		Suggester(
+		elastic.NewCompletionSuggester("title_suggest").
+			Field("title_suggest").
+			Text(query.Term).
+			ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", result_types...)).
+			Size(50000), // Temporary fix. Should not be a problem in v6, should set skip_duplicate = true.
+	)
+
+	return elastic.NewSearchRequest().
+		SearchSource(searchSource).
+		Index(index).
+		Preference(preference)
+}
+
+func NewResultsSuggestRequests(result_types []string, query Query, preference string) []*elastic.SearchRequest {
+	requests := make([]*elastic.SearchRequest, 0)
+	indices := make([]string, len(query.LanguageOrder))
+	for i := range query.LanguageOrder {
+		indices[i] = es.IndexName("prod", consts.ES_RESULTS_INDEX, query.LanguageOrder[i])
+	}
+	for _, index := range indices {
+		request := NewResultsSuggestRequest(result_types, index, query, preference)
 		requests = append(requests, request)
 	}
 	return requests

@@ -529,14 +529,18 @@ func AutocompleteHandler(c *gin.Context) {
 
 	log.Infof("Query: [%s] Language Order: [%+v]", c.Query("q"), order)
 
-	// Have a 50ms deadline on the search engine call.
+	// Have a 100ms deadline on the search engine call.
 	// It's autocomplete after all...
 	ctx, cancelFn := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancelFn()
 
-	res, err := se.GetSuggestions(ctx, search.Query{Term: q, LanguageOrder: order})
+	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
+	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
+	preference := fmt.Sprintf("%x", md5.Sum([]byte(c.ClientIP())))
+
+	res, err := se.GetSuggestions(ctx, search.Query{Term: q, LanguageOrder: order}, preference)
 	if err == nil {
-		log.Infof("Autocomplete: %+v", utils.Pprint(res))
+		log.Infof("Autocomplete: %+v", res)
 		c.JSON(http.StatusOK, res)
 	} else {
 		NewInternalError(err).Abort(c)
