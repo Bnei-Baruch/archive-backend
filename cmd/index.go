@@ -40,11 +40,11 @@ var indexUnitsCmd = &cobra.Command{
 	Run:   indexUnitsFn,
 }
 
-// var indexCollectionsCmd = &cobra.Command{
-// 	Use:   "collections",
-// 	Short: "Index content collections in ES",
-// 	Run:   indexCollectionsFn,
-// }
+var indexCollectionsCmd = &cobra.Command{
+	Use:   "collections",
+	Short: "Index content collections in ES",
+	Run:   indexCollectionsFn,
+}
 
 var indexSourcesCmd = &cobra.Command{
 	Use:   "sources",
@@ -62,7 +62,7 @@ func init() {
 	RootCmd.AddCommand(indexCmd)
 	indexCmd.AddCommand(indexTagsCmd)
 	indexCmd.AddCommand(indexUnitsCmd)
-	// indexCmd.AddCommand(indexCollectionsCmd)
+	indexCmd.AddCommand(indexCollectionsCmd)
 	indexCmd.AddCommand(indexSourcesCmd)
 	indexCmd.AddCommand(deleteResultsIndexCmd)
 	indexCmd.AddCommand(restartSearchLogsCmd)
@@ -80,9 +80,9 @@ func indexUnitsFn(cmd *cobra.Command, args []string) {
 	IndexCmd(consts.ES_RESULT_TYPE_UNITS)
 }
 
-// func indexCollectionsFn(cmd *cobra.Command, args []string) {
-// 	IndexCmd(consts.ES_COLLECTIONS_INDEX)
-// }
+func indexCollectionsFn(cmd *cobra.Command, args []string) {
+	IndexCmd(consts.ES_RESULT_TYPE_COLLECTIONS)
+}
 
 func indexSourcesFn(cmd *cobra.Command, args []string) {
 	IndexCmd(consts.ES_RESULT_TYPE_SOURCES)
