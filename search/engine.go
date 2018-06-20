@@ -251,7 +251,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 	potentialIntents := make([]Intent, 0)
 	for _, language := range query.LanguageOrder {
 		// Order here provides the priority in results, i.e., tags are more importnt then sources.
-		index := es.IndexName("prod", consts.ES_RESULTS_INDEX, language)
+		index := es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, language)
 		mssFirstRound.Add(NewResultsSearchRequest(
 			[]string{consts.ES_RESULT_TYPE_TAGS}, index, *query,
 			consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference))
@@ -293,7 +293,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 				if intent != nil {
 					mssSecondRound.Add(NewResultsSearchRequest(
 						[]string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
-						es.IndexName("prod", consts.ES_RESULTS_INDEX, intent.Language),
+						es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, intent.Language),
 						*secondRoundQuery, consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE,
 						preference))
 					finalIntents = append(finalIntents, *intent)

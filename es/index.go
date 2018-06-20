@@ -35,19 +35,37 @@ type Index interface {
 type BaseIndex struct {
 	namespace string
 	baseName  string
+    indexDate string
 	db        *sql.DB
 	esc       *elastic.Client
 }
 
-func IndexName(namespace string, name string, lang string) string {
+func IndexAliasName(namespace string, name string, lang string) string {
+    if (namespace == "" || name == "" || lang == "") {
+        panic(fmt.Sprintf("Not expecting empty parameter for IndexName, provided: (%s, %s, %s)", namespace, name, lang))
+    }
 	return fmt.Sprintf("%s_%s_%s", namespace, name, lang)
 }
 
+func IndexName(namespace string, name string, lang string, date string) string {
+    if (date == "") {
+        panic(fmt.Sprintf("Not expecting empty parameter for IndexName, provided: (%s, %s, %s, %s)", namespace, name, lang, date))
+    }
+	return fmt.Sprintf("%s_%s", IndexAliasName(namespace, name, lang), date)
+}
+
 func (index *BaseIndex) indexName(lang string) string {
+	if index.namespace == "" || index.baseName == "" || index.indexDate == "" {
+		panic("Index namespace, baseName and indexDate should be set.")
+	}
+	return IndexName(index.namespace, index.baseName, lang, index.indexDate)
+}
+
+func (index *BaseIndex) indexAliasName(lang string) string {
 	if index.namespace == "" || index.baseName == "" {
 		panic("Index namespace and baseName should be set.")
 	}
-	return IndexName(index.namespace, index.baseName, lang)
+	return IndexAliasName(index.namespace, index.baseName, lang)
 }
 
 func (index *BaseIndex) CreateIndex() error {

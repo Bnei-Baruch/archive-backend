@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+    "strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -22,35 +23,11 @@ var indexCmd = &cobra.Command{
 	Run:   indexFn,
 }
 
-var deleteResultsIndexCmd = &cobra.Command{
-	Use:   "delete_results_index",
-	Short: "Delete results index.",
-	Run:   deleteResultsIndexFn,
+var deleteIndexCmd = &cobra.Command{
+	Use:   "delete_index",
+	Short: "Delete index.",
+	Run:   deleteIndexFn,
 }
-
-var indexTagsCmd = &cobra.Command{
-	Use:   "tags",
-	Short: "Index tags in ES",
-	Run:   indexTagsFn,
-}
-
-var indexUnitsCmd = &cobra.Command{
-	Use:   "units",
-	Short: "Index content units in ES",
-	Run:   indexUnitsFn,
-}
-
-// var indexCollectionsCmd = &cobra.Command{
-// 	Use:   "collections",
-// 	Short: "Index content collections in ES",
-// 	Run:   indexCollectionsFn,
-// }
-//
-// var indexSourcesCmd = &cobra.Command{
-// 	Use:   "sources",
-// 	Short: "Index sources in ES",
-// 	Run:   indexSourcesFn,
-// }
 
 var restartSearchLogsCmd = &cobra.Command{
 	Use:   "restart_search_logs",
@@ -58,40 +35,35 @@ var restartSearchLogsCmd = &cobra.Command{
 	Run:   restartSearchLogsFn,
 }
 
+var indexDate string
+
 func init() {
 	RootCmd.AddCommand(indexCmd)
-	indexCmd.AddCommand(indexTagsCmd)
-	indexCmd.AddCommand(indexUnitsCmd)
-	// indexCmd.AddCommand(indexCollectionsCmd)
-	// indexCmd.AddCommand(indexSourcesCmd)
-	indexCmd.AddCommand(deleteResultsIndexCmd)
-	indexCmd.AddCommand(restartSearchLogsCmd)
+	deleteIndexCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be deleted.")
+	deleteIndexCmd.MarkFlagRequired("index_date")
+	RootCmd.AddCommand(deleteIndexCmd)
+	RootCmd.AddCommand(restartSearchLogsCmd)
 }
 
 func indexFn(cmd *cobra.Command, args []string) {
-	fmt.Println("Use one of the subcommands.")
-}
-
-func indexTagsFn(cmd *cobra.Command, args []string) {
-	IndexCmd(consts.ES_RESULT_TYPE_TAGS)
-}
-
-func indexUnitsFn(cmd *cobra.Command, args []string) {
-	IndexCmd(consts.ES_RESULT_TYPE_UNITS)
-}
-
-// func indexCollectionsFn(cmd *cobra.Command, args []string) {
-// 	IndexCmd(consts.ES_COLLECTIONS_INDEX)
-// }
-
-// func indexSourcesFn(cmd *cobra.Command, args []string) {
-// 	IndexCmd(consts.ES_SOURCES_INDEX)
-// }
-
-func IndexCmd(index string) {
 	clock := common.Init()
 	defer common.Shutdown()
-	indexer, err := es.MakeIndexer("prod", []string{index}, common.DB, common.ESC)
+
+    t := time.Now()
+    date := strings.ToLower(t.Format(time.RFC3339))
+
+    err, prevDate := es.ProdAliasedIndexDate(common.ESC)
+    if err != nil {
+        log.Error(err)
+        return
+    }
+
+    if date == prevDate {
+        log.Info(fmt.Sprintf("New index date is the same as previous index date %s. Wait a minute and rerun.", prevDate))
+        return
+    }
+
+    indexer, err := es.MakeProdIndexer(date, common.DB, common.ESC)
 	if err != nil {
 		log.Error(err)
 		return
@@ -101,16 +73,21 @@ func IndexCmd(index string) {
 		log.Error(err)
 		return
 	}
+    err = es.SwitchProdAliasToCurrentIndex(date, common.ESC)
+    if err != nil {
+        log.Error(err)
+        return
+    }
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
 
-func deleteResultsIndexFn(cmd *cobra.Command, args []string) {
+func deleteIndexFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
 	for _, lang := range consts.ALL_KNOWN_LANGS {
-		name := es.IndexName("prod", consts.ES_RESULTS_INDEX, lang)
+		name := es.IndexName("prod", consts.ES_RESULTS_INDEX, lang, strings.ToLower(indexDate))
 		exists, err := common.ESC.IndexExists(name).Do(context.TODO())
 		if err != nil {
 			log.Error(err)

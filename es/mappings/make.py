@@ -195,12 +195,6 @@ RESULTS_TEMPLATE = {
           },
         },
 
-        # Effective date is relevant for units only (for now).
-        "effective_date": {
-          "type": "date",
-          "format": "strict_date",
-        },
-
         # Suggest field for autocomplete.
         "title_suggest": {
           "type": "completion",
@@ -212,6 +206,12 @@ RESULTS_TEMPLATE = {
               "path": "result_type",
             },
           ],
+        },
+
+        # Content unit specific fields.
+        "effective_date": {
+          "type": "date",
+          "format": "strict_date",
         },
       }
     }

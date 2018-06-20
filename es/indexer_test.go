@@ -264,7 +264,7 @@ func (suite *IndexerSuite) SetupTest() {
 	}
 	r.Nil(deleteContentUnits(uids))
 	// Remove test indexes.
-	indexer, err := es.MakeIndexer("test", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
 	r.Nil(err)
 	r.Nil(indexer.DeleteIndexes())
 	// Delete test directory
