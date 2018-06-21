@@ -39,7 +39,7 @@ func CollectionsHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err := HandleCollections(c.MustGet("MDB_DB").(*sql.DB), r)
+	resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), r)
 	concludeRequest(c, resp, err)
 }
 
@@ -302,7 +302,7 @@ func LessonsHandler(c *gin.Context) {
 			DateRangeFilter: r.DateRangeFilter,
 			WithUnits:       true,
 		}
-		resp, err := HandleCollections(c.MustGet("MDB_DB").(*sql.DB), cr)
+		resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), cr)
 		concludeRequest(c, resp, err)
 	} else {
 		if r.OrderBy == "" {
@@ -615,7 +615,7 @@ func StatsCUClassHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
-func HandleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
+func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
 	// filters

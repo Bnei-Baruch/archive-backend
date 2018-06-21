@@ -1,21 +1,21 @@
 package api
 
 import (
-	"time"
 	"database/sql"
-	"net/http"
-	"fmt"
-
-	"gopkg.in/gin-gonic/gin.v1"
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
-
-	"github.com/Bnei-Baruch/archive-backend/feeds"
-	"github.com/Bnei-Baruch/archive-backend/utils"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
-	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/pkg/errors"
-	"regexp"
 	"encoding/xml"
+	"fmt"
+	"net/http"
+	"regexp"
+	"time"
+
+	"github.com/pkg/errors"
+	"gopkg.in/gin-gonic/gin.v1"
+
+	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/feeds"
+	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 )
 
 var copyright = fmt.Sprintf("Bnei-Baruch Copyright 2008-%d", time.Now().Year())
@@ -277,7 +277,7 @@ func FeedWSXML(c *gin.Context) {
 		},
 		WithUnits: true,
 	}
-	resp, herr := HandleCollections(db, r)
+	resp, herr := handleCollections(db, r)
 	if herr != nil {
 		herr.Abort(c)
 	}
@@ -453,7 +453,7 @@ func FeedPodcast(c *gin.Context) {
 			}
 
 			// TODO: change title and description
-			url := fmt.Sprintf("%s%s", consts.CDN,file.UID)
+			url := fmt.Sprintf("%s%s", consts.CDN, file.UID)
 			feed.Items = append(feed.Items, &feeds.Item{
 				Author: "info@kab.co.il",
 				Title:  cu.Name,
@@ -609,7 +609,7 @@ func FeedRssPhp(c *gin.Context) {
 				continue
 			}
 
-			url := fmt.Sprintf("%s%s", consts.CDN,file.UID)
+			url := fmt.Sprintf("%s%s", consts.CDN, file.UID)
 			feed.Items = append(feed.Items, &feeds.Item{
 				Title: cu.Name,
 				Description: &feeds.Description{
@@ -630,7 +630,7 @@ func FeedRssPhp(c *gin.Context) {
 	createFeed(feed, config.DLANG, false, c)
 }
 
-func showAsset(language string, mimeType string, files []*mdbmodels.File, duration float64, name string) (string) {
+func showAsset(language string, mimeType string, files []*mdbmodels.File, duration float64, name string) string {
 	for _, file := range files {
 		if file.MimeType.String == mimeType && file.Language.String == language {
 			size := convertSizeToMb(file.Size)
