@@ -21,12 +21,13 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
-func MakeSourcesIndex(namespace string, db *sql.DB, esc *elastic.Client) *SourcesIndex {
+func MakeSourcesIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *SourcesIndex {
 	si := new(SourcesIndex)
 	si.baseName = consts.ES_RESULTS_INDEX
 	si.namespace = namespace
 	si.db = db
 	si.esc = esc
+	si.indexDate = indexDate
 	return si
 }
 

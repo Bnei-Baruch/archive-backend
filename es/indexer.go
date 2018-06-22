@@ -35,7 +35,7 @@ func MakeIndexer(namespace string, date string, names []string, mdb *sql.DB, esc
 		if name == consts.ES_RESULT_TYPE_UNITS {
 			indexer.indices[i] = MakeContentUnitsIndex(namespace, date, mdb, esc)
 		} else if name == consts.ES_RESULT_TYPE_SOURCES {
-			indexer.indices[i] = MakeSourcesIndex(namespace, mdb, esc)
+			indexer.indices[i] = MakeSourcesIndex(namespace, date, mdb, esc)
 		} else if name == consts.ES_RESULT_TYPE_TAGS {
 			indexer.indices[i] = MakeTagsIndex(namespace, date, mdb, esc)
 		} else if name == consts.ES_RESULT_TYPE_COLLECTIONS {
