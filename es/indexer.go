@@ -43,16 +43,6 @@ func MakeIndexer(namespace string, date string, names []string, mdb *sql.DB, esc
 		} else {
 			return nil, errors.New(fmt.Sprintf("MakeIndexer - Invalid index name: %+v", name))
 		}
-
-		// if name == consts.ES_CLASSIFICATIONS_INDEX {
-		// 	indexer.indices[i] = MakeClassificationsIndex(namespace, mdb, esc)
-		// } else if name == consts.ES_UNITS_INDEX {
-		// 	indexer.indices[i] = MakeContentUnitsIndex(namespace, mdb, esc)
-		// } else if name == consts.ES_COLLECTIONS_INDEX {
-		// 	indexer.indices[i] = MakeCollectionsIndex(namespace, mdb, esc)
-		// } else if name == consts.ES_SOURCES_INDEX {
-		// 	indexer.indices[i] = MakeSourcesIndex(namespace, mdb, esc)
-		// }
 	}
 	return indexer, nil
 }
