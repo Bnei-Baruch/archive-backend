@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"strings"
+    "sync/atomic"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -21,10 +22,11 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
-func MakeSourcesIndex(namespace string, db *sql.DB, esc *elastic.Client) *SourcesIndex {
+func MakeSourcesIndex(namespace string, date string, db *sql.DB, esc *elastic.Client) *SourcesIndex {
 	si := new(SourcesIndex)
 	si.baseName = consts.ES_RESULTS_INDEX
 	si.namespace = namespace
+    si.indexDate = date
 	si.db = db
 	si.esc = esc
 	return si
@@ -32,6 +34,7 @@ func MakeSourcesIndex(namespace string, db *sql.DB, esc *elastic.Client) *Source
 
 type SourcesIndex struct {
 	BaseIndex
+    Progress uint64
 }
 
 func (index *SourcesIndex) ReindexAll() error {
@@ -75,6 +78,40 @@ func (index *SourcesIndex) removeFromIndex(scope Scope) ([]string, error) {
 	return []string{}, nil
 }
 
+func (index *SourcesIndex) bulkIndexSources(
+    offset int, limit int, sqlScope string,
+    codesMap map[string][]string,
+    idsMap map[string][]int64,
+    authorsByLanguageMap map[string]map[string][]string) error {
+    var sources []*mdbmodels.Source
+    err := mdbmodels.NewQuery(index.db,
+        qm.From("sources as source"),
+        qm.Load("SourceI18ns"),
+        qm.Load("Authors"),
+        qm.Where(sqlScope),
+        qm.Offset(offset),
+        qm.Limit(limit)).Bind(&sources)
+    if err != nil {
+        return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources from mdb")
+    }
+
+    log.Infof("SourcesIndex.addToIndexSql - Adding %d sources (offset: %d).", len(sources), offset)
+
+    for _, source := range sources {
+        if parents, ok := codesMap[source.UID]; !ok {
+            log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in codesMap: %+v", source.UID, codesMap)
+        } else if parentIds, ok := idsMap[source.UID]; !ok {
+            log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in idsMap: %+v", source.UID, idsMap)
+        } else if authors, ok := authorsByLanguageMap[source.UID]; !ok {
+            log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in authorsByLanguageMap: %+v", source.UID, idsMap)
+        } else if err := index.indexSource(source, parents, parentIds, authors); err != nil {
+            log.Warnf("SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
+        }
+    }
+
+    return nil
+}
+
 // Note: scope usage is limited to source.uid only (e.g. source.uid='L2jMWyce')
 func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 	var count int64
@@ -97,36 +134,38 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 		return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources parents from mdb.")
 	}
 
-	offset := 0
-	limit := 1000
-	for offset < int(count) {
-		var sources []*mdbmodels.Source
-		err := mdbmodels.NewQuery(index.db,
-			qm.From("sources as source"),
-			qm.Load("SourceI18ns"),
-			qm.Load("Authors"),
-			qm.Where(sqlScope),
-			qm.Offset(offset),
-			qm.Limit(limit)).Bind(&sources)
-		if err != nil {
-			return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources from mdb")
-		}
+    tasks := make(chan OffsetLimitJob, 300)
+    errors := make(chan error, 300)
+    doneAdding := make(chan bool)
 
-		log.Infof("SourcesIndex.addToIndexSql - Adding %d sources (offset: %d).", len(sources), offset)
+    tasksCount := 0
+    go func() {
+        offset := 0
+        limit := 20
+        for offset < int(count) {
+            tasks <- OffsetLimitJob{offset, limit}
+            tasksCount += 1
+            offset += limit
+        }
+        close(tasks)
+        doneAdding <- true
+    }()
 
-		for _, source := range sources {
-			if parents, ok := codesMap[source.UID]; !ok {
-				log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in codesMap: %+v", source.UID, codesMap)
-			} else if parentIds, ok := idsMap[source.UID]; !ok {
-				log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in idsMap: %+v", source.UID, idsMap)
-			} else if authors, ok := authorsByLanguageMap[source.UID]; !ok {
-				log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in authorsByLanguageMap: %+v", source.UID, idsMap)
-			} else if err := index.indexSource(source, parents, parentIds, authors); err != nil {
-				log.Warnf("SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
-			}
-		}
-		offset += limit
-	}
+    for w := 1; w <= 10; w++ {
+        go func(tasks <-chan OffsetLimitJob, errors chan<- error) {
+            for task := range tasks {
+                errors <- index.bulkIndexSources(task.Offset, task.Limit, sqlScope, codesMap, idsMap, authorsByLanguageMap)
+            }
+        }(tasks, errors)
+    }
+
+    <-doneAdding
+    for a := 1; a <= tasksCount; a++ {
+        e := <-errors
+        if e != nil {
+            return e
+        }
+    }
 
 	return nil
 }
@@ -331,6 +370,12 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			return errors.Errorf("Sources Index - Not created: source %s %s", name, mdbSource.UID)
 		}
 	}
+
+    atomic.AddUint64(&index.Progress, 1)
+    progress := atomic.LoadUint64(&index.Progress)
+    if progress % 10 == 0 {
+        log.Infof("Progress sources %d", progress)
+    }
 
 	return nil
 }

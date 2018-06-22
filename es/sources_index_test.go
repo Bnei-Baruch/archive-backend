@@ -26,9 +26,9 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 
 	r := require.New(suite.T())
 
-	indexNameEn := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH)
-	indexNameHe := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_HEBREW)
-	indexer, err := es.MakeIndexer("test", []string{consts.ES_RESULT_TYPE_SOURCES}, common.DB, common.ESC)
+	indexNameEn := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
+	indexNameHe := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_HEBREW, "test-date")
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_SOURCES}, common.DB, common.ESC)
 	r.Nil(err)
 
 	fmt.Printf("\n\n\nAdding source.\n\n")

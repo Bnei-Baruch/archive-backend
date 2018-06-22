@@ -19,7 +19,7 @@ type Indexer struct {
 }
 
 func MakeProdIndexer(date string, mdb *sql.DB, esc *elastic.Client) (*Indexer, error) {
-	return MakeIndexer("prod", date, []string{consts.ES_RESULT_TYPE_UNITS}, mdb, esc)
+    return MakeIndexer("prod", date, consts.ES_ALL_RESULT_TYPES, mdb, esc)
 }
 
 func MakeFakeIndexer(mdb *sql.DB, esc *elastic.Client) (*Indexer, error) {
@@ -35,22 +35,12 @@ func MakeIndexer(namespace string, date string, names []string, mdb *sql.DB, esc
 		if name == consts.ES_RESULT_TYPE_UNITS {
 			indexer.indices[i] = MakeContentUnitsIndex(namespace, date, mdb, esc)
 		} else if name == consts.ES_RESULT_TYPE_SOURCES {
-			indexer.indices[i] = MakeSourcesIndex(namespace, mdb, esc)
+			indexer.indices[i] = MakeSourcesIndex(namespace, date, mdb, esc)
 		} else if name == consts.ES_RESULT_TYPE_TAGS {
 			indexer.indices[i] = MakeTagsIndex(namespace, date, mdb, esc)
 		} else {
 			return nil, errors.New(fmt.Sprintf("MakeIndexer - Invalid index name: %+v", name))
 		}
-
-		// if name == consts.ES_CLASSIFICATIONS_INDEX {
-		// 	indexer.indices[i] = MakeClassificationsIndex(namespace, mdb, esc)
-		// } else if name == consts.ES_UNITS_INDEX {
-		// 	indexer.indices[i] = MakeContentUnitsIndex(namespace, mdb, esc)
-		// } else if name == consts.ES_COLLECTIONS_INDEX {
-		// 	indexer.indices[i] = MakeCollectionsIndex(namespace, mdb, esc)
-		// } else if name == consts.ES_SOURCES_INDEX {
-		// 	indexer.indices[i] = MakeSourcesIndex(namespace, mdb, esc)
-		// }
 	}
 	return indexer, nil
 }

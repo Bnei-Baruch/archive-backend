@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+    "sync/atomic"
 	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -32,6 +33,7 @@ func MakeContentUnitsIndex(namespace string, indexDate string, db *sql.DB, esc *
 
 type ContentUnitsIndex struct {
 	BaseIndex
+    Progress uint64
 }
 
 func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
@@ -76,7 +78,7 @@ func (index *ContentUnitsIndex) Update(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) error {
-	// TODO: Work not done! Missing tags and sources scopes!
+	// TODO: Missing tag scope handling.
 	sqlScope := defaultContentUnitSql()
 	uids := removedUIDs
 	if scope.ContentUnitUID != "" {
@@ -166,6 +168,38 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	}
 }
 
+func (index *ContentUnitsIndex) bulkIndexUnits(offset int, limit int, sqlScope string) error {
+    var units []*mdbmodels.ContentUnit
+    err := mdbmodels.NewQuery(index.db,
+        qm.From("content_units as cu"),
+        qm.Load("ContentUnitI18ns"),
+        qm.Load("CollectionsContentUnits"),
+        qm.Load("CollectionsContentUnits.Collection"),
+        qm.Where(sqlScope),
+        qm.Offset(offset),
+        qm.Limit(limit)).Bind(&units)
+    if err != nil {
+        return errors.Wrap(err, "Fetch units from mdb")
+    }
+    log.Infof("Content Units Index - Adding %d units (offset: %d).", len(units), offset)
+
+    indexData, err := MakeIndexData(index.db, sqlScope)
+    if err != nil {
+        return err
+    }
+    for _, unit := range units {
+        if err := index.indexUnit(unit, indexData); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
+type OffsetLimitJob struct {
+    Offset int
+    Limit int
+}
+
 func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 	var count int64
 	err := mdbmodels.NewQuery(index.db,
@@ -178,34 +212,38 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 
 	log.Infof("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
 
-	offset := 0
-	limit := 1000
-	for offset < int(count) {
-		var units []*mdbmodels.ContentUnit
-		err := mdbmodels.NewQuery(index.db,
-			qm.From("content_units as cu"),
-			qm.Load("ContentUnitI18ns"),
-			qm.Load("CollectionsContentUnits"),
-			qm.Load("CollectionsContentUnits.Collection"),
-			qm.Where(sqlScope),
-			qm.Offset(offset),
-			qm.Limit(limit)).Bind(&units)
-		if err != nil {
-			return errors.Wrap(err, "Fetch units from mdb")
-		}
-		log.Infof("Content Units Index - Adding %d units (offset: %d).", len(units), offset)
+    tasks := make(chan OffsetLimitJob, 300)
+    errors := make(chan error, 300)
+    doneAdding := make(chan bool)
 
-		indexData, err := MakeIndexData(index.db, sqlScope)
-		if err != nil {
-			return err
-		}
-		for _, unit := range units {
-			if err := index.indexUnit(unit, indexData); err != nil {
-				return err
-			}
-		}
-		offset += limit
-	}
+    tasksCount := 0
+    go func() {
+        offset := 0
+        limit := 1000
+        for offset < int(count) {
+            tasks <- OffsetLimitJob{offset, limit}
+            tasksCount += 1
+            offset += limit
+        }
+        close(tasks)
+        doneAdding <- true
+    }()
+
+    for w := 1; w <= 10; w++ {
+        go func(tasks <-chan OffsetLimitJob, errors chan<- error) {
+            for task := range tasks {
+                errors <- index.bulkIndexUnits(task.Offset, task.Limit, sqlScope)
+            }
+        }(tasks, errors)
+    }
+
+    <-doneAdding
+    for a := 1; a <= tasksCount; a++ {
+        e := <-errors
+        if e != nil {
+            return e
+        }
+    }
 
 	return nil
 }
@@ -336,6 +374,12 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 			return errors.Errorf("Content Units Index - Not created: unit %s %s", name, cu.UID)
 		}
 	}
+
+    atomic.AddUint64(&index.Progress, 1)
+    progress := atomic.LoadUint64(&index.Progress)
+    if progress % 100 == 0 {
+        log.Infof("Progress units %d", progress)
+    }
 
 	return nil
 }
