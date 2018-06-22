@@ -160,7 +160,7 @@ func (index *BaseIndex) RemoveFromIndexQuery(elasticScope elastic.Query) ([]stri
 	if err != nil {
 		return []string{}, err
 	}
-	log.Infof("Content Untis Index - Removing from index. Scope: %s", string(jsonBytes))
+	log.Infof("Results Index - Removing from index. Scope: %s", string(jsonBytes))
 	removed := make(map[string]bool)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		indexName := index.indexName(lang)
@@ -180,14 +180,14 @@ func (index *BaseIndex) RemoveFromIndexQuery(elasticScope elastic.Query) ([]stri
 			Query(elasticScope).
 			Do(context.TODO())
 		if err != nil {
-			return []string{}, errors.Wrapf(err, "Content Units Index - Remove from index %s %+v\n", indexName, elasticScope)
+			return []string{}, errors.Wrapf(err, "Results Index - Remove from index %s %+v\n", indexName, elasticScope)
 		}
 		if delRes.Deleted > 0 {
-			fmt.Printf("Content Units Index - Deleted %d documents from %s.\n", delRes.Deleted, indexName)
+			fmt.Printf("Results Index - Deleted %d documents from %s.\n", delRes.Deleted, indexName)
 		}
 	}
 	if len(removed) == 0 {
-		fmt.Println("Content Units Index - Nothing was delete.")
+		fmt.Println("Results Index - Nothing was delete.")
 		return []string{}, nil
 	}
 	keys := make([]string, 0)

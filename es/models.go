@@ -98,8 +98,10 @@ type Classification struct {
 }
 
 type Source struct {
-	MDB_UID     string   `json:"mdb_uid"`
-	Name        string   `json:"name"`
+	MDB_UID string `json:"mdb_uid"`
+	Name    string `json:"name"`
+
+	// Deprecated fields (since we use 'Result Template' in order to index the sources):
 	Description string   `json:"description"`
 	Content     string   `json:"content"`
 	Sources     []string `json:"sources"`

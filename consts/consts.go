@@ -230,10 +230,12 @@ const ES_RESULTS_INDEX = "results"
 // Result type
 const ES_RESULT_TYPE = "result_type"
 const ES_RESULT_TYPE_UNITS = "units"
+const ES_RESULT_TYPE_SOURCES = "sources"
+const ES_RESULT_TYPE_COLLECTIONS = "collections"
 const ES_RESULT_TYPE_TAGS = "tags"
 
-var ES_SEARCH_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS}
-var ES_ALL_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_TAGS}
+var ES_SEARCH_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_SOURCES}
+var ES_ALL_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_TAGS, ES_RESULT_TYPE_SOURCES}
 
 // Other indices are deprecated. Remove them when move to one index is done.
 const ES_CLASSIFICATIONS_INDEX = "classifications"

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-    "strings"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -49,21 +49,21 @@ func indexFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
-    t := time.Now()
-    date := strings.ToLower(t.Format(time.RFC3339))
+	t := time.Now()
+	date := strings.ToLower(t.Format(time.RFC3339))
 
-    err, prevDate := es.ProdAliasedIndexDate(common.ESC)
-    if err != nil {
-        log.Error(err)
-        return
-    }
+	err, prevDate := es.ProdAliasedIndexDate(common.ESC)
+	if err != nil {
+		log.Error(err)
+		return
+	}
 
-    if date == prevDate {
-        log.Info(fmt.Sprintf("New index date is the same as previous index date %s. Wait a minute and rerun.", prevDate))
-        return
-    }
+	if date == prevDate {
+		log.Info(fmt.Sprintf("New index date is the same as previous index date %s. Wait a minute and rerun.", prevDate))
+		return
+	}
 
-    indexer, err := es.MakeProdIndexer(date, common.DB, common.ESC)
+	indexer, err := es.MakeProdIndexer(date, common.DB, common.ESC)
 	if err != nil {
 		log.Error(err)
 		return
@@ -73,11 +73,11 @@ func indexFn(cmd *cobra.Command, args []string) {
 		log.Error(err)
 		return
 	}
-    err = es.SwitchProdAliasToCurrentIndex(date, common.ESC)
-    if err != nil {
-        log.Error(err)
-        return
-    }
+	err = es.SwitchProdAliasToCurrentIndex(date, common.ESC)
+	if err != nil {
+		log.Error(err)
+		return
+	}
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
