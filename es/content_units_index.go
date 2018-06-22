@@ -24,7 +24,7 @@ func MakeContentUnitsIndex(namespace string, indexDate string, db *sql.DB, esc *
 	cui := new(ContentUnitsIndex)
 	cui.baseName = consts.ES_RESULTS_INDEX
 	cui.namespace = namespace
-    cui.indexDate = indexDate
+	cui.indexDate = indexDate
 	cui.db = db
 	cui.esc = esc
 	return cui
@@ -76,7 +76,7 @@ func (index *ContentUnitsIndex) Update(scope Scope) error {
 }
 
 func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) error {
-	// TODO: Work not done! Missing tags and sources scopes!
+	// TODO: Work not done! Missing tags scopes!
 	sqlScope := defaultContentUnitSql()
 	uids := removedUIDs
 	if scope.ContentUnitUID != "" {
