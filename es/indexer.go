@@ -19,7 +19,7 @@ type Indexer struct {
 }
 
 func MakeProdIndexer(date string, mdb *sql.DB, esc *elastic.Client) (*Indexer, error) {
-	return MakeIndexer("prod", date, []string{consts.ES_RESULT_TYPE_UNITS}, mdb, esc)
+	return MakeIndexer("prod", date, consts.ES_ALL_RESULT_TYPES, mdb, esc)
 }
 
 func MakeFakeIndexer(mdb *sql.DB, esc *elastic.Client) (*Indexer, error) {
