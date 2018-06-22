@@ -36,10 +36,10 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	UIDs := []string{cu1UID, cu2UID, cuNotPublishedUID, cuNotSecureUID}
 
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
-	indexNameEn := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH)
-	indexNameHe := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_HEBREW)
-	indexNameRu := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_RUSSIAN)
-	indexer, err := es.MakeIndexer("test", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
+	indexNameEn := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
+	indexNameHe := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_HEBREW, "test-date")
+	indexNameRu := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_RUSSIAN, "test-date")
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
 	r.Nil(err)
 
 	// Index existing DB data.
@@ -177,8 +177,8 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 	UIDs := []string{cu1UID, cu2UID}
 
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
-	indexName := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH)
-	indexer, err := es.MakeIndexer("test", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
+	indexName := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
 	r.Nil(err)
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll())
