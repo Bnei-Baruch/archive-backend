@@ -207,7 +207,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 				TypedUids:    typedUIDs,
 				FilterValues: filterValues,
 				Title:        i18n.Name.String,
-				TitleSuggest: Suffixes(i18n.Name.String),
+				//TitleSuggest: Suffixes(i18n.Name.String),
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
