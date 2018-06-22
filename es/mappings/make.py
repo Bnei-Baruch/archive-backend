@@ -195,12 +195,6 @@ RESULTS_TEMPLATE = {
           },
         },
 
-        # Effective date is relevant for units only (for now).
-        "effective_date": {
-          "type": "date",
-          "format": "strict_date",
-        },
-
         # Suggest field for autocomplete.
         "title_suggest": {
           "type": "completion",
@@ -212,6 +206,12 @@ RESULTS_TEMPLATE = {
               "path": "result_type",
             },
           ],
+        },
+
+        # Content unit specific fields.
+        "effective_date": {
+          "type": "date",
+          "format": "strict_date",
         },
       }
     }
@@ -570,12 +570,20 @@ SEARCH_LOGS_TEMPLATE = {
     "mappings": {
         "search_logs": {
             "properties": {
+                # Search log key, search_id and timestamp.
                 "search_id": {
                     "type": "keyword",
                 },
                 "created": {
                     "type": "date",
                 },
+
+                # Search log type, i.e., "query" or "click".
+                "log_type": {
+                    "type": "keyword",
+                },
+
+                # Query log type fields.
                 "query": {
                     "type": "object",
                 },
@@ -585,42 +593,33 @@ SEARCH_LOGS_TEMPLATE = {
                 "size": {
                     "type": "integer",
                 },
-                "results": {
-                    "type": "object",
-                },
                 "sort_by": {
                     "type": "keyword",
                 },
+                "query_result": {
+                    "type": "object",
+                    "enabled": False,
+                },
                 "error": {
                     "type": "object",
+                    "enabled": False,
                 },
-            },
-        },
-        "search_clicks": {
-            "properties": {
-                "created": {
-                    "type": "date",
-                },
+
+                # Click log type fields.
                 "mdb_uid": {
                     "type": "keyword",
                 },
                 "index": {
                     "type": "keyword",
                 },
-                "type": {
+                "result_type": {
                     "type": "keyword",
                 },
                 "rank": {
                     "type": "integer",
                 },
-                "search_id": {
-                    "type": "keyword",
-                },
             },
-            "_parent": {
-                "type": "search_logs",
-            }
-        }
+        },
     },
 }
 

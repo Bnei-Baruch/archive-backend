@@ -20,10 +20,11 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-func MakeContentUnitsIndex(namespace string, db *sql.DB, esc *elastic.Client) *ContentUnitsIndex {
+func MakeContentUnitsIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *ContentUnitsIndex {
 	cui := new(ContentUnitsIndex)
 	cui.baseName = consts.ES_RESULTS_INDEX
 	cui.namespace = namespace
+    cui.indexDate = indexDate
 	cui.db = db
 	cui.esc = esc
 	return cui

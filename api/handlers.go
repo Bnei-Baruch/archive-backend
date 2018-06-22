@@ -453,6 +453,8 @@ func SearchHandler(c *gin.Context) {
 
 	searchId := c.Query("search_id")
 
+    suggestion := c.Query("suggest")
+
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
 	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
 	preference := fmt.Sprintf("%x", md5.Sum([]byte(c.ClientIP())))
@@ -478,7 +480,7 @@ func SearchHandler(c *gin.Context) {
 	)
 	if err == nil {
 		// TODO: How does this slows the search query? Consider logging in parallel.
-		err := logger.LogSearch(query, sortByVal, from, size, searchId, res)
+		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res)
 		if err != nil {
 			log.Warnf("Error logging search: %+v %+v", err, res)
 		}
@@ -486,7 +488,7 @@ func SearchHandler(c *gin.Context) {
 	} else {
 		// TODO: Remove following line, we should not log this.
 		log.Infof("Error on search: %+v", err)
-		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, err)
+		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, suggestion, err)
 		if logErr != nil {
 			log.Warnf("Erro logging search error: %+v %+v", logErr, err)
 		}
@@ -497,7 +499,7 @@ func SearchHandler(c *gin.Context) {
 func ClickHandler(c *gin.Context) {
 	mdbUid := c.Query("mdb_uid")
 	index := c.Query("index")
-	index_type := c.Query("type")
+	result_type := c.Query("result_type")
 	rank, err := strconv.Atoi(c.Query("rank"))
 	if err != nil || rank < 0 {
 		NewBadRequestError(errors.New("rank expects a positive number")).Abort(c)
@@ -505,7 +507,7 @@ func ClickHandler(c *gin.Context) {
 	}
 	searchId := c.Query("search_id")
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
-	if err = logger.LogClick(mdbUid, index, index_type, rank, searchId); err != nil {
+	if err = logger.LogClick(mdbUid, index, result_type, rank, searchId); err != nil {
 		log.Warnf("Error logging click: %+v", err)
 	}
 	c.JSON(http.StatusOK, gin.H{})

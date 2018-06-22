@@ -66,7 +66,9 @@ func (index *SourcesIndex) addToIndex(scope Scope, removedUIDs []string) error {
 
 func (index *SourcesIndex) removeFromIndex(scope Scope) ([]string, error) {
 	if scope.SourceUID != "" {
-		return index.RemoveFromIndexQuery(elastic.NewTermsQuery("mdb_uid", scope.SourceUID))
+		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_SOURCES).
+			Filter(elastic.NewTermsQuery("mdb_uid", scope.SourceUID))
+		return index.RemoveFromIndexQuery(elasticScope)
 	}
 
 	// Nothing to remove.
@@ -267,6 +269,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				ResultType:   consts.ES_RESULT_TYPE_SOURCES,
 				MDB_UID:      mdbSource.UID,
 				FilterValues: keyValues("source", parents),
+				TypedUids:    []string{keyValue("source", mdbSource.UID)},
 			}
 			if i18n.Description.Valid && i18n.Description.String != "" {
 				source.Description = i18n.Description.String
@@ -303,7 +306,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			authors := authorsByLanguage[i18n.Language]
 			s := append(authors, pathNames...)
 			source.Title = strings.Join(s, " > ")
-			source.TitleSuggest = Suffixes(pathNames[len(pathNames)-1])
+			source.TitleSuggest = Suffixes(strings.Join(s, " "))
 			i18nMap[i18n.Language] = source
 		}
 	}

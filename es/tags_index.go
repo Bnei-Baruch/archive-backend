@@ -15,10 +15,11 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
-func MakeTagsIndex(namespace string, db *sql.DB, esc *elastic.Client) *TagsIndex {
+func MakeTagsIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *TagsIndex {
 	tagsIndex := new(TagsIndex)
 	tagsIndex.baseName = consts.ES_RESULTS_INDEX
 	tagsIndex.namespace = namespace
+    tagsIndex.indexDate = indexDate
 	tagsIndex.db = db
 	tagsIndex.esc = esc
 	return tagsIndex

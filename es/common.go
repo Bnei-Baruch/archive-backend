@@ -270,9 +270,9 @@ func DumpDB(mdb *sql.DB, title string) error {
 
 func DumpIndexes(esc *elastic.Client, title string, resultType string) error {
 	fmt.Printf("\n\n ------------------- %s DUMP INDEXES ------------------- \n\n", title)
-	indexName := IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH)
+	indexName := IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
 	fmt.Printf("\n\n\nINDEX %s\n\n", indexName)
-	indexer, err := MakeIndexer("test", []string{resultType}, nil, esc)
+	indexer, err := MakeIndexer("test", "test-date", []string{resultType}, nil, esc)
 	if err != nil {
 		return err
 	}

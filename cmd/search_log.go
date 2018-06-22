@@ -71,7 +71,7 @@ func queriesFn(cmd *cobra.Command, args []string) {
 	queries, err := logger.GetAllQueries()
 	utils.Must(err)
 	log.Infof("Found %d queries.", len(queries))
-	log.Info("#\tSearchId\tCreated\tTerm\tExact\tFilters\tLanguages\tFrom\tSize\tSortBy\tError")
+	log.Info("#\tSearchId\tCreated\tTerm\tExact\tFilters\tLanguages\tFrom\tSize\tSortBy\tSuggestion\tError")
 	sortedQueries := make(search.CreatedSearchLogs, 0, len(queries))
 	for _, q := range queries {
 		sortedQueries = append(sortedQueries, q)
@@ -80,7 +80,7 @@ func queriesFn(cmd *cobra.Command, args []string) {
 	for i, sl := range sortedQueries {
 		filters, err := utils.PrintMap(sl.Query.Filters)
 		utils.Must(err)
-		log.Infof("%5d\t%16s\t%20s\t%40s\t%5s\t%5s\t%10s\t%5d\t%5d\t%10s\t%6t",
+		log.Infof("%5d\t%16s\t%20s\t%40s\t%5s\t%5s\t%10s\t%5d\t%5d\t%10s\t%15s\t%6t",
 			i+1,
 			sl.SearchId,
 			sl.Created.Format("2006-01-02 15:04:05"),
@@ -88,7 +88,7 @@ func queriesFn(cmd *cobra.Command, args []string) {
 			strings.Join(sl.Query.ExactTerms, ","),
 			filters,
 			strings.Join(sl.Query.LanguageOrder, ","),
-			sl.From, sl.Size, sl.SortBy, sl.Error != nil)
+			sl.From, sl.Size, sl.SortBy, sl.Suggestion, sl.Error != nil)
 	}
 }
 
@@ -111,6 +111,6 @@ func clicksFn(cmd *cobra.Command, args []string) {
 			sq.Rank,
 			sq.MdbUid,
 			sq.Index,
-			sq.Type)
+			sq.ResultType)
 	}
 }
