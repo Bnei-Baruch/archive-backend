@@ -38,6 +38,8 @@ func MakeIndexer(namespace string, date string, names []string, mdb *sql.DB, esc
 			indexer.indices[i] = MakeSourcesIndex(namespace, mdb, esc)
 		} else if name == consts.ES_RESULT_TYPE_TAGS {
 			indexer.indices[i] = MakeTagsIndex(namespace, date, mdb, esc)
+		} else if name == consts.ES_RESULT_TYPE_COLLECTIONS {
+			indexer.indices[i] = MakeCollectionsIndex(namespace, date, mdb, esc)
 		} else {
 			return nil, errors.New(fmt.Sprintf("MakeIndexer - Invalid index name: %+v", name))
 		}

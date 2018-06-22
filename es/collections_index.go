@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
@@ -16,15 +15,15 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
-	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-func MakeCollectionsIndex(namespace string, db *sql.DB, esc *elastic.Client) *CollectionsIndex {
+func MakeCollectionsIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *CollectionsIndex {
 	ci := new(CollectionsIndex)
 	ci.baseName = consts.ES_RESULTS_INDEX
 	ci.namespace = namespace
 	ci.db = db
 	ci.esc = esc
+	ci.indexDate = indexDate
 	return ci
 }
 
@@ -215,29 +214,29 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 				collection.Description = i18n.Description.String
 			}
 
-			if c.Properties.Valid {
-				var props map[string]interface{}
-				err := json.Unmarshal(c.Properties.JSON, &props)
-				if err != nil {
-					return errors.Wrapf(err, "json.Unmarshal properties %s", c.UID)
-				}
+			// if c.Properties.Valid {
+			// 	var props map[string]interface{}
+			// 	err := json.Unmarshal(c.Properties.JSON, &props)
+			// 	if err != nil {
+			// 		return errors.Wrapf(err, "json.Unmarshal properties %s", c.UID)
+			// 	}
 
-				if startDate, ok := props["start_date"]; ok {
-					val, err := time.Parse("2006-01-02", startDate.(string))
-					if err != nil {
-						val, err = time.Parse("2006-01-02T15:04:05Z", startDate.(string))
-						if err != nil {
-							return errors.Wrapf(err, "time.Parse start_date %s", c.UID)
-						}
-					}
-					collection.EffectiveDate = &utils.Date{Time: val}
-				}
+			// 	if startDate, ok := props["start_date"]; ok {
+			// 		val, err := time.Parse("2006-01-02", startDate.(string))
+			// 		if err != nil {
+			// 			val, err = time.Parse("2006-01-02T15:04:05Z", startDate.(string))
+			// 			if err != nil {
+			// 				return errors.Wrapf(err, "time.Parse start_date %s", c.UID)
+			// 			}
+			// 		}
+			// 		collection.EffectiveDate = &utils.Date{Time: val}
+			// 	}
 
-				// No use for OriginalLanguage
-				/*if originalLanguage, ok := props["original_language"]; ok {
-					collection.OriginalLanguage = originalLanguage.(string)
-				}*/
-			}
+			// 	// No use for OriginalLanguage
+			// 	/*if originalLanguage, ok := props["original_language"]; ok {
+			// 		collection.OriginalLanguage = originalLanguage.(string)
+			// 	}*/
+			// }
 
 			i18nMap[i18n.Language] = collection
 		}
