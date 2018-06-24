@@ -9,7 +9,7 @@ import (
 	"os"
 	"path"
 	"strings"
-    "sync/atomic"
+	"sync/atomic"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -22,11 +22,11 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
-func MakeSourcesIndex(namespace string, date string, db *sql.DB, esc *elastic.Client) *SourcesIndex {
+func MakeSourcesIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *SourcesIndex {
 	si := new(SourcesIndex)
 	si.baseName = consts.ES_RESULTS_INDEX
 	si.namespace = namespace
-    si.indexDate = date
+	si.indexDate = indexDate
 	si.db = db
 	si.esc = esc
 	return si
@@ -34,7 +34,7 @@ func MakeSourcesIndex(namespace string, date string, db *sql.DB, esc *elastic.Cl
 
 type SourcesIndex struct {
 	BaseIndex
-    Progress uint64
+	Progress uint64
 }
 
 func (index *SourcesIndex) ReindexAll() error {
@@ -79,37 +79,37 @@ func (index *SourcesIndex) removeFromIndex(scope Scope) ([]string, error) {
 }
 
 func (index *SourcesIndex) bulkIndexSources(
-    offset int, limit int, sqlScope string,
-    codesMap map[string][]string,
-    idsMap map[string][]int64,
-    authorsByLanguageMap map[string]map[string][]string) error {
-    var sources []*mdbmodels.Source
-    err := mdbmodels.NewQuery(index.db,
-        qm.From("sources as source"),
-        qm.Load("SourceI18ns"),
-        qm.Load("Authors"),
-        qm.Where(sqlScope),
-        qm.Offset(offset),
-        qm.Limit(limit)).Bind(&sources)
-    if err != nil {
-        return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources from mdb")
-    }
+	offset int, limit int, sqlScope string,
+	codesMap map[string][]string,
+	idsMap map[string][]int64,
+	authorsByLanguageMap map[string]map[string][]string) error {
+	var sources []*mdbmodels.Source
+	err := mdbmodels.NewQuery(index.db,
+		qm.From("sources as source"),
+		qm.Load("SourceI18ns"),
+		qm.Load("Authors"),
+		qm.Where(sqlScope),
+		qm.Offset(offset),
+		qm.Limit(limit)).Bind(&sources)
+	if err != nil {
+		return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources from mdb")
+	}
 
-    log.Infof("SourcesIndex.addToIndexSql - Adding %d sources (offset: %d).", len(sources), offset)
+	log.Infof("SourcesIndex.addToIndexSql - Adding %d sources (offset: %d).", len(sources), offset)
 
-    for _, source := range sources {
-        if parents, ok := codesMap[source.UID]; !ok {
-            log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in codesMap: %+v", source.UID, codesMap)
-        } else if parentIds, ok := idsMap[source.UID]; !ok {
-            log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in idsMap: %+v", source.UID, idsMap)
-        } else if authors, ok := authorsByLanguageMap[source.UID]; !ok {
-            log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in authorsByLanguageMap: %+v", source.UID, idsMap)
-        } else if err := index.indexSource(source, parents, parentIds, authors); err != nil {
-            log.Warnf("SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
-        }
-    }
+	for _, source := range sources {
+		if parents, ok := codesMap[source.UID]; !ok {
+			log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in codesMap: %+v", source.UID, codesMap)
+		} else if parentIds, ok := idsMap[source.UID]; !ok {
+			log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in idsMap: %+v", source.UID, idsMap)
+		} else if authors, ok := authorsByLanguageMap[source.UID]; !ok {
+			log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in authorsByLanguageMap: %+v", source.UID, idsMap)
+		} else if err := index.indexSource(source, parents, parentIds, authors); err != nil {
+			log.Warnf("SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
+		}
+	}
 
-    return nil
+	return nil
 }
 
 // Note: scope usage is limited to source.uid only (e.g. source.uid='L2jMWyce')
@@ -134,38 +134,38 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 		return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources parents from mdb.")
 	}
 
-    tasks := make(chan OffsetLimitJob, 300)
-    errors := make(chan error, 300)
-    doneAdding := make(chan bool)
+	tasks := make(chan OffsetLimitJob, 300)
+	errors := make(chan error, 300)
+	doneAdding := make(chan bool)
 
-    tasksCount := 0
-    go func() {
-        offset := 0
-        limit := 20
-        for offset < int(count) {
-            tasks <- OffsetLimitJob{offset, limit}
-            tasksCount += 1
-            offset += limit
-        }
-        close(tasks)
-        doneAdding <- true
-    }()
+	tasksCount := 0
+	go func() {
+		offset := 0
+		limit := 20
+		for offset < int(count) {
+			tasks <- OffsetLimitJob{offset, limit}
+			tasksCount += 1
+			offset += limit
+		}
+		close(tasks)
+		doneAdding <- true
+	}()
 
-    for w := 1; w <= 10; w++ {
-        go func(tasks <-chan OffsetLimitJob, errors chan<- error) {
-            for task := range tasks {
-                errors <- index.bulkIndexSources(task.Offset, task.Limit, sqlScope, codesMap, idsMap, authorsByLanguageMap)
-            }
-        }(tasks, errors)
-    }
+	for w := 1; w <= 10; w++ {
+		go func(tasks <-chan OffsetLimitJob, errors chan<- error) {
+			for task := range tasks {
+				errors <- index.bulkIndexSources(task.Offset, task.Limit, sqlScope, codesMap, idsMap, authorsByLanguageMap)
+			}
+		}(tasks, errors)
+	}
 
-    <-doneAdding
-    for a := 1; a <= tasksCount; a++ {
-        e := <-errors
-        if e != nil {
-            return e
-        }
-    }
+	<-doneAdding
+	for a := 1; a <= tasksCount; a++ {
+		e := <-errors
+		if e != nil {
+			return e
+		}
+	}
 
 	return nil
 }
@@ -371,11 +371,11 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 		}
 	}
 
-    atomic.AddUint64(&index.Progress, 1)
-    progress := atomic.LoadUint64(&index.Progress)
-    if progress % 10 == 0 {
-        log.Infof("Progress sources %d", progress)
-    }
+	atomic.AddUint64(&index.Progress, 1)
+	progress := atomic.LoadUint64(&index.Progress)
+	if progress%10 == 0 {
+		log.Infof("Progress sources %d", progress)
+	}
 
 	return nil
 }

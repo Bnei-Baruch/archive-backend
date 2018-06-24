@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
@@ -16,15 +15,15 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
-	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-func MakeCollectionsIndex(namespace string, db *sql.DB, esc *elastic.Client) *CollectionsIndex {
+func MakeCollectionsIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *CollectionsIndex {
 	ci := new(CollectionsIndex)
-	ci.baseName = consts.ES_COLLECTIONS_INDEX
+	ci.baseName = consts.ES_RESULTS_INDEX
 	ci.namespace = namespace
 	ci.db = db
 	ci.esc = esc
+	ci.indexDate = indexDate
 	return ci
 }
 
@@ -46,7 +45,7 @@ func defaultCollectionsSql() string {
 
 func (index *CollectionsIndex) ReindexAll() error {
 	log.Infof("Collections Index - Reindex all.")
-	if _, err := index.removeFromIndexQuery(elastic.NewMatchAllQuery()); err != nil {
+	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_COLLECTIONS)); err != nil {
 		return err
 	}
 	return index.addToIndexSql(defaultCollectionsSql())
@@ -116,7 +115,7 @@ func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
 			typedUIDsI[i] = typedUID
 		}
 		elasticScope := elastic.NewTermsQuery("typed_uids", typedUIDsI...)
-		return index.removeFromIndexQuery(elasticScope)
+		return index.RemoveFromIndexQuery(elasticScope)
 	} else {
 		// Nothing to remove.
 		return []string{}, nil
@@ -171,56 +170,6 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 	return nil
 }
 
-func (index *CollectionsIndex) removeFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
-	source, err := elasticScope.Source()
-	if err != nil {
-		return []string{}, err
-	}
-	jsonBytes, err := json.Marshal(source)
-	if err != nil {
-		return []string{}, err
-	}
-	log.Infof("Collections Index - Removing from index. Scope: %s", string(jsonBytes))
-	removed := make(map[string]bool)
-	for _, lang := range consts.ALL_KNOWN_LANGS {
-		indexName := index.indexName(lang)
-		searchRes, err := index.esc.Search(indexName).Query(elasticScope).Do(context.TODO())
-		if err != nil {
-			return []string{}, err
-		}
-		for _, h := range searchRes.Hits.Hits {
-			var c Collection
-			err := json.Unmarshal(*h.Source, &c)
-			if err != nil {
-				return []string{}, err
-			}
-			removed[c.MDB_UID] = true
-		}
-		delRes, err := index.esc.DeleteByQuery(indexName).
-			Query(elasticScope).
-			Do(context.TODO())
-		if err != nil {
-			return []string{}, errors.Wrapf(err, "Remove from index %s %+v\n", indexName, elasticScope)
-		}
-		if delRes.Deleted > 0 {
-			log.Infof("Deleted %d documents from %s.\n", delRes.Deleted, indexName)
-		}
-		if delRes.Deleted != int64(len(searchRes.Hits.Hits)) {
-			return []string{}, errors.New(fmt.Sprintf("Expected to remove %d documents, removed only %d",
-				len(searchRes.Hits.Hits), delRes.Deleted))
-		}
-	}
-	if len(removed) == 0 {
-		log.Info("Collections Index - Nothing was delete.")
-		return []string{}, nil
-	}
-	keys := make([]string, 0)
-	for k := range removed {
-		keys = append(keys, k)
-	}
-	return keys, nil
-}
-
 func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	m := make(map[string]bool)
 	for _, ccu := range collectionsContentUnits {
@@ -245,45 +194,49 @@ func contentUnitsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentU
 
 func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 	// Create documents in each language with available translation
-	i18nMap := make(map[string]Collection)
+	i18nMap := make(map[string]Result)
 	for _, i18n := range c.R.CollectionI18ns {
 		if i18n.Name.Valid && i18n.Name.String != "" {
 			typedUIDs := append([]string{keyValue("collection", c.UID)},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
-			collection := Collection{
-				MDB_UID:                  c.UID,
-				TypedUIDs:                typedUIDs,
-				Name:                     i18n.Name.String,
-				ContentType:              mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name,
-				ContentUnitsContentTypes: contentUnitsContentTypes(c.R.CollectionsContentUnits),
+			filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
+				keyValues("collections_content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))...)
+			collection := Result{
+				ResultType:   consts.ES_RESULT_TYPE_COLLECTIONS,
+				MDB_UID:      c.UID,
+				TypedUids:    typedUIDs,
+				FilterValues: filterValues,
+				Title:        i18n.Name.String,
+				//TitleSuggest: Suffixes(i18n.Name.String),
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
 				collection.Description = i18n.Description.String
 			}
 
-			if c.Properties.Valid {
-				var props map[string]interface{}
-				err := json.Unmarshal(c.Properties.JSON, &props)
-				if err != nil {
-					return errors.Wrapf(err, "json.Unmarshal properties %s", c.UID)
-				}
+			// if c.Properties.Valid {
+			// 	var props map[string]interface{}
+			// 	err := json.Unmarshal(c.Properties.JSON, &props)
+			// 	if err != nil {
+			// 		return errors.Wrapf(err, "json.Unmarshal properties %s", c.UID)
+			// 	}
 
-				if startDate, ok := props["start_date"]; ok {
-					val, err := time.Parse("2006-01-02", startDate.(string))
-					if err != nil {
-						val, err = time.Parse("2006-01-02T15:04:05Z", startDate.(string))
-						if err != nil {
-							return errors.Wrapf(err, "time.Parse start_date %s", c.UID)
-						}
-					}
-					collection.EffectiveDate = &utils.Date{Time: val}
-				}
+			// 	if startDate, ok := props["start_date"]; ok {
+			// 		val, err := time.Parse("2006-01-02", startDate.(string))
+			// 		if err != nil {
+			// 			val, err = time.Parse("2006-01-02T15:04:05Z", startDate.(string))
+			// 			if err != nil {
+			// 				return errors.Wrapf(err, "time.Parse start_date %s", c.UID)
+			// 			}
+			// 		}
+			// 		collection.EffectiveDate = &utils.Date{Time: val}
+			// 	}
 
-				if originalLanguage, ok := props["original_language"]; ok {
-					collection.OriginalLanguage = originalLanguage.(string)
-				}
-			}
+			// 	// No use for OriginalLanguage
+			// 	/*if originalLanguage, ok := props["original_language"]; ok {
+			// 		collection.OriginalLanguage = originalLanguage.(string)
+			// 	}*/
+			// }
 
 			i18nMap[i18n.Language] = collection
 		}
