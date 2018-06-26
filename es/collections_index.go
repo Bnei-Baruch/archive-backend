@@ -207,7 +207,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 				TypedUids:    typedUIDs,
 				FilterValues: filterValues,
 				Title:        i18n.Name.String,
-				//TitleSuggest: Suffixes(i18n.Name.String),
+				TitleSuggest: Suffixes(i18n.Name.String),
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
@@ -252,7 +252,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 		log.Infof("Collections Index - Add collection %s to index %s", string(vBytes), name)
 		resp, err := index.esc.Index().
 			Index(name).
-			Type("collections").
+			Type("result").
 			BodyJson(v).
 			Do(context.TODO())
 		if err != nil {

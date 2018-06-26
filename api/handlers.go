@@ -409,6 +409,7 @@ func ParseQuery(q string) search.Query {
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
+	log.Infof("Deb: [%s]", c.Query("deb"))
 	query := ParseQuery(c.Query("q"))
 	query.Deb = false
 	if c.Query("deb") == "true" {
@@ -470,6 +471,7 @@ func SearchHandler(c *gin.Context) {
 	log.Debugf("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
 	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
+    log.Infof("Before do search.")
 	res, err := se.DoSearch(
 		context.TODO(),
 		query,
@@ -479,6 +481,7 @@ func SearchHandler(c *gin.Context) {
 		preference,
 	)
 	if err == nil {
+        log.Infof("DoSearch ok, logging...")
 		// TODO: How does this slows the search query? Consider logging in parallel.
 		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res)
 		if err != nil {

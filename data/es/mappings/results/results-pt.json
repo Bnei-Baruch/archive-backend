@@ -46,15 +46,15 @@
                     "type": "text", 
                     "analyzer": "standard"
                 }, 
-                "typed_uids": {
-                    "type": "keyword"
+                "effective_date": {
+                    "type": "date", 
+                    "format": "strict_date"
                 }, 
                 "filter_values": {
                     "type": "keyword"
                 }, 
-                "effective_date": {
-                    "type": "date", 
-                    "format": "strict_date"
+                "typed_uids": {
+                    "type": "keyword"
                 }, 
                 "result_type": {
                     "type": "keyword"
