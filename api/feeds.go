@@ -74,7 +74,7 @@ func FeedRusZohar(c *gin.Context) {
 	audioRus := buildHtmlFromFile(consts.LANG_RUSSIAN, consts.MEDIA_MP3, files, cu.Duration)
 	videoHeb := buildHtmlFromFile(consts.LANG_HEBREW, consts.MEDIA_MP4, files, cu.Duration)
 	audioHeb := buildHtmlFromFile(consts.LANG_HEBREW, consts.MEDIA_MP3, files, cu.Duration)
-	link := "https://archive.kbb1.com/ru/lessons/cu/" + cu.ID
+	link := "https://kabbalahmedia.info/ru/lessons/cu/" + cu.ID
 
 	feed.Items = []*feeds.Item{
 		{
@@ -153,7 +153,7 @@ func FeedRusForLaitmanRu(c *gin.Context) {
 		audioRus := buildHtmlFromFile(consts.LANG_RUSSIAN, consts.MEDIA_MP3, files, cu.Duration)
 		videoHeb := buildHtmlFromFile(consts.LANG_HEBREW, consts.MEDIA_MP4, files, cu.Duration)
 		audioHeb := buildHtmlFromFile(consts.LANG_HEBREW, consts.MEDIA_MP3, files, cu.Duration)
-		link := "https://archive.kbb1.com/ru/lessons/cu/" + cu.ID
+		link := "https://kabbalahmedia.info/ru/lessons/cu/" + cu.ID
 		feed.Items[idx] = &feeds.Item{
 			Title: "Утренний урок " + cu.FilmDate.Format("02.01.2006"),
 			Guid:  link,
@@ -554,7 +554,7 @@ func FeedMorningLesson(c *gin.Context) {
 		listen += "<div class='title'>" + cu.Name + "</div>" + video + audio
 		download += "<div class='title'>" + cu.Name + "</div>" + video + audio
 	}
-	link := "https://archive.kbb1.com/ru/lessons/cu/" + lessonParts.ID
+	link := "https://kabbalahmedia.info/ru/lessons/cu/" + lessonParts.ID
 	feed.Items = []*feeds.Item{
 		{
 			Title:       t.LessonFrom + " " + lessonParts.FilmDate.Format("02.01.2006"),
