@@ -103,6 +103,7 @@ func createFeed(feed *feeds.Feed, language string, isItunes bool, c *gin.Context
 		NewInternalError(err).Abort(c)
 		return
 	}
+	c.Header("Content-Type", "application/rss+xml; charset=utf-8")
 	c.String(http.StatusOK, content)
 }
 
