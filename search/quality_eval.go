@@ -109,6 +109,7 @@ var EXPECTATION_HIT_TYPE = map[int]string{
 const (
 	FILTER_NAME_SOURCE = "source"
 	FILTER_NAME_TOPIC  = "topic"
+	PREFIX_LATEST      = "[latest]"
 )
 
 type Filter struct {
@@ -253,6 +254,7 @@ func ParseExpectation(e string) Expectation {
 	if err != nil {
 		return Expectation{ET_FAILED_PARSE, "", nil, e}
 	}
+	takeLatest := strings.HasPrefix(e, PREFIX_LATEST)
 	p := u.RequestURI()
 	idx := strings.Index(p, "?")
 	q := "" // The query part, i.e., .../he/lessons?source=bs_L2jMWyce_kB3eD83I => source=bs_L2jMWyce_kB3eD83I
@@ -283,6 +285,12 @@ func ParseExpectation(e string) Expectation {
 				}
 			}
 		}
+		if takeLatest {
+			filters, err = getLatest(filters)
+			if err != nil {
+				return Expectation{ET_FAILED_PARSE, "", nil, e}
+			}
+		}
 		return Expectation{t, "", filters, e}
 	}
 	switch contentUnitOrCollection {
@@ -295,6 +303,7 @@ func ParseExpectation(e string) Expectation {
 	default:
 		return Expectation{ET_BAD_STRUCTURE, "", nil, e}
 	}
+
 	return Expectation{t, uidOrSection, nil, e}
 }
 
@@ -538,4 +547,25 @@ func WriteToCsv(path string, records [][]string) error {
 		return err
 	}
 	return nil
+}
+
+func getLatest(filters []Filter) ([]Filter, error) {
+	//TBD
+	return nil, nil
+}
+
+func getSqlQueryForLatestResults(filters []Filter) string {
+	wherePart := " where "
+	for i, filter := range filters {
+		var t string
+		if i == 0 {
+			t = ""
+		} else {
+			t = "and"
+		}
+		wherePart = fmt.Sprintf("%s %s %s=%s ", wherePart, t, filter.Name, FilterValueToUid(filter.Value))		
+	}
+
+	//TBD
+	return "TBD"
 }
