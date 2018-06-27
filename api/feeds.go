@@ -239,6 +239,8 @@ var T = map[string]translation{
 
 // wsxml.xml?CID=4016&DLANG=HEB&DF=2013-04-30&DT=2013-03-31
 // supports only CID: 120, 3589, 3673, 4016, 4728
+// This feed is used by kab.co.il
+// On that server there is a hardcoded ip of our server !!!
 func FeedWSXML(c *gin.Context) {
 	var config feedConfig
 	(&config).getConfig(c)
