@@ -238,6 +238,7 @@ var T = map[string]translation{
 }
 
 // wsxml.xml?CID=4016&DLANG=HEB&DF=2013-04-30&DT=2013-03-31
+// supports only CID: 120, 3589, 3673, 4016, 4728
 func FeedWSXML(c *gin.Context) {
 	var config feedConfig
 	(&config).getConfig(c)
@@ -258,8 +259,7 @@ func FeedWSXML(c *gin.Context) {
 		dateFrom = t.Format("2006-01-02")
 	}
 
-	db := c.MustGet("MDB_DB").(*sql.DB)
-	r := CollectionsRequest{
+	cur := ContentUnitsRequest{
 		ListRequest: ListRequest{
 			BaseRequest: BaseRequest{
 				Language: config.Lang,
@@ -272,24 +272,48 @@ func FeedWSXML(c *gin.Context) {
 			StartDate: dateFrom,
 			EndDate:   dateTo,
 		},
-		KMediaIdFilter: KMediaIdFilter{
-			ID: catalogId,
-		},
-		WithUnits: true,
 	}
-	resp, herr := handleCollections(db, r)
+	switch catalogId {
+	case 120: // yeshivat-haverim => FRIENDS_GATHERING
+		cur.ContentTypesFilter = ContentTypesFilter{
+			ContentTypes: []string{consts.CT_FRIENDS_GATHERING},
+		}
+		break
+	case 3673: // tv-clip => CLIP
+		cur.ContentTypesFilter = ContentTypesFilter{
+			ContentTypes: []string{consts.CT_CLIP},
+		}
+		break
+	case 4016: // lessons_zohar-la-am => LESSON_PART + SourcesFilter.Sources= ["AwGBQX2L"]
+		cur.ContentTypesFilter = ContentTypesFilter{
+			ContentTypes: []string{consts.CT_LESSON_PART},
+		}
+		cur.SourcesFilter = SourcesFilter{Sources: []string{"AwGBQX2L"}}
+		break
+	case 4728: // lessons-part => LESSON_PART
+		cur.ContentTypesFilter = ContentTypesFilter{
+			ContentTypes: []string{consts.CT_LESSON_PART},
+		}
+		break
+		// vl_heb_virtual-group-israel => ignore
+		//case 3589:
+		//	break
+	default:
+		c.String(http.StatusOK, "<lessons />")
+		return
+	}
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	items, herr := handleContentUnits(db, cur)
 	if herr != nil {
 		herr.Abort(c)
 	}
-	if len(resp.Collections) == 0 {
+	if len(items.ContentUnits) == 0 {
 		c.String(http.StatusOK, "<lessons />")
 		return
 	}
 
-	collection := resp.Collections[0]
-	items := collection.ContentUnits
-	cuids := make([]int64, len(items))
-	for idx, cu := range items {
+	cuids := make([]int64, len(items.ContentUnits))
+	for idx, cu := range items.ContentUnits {
 		id, err := mapCU2ID(cu.ID, db, c)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -345,16 +369,15 @@ func FeedWSXML(c *gin.Context) {
 	}
 
 	lessons := lessonsT{
-		Lesson: make([]lessonT, len(collection.ContentUnits)),
+		Lesson: make([]lessonT, len(items.ContentUnits)),
 	}
-	for i, unit := range collection.ContentUnits {
-		t, _ := time.Parse("2006-Jan-02 15:04:05 -0700 MST", unit.FilmDate.String())
+	for i, unit := range items.ContentUnits {
 		unitFiles := fileMap[cuids[i]]
 		lessons.Lesson[i] = lessonT{
 			Title:       unit.Name,
 			Description: unit.Description,
 			Link:        getHref("/"+config.Lang+"/lessons/cu/"+string(unit.ID), c),
-			Date:        t.Format(time.RFC1123Z),
+			Date:        unit.FilmDate.String(),
 			Language:    consts.LANG2CODE[unit.OriginalLanguage],
 			Lecturer:    "",
 			Files: filesT{
@@ -379,8 +402,8 @@ func FeedWSXML(c *gin.Context) {
 			}
 		}
 	}
-	c.XML(http.StatusOK, lessons)
 
+	c.XML(http.StatusOK, lessons)
 }
 
 func FeedPodcast(c *gin.Context) {
