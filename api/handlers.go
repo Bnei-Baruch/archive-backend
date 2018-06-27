@@ -1083,6 +1083,30 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		return nil, ex
 	}
 
+	// files
+	if r.WithFiles {
+		ids := make([]int64, len(units))
+		uidsMap := make(map[string]int64, len(units))
+		for i := range units {
+			ids[i] = units[i].ID
+			uidsMap[units[i].UID] = units[i].ID
+		}
+
+		fileMap, err := loadCUFiles(db, ids)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+
+		for i := range cus {
+			cu := cus[i]
+			if files, ok := fileMap[uidsMap[cu.ID]]; ok {
+				if err := setCUFiles(cu, files); err != nil {
+					return nil, NewInternalError(err)
+				}
+			}
+		}
+	}
+
 	resp := &ContentUnitsResponse{
 		ListResponse: ListResponse{Total: total},
 		ContentUnits: cus,

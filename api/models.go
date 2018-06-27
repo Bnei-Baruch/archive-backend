@@ -111,6 +111,7 @@ type ContentUnitsRequest struct {
 	CollectionsFilter
 	PublishersFilter
 	KmediaIDsFilter
+	WithFiles bool `json:"with_files" form:"with_files"`
 }
 
 type ContentUnitsResponse struct {
