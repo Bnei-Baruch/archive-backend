@@ -628,9 +628,6 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendKMediaIdFilterMods(&mods, r.KMediaIdFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
 
 	// count query
 	var total int64
@@ -1490,16 +1487,6 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	if f.EndDate != "" {
 		*mods = append(*mods, qm.Where("(properties->>'film_date')::date <= ?", e))
 	}
-
-	return nil
-}
-
-func appendKMediaIdFilterMods(mods *[]qm.QueryMod, f KMediaIdFilter) error {
-	if f.ID == 0 {
-		return nil
-	}
-
-	*mods = append(*mods, qm.Where("(properties->>'kmedia_id')::integer = ?", f.ID))
 
 	return nil
 }

@@ -53,10 +53,6 @@ type DateRangeFilter struct {
 	EndDate   string `json:"end_date" form:"end_date" binding:"omitempty"`
 }
 
-type KMediaIdFilter struct {
-	ID int64 `json:"kmedia_id" form:"kmeia_id" binding:"omitempty"`
-}
-
 func (drf *DateRangeFilter) Range() (time.Time, time.Time, error) {
 	var err error
 	var s, e time.Time
@@ -96,7 +92,6 @@ type CollectionsRequest struct {
 	IDsFilter
 	ContentTypesFilter
 	DateRangeFilter
-	KMediaIdFilter
 	WithUnits bool `json:"with_units" form:"with_units"`
 }
 
