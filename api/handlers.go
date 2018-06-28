@@ -1035,9 +1035,6 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
-	if err := appendKmediaIDsFilterMods(&mods, r.KmediaIDsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
@@ -1681,16 +1678,6 @@ INNER JOIN content_units_publishers cup ON cu.id = cup.content_unit_id
 AND cu.secure = 0 AND cu.published IS TRUE AND cup.publisher_id = ANY(?))`
 		*mods = append(*mods, qm.InnerJoin(q, ids))
 	}
-
-	return nil
-}
-
-func appendKmediaIDsFilterMods(mods *[]qm.QueryMod, f KmediaIDsFilter) error {
-	if utils.IsEmpty(f.IDs) {
-		return nil
-	}
-
-	*mods = append(*mods, qm.WhereIn("properties->>'kmedia_id' IN ?", utils.ConvertArgsString(f.IDs)...))
 
 	return nil
 }

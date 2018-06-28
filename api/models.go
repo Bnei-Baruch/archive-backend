@@ -83,10 +83,6 @@ type PublishersFilter struct {
 	Publishers []string `json:"publishers" form:"publisher" binding:"omitempty,dive,len=8"`
 }
 
-type KmediaIDsFilter struct {
-	IDs []string `json:"kmedia_ids" form:"kmedia_id" binding:"omitempty"`
-}
-
 type CollectionsRequest struct {
 	ListRequest
 	IDsFilter
@@ -110,7 +106,6 @@ type ContentUnitsRequest struct {
 	GenresProgramsFilter
 	CollectionsFilter
 	PublishersFilter
-	KmediaIDsFilter
 	WithFiles bool `json:"with_files" form:"with_files"`
 }
 
