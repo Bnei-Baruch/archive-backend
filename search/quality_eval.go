@@ -1,6 +1,7 @@
 package search
 
 import (
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -14,9 +15,12 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	"gopkg.in/olivere/elastic.v5"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/sqlboiler/queries"
 )
 
 const (
@@ -286,10 +290,12 @@ func ParseExpectation(e string) Expectation {
 			}
 		}
 		if takeLatest {
-			filters, err = getLatest(filters)
+			latestUid, err := getLatestLessonUidBySource(filters)
 			if err != nil {
 				return Expectation{ET_FAILED_PARSE, "", nil, e}
 			}
+
+			//TBD
 		}
 		return Expectation{t, "", filters, e}
 	}
@@ -549,23 +555,39 @@ func WriteToCsv(path string, records [][]string) error {
 	return nil
 }
 
-func getLatest(filters []Filter) ([]Filter, error) {
-	//TBD
-	return nil, nil
-}
+func getLatestLessonUidBySource(filters []Filter) (string, error) {
 
-func getSqlQueryForLatestResults(filters []Filter) string {
-	wherePart := " where "
-	for i, filter := range filters {
-		var t string
-		if i == 0 {
-			t = ""
-		} else {
-			t = "and"
-		}
-		wherePart = fmt.Sprintf("%s %s %s=%s ", wherePart, t, filter.Name, FilterValueToUid(filter.Value))		
+	var uid string
+
+	db, err := sql.Open("postgres", viper.GetString("mdb.url"))
+	if err != nil {
+		//TBD log
+		return "", errors.Wrap(err, "Unable to connect to DB.")
 	}
 
-	//TBD
-	return "TBD"
+	row := queries.Raw(db, fmt.Sprintf(`
+	select cu.uid from content_units cu
+	join content_units_sources cus on cus.content_unit_id = cu.id
+	join sources s on s.id = cus.source_id
+	where cu.published IS TRUE and cu.secure = 0
+	and typed_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+	and s.uid = '%s'
+	order by (cu.properties->>'film_date')::date desc
+	limit 1`,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		FilterValueToUid(filters[0].Value))).QueryRow()
+
+	err = row.Scan(&uid)
+	if err != nil {
+		//TBD log
+		return "", errors.Wrap(err, "Unable to retrieve from DB the latest uid for lesson by source.")
+	}
+
+	return uid, nil
 }
