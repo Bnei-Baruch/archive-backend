@@ -185,6 +185,12 @@ func GoodExpectations(expectations []Expectation) int {
 }
 
 func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
+
+	db, err := sql.Open("postgres", viper.GetString("mdb.url"))
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to connect to DB.")
+	}
+
 	f, err := os.Open(evalSetPath)
 	if err != nil {
 		return nil, err
@@ -210,7 +216,7 @@ func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 		var expectations []Expectation
 		hasGoodExpectations := false
 		for i := EVAL_SET_EXPECTATION_FIRST_COLUMN; i <= EVAL_SET_EXPECTATION_LAST_COLUMN; i++ {
-			e := ParseExpectation(line[i])
+			e := ParseExpectation(line[i], db)
 			expectations = append(expectations, e)
 			if GOOD_EXPECTATION[e.Type] {
 				expectationsCount++
@@ -250,7 +256,7 @@ type HitSource struct {
 // https://archive.kbb1.com/he/events/meals
 // https://archive.kbb1.com/he/events/friends-gatherings
 // https://archive.kbb1.com/he/events?year=2013
-func ParseExpectation(e string) Expectation {
+func ParseExpectation(e string, db *sql.DB) Expectation {
 	if e == "" {
 		return Expectation{ET_EMPTY, "", nil, e}
 	}
@@ -290,12 +296,13 @@ func ParseExpectation(e string) Expectation {
 			}
 		}
 		if takeLatest {
-			latestUid, err := getLatestLessonUidBySource(filters)
+			latestUid, err := getLatestLessonUidBySource(filters, db)
 			if err != nil {
 				return Expectation{ET_FAILED_PARSE, "", nil, e}
 			}
 
-			//TBD
+			// TBD
+			//return ParseExpectation()
 		}
 		return Expectation{t, "", filters, e}
 	}
@@ -555,25 +562,19 @@ func WriteToCsv(path string, records [][]string) error {
 	return nil
 }
 
-func getLatestLessonUidBySource(filters []Filter) (string, error) {
+func getLatestLessonUidBySource(filters []Filter, db *sql.DB) (string, error) {
 
 	var uid string
 
-	db, err := sql.Open("postgres", viper.GetString("mdb.url"))
-	if err != nil {
-		//TBD log
-		return "", errors.Wrap(err, "Unable to connect to DB.")
-	}
-
 	row := queries.Raw(db, fmt.Sprintf(`
-	select cu.uid from content_units cu
-	join content_units_sources cus on cus.content_unit_id = cu.id
-	join sources s on s.id = cus.source_id
-	where cu.published IS TRUE and cu.secure = 0
-	and typed_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
-	and s.uid = '%s'
-	order by (cu.properties->>'film_date')::date desc
-	limit 1`,
+		select cu.uid from content_units cu
+		join content_units_sources cus on cus.content_unit_id = cu.id
+		join sources s on s.id = cus.source_id
+		where cu.published IS TRUE and cu.secure = 0
+		and typed_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+		and s.uid = '%s'
+		order by (cu.properties->>'film_date')::date desc
+		limit 1`,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
@@ -583,7 +584,7 @@ func getLatestLessonUidBySource(filters []Filter) (string, error) {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
 		FilterValueToUid(filters[0].Value))).QueryRow()
 
-	err = row.Scan(&uid)
+	err := row.Scan(&uid)
 	if err != nil {
 		//TBD log
 		return "", errors.Wrap(err, "Unable to retrieve from DB the latest uid for lesson by source.")
