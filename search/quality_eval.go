@@ -20,6 +20,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 )
 
@@ -190,6 +191,7 @@ func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "Unable to connect to DB.")
 	}
+	utils.Must(mdb.InitTypeRegistries(db))
 
 	f, err := os.Open(evalSetPath)
 	if err != nil {
@@ -257,14 +259,18 @@ type HitSource struct {
 // https://archive.kbb1.com/he/events/friends-gatherings
 // https://archive.kbb1.com/he/events?year=2013
 func ParseExpectation(e string, db *sql.DB) Expectation {
+	originalE := e
 	if e == "" {
 		return Expectation{ET_EMPTY, "", nil, e}
+	}
+	takeLatest := strings.HasPrefix(e, PREFIX_LATEST)
+	if takeLatest {
+		e = e[len(PREFIX_LATEST):]
 	}
 	u, err := url.Parse(e)
 	if err != nil {
 		return Expectation{ET_FAILED_PARSE, "", nil, e}
 	}
-	takeLatest := strings.HasPrefix(e, PREFIX_LATEST)
 	p := u.RequestURI()
 	idx := strings.Index(p, "?")
 	q := "" // The query part, i.e., .../he/lessons?source=bs_L2jMWyce_kB3eD83I => source=bs_L2jMWyce_kB3eD83I
@@ -296,11 +302,14 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			}
 		}
 		if takeLatest {
-			latestUid, err := getLatestUidByFilters(filters, db)
+			latestUID, err := getLatestUidByFilters(filters, db)
 			if err != nil {
-				return Expectation{ET_FAILED_PARSE, "", nil, e}
+				if err == sql.ErrNoRows {
+					return Expectation{ET_EMPTY, "", filters, originalE}
+				}
+				return Expectation{ET_FAILED_PARSE, "", filters, originalE}
 			}
-			newe := fmt.Sprintf("%s/%s/%s", p, EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUid)
+			newe := fmt.Sprintf("%s/%s/%s", p, EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
 			return ParseExpectation(newe, db)
 		}
 		return Expectation{t, "", filters, e}
@@ -575,17 +584,17 @@ func getLatestUidByFilters(filters []Filter, db *sql.DB) (string, error) {
 		}
 	}
 
-	row := queries.Raw(db, fmt.Sprintf(`
-		select cu.uid from content_units cu
-		left join content_units_tags cut on cut.content_unit_id = cu.id
-		left join tags t on t.id = cut.tag_id
-		left join content_units_sources cus on cus.content_unit_id = cu.id
-		left join sources s on s.id = cus.source_id
-		where cu.published IS TRUE and cu.secure = 0
-		and typed_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
-		%s
-		order by (cu.properties->>'film_date')::date desc
-		limit 1`,
+	query := fmt.Sprintf(`
+	select cu.uid from content_units cu
+	left join content_units_tags cut on cut.content_unit_id = cu.id
+	left join tags t on t.id = cut.tag_id
+	left join content_units_sources cus on cus.content_unit_id = cu.id
+	left join sources s on s.id = cus.source_id
+	where cu.published IS TRUE and cu.secure = 0
+	and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+	%s
+	order by (cu.properties->>'film_date')::date desc
+	limit 1`,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
@@ -593,7 +602,9 @@ func getLatestUidByFilters(filters []Filter, db *sql.DB) (string, error) {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
-		filterByUidQuery)).QueryRow()
+		filterByUidQuery)
+
+	row := queries.Raw(db, query).QueryRow()
 
 	err := row.Scan(&uid)
 	if err != nil {
