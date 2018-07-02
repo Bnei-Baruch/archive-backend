@@ -296,11 +296,11 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			}
 		}
 		if takeLatest {
-			latestUid, err := getLatestLessonUidBySource(filters, db)
+			latestUid, err := getLatestUidByFilters(filters, db)
 			if err != nil {
 				return Expectation{ET_FAILED_PARSE, "", nil, e}
 			}
-			newe := fmt.Sprintf("%s/cu/%s", p, latestUid)
+			newe := fmt.Sprintf("%s/%s/%s", p, EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUid)
 			return ParseExpectation(newe, db)
 		}
 		return Expectation{t, "", filters, e}
@@ -561,17 +561,29 @@ func WriteToCsv(path string, records [][]string) error {
 	return nil
 }
 
-func getLatestLessonUidBySource(filters []Filter, db *sql.DB) (string, error) {
+func getLatestUidByFilters(filters []Filter, db *sql.DB) (string, error) {
 
 	var uid string
+	filterByUidQuery := ""
+
+	for _, filter := range filters {
+		switch filter.Name {
+		case FILTER_NAME_SOURCE:
+			filterByUidQuery = fmt.Sprintf("%s and s.uid = '%s'", filterByUidQuery, FilterValueToUid(filter.Value))
+		case FILTER_NAME_TOPIC:
+			filterByUidQuery = fmt.Sprintf("%s and t.uid = '%s'", filterByUidQuery, FilterValueToUid(filter.Value))
+		}
+	}
 
 	row := queries.Raw(db, fmt.Sprintf(`
 		select cu.uid from content_units cu
-		join content_units_sources cus on cus.content_unit_id = cu.id
-		join sources s on s.id = cus.source_id
+		left join content_units_tags cut on cut.content_unit_id = cu.id
+		left join tags t on t.id = cut.tag_id
+		left join content_units_sources cus on cus.content_unit_id = cu.id
+		left join sources s on s.id = cus.source_id
 		where cu.published IS TRUE and cu.secure = 0
 		and typed_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
-		and s.uid = '%s'
+		%s
 		order by (cu.properties->>'film_date')::date desc
 		limit 1`,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
@@ -581,12 +593,11 @@ func getLatestLessonUidBySource(filters []Filter, db *sql.DB) (string, error) {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
-		FilterValueToUid(filters[0].Value))).QueryRow()
+		filterByUidQuery)).QueryRow()
 
 	err := row.Scan(&uid)
 	if err != nil {
-		//TBD log
-		return "", errors.Wrap(err, "Unable to retrieve from DB the latest uid for lesson by source.")
+		return "", errors.Wrap(err, "Unable to retrieve from DB the latest uid for lesson by tag and source.")
 	}
 
 	return uid, nil
