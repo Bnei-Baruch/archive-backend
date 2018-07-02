@@ -300,9 +300,8 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			if err != nil {
 				return Expectation{ET_FAILED_PARSE, "", nil, e}
 			}
-
-			// TBD
-			//return ParseExpectation()
+			newe := fmt.Sprintf("%s/cu/%s", p, latestUid)
+			return ParseExpectation(newe, db)
 		}
 		return Expectation{t, "", filters, e}
 	}
