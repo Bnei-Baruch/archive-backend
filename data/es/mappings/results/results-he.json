@@ -11,13 +11,13 @@
                         }
                     ], 
                     "type": "completion", 
-                    "analyzer": "hebrew"
+                    "analyzer": "he"
                 }, 
                 "description": {
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "hebrew"
+                            "analyzer": "he"
                         }
                     }, 
                     "type": "text", 
@@ -27,7 +27,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "hebrew"
+                            "analyzer": "he"
                         }
                     }, 
                     "type": "text", 
@@ -40,7 +40,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "hebrew"
+                            "analyzer": "he"
                         }
                     }, 
                     "type": "text", 
@@ -65,6 +65,41 @@
     "settings": {
         "index": {
             "number_of_replicas": 0, 
+            "analysis": {
+                "filter": {
+                    "he_IL": {
+                        "locale": "he_IL", 
+                        "type": "hunspell", 
+                        "dedup": true
+                    }
+                }, 
+                "char_filter": {
+                    "quotes": {
+                        "type": "mapping", 
+                        "mappings": [
+                            "\\u0091=>\\u0027", 
+                            "\\u0092=>\\u0027", 
+                            "\\u2018=>\\u0027", 
+                            "\\u2019=>\\u0027", 
+                            "\\u201B=>\\u0027", 
+                            "\\u0022=>", 
+                            "\\u201C=>", 
+                            "\\u201D=>"
+                        ]
+                    }
+                }, 
+                "analyzer": {
+                    "he": {
+                        "filter": [
+                            "he_IL"
+                        ], 
+                        "char_filter": [
+                            "quotes"
+                        ], 
+                        "tokenizer": "standard"
+                    }
+                }
+            }, 
             "number_of_shards": 1
         }
     }

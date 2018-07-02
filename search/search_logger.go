@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 )
 
 type SearchLog struct {
@@ -101,9 +102,10 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultTy
 	if err != nil {
 		return errors.Wrap(err, "Log Click")
 	}
-	if !resp.Created {
-		return errors.Errorf("Click log not created.")
-	}
+    log.Infof("Create resp: %+v", resp)
+	// if !resp.Created {
+	// 	return errors.Errorf("Click log not created.")
+	// }
 	return nil
 }
 
@@ -169,7 +171,7 @@ func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int
 	if err != nil {
 		return errors.Wrap(err, "Log Search")
 	}
-	if !resp.Created {
+	if resp.Result != "created" {
 		return errors.Errorf("Search log not created.")
 	}
 	return nil

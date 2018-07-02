@@ -28,7 +28,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
@@ -576,6 +576,25 @@ func removeContentUnitFile(cu es.ContentUnit, lang string, file mdbmodels.File) 
 	return file.UID, nil
 }
 
+func setContentUnitType(cu es.ContentUnit, typeID int64) (string, error) {
+	var mdbContentUnit mdbmodels.ContentUnit
+	if cu.MDB_UID != "" {
+		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		if err != nil {
+			return "", err
+		}
+		mdbContentUnit = *cup
+	} else {
+		return "", errors.New("cu.MDB_UID is empty")
+	}
+	mdbContentUnit.TypeID = typeID
+
+	if err := mdbContentUnit.Update(common.DB); err != nil {
+		return "", err
+	}
+	return mdbContentUnit.UID, nil
+}
+
 func updateContentUnit(cu es.ContentUnit, lang string, published bool, secure bool) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
@@ -601,6 +620,7 @@ func updateContentUnit(cu es.ContentUnit, lang string, published bool, secure bo
 	if !published {
 		p = false
 	}
+
 	mdbContentUnit.Secure = s
 	mdbContentUnit.Published = p
 	if err := mdbContentUnit.Update(common.DB); err != nil {
@@ -1006,6 +1026,13 @@ func removeAuthorFromSource(source es.Source, mdbAuthor mdbmodels.Author) error 
 func (suite *IndexerSuite) ucu(cu es.ContentUnit, lang string, published bool, secure bool) string {
 	r := require.New(suite.T())
 	uid, err := updateContentUnit(cu, lang, published, secure)
+	r.Nil(err)
+	return uid
+}
+
+func (suite *IndexerSuite) setCUType(cu es.ContentUnit, typeId int64) string {
+	r := require.New(suite.T())
+	uid, err := setContentUnitType(cu, typeId)
 	r.Nil(err)
 	return uid
 }

@@ -8,7 +8,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -73,6 +73,7 @@ func (index *BaseIndex) CreateIndex() error {
 		name := index.indexName(lang)
 		// Do nothing if index already exists.
 		exists, err := index.esc.IndexExists(name).Do(context.TODO())
+        log.Infof("Create index, exists: %t.", exists)
 		if err != nil {
 			return err
 		}

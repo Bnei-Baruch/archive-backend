@@ -9,7 +9,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )
@@ -135,11 +135,22 @@ func (indexer *Indexer) ReindexAll() error {
 	if err := indexer.CreateIndexes(); err != nil {
 		return err
 	}
-	for _, index := range indexer.indices {
-		if err := index.ReindexAll(); err != nil {
-			return err
-		}
+    done := make(chan struct{})
+    errs := make([]error, len(indexer.indices))
+	for i, index := range indexer.indices {
+        go func() {
+            errs[i] = index.ReindexAll()
+            done <- struct{}{}
+        }()
 	}
+    for _ = range indexer.indices {
+        <-done
+    }
+    for _, err := range errs {
+        if err != nil {
+            return err
+        }
+    }
 	return nil
 }
 

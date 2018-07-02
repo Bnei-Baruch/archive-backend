@@ -10,7 +10,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -258,7 +258,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 		if err != nil {
 			return errors.Wrapf(err, "Index collection %s %s", name, c.UID)
 		}
-		if !resp.Created {
+		if resp.Result != "created" {
 			return errors.Errorf("Not created: collection %s %s", name, c.UID)
 		}
 	}

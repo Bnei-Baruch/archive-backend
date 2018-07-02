@@ -16,7 +16,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -366,7 +366,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 		if err != nil {
 			return errors.Wrapf(err, "Sources Index - Source %s %s", name, mdbSource.UID)
 		}
-		if !resp.Created {
+		if resp.Result != "created" {
 			return errors.Errorf("Sources Index - Not created: source %s %s", name, mdbSource.UID)
 		}
 	}

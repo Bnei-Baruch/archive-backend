@@ -13,7 +13,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -44,18 +44,20 @@ func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
 	})
 }
 
 func defaultContentUnitSql() string {
-	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)",
+	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d)",
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
 	)
 }
@@ -370,8 +372,8 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 		if err != nil {
 			return errors.Wrapf(err, "Content Units Index - Index unit %s %s", name, cu.UID)
 		}
-		if !resp.Created {
-			return errors.Errorf("Content Units Index - Not created: unit %s %s", name, cu.UID)
+		if resp.Result != "created" {
+			return errors.Errorf("Content Units Index - Not created: unit %s %s %+v", name, cu.UID, resp)
 		}
 	}
 

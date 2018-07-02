@@ -9,7 +9,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -115,7 +115,7 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 			if err != nil {
 				return errors.Wrapf(err, "Tags Index - Index tag %s %s", name, t.UID)
 			}
-			if !resp.Created {
+			if resp.Result != "created" {
 				return errors.Errorf("Tags Index - Not created: tag %s %s", name, t.UID)
 			}
 		}

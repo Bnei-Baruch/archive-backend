@@ -1,7 +1,7 @@
 package es
 
 import (
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )

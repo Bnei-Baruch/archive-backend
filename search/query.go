@@ -1,7 +1,7 @@
 package search
 
 import (
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -21,6 +21,8 @@ const (
 	STANDARD_BOOST = 1.2
 	// Boost for exact phrase match, without slop.
 	EXACT_BOOST = 1.5
+
+    NUM_SUGGESTS = 500
 )
 
 func createResultsQuery(result_types []string, q Query) elastic.Query {
@@ -157,13 +159,15 @@ func NewResultsSearchRequests(result_types []string, query Query, sortBy string,
 }
 
 func NewResultsSuggestRequest(result_types []string, index string, query Query, preference string) *elastic.SearchRequest {
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title")
 	searchSource := elastic.NewSearchSource().
+        FetchSourceContext(fetchSourceContext).
 		Suggester(
 		elastic.NewCompletionSuggester("title_suggest").
 			Field("title_suggest").
 			Text(query.Term).
 			ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", result_types...)).
-			Size(50000), // Temporary fix. Should not be a problem in v6, should set skip_duplicate = true.
+			Size(NUM_SUGGESTS),
 	)
 
 	return elastic.NewSearchRequest().

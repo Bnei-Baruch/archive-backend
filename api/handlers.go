@@ -19,7 +19,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"gopkg.in/gin-gonic/gin.v1"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -409,7 +409,6 @@ func ParseQuery(q string) search.Query {
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
-	log.Infof("Deb: [%s]", c.Query("deb"))
 	query := ParseQuery(c.Query("q"))
 	query.Deb = false
 	if c.Query("deb") == "true" {
@@ -451,6 +450,9 @@ func SearchHandler(c *gin.Context) {
 	if _, ok := consts.SORT_BY_VALUES[sortBy]; ok {
 		sortByVal = sortBy
 	}
+	if len(query.Term) == 0 {
+		sortByVal = consts.SORT_BY_SOURCE_FIRST
+	}
 
 	searchId := c.Query("search_id")
 
@@ -471,7 +473,6 @@ func SearchHandler(c *gin.Context) {
 	log.Debugf("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
 	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
-    log.Infof("Before do search.")
 	res, err := se.DoSearch(
 		context.TODO(),
 		query,
@@ -481,7 +482,6 @@ func SearchHandler(c *gin.Context) {
 		preference,
 	)
 	if err == nil {
-        log.Infof("DoSearch ok, logging...")
 		// TODO: How does this slows the search query? Consider logging in parallel.
 		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res)
 		if err != nil {
@@ -634,7 +634,7 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendKmediaIDsFilterMods(&mods, r.KmediaIDsFilter); err != nil {
+	if err := appendKMediaIdFilterMods(&mods, r.KMediaIdFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 
@@ -1390,62 +1390,10 @@ func handleStatsCUClass(db *sql.DB, r ContentUnitsRequest) (*StatsCUClassRespons
 
 	q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
 
-	qq := fmt.Sprintf(`with fcu as (%s)
-select
-  's',
-  s.uid,
-  count(cus.content_unit_id)
-from sources s
-  inner join content_units_sources cus on s.id = cus.source_id
-  inner join fcu on cus.content_unit_id = fcu.id
-group by s.id
-union
-select
-  't',
-  t.uid,
-  count(cut.content_unit_id)
-from tags t
-  inner join content_units_tags cut on t.id = cut.tag_id
-  inner join fcu on cut.content_unit_id = fcu.id
-group by t.id
-union
-select
-  'p',
-  p.uid,
-  count(cup.content_unit_id)
-from persons p
-  inner join content_units_persons cup on p.id = cup.person_id
-  inner join fcu on cup.content_unit_id = fcu.id
-group by p.id`, q[:len(q)-1])
-
-	rows, err := queries.Raw(db, qq, args...).Query()
-	if err != nil {
-		return nil, NewInternalError(err)
-	}
-	defer rows.Close()
-
+	var err error
 	resp := NewStatsCUClassResponse()
-
-	for rows.Next() {
-		var typ, key string
-		var val int64
-		if err := rows.Scan(&typ, &key, &val); err != nil {
-			return nil, NewInternalError(err)
-		}
-
-		switch typ {
-		case "s":
-			resp.Sources[key] += val
-		case "t":
-			resp.Tags[key] += val
-		case "p":
-			resp.Persons[key] += val
-		default:
-			return nil, NewInternalError(errors.Errorf("Unknown classification notation: %s", typ))
-		}
-	}
-
-	if err := rows.Err(); err != nil {
+	resp.Tags, resp.Sources, err = GetFiltersStats(db, q, args)
+	if err != nil {
 		return nil, NewInternalError(err)
 	}
 
@@ -1548,6 +1496,16 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	if f.EndDate != "" {
 		*mods = append(*mods, qm.Where("(properties->>'film_date')::date <= ?", e))
 	}
+
+	return nil
+}
+
+func appendKMediaIdFilterMods(mods *[]qm.QueryMod, f KMediaIdFilter) error {
+	if f.ID == 0 {
+		return nil
+	}
+
+	*mods = append(*mods, qm.Where("(properties->>'kmedia_id')::integer = ?", f.ID))
 
 	return nil
 }

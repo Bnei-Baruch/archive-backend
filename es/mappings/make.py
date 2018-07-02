@@ -70,7 +70,7 @@ LANG_GROUPS = {
 # Units indexing
 LanguageAnalyzer = {
   ENGLISH: "english",
-  HEBREW: "hebrew",
+  HEBREW: "he",
   RUSSIAN: "russian",
   SPANISH: "spanish",
   ITALIAN: "italian",
@@ -130,13 +130,77 @@ def IsCyrillic(lang, something):
   return something if lang in LANG_GROUPS[CYRILLIC] else None
 
 
-RESULTS_TEMPLATE = {
-  "settings": {
-    "index": {
-      "number_of_shards": 1,
-      "number_of_replicas": 0,
+SETTINGS = {
+  "index": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "analyzer": {
+        "he": {
+          "tokenizer": "standard",
+          "filter": [
+            "he_IL"
+          ],
+          "char_filter": [
+            "quotes"
+          ]
+        },
+        # "phonetic_analyzer": {
+        #   "tokenizer": "standard",
+        #   "char_filter": ["quotes"],
+        #   "filter": [
+        #     "standard",
+        #     "lowercase",
+        #     lambda lang: IsCyrillic(lang, 'icu_transliterate'),
+        #     "custom_phonetic",
+        #   ],
+        # },
+      },
+      "char_filter": {
+        "quotes": {
+          "type": "mapping",
+          "mappings": [
+            "\\u0091=>\\u0027",
+            "\\u0092=>\\u0027",
+            "\\u2018=>\\u0027",
+            "\\u2019=>\\u0027",
+            "\\u201B=>\\u0027",
+            "\\u0022=>",
+            "\\u201C=>",
+            "\\u201D=>",
+          ],
+        },
+      },
+      "filter": {
+        "he_IL": {
+          "type": "hunspell",
+          "locale": "he_IL",
+          "dedup": True,
+        },
+        # "icu_transliterate": lambda lang: IsCyrillic(lang, {
+        #   "type": "icu_transform",
+        #   "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
+        # }),
+        # "custom_phonetic": {
+        #   "type": "phonetic",
+        #   "encoder": "beider_morse",
+        #   "replace": True,
+        #   "languageset": BeiderMorseLanguageset,
+        # },
+      },
     },
   },
+}
+
+
+RESULTS_TEMPLATE = {
+  # "settings": {
+  #   "index": {
+  #     "number_of_shards": 1,
+  #     "number_of_replicas": 0,
+  #   },
+  # },
+  "settings": SETTINGS,
   "mappings": {
     "result": {
       "properties": {
@@ -216,54 +280,6 @@ RESULTS_TEMPLATE = {
       }
     }
   }
-}
-
-SETTINGS = {
-  "index": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0,
-    "analysis": {
-      "analyzer": {
-        "phonetic_analyzer": {
-          "tokenizer": "standard",
-          "char_filter": ["quotes"],
-          "filter": [
-            "standard",
-            "lowercase",
-            lambda lang: IsCyrillic(lang, 'icu_transliterate'),
-            "custom_phonetic",
-          ],
-        },
-      },
-      "char_filter": {
-        "quotes": {
-          "type": "mapping",
-          "mappings": [
-            "\\u0091=>\\u0027",
-            "\\u0092=>\\u0027",
-            "\\u2018=>\\u0027",
-            "\\u2019=>\\u0027",
-            "\\u201B=>\\u0027",
-            "\\u0022=>",
-            "\\u201C=>",
-            "\\u201D=>",
-          ],
-        },
-      },
-      "filter": {
-        "icu_transliterate": lambda lang: IsCyrillic(lang, {
-          "type": "icu_transform",
-          "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
-        }),
-        "custom_phonetic": {
-          "type": "phonetic",
-          "encoder": "beider_morse",
-          "replace": True,
-          "languageset": BeiderMorseLanguageset,
-        },
-      },
-    },
-  },
 }
 
 UNITS_TEMPLATE = {
@@ -638,15 +654,15 @@ def Resolve(lang, value):
 for lang in LANG_GROUPS[ALL]:
   with open(os.path.join('.', 'data', 'es', 'mappings', 'results', 'results-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, RESULTS_TEMPLATE), f, indent=4)
-# Deprecated, delete everything when change ready.
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'units', 'units-%s.json' % lang), 'w') as f:
-    json.dump(Resolve(lang, UNITS_TEMPLATE), f, indent=4)
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'classifications', 'classifications-%s.json' % lang), 'w') as f:
-    json.dump(Resolve(lang, CLASSIFICATIONS_TEMPLATE), f, indent=4)
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'collections', 'collections-%s.json' % lang), 'w') as f:
-    json.dump(Resolve(lang, COLLECTIONS_TEMPLATE), f, indent=4)
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'sources', 'sources-%s.json' % lang), 'w') as f:
-    json.dump(Resolve(lang, SOURCES_TEMPLATE), f, indent=4)
+  # Deprecated, delete everything when change ready.
+  # with open(os.path.join('.', 'data', 'es', 'mappings', 'units', 'units-%s.json' % lang), 'w') as f:
+  #   json.dump(Resolve(lang, UNITS_TEMPLATE), f, indent=4)
+  # with open(os.path.join('.', 'data', 'es', 'mappings', 'classifications', 'classifications-%s.json' % lang), 'w') as f:
+  #   json.dump(Resolve(lang, CLASSIFICATIONS_TEMPLATE), f, indent=4)
+  # with open(os.path.join('.', 'data', 'es', 'mappings', 'collections', 'collections-%s.json' % lang), 'w') as f:
+  #   json.dump(Resolve(lang, COLLECTIONS_TEMPLATE), f, indent=4)
+  # with open(os.path.join('.', 'data', 'es', 'mappings', 'sources', 'sources-%s.json' % lang), 'w') as f:
+  #   json.dump(Resolve(lang, SOURCES_TEMPLATE), f, indent=4)
 # Without languages
 with open(os.path.join('.', 'data', 'es', 'mappings', 'search_logs.json'), 'w') as f:
   json.dump(Resolve('xx', SEARCH_LOGS_TEMPLATE), f, indent=4)

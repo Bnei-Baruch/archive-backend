@@ -9,7 +9,7 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
-                            "analyzer": "hebrew"
+                            "analyzer": "he"
                         }
                     }, 
                     "type": "text", 
@@ -19,7 +19,7 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
-                            "analyzer": "hebrew"
+                            "analyzer": "he"
                         }
                     }, 
                     "type": "text", 
@@ -32,7 +32,7 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
-                            "analyzer": "hebrew"
+                            "analyzer": "he"
                         }
                     }, 
                     "type": "text", 
@@ -45,7 +45,7 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
-                            "analyzer": "hebrew"
+                            "analyzer": "he"
                         }
                     }, 
                     "type": "text", 
@@ -55,7 +55,7 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
-                            "analyzer": "hebrew"
+                            "analyzer": "he"
                         }
                     }, 
                     "type": "text", 
@@ -65,7 +65,7 @@
                     "fields": {
                         "analyzed": {
                             "type": "text", 
-                            "analyzer": "hebrew"
+                            "analyzer": "he"
                         }
                     }, 
                     "type": "text", 
@@ -79,11 +79,10 @@
             "number_of_replicas": 0, 
             "analysis": {
                 "filter": {
-                    "custom_phonetic": {
-                        "encoder": "beider_morse", 
-                        "type": "phonetic", 
-                        "languageset": "hebrew", 
-                        "replace": true
+                    "he_IL": {
+                        "locale": "he_IL", 
+                        "type": "hunspell", 
+                        "dedup": true
                     }
                 }, 
                 "char_filter": {
@@ -102,11 +101,9 @@
                     }
                 }, 
                 "analyzer": {
-                    "phonetic_analyzer": {
+                    "he": {
                         "filter": [
-                            "standard", 
-                            "lowercase", 
-                            "custom_phonetic"
+                            "he_IL"
                         ], 
                         "char_filter": [
                             "quotes"
