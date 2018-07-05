@@ -26,6 +26,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/latestLesson", LatestLessonHandler)
 	router.GET("/sqdata", SemiQuasiDataHandler)
 	router.GET("/stats/cu_class", StatsCUClassHandler)
+	router.GET("/tweets", TweetsHandler)
 
 	router.GET("/feeds/rus_zohar", FeedRusZohar)
 	router.GET("/feeds/rus_zohar.rss", FeedRusZohar)

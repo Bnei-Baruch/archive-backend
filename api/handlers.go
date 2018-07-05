@@ -615,6 +615,16 @@ func StatsCUClassHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func TweetsHandler(c *gin.Context) {
+	var r TweetsRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	resp, err := handleTweets(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
 func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
@@ -1412,6 +1422,68 @@ func handleStatsCUClass(db *sql.DB, r ContentUnitsRequest) (*StatsCUClassRespons
 	return resp, nil
 }
 
+func handleTweets(db *sql.DB, r TweetsRequest) (*TweetsResponse, *HttpError) {
+	var mods []qm.QueryMod
+
+	// filters
+	if err := appendDateRangeFilterModsTwitter(&mods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendUsernameFilterMods(db, &mods, r.UsernameFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			return nil, e
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+
+	var total int64
+	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
+	err := mdbmodels.TwitterTweets(db, countMods...).QueryRow().Scan(&total)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	if total == 0 {
+		return NewTweetsResponse(), nil
+	}
+
+	// order, limit, offset
+	r.OrderBy = "tweet_at desc"
+	_, offset, err := appendListMods(&mods, r.ListRequest)
+	if err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if int64(offset) >= total {
+		return NewTweetsResponse(), nil
+	}
+
+	// data query
+	tweets, err := mdbmodels.TwitterTweets(db, mods...).All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// response
+	ts := make([]*Tweet, len(tweets))
+	for i := range tweets {
+		t := tweets[i]
+		ts[i] = &Tweet{
+			Username:  mdb.TWITTER_USERS_REGISTRY.ByID[t.UserID].Username,
+			TwitterID: t.TwitterID,
+			FullText:  t.FullText,
+			CreatedAt: t.TweetAt,
+			Raw:       t.Raw,
+		}
+	}
+
+	resp := &TweetsResponse{
+		ListResponse: ListResponse{Total: total},
+		Tweets:       ts,
+	}
+
+	return resp, nil
+}
+
 // appendListMods compute and appends the OrderBy, Limit and Offset query mods.
 // It returns the limit, offset and error if any
 func appendListMods(mods *[]qm.QueryMod, r ListRequest) (int, int, error) {
@@ -1493,6 +1565,14 @@ func appendContentTypesFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) err
 }
 
 func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
+	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
+}
+
+func appendDateRangeFilterModsTwitter(mods *[]qm.QueryMod, f DateRangeFilter) error {
+	return appendDRFBaseMods(mods, f, "tweet_at")
+}
+
+func appendDRFBaseMods(mods *[]qm.QueryMod, f DateRangeFilter, field string) error {
 	s, e, err := f.Range()
 	if err != nil {
 		return err
@@ -1503,10 +1583,10 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	}
 
 	if f.StartDate != "" {
-		*mods = append(*mods, qm.Where("(properties->>'film_date')::date >= ?", s))
+		*mods = append(*mods, qm.Where(fmt.Sprintf("%s >= ?", field), s))
 	}
 	if f.EndDate != "" {
-		*mods = append(*mods, qm.Where("(properties->>'film_date')::date <= ?", e))
+		*mods = append(*mods, qm.Where(fmt.Sprintf("%s <= ?", field), e))
 	}
 
 	return nil
@@ -1678,6 +1758,25 @@ INNER JOIN content_units_publishers cup ON cu.id = cup.content_unit_id
 AND cu.secure = 0 AND cu.published IS TRUE AND cup.publisher_id = ANY(?))`
 		*mods = append(*mods, qm.InnerJoin(q, ids))
 	}
+
+	return nil
+}
+
+func appendUsernameFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f UsernameFilter) error {
+	if len(f.Usernames) == 0 {
+		return nil
+	}
+
+	ids := make([]int64, len(f.Usernames))
+	for i := range f.Usernames {
+		if username, ok := mdb.TWITTER_USERS_REGISTRY.ByUsername[f.Usernames[i]]; ok {
+			ids[i] = username.ID
+		} else {
+			return NewBadRequestError(errors.Errorf("Unknown twitter username: %s", f.Usernames[i]))
+		}
+	}
+
+	*mods = append(*mods, qm.WhereIn("user_id in ?", utils.ConvertArgsInt64(ids)...))
 
 	return nil
 }

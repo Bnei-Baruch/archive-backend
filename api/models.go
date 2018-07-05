@@ -83,6 +83,10 @@ type PublishersFilter struct {
 	Publishers []string `json:"publishers" form:"publisher" binding:"omitempty,dive,len=8"`
 }
 
+type UsernameFilter struct {
+	Usernames []string `json:"usernames" form:"username" binding:"omitempty"`
+}
+
 type CollectionsRequest struct {
 	ListRequest
 	IDsFilter
@@ -152,6 +156,17 @@ type StatsCUClassResponse struct {
 	Tags    map[string]int `json:"tags"`
 }
 
+type TweetsRequest struct {
+	ListRequest
+	DateRangeFilter
+	UsernameFilter
+}
+
+type TweetsResponse struct {
+	ListResponse
+	Tweets []*Tweet `json:"tweets"`
+}
+
 func NewCollectionsResponse() *CollectionsResponse {
 	return &CollectionsResponse{Collections: make([]*Collection, 0)}
 }
@@ -162,6 +177,10 @@ func NewContentUnitsResponse() *ContentUnitsResponse {
 
 func NewPublishersResponse() *PublishersResponse {
 	return &PublishersResponse{Publishers: make([]*Publisher, 0)}
+}
+
+func NewTweetsResponse() *TweetsResponse {
+	return &TweetsResponse{Tweets: make([]*Tweet, 0)}
 }
 
 func NewTagsDashboardResponse() *TagsDashboardResponse {
@@ -280,4 +299,12 @@ type SemiQuasiData struct {
 	Authors    []*Author    `json:"sources"`
 	Tags       []*Tag       `json:"tags"`
 	Publishers []*Publisher `json:"publishers"`
+}
+
+type Tweet struct {
+	Username  string    `json:"username"`
+	TwitterID string    `json:"twitter_id"`
+	FullText  string    `json:"full_text"`
+	CreatedAt time.Time `json:"created_at"`
+	Raw       null.JSON `json:"raw"`
 }
