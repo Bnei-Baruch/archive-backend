@@ -263,7 +263,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	if e == "" {
 		return Expectation{ET_EMPTY, "", nil, e}
 	}
-	takeLatest := strings.HasPrefix(e, PREFIX_LATEST)
+	takeLatest := strings.HasPrefix(strings.ToLower(e), PREFIX_LATEST)
 	if takeLatest {
 		e = e[len(PREFIX_LATEST):]
 	}
