@@ -302,7 +302,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			}
 		}
 		if takeLatest {
-			latestUID, err := getLatestUidByFilters(filters, db)
+			latestUID, err := GetLatestUidByFilters(filters, db)
 			if err != nil {
 				if err == sql.ErrNoRows {
 					return Expectation{ET_EMPTY, "", filters, originalE}
@@ -570,7 +570,7 @@ func WriteToCsv(path string, records [][]string) error {
 	return nil
 }
 
-func getLatestUidByFilters(filters []Filter, db *sql.DB) (string, error) {
+func GetLatestUidByFilters(filters []Filter, db *sql.DB) (string, error) {
 
 	sourcesTempTableMask := `CREATE TEMP TABLE temp_rec_sources ON COMMIT DROP AS
 	(WITH RECURSIVE rec_sources AS (

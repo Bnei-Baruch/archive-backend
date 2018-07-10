@@ -1,15 +1,24 @@
-package search
+package search_test
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
+	"testing"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/migrations"
+	"github.com/Bnei-Baruch/archive-backend/search"
+	"github.com/Bnei-Baruch/sqlboiler/boil"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -20,11 +29,33 @@ import (
 
 type QualityEvalSuite struct {
 	suite.Suite
+	TestDBManager
+	ctx context.Context
 }
 
 type TestDBManager struct {
 	DB     *sql.DB
 	testDB string
+}
+
+const uidBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+const lettersBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func GenerateUID(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = uidBytes[rand.Intn(len(uidBytes))]
+	}
+	return string(b)
+}
+
+func GenerateName(n int) string {
+	b := make([]byte, n)
+	b[0] = lettersBytes[rand.Intn(len(lettersBytes))]
+	for i := range b[1:] {
+		b[i+1] = uidBytes[rand.Intn(len(uidBytes))]
+	}
+	return string(b)
 }
 
 func (m *TestDBManager) InitTestDB() error {
@@ -71,45 +102,118 @@ func (m *TestDBManager) DestroyTestDB() error {
 	return err
 }
 
+func (m *TestDBManager) runMigrations(testDB *sql.DB) error {
+	var visit = func(path string, f os.FileInfo, err error) error {
+		match, _ := regexp.MatchString(".*\\.sql$", path)
+		if !match {
+			return nil
+		}
+
+		//fmt.Printf("Applying migration %s\n", path)
+		m, err := migrations.NewMigration(path)
+		if err != nil {
+			fmt.Printf("Error migrating %s, %s", path, err.Error())
+			return err
+		}
+
+		for _, statement := range m.Up() {
+			if _, err := testDB.Exec(statement); err != nil {
+				return fmt.Errorf("Unable to apply migration %s: %s\nStatement: %s\n", m.Name, err, statement)
+			}
+		}
+
+		return nil
+	}
+
+	return filepath.Walk("../migrations", visit)
+}
+
 func (suite *QualityEvalSuite) SetupSuite() {
-	// TBD replace DB
+	err := suite.InitTestDB()
+	if err != nil {
+		panic(err)
+	}
+	suite.ctx = context.Background()
+
+	// Set package db.
+	common.InitWithDefault(suite.DB)
+	boil.DebugMode = viper.GetString("boiler-mode") == "debug"
+}
+
+func (suite *QualityEvalSuite) TearDownSuite() {
+	// Close connections.
+	common.Shutdown()
+	// Drop test database.
+	suite.Require().Nil(suite.DestroyTestDB())
 }
 
 // In order for 'go test' to run this suite, we need to create
 // a normal test function and pass our suite to suite.Run
-//func TestEngine(t *testing.T) {
-//	suite.Run(t, new(QualityEvalSuite))
-//}
+func TestEngine(t *testing.T) {
+	suite.Run(t, new(QualityEvalSuite))
+}
 
 func (suite *QualityEvalSuite) TestGetLatestUidByFilters() {
 	fmt.Printf("\n------ TestGetLatestUidByFilters ------\n\n")
 	r := require.New(suite.T())
 
+	var latestUID string
+	filmDateMask := "{\"film_date\":\"2018-01-%s\"}"
+
+	childTag := mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}
+	childSource := mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 1, TypeID: 1, UID: "ALlyoveA"}
 	parentTag := mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}
-	suite.updateTagParent("L2jMWyce", parentTag, false)
-	parentSource := mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: sourceUID2}
-	suite.updateSourceParent(sourceUID1, parentSource, false)
+	parentSource := mdbmodels.Source{Pattern: null.String{"bs-akdmot", true}, ID: 2, TypeID: 1, UID: "1vCj4qN9"}
 
-	suite.ucu(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, true, true, "{\"film_date\":\"2017-01-01\"}")
-	suite.ucut(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, parentTag, false)
-	suite.acus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, parentSource, mdbmodels.Author{ID: 1}, false)
+	r.Nil(suite.updateTagParent(childTag, parentTag, true, true))
+	r.Nil(suite.updateSourceParent(childSource, parentSource, true, true))
 
-	suite.ucu(es.ContentUnit{MDB_UID: cu2UID}, consts.LANG_ENGLISH, true, true, "{\"film_date\":\"2018-01-01\"}")
-	suite.ucut(es.ContentUnit{MDB_UID: cu2UID}, consts.LANG_ENGLISH, parentTag, false)
-	suite.acus(es.ContentUnit{MDB_UID: cu2UID}, consts.LANG_ENGLISH, parentSource, mdbmodels.Author{ID: 1}, false)
+	for i := 1; i < 13; i++ {
+		properties := null.JSON{JSON: []byte(fmt.Sprintf(filmDateMask, strconv.Itoa(i))), Valid: true}
+		cuUID, err := suite.addContentUnitTag(mdbmodels.ContentUnit{Properties: properties, Secure: 0, Published: true, ID: int64(i)}, consts.LANG_ENGLISH, childTag)
+		r.Nil(err)
+		_, err = suite.addContentUnitSource(mdbmodels.ContentUnit{UID: cuUID}, consts.LANG_ENGLISH, childSource)
+		r.Nil(err)
+		latestUID = cuUID
+	}
 
+	sourceFilter := search.Filter{Name: search.FILTER_NAME_SOURCE, Value: parentSource.UID}
+	tagsFilter := search.Filter{Name: search.FILTER_NAME_TOPIC, Value: parentTag.UID}
+
+	fmt.Printf("Test by source \n")
+	resultUID, err := search.GetLatestUidByFilters([]search.Filter{sourceFilter}, common.DB)
+	r.Nil(err)
+	r.Equal(latestUID, resultUID)
+
+	fmt.Printf("Test by topic \n")
+	resultUID, err = search.GetLatestUidByFilters([]search.Filter{tagsFilter}, common.DB)
+	r.Nil(err)
+	r.Equal(latestUID, resultUID)
+
+	fmt.Printf("Test by source and topic \n")
+	resultUID, err = search.GetLatestUidByFilters([]search.Filter{sourceFilter, tagsFilter}, common.DB)
+	r.Nil(err)
+	r.Equal(latestUID, resultUID)
 }
 
-func (suite *QualityEvalSuite) updateSourceParent(sourceUID string, parentSource mdbmodels.Source, insertParent bool) error {
-	var mdbSource mdbmodels.Source
-	src, err := mdbmodels.Sources(common.DB, qm.Where("uid = ?", sourceUID)).One()
+func (suite *QualityEvalSuite) updateSourceParent(child mdbmodels.Source, parentSource mdbmodels.Source, insertChild bool, insertParent bool) error {
+	childFromDB, err := mdbmodels.Sources(common.DB, qm.Where("uid = ?", child.UID)).One()
 	if err != nil {
-		return err
+		if err == sql.ErrNoRows && insertChild {
+			err = child.Insert(common.DB)
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return err
+		}
+	} else {
+		child = *childFromDB
 	}
-	mdbSource = *src
 
 	if parentSource.UID != "" {
-		err = mdbSource.SetParent(common.DB, insertParent, &parentSource)
+		err = child.SetParent(common.DB, insertParent, &parentSource)
 		if err != nil {
 			return err
 		}
@@ -119,17 +223,25 @@ func (suite *QualityEvalSuite) updateSourceParent(sourceUID string, parentSource
 	}
 }
 
-func (suite *QualityEvalSuite) updateTagParent(tagUID string, parent mdbmodels.Tag, insertParent bool) error {
-	var mdbTag mdbmodels.Tag
-
-	tag, err := mdbmodels.Tags(common.DB, qm.Where("uid = ?", tagUID)).One()
+func (suite *QualityEvalSuite) updateTagParent(child mdbmodels.Tag, parent mdbmodels.Tag, insertChild bool, insertParent bool) error {
+	childFromDB, err := mdbmodels.Tags(common.DB, qm.Where("uid = ?", child.UID)).One()
 	if err != nil {
-		return err
+		if err == sql.ErrNoRows && insertChild {
+
+			err = child.Insert(common.DB)
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return err
+		}
+	} else {
+		child = *childFromDB
 	}
-	mdbTag = *tag
 
 	if parent.UID != "" {
-		err = mdbTag.SetParent(common.DB, insertParent, &parent)
+		err = child.SetParent(common.DB, insertParent, &parent)
 		if err != nil {
 			return err
 		}
@@ -139,93 +251,45 @@ func (suite *QualityEvalSuite) updateTagParent(tagUID string, parent mdbmodels.T
 	}
 }
 
-func updateContentUnit(cu mdbmodels.ContentUnit, lang string, properties string) (string, error) {
-	if cu.UID == "" {
-		cu.UID = GenerateUID(8)
-		if err := mdbContentUnit.Insert(common.DB); err != nil {
-			return "", err
-		}
-	}
-
-	cu.Properties = properties
-	if err := cu.Update(common.DB); err != nil {
-		return "", err
-	}
-
-	return cu.UID, nil
-}
-
-func addContentUnitTag(cu es.ContentUnit, lang string, tag mdbmodels.Tag) (string, error) {
-	var mdbContentUnit mdbmodels.ContentUnit
-	if cu.MDB_UID != "" {
-		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+func (suite *QualityEvalSuite) addContentUnitTag(cu mdbmodels.ContentUnit, lang string, tag mdbmodels.Tag) (string, error) {
+	if cu.UID != "" {
+		cuFromDB, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.UID)).One()
 		if err != nil {
 			return "", err
 		}
-		mdbContentUnit = *cup
+		cu = *cuFromDB
 	} else {
-		mdbContentUnit = mdbmodels.ContentUnit{
-			UID:    GenerateUID(8),
-			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
-		}
-		if err := mdbContentUnit.Insert(common.DB); err != nil {
+		cu.UID = GenerateUID(8)
+		cu.TypeID = mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID
+		if err := cu.Insert(common.DB); err != nil {
 			return "", err
 		}
 	}
 
 	_, err := mdbmodels.FindTag(common.DB, tag.ID)
 	if err != nil {
-		if err == sql.ErrNoRows {
-
-			// save tag to DB:
-
-			/*//generate uid
-			b := make([]byte, 8)
-			for i := range b {
-				b[i] = uidBytes[rand.Intn(len(uidBytes))]
-			}
-			tag.UID = string(b)*/
-
-			err = tag.Insert(common.DB)
-			if err != nil {
-				return "", err
-			}
-
-			// save i18n
-			/*for _, v := range tag.I18n {
-				err := t.AddTagI18ns(exec, true, v)
-				if err != nil {
-					return "", err
-				}
-			}*/
-
-		} else {
-			return "", err
-		}
+		return "", err
 	}
 
-	err = mdbContentUnit.AddTags(common.DB, false, &tag)
+	err = cu.AddTags(common.DB, false, &tag)
 	if err != nil {
 		return "", err
 	}
 
-	return mdbContentUnit.UID, nil
+	return cu.UID, nil
 }
 
-func addContentUnitSource(cu es.ContentUnit, lang string, src mdbmodels.Source, author mdbmodels.Author, insertAuthor bool) (string, error) {
-	var mdbContentUnit mdbmodels.ContentUnit
-	if cu.MDB_UID != "" {
-		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+func (suite *QualityEvalSuite) addContentUnitSource(cu mdbmodels.ContentUnit, lang string, src mdbmodels.Source) (string, error) {
+	if cu.UID != "" {
+		cuFromDB, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.UID)).One()
 		if err != nil {
 			return "", err
 		}
-		mdbContentUnit = *cup
+		cu = *cuFromDB
 	} else {
-		mdbContentUnit = mdbmodels.ContentUnit{
-			UID:    GenerateUID(8),
-			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
-		}
-		if err := mdbContentUnit.Insert(common.DB); err != nil {
+		cu.UID = GenerateUID(8)
+		cu.TypeID = mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID
+		if err := cu.Insert(common.DB); err != nil {
 			return "", err
 		}
 	}
@@ -237,19 +301,15 @@ func addContentUnitSource(cu es.ContentUnit, lang string, src mdbmodels.Source, 
 			if err != nil {
 				return "", err
 			}
-			err = src.AddAuthors(common.DB, insertAuthor, &author)
-			if err != nil {
-				return "", err
-			}
 		} else {
 			return "", err
 		}
 	}
 
-	err = mdbContentUnit.AddSources(common.DB, false, &src)
+	err = cu.AddSources(common.DB, false, &src)
 	if err != nil {
 		return "", err
 	}
 
-	return mdbContentUnit.UID, nil
+	return cu.UID, nil
 }
