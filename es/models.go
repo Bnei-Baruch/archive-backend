@@ -10,6 +10,10 @@ type EffectiveDate struct {
 	EffectiveDate *utils.Date `json:"effective_date"`
 }
 
+type ResultType struct {
+	ResultType string `json:"result_type"`
+}
+
 // For full description see make.py RESULTS TEMPLATE.
 type Result struct {
 	// Document type.

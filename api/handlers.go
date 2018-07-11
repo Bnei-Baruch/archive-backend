@@ -456,7 +456,7 @@ func SearchHandler(c *gin.Context) {
 
 	searchId := c.Query("search_id")
 
-    suggestion := c.Query("suggest")
+	suggestion := c.Query("suggest")
 
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
 	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html

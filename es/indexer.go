@@ -135,22 +135,23 @@ func (indexer *Indexer) ReindexAll() error {
 	if err := indexer.CreateIndexes(); err != nil {
 		return err
 	}
-    done := make(chan struct{})
-    errs := make([]error, len(indexer.indices))
-	for i, index := range indexer.indices {
-        go func() {
-            errs[i] = index.ReindexAll()
-            done <- struct{}{}
-        }()
+	done := make(chan string)
+	errs := make([]error, len(indexer.indices))
+	for i := range indexer.indices {
+		go func(i int) {
+			errs[i] = indexer.indices[i].ReindexAll()
+			done <- indexer.indices[i].ResultType()
+		}(i)
 	}
-    for _ = range indexer.indices {
-        <-done
-    }
-    for _, err := range errs {
-        if err != nil {
-            return err
-        }
-    }
+	for _ = range indexer.indices {
+		name := <-done
+		log.Infof("Finished: %s", name)
+	}
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

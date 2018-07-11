@@ -86,8 +86,16 @@ func keyValue(t string, uid string) string {
 	return fmt.Sprintf("%s:%s", t, uid)
 }
 
-func keyValues(t string, uids []string) []string {
+func KeyValues(t string, uids []string) []string {
 	ret := make([]string, len(uids))
+	for i, uid := range uids {
+		ret[i] = keyValue(t, uid)
+	}
+	return ret
+}
+
+func KeyIValues(t string, uids []string) []interface{} {
+	ret := make([]interface{}, len(uids))
 	for i, uid := range uids {
 		ret[i] = keyValue(t, uid)
 	}

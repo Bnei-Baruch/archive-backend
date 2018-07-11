@@ -80,18 +80,12 @@ func (s bySourceFirst) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 func (s bySourceFirst) Less(i, j int) bool {
-	res := s[i].Type == consts.SOURCES_INDEX_TYPE && s[j].Type != consts.SOURCES_INDEX_TYPE
+	res, err := compareHits(s[i], s[j], consts.SORT_BY_SOURCE_FIRST)
+	if err != nil {
+		panic(fmt.Sprintf("compareHits error: %s", err))
+	}
 	return res
 }
-
-// func debugPrintQuery(q elastic.Query) elastic.Query {
-// 	i, err := q.Source()
-// 	utils.Must(err)
-// 	json, err := json.MarshalIndent(i, "", "  ")
-// 	utils.Must(err)
-// 	log.Infof("Query:\n%s\n\n", (string(json)))
-// 	return q
-// }
 
 // TODO: All interactions with ES should be throttled to prevent downstream pressure
 
@@ -110,7 +104,6 @@ func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 	return false
 }
 
-
 func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference string) (interface{}, error) {
 	multiSearchService := e.esc.MultiSearch()
 	requests := NewResultsSuggestRequests([]string{consts.ES_RESULT_TYPE_TAGS, consts.ES_RESULT_TYPE_SOURCES}, query, preference)
@@ -122,14 +115,14 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 		// don't kill entire request if ctx was cancelled
 		if ue, ok := err.(*url.Error); ok {
 			if ue.Err == context.DeadlineExceeded || ue.Err == context.Canceled {
-                if ue.Err == context.DeadlineExceeded {
-                    log.Warn("ESEngine.GetSuggestions - ctx cancelled - deadline.")
-                }
-                if ue.Err == context.Canceled {
-                    log.Warn("ESEngine.GetSuggestions - ctx cancelled - canceled.")
-                }
-                return nil, nil
-            }
+				if ue.Err == context.DeadlineExceeded {
+					log.Warn("ESEngine.GetSuggestions - ctx cancelled - deadline.")
+				}
+				if ue.Err == context.Canceled {
+					log.Warn("ESEngine.GetSuggestions - ctx cancelled - canceled.")
+				}
+				return nil, nil
+			}
 		}
 		return nil, errors.Wrap(err, "ESEngine.GetSuggestions")
 	}
@@ -165,7 +158,7 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 		query.Term = ""
 		query.ExactTerms = []string{classificationIntent.Title}
 		intent.Value = classificationIntent
-        log.Infof("Potential intent: %s", classificationIntent.Title)
+		log.Infof("Potential intent: %s", classificationIntent.Title)
 		return nil, &intent, &query
 	}
 	return nil, nil, nil
@@ -182,12 +175,12 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		// Order here provides the priority in results, i.e., tags are more importnt then sources.
 		index := es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, language)
 		mssFirstRound.Add(NewResultsSearchRequest(
-			[]string{consts.ES_RESULT_TYPE_TAGS}, index, *query,
-			consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference))
+			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_TAGS}, index, *query,
+			consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
 		mssFirstRound.Add(NewResultsSearchRequest(
-			[]string{consts.ES_RESULT_TYPE_SOURCES}, index, *query,
-			consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference))
+			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_SOURCES}, index, *query,
+			consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
 	mr, err := mssFirstRound.Do(context.TODO())
@@ -207,16 +200,16 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		if haveHits(res) {
 			for _, h := range res.Hits.Hits {
 				err, intent, secondRoundQuery := e.AddIntentSecondRound(h, potentialIntents[i], *query)
-				// log.Infof("Adding second round for %+v %+v %+v", intent, secondRoundQuery, potentialIntents[i])
+				log.Infof("Adding second round for %+v %+v %+v", intent, secondRoundQuery, potentialIntents[i])
 				if err != nil {
 					return errors.Wrapf(err, "ESEngine.AddIntents - Error second run for intent %+v", potentialIntents[i])
 				}
 				if intent != nil {
 					mssSecondRound.Add(NewResultsSearchRequest(
-						[]string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
-						es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, intent.Language),
-						*secondRoundQuery, consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE,
-						preference))
+						SearchRequestOptions{[]string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
+    						es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, intent.Language),
+	    					*secondRoundQuery, consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE,
+		    				preference, true}))
 					finalIntents = append(finalIntents, *intent)
 				}
 			}
@@ -228,6 +221,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		res := mr.Responses[i]
 		if res.Error != nil {
 			log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error)
+			log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error.RootCause[0])
 			return errors.New("ESEngine.AddIntents - Second Run Failed multi get (S).")
 		}
 		intentValue, intentOk := finalIntents[i].Value.(es.ClassificationIntent)
@@ -245,7 +239,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 				if query.Deb {
 					intentValue.MaxExplanation = *h.Explanation
 				}
-                log.Infof("%s: %+v", classificationIntent.Title, *h.Score)
+				log.Infof("%s: %+v", classificationIntent.Title, *h.Score)
 				if intentValue.MDB_UID == classificationIntent.MDB_UID {
 					found = true
 					// log.Infof("Max Score: %+v", *h.Score)
@@ -341,10 +335,21 @@ func haveHits(r *elastic.SearchResult) bool {
 	return r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0
 }
 
+
 func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (bool, error) {
 	if sortBy == consts.SORT_BY_RELEVANCE {
 		return *(h1.Score) > *(h2.Score), nil
-	} else {
+	} else if sortBy == consts.SORT_BY_SOURCE_FIRST {
+		var rt1, rt2 es.ResultType
+		if err := json.Unmarshal(*h1.Source, &rt1); err != nil {
+			return false, err
+		}
+		if err := json.Unmarshal(*h2.Source, &rt2); err != nil {
+			return false, err
+		}
+        // Order by sources first, then be score.
+        return rt1.ResultType == consts.ES_RESULT_TYPE_SOURCES && rt2.ResultType != consts.ES_RESULT_TYPE_SOURCES || *(h1.Score) > *(h2.Score), nil
+    } else {
 		var ed1, ed2 es.EffectiveDate
 		if err := json.Unmarshal(*h1.Source, &ed1); err != nil {
 			return false, err
@@ -359,9 +364,13 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 			ed2.EffectiveDate = &utils.Date{time.Time{}}
 		}
 		if sortBy == consts.SORT_BY_OLDER_TO_NEWER {
-			return ed2.EffectiveDate.Time.After(ed1.EffectiveDate.Time), nil
+            // Oder by older to newer, break ties using score.
+			return ed2.EffectiveDate.Time.After(ed1.EffectiveDate.Time) ||
+                ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && *(h1.Score) > *(h2.Score), nil
 		} else {
-			return ed2.EffectiveDate.Time.Before(ed1.EffectiveDate.Time), nil
+            // Order by newer to older, break ties using score.
+			return ed2.EffectiveDate.Time.Before(ed1.EffectiveDate.Time) ||
+                ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && *(h1.Score) > *(h2.Score), nil
 		}
 	}
 }
@@ -419,7 +428,7 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
-    // log.Infof("DoSearch: %s", query.ToString())
+	// log.Infof("DoSearch: %s", query.ToString())
 	if err := e.AddIntents(&query, preference); err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
 	}
@@ -454,7 +463,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// 	multiSearchService.Add(k...)
 	// }
 
-	multiSearchService.Add(NewResultsSearchRequests(consts.ES_SEARCH_RESULT_TYPES, query, sortBy, 0, from+size, preference)...)
+	multiSearchService.Add(NewResultsSearchRequests(
+            SearchRequestOptions{consts.ES_SEARCH_RESULT_TYPES, "", query, sortBy,
+            0, from+size, preference, false})...)
 
 	// Do search.
 	mr, err := multiSearchService.Do(context.TODO())

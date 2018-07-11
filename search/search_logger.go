@@ -15,20 +15,20 @@ import (
 type SearchLog struct {
 	SearchId    string      `json:"search_id"`
 	Created     time.Time   `json:"created"`
-    LogType     string      `json:"log_type"`
+	LogType     string      `json:"log_type"`
 	Query       Query       `json:"query"`
 	QueryResult interface{} `json:"query_result,omitempty"`
 	Error       interface{} `json:"error,omitempty"`
 	SortBy      string      `json:"sort_by,omitempty"`
 	From        uint64      `json:"from,omitempty"`
 	Size        uint64      `json:"size,omitempty"`
-    Suggestion  string      `json:"suggestion,omitempty"`
+	Suggestion  string      `json:"suggestion,omitempty"`
 }
 
 type SearchClick struct {
 	SearchId   string    `json:"search_id"`
 	Created    time.Time `json:"created"`
-    LogType    string    `json:"log_type"`
+	LogType    string    `json:"log_type"`
 	MdbUid     string    `json:"mdb_uid",omitempty`
 	Index      string    `json:"index",omitempty`
 	ResultType string    `json:"result_type",omitempty`
@@ -75,7 +75,7 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultTy
 	sc := SearchClick{
 		SearchId:   searchId,
 		Created:    time.Now(),
-        LogType:    "click",
+		LogType:    "click",
 		MdbUid:     mdbUid,
 		Index:      index,
 		ResultType: resultType,
@@ -102,7 +102,7 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultTy
 	if err != nil {
 		return errors.Wrap(err, "Log Click")
 	}
-    log.Infof("Create resp: %+v", resp)
+	log.Infof("Create resp: %+v", resp)
 	// if !resp.Created {
 	// 	return errors.Errorf("Click log not created.")
 	// }
@@ -154,14 +154,14 @@ func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int
 	sl := SearchLog{
 		Created:     time.Now(),
 		SearchId:    searchId,
-        LogType:     "query",
+		LogType:     "query",
 		Query:       query,
 		QueryResult: searchLogger.fixResults(res),
 		Error:       searchErr,
 		SortBy:      sortBy,
 		From:        uint64(from),
 		Size:        uint64(size),
-        Suggestion:  suggestion,
+		Suggestion:  suggestion,
 	}
 	resp, err := searchLogger.esc.Index().
 		Index("search_logs").

@@ -24,6 +24,7 @@ import (
 
 func MakeSourcesIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *SourcesIndex {
 	si := new(SourcesIndex)
+	si.resultType = consts.ES_RESULT_TYPE_SOURCES
 	si.baseName = consts.ES_RESULTS_INDEX
 	si.namespace = namespace
 	si.indexDate = indexDate
@@ -307,7 +308,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			source := Result{
 				ResultType:   consts.ES_RESULT_TYPE_SOURCES,
 				MDB_UID:      mdbSource.UID,
-				FilterValues: keyValues("source", parents),
+				FilterValues: KeyValues("source", parents),
 				TypedUids:    []string{keyValue("source", mdbSource.UID)},
 			}
 			if i18n.Description.Valid && i18n.Description.String != "" {

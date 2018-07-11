@@ -2,8 +2,8 @@ package feeds
 
 import (
 	"encoding/xml"
-	"time"
 	"strings"
+	"time"
 )
 
 type AtomLink struct {
@@ -53,8 +53,8 @@ type Feed struct {
 type Channel struct {
 	XMLName       xml.Name `xml:"channel"`
 	AtomLink      *AtomLink
-	Ttl           int      `xml:"ttl,omitempty"`
-	LastBuildDate string   `xml:"lastBuildDate,omitempty"`
+	Ttl           int    `xml:"ttl,omitempty"`
+	LastBuildDate string `xml:"lastBuildDate,omitempty"`
 	*Feed
 }
 
@@ -68,10 +68,10 @@ type Item struct {
 	Category     string       `xml:"category,omitempty"`
 	Comments     string       `xml:"comments,omitempty"`
 	Enclosure    *Enclosure
-	Guid         string       `xml:"guid,omitempty"`
-	Source       string       `xml:"source,omitempty"`
-	PubDate      string       `xml:"pubDate,omitempty"` // created or updated
-	Created      time.Time    `xml:"-"`
+	Guid         string    `xml:"guid,omitempty"`
+	Source       string    `xml:"source,omitempty"`
+	PubDate      string    `xml:"pubDate,omitempty"` // created or updated
+	Created      time.Time `xml:"-"`
 }
 
 func (r *Feed) RssFeed() (channel *Channel) {

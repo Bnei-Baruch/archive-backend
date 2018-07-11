@@ -17,9 +17,10 @@ import (
 
 func MakeTagsIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *TagsIndex {
 	tagsIndex := new(TagsIndex)
+	tagsIndex.resultType = consts.ES_RESULT_TYPE_TAGS
 	tagsIndex.baseName = consts.ES_RESULTS_INDEX
 	tagsIndex.namespace = namespace
-    tagsIndex.indexDate = indexDate
+	tagsIndex.indexDate = indexDate
 	tagsIndex.db = db
 	tagsIndex.esc = esc
 	return tagsIndex
