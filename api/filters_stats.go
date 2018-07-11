@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"github.com/volatiletech/sqlboiler/queries"
 	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"

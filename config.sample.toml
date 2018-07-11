@@ -43,7 +43,7 @@ durable-name="test-name" # name for durable subscribtion meaning it will start f
 url1="http://files.kabbalahmedia.info/api/v1/get"
 
 [assets_service]
-url="https://archive.kbb1.com/assets/api/"
+url="https://kabbalahmedia.info/assets/api/"
 
 [cache]
 refresh-search-stats="5m"

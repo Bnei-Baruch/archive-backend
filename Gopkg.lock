@@ -228,16 +228,6 @@
   revision = "e7201282ae8da26cd97aed2e516f75c0bd91bb93"
 
 [[projects]]
-  name = "github.com/volatiletech/sqlboiler"
-  packages = [
-    "boil",
-    "queries",
-    "strmangle"
-  ]
-  revision = "7e0eca627f995e2476d637ada0c3b70ecb5d837c"
-  version = "v2.6.1"
-
-[[projects]]
   name = "golang.org/x/net"
   packages = ["context"]
   revision = "fe686d45ea04bc1bd4eff6a52865ce8757320325"
