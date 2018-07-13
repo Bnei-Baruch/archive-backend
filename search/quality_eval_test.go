@@ -18,6 +18,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/migrations"
 	"github.com/Bnei-Baruch/archive-backend/search"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/Bnei-Baruch/sqlboiler/boil"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
@@ -129,6 +130,7 @@ func (m *TestDBManager) runMigrations(testDB *sql.DB) error {
 }
 
 func (suite *QualityEvalSuite) SetupSuite() {
+	utils.InitConfig("", "../")
 	err := suite.InitTestDB()
 	if err != nil {
 		panic(err)
@@ -149,7 +151,7 @@ func (suite *QualityEvalSuite) TearDownSuite() {
 
 // In order for 'go test' to run this suite, we need to create
 // a normal test function and pass our suite to suite.Run
-func TestEngine(t *testing.T) {
+func TestEval(t *testing.T) {
 	suite.Run(t, new(QualityEvalSuite))
 }
 
