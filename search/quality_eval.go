@@ -302,7 +302,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			}
 		}
 		if takeLatest {
-			latestUID, err := GetLatestUidByFilters(filters, db)
+			latestUID, err := GetLatestUIDByFilters(filters, db)
 			if err != nil {
 				if err == sql.ErrNoRows {
 					return Expectation{ET_EMPTY, "", filters, originalE}
@@ -319,6 +319,17 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		t = ET_CONTENT_UNITS
 	case EXPECTATION_URL_PATH[ET_COLLECTIONS]:
 		t = ET_COLLECTIONS
+		if takeLatest { //for debug: if true {
+			latestUID, err := GetLatestUIDByCollection(uidOrSection, db)
+			if err != nil {
+				if err == sql.ErrNoRows {
+					return Expectation{ET_EMPTY, uidOrSection, nil, originalE}
+				}
+				return Expectation{ET_FAILED_PARSE, uidOrSection, nil, originalE}
+			}
+			newe := fmt.Sprintf("%s/%s/%s", p, EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+			return ParseExpectation(newe, db)
+		}
 	case EXPECTATION_URL_PATH[ET_SOURCES]:
 		t = ET_SOURCES
 	default:
@@ -570,7 +581,40 @@ func WriteToCsv(path string, records [][]string) error {
 	return nil
 }
 
-func GetLatestUidByFilters(filters []Filter, db *sql.DB) (string, error) {
+func GetLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) {
+
+	var latestUID string
+
+	queryMask := `select cu.uid from content_units cu
+		join collections_content_units ccu on cu.id = ccu.content_unit_id
+		join collections c on c.id = ccu.collection_id
+		where cu.published IS TRUE and cu.secure = 0
+			and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+		and c.uid = '%s'
+		order by (cu.properties->>'film_date')::date desc
+			limit 1`
+
+	query := fmt.Sprintf(queryMask,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		collectionUID)
+
+	row := queries.Raw(db, query).QueryRow()
+
+	err := row.Scan(&latestUID)
+	if err != nil {
+		return "", errors.Wrap(err, "Unable to retrieve from DB the latest content unit UID by collection.")
+	}
+
+	return latestUID, nil
+}
+
+func GetLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 
 	sourcesTempTableMask := `CREATE TEMP TABLE temp_rec_sources ON COMMIT DROP AS
 	(WITH RECURSIVE rec_sources AS (
@@ -644,7 +688,7 @@ func GetLatestUidByFilters(filters []Filter, db *sql.DB) (string, error) {
 
 	err := row.Scan(&uid)
 	if err != nil {
-		return "", errors.Wrap(err, "Unable to retrieve from DB the latest uid for lesson by tag and source.")
+		return "", errors.Wrap(err, "Unable to retrieve from DB the latest UID for lesson by tag and source.")
 	}
 
 	return uid, nil
