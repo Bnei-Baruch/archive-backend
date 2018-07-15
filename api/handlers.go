@@ -1045,6 +1045,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
@@ -1409,6 +1412,9 @@ func handleStatsCUClass(db *sql.DB, r ContentUnitsRequest) (*StatsCUClassRespons
 	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
 
 	q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
 
@@ -1757,6 +1763,30 @@ func appendPublishersFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Publi
 INNER JOIN content_units_publishers cup ON cu.id = cup.content_unit_id
 AND cu.secure = 0 AND cu.published IS TRUE AND cup.publisher_id = ANY(?))`
 		*mods = append(*mods, qm.InnerJoin(q, ids))
+	}
+
+	return nil
+}
+
+func appendPersonsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f PersonsFilter) error {
+	if len(f.Persons) == 0 {
+		return nil
+	}
+
+	// convert publisher uids to ids
+	var ids pq.Int64Array
+	q := `SELECT array_agg(DISTINCT id) FROM persons WHERE uid = ANY($1)`
+	err := queries.Raw(exec, q, pq.Array(f.Persons)).QueryRow().Scan(&ids)
+	if err != nil {
+		return err
+	}
+
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods,
+			qm.InnerJoin("content_units_persons cup ON id = cup.content_unit_id"),
+			qm.WhereIn("cup.person_id in ?", utils.ConvertArgsInt64(ids)...))
 	}
 
 	return nil

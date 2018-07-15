@@ -83,6 +83,10 @@ type PublishersFilter struct {
 	Publishers []string `json:"publishers" form:"publisher" binding:"omitempty,dive,len=8"`
 }
 
+type PersonsFilter struct {
+	Persons []string `json:"persons" form:"person" binding:"omitempty,dive,len=8"`
+}
+
 type UsernameFilter struct {
 	Usernames []string `json:"usernames" form:"username" binding:"omitempty"`
 }
@@ -110,6 +114,7 @@ type ContentUnitsRequest struct {
 	GenresProgramsFilter
 	CollectionsFilter
 	PublishersFilter
+	PersonsFilter
 	WithFiles bool `json:"with_files" form:"with_files"`
 }
 
