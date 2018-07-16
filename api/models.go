@@ -172,6 +172,17 @@ type TweetsResponse struct {
 	Tweets []*Tweet `json:"tweets"`
 }
 
+type SimpleModeRequest struct {
+	BaseRequest
+	DateRangeFilter
+}
+
+type SimpleModeResponse struct {
+	ListResponse
+	Lessons []*Collection  `json:"lessons"`
+	Others  []*ContentUnit `json:"others"`
+}
+
 func NewCollectionsResponse() *CollectionsResponse {
 	return &CollectionsResponse{Collections: make([]*Collection, 0)}
 }
@@ -222,6 +233,7 @@ type Collection struct {
 }
 
 type ContentUnit struct {
+	mdbID            int64
 	ID               string                  `json:"id"`
 	ContentType      string                  `json:"content_type"`
 	NameInCollection string                  `json:"name_in_collection,omitempty"`
