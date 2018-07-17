@@ -356,9 +356,17 @@ func haveHits(r *elastic.SearchResult) bool {
 	return r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0
 }
 
+func score(score *float64) float64 {
+    if score == nil {
+        return 0
+    } else {
+        return *score
+    }
+}
+
 func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (bool, error) {
 	if sortBy == consts.SORT_BY_RELEVANCE {
-		return *(h1.Score) > *(h2.Score), nil
+		return score(h1.Score) > score(h2.Score), nil
 	} else if sortBy == consts.SORT_BY_SOURCE_FIRST {
 		var rt1, rt2 es.ResultType
 		if err := json.Unmarshal(*h1.Source, &rt1); err != nil {
@@ -368,7 +376,7 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 			return false, err
 		}
 		// Order by sources first, then be score.
-		return rt1.ResultType == consts.ES_RESULT_TYPE_SOURCES && rt2.ResultType != consts.ES_RESULT_TYPE_SOURCES || *(h1.Score) > *(h2.Score), nil
+		return rt1.ResultType == consts.ES_RESULT_TYPE_SOURCES && rt2.ResultType != consts.ES_RESULT_TYPE_SOURCES || score(h1.Score) > score(h2.Score), nil
 	} else {
 		var ed1, ed2 es.EffectiveDate
 		if err := json.Unmarshal(*h1.Source, &ed1); err != nil {
@@ -386,11 +394,12 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 		if sortBy == consts.SORT_BY_OLDER_TO_NEWER {
 			// Oder by older to newer, break ties using score.
 			return ed2.EffectiveDate.Time.After(ed1.EffectiveDate.Time) ||
-				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && *(h1.Score) > *(h2.Score), nil
+				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && score(h1.Score) > score(h2.Score), nil
 		} else {
+            log.Infof("%+v %+v %+v %+v", ed1, ed2, h1, h2)
 			// Order by newer to older, break ties using score.
 			return ed2.EffectiveDate.Time.Before(ed1.EffectiveDate.Time) ||
-				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && *(h1.Score) > *(h2.Score), nil
+				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && score(h1.Score) > score(h2.Score), nil
 		}
 	}
 }
