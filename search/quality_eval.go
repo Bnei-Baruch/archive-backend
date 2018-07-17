@@ -309,7 +309,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 				}
 				return Expectation{ET_FAILED_PARSE, "", filters, originalE}
 			}
-			newe := fmt.Sprintf("%s/%s/%s", p, EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+			newe := fmt.Sprintf("%s://%s%s/%s/%s", u.Scheme, u.Host, p, EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
 			return ParseExpectation(newe, db)
 		}
 		return Expectation{t, "", filters, e}
@@ -319,7 +319,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		t = ET_CONTENT_UNITS
 	case EXPECTATION_URL_PATH[ET_COLLECTIONS]:
 		t = ET_COLLECTIONS
-		if takeLatest { //for debug: if true {
+		if takeLatest {
 			latestUID, err := GetLatestUIDByCollection(uidOrSection, db)
 			if err != nil {
 				if err == sql.ErrNoRows {
@@ -327,7 +327,8 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 				}
 				return Expectation{ET_FAILED_PARSE, uidOrSection, nil, originalE}
 			}
-			newe := fmt.Sprintf("%s/%s/%s", p, EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+			uriParts := strings.Split(p, "/")
+			newe := fmt.Sprintf("%s://%s%s/%s/%s/%s", u.Scheme, u.Host, uriParts[0], uriParts[1], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
 			return ParseExpectation(newe, db)
 		}
 	case EXPECTATION_URL_PATH[ET_SOURCES]:
@@ -591,7 +592,7 @@ func GetLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 		where cu.published IS TRUE and cu.secure = 0
 			and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
 		and c.uid = '%s'
-		order by (cu.properties->>'film_date')::date desc
+		order by ccu.position desc
 			limit 1`
 
 	query := fmt.Sprintf(queryMask,
