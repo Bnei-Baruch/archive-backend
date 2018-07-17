@@ -100,8 +100,8 @@ func createResultsQuery(resultTypes []string, q Query) elastic.Query {
 		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
 			contentTypeQuery.Should(elastic.NewTermsQuery("filter_values", es.KeyIValues(filter, s)...))
 			filterByContentType = true
-        case consts.FILTERS[consts.FILTER_SECTION_SOURCES]:
-            boolQuery.Filter(elastic.NewTermsQuery("result_type", consts.ES_RESULT_TYPE_SOURCES))
+		case consts.FILTERS[consts.FILTER_SECTION_SOURCES]:
+			boolQuery.Filter(elastic.NewTermsQuery("result_type", consts.ES_RESULT_TYPE_SOURCES))
 		default:
 			boolQuery.Filter(elastic.NewTermsQuery("filter_values", es.KeyIValues(filter, s)...))
 		}
@@ -115,20 +115,20 @@ func createResultsQuery(resultTypes []string, q Query) elastic.Query {
 		// No potential score from string matching.
 		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
 	}
-    scoreQuery := elastic.NewFunctionScoreQuery().ScoreMode("first")
-    for _, resultType := range resultTypes {
-        weight := 1.0
-        if resultType == consts.ES_RESULT_TYPE_UNITS {
-            weight = 1.0
-        } else if resultType == consts.ES_RESULT_TYPE_TAGS {
-            weight = 1.5  // We use tags for intents only, score should be same as for sources.
-        } else if resultType == consts.ES_RESULT_TYPE_SOURCES {
-            weight = 1.5
-        } else if resultType == consts.ES_RESULT_TYPE_COLLECTIONS {
-            weight = 2.0
-        }
-        scoreQuery.Add(elastic.NewTermsQuery("result_type", resultType), elastic.NewWeightFactorFunction(weight))
-    }
+	scoreQuery := elastic.NewFunctionScoreQuery().ScoreMode("first")
+	for _, resultType := range resultTypes {
+		weight := 1.0
+		if resultType == consts.ES_RESULT_TYPE_UNITS {
+			weight = 1.0
+		} else if resultType == consts.ES_RESULT_TYPE_TAGS {
+			weight = 1.5 // We use tags for intents only, score should be same as for sources.
+		} else if resultType == consts.ES_RESULT_TYPE_SOURCES {
+			weight = 1.5
+		} else if resultType == consts.ES_RESULT_TYPE_COLLECTIONS {
+			weight = 2.0
+		}
+		scoreQuery.Add(elastic.NewTermsQuery("result_type", resultType), elastic.NewWeightFactorFunction(weight))
+	}
 	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query)).ScoreMode("sum").MaxBoost(100.0).
 		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))
@@ -136,17 +136,17 @@ func createResultsQuery(resultTypes []string, q Query) elastic.Query {
 
 func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchRequest {
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title")
-    highlightQuery := elastic.NewHighlight().Fields(
-        elastic.NewHighlighterField("title").NumOfFragments(0),
-        elastic.NewHighlighterField("description"),
-        elastic.NewHighlighterField("content"),
-        elastic.NewHighlighterField("description.language"),
-        elastic.NewHighlighterField("content.language"))
-    if !options.partialHighlight {
-        // Following field not used in intents to solve elastic bug with highlight.
-        highlightQuery.Fields(
+	highlightQuery := elastic.NewHighlight().Fields(
+		elastic.NewHighlighterField("title").NumOfFragments(0),
+		elastic.NewHighlighterField("description"),
+		elastic.NewHighlighterField("content"),
+		elastic.NewHighlighterField("description.language"),
+		elastic.NewHighlighterField("content.language"))
+	if !options.partialHighlight {
+		// Following field not used in intents to solve elastic bug with highlight.
+		highlightQuery.Fields(
 			elastic.NewHighlighterField("title.language").NumOfFragments(0))
-    }
+	}
 
 	source := elastic.NewSearchSource().
 		Query(createResultsQuery(options.resultTypes, options.query)).Highlight(highlightQuery).
@@ -173,7 +173,7 @@ func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchReq
 		indices[i] = es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, options.query.LanguageOrder[i])
 	}
 	for _, index := range indices {
-        options.index = index
+		options.index = index
 		request := NewResultsSearchRequest(options)
 		requests = append(requests, request)
 	}

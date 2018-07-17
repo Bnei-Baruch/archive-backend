@@ -169,27 +169,27 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		return nil
 	}
 
-    // Don't do intents, if sources are selected in section filter.
-    if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
-        return nil
-    }
+	// Don't do intents, if sources are selected in section filter.
+	if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
+		return nil
+	}
 	checkContentUnitsTypes := []string{}
-    if values, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
-        for _, value := range values {
-            if value == consts.CT_LESSON_PART {
-                checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_LESSON_PART)
-            }
-            if value == consts.CT_VIDEO_PROGRAM_CHAPTER {
-                checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_VIDEO_PROGRAM_CHAPTER)
-            }
-        }
-    } else {
-        checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_LESSON_PART, consts.CT_VIDEO_PROGRAM_CHAPTER)
-    }
+	if values, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
+		for _, value := range values {
+			if value == consts.CT_LESSON_PART {
+				checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_LESSON_PART)
+			}
+			if value == consts.CT_VIDEO_PROGRAM_CHAPTER {
+				checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_VIDEO_PROGRAM_CHAPTER)
+			}
+		}
+	} else {
+		checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_LESSON_PART, consts.CT_VIDEO_PROGRAM_CHAPTER)
+	}
 
-    // Clear filters. We don't want filters on Intents. Filters should be applied to final hits.
-    queryWithoutFilters := *query
-    queryWithoutFilters.Filters = map[string][]string{}
+	// Clear filters. We don't want filters on Intents. Filters should be applied to final hits.
+	queryWithoutFilters := *query
+	queryWithoutFilters.Filters = map[string][]string{}
 
 	mssFirstRound := e.esc.MultiSearch()
 	potentialIntents := make([]Intent, 0)
@@ -198,11 +198,11 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		index := es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, language)
 		mssFirstRound.Add(NewResultsSearchRequest(
 			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_TAGS}, index, queryWithoutFilters,
-			consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
+				consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
 		mssFirstRound.Add(NewResultsSearchRequest(
 			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_SOURCES}, index, queryWithoutFilters,
-			consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
+				consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
 	mr, err := mssFirstRound.Do(context.TODO())
@@ -229,9 +229,9 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 				if intent != nil {
 					mssSecondRound.Add(NewResultsSearchRequest(
 						SearchRequestOptions{[]string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
-    						es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, intent.Language),
-	    					*secondRoundQuery, consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE,
-		    				preference, true}))
+							es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, intent.Language),
+							*secondRoundQuery, consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE,
+							preference, true}))
 					finalIntents = append(finalIntents, *intent)
 				}
 			}
@@ -356,7 +356,6 @@ func haveHits(r *elastic.SearchResult) bool {
 	return r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0
 }
 
-
 func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (bool, error) {
 	if sortBy == consts.SORT_BY_RELEVANCE {
 		return *(h1.Score) > *(h2.Score), nil
@@ -368,9 +367,9 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 		if err := json.Unmarshal(*h2.Source, &rt2); err != nil {
 			return false, err
 		}
-        // Order by sources first, then be score.
-        return rt1.ResultType == consts.ES_RESULT_TYPE_SOURCES && rt2.ResultType != consts.ES_RESULT_TYPE_SOURCES || *(h1.Score) > *(h2.Score), nil
-    } else {
+		// Order by sources first, then be score.
+		return rt1.ResultType == consts.ES_RESULT_TYPE_SOURCES && rt2.ResultType != consts.ES_RESULT_TYPE_SOURCES || *(h1.Score) > *(h2.Score), nil
+	} else {
 		var ed1, ed2 es.EffectiveDate
 		if err := json.Unmarshal(*h1.Source, &ed1); err != nil {
 			return false, err
@@ -385,13 +384,13 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 			ed2.EffectiveDate = &utils.Date{time.Time{}}
 		}
 		if sortBy == consts.SORT_BY_OLDER_TO_NEWER {
-            // Oder by older to newer, break ties using score.
+			// Oder by older to newer, break ties using score.
 			return ed2.EffectiveDate.Time.After(ed1.EffectiveDate.Time) ||
-                ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && *(h1.Score) > *(h2.Score), nil
+				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && *(h1.Score) > *(h2.Score), nil
 		} else {
-            // Order by newer to older, break ties using score.
+			// Order by newer to older, break ties using score.
 			return ed2.EffectiveDate.Time.Before(ed1.EffectiveDate.Time) ||
-                ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && *(h1.Score) > *(h2.Score), nil
+				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && *(h1.Score) > *(h2.Score), nil
 		}
 	}
 }
@@ -455,8 +454,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	multiSearchService := e.esc.MultiSearch()
 	multiSearchService.Add(NewResultsSearchRequests(
-            SearchRequestOptions{consts.ES_SEARCH_RESULT_TYPES, "", query, sortBy,
-            0, from+size, preference, false})...)
+		SearchRequestOptions{consts.ES_SEARCH_RESULT_TYPES, "", query, sortBy,
+			0, from + size, preference, false})...)
 
 	// Do search.
 	mr, err := multiSearchService.Do(context.TODO())
