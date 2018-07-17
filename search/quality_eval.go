@@ -256,7 +256,7 @@ type HitSource struct {
 // https://archive.kbb1.com/he/sources/kB3eD83I ==> (sources, kB3eD83I)
 // [latest]https://kabbalahmedia.info/he/lessons?source=bs_qMUUn22b_hFeGidcS ==> (content_units, SLQOALyt)
 // [latest]https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (content_units, erZIsm86)
-// [latest]https://kabbalahmedia.info/he/programs/cu/orMKRcNk ==> (content_units, orMKRcNk)
+// [latest]https://kabbalahmedia.info/he/programs/c/zf4lLwyI ==> (content_units, orMKRcNk)
 // All events sub pages and years:
 // https://archive.kbb1.com/he/events/meals
 // https://archive.kbb1.com/he/events/friends-gatherings
@@ -305,7 +305,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			}
 		}
 		if takeLatest {
-			latestUID, err := GetLatestUIDByFilters(filters, db)
+			latestUID, err := getLatestUIDByFilters(filters, db)
 			if err != nil {
 				if err == sql.ErrNoRows {
 					return Expectation{ET_EMPTY, "", filters, originalE}
@@ -323,7 +323,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	case EXPECTATION_URL_PATH[ET_COLLECTIONS]:
 		t = ET_COLLECTIONS
 		if takeLatest {
-			latestUID, err := GetLatestUIDByCollection(uidOrSection, db)
+			latestUID, err := getLatestUIDByCollection(uidOrSection, db)
 			if err != nil {
 				if err == sql.ErrNoRows {
 					return Expectation{ET_EMPTY, uidOrSection, nil, originalE}
@@ -585,7 +585,7 @@ func WriteToCsv(path string, records [][]string) error {
 	return nil
 }
 
-func GetLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) {
+func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) {
 
 	var latestUID string
 
@@ -618,7 +618,7 @@ func GetLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 	return latestUID, nil
 }
 
-func GetLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
+func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 
 	sourcesTempTableMask := `CREATE TEMP TABLE temp_rec_sources ON COMMIT DROP AS
 	(WITH RECURSIVE rec_sources AS (

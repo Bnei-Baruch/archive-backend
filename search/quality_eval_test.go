@@ -155,17 +155,21 @@ func TestEval(t *testing.T) {
 	suite.Run(t, new(QualityEvalSuite))
 }
 
-func (suite *QualityEvalSuite) TestGetLatestUidByFilters() {
-	fmt.Printf("\n------ TestGetLatestUidByFilters ------\n\n")
+func (suite *QualityEvalSuite) TestParseExpectation() {
+	fmt.Printf("\n------ TestParseExpectation ------\n\n")
 	r := require.New(suite.T())
 
-	var latestUID string
+	var latestUIDByDate string
+	var latestUIDByPosition string
 	filmDateMask := "{\"film_date\":\"2018-01-%s\"}"
 
 	childTag := mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}
 	childSource := mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 1, TypeID: 1, UID: "ALlyoveA"}
 	parentTag := mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}
 	parentSource := mdbmodels.Source{Pattern: null.String{"bs-akdmot", true}, ID: 2, TypeID: 1, UID: "1vCj4qN9"}
+
+	cUID, err := suite.updateCollection(mdbmodels.Collection{TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID}, "", 0)
+	r.Nil(err)
 
 	r.Nil(suite.updateTagParent(childTag, parentTag, true, true))
 	r.Nil(suite.updateSourceParent(childSource, parentSource, true, true))
@@ -176,26 +180,42 @@ func (suite *QualityEvalSuite) TestGetLatestUidByFilters() {
 		r.Nil(err)
 		_, err = suite.addContentUnitSource(mdbmodels.ContentUnit{UID: cuUID}, consts.LANG_ENGLISH, childSource)
 		r.Nil(err)
-		latestUID = cuUID
+		_, err = suite.updateCollection(mdbmodels.Collection{UID: cUID}, cuUID, 13-i)
+		r.Nil(err)
+		if i == 1 {
+			latestUIDByPosition = cuUID
+		}
+		latestUIDByDate = cuUID
 	}
 
-	sourceFilter := search.Filter{Name: search.FILTER_NAME_SOURCE, Value: parentSource.UID}
-	tagsFilter := search.Filter{Name: search.FILTER_NAME_TOPIC, Value: parentTag.UID}
+	fmt.Printf("Test [latest] by source \n")
+	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/lessons?source=%s", parentSource.UID),
+		search.Expectation{search.ET_LESSONS, latestUIDByDate, nil, ""}, r)
 
-	fmt.Printf("Test by source \n")
-	resultUID, err := search.GetLatestUidByFilters([]search.Filter{sourceFilter}, common.DB)
-	r.Nil(err)
-	r.Equal(latestUID, resultUID)
+	fmt.Printf("Test [latest] by topic \n")
+	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/programs?topic=%s", parentTag.UID),
+		search.Expectation{search.ET_PROGRAMS, latestUIDByDate, nil, ""}, r)
 
-	fmt.Printf("Test by topic \n")
-	resultUID, err = search.GetLatestUidByFilters([]search.Filter{tagsFilter}, common.DB)
-	r.Nil(err)
-	r.Equal(latestUID, resultUID)
+	fmt.Printf("Test [latest] by source and topic \n")
+	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/lessons?source=%s&topic=%s", parentSource.UID, parentTag.UID),
+		search.Expectation{search.ET_LESSONS, latestUIDByDate, nil, ""}, r)
 
-	fmt.Printf("Test by source and topic \n")
-	resultUID, err = search.GetLatestUidByFilters([]search.Filter{sourceFilter, tagsFilter}, common.DB)
-	r.Nil(err)
-	r.Equal(latestUID, resultUID)
+	fmt.Printf("Test [latest] by collection \n")
+	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/programs?topic=%s", parentTag.UID),
+		search.Expectation{search.ET_PROGRAMS, latestUIDByPosition, nil, ""}, r)
+}
+
+func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expectation, r *require.Assertions) {
+
+	// Expectation Source is not tested.
+
+	resultExp := search.ParseExpectation(url, common.DB)
+	r.Equal(resultExp.Uid, exp.Uid)
+	r.Equal(resultExp.Type, exp.Type)
+	if exp.Filters != nil {
+		r.Equal(int64(len(resultExp.Filters)), exp.Filters)
+		r.ElementsMatch(resultExp.Filters, exp.Filters)
+	}
 }
 
 func (suite *QualityEvalSuite) updateSourceParent(child mdbmodels.Source, parentSource mdbmodels.Source, insertChild bool, insertParent bool) error {
@@ -314,4 +334,39 @@ func (suite *QualityEvalSuite) addContentUnitSource(cu mdbmodels.ContentUnit, la
 	}
 
 	return cu.UID, nil
+}
+
+func (suite *QualityEvalSuite) updateCollection(c mdbmodels.Collection, cuUID string, position int) (string, error) {
+	if c.UID != "" {
+		cFromDB, err := mdbmodels.Collections(common.DB, qm.Where("uid = ?", c.UID)).One()
+		if err != nil {
+			return "", err
+		}
+		c = *cFromDB
+	} else {
+		c.UID = GenerateUID(8)
+		c.TypeID = c.TypeID
+		c.Secure = int16(0)
+		c.Published = true
+		if err := c.Insert(common.DB); err != nil {
+			return "", err
+		}
+	}
+
+	if cuUID != "" {
+		cu, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cuUID)).One()
+		if err != nil {
+			return "", err
+		}
+		if _, err := mdbmodels.FindCollectionsContentUnit(common.DB, c.ID, cu.ID); err == sql.ErrNoRows {
+			var mdbCollectionsContentUnit mdbmodels.CollectionsContentUnit
+			mdbCollectionsContentUnit.CollectionID = c.ID
+			mdbCollectionsContentUnit.ContentUnitID = cu.ID
+			mdbCollectionsContentUnit.Position = position
+			if err := mdbCollectionsContentUnit.Insert(common.DB); err != nil {
+				return "", err
+			}
+		}
+	}
+	return c.UID, nil
 }
