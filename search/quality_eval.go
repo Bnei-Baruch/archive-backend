@@ -328,7 +328,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 				return Expectation{ET_FAILED_PARSE, uidOrSection, nil, originalE}
 			}
 			uriParts := strings.Split(p, "/")
-			newe := fmt.Sprintf("%s://%s%s/%s/%s/%s", u.Scheme, u.Host, uriParts[0], uriParts[1], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+			newe := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
 			return ParseExpectation(newe, db)
 		}
 	case EXPECTATION_URL_PATH[ET_SOURCES]:
