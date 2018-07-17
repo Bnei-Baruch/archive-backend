@@ -8,7 +8,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -30,28 +30,34 @@ type Index interface {
 	CreateIndex() error
 	DeleteIndex() error
 	RefreshIndex() error
+	ResultType() string
 }
 
 type BaseIndex struct {
-	namespace string
-	baseName  string
-    indexDate string
-	db        *sql.DB
-	esc       *elastic.Client
+	resultType string
+	namespace  string
+	baseName   string
+	indexDate  string
+	db         *sql.DB
+	esc        *elastic.Client
 }
 
 func IndexAliasName(namespace string, name string, lang string) string {
-    if (namespace == "" || name == "" || lang == "") {
-        panic(fmt.Sprintf("Not expecting empty parameter for IndexName, provided: (%s, %s, %s)", namespace, name, lang))
-    }
+	if namespace == "" || name == "" || lang == "" {
+		panic(fmt.Sprintf("Not expecting empty parameter for IndexName, provided: (%s, %s, %s)", namespace, name, lang))
+	}
 	return fmt.Sprintf("%s_%s_%s", namespace, name, lang)
 }
 
 func IndexName(namespace string, name string, lang string, date string) string {
-    if (date == "") {
-        panic(fmt.Sprintf("Not expecting empty parameter for IndexName, provided: (%s, %s, %s, %s)", namespace, name, lang, date))
-    }
+	if date == "" {
+		panic(fmt.Sprintf("Not expecting empty parameter for IndexName, provided: (%s, %s, %s, %s)", namespace, name, lang, date))
+	}
 	return fmt.Sprintf("%s_%s", IndexAliasName(namespace, name, lang), date)
+}
+
+func (index *BaseIndex) ResultType() string {
+	return index.resultType
 }
 
 func (index *BaseIndex) indexName(lang string) string {
@@ -73,6 +79,7 @@ func (index *BaseIndex) CreateIndex() error {
 		name := index.indexName(lang)
 		// Do nothing if index already exists.
 		exists, err := index.esc.IndexExists(name).Do(context.TODO())
+		log.Infof("Create index, exists: %t.", exists)
 		if err != nil {
 			return err
 		}

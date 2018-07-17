@@ -12,7 +12,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -86,8 +86,16 @@ func keyValue(t string, uid string) string {
 	return fmt.Sprintf("%s:%s", t, uid)
 }
 
-func keyValues(t string, uids []string) []string {
+func KeyValues(t string, uids []string) []string {
 	ret := make([]string, len(uids))
+	for i, uid := range uids {
+		ret[i] = keyValue(t, uid)
+	}
+	return ret
+}
+
+func KeyIValues(t string, uids []string) []interface{} {
+	ret := make([]interface{}, len(uids))
 	for i, uid := range uids {
 		ret[i] = keyValue(t, uid)
 	}

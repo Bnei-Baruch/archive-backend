@@ -83,8 +83,12 @@ type PublishersFilter struct {
 	Publishers []string `json:"publishers" form:"publisher" binding:"omitempty,dive,len=8"`
 }
 
-type KmediaIDsFilter struct {
-	IDs []string `json:"kmedia_ids" form:"kmedia_id" binding:"omitempty"`
+type PersonsFilter struct {
+	Persons []string `json:"persons" form:"person" binding:"omitempty,dive,len=8"`
+}
+
+type UsernameFilter struct {
+	Usernames []string `json:"usernames" form:"username" binding:"omitempty"`
 }
 
 type CollectionsRequest struct {
@@ -92,7 +96,6 @@ type CollectionsRequest struct {
 	IDsFilter
 	ContentTypesFilter
 	DateRangeFilter
-	KmediaIDsFilter
 	WithUnits bool `json:"with_units" form:"with_units"`
 }
 
@@ -111,7 +114,8 @@ type ContentUnitsRequest struct {
 	GenresProgramsFilter
 	CollectionsFilter
 	PublishersFilter
-	KmediaIDsFilter
+	PersonsFilter
+	WithFiles bool `json:"with_files" form:"with_files"`
 }
 
 type ContentUnitsResponse struct {
@@ -153,9 +157,30 @@ type TagsDashboardResponse struct {
 }
 
 type StatsCUClassResponse struct {
-	Sources map[string]int64 `json:"sources"`
-	Tags    map[string]int64 `json:"tags"`
-	Persons map[string]int64 `json:"persons"`
+	Sources map[string]int `json:"sources"`
+	Tags    map[string]int `json:"tags"`
+}
+
+type TweetsRequest struct {
+	ListRequest
+	DateRangeFilter
+	UsernameFilter
+}
+
+type TweetsResponse struct {
+	ListResponse
+	Tweets []*Tweet `json:"tweets"`
+}
+
+type SimpleModeRequest struct {
+	BaseRequest
+	DateRangeFilter
+}
+
+type SimpleModeResponse struct {
+	ListResponse
+	Lessons []*Collection  `json:"lessons"`
+	Others  []*ContentUnit `json:"others"`
 }
 
 func NewCollectionsResponse() *CollectionsResponse {
@@ -170,6 +195,10 @@ func NewPublishersResponse() *PublishersResponse {
 	return &PublishersResponse{Publishers: make([]*Publisher, 0)}
 }
 
+func NewTweetsResponse() *TweetsResponse {
+	return &TweetsResponse{Tweets: make([]*Tweet, 0)}
+}
+
 func NewTagsDashboardResponse() *TagsDashboardResponse {
 	return &TagsDashboardResponse{
 		PromotedContentUnits: make([]*ContentUnit, 0),
@@ -179,9 +208,8 @@ func NewTagsDashboardResponse() *TagsDashboardResponse {
 
 func NewStatsCUClassResponse() *StatsCUClassResponse {
 	return &StatsCUClassResponse{
-		Sources: make(map[string]int64),
-		Tags:    make(map[string]int64),
-		Persons: make(map[string]int64),
+		Sources: make(map[string]int),
+		Tags:    make(map[string]int),
 	}
 }
 
@@ -205,6 +233,7 @@ type Collection struct {
 }
 
 type ContentUnit struct {
+	mdbID            int64
 	ID               string                  `json:"id"`
 	ContentType      string                  `json:"content_type"`
 	NameInCollection string                  `json:"name_in_collection,omitempty"`
@@ -287,4 +316,12 @@ type SemiQuasiData struct {
 	Authors    []*Author    `json:"sources"`
 	Tags       []*Tag       `json:"tags"`
 	Publishers []*Publisher `json:"publishers"`
+}
+
+type Tweet struct {
+	Username  string    `json:"username"`
+	TwitterID string    `json:"twitter_id"`
+	FullText  string    `json:"full_text"`
+	CreatedAt time.Time `json:"created_at"`
+	Raw       null.JSON `json:"raw"`
 }

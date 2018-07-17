@@ -1,13 +1,17 @@
 package es
 
 import (
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type EffectiveDate struct {
 	EffectiveDate *utils.Date `json:"effective_date"`
+}
+
+type ResultType struct {
+	ResultType string `json:"result_type"`
 }
 
 // For full description see make.py RESULTS TEMPLATE.

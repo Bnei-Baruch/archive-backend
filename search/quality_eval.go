@@ -13,10 +13,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -104,11 +105,11 @@ var EXPECTATION_URL_PATH = map[int]string{
 }
 
 var EXPECTATION_HIT_TYPE = map[int]string{
-	ET_CONTENT_UNITS: "content_units",
-	ET_COLLECTIONS:   "collections",
+	ET_CONTENT_UNITS: consts.ES_RESULT_TYPE_UNITS,
+	ET_COLLECTIONS:   consts.ES_RESULT_TYPE_COLLECTIONS,
 	ET_LESSONS:       consts.INTENT_HIT_TYPE_LESSONS,
 	ET_PROGRAMS:      consts.INTENT_HIT_TYPE_PROGRAMS,
-	ET_SOURCES:       "sources",
+	ET_SOURCES:       consts.ES_RESULT_TYPE_SOURCES,
 }
 
 const (
@@ -243,7 +244,8 @@ func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 }
 
 type HitSource struct {
-	MdbUid string `json:"mdb_uid"`
+	MdbUid     string `json:"mdb_uid"`
+	ResultType string `json:"result_type"`
 }
 
 // Parses expectation described by result URL and converts
@@ -352,7 +354,7 @@ func FilterValueToUid(value string) string {
 }
 
 func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expectation) bool {
-	if hit.Type != EXPECTATION_HIT_TYPE[e.Type] {
+	if hitSource.ResultType != EXPECTATION_HIT_TYPE[e.Type] {
 		return false
 	}
 

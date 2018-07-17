@@ -10,7 +10,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -19,6 +19,7 @@ import (
 
 func MakeCollectionsIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *CollectionsIndex {
 	ci := new(CollectionsIndex)
+	ci.resultType = consts.ES_RESULT_TYPE_COLLECTIONS
 	ci.baseName = consts.ES_RESULTS_INDEX
 	ci.namespace = namespace
 	ci.db = db
@@ -101,7 +102,7 @@ func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
 		if err != nil {
 			return []string{}, err
 		}
-		typedUIDs = append(typedUIDs, keyValues("content_unit", moreUIDs)...)
+		typedUIDs = append(typedUIDs, KeyValues("content_unit", moreUIDs)...)
 	}
 	if scope.TagUID != "" {
 		typedUIDs = append(typedUIDs, keyValue("tag", scope.TagUID))
@@ -200,7 +201,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 			typedUIDs := append([]string{keyValue("collection", c.UID)},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
 			filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
-				keyValues("collections_content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))...)
+				KeyValues("collections_content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))...)
 			collection := Result{
 				ResultType:   consts.ES_RESULT_TYPE_COLLECTIONS,
 				MDB_UID:      c.UID,
@@ -258,7 +259,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 		if err != nil {
 			return errors.Wrapf(err, "Index collection %s %s", name, c.UID)
 		}
-		if !resp.Created {
+		if resp.Result != "created" {
 			return errors.Errorf("Not created: collection %s %s", name, c.UID)
 		}
 	}

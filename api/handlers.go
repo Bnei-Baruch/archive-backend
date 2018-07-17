@@ -19,7 +19,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"gopkg.in/gin-gonic/gin.v1"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -409,7 +409,6 @@ func ParseQuery(q string) search.Query {
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
-	log.Infof("Deb: [%s]", c.Query("deb"))
 	query := ParseQuery(c.Query("q"))
 	query.Deb = false
 	if c.Query("deb") == "true" {
@@ -451,10 +450,13 @@ func SearchHandler(c *gin.Context) {
 	if _, ok := consts.SORT_BY_VALUES[sortBy]; ok {
 		sortByVal = sortBy
 	}
+	if len(query.Term) == 0 {
+		sortByVal = consts.SORT_BY_SOURCE_FIRST
+	}
 
 	searchId := c.Query("search_id")
 
-    suggestion := c.Query("suggest")
+	suggestion := c.Query("suggest")
 
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
 	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
@@ -471,7 +473,6 @@ func SearchHandler(c *gin.Context) {
 	log.Debugf("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
 	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 
-    log.Infof("Before do search.")
 	res, err := se.DoSearch(
 		context.TODO(),
 		query,
@@ -481,7 +482,6 @@ func SearchHandler(c *gin.Context) {
 		preference,
 	)
 	if err == nil {
-        log.Infof("DoSearch ok, logging...")
 		// TODO: How does this slows the search query? Consider logging in parallel.
 		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res)
 		if err != nil {
@@ -621,6 +621,37 @@ func StatsCUClassHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func TweetsHandler(c *gin.Context) {
+	var r TweetsRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	resp, err := handleTweets(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
+func SimpleModeHandler(c *gin.Context) {
+	var r SimpleModeRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	s, e, err := r.Range()
+	if err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+
+	if r.StartDate != "" && r.EndDate != "" && e.Equal(s) {
+		NewBadRequestError(errors.New("Start and end dates should equal")).Abort(c)
+		return
+	}
+
+	resp, err2 := handleSimpleMode(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err2)
+}
+
 func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
@@ -632,9 +663,6 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendKmediaIDsFilterMods(&mods, r.KmediaIDsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 
@@ -1044,7 +1072,7 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
-	if err := appendKmediaIDsFilterMods(&mods, r.KmediaIDsFilter); err != nil {
+	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 
@@ -1090,6 +1118,30 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	cus, ex := prepareCUs(db, units, r.Language)
 	if ex != nil {
 		return nil, ex
+	}
+
+	// files
+	if r.WithFiles {
+		ids := make([]int64, len(units))
+		uidsMap := make(map[string]int64, len(units))
+		for i := range units {
+			ids[i] = units[i].ID
+			uidsMap[units[i].UID] = units[i].ID
+		}
+
+		fileMap, err := loadCUFiles(db, ids)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+
+		for i := range cus {
+			cu := cus[i]
+			if files, ok := fileMap[uidsMap[cu.ID]]; ok {
+				if err := setCUFiles(cu, files); err != nil {
+					return nil, NewInternalError(err)
+				}
+			}
+		}
 	}
 
 	resp := &ContentUnitsResponse{
@@ -1387,69 +1439,155 @@ func handleStatsCUClass(db *sql.DB, r ContentUnitsRequest) (*StatsCUClassRespons
 	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
 
 	q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
 
-	qq := fmt.Sprintf(`with fcu as (%s)
-select
-  's',
-  s.uid,
-  count(cus.content_unit_id)
-from sources s
-  inner join content_units_sources cus on s.id = cus.source_id
-  inner join fcu on cus.content_unit_id = fcu.id
-group by s.id
-union
-select
-  't',
-  t.uid,
-  count(cut.content_unit_id)
-from tags t
-  inner join content_units_tags cut on t.id = cut.tag_id
-  inner join fcu on cut.content_unit_id = fcu.id
-group by t.id
-union
-select
-  'p',
-  p.uid,
-  count(cup.content_unit_id)
-from persons p
-  inner join content_units_persons cup on p.id = cup.person_id
-  inner join fcu on cup.content_unit_id = fcu.id
-group by p.id`, q[:len(q)-1])
-
-	rows, err := queries.Raw(db, qq, args...).Query()
-	if err != nil {
-		return nil, NewInternalError(err)
-	}
-	defer rows.Close()
-
+	var err error
 	resp := NewStatsCUClassResponse()
-
-	for rows.Next() {
-		var typ, key string
-		var val int64
-		if err := rows.Scan(&typ, &key, &val); err != nil {
-			return nil, NewInternalError(err)
-		}
-
-		switch typ {
-		case "s":
-			resp.Sources[key] += val
-		case "t":
-			resp.Tags[key] += val
-		case "p":
-			resp.Persons[key] += val
-		default:
-			return nil, NewInternalError(errors.Errorf("Unknown classification notation: %s", typ))
-		}
-	}
-
-	if err := rows.Err(); err != nil {
+	resp.Tags, resp.Sources, err = GetFiltersStats(db, q, args)
+	if err != nil {
 		return nil, NewInternalError(err)
 	}
 
 	return resp, nil
+}
+
+func handleTweets(db *sql.DB, r TweetsRequest) (*TweetsResponse, *HttpError) {
+	var mods []qm.QueryMod
+
+	// filters
+	if err := appendDateRangeFilterModsTwitter(&mods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendUsernameFilterMods(db, &mods, r.UsernameFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			return nil, e
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+
+	var total int64
+	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
+	err := mdbmodels.TwitterTweets(db, countMods...).QueryRow().Scan(&total)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	if total == 0 {
+		return NewTweetsResponse(), nil
+	}
+
+	// order, limit, offset
+	r.OrderBy = "tweet_at desc"
+	_, offset, err := appendListMods(&mods, r.ListRequest)
+	if err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if int64(offset) >= total {
+		return NewTweetsResponse(), nil
+	}
+
+	// data query
+	tweets, err := mdbmodels.TwitterTweets(db, mods...).All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// response
+	ts := make([]*Tweet, len(tweets))
+	for i := range tweets {
+		t := tweets[i]
+		ts[i] = &Tweet{
+			Username:  mdb.TWITTER_USERS_REGISTRY.ByID[t.UserID].Username,
+			TwitterID: t.TwitterID,
+			FullText:  t.FullText,
+			CreatedAt: t.TweetAt,
+			Raw:       t.Raw,
+		}
+	}
+
+	resp := &TweetsResponse{
+		ListResponse: ListResponse{Total: total},
+		Tweets:       ts,
+	}
+
+	return resp, nil
+}
+
+func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *HttpError) {
+	// use today if empty (or partially empty) date range was provided
+	if r.StartDate == "" {
+		r.StartDate = r.EndDate
+	}
+	if r.EndDate == "" {
+		r.EndDate = r.StartDate
+	}
+	if r.StartDate == "" && r.EndDate == "" {
+		r.StartDate = time.Now().Format("2006-01-02")
+		r.EndDate = r.StartDate
+	}
+
+	// All content units in this day
+	cur := ContentUnitsRequest{
+		ListRequest: ListRequest{
+			PageSize: consts.API_MAX_PAGE_SIZE,
+			OrderBy:  "created_at desc",
+		},
+		DateRangeFilter: r.DateRangeFilter,
+		WithFiles:       true,
+	}
+	respCUs, err := handleContentUnits(db, cur)
+	if err != nil {
+		return nil, err
+	}
+
+	lpCUs := make(map[string]*ContentUnit)
+	others := make([]*ContentUnit, 0)
+	for i := range respCUs.ContentUnits {
+		cu := respCUs.ContentUnits[i]
+		switch cu.ContentType {
+		case consts.CT_LESSON_PART:
+			lpCUs[cu.ID] = cu
+		case consts.CT_KITEI_MAKOR, consts.CT_LELO_MIKUD, consts.CT_PUBLICATION:
+			// skip these for now (they should be properly attached as derived units)
+			break
+		default:
+			others = append(others, cu)
+		}
+	}
+
+	// lessons
+	cr := CollectionsRequest{
+		ContentTypesFilter: ContentTypesFilter{
+			ContentTypes: []string{consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON},
+		},
+		ListRequest: ListRequest{
+			PageSize: consts.API_MAX_PAGE_SIZE,
+			OrderBy:  "(properties->>'number')::int desc, created_at desc",
+		},
+		DateRangeFilter: r.DateRangeFilter,
+		WithUnits:       true,
+	}
+	resp, err := handleCollections(db, cr)
+	if err != nil {
+		return nil, err
+	}
+
+	// replace cu's with the same ones just with files in them
+	for i := range resp.Collections {
+		cus := resp.Collections[i].ContentUnits
+		for j := range cus {
+			cus[j] = lpCUs[cus[j].ID]
+		}
+	}
+
+	return &SimpleModeResponse{
+		Lessons: resp.Collections,
+		Others:  others,
+	}, nil
 }
 
 // appendListMods compute and appends the OrderBy, Limit and Offset query mods.
@@ -1533,6 +1671,14 @@ func appendContentTypesFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) err
 }
 
 func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
+	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
+}
+
+func appendDateRangeFilterModsTwitter(mods *[]qm.QueryMod, f DateRangeFilter) error {
+	return appendDRFBaseMods(mods, f, "tweet_at")
+}
+
+func appendDRFBaseMods(mods *[]qm.QueryMod, f DateRangeFilter, field string) error {
 	s, e, err := f.Range()
 	if err != nil {
 		return err
@@ -1543,10 +1689,10 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	}
 
 	if f.StartDate != "" {
-		*mods = append(*mods, qm.Where("(properties->>'film_date')::date >= ?", s))
+		*mods = append(*mods, qm.Where(fmt.Sprintf("%s >= ?", field), s))
 	}
 	if f.EndDate != "" {
-		*mods = append(*mods, qm.Where("(properties->>'film_date')::date <= ?", e))
+		*mods = append(*mods, qm.Where(fmt.Sprintf("%s <= ?", field), e))
 	}
 
 	return nil
@@ -1722,12 +1868,45 @@ AND cu.secure = 0 AND cu.published IS TRUE AND cup.publisher_id = ANY(?))`
 	return nil
 }
 
-func appendKmediaIDsFilterMods(mods *[]qm.QueryMod, f KmediaIDsFilter) error {
-	if utils.IsEmpty(f.IDs) {
+func appendPersonsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f PersonsFilter) error {
+	if len(f.Persons) == 0 {
 		return nil
 	}
 
-	*mods = append(*mods, qm.WhereIn("properties->>'kmedia_id' IN ?", utils.ConvertArgsString(f.IDs)...))
+	// convert publisher uids to ids
+	var ids pq.Int64Array
+	q := `SELECT array_agg(DISTINCT id) FROM persons WHERE uid = ANY($1)`
+	err := queries.Raw(exec, q, pq.Array(f.Persons)).QueryRow().Scan(&ids)
+	if err != nil {
+		return err
+	}
+
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods,
+			qm.InnerJoin("content_units_persons cup ON id = cup.content_unit_id"),
+			qm.WhereIn("cup.person_id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+
+	return nil
+}
+
+func appendUsernameFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f UsernameFilter) error {
+	if len(f.Usernames) == 0 {
+		return nil
+	}
+
+	ids := make([]int64, len(f.Usernames))
+	for i := range f.Usernames {
+		if username, ok := mdb.TWITTER_USERS_REGISTRY.ByUsername[f.Usernames[i]]; ok {
+			ids[i] = username.ID
+		} else {
+			return NewBadRequestError(errors.Errorf("Unknown twitter username: %s", f.Usernames[i]))
+		}
+	}
+
+	*mods = append(*mods, qm.WhereIn("user_id in ?", utils.ConvertArgsInt64(ids)...))
 
 	return nil
 }
@@ -1781,6 +1960,7 @@ func mdbToCU(cu *mdbmodels.ContentUnit) (*ContentUnit, error) {
 	}
 
 	u := &ContentUnit{
+		mdbID:            cu.ID,
 		ID:               cu.UID,
 		ContentType:      mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
 		Duration:         props.Duration,

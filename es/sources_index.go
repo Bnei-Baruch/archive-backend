@@ -16,7 +16,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -24,6 +24,7 @@ import (
 
 func MakeSourcesIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *SourcesIndex {
 	si := new(SourcesIndex)
+	si.resultType = consts.ES_RESULT_TYPE_SOURCES
 	si.baseName = consts.ES_RESULTS_INDEX
 	si.namespace = namespace
 	si.indexDate = indexDate
@@ -307,7 +308,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			source := Result{
 				ResultType:   consts.ES_RESULT_TYPE_SOURCES,
 				MDB_UID:      mdbSource.UID,
-				FilterValues: keyValues("source", parents),
+				FilterValues: KeyValues("source", parents),
 				TypedUids:    []string{keyValue("source", mdbSource.UID)},
 			}
 			if i18n.Description.Valid && i18n.Description.String != "" {
@@ -366,7 +367,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 		if err != nil {
 			return errors.Wrapf(err, "Sources Index - Source %s %s", name, mdbSource.UID)
 		}
-		if !resp.Created {
+		if resp.Result != "created" {
 			return errors.Errorf("Sources Index - Not created: source %s %s", name, mdbSource.UID)
 		}
 	}

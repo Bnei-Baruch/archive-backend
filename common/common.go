@@ -8,7 +8,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/es"

@@ -1,7 +1,7 @@
 package search
 
 import (
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -21,12 +21,14 @@ const (
 	STANDARD_BOOST = 1.2
 	// Boost for exact phrase match, without slop.
 	EXACT_BOOST = 1.5
+
+	NUM_SUGGESTS = 500
 )
 
-func createResultsQuery(result_types []string, q Query) elastic.Query {
+func createResultsQuery(resultTypes []string, q Query) elastic.Query {
 	boolQuery := elastic.NewBoolQuery().Must(
 		elastic.NewConstantScoreQuery(
-			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(result_types)...),
+			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(resultTypes)...),
 		).Boost(0.0),
 	)
 	if q.Term != "" {
@@ -86,7 +88,7 @@ func createResultsQuery(result_types []string, q Query) elastic.Query {
 	contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
 	filterByContentType := false
 	for filter, values := range q.Filters {
-		s := make([]interface{}, len(values))
+		s := make([]string, len(values))
 		for i, v := range values {
 			s[i] = v
 		}
@@ -96,10 +98,12 @@ func createResultsQuery(result_types []string, q Query) elastic.Query {
 		case consts.FILTERS[consts.FILTER_END_DATE]:
 			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
 		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
-			contentTypeQuery.Should(elastic.NewTermsQuery(filter, s...))
+			contentTypeQuery.Should(elastic.NewTermsQuery("filter_values", es.KeyIValues(filter, s)...))
 			filterByContentType = true
+		case consts.FILTERS[consts.FILTER_SECTION_SOURCES]:
+			boolQuery.Filter(elastic.NewTermsQuery("result_type", consts.ES_RESULT_TYPE_SOURCES))
 		default:
-			boolQuery.Filter(elastic.NewTermsQuery(filter, s...))
+			boolQuery.Filter(elastic.NewTermsQuery("filter_values", es.KeyIValues(filter, s)...))
 		}
 		if filterByContentType {
 			boolQuery.Filter(contentTypeQuery)
@@ -111,27 +115,46 @@ func createResultsQuery(result_types []string, q Query) elastic.Query {
 		// No potential score from string matching.
 		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
 	}
-	return elastic.NewFunctionScoreQuery().Query(query).ScoreMode("sum").MaxBoost(100.0).
+	scoreQuery := elastic.NewFunctionScoreQuery().ScoreMode("first")
+	for _, resultType := range resultTypes {
+		weight := 1.0
+		if resultType == consts.ES_RESULT_TYPE_UNITS {
+			weight = 1.0
+		} else if resultType == consts.ES_RESULT_TYPE_TAGS {
+			weight = 1.5 // We use tags for intents only, score should be same as for sources.
+		} else if resultType == consts.ES_RESULT_TYPE_SOURCES {
+			weight = 1.5
+		} else if resultType == consts.ES_RESULT_TYPE_COLLECTIONS {
+			weight = 2.0
+		}
+		scoreQuery.Add(elastic.NewTermsQuery("result_type", resultType), elastic.NewWeightFactorFunction(weight))
+	}
+	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query)).ScoreMode("sum").MaxBoost(100.0).
 		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))
 }
 
-func NewResultsSearchRequest(result_types []string, index string, query Query, sortBy string, from int, size int, preference string) *elastic.SearchRequest {
+func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchRequest {
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title")
+	highlightQuery := elastic.NewHighlight().Fields(
+		elastic.NewHighlighterField("title").NumOfFragments(0),
+		elastic.NewHighlighterField("description"),
+		elastic.NewHighlighterField("content"),
+		elastic.NewHighlighterField("description.language"),
+		elastic.NewHighlighterField("content.language"))
+	if !options.partialHighlight {
+		// Following field not used in intents to solve elastic bug with highlight.
+		highlightQuery.Fields(
+			elastic.NewHighlighterField("title.language").NumOfFragments(0))
+	}
+
 	source := elastic.NewSearchSource().
-		Query(createResultsQuery(result_types, query)).
-		Highlight(
-		elastic.NewHighlight().HighlighterType("unified").Fields(
-			elastic.NewHighlighterField("title").NumOfFragments(0),
-			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("content"),
-		),
-	).
+		Query(createResultsQuery(options.resultTypes, options.query)).Highlight(highlightQuery).
 		FetchSourceContext(fetchSourceContext).
-		From(from).
-		Size(size).
-		Explain(query.Deb)
-	switch sortBy {
+		From(options.from).
+		Size(options.size).
+		Explain(options.query.Deb)
+	switch options.sortBy {
 	case consts.SORT_BY_OLDER_TO_NEWER:
 		source = source.Sort("effective_date", true)
 	case consts.SORT_BY_NEWER_TO_OLDER:
@@ -139,31 +162,34 @@ func NewResultsSearchRequest(result_types []string, index string, query Query, s
 	}
 	return elastic.NewSearchRequest().
 		SearchSource(source).
-		Index(index).
-		Preference(preference)
+		Index(options.index).
+		Preference(options.preference)
 }
 
-func NewResultsSearchRequests(result_types []string, query Query, sortBy string, from int, size int, preference string) []*elastic.SearchRequest {
+func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchRequest {
 	requests := make([]*elastic.SearchRequest, 0)
-	indices := make([]string, len(query.LanguageOrder))
-	for i := range query.LanguageOrder {
-		indices[i] = es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, query.LanguageOrder[i])
+	indices := make([]string, len(options.query.LanguageOrder))
+	for i := range options.query.LanguageOrder {
+		indices[i] = es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, options.query.LanguageOrder[i])
 	}
 	for _, index := range indices {
-		request := NewResultsSearchRequest(result_types, index, query, sortBy, from, size, preference)
+		options.index = index
+		request := NewResultsSearchRequest(options)
 		requests = append(requests, request)
 	}
 	return requests
 }
 
-func NewResultsSuggestRequest(result_types []string, index string, query Query, preference string) *elastic.SearchRequest {
+func NewResultsSuggestRequest(resultTypes []string, index string, query Query, preference string) *elastic.SearchRequest {
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title")
 	searchSource := elastic.NewSearchSource().
+		FetchSourceContext(fetchSourceContext).
 		Suggester(
 		elastic.NewCompletionSuggester("title_suggest").
 			Field("title_suggest").
 			Text(query.Term).
-			ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", result_types...)).
-			Size(50000), // Temporary fix. Should not be a problem in v6, should set skip_duplicate = true.
+			ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
+			Size(NUM_SUGGESTS),
 	)
 
 	return elastic.NewSearchRequest().
@@ -172,14 +198,14 @@ func NewResultsSuggestRequest(result_types []string, index string, query Query, 
 		Preference(preference)
 }
 
-func NewResultsSuggestRequests(result_types []string, query Query, preference string) []*elastic.SearchRequest {
+func NewResultsSuggestRequests(resultTypes []string, query Query, preference string) []*elastic.SearchRequest {
 	requests := make([]*elastic.SearchRequest, 0)
 	indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
 		indices[i] = es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, query.LanguageOrder[i])
 	}
 	for _, index := range indices {
-		request := NewResultsSuggestRequest(result_types, index, query, preference)
+		request := NewResultsSuggestRequest(resultTypes, index, query, preference)
 		requests = append(requests, request)
 	}
 	return requests
