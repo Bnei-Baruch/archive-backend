@@ -631,6 +631,27 @@ func TweetsHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func SimpleModeHandler(c *gin.Context) {
+	var r SimpleModeRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	s, e, err := r.Range()
+	if err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+
+	if r.StartDate != "" && r.EndDate != "" && e.Equal(s) {
+		NewBadRequestError(errors.New("Start and end dates should equal")).Abort(c)
+		return
+	}
+
+	resp, err2 := handleSimpleMode(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err2)
+}
+
 func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
@@ -1051,6 +1072,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
@@ -1415,6 +1439,9 @@ func handleStatsCUClass(db *sql.DB, r ContentUnitsRequest) (*StatsCUClassRespons
 	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
 
 	q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
 
@@ -1488,6 +1515,79 @@ func handleTweets(db *sql.DB, r TweetsRequest) (*TweetsResponse, *HttpError) {
 	}
 
 	return resp, nil
+}
+
+func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *HttpError) {
+	// use today if empty (or partially empty) date range was provided
+	if r.StartDate == "" {
+		r.StartDate = r.EndDate
+	}
+	if r.EndDate == "" {
+		r.EndDate = r.StartDate
+	}
+	if r.StartDate == "" && r.EndDate == "" {
+		r.StartDate = time.Now().Format("2006-01-02")
+		r.EndDate = r.StartDate
+	}
+
+	// All content units in this day
+	cur := ContentUnitsRequest{
+		ListRequest: ListRequest{
+			PageSize: consts.API_MAX_PAGE_SIZE,
+			OrderBy:  "created_at desc",
+		},
+		DateRangeFilter: r.DateRangeFilter,
+		WithFiles:       true,
+	}
+	respCUs, err := handleContentUnits(db, cur)
+	if err != nil {
+		return nil, err
+	}
+
+	lpCUs := make(map[string]*ContentUnit)
+	others := make([]*ContentUnit, 0)
+	for i := range respCUs.ContentUnits {
+		cu := respCUs.ContentUnits[i]
+		switch cu.ContentType {
+		case consts.CT_LESSON_PART:
+			lpCUs[cu.ID] = cu
+		case consts.CT_KITEI_MAKOR, consts.CT_LELO_MIKUD, consts.CT_PUBLICATION:
+			// skip these for now (they should be properly attached as derived units)
+			break
+		default:
+			others = append(others, cu)
+		}
+	}
+
+	// lessons
+	cr := CollectionsRequest{
+		ContentTypesFilter: ContentTypesFilter{
+			ContentTypes: []string{consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON},
+		},
+		ListRequest: ListRequest{
+			PageSize: consts.API_MAX_PAGE_SIZE,
+			OrderBy:  "(properties->>'number')::int desc, created_at desc",
+		},
+		DateRangeFilter: r.DateRangeFilter,
+		WithUnits:       true,
+	}
+	resp, err := handleCollections(db, cr)
+	if err != nil {
+		return nil, err
+	}
+
+	// replace cu's with the same ones just with files in them
+	for i := range resp.Collections {
+		cus := resp.Collections[i].ContentUnits
+		for j := range cus {
+			cus[j] = lpCUs[cus[j].ID]
+		}
+	}
+
+	return &SimpleModeResponse{
+		Lessons: resp.Collections,
+		Others:  others,
+	}, nil
 }
 
 // appendListMods compute and appends the OrderBy, Limit and Offset query mods.
@@ -1768,6 +1868,30 @@ AND cu.secure = 0 AND cu.published IS TRUE AND cup.publisher_id = ANY(?))`
 	return nil
 }
 
+func appendPersonsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f PersonsFilter) error {
+	if len(f.Persons) == 0 {
+		return nil
+	}
+
+	// convert publisher uids to ids
+	var ids pq.Int64Array
+	q := `SELECT array_agg(DISTINCT id) FROM persons WHERE uid = ANY($1)`
+	err := queries.Raw(exec, q, pq.Array(f.Persons)).QueryRow().Scan(&ids)
+	if err != nil {
+		return err
+	}
+
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods,
+			qm.InnerJoin("content_units_persons cup ON id = cup.content_unit_id"),
+			qm.WhereIn("cup.person_id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+
+	return nil
+}
+
 func appendUsernameFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f UsernameFilter) error {
 	if len(f.Usernames) == 0 {
 		return nil
@@ -1836,6 +1960,7 @@ func mdbToCU(cu *mdbmodels.ContentUnit) (*ContentUnit, error) {
 	}
 
 	u := &ContentUnit{
+		mdbID:            cu.ID,
 		ID:               cu.UID,
 		ContentType:      mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name,
 		Duration:         props.Duration,

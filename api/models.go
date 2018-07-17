@@ -83,6 +83,10 @@ type PublishersFilter struct {
 	Publishers []string `json:"publishers" form:"publisher" binding:"omitempty,dive,len=8"`
 }
 
+type PersonsFilter struct {
+	Persons []string `json:"persons" form:"person" binding:"omitempty,dive,len=8"`
+}
+
 type UsernameFilter struct {
 	Usernames []string `json:"usernames" form:"username" binding:"omitempty"`
 }
@@ -110,6 +114,7 @@ type ContentUnitsRequest struct {
 	GenresProgramsFilter
 	CollectionsFilter
 	PublishersFilter
+	PersonsFilter
 	WithFiles bool `json:"with_files" form:"with_files"`
 }
 
@@ -167,6 +172,17 @@ type TweetsResponse struct {
 	Tweets []*Tweet `json:"tweets"`
 }
 
+type SimpleModeRequest struct {
+	BaseRequest
+	DateRangeFilter
+}
+
+type SimpleModeResponse struct {
+	ListResponse
+	Lessons []*Collection  `json:"lessons"`
+	Others  []*ContentUnit `json:"others"`
+}
+
 func NewCollectionsResponse() *CollectionsResponse {
 	return &CollectionsResponse{Collections: make([]*Collection, 0)}
 }
@@ -217,6 +233,7 @@ type Collection struct {
 }
 
 type ContentUnit struct {
+	mdbID            int64
 	ID               string                  `json:"id"`
 	ContentType      string                  `json:"content_type"`
 	NameInCollection string                  `json:"name_in_collection,omitempty"`
