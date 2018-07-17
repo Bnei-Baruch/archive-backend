@@ -80,8 +80,8 @@ func (suite *IndexerSuite) TestCollectionsIndex() {
 	r.Nil(indexer.ReindexAll())
 	r.Nil(indexer.RefreshAll())
 	fmt.Printf("\n\n\nValidate we have 2 searchable collections with proper content units.\n\n")
-	r.Nil(es.DumpDB(common.DB, "Before validation"))
-	r.Nil(es.DumpIndexes(common.ESC, "Before validation", consts.ES_COLLECTIONS_INDEX))
+	// r.Nil(es.DumpDB(common.DB, "Before validation"))
+	// r.Nil(es.DumpIndexes(common.ESC, "Before validation", consts.ES_COLLECTIONS_INDEX))
 	suite.validateCollectionsContentUnits(indexName, indexer, map[string][]string{
 		c1UID: {cu1UID},
 		c2UID: {cu1UID},

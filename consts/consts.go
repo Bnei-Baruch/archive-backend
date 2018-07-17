@@ -281,13 +281,12 @@ const (
 
 // Use to identify and map request filters
 // Maps request filter name to index field name.
-// TODO: Validate all keys and values are required. Seems some are not needed.
 var FILTERS = map[string]string{
-	FILTER_TAG:                       "tags",
+	FILTER_TAG:                       "tag",
 	FILTER_START_DATE:                "start_date",
 	FILTER_END_DATE:                  "end_date",
-	FILTER_SOURCE:                    "sources",
-	FILTER_AUTHOR:                    "sources",
+	FILTER_SOURCE:                    "source",
+	FILTER_AUTHOR:                    "source",
 	FILTER_UNITS_CONTENT_TYPES:       "content_type",
 	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
 	FILTER_SECTION_SOURCES:           "filter_section_sources",
@@ -305,11 +304,6 @@ const ES_RESULT_TYPE_TAGS = "tags"
 
 var ES_SEARCH_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_SOURCES, ES_RESULT_TYPE_COLLECTIONS}
 var ES_ALL_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_TAGS, ES_RESULT_TYPE_SOURCES, ES_RESULT_TYPE_COLLECTIONS}
-
-// Other indices are deprecated. Remove them when move to one index is done.
-const ES_CLASSIFICATIONS_INDEX = "classifications"
-const ES_UNITS_INDEX = "units"
-const ES_COLLECTIONS_INDEX = "collections"
 
 const (
 	MEDIA_MP4 = "video/mp4"

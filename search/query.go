@@ -100,6 +100,8 @@ func createResultsQuery(resultTypes []string, q Query) elastic.Query {
 		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
 			contentTypeQuery.Should(elastic.NewTermsQuery("filter_values", es.KeyIValues(filter, s)...))
 			filterByContentType = true
+        case consts.FILTERS[consts.FILTER_SECTION_SOURCES]:
+            boolQuery.Filter(elastic.NewTermsQuery("result_type", consts.ES_RESULT_TYPE_SOURCES))
 		default:
 			boolQuery.Filter(elastic.NewTermsQuery("filter_values", es.KeyIValues(filter, s)...))
 		}

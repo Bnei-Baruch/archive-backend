@@ -158,7 +158,7 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 		query.Term = ""
 		query.ExactTerms = []string{classificationIntent.Title}
 		intent.Value = classificationIntent
-		log.Infof("Potential intent: %s", classificationIntent.Title)
+		// log.Infof("Potential intent: %s", classificationIntent.Title)
 		return nil, &intent, &query
 	}
 	return nil, nil, nil
@@ -169,17 +169,39 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		return nil
 	}
 
+    // Don't do intents, if sources are selected in section filter.
+    if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
+        return nil
+    }
+	checkContentUnitsTypes := []string{}
+    if values, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
+        for _, value := range values {
+            if value == consts.CT_LESSON_PART {
+                checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_LESSON_PART)
+            }
+            if value == consts.CT_VIDEO_PROGRAM_CHAPTER {
+                checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_VIDEO_PROGRAM_CHAPTER)
+            }
+        }
+    } else {
+        checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_LESSON_PART, consts.CT_VIDEO_PROGRAM_CHAPTER)
+    }
+
+    // Clear filters. We don't want filters on Intents. Filters should be applied to final hits.
+    queryWithoutFilters := *query
+    queryWithoutFilters.Filters = map[string][]string{}
+
 	mssFirstRound := e.esc.MultiSearch()
 	potentialIntents := make([]Intent, 0)
 	for _, language := range query.LanguageOrder {
 		// Order here provides the priority in results, i.e., tags are more importnt then sources.
 		index := es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, language)
 		mssFirstRound.Add(NewResultsSearchRequest(
-			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_TAGS}, index, *query,
+			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_TAGS}, index, queryWithoutFilters,
 			consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
 		mssFirstRound.Add(NewResultsSearchRequest(
-			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_SOURCES}, index, *query,
+			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_SOURCES}, index, queryWithoutFilters,
 			consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
@@ -199,8 +221,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		}
 		if haveHits(res) {
 			for _, h := range res.Hits.Hits {
-				err, intent, secondRoundQuery := e.AddIntentSecondRound(h, potentialIntents[i], *query)
-				log.Infof("Adding second round for %+v %+v %+v", intent, secondRoundQuery, potentialIntents[i])
+				err, intent, secondRoundQuery := e.AddIntentSecondRound(h, potentialIntents[i], queryWithoutFilters)
+				// log.Infof("Adding second round for %+v %+v %+v", intent, secondRoundQuery, potentialIntents[i])
 				if err != nil {
 					return errors.Wrapf(err, "ESEngine.AddIntents - Error second run for intent %+v", potentialIntents[i])
 				}
@@ -262,7 +284,6 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 
 	// Set content unit type and exists for intents that are in the query, i.e., those who passed the second round.
 	// If more then one content unit type exist for this intent, we will have to duplicate that intent.
-	checkContentUnitsTypes := []string{consts.CT_LESSON_PART, consts.CT_VIDEO_PROGRAM_CHAPTER}
 	moreIntents := make([]Intent, 0)
 	for intentIdx := range query.Intents {
 		for _, contentUnitType := range checkContentUnitsTypes {
@@ -428,41 +449,11 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
-	// log.Infof("DoSearch: %s", query.ToString())
 	if err := e.AddIntents(&query, preference); err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
 	}
 
-	// log.Infof("ESEngine.DoSearch - Query: %s sort by: %s, from: %d, size: %d", query.ToString(), sortBy, from, size)
-
 	multiSearchService := e.esc.MultiSearch()
-	// requestsByIndex := make(map[string][]*elastic.SearchRequest)
-
-	// TODO: Add support for filters for results.
-	// searchFilter := consts.SEARCH_NO_FILTER
-	// if len(query.Filters) > 0 {
-	// 	if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
-	// 		searchFilter = consts.SEARCH_FILTER_ONLY_SOURCES
-	// 	} else if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SOURCE]]; ok {
-	// 		searchFilter = consts.SEARCH_NO_FILTER
-	// 	} else {
-	// 		searchFilter = consts.SEARCH_FILTER_WITHOUT_SOURCES
-	// 	}
-	// }
-	//
-	// if searchFilter != consts.SEARCH_FILTER_ONLY_SOURCES {
-	// 	requestsByIndex[consts.ES_UNITS_INDEX] = GetSearchRequests(query, sortBy, 0, from+size, preference)
-	// 	// requestsByIndex[consts.ES_COLLECTIONS_INDEX] = GetCollectionsSearchRequests(query, sortBy, 0, from+size, preference)
-	// }
-	//
-	// // if searchFilter != consts.SEARCH_FILTER_WITHOUT_SOURCES {
-	// // 	requestsByIndex[consts.ES_SOURCES_INDEX] = GetSourcesSearchRequests(query, 0, from+size, preference)
-	// // }
-	//
-	// for _, k := range requestsByIndex {
-	// 	multiSearchService.Add(k...)
-	// }
-
 	multiSearchService.Add(NewResultsSearchRequests(
             SearchRequestOptions{consts.ES_SEARCH_RESULT_TYPES, "", query, sortBy,
             0, from+size, preference, false})...)
