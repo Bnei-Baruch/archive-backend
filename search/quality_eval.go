@@ -254,6 +254,9 @@ type HitSource struct {
 // https://archive.kbb1.com/he/lessons?source=bs_L2jMWyce_kB3eD83I       ==> (lessons,  nil, source=bs_L2jMWyce_kB3eD83I)
 // https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (programs, nil, topic=g3ml0jum_1nyptSIo_RWqjxgkj)
 // https://archive.kbb1.com/he/sources/kB3eD83I ==> (sources, kB3eD83I)
+// [latest]https://kabbalahmedia.info/he/lessons?source=bs_qMUUn22b_hFeGidcS ==> (content_units, SLQOALyt)
+// [latest]https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (content_units, erZIsm86)
+// [latest]https://kabbalahmedia.info/he/programs/cu/orMKRcNk ==> (content_units, orMKRcNk)
 // All events sub pages and years:
 // https://archive.kbb1.com/he/events/meals
 // https://archive.kbb1.com/he/events/friends-gatherings
