@@ -293,7 +293,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		t = ET_PROGRAMS
 	}
 	if t != -1 {
-		queryParts := strings.Split(q, ",")
+		queryParts := strings.Split(q, "&")
 		filters := make([]Filter, len(queryParts))
 		for i, qp := range queryParts {
 			nameValue := strings.Split(qp, "=")

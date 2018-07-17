@@ -188,6 +188,24 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 		latestUIDByDate = cuUID
 	}
 
+	fmt.Printf("Test content_units \n")
+	suite.validateExpectation(fmt.Sprintf("https://archive.kbb1.com/he/programs/cu/%s", latestUIDByDate),
+		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByDate, nil, ""}, r)
+
+	fmt.Printf("Test collections \n")
+	suite.validateExpectation(fmt.Sprintf("https://archive.kbb1.com/he/programs/c/%s", cUID),
+		search.Expectation{search.ET_COLLECTIONS, cUID, nil, ""}, r)
+
+	fmt.Printf("Test lessons \n")
+	src := fmt.Sprintf("bs_%s_%s", parentSource.UID, childSource.UID)
+	suite.validateExpectation(fmt.Sprintf("https://archive.kbb1.com/he/lessons?source=%s", src),
+		search.Expectation{search.ET_LESSONS, "", []search.Filter{search.Filter{Name: search.FILTER_NAME_SOURCE, Value: src}}, ""}, r)
+
+	fmt.Printf("Test programs \n")
+	tag := fmt.Sprintf("%s_%s", parentTag.UID, childTag.UID)
+	suite.validateExpectation(fmt.Sprintf("https://archive.kbb1.com/he/programs?topic=%s", tag),
+		search.Expectation{search.ET_PROGRAMS, "", []search.Filter{search.Filter{Name: search.FILTER_NAME_TOPIC, Value: tag}}, ""}, r)
+
 	fmt.Printf("Test [latest] by source \n")
 	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/lessons?source=%s", parentSource.UID),
 		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByDate, nil, ""}, r)
@@ -201,8 +219,12 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByDate, nil, ""}, r)
 
 	fmt.Printf("Test [latest] by collection \n")
-	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/programs?topic=%s", parentTag.UID),
+	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/programs/c/%s", cUID),
 		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByPosition, nil, ""}, r)
+
+	// TBD:
+	// https://archive.kbb1.com/he/sources/kB3eD83I ==> (sources, kB3eD83I)
+	// and more
 }
 
 func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expectation, r *require.Assertions) {
@@ -213,7 +235,7 @@ func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expect
 	r.Equal(resultExp.Uid, exp.Uid)
 	r.Equal(resultExp.Type, exp.Type)
 	if exp.Filters != nil {
-		r.Equal(int64(len(resultExp.Filters)), exp.Filters)
+		r.Equal(int64(len(resultExp.Filters)), int64(len(exp.Filters)))
 		r.ElementsMatch(resultExp.Filters, exp.Filters)
 	}
 }
