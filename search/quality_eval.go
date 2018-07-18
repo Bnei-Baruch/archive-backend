@@ -11,6 +11,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+    "sync"
+    "time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
@@ -423,8 +425,33 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, e
 	ret := EvalResults{}
 	ret.UniqueMap = make(map[int]float64)
 	ret.WeightedMap = make(map[int]float64)
-	for _, q := range queries {
-		r := EvaluateQuery(q, serverUrl)
+
+    evalResults := make([]EvalResult, len(queries))
+
+    var doneWG sync.WaitGroup
+    paralellism := 5
+    c := make(chan bool, paralellism)
+    for i := 0; i < paralellism; i++ {
+        c <- true
+    }
+    log.Infof("C: %d", len(c))
+    rate := time.Second / 10
+    throttle := time.Tick(rate)
+    for i, q := range queries {
+        <-throttle  // rate limit our Service.Method RPCs
+        <-c
+        doneWG.Add(1)
+        go func(i int, q EvalQuery) {
+            defer doneWG.Done()
+            defer func() { c <- true }()
+            evalResults[i] = EvaluateQuery(q, serverUrl)
+            log.Infof("Done %d / %d", i, len(queries))
+        }(i, q)
+    }
+    doneWG.Wait()
+
+	for i, r := range evalResults {
+        q := queries[i]
 		goodExpectations := GoodExpectations(q.Expectations)
 		if goodExpectations > 0 {
 			for i, sq := range r.SearchQuality {
@@ -445,6 +472,9 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, e
 			ret.TotalErrors++
 		}
 		ret.Results = append(ret.Results, r)
+        if len(ret.Results) % 20 == 0 {
+            log.Infof("Done evaluating (%d/%d) queries.", len(ret.Results), len(queries))
+        }
 	}
 	for k, v := range ret.UniqueMap {
 		ret.UniqueMap[k] = v / float64(ret.TotalUnique)
