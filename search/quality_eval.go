@@ -251,18 +251,19 @@ type HitSource struct {
 // Parses expectation described by result URL and converts
 // to type (collections or content_units) and uid.
 // Examples:
-// https://archive.kbb1.com/he/programs/cu/AsNLozeK ==> (content_units, AsNLozeK)
-// https://archive.kbb1.com/he/programs/c/fLWpcUjQ  ==> (collections  , fLWpcUjQ)
-// https://archive.kbb1.com/he/lessons?source=bs_L2jMWyce_kB3eD83I       ==> (lessons,  nil, source=bs_L2jMWyce_kB3eD83I)
-// https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (programs, nil, topic=g3ml0jum_1nyptSIo_RWqjxgkj)
-// https://archive.kbb1.com/he/sources/kB3eD83I ==> (sources, kB3eD83I)
+// https://kabbalahmedia.info/he/programs/cu/AsNLozeK ==> (content_units, AsNLozeK)
+// https://kabbalahmedia.info/he/programs/c/fLWpcUjQ  ==> (collections  , fLWpcUjQ)
+// https://kabbalahmedia.info/he/lessons/series/c/XZoflItG  ==> (collections  , XZoflItG)
+// https://kabbalahmedia.info/he/lessons?source=bs_L2jMWyce_kB3eD83I       ==> (lessons,  nil, source=bs_L2jMWyce_kB3eD83I)
+// https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (programs, nil, topic=g3ml0jum_1nyptSIo_RWqjxgkj)
+// https://kabbalahmedia.info/he/sources/kB3eD83I ==> (sources, kB3eD83I)
 // [latest]https://kabbalahmedia.info/he/lessons?source=bs_qMUUn22b_hFeGidcS ==> (content_units, SLQOALyt)
-// [latest]https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (content_units, erZIsm86)
+// [latest]https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (content_units, erZIsm86)
 // [latest]https://kabbalahmedia.info/he/programs/c/zf4lLwyI ==> (content_units, orMKRcNk)
 // All events sub pages and years:
-// https://archive.kbb1.com/he/events/meals
-// https://archive.kbb1.com/he/events/friends-gatherings
-// https://archive.kbb1.com/he/events?year=2013
+// https://kabbalahmedia.info/he/events/meals
+// https://kabbalahmedia.info/he/events/friends-gatherings
+// https://kabbalahmedia.info/he/events?year=2013
 func ParseExpectation(e string, db *sql.DB) Expectation {
 	originalE := e
 	if e == "" {

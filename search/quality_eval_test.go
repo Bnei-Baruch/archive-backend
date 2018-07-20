@@ -189,22 +189,30 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 	}
 
 	fmt.Printf("Test content_units \n")
-	suite.validateExpectation(fmt.Sprintf("https://archive.kbb1.com/he/programs/cu/%s", latestUIDByDate),
+	suite.validateExpectation(fmt.Sprintf("https://kabbalahmedia.info/he/programs/cu/%s", latestUIDByDate), // Using arbitrary UID
 		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByDate, nil, ""}, r)
 
-	fmt.Printf("Test collections \n")
-	suite.validateExpectation(fmt.Sprintf("https://archive.kbb1.com/he/programs/c/%s", cUID),
+	fmt.Printf("Test program collections \n")
+	suite.validateExpectation(fmt.Sprintf("https://kabbalahmedia.info/he/programs/c/%s", cUID),
+		search.Expectation{search.ET_COLLECTIONS, cUID, nil, ""}, r)
+
+	fmt.Printf("Test lesson collections \n")
+	suite.validateExpectation(fmt.Sprintf("https://kabbalahmedia.info/he/lessons/series/c/%s", cUID),
 		search.Expectation{search.ET_COLLECTIONS, cUID, nil, ""}, r)
 
 	fmt.Printf("Test lessons \n")
 	src := fmt.Sprintf("bs_%s_%s", parentSource.UID, childSource.UID)
-	suite.validateExpectation(fmt.Sprintf("https://archive.kbb1.com/he/lessons?source=%s", src),
+	suite.validateExpectation(fmt.Sprintf("https://kabbalahmedia.info/he/lessons?source=%s", src),
 		search.Expectation{search.ET_LESSONS, "", []search.Filter{search.Filter{Name: search.FILTER_NAME_SOURCE, Value: src}}, ""}, r)
 
 	fmt.Printf("Test programs \n")
 	tag := fmt.Sprintf("%s_%s", parentTag.UID, childTag.UID)
-	suite.validateExpectation(fmt.Sprintf("https://archive.kbb1.com/he/programs?topic=%s", tag),
+	suite.validateExpectation(fmt.Sprintf("https://kabbalahmedia.info/he/programs?topic=%s", tag),
 		search.Expectation{search.ET_PROGRAMS, "", []search.Filter{search.Filter{Name: search.FILTER_NAME_TOPIC, Value: tag}}, ""}, r)
+
+	fmt.Printf("Test sources \n")
+	suite.validateExpectation(fmt.Sprintf("https://kabbalahmedia.info/he/sources/%s", parentSource.UID),
+		search.Expectation{search.ET_SOURCES, parentSource.UID, nil, ""}, r)
 
 	fmt.Printf("Test [latest] by source \n")
 	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/lessons?source=%s", parentSource.UID),
@@ -221,10 +229,6 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 	fmt.Printf("Test [latest] by collection \n")
 	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/programs/c/%s", cUID),
 		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByPosition, nil, ""}, r)
-
-	// TBD:
-	// https://archive.kbb1.com/he/sources/kB3eD83I ==> (sources, kB3eD83I)
-	// and more
 }
 
 func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expectation, r *require.Assertions) {
