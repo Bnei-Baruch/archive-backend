@@ -91,6 +91,10 @@ type UsernameFilter struct {
 	Usernames []string `json:"usernames" form:"username" binding:"omitempty"`
 }
 
+type BlogFilter struct {
+	Blogs []string `json:"blogs" form:"blog" binding:"omitempty"`
+}
+
 type CollectionsRequest struct {
 	ListRequest
 	IDsFilter
@@ -172,6 +176,17 @@ type TweetsResponse struct {
 	Tweets []*Tweet `json:"tweets"`
 }
 
+type BlogPostsRequest struct {
+	ListRequest
+	DateRangeFilter
+	BlogFilter
+}
+
+type BlogPostsResponse struct {
+	ListResponse
+	Posts []*BlogPost `json:"posts"`
+}
+
 type SimpleModeRequest struct {
 	BaseRequest
 	DateRangeFilter
@@ -197,6 +212,10 @@ func NewPublishersResponse() *PublishersResponse {
 
 func NewTweetsResponse() *TweetsResponse {
 	return &TweetsResponse{Tweets: make([]*Tweet, 0)}
+}
+
+func NewBlogPostsResponse() *BlogPostsResponse {
+	return &BlogPostsResponse{Posts: make([]*BlogPost, 0)}
 }
 
 func NewTagsDashboardResponse() *TagsDashboardResponse {
@@ -324,4 +343,13 @@ type Tweet struct {
 	FullText  string    `json:"full_text"`
 	CreatedAt time.Time `json:"created_at"`
 	Raw       null.JSON `json:"raw"`
+}
+
+type BlogPost struct {
+	Blog         string    `json:"blog"`
+	WordpressID  int64     `json:"wp_id"`
+	CanonicalUrl string    `json:"url"`
+	Title        string    `json:"title"`
+	Content      string    `json:"content"`
+	CreatedAt    time.Time `json:"created_at"`
 }

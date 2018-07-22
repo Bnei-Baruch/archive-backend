@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +19,8 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v5"
 
@@ -623,6 +626,39 @@ func TweetsHandler(c *gin.Context) {
 
 	resp, err := handleTweets(c.MustGet("MDB_DB").(*sql.DB), r)
 	concludeRequest(c, resp, err)
+}
+
+func BlogPostsHandler(c *gin.Context) {
+	var r BlogPostsRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	resp, err := handleBlogPosts(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
+func BlogPostHandler(c *gin.Context) {
+	blog, ok := mdb.BLOGS_REGISTRY.ByName[c.Param("blog")]
+	if !ok {
+		NewBadRequestError(errors.Errorf("Unknown blog: %s", c.Param("blog"))).Abort(c)
+		return
+	}
+
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		NewBadRequestError(errors.Errorf("Invalid post id: %s", c.Param("id"))).Abort(c)
+		return
+	}
+
+	post, err := mdbmodels.BlogPosts(c.MustGet("MDB_DB").(*sql.DB),
+		qm.Where("blog_id = ? and wp_id = ?", blog.ID, id)).One()
+	if err != nil {
+		NewNotFoundError().Abort(c)
+		return
+	}
+
+	c.JSON(http.StatusOK, mdbToBlogPost(post))
 }
 
 func SimpleModeHandler(c *gin.Context) {
@@ -1511,6 +1547,61 @@ func handleTweets(db *sql.DB, r TweetsRequest) (*TweetsResponse, *HttpError) {
 	return resp, nil
 }
 
+func handleBlogPosts(db *sql.DB, r BlogPostsRequest) (*BlogPostsResponse, *HttpError) {
+	var mods []qm.QueryMod
+
+	// filters
+	if err := appendDateRangeFilterModsBlog(&mods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendBlogFilterMods(db, &mods, r.BlogFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			return nil, e
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+
+	var total int64
+	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
+	err := mdbmodels.BlogPosts(db, countMods...).QueryRow().Scan(&total)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	if total == 0 {
+		return NewBlogPostsResponse(), nil
+	}
+
+	// order, limit, offset
+	r.OrderBy = "posted_at desc"
+	_, offset, err := appendListMods(&mods, r.ListRequest)
+	if err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if int64(offset) >= total {
+		return NewBlogPostsResponse(), nil
+	}
+
+	// data query
+	posts, err := mdbmodels.BlogPosts(db, mods...).All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// response
+	ps := make([]*BlogPost, len(posts))
+	for i := range posts {
+		ps[i] = mdbToBlogPost(posts[i])
+	}
+
+	resp := &BlogPostsResponse{
+		ListResponse: ListResponse{Total: total},
+		Posts:        ps,
+	}
+
+	return resp, nil
+}
+
 func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *HttpError) {
 	// use today if empty (or partially empty) date range was provided
 	if r.StartDate == "" {
@@ -1670,6 +1761,10 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 
 func appendDateRangeFilterModsTwitter(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "tweet_at")
+}
+
+func appendDateRangeFilterModsBlog(mods *[]qm.QueryMod, f DateRangeFilter) error {
+	return appendDRFBaseMods(mods, f, "posted_at")
 }
 
 func appendDRFBaseMods(mods *[]qm.QueryMod, f DateRangeFilter, field string) error {
@@ -1905,6 +2000,25 @@ func appendUsernameFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Usernam
 	return nil
 }
 
+func appendBlogFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f BlogFilter) error {
+	if len(f.Blogs) == 0 {
+		return nil
+	}
+
+	ids := make([]int64, len(f.Blogs))
+	for i := range f.Blogs {
+		if blog, ok := mdb.BLOGS_REGISTRY.ByName[f.Blogs[i]]; ok {
+			ids[i] = blog.ID
+		} else {
+			return NewBadRequestError(errors.Errorf("Unknown blog: %s", f.Blogs[i]))
+		}
+	}
+
+	*mods = append(*mods, qm.WhereIn("blog_id in ?", utils.ConvertArgsInt64(ids)...))
+
+	return nil
+}
+
 // concludeRequest responds with JSON of given response or aborts the request with the given error.
 func concludeRequest(c *gin.Context, resp interface{}, err *HttpError) {
 	if err == nil {
@@ -2120,4 +2234,70 @@ func setCUFiles(cu *ContentUnit, files []*mdbmodels.File) error {
 	}
 
 	return nil
+}
+
+var blogLinkRegex = map[string]*regexp.Regexp{
+	"laitman-ru": regexp.MustCompile(`https?://(www\.)?laitman\.ru/(.*)/(\d+)\.html`),
+}
+
+func mdbToBlogPost(post *mdbmodels.BlogPost) *BlogPost {
+	blog := mdb.BLOGS_REGISTRY.ByID[post.BlogID]
+
+	p := BlogPost{
+		Blog:         blog.Name,
+		WordpressID:  post.WPID,
+		CanonicalUrl: fmt.Sprintf("%s/?p=%d", blog.URL, post.WPID),
+		Title:        post.Title,
+		Content:      post.Content,
+		CreatedAt:    post.PostedAt,
+	}
+
+	// prepare HTML
+	ctxNode := html.Node{
+		Type:     html.ElementNode,
+		DataAtom: atom.Body,
+		Data:     "body",
+	}
+
+	if nodes, err := html.ParseFragment(strings.NewReader(post.Content), &ctxNode); err != nil {
+		log.Errorf("mdbToBlogPost html.ParseFragment %s %s: %s", blog.Name, post.WPID, err.Error())
+	} else {
+		var sb strings.Builder
+		fn := makePostLinksRelative(blog)
+		for i := range nodes {
+			traverseHtmlNode(nodes[i], fn)
+			html.Render(&sb, nodes[i])
+		}
+		p.Content = sb.String()
+		log.Infof("p %d: %s", post.WPID, p.Content)
+	}
+
+	return &p
+}
+
+func traverseHtmlNode(node *html.Node, fn func(node *html.Node)) {
+	fn(node)
+	for c := node.FirstChild; c != nil; c = c.NextSibling {
+		fn(c)
+	}
+}
+
+func makePostLinksRelative(blog *mdbmodels.Blog) func(node *html.Node) {
+	return func(node *html.Node) {
+		if node.DataAtom != atom.A {
+			return
+		}
+
+		for i := range node.Attr {
+			if node.Attr[i].Key == "href" {
+				if reg, ok := blogLinkRegex[blog.Name]; ok {
+					m := reg.FindStringSubmatch(node.Attr[i].Val)
+					if len(m) > 0 {
+						node.Attr[i].Val = fmt.Sprintf("/publications/blog/%s/%s", blog.Name, m[len(m)-1])
+					}
+				}
+				break
+			}
+		}
+	}
 }
