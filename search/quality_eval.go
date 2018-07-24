@@ -69,6 +69,8 @@ const (
 	ET_LESSONS       = iota
 	ET_PROGRAMS      = iota
 	ET_SOURCES       = iota
+	ET_EVENTS        = iota
+	ET_LANDING_PAGE  = iota
 	ET_EMPTY         = iota
 	ET_FAILED_PARSE  = iota
 	ET_BAD_STRUCTURE = iota
@@ -79,7 +81,7 @@ var GOOD_EXPECTATION = map[int]bool{
 	ET_COLLECTIONS:   true,
 	ET_LESSONS:       true,
 	ET_PROGRAMS:      true,
-	ET_SOURCES:       true,
+	ET_LANDING_PAGE:  true,
 	ET_EMPTY:         false,
 	ET_FAILED_PARSE:  false,
 	ET_BAD_STRUCTURE: false,
@@ -102,6 +104,7 @@ var EXPECTATION_URL_PATH = map[int]string{
 	ET_LESSONS:       "lessons",
 	ET_PROGRAMS:      "programs",
 	ET_SOURCES:       "sources",
+	ET_EVENTS:        "events",
 }
 
 var EXPECTATION_HIT_TYPE = map[int]string{
@@ -256,7 +259,7 @@ type HitSource struct {
 // https://kabbalahmedia.info/he/lessons/series/c/XZoflItG  ==> (collections  , XZoflItG)
 // https://kabbalahmedia.info/he/lessons?source=bs_L2jMWyce_kB3eD83I       ==> (lessons,  nil, source=bs_L2jMWyce_kB3eD83I)
 // https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (programs, nil, topic=g3ml0jum_1nyptSIo_RWqjxgkj)
-// https://kabbalahmedia.info/he/sources/kB3eD83I ==> (sources, kB3eD83I)
+// https://kabbalahmedia.info/he/sources/kB3eD83I ==> (landing page, kB3eD83I)
 // [latest]https://kabbalahmedia.info/he/lessons?source=bs_qMUUn22b_hFeGidcS ==> (content_units, SLQOALyt)
 // [latest]https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (content_units, erZIsm86)
 // [latest]https://kabbalahmedia.info/he/programs/c/zf4lLwyI ==> (content_units, orMKRcNk)
@@ -294,18 +297,27 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		t = ET_LESSONS
 	case EXPECTATION_URL_PATH[ET_PROGRAMS]:
 		t = ET_PROGRAMS
+	case EXPECTATION_URL_PATH[ET_EVENTS]:
+		t = ET_LANDING_PAGE
 	}
 	if t != -1 {
-		queryParts := strings.Split(q, "&")
-		filters := make([]Filter, len(queryParts))
-		for i, qp := range queryParts {
-			nameValue := strings.Split(qp, "=")
-			if len(nameValue) > 0 {
-				filters[i].Name = nameValue[0]
-				if len(nameValue) > 1 {
-					filters[i].Value = nameValue[1]
+
+		var filters []Filter
+
+		if q != "" {
+			queryParts := strings.Split(q, "&")
+			filters = make([]Filter, len(queryParts))
+			for i, qp := range queryParts {
+				nameValue := strings.Split(qp, "=")
+				if len(nameValue) > 0 {
+					filters[i].Name = nameValue[0]
+					if len(nameValue) > 1 {
+						filters[i].Value = nameValue[1]
+					}
 				}
 			}
+		} else {
+			t = ET_LANDING_PAGE
 		}
 		if takeLatest {
 			latestUID, err := getLatestUIDByFilters(filters, db)
@@ -338,9 +350,17 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			return ParseExpectation(newe, db)
 		}
 	case EXPECTATION_URL_PATH[ET_SOURCES]:
-		t = ET_SOURCES
+		t = ET_LANDING_PAGE
+	case EXPECTATION_URL_PATH[ET_EVENTS]:
+		t = ET_LANDING_PAGE
+	case EXPECTATION_URL_PATH[ET_LESSONS]:
+		t = ET_LANDING_PAGE
 	default:
-		return Expectation{ET_BAD_STRUCTURE, "", nil, e}
+		if uidOrSection == EXPECTATION_URL_PATH[ET_SOURCES] || uidOrSection == EXPECTATION_URL_PATH[ET_LESSONS] {
+			return Expectation{ET_LANDING_PAGE, "", nil, e}
+		} else {
+			return Expectation{ET_BAD_STRUCTURE, "", nil, e}
+		}
 	}
 
 	return Expectation{t, uidOrSection, nil, e}
@@ -622,6 +642,8 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 }
 
 func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
+
+	// TBD case when filters is nil
 
 	sourcesTempTableMask := `CREATE TEMP TABLE temp_rec_sources ON COMMIT DROP AS
 	(WITH RECURSIVE rec_sources AS (
