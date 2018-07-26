@@ -28,6 +28,8 @@ type BlogPost struct {
 	Content   string    `boil:"content" json:"content" toml:"content" yaml:"content"`
 	PostedAt  time.Time `boil:"posted_at" json:"posted_at" toml:"posted_at" yaml:"posted_at"`
 	CreatedAt time.Time `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
+	Link      string    `boil:"link" json:"link" toml:"link" yaml:"link"`
+	Filtered  bool      `boil:"filtered" json:"filtered" toml:"filtered" yaml:"filtered"`
 
 	R *blogPostR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L blogPostL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -41,6 +43,8 @@ var BlogPostColumns = struct {
 	Content   string
 	PostedAt  string
 	CreatedAt string
+	Link      string
+	Filtered  string
 }{
 	ID:        "id",
 	BlogID:    "blog_id",
@@ -49,6 +53,8 @@ var BlogPostColumns = struct {
 	Content:   "content",
 	PostedAt:  "posted_at",
 	CreatedAt: "created_at",
+	Link:      "link",
+	Filtered:  "filtered",
 }
 
 // blogPostR is where relationships are stored.
@@ -60,9 +66,9 @@ type blogPostR struct {
 type blogPostL struct{}
 
 var (
-	blogPostColumns               = []string{"id", "blog_id", "wp_id", "title", "content", "posted_at", "created_at"}
+	blogPostColumns               = []string{"id", "blog_id", "wp_id", "title", "content", "posted_at", "created_at", "link", "filtered"}
 	blogPostColumnsWithoutDefault = []string{"blog_id", "wp_id", "title", "content", "posted_at"}
-	blogPostColumnsWithDefault    = []string{"id", "created_at"}
+	blogPostColumnsWithDefault    = []string{"id", "created_at", "link", "filtered"}
 	blogPostPrimaryKeyColumns     = []string{"id"}
 )
 

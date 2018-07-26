@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,8 +18,6 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"golang.org/x/net/html"
-	"golang.org/x/net/html/atom"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v5"
 
@@ -1548,7 +1545,7 @@ func handleTweets(db *sql.DB, r TweetsRequest) (*TweetsResponse, *HttpError) {
 }
 
 func handleBlogPosts(db *sql.DB, r BlogPostsRequest) (*BlogPostsResponse, *HttpError) {
-	var mods []qm.QueryMod
+	var mods = []qm.QueryMod{qm.Where("filtered is false")}
 
 	// filters
 	if err := appendDateRangeFilterModsBlog(&mods, r.DateRangeFilter); err != nil {
@@ -2236,68 +2233,14 @@ func setCUFiles(cu *ContentUnit, files []*mdbmodels.File) error {
 	return nil
 }
 
-var blogLinkRegex = map[string]*regexp.Regexp{
-	"laitman-ru": regexp.MustCompile(`https?://(www\.)?laitman\.ru/(.*)/(\d+)\.html`),
-}
-
 func mdbToBlogPost(post *mdbmodels.BlogPost) *BlogPost {
 	blog := mdb.BLOGS_REGISTRY.ByID[post.BlogID]
-
-	p := BlogPost{
+	return &BlogPost{
 		Blog:         blog.Name,
 		WordpressID:  post.WPID,
 		CanonicalUrl: fmt.Sprintf("%s/?p=%d", blog.URL, post.WPID),
 		Title:        post.Title,
 		Content:      post.Content,
 		CreatedAt:    post.PostedAt,
-	}
-
-	// prepare HTML
-	ctxNode := html.Node{
-		Type:     html.ElementNode,
-		DataAtom: atom.Body,
-		Data:     "body",
-	}
-
-	if nodes, err := html.ParseFragment(strings.NewReader(post.Content), &ctxNode); err != nil {
-		log.Errorf("mdbToBlogPost html.ParseFragment %s %s: %s", blog.Name, post.WPID, err.Error())
-	} else {
-		var sb strings.Builder
-		fn := makePostLinksRelative(blog)
-		for i := range nodes {
-			traverseHtmlNode(nodes[i], fn)
-			html.Render(&sb, nodes[i])
-		}
-		p.Content = sb.String()
-		log.Infof("p %d: %s", post.WPID, p.Content)
-	}
-
-	return &p
-}
-
-func traverseHtmlNode(node *html.Node, fn func(node *html.Node)) {
-	fn(node)
-	for c := node.FirstChild; c != nil; c = c.NextSibling {
-		fn(c)
-	}
-}
-
-func makePostLinksRelative(blog *mdbmodels.Blog) func(node *html.Node) {
-	return func(node *html.Node) {
-		if node.DataAtom != atom.A {
-			return
-		}
-
-		for i := range node.Attr {
-			if node.Attr[i].Key == "href" {
-				if reg, ok := blogLinkRegex[blog.Name]; ok {
-					m := reg.FindStringSubmatch(node.Attr[i].Val)
-					if len(m) > 0 {
-						node.Attr[i].Val = fmt.Sprintf("/publications/blog/%s/%s", blog.Name, m[len(m)-1])
-					}
-				}
-				break
-			}
-		}
 	}
 }

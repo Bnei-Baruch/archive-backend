@@ -42,7 +42,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/feeds/podcast.rss", FeedPodcast)
 	router.GET("/feeds/wsxml", FeedWSXML)
 
-	router.GET("/_recover", func(c *gin.Context) {
-		panic("test recover")
-	})
+	//router.GET("/_recover", func(c *gin.Context) {
+	//	panic("test recover")
+	//})
 }
