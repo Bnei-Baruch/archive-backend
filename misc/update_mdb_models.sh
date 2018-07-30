@@ -9,4 +9,4 @@ cp  $GOPATH/src/github.com/Bnei-Baruch/mdb/models/*.go mdb/models
 sed -i 's/models/mdbmodels/' mdb/models/*
 rm mdb/models/*_test.go
 #godep update github.com/Bnei-Baruch/sqlboiler/...
-dep ensure
+#dep ensure

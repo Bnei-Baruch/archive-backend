@@ -229,7 +229,11 @@
 
 [[projects]]
   name = "golang.org/x/net"
-  packages = ["context"]
+  packages = [
+    "context",
+    "html",
+    "html/atom"
+  ]
   revision = "fe686d45ea04bc1bd4eff6a52865ce8757320325"
 
 [[projects]]

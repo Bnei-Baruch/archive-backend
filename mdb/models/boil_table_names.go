@@ -7,6 +7,8 @@ var TableNames = struct {
 	AuthorI18n              string
 	Authors                 string
 	AuthorsSources          string
+	BlogPosts               string
+	Blogs                   string
 	CollectionI18n          string
 	Collections             string
 	CollectionsContentUnits string
@@ -41,6 +43,8 @@ var TableNames = struct {
 	AuthorI18n:              "author_i18n",
 	Authors:                 "authors",
 	AuthorsSources:          "authors_sources",
+	BlogPosts:               "blog_posts",
+	Blogs:                   "blogs",
 	CollectionI18n:          "collection_i18n",
 	Collections:             "collections",
 	CollectionsContentUnits: "collections_content_units",
