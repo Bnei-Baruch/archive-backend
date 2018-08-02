@@ -116,9 +116,10 @@ var EXPECTATION_HIT_TYPE = map[int]string{
 }
 
 const (
-	FILTER_NAME_SOURCE = "source"
-	FILTER_NAME_TOPIC  = "topic"
-	PREFIX_LATEST      = "[latest]"
+	FILTER_NAME_SOURCE       = "source"
+	FILTER_NAME_TOPIC        = "topic"
+	FILTER_NAME_CONTENT_TYPE = "contentType"
+	PREFIX_LATEST            = "[latest]"
 )
 
 type Filter struct {
@@ -327,8 +328,8 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 				}
 				return Expectation{ET_FAILED_PARSE, "", filters, originalE}
 			}
-			newe := fmt.Sprintf("%s://%s%s/%s/%s", u.Scheme, u.Host, p, EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
-			return ParseExpectation(newe, db)
+			newE := fmt.Sprintf("%s://%s%s/%s/%s", u.Scheme, u.Host, p, EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+			return ParseExpectation(newE, db)
 		}
 		return Expectation{t, "", filters, e}
 	}
@@ -346,8 +347,8 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 				return Expectation{ET_FAILED_PARSE, uidOrSection, nil, originalE}
 			}
 			uriParts := strings.Split(p, "/")
-			newe := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
-			return ParseExpectation(newe, db)
+			newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+			return ParseExpectation(newE, db)
 		}
 	case EXPECTATION_URL_PATH[ET_SOURCES]:
 		t = ET_LANDING_PAGE
@@ -355,6 +356,18 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		t = ET_LANDING_PAGE
 	case EXPECTATION_URL_PATH[ET_LESSONS]:
 		t = ET_LANDING_PAGE
+		if takeLatest && uidOrSection == "women" {
+			latestUID, err := getLatestUIDOfWomenLesson(db)
+			if err != nil {
+				if err == sql.ErrNoRows {
+					return Expectation{ET_EMPTY, uidOrSection, nil, originalE}
+				}
+				return Expectation{ET_FAILED_PARSE, uidOrSection, nil, originalE}
+			}
+			uriParts := strings.Split(p, "/")
+			newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+			return ParseExpectation(newE, db)
+		}
 	default:
 		if uidOrSection == EXPECTATION_URL_PATH[ET_SOURCES] || uidOrSection == EXPECTATION_URL_PATH[ET_LESSONS] {
 			return Expectation{ET_LANDING_PAGE, "", nil, e}
@@ -679,6 +692,7 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 	filterByUidQuery := ""
 	sourceUids := make([]string, 0)
 	tagsUids := make([]string, 0)
+	contentType := ""
 	query := ""
 
 	for _, filter := range filters {
@@ -689,6 +703,8 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 		case FILTER_NAME_TOPIC:
 			uidStr := fmt.Sprintf("'%s'", FilterValueToUid(filter.Value))
 			tagsUids = append(tagsUids, uidStr)
+		case FILTER_NAME_CONTENT_TYPE:
+			contentType = filter.Value
 		}
 	}
 
@@ -701,6 +717,9 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 		filterByUidQuery += "and t.id in (select id from temp_rec_tags) "
 		tagsTempTableQuery := fmt.Sprintf(tagsTempTableMask, strings.Join(tagsUids, ","))
 		query += tagsTempTableQuery
+	}
+	if contentType != "" {
+		filterByUidQuery += fmt.Sprintf("and cu.type_id = %d ", mdb.CONTENT_TYPE_REGISTRY.ByName[contentType].ID)
 	}
 
 	query += fmt.Sprintf(queryMask,
@@ -721,4 +740,9 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 	}
 
 	return uid, nil
+
+}
+
+func getLatestUIDOfWomenLesson(db *sql.DB) (string, error) {
+	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: consts.CT_WOMEN_LESSON}}, db)
 }

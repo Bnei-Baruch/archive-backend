@@ -176,7 +176,8 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 
 	for i := 1; i < 13; i++ {
 		properties := null.JSON{JSON: []byte(fmt.Sprintf(filmDateMask, strconv.Itoa(i))), Valid: true}
-		cuUID, err := suite.addContentUnitTag(mdbmodels.ContentUnit{Properties: properties, Secure: 0, Published: true, ID: int64(i)}, consts.LANG_ENGLISH, childTag)
+		cuUID, err := suite.addContentUnitTag(mdbmodels.ContentUnit{Properties: properties, Secure: 0, Published: true, ID: int64(i), TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID},
+			consts.LANG_ENGLISH, childTag)
 		r.Nil(err)
 		_, err = suite.addContentUnitSource(mdbmodels.ContentUnit{UID: cuUID}, consts.LANG_ENGLISH, childSource)
 		r.Nil(err)
@@ -257,6 +258,10 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 	fmt.Printf("Test [latest] by collection \n")
 	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/programs/c/%s", cUID),
 		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByPosition, nil, ""}, r)
+
+	fmt.Printf("Test [latest] by women lesson \n")
+	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/lessons/women",
+		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByDate, nil, ""}, r)
 
 	// TBD
 	/*fmt.Printf("Test [latest] lecture \n")
@@ -344,7 +349,6 @@ func (suite *QualityEvalSuite) addContentUnitTag(cu mdbmodels.ContentUnit, lang 
 		cu = *cuFromDB
 	} else {
 		cu.UID = GenerateUID(8)
-		cu.TypeID = mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID
 		if err := cu.Insert(common.DB); err != nil {
 			return "", err
 		}
