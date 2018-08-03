@@ -217,19 +217,19 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 
 	fmt.Printf("Test source page \n")
 	suite.validateExpectation(fmt.Sprintf("https://kabbalahmedia.info/he/sources/%s", parentSource.UID),
-		search.Expectation{search.ET_LANDING_PAGE, parentSource.UID, nil, ""}, r)
+		search.Expectation{search.ET_SOURCES, parentSource.UID, nil, ""}, r)
 
 	fmt.Printf("Test sources main page \n")
 	suite.validateExpectation("https://kabbalahmedia.info/he/sources",
-		search.Expectation{search.ET_LANDING_PAGE, "", nil, ""}, r)
+		search.Expectation{search.ET_SOURCES, "", nil, ""}, r)
 
 	fmt.Printf("Test events page \n")
 	suite.validateExpectation("https://kabbalahmedia.info/he/events",
-		search.Expectation{search.ET_LANDING_PAGE, "", nil, ""}, r)
+		search.Expectation{search.ET_LANDING_PAGE, "events", nil, ""}, r)
 
 	fmt.Printf("Test events page by geo location \n")
 	suite.validateExpectation("https://kabbalahmedia.info/he/events?location=Russia%7CMoscow",
-		search.Expectation{search.ET_LANDING_PAGE, "", []search.Filter{search.Filter{Name: "location", Value: "Russia%7CMoscow"}}, ""}, r)
+		search.Expectation{search.ET_LANDING_PAGE, "events", []search.Filter{search.Filter{Name: "location", Value: "Russia%7CMoscow"}}, ""}, r)
 
 	fmt.Printf("Test events page by event type \n")
 	suite.validateExpectation("https://kabbalahmedia.info/he/events/conventions",
@@ -237,7 +237,7 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 
 	fmt.Printf("Test lessons page \n")
 	suite.validateExpectation("https://kabbalahmedia.info/he/lessons",
-		search.Expectation{search.ET_LANDING_PAGE, "", nil, ""}, r)
+		search.Expectation{search.ET_LANDING_PAGE, "lessons", nil, ""}, r)
 
 	fmt.Printf("Test lessons page by type \n")
 	suite.validateExpectation("https://kabbalahmedia.info/he/lessons/women",

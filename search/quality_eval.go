@@ -260,7 +260,7 @@ type HitSource struct {
 // https://kabbalahmedia.info/he/lessons/series/c/XZoflItG  ==> (collections  , XZoflItG)
 // https://kabbalahmedia.info/he/lessons?source=bs_L2jMWyce_kB3eD83I       ==> (lessons,  nil, source=bs_L2jMWyce_kB3eD83I)
 // https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (programs, nil, topic=g3ml0jum_1nyptSIo_RWqjxgkj)
-// https://kabbalahmedia.info/he/sources/kB3eD83I ==> (landing page, kB3eD83I)
+// https://kabbalahmedia.info/he/sources/kB3eD83I ==> (source, kB3eD83I)
 // [latest]https://kabbalahmedia.info/he/lessons?source=bs_qMUUn22b_hFeGidcS ==> (content_units, SLQOALyt)
 // [latest]https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (content_units, erZIsm86)
 // [latest]https://kabbalahmedia.info/he/programs/c/zf4lLwyI ==> (content_units, orMKRcNk)
@@ -293,6 +293,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	// One before last part .../he/programs/cu/AsNLozeK => cu
 	contentUnitOrCollection := path.Base(path.Dir(p))
 	t := -1
+	subSection := ""
 	switch uidOrSection {
 	case EXPECTATION_URL_PATH[ET_LESSONS]:
 		t = ET_LESSONS
@@ -300,6 +301,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		t = ET_PROGRAMS
 	case EXPECTATION_URL_PATH[ET_EVENTS]:
 		t = ET_LANDING_PAGE
+		subSection = uidOrSection
 	}
 	if t != -1 {
 
@@ -318,6 +320,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 				}
 			}
 		} else {
+			subSection = uidOrSection
 			t = ET_LANDING_PAGE
 		}
 		if takeLatest {
@@ -331,7 +334,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			newE := fmt.Sprintf("%s://%s%s/%s/%s", u.Scheme, u.Host, p, EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
 			return ParseExpectation(newE, db)
 		}
-		return Expectation{t, "", filters, e}
+		return Expectation{t, subSection, filters, e}
 	}
 	switch contentUnitOrCollection {
 	case EXPECTATION_URL_PATH[ET_CONTENT_UNITS]:
@@ -351,7 +354,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			return ParseExpectation(newE, db)
 		}
 	case EXPECTATION_URL_PATH[ET_SOURCES]:
-		t = ET_LANDING_PAGE
+		t = ET_SOURCES
 	case EXPECTATION_URL_PATH[ET_EVENTS]:
 		t = ET_LANDING_PAGE
 	case EXPECTATION_URL_PATH[ET_LESSONS]:
@@ -369,7 +372,9 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			return ParseExpectation(newE, db)
 		}
 	default:
-		if uidOrSection == EXPECTATION_URL_PATH[ET_SOURCES] || uidOrSection == EXPECTATION_URL_PATH[ET_LESSONS] {
+		if uidOrSection == EXPECTATION_URL_PATH[ET_SOURCES] {
+			return Expectation{ET_SOURCES, "", nil, e}
+		} else if uidOrSection == EXPECTATION_URL_PATH[ET_LESSONS] {
 			return Expectation{ET_LANDING_PAGE, "", nil, e}
 		} else {
 			return Expectation{ET_BAD_STRUCTURE, "", nil, e}
