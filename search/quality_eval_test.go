@@ -160,6 +160,11 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 	r := require.New(suite.T())
 
 	var latestUIDByDate string
+	var latestWomenLessonUID string
+	var latestMealUID string
+	var latestFriendsGatheringsUID string
+	var latestLectureUID string
+	var latestVirtualLessonUID string
 	var latestUIDByPosition string
 	filmDateMask := "{\"film_date\":\"2018-01-%s\"}"
 
@@ -176,17 +181,32 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 
 	for i := 1; i < 13; i++ {
 		properties := null.JSON{JSON: []byte(fmt.Sprintf(filmDateMask, strconv.Itoa(i))), Valid: true}
-		cuUID, err := suite.addContentUnitTag(mdbmodels.ContentUnit{Properties: properties, Secure: 0, Published: true, ID: int64(i), TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID},
+		lessonPartCUUID, err := suite.addContentUnitTag(mdbmodels.ContentUnit{Properties: properties, Secure: 0, Published: true, ID: int64(i), TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID},
+			consts.LANG_ENGLISH, childTag)
+		womenLessonCUUID, err := suite.addContentUnitTag(mdbmodels.ContentUnit{Properties: properties, Secure: 0, Published: true, ID: int64(100 + i), TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID},
+			consts.LANG_ENGLISH, childTag)
+		mealCUUID, err := suite.addContentUnitTag(mdbmodels.ContentUnit{Properties: properties, Secure: 0, Published: true, ID: int64(200 + i), TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID},
+			consts.LANG_ENGLISH, childTag)
+		friendsGatheringsCUUID, err := suite.addContentUnitTag(mdbmodels.ContentUnit{Properties: properties, Secure: 0, Published: true, ID: int64(300 + i), TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID},
+			consts.LANG_ENGLISH, childTag)
+		lectureCUUID, err := suite.addContentUnitTag(mdbmodels.ContentUnit{Properties: properties, Secure: 0, Published: true, ID: int64(400 + i), TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LECTURE].ID},
+			consts.LANG_ENGLISH, childTag)
+		virtualLessonCUUID, err := suite.addContentUnitTag(mdbmodels.ContentUnit{Properties: properties, Secure: 0, Published: true, ID: int64(500 + i), TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIRTUAL_LESSON].ID},
 			consts.LANG_ENGLISH, childTag)
 		r.Nil(err)
-		_, err = suite.addContentUnitSource(mdbmodels.ContentUnit{UID: cuUID}, consts.LANG_ENGLISH, childSource)
+		_, err = suite.addContentUnitSource(mdbmodels.ContentUnit{UID: lessonPartCUUID}, consts.LANG_ENGLISH, childSource)
 		r.Nil(err)
-		_, err = suite.updateCollection(mdbmodels.Collection{UID: cUID}, cuUID, 13-i)
+		_, err = suite.updateCollection(mdbmodels.Collection{UID: cUID}, lessonPartCUUID, 13-i)
 		r.Nil(err)
 		if i == 1 {
-			latestUIDByPosition = cuUID
+			latestUIDByPosition = lessonPartCUUID
 		}
-		latestUIDByDate = cuUID
+		latestUIDByDate = lessonPartCUUID
+		latestWomenLessonUID = womenLessonCUUID
+		latestMealUID = mealCUUID
+		latestFriendsGatheringsUID = friendsGatheringsCUUID
+		latestLectureUID = lectureCUUID
+		latestVirtualLessonUID = virtualLessonCUUID
 	}
 
 	fmt.Printf("Test content_units \n")
@@ -261,12 +281,33 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 
 	fmt.Printf("Test [latest] by women lesson \n")
 	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/lessons/women",
+		search.Expectation{search.ET_CONTENT_UNITS, latestWomenLessonUID, nil, ""}, r)
+
+	fmt.Printf("Test [latest] lesson preperation \n")
+	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/lessons",
 		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByDate, nil, ""}, r)
 
-	// TBD
-	/*fmt.Printf("Test [latest] lecture \n")
-	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/lectures"),
-		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByDate, nil, ""}, r)*/
+	fmt.Printf("Test [latest] meal event \n")
+	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/events/meals",
+		search.Expectation{search.ET_CONTENT_UNITS, latestMealUID, nil, ""}, r)
+
+	fmt.Printf("Test [latest] friends-gatherings \n")
+	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/events/friends-gatherings",
+		search.Expectation{search.ET_CONTENT_UNITS, latestFriendsGatheringsUID, nil, ""}, r)
+
+	fmt.Printf("Test [latest] lecture \n")
+	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/lessons/lectures",
+		search.Expectation{search.ET_CONTENT_UNITS, latestLectureUID, nil, ""}, r)
+
+	fmt.Printf("Test [latest] virtual lesson \n")
+	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/lessons/virtual",
+		search.Expectation{search.ET_CONTENT_UNITS, latestVirtualLessonUID, nil, ""}, r)
+
+	// === TBD ===
+
+	/*fmt.Printf("Test [latest] event \n")
+	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/events",
+		search.Expectation{search.ET_COLLECTIONS, cUID, nil, ""}, r)*/
 }
 
 func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expectation, r *require.Assertions) {

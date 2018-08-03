@@ -359,18 +359,6 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		t = ET_LANDING_PAGE
 	case EXPECTATION_URL_PATH[ET_LESSONS]:
 		t = ET_LANDING_PAGE
-		if takeLatest && uidOrSection == "women" {
-			latestUID, err := getLatestUIDOfWomenLesson(db)
-			if err != nil {
-				if err == sql.ErrNoRows {
-					return Expectation{ET_EMPTY, uidOrSection, nil, originalE}
-				}
-				return Expectation{ET_FAILED_PARSE, uidOrSection, nil, originalE}
-			}
-			uriParts := strings.Split(p, "/")
-			newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
-			return ParseExpectation(newE, db)
-		}
 	default:
 		if uidOrSection == EXPECTATION_URL_PATH[ET_SOURCES] {
 			return Expectation{ET_SOURCES, "", nil, e}
@@ -379,6 +367,32 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		} else {
 			return Expectation{ET_BAD_STRUCTURE, "", nil, e}
 		}
+	}
+
+	if t == ET_LANDING_PAGE && takeLatest {
+		var err error
+		latestUID := ""
+		switch uidOrSection {
+		case "women":
+			latestUID, err = getLatestUIDOfWomenLesson(db)
+		case "meals":
+			latestUID, err = getLatestUIDOfMeal(db)
+		case "friends-gatherings":
+			latestUID, err = getLatestUIDOfFriendsGatherings(db)
+		case "lectures":
+			latestUID, err = getLatestUIDOfLectures(db)
+		case "virtual":
+			latestUID, err = getLatestUIDOfVirtualLessons(db)
+		}
+		if err != nil || latestUID == "" {
+			if err == sql.ErrNoRows {
+				return Expectation{ET_EMPTY, uidOrSection, nil, originalE}
+			}
+			return Expectation{ET_FAILED_PARSE, uidOrSection, nil, originalE}
+		}
+		uriParts := strings.Split(p, "/")
+		newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+		return ParseExpectation(newE, db)
 	}
 
 	return Expectation{t, uidOrSection, nil, e}
@@ -661,8 +675,6 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 
 func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 
-	// TBD case when filters is nil
-
 	sourcesTempTableMask := `CREATE TEMP TABLE temp_rec_sources ON COMMIT DROP AS
 	(WITH RECURSIVE rec_sources AS (
 		SELECT id, parent_id FROM sources s
@@ -700,17 +712,21 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 	contentType := ""
 	query := ""
 
-	for _, filter := range filters {
-		switch filter.Name {
-		case FILTER_NAME_SOURCE:
-			uidStr := fmt.Sprintf("'%s'", FilterValueToUid(filter.Value))
-			sourceUids = append(sourceUids, uidStr)
-		case FILTER_NAME_TOPIC:
-			uidStr := fmt.Sprintf("'%s'", FilterValueToUid(filter.Value))
-			tagsUids = append(tagsUids, uidStr)
-		case FILTER_NAME_CONTENT_TYPE:
-			contentType = filter.Value
+	if len(filters) > 0 {
+		for _, filter := range filters {
+			switch filter.Name {
+			case FILTER_NAME_SOURCE:
+				uidStr := fmt.Sprintf("'%s'", FilterValueToUid(filter.Value))
+				sourceUids = append(sourceUids, uidStr)
+			case FILTER_NAME_TOPIC:
+				uidStr := fmt.Sprintf("'%s'", FilterValueToUid(filter.Value))
+				tagsUids = append(tagsUids, uidStr)
+			case FILTER_NAME_CONTENT_TYPE:
+				contentType = filter.Value
+			}
 		}
+	} else {
+		contentType = consts.CT_LESSON_PART
 	}
 
 	if len(sourceUids) > 0 {
@@ -750,4 +766,20 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 
 func getLatestUIDOfWomenLesson(db *sql.DB) (string, error) {
 	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: consts.CT_WOMEN_LESSON}}, db)
+}
+
+func getLatestUIDOfMeal(db *sql.DB) (string, error) {
+	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: consts.CT_MEAL}}, db)
+}
+
+func getLatestUIDOfFriendsGatherings(db *sql.DB) (string, error) {
+	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: consts.CT_FRIENDS_GATHERING}}, db)
+}
+
+func getLatestUIDOfLectures(db *sql.DB) (string, error) {
+	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: consts.CT_LECTURE}}, db)
+}
+
+func getLatestUIDOfVirtualLessons(db *sql.DB) (string, error) {
+	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: consts.CT_VIRTUAL_LESSON}}, db)
 }
