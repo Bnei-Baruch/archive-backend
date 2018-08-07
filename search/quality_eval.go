@@ -324,14 +324,23 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			t = ET_LANDING_PAGE
 		}
 		if takeLatest {
-			latestUID, err := getLatestUIDByFilters(filters, db)
+			var err error
+			var entityType string
+			latestUID := ""
+			if subSection == "events" {
+				entityType = EXPECTATION_URL_PATH[ET_COLLECTIONS]
+				latestUID, err = getLatestUIDOfCollection(consts.CT_CONGRESS, db)
+			} else {
+				entityType = EXPECTATION_URL_PATH[ET_CONTENT_UNITS]
+				latestUID, err = getLatestUIDByFilters(filters, db)
+			}
 			if err != nil {
 				if err == sql.ErrNoRows {
 					return Expectation{ET_EMPTY, "", filters, originalE}
 				}
 				return Expectation{ET_FAILED_PARSE, "", filters, originalE}
 			}
-			newE := fmt.Sprintf("%s://%s%s/%s/%s", u.Scheme, u.Host, p, EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+			newE := fmt.Sprintf("%s://%s%s/%s/%s", u.Scheme, u.Host, p, entityType, latestUID)
 			return ParseExpectation(newE, db)
 		}
 		return Expectation{t, subSection, filters, e}
@@ -374,15 +383,15 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		latestUID := ""
 		switch uidOrSection {
 		case "women":
-			latestUID, err = getLatestUIDOfWomenLesson(db)
+			latestUID, err = getLatestUIDByContentType(consts.CT_WOMEN_LESSON, db)
 		case "meals":
-			latestUID, err = getLatestUIDOfMeal(db)
+			latestUID, err = getLatestUIDByContentType(consts.CT_MEAL, db)
 		case "friends-gatherings":
-			latestUID, err = getLatestUIDOfFriendsGatherings(db)
+			latestUID, err = getLatestUIDByContentType(consts.CT_FRIENDS_GATHERING, db)
 		case "lectures":
-			latestUID, err = getLatestUIDOfLectures(db)
+			latestUID, err = getLatestUIDByContentType(consts.CT_LECTURE, db)
 		case "virtual":
-			latestUID, err = getLatestUIDOfVirtualLessons(db)
+			latestUID, err = getLatestUIDByContentType(consts.CT_VIRTUAL_LESSON, db)
 		}
 		if err != nil || latestUID == "" {
 			if err == sql.ErrNoRows {
@@ -757,29 +766,38 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 
 	err := row.Scan(&uid)
 	if err != nil {
-		return "", errors.Wrap(err, "Unable to retrieve from DB the latest UID for lesson by tag and source.")
+		return "", errors.Wrap(err, "Unable to retrieve from DB the latest UID for lesson by tag or by source or by content type.")
 	}
 
 	return uid, nil
 
 }
 
-func getLatestUIDOfWomenLesson(db *sql.DB) (string, error) {
-	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: consts.CT_WOMEN_LESSON}}, db)
+func getLatestUIDByContentType(cT string, db *sql.DB) (string, error) {
+	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: cT}}, db)
 }
 
-func getLatestUIDOfMeal(db *sql.DB) (string, error) {
-	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: consts.CT_MEAL}}, db)
-}
+func getLatestUIDOfCollection(contentType string, db *sql.DB) (string, error) {
 
-func getLatestUIDOfFriendsGatherings(db *sql.DB) (string, error) {
-	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: consts.CT_FRIENDS_GATHERING}}, db)
-}
+	var uid string
 
-func getLatestUIDOfLectures(db *sql.DB) (string, error) {
-	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: consts.CT_LECTURE}}, db)
-}
+	queryMask :=
+		`select c.uid from collections c
+		where c.published IS TRUE and c.secure = 0
+		and c.type_id = %d
+		order by (c.properties->>'film_date')::date desc
+		limit 1`
 
-func getLatestUIDOfVirtualLessons(db *sql.DB) (string, error) {
-	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: consts.CT_VIRTUAL_LESSON}}, db)
+	contentTypeId := mdb.CONTENT_TYPE_REGISTRY.ByName[contentType].ID
+	query := fmt.Sprintf(queryMask, contentTypeId)
+
+	row := queries.Raw(db, query).QueryRow()
+
+	err := row.Scan(&uid)
+	if err != nil {
+		return "", errors.Wrap(err, "Unable to retrieve from DB the latest UID for collection by content type.")
+	}
+
+	return uid, nil
+
 }

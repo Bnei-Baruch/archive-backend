@@ -173,7 +173,12 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 	parentTag := mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}
 	parentSource := mdbmodels.Source{Pattern: null.String{"bs-akdmot", true}, ID: 2, TypeID: 1, UID: "1vCj4qN9"}
 
-	cUID, err := suite.updateCollection(mdbmodels.Collection{TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID}, "", 0)
+	firstCollectionProperties := null.JSON{JSON: []byte(fmt.Sprintf(filmDateMask, "1")), Valid: true}
+	lastCollectionProperties := null.JSON{JSON: []byte(fmt.Sprintf(filmDateMask, "2")), Valid: true}
+
+	cUID, err := suite.updateCollection(mdbmodels.Collection{Properties: firstCollectionProperties, TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID}, "", 0)
+	r.Nil(err)
+	latsCollectionUID, err := suite.updateCollection(mdbmodels.Collection{Properties: lastCollectionProperties, TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID}, "", 0)
 	r.Nil(err)
 
 	r.Nil(suite.updateTagParent(childTag, parentTag, true, true))
@@ -303,11 +308,9 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/lessons/virtual",
 		search.Expectation{search.ET_CONTENT_UNITS, latestVirtualLessonUID, nil, ""}, r)
 
-	// === TBD ===
-
-	/*fmt.Printf("Test [latest] event \n")
+	fmt.Printf("Test [latest] congress event \n")
 	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/events",
-		search.Expectation{search.ET_COLLECTIONS, cUID, nil, ""}, r)*/
+		search.Expectation{search.ET_COLLECTIONS, latsCollectionUID, nil, ""}, r)
 }
 
 func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expectation, r *require.Assertions) {
