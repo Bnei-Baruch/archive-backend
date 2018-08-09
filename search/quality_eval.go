@@ -1,6 +1,7 @@
 package search
 
 import (
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -14,11 +15,16 @@ import (
     "sync"
     "time"
 
+	"github.com/spf13/viper"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/utils"
+	"github.com/Bnei-Baruch/sqlboiler/queries"
 )
 
 const (
@@ -65,6 +71,8 @@ const (
 	ET_LESSONS       = iota
 	ET_PROGRAMS      = iota
 	ET_SOURCES       = iota
+	ET_EVENTS        = iota
+	ET_LANDING_PAGE  = iota
 	ET_EMPTY         = iota
 	ET_FAILED_PARSE  = iota
 	ET_BAD_STRUCTURE = iota
@@ -75,7 +83,7 @@ var GOOD_EXPECTATION = map[int]bool{
 	ET_COLLECTIONS:   true,
 	ET_LESSONS:       true,
 	ET_PROGRAMS:      true,
-	ET_SOURCES:       true,
+	ET_LANDING_PAGE:  true,
 	ET_EMPTY:         false,
 	ET_FAILED_PARSE:  false,
 	ET_BAD_STRUCTURE: false,
@@ -98,6 +106,7 @@ var EXPECTATION_URL_PATH = map[int]string{
 	ET_LESSONS:       "lessons",
 	ET_PROGRAMS:      "programs",
 	ET_SOURCES:       "sources",
+	ET_EVENTS:        "events",
 }
 
 var EXPECTATION_HIT_TYPE = map[int]string{
@@ -109,8 +118,10 @@ var EXPECTATION_HIT_TYPE = map[int]string{
 }
 
 const (
-	FILTER_NAME_SOURCE = "source"
-	FILTER_NAME_TOPIC  = "topic"
+	FILTER_NAME_SOURCE       = "source"
+	FILTER_NAME_TOPIC        = "topic"
+	FILTER_NAME_CONTENT_TYPE = "contentType"
+	PREFIX_LATEST            = "[latest]"
 )
 
 type Filter struct {
@@ -182,6 +193,13 @@ func GoodExpectations(expectations []Expectation) int {
 }
 
 func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
+
+	db, err := sql.Open("postgres", viper.GetString("mdb.url"))
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to connect to DB.")
+	}
+	utils.Must(mdb.InitTypeRegistries(db))
+
 	f, err := os.Open(evalSetPath)
 	if err != nil {
 		return nil, err
@@ -207,7 +225,7 @@ func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 		var expectations []Expectation
 		hasGoodExpectations := false
 		for i := EVAL_SET_EXPECTATION_FIRST_COLUMN; i <= EVAL_SET_EXPECTATION_LAST_COLUMN; i++ {
-			e := ParseExpectation(line[i])
+			e := ParseExpectation(line[i], db)
 			expectations = append(expectations, e)
 			if GOOD_EXPECTATION[e.Type] {
 				expectationsCount++
@@ -239,18 +257,27 @@ type HitSource struct {
 // Parses expectation described by result URL and converts
 // to type (collections or content_units) and uid.
 // Examples:
-// https://archive.kbb1.com/he/programs/cu/AsNLozeK ==> (content_units, AsNLozeK)
-// https://archive.kbb1.com/he/programs/c/fLWpcUjQ  ==> (collections  , fLWpcUjQ)
-// https://archive.kbb1.com/he/lessons?source=bs_L2jMWyce_kB3eD83I       ==> (lessons,  nil, source=bs_L2jMWyce_kB3eD83I)
-// https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (programs, nil, topic=g3ml0jum_1nyptSIo_RWqjxgkj)
-// https://archive.kbb1.com/he/sources/kB3eD83I ==> (sources, kB3eD83I)
+// https://kabbalahmedia.info/he/programs/cu/AsNLozeK ==> (content_units, AsNLozeK)
+// https://kabbalahmedia.info/he/programs/c/fLWpcUjQ  ==> (collections  , fLWpcUjQ)
+// https://kabbalahmedia.info/he/lessons/series/c/XZoflItG  ==> (collections  , XZoflItG)
+// https://kabbalahmedia.info/he/lessons?source=bs_L2jMWyce_kB3eD83I       ==> (lessons,  nil, source=bs_L2jMWyce_kB3eD83I)
+// https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (programs, nil, topic=g3ml0jum_1nyptSIo_RWqjxgkj)
+// https://kabbalahmedia.info/he/sources/kB3eD83I ==> (source, kB3eD83I)
+// [latest]https://kabbalahmedia.info/he/lessons?source=bs_qMUUn22b_hFeGidcS ==> (content_units, SLQOALyt)
+// [latest]https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj ==> (content_units, erZIsm86)
+// [latest]https://kabbalahmedia.info/he/programs/c/zf4lLwyI ==> (content_units, orMKRcNk)
 // All events sub pages and years:
-// https://archive.kbb1.com/he/events/meals
-// https://archive.kbb1.com/he/events/friends-gatherings
-// https://archive.kbb1.com/he/events?year=2013
-func ParseExpectation(e string) Expectation {
+// https://kabbalahmedia.info/he/events/meals
+// https://kabbalahmedia.info/he/events/friends-gatherings
+// https://kabbalahmedia.info/he/events?year=2013
+func ParseExpectation(e string, db *sql.DB) Expectation {
+	originalE := e
 	if e == "" {
 		return Expectation{ET_EMPTY, "", nil, e}
+	}
+	takeLatest := strings.HasPrefix(strings.ToLower(e), PREFIX_LATEST)
+	if takeLatest {
+		e = e[len(PREFIX_LATEST):]
 	}
 	u, err := url.Parse(e)
 	if err != nil {
@@ -268,36 +295,117 @@ func ParseExpectation(e string) Expectation {
 	// One before last part .../he/programs/cu/AsNLozeK => cu
 	contentUnitOrCollection := path.Base(path.Dir(p))
 	t := -1
+	subSection := ""
 	switch uidOrSection {
 	case EXPECTATION_URL_PATH[ET_LESSONS]:
 		t = ET_LESSONS
 	case EXPECTATION_URL_PATH[ET_PROGRAMS]:
 		t = ET_PROGRAMS
+	case EXPECTATION_URL_PATH[ET_EVENTS]:
+		t = ET_LANDING_PAGE
+		subSection = uidOrSection
 	}
 	if t != -1 {
-		queryParts := strings.Split(q, ",")
-		filters := make([]Filter, len(queryParts))
-		for i, qp := range queryParts {
-			nameValue := strings.Split(qp, "=")
-			if len(nameValue) > 0 {
-				filters[i].Name = nameValue[0]
-				if len(nameValue) > 1 {
-					filters[i].Value = nameValue[1]
+
+		var filters []Filter
+
+		if q != "" {
+			queryParts := strings.Split(q, "&")
+			filters = make([]Filter, len(queryParts))
+			for i, qp := range queryParts {
+				nameValue := strings.Split(qp, "=")
+				if len(nameValue) > 0 {
+					filters[i].Name = nameValue[0]
+					if len(nameValue) > 1 {
+						filters[i].Value = nameValue[1]
+					}
 				}
 			}
+		} else {
+			subSection = uidOrSection
+			t = ET_LANDING_PAGE
 		}
-		return Expectation{t, "", filters, e}
+		if takeLatest {
+			var err error
+			var entityType string
+			latestUID := ""
+			if subSection == "events" {
+				entityType = EXPECTATION_URL_PATH[ET_COLLECTIONS]
+				latestUID, err = getLatestUIDOfCollection(consts.CT_CONGRESS, db)
+			} else {
+				entityType = EXPECTATION_URL_PATH[ET_CONTENT_UNITS]
+				latestUID, err = getLatestUIDByFilters(filters, db)
+			}
+			if err != nil {
+				if err == sql.ErrNoRows {
+					return Expectation{ET_EMPTY, "", filters, originalE}
+				}
+				return Expectation{ET_FAILED_PARSE, "", filters, originalE}
+			}
+			newE := fmt.Sprintf("%s://%s%s/%s/%s", u.Scheme, u.Host, p, entityType, latestUID)
+			return ParseExpectation(newE, db)
+		}
+		return Expectation{t, subSection, filters, e}
 	}
 	switch contentUnitOrCollection {
 	case EXPECTATION_URL_PATH[ET_CONTENT_UNITS]:
 		t = ET_CONTENT_UNITS
 	case EXPECTATION_URL_PATH[ET_COLLECTIONS]:
 		t = ET_COLLECTIONS
+		if takeLatest {
+			latestUID, err := getLatestUIDByCollection(uidOrSection, db)
+			if err != nil {
+				if err == sql.ErrNoRows {
+					return Expectation{ET_EMPTY, uidOrSection, nil, originalE}
+				}
+				return Expectation{ET_FAILED_PARSE, uidOrSection, nil, originalE}
+			}
+			uriParts := strings.Split(p, "/")
+			newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+			return ParseExpectation(newE, db)
+		}
 	case EXPECTATION_URL_PATH[ET_SOURCES]:
 		t = ET_SOURCES
+	case EXPECTATION_URL_PATH[ET_EVENTS]:
+		t = ET_LANDING_PAGE
+	case EXPECTATION_URL_PATH[ET_LESSONS]:
+		t = ET_LANDING_PAGE
 	default:
-		return Expectation{ET_BAD_STRUCTURE, "", nil, e}
+		if uidOrSection == EXPECTATION_URL_PATH[ET_SOURCES] {
+			return Expectation{ET_SOURCES, "", nil, e}
+		} else if uidOrSection == EXPECTATION_URL_PATH[ET_LESSONS] {
+			return Expectation{ET_LANDING_PAGE, "", nil, e}
+		} else {
+			return Expectation{ET_BAD_STRUCTURE, "", nil, e}
+		}
 	}
+
+	if t == ET_LANDING_PAGE && takeLatest {
+		var err error
+		latestUID := ""
+		switch uidOrSection {
+		case "women":
+			latestUID, err = getLatestUIDByContentType(consts.CT_WOMEN_LESSON, db)
+		case "meals":
+			latestUID, err = getLatestUIDByContentType(consts.CT_MEAL, db)
+		case "friends-gatherings":
+			latestUID, err = getLatestUIDByContentType(consts.CT_FRIENDS_GATHERING, db)
+		case "lectures":
+			latestUID, err = getLatestUIDByContentType(consts.CT_LECTURE, db)
+		case "virtual":
+			latestUID, err = getLatestUIDByContentType(consts.CT_VIRTUAL_LESSON, db)
+		}
+		if err != nil || latestUID == "" {
+			if err == sql.ErrNoRows {
+				return Expectation{ET_EMPTY, uidOrSection, nil, originalE}
+			}
+			return Expectation{ET_FAILED_PARSE, uidOrSection, nil, originalE}
+		}
+		uriParts := strings.Split(p, "/")
+		newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+		return ParseExpectation(newE, db)
+	}
+
 	return Expectation{t, uidOrSection, nil, e}
 }
 
@@ -569,4 +677,157 @@ func WriteToCsv(path string, records [][]string) error {
 		return err
 	}
 	return nil
+}
+
+func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) {
+
+	var latestUID string
+
+	queryMask := `select cu.uid from content_units cu
+		join collections_content_units ccu on cu.id = ccu.content_unit_id
+		join collections c on c.id = ccu.collection_id
+		where cu.published IS TRUE and cu.secure = 0
+			and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+		and c.uid = '%s'
+		order by ccu.position desc
+			limit 1`
+
+	query := fmt.Sprintf(queryMask,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		collectionUID)
+
+	row := queries.Raw(db, query).QueryRow()
+
+	err := row.Scan(&latestUID)
+	if err != nil {
+		return "", errors.Wrap(err, "Unable to retrieve from DB the latest content unit UID by collection.")
+	}
+
+	return latestUID, nil
+}
+
+func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
+
+	sourcesTempTableMask := `CREATE TEMP TABLE temp_rec_sources ON COMMIT DROP AS
+	(WITH RECURSIVE rec_sources AS (
+		SELECT id, parent_id FROM sources s
+			WHERE uid in (%s)
+		UNION SELECT
+			s.id, s.parent_id
+		FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id)
+	SELECT id FROM rec_sources);`
+
+	tagsTempTableMask := `CREATE TEMP TABLE temp_rec_tags ON COMMIT DROP AS
+	(WITH RECURSIVE rec_tags AS (
+		SELECT id, parent_id FROM tags t
+			WHERE uid in (%s)
+		UNION SELECT
+			t.id, t.parent_id
+		FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id)
+	SELECT id FROM rec_tags);`
+
+	queryMask := `
+		select cu.uid from content_units cu
+		left join content_units_tags cut on cut.content_unit_id = cu.id
+		left join tags t on t.id = cut.tag_id
+		left join content_units_sources cus on cus.content_unit_id = cu.id
+		left join sources s on s.id = cus.source_id
+		where cu.published IS TRUE and cu.secure = 0
+		and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+		%s
+		order by (cu.properties->>'film_date')::date desc
+		limit 1`
+
+	var uid string
+	filterByUidQuery := ""
+	sourceUids := make([]string, 0)
+	tagsUids := make([]string, 0)
+	contentType := ""
+	query := ""
+
+	if len(filters) > 0 {
+		for _, filter := range filters {
+			switch filter.Name {
+			case FILTER_NAME_SOURCE:
+				uidStr := fmt.Sprintf("'%s'", FilterValueToUid(filter.Value))
+				sourceUids = append(sourceUids, uidStr)
+			case FILTER_NAME_TOPIC:
+				uidStr := fmt.Sprintf("'%s'", FilterValueToUid(filter.Value))
+				tagsUids = append(tagsUids, uidStr)
+			case FILTER_NAME_CONTENT_TYPE:
+				contentType = filter.Value
+			}
+		}
+	} else {
+		contentType = consts.CT_LESSON_PART
+	}
+
+	if len(sourceUids) > 0 {
+		filterByUidQuery += "and s.id in (select id from temp_rec_sources) "
+		sourcesTempTableQuery := fmt.Sprintf(sourcesTempTableMask, strings.Join(sourceUids, ","))
+		query += sourcesTempTableQuery
+	}
+	if len(tagsUids) > 0 {
+		filterByUidQuery += "and t.id in (select id from temp_rec_tags) "
+		tagsTempTableQuery := fmt.Sprintf(tagsTempTableMask, strings.Join(tagsUids, ","))
+		query += tagsTempTableQuery
+	}
+	if contentType != "" {
+		filterByUidQuery += fmt.Sprintf("and cu.type_id = %d ", mdb.CONTENT_TYPE_REGISTRY.ByName[contentType].ID)
+	}
+
+	query += fmt.Sprintf(queryMask,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		filterByUidQuery)
+
+	row := queries.Raw(db, query).QueryRow()
+
+	err := row.Scan(&uid)
+	if err != nil {
+		return "", errors.Wrap(err, "Unable to retrieve from DB the latest UID for lesson by tag or by source or by content type.")
+	}
+
+	return uid, nil
+
+}
+
+func getLatestUIDByContentType(cT string, db *sql.DB) (string, error) {
+	return getLatestUIDByFilters([]Filter{Filter{Name: FILTER_NAME_CONTENT_TYPE, Value: cT}}, db)
+}
+
+func getLatestUIDOfCollection(contentType string, db *sql.DB) (string, error) {
+
+	var uid string
+
+	queryMask :=
+		`select c.uid from collections c
+		where c.published IS TRUE and c.secure = 0
+		and c.type_id = %d
+		order by (c.properties->>'film_date')::date desc
+		limit 1`
+
+	contentTypeId := mdb.CONTENT_TYPE_REGISTRY.ByName[contentType].ID
+	query := fmt.Sprintf(queryMask, contentTypeId)
+
+	row := queries.Raw(db, query).QueryRow()
+
+	err := row.Scan(&uid)
+	if err != nil {
+		return "", errors.Wrap(err, "Unable to retrieve from DB the latest UID for collection by content type.")
+	}
+
+	return uid, nil
+
 }
