@@ -22,6 +22,8 @@ type Scope struct {
 	SourceUID      string
 	PersonUID      string
 	PublisherUID   string
+	TweetTID       string
+	BlogPostWPID   string
 }
 
 type Index interface {
