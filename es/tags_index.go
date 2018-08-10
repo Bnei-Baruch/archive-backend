@@ -65,7 +65,7 @@ func (index *TagsIndex) addToIndex(scope Scope, removedUIDs []string) error {
 func (index *TagsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	log.Infof("Tags Index - removeFromIndex. Scope: %+v.", scope)
 	if scope.TagUID != "" {
-		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_UNITS).
+		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_TAGS).
 			Filter(elastic.NewTermsQuery("typed_uids", keyValue("tag", scope.TagUID)))
 		return index.RemoveFromIndexQuery(elasticScope)
 	}
@@ -98,13 +98,39 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 	for i := range t.R.TagI18ns {
 		i18n := t.R.TagI18ns[i]
 		if i18n.Label.Valid && strings.TrimSpace(i18n.Label.String) != "" {
+			parentTag := t
+			parentI18n := i18n
+			pathNames := []string{i18n.Label.String}
+			parentUids := []string{t.UID}
+			for parentTag.ParentID.Valid {
+				var err error
+				parentTag, err = mdbmodels.Tags(index.db,
+					qm.Load("TagI18ns"),
+					qm.Where(fmt.Sprintf("id = %d", parentTag.ParentID.Int64))).One()
+				if err != nil {
+					return err
+				}
+				found := false
+				for _, pI18n := range parentTag.R.TagI18ns {
+					if pI18n.Language == parentI18n.Language {
+						parentI18n = pI18n
+						found = true
+					}
+				}
+				if !found || !parentI18n.Label.Valid {
+					return errors.New("Tag I18n not found or invalid label.")
+				}
+				pathNames = append([]string{parentI18n.Label.String}, pathNames...)
+				parentUids = append([]string{parentTag.UID}, parentUids...)
+			}
+
 			r := Result{
 				ResultType:   consts.ES_RESULT_TYPE_TAGS,
 				MDB_UID:      t.UID,
+				FilterValues: KeyValues("tag", parentUids),
 				TypedUids:    []string{keyValue("tag", t.UID)},
-				FilterValues: []string{keyValue("tag", t.UID)},
-				Title:        i18n.Label.String,
-				TitleSuggest: Suffixes(i18n.Label.String),
+				Title:        strings.Join(pathNames, " - "),
+				TitleSuggest: Suffixes(strings.Join(pathNames, " ")),
 			}
 			name := index.indexName(i18n.Language)
 			log.Infof("Tags Index - Add tag %s to index %s", r.ToString(), name)
