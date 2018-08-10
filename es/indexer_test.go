@@ -21,10 +21,10 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/boil"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
-	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
@@ -718,6 +718,28 @@ func deleteCollections(UIDs []string) error {
 	return nil
 }
 
+func deletePosts(IDs []string) error {
+
+	quoted := make([]string, len(IDs))
+	for i, id := range IDs {
+		s := strings.Split(id, "-")
+		blogId := s[0]
+		wpId := s[1]
+		quoted[i] = fmt.Sprintf("(blog_id = %s and wp_id = %s)", blogId, wpId)
+	}
+	scope := strings.Join(quoted, " or ")
+
+	return mdbmodels.BlogPosts(common.DB, qm.WhereIn(scope)).DeleteAll()
+}
+
+func deleteTweets(TIDs []string) error {
+	TIDsI := make([]interface{}, len(TIDs))
+	for i, v := range TIDs {
+		TIDsI[i] = v
+	}
+	return mdbmodels.TwitterTweets(common.DB, qm.WhereIn("twitter_id in ?", TIDsI...)).DeleteAll()
+}
+
 func deleteContentUnits(UIDs []string) error {
 	if len(UIDs) == 0 {
 		return nil
@@ -1070,6 +1092,70 @@ func removeAuthorFromSource(source es.Source, mdbAuthor mdbmodels.Author) error 
 	return nil
 }
 
+func insertPost(wp_id int64, blogId int64, title string, filtered bool) error {
+
+	mdbPost := mdbmodels.BlogPost{
+		ID:        wp_id,
+		BlogID:    blogId,
+		WPID:      wp_id,
+		Title:     title,
+		Content:   "",
+		PostedAt:  time.Now(),
+		CreatedAt: time.Now(),
+		Link:      "",
+		Filtered:  filtered,
+	}
+	if err := mdbPost.Insert(common.DB); err != nil {
+		return err
+	}
+	return nil
+}
+
+func insertTweet(id int64, tid string, userId int64, title string) error {
+
+	_, err := mdbmodels.FindTwitterUser(common.DB, userId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+
+			// save twitter user to DB:
+			usr := mdbmodels.TwitterUser{
+				ID:        userId,
+				Username:  fmt.Sprintf("user-%v", userId),
+				AccountID: fmt.Sprintf("user-account-%v", userId),
+			}
+
+			err = usr.Insert(common.DB)
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return err
+		}
+	}
+
+	sraw := struct{ Text string }{Text: title}
+	raw, err := json.Marshal(sraw)
+	if err != nil {
+		return err
+	}
+
+	mdbTweet := mdbmodels.TwitterTweet{
+		ID:        id,
+		UserID:    userId,
+		TwitterID: tid,
+		FullText:  title,
+		TweetAt:   time.Now(),
+		Raw:       null.NewJSON(raw, true),
+		CreatedAt: time.Now(),
+	}
+
+	if err := mdbTweet.Insert(common.DB); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (suite *IndexerSuite) ucu(cu es.ContentUnit, lang string, published bool, secure bool) string {
 	r := require.New(suite.T())
 	uid, err := updateContentUnit(cu, lang, published, secure)
@@ -1186,6 +1272,22 @@ func (suite *IndexerSuite) rsa(source es.Source, mdbAuthor mdbmodels.Author) {
 	r.Nil(err)
 }
 
+//insert blog post
+func (suite *IndexerSuite) ibp(wpId int64, blogId int64, title string, filtered bool) string {
+	idStr := fmt.Sprintf("%v-%v", blogId, wpId)
+	r := require.New(suite.T())
+	err := insertPost(wpId, blogId, title, filtered)
+	r.Nil(err)
+	return idStr
+}
+
+//insert tweet
+func (suite *IndexerSuite) itt(id int64, tid string, userId int64, title string) {
+	r := require.New(suite.T())
+	err := insertTweet(id, tid, userId, title)
+	r.Nil(err)
+}
+
 func (suite *IndexerSuite) validateCollectionsContentUnits(indexName string, indexer *es.Indexer, expectedCUs map[string][]string) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
@@ -1207,27 +1309,6 @@ func (suite *IndexerSuite) validateCollectionsContentUnits(indexName string, ind
 		cus[c.MDB_UID] = uids
 	}
 	suite.validateMaps(expectedCUs, cus)
-}
-
-func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *es.Indexer, expectedNames []string) {
-	r := require.New(suite.T())
-	err := indexer.RefreshAll()
-	r.Nil(err)
-	var res *elastic.SearchResult
-	log.Infof("indexName: %+v", indexName)
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
-	if err != nil {
-		log.Infof("Error: %+v", err.Error())
-		r.Nil(err)
-	}
-	names := make([]string, len(res.Hits.Hits))
-	for i, hit := range res.Hits.Hits {
-		var cu es.Result
-		json.Unmarshal(*hit.Source, &cu)
-		names[i] = cu.Title
-	}
-	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
-	r.ElementsMatch(expectedNames, names)
 }
 
 func (suite *IndexerSuite) validateContentUnitTags(indexName string, indexer *es.Indexer, expectedTags []string) {
@@ -1446,4 +1527,21 @@ func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Inde
 	}
 
 	r.True(reflect.DeepEqual(expectedContentsByNames, contentsByNames))
+}
+
+func (suite *IndexerSuite) validateNames(indexName string, indexer *es.Indexer, expectedNames []string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	names := make([]string, len(res.Hits.Hits))
+	for i, hit := range res.Hits.Hits {
+		var res es.Result
+		json.Unmarshal(*hit.Source, &res)
+		names[i] = res.Title
+	}
+	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
+	r.ElementsMatch(expectedNames, names)
 }

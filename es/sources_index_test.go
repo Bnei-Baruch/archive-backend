@@ -96,8 +96,8 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	UIDs := []string{source1UID, source2UID}
 	r.Nil(deleteSources(UIDs))
 	r.Nil(indexer.ReindexAll())
-	suite.validateSourceNames(indexNameEn, indexer, []string{})
-	suite.validateSourceNames(indexNameHe, indexer, []string{})
+	suite.validateNames(indexNameEn, indexer, []string{})
+	suite.validateNames(indexNameHe, indexer, []string{})
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())
