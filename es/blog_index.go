@@ -66,7 +66,7 @@ func (index *BlogIndex) Update(scope Scope) error {
 }
 
 func (index *BlogIndex) addToIndex(scope Scope, removedUIDs []string) error {
-	sqlScope := defaultCollectionsSql()
+	sqlScope := defaultBlogPostsSql()
 	uids := removedUIDs
 	if scope.BlogPostID != "" {
 		uids = append(uids, scope.BlogPostID)

@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/boil"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -717,6 +718,14 @@ func deleteCollections(UIDs []string) error {
 	return nil
 }
 
+func deletePosts(IDs []int64) error {
+	IDsI := make([]interface{}, len(IDs))
+	for i, v := range IDs {
+		IDsI[i] = v
+	}
+	return mdbmodels.BlogPosts(common.DB, qm.WhereIn("id in ?", IDsI...)).DeleteAll()
+}
+
 func deleteContentUnits(UIDs []string) error {
 	if len(UIDs) == 0 {
 		return nil
@@ -1023,6 +1032,24 @@ func removeAuthorFromSource(source es.Source, mdbAuthor mdbmodels.Author) error 
 	return nil
 }
 
+func insertPost(id int64, blogId int64, title string, filtered bool) error {
+	mdbPost := mdbmodels.BlogPost{
+		ID:        id,
+		BlogID:    blogId,
+		WPID:      100 + id,
+		Title:     title,
+		Content:   "",
+		PostedAt:  time.Now(),
+		CreatedAt: time.Now(),
+		Link:      "",
+		Filtered:  filtered,
+	}
+	if err := mdbPost.Insert(common.DB); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (suite *IndexerSuite) ucu(cu es.ContentUnit, lang string, published bool, secure bool) string {
 	r := require.New(suite.T())
 	uid, err := updateContentUnit(cu, lang, published, secure)
@@ -1123,6 +1150,13 @@ func (suite *IndexerSuite) asa(source es.Source, lang string, mdbAuthor mdbmodel
 func (suite *IndexerSuite) rsa(source es.Source, mdbAuthor mdbmodels.Author) {
 	r := require.New(suite.T())
 	err := removeAuthorFromSource(source, mdbAuthor)
+	r.Nil(err)
+}
+
+//insert blog post
+func (suite *IndexerSuite) ibp(id int64, blogId int64, title string, filtered bool) {
+	r := require.New(suite.T())
+	err := insertPost(id, blogId, title, filtered)
 	r.Nil(err)
 }
 
