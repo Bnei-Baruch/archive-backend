@@ -45,20 +45,21 @@ func (suite *BlogIndexerSuite) TestBlogIndex() {
 	fmt.Printf("\nAdding Spanish post and validate.\n\n")
 	suite.ibp(2, 3, "this is spanish post", false)
 	r.Nil(indexer.BlogPostUpdate(2))
-	suite.validateSourceNames(indexNameEn, indexer, []string{"this is spanish post"})
+	suite.validateSourceNames(indexNameEs, indexer, []string{"this is spanish post"})
 
 	fmt.Printf("\nAdding Hebrew post and validate.\n\n")
 	suite.ibp(3, 4, "this is hebrew post", false)
 	r.Nil(indexer.BlogPostUpdate(3))
-	suite.validateSourceNames(indexNameEn, indexer, []string{"this is hebrew post"})
+	suite.validateSourceNames(indexNameHe, indexer, []string{"this is hebrew post"})
 
 	fmt.Printf("\nAdding Russian post and validate.\n\n")
 	suite.ibp(4, 1, "this is russian post", false)
 	r.Nil(indexer.BlogPostUpdate(4))
-	suite.validateSourceNames(indexNameEn, indexer, []string{"this is russian post"})
+	suite.validateSourceNames(indexNameRu, indexer, []string{"this is russian post"})
 
 	fmt.Println("\nValidate adding filtered post - should not index.")
-	suite.ibp(4, 2, "today morning lesson", true)
+	suite.ibp(5, 2, "today morning lesson", true)
+	r.Nil(indexer.BlogPostUpdate(5))
 	suite.validateSourceNames(indexNameEn, indexer, []string{"this is english post"})
 
 	fmt.Println("\nDelete posts from DB, reindex and validate we have 0 posts.")

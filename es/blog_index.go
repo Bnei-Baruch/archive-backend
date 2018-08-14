@@ -36,7 +36,7 @@ type BlogIndex struct {
 }
 
 func defaultBlogPostsSql() string {
-	return "p.filtered = 0"
+	return "p.filtered = false"
 }
 
 func (index *BlogIndex) blogIdToLanguageMapping() map[int]string {
@@ -53,7 +53,7 @@ func (index *BlogIndex) ReindexAll() error {
 	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_BLOG_POSTS)); err != nil {
 		return err
 	}
-	return index.addToIndexSql(defaultCollectionsSql())
+	return index.addToIndexSql(defaultBlogPostsSql())
 }
 
 func (index *BlogIndex) Update(scope Scope) error {
