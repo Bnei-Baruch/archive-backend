@@ -174,7 +174,7 @@ func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int
 	return nil
 }
 
-func (searchLogger *SearchLogger) GetAllQueries() ([]SearchLog, error) {
+func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]SearchLog, error) {
 	var ret []SearchLog
 	var searchResult *elastic.SearchResult
 	for true {
@@ -191,6 +191,7 @@ func (searchLogger *SearchLogger) GetAllQueries() ([]SearchLog, error) {
 			Type("search_logs").
 			Query(elastic.NewMatchAllQuery()).
 			Scroll("1m").
+			Slice(s).
 			Size(100)
 		if searchResult != nil {
 			scrollClient = scrollClient.ScrollId(searchResult.ScrollId)

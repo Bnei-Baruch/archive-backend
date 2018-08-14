@@ -164,7 +164,7 @@ func (r *TwitterUsersRegistry) Init(exec boil.Executor) error {
 
 type BlogsRegistry struct {
 	ByName map[string]*mdbmodels.Blog
-	ByID map[int64]*mdbmodels.Blog
+	ByID   map[int64]*mdbmodels.Blog
 }
 
 func (r *BlogsRegistry) Init(exec boil.Executor) error {

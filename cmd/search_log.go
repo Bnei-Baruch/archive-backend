@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/csv"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -68,27 +70,40 @@ func initLogger() *search.SearchLogger {
 
 func queriesFn(cmd *cobra.Command, args []string) {
 	logger := initLogger()
-	queries, err := logger.GetAllQueries()
-	utils.Must(err)
-	log.Infof("Found %d queries.", len(queries))
-	log.Info("#\tSearchId\tCreated\tTerm\tExact\tFilters\tLanguages\tFrom\tSize\tSortBy\tError")
-	sortedQueries := make(search.CreatedSearchLogs, 0, len(queries))
-	for _, q := range queries {
-		sortedQueries = append(sortedQueries, q)
-	}
-	sort.Sort(sortedQueries)
-	for i, sl := range sortedQueries {
-		filters, err := utils.PrintMap(sl.Query.Filters)
+	for i := 0; i < 10; i++ {
+		s := elastic.NewSliceQuery().Id(i).Max(10)
+		queries, err := logger.GetAllQueries(s)
 		utils.Must(err)
-		log.Infof("%5d\t%16s\t%20s\t%40s\t%5s\t%5s\t%10s\t%5d\t%5d\t%10s\t%6t",
-			i+1,
-			sl.SearchId,
-			sl.Created.Format("2006-01-02 15:04:05"),
-			sl.Query.Term,
-			strings.Join(sl.Query.ExactTerms, ","),
-			filters,
-			strings.Join(sl.Query.LanguageOrder, ","),
-			sl.From, sl.Size, sl.SortBy, sl.Error != nil)
+		log.Infof("Found %d queries.", len(queries))
+		log.Info("#\tSearchId\tCreated\tTerm\tExact\tFilters\tLanguages\tFrom\tSize\tSortBy\tError")
+		sortedQueries := make(search.CreatedSearchLogs, 0, len(queries))
+		for _, q := range queries {
+			sortedQueries = append(sortedQueries, q)
+		}
+		sort.Sort(sortedQueries)
+		records := [][]string{}
+		for i, sl := range sortedQueries {
+			filters, err := utils.PrintMap(sl.Query.Filters)
+			utils.Must(err)
+			records = append(records, []string{
+				fmt.Sprintf("%d", i+1),
+				sl.SearchId,
+				sl.Created.Format("2006-01-02 15:04:05"),
+				sl.Query.Term,
+				strings.Join(sl.Query.ExactTerms, ","),
+				filters,
+				strings.Join(sl.Query.LanguageOrder, ","),
+				fmt.Sprintf("%d", sl.From),
+				fmt.Sprintf("%d", sl.Size),
+				sl.SortBy,
+				fmt.Sprintf("%t", sl.Error != nil),
+			})
+		}
+		w := csv.NewWriter(os.Stdout)
+		w.WriteAll(records)
+		if err := w.Error(); err != nil {
+			log.Fatalln("error writing csv:", err)
+		}
 	}
 }
 

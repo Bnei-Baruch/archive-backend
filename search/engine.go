@@ -133,13 +133,13 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query) (interface{}
 			for _, index := range indices {
 				searchSource := elastic.NewSearchSource().
 					Suggester(elastic.NewCompletionSuggester("classification_name").
-						Field("name_suggest").
-						Text(query.Term).
-						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
+					Field("name_suggest").
+					Text(query.Term).
+					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType))).
 					Suggester(elastic.NewCompletionSuggester("classification_description").
-						Field("description_suggest").
-						Text(query.Term).
-						ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
+					Field("description_suggest").
+					Text(query.Term).
+					ContextQuery(elastic.NewSuggesterCategoryQuery("classification", classType)))
 
 				request := elastic.NewSearchRequest().
 					SearchSource(searchSource).
@@ -426,7 +426,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 	for _, intent := range query.Intents {
 		// Convert intent to result with score.
 		intentValue := intent.Value.(es.ClassificationIntent)
-        boostedScore := float64(0.0)
+		boostedScore := float64(0.0)
 		if intentValue.Exist {
 			sh := srMap[intent.Language].Hits
 			sh.TotalHits++
@@ -450,7 +450,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			intentHit.Source = (*json.RawMessage)(&source)
 			sh.Hits = append(sh.Hits, intentHit)
 		}
-        log.Infof("Added intent %s %s %s boost score:%f exist:%t", intentValue.Name, intent.Type, intent.Language, boostedScore, intentValue.Exist)
+		log.Infof("Added intent %s %s %s boost score:%f exist:%t", intentValue.Name, intent.Type, intent.Language, boostedScore, intentValue.Exist)
 	}
 	return nil, srMap
 }
