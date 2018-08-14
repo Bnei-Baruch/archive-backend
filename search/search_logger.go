@@ -181,7 +181,9 @@ func (searchLogger *SearchLogger) GetAllQueries() ([]SearchLog, error) {
 	var ret []SearchLog
 	var searchResult *elastic.SearchResult
 	for true {
+        log.Infof("Scrolling...")
 		if searchResult != nil && searchResult.Hits != nil {
+            log.Infof("Git %d hits...", len(searchResult.Hits.Hits))
 			for _, h := range searchResult.Hits.Hits {
 				sl := SearchLog{}
 				json.Unmarshal(*h.Source, &sl)
@@ -193,7 +195,7 @@ func (searchLogger *SearchLogger) GetAllQueries() ([]SearchLog, error) {
 			Index("search_logs").
 			Type("search_logs").
 			Query(elastic.NewTermsQuery("log_type", "query")).
-			Scroll("1m").
+			Scroll("5m").
 			Size(100)
 		if searchResult != nil {
 			scrollClient = scrollClient.ScrollId(searchResult.ScrollId)
