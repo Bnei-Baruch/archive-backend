@@ -733,25 +733,38 @@ func FeedRssVideo(c *gin.Context) {
 }
 
 func showAsset(language string, mimeTypes []string, files []*mdbmodels.File, duration float64, name string, ext string) string {
+	bestFiles := []*mdbmodels.File{}
 	for _, file := range files {
 		if file.Language.String == language && in_array(file.MimeType.String, mimeTypes) {
-			size := convertSizeToMb(file.Size)
-			var title string
-			if duration == 0 {
-				title = fmt.Sprintf("%s&nbsp;|&nbsp;%.2fMb", ext, size)
-			} else {
-				title = fmt.Sprintf("%s&nbsp;|&nbsp;%.2fMb&nbsp;|&nbsp;%s", ext, size, convertDuration(duration))
-			}
-			return fmt.Sprintf(`<a href="%s%s" title="%s">%s %s</a>`, consts.CDN, file.UID, title, name, ext)
+			bestFiles = append(bestFiles, file)
 		}
 	}
+	if len(bestFiles) == 0 {
+		return ""
+	}
 
-	return ""
+	var maxSize int64 = 0
+	var maxIndex int
+	for idx, file := range bestFiles {
+		if file.Size > maxSize {
+			maxIndex = idx
+			maxSize = file.Size
+		}
+	}
+	file := bestFiles[maxIndex]
+	size := convertSizeToMb(file.Size)
+	var title string
+	if duration == 0 {
+		title = fmt.Sprintf("%s&nbsp;|&nbsp;%.2fMb", ext, size)
+	} else {
+		title = fmt.Sprintf("%s&nbsp;|&nbsp;%.2fMb&nbsp;|&nbsp;%s", ext, size, convertDuration(duration))
+	}
+	return fmt.Sprintf(`<a href="%s%s" title="%s">%s %s</a>`, consts.CDN, file.UID, title, name, ext)
 }
 
 func in_array(val string, array []string) (ok bool) {
 	for i := range array {
-		if ok  = array[i] == val; ok {
+		if ok = array[i] == val; ok {
 			return
 		}
 	}
