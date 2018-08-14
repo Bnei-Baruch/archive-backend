@@ -1615,6 +1615,9 @@ func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *Ht
 	// All content units in this day
 	cur := ContentUnitsRequest{
 		ListRequest: ListRequest{
+			BaseRequest: BaseRequest{
+				Language: r.Language,
+			},
 			PageSize: consts.API_MAX_PAGE_SIZE,
 			OrderBy:  "created_at desc",
 		},
