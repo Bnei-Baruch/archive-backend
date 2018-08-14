@@ -540,8 +540,8 @@ func FeedMorningLesson(c *gin.Context) {
 			NewInternalError(errors.Errorf("Illegal state: unit %s not in file map", cu.ID)).Abort(c)
 			return
 		}
-		video := showAsset(config.Lang, consts.MEDIA_MP4, files, cu.Duration, t.Video+" mp4")
-		audio := showAsset(config.Lang, consts.MEDIA_MP3, files, cu.Duration, t.Audio+" mp3")
+		video := showAsset(config.Lang, []string{consts.MEDIA_MP4}, files, cu.Duration, t.Video, "mp4")
+		audio := showAsset(config.Lang, []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}, files, cu.Duration, t.Audio, "mp3")
 
 		listen += "<div class='title'>" + cu.Name + "</div>" + video + audio
 		download += "<div class='title'>" + cu.Name + "</div>" + video + audio
@@ -557,7 +557,7 @@ func FeedMorningLesson(c *gin.Context) {
 		},
 	}
 
-	createFeed(feed, config.DLANG, false, c)
+	createFeed(feed, config.Lang, false, c)
 }
 
 func rssPhpDescription(lang string) string {
@@ -732,23 +732,30 @@ func FeedRssVideo(c *gin.Context) {
 	createFeed(feed, config.Lang, false, c)
 }
 
-func showAsset(language string, mimeType string, files []*mdbmodels.File, duration float64, name string) string {
+func showAsset(language string, mimeTypes []string, files []*mdbmodels.File, duration float64, name string, ext string) string {
 	for _, file := range files {
-		if file.MimeType.String == mimeType && file.Language.String == language {
+		if file.Language.String == language && in_array(file.MimeType.String, mimeTypes) {
 			size := convertSizeToMb(file.Size)
 			var title string
 			if duration == 0 {
-				title = fmt.Sprintf("mp4&nbsp;|&nbsp;%.2fMb", size)
+				title = fmt.Sprintf("%s&nbsp;|&nbsp;%.2fMb", ext, size)
 			} else {
-				title = fmt.Sprintf("mp4&nbsp;|&nbsp;%.2fMb&nbsp;|&nbsp;%s", size, convertDuration(duration))
+				title = fmt.Sprintf("%s&nbsp;|&nbsp;%.2fMb&nbsp;|&nbsp;%s", ext, size, convertDuration(duration))
 			}
-			return fmt.Sprintf(
-				`<a href="%s%s" title="%s">%s</a>`,
-				consts.CDN, file.UID, title, name)
+			return fmt.Sprintf(`<a href="%s%s" title="%s">%s %s</a>`, consts.CDN, file.UID, title, name, ext)
 		}
 	}
 
 	return ""
+}
+
+func in_array(val string, array []string) (ok bool) {
+	for i := range array {
+		if ok  = array[i] == val; ok {
+			return
+		}
+	}
+	return
 }
 
 func buildHtmlFromFile(language string, mimeType string, files []*mdbmodels.File, duration float64) string {
