@@ -76,10 +76,10 @@ type Item struct {
 
 func (r *Feed) RssFeed() (channel *Channel) {
 	if r.PubDate == "" {
-		r.PubDate = anyTimeFormat(time.RFC1123, r.Created, time.Now())
+		r.PubDate = anyTimeFormat(time.RFC1123Z, r.Created, time.Now())
 	}
 	for _, item := range r.Items {
-		item.PubDate = anyTimeFormat(time.RFC1123, r.Created, time.Now())
+		item.PubDate = anyTimeFormat(time.RFC1123Z, r.Created, time.Now())
 	}
 	channel = &Channel{
 		AtomLink: &AtomLink{
@@ -88,7 +88,7 @@ func (r *Feed) RssFeed() (channel *Channel) {
 			Type: "application/rss+xml",
 		},
 		Ttl:           600,
-		LastBuildDate: anyTimeFormat(time.RFC1123, r.Created, r.Updated, time.Now()),
+		LastBuildDate: anyTimeFormat(time.RFC1123Z, r.Created, r.Updated, time.Now()),
 		Feed:          r,
 	}
 	return channel

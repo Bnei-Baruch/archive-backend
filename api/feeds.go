@@ -59,7 +59,7 @@ func FeedRusZohar(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	fileMap, err := loadCUFiles(db, []int64{id})
+	fileMap, err := loadCUFiles(db, []int64{id}, nil, "")
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -124,20 +124,16 @@ func FeedRusForLaitmanRu(c *gin.Context) {
 		herr.Abort(c)
 	}
 
-	cuids := make([]int64, len(lessonParts.ContentUnits))
-	for idx, cu := range lessonParts.ContentUnits {
-		id, err := mapCU2ID(cu.ID, db, c)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				// empty feed
-			} else {
-				NewInternalError(err).Abort(c)
-			}
-			return
+	cuids, err := mapCU2IDs(lessonParts.ContentUnits, db, c)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			createFeed(feed, "ru", false, c)
+		} else {
+			NewInternalError(err).Abort(c)
 		}
-		cuids[idx] = id
+		return
 	}
-	fileMap, err := loadCUFiles(db, cuids)
+	fileMap, err := loadCUFiles(db, cuids, nil, "")
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -171,6 +167,25 @@ func FeedRusForLaitmanRu(c *gin.Context) {
 	}
 
 	createFeed(feed, "RUS", false, c)
+}
+
+func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB, c *gin.Context) (ids []int64, err error) {
+	cuids := make([]interface{}, len(contentUnits))
+	for idx, cu := range contentUnits {
+		cuids[idx] = cu.ID
+	}
+	xus, err := mdbmodels.ContentUnits(db, qm.Select("id"), qm.WhereIn("uid in ?", cuids...), qm.OrderBy("created_at asc")).All()
+	if err != nil {
+		if err != sql.ErrNoRows { // non-empty feed
+			NewInternalError(err).Abort(c)
+		}
+		return
+	}
+	ids = make([]int64, len(xus))
+	for idx, xu := range xus {
+		ids[idx] = xu.ID
+	}
+	return
 }
 
 func mapCU2ID(cuID string, db *sql.DB, c *gin.Context) (id int64, err error) {
@@ -239,7 +254,7 @@ var T = map[string]translation{
 }
 
 // wsxml.xml?CID=4016&DLANG=HEB&DF=2013-04-30&DT=2013-03-31
-// supports only CID: 120, 3589, 3673, 4016, 4728
+// supports only CID: 120 - yehsivat haverim (kab.co.il), 4728 - lesson parts (kab.co.il)
 // This feed is used by kab.co.il
 // On that server there is a hardcoded ip of our server !!!
 func FeedWSXML(c *gin.Context) {
@@ -268,7 +283,7 @@ func FeedWSXML(c *gin.Context) {
 				Language: config.Lang,
 			},
 			StartIndex: 1,
-			StopIndex:  150,
+			StopIndex:  20,
 			OrderBy:    "properties->'filmdate' desc, created_at desc",
 		},
 		DateRangeFilter: DateRangeFilter{
@@ -282,54 +297,36 @@ func FeedWSXML(c *gin.Context) {
 			ContentTypes: []string{consts.CT_FRIENDS_GATHERING},
 		}
 		break
-	case 3673: // tv-clip => CLIP
-		cur.ContentTypesFilter = ContentTypesFilter{
-			ContentTypes: []string{consts.CT_CLIP},
-		}
-		break
-	case 4016: // lessons_zohar-la-am => LESSON_PART + SourcesFilter.Sources= ["AwGBQX2L"]
-		cur.ContentTypesFilter = ContentTypesFilter{
-			ContentTypes: []string{consts.CT_LESSON_PART},
-		}
-		cur.SourcesFilter = SourcesFilter{Sources: []string{"AwGBQX2L"}}
-		break
 	case 4728: // lessons-part => LESSON_PART
 		cur.ContentTypesFilter = ContentTypesFilter{
 			ContentTypes: []string{consts.CT_LESSON_PART},
 		}
 		break
-		// vl_heb_virtual-group-israel => ignore
-		//case 3589:
-		//	break
 	default:
 		c.String(http.StatusOK, "<lessons />")
 		return
 	}
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	items, herr := handleContentUnits(db, cur)
+	item, herr := handleContentUnits(db, cur)
 	if herr != nil {
 		herr.Abort(c)
 	}
-	if len(items.ContentUnits) == 0 {
+	if len(item.ContentUnits) == 0 {
 		c.String(http.StatusOK, "<lessons />")
 		return
 	}
 
-	cuids := make([]int64, len(items.ContentUnits))
-	for idx, cu := range items.ContentUnits {
-		id, err := mapCU2ID(cu.ID, db, c)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				// empty feed
-			} else {
-				NewInternalError(err).Abort(c)
-			}
-			return
+	cuids, err := mapCU2IDs(item.ContentUnits, db, c)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.String(http.StatusOK, "<lessons />")
+		} else {
+			NewInternalError(err).Abort(c)
 		}
-		cuids[idx] = id
+		return
 	}
 
-	fileMap, err := loadCUFiles(db, cuids)
+	fileMap, err := loadCUFiles(db, cuids, nil, "")
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -372,15 +369,15 @@ func FeedWSXML(c *gin.Context) {
 	}
 
 	lessons := lessonsT{
-		Lesson: make([]lessonT, len(items.ContentUnits)),
+		Lesson: make([]lessonT, len(item.ContentUnits)),
 	}
-	for i, unit := range items.ContentUnits {
+	for i, unit := range item.ContentUnits {
 		unitFiles := fileMap[cuids[i]]
 		lessons.Lesson[i] = lessonT{
 			Title:       unit.Name,
 			Description: unit.Description,
 			Link:        getHref("/"+config.Lang+"/lessons/cu/"+string(unit.ID), c),
-			Date:        unit.FilmDate.String(),
+			Date:        unit.FilmDate.Format("Mon, 2 Jan 2006 15:04:05 -0700"),
 			Language:    consts.LANG2CODE[unit.OriginalLanguage],
 			Lecturer:    "",
 			Files: filesT{
@@ -413,6 +410,18 @@ func FeedPodcast(c *gin.Context) {
 	var config feedConfig
 	(&config).getConfig(c)
 
+	feed := &feeds.Feed{
+		Title:          "שיעור הקבלה היומי",
+		Link:           getHref("/feeds/podcast.rss?DLANG="+config.DLANG, c),
+		Description:    "כאן תקבלו עדכונים יומיים של שיעורי קבלה. התכנים מבוססים על מקורות הקבלה האותנטיים בלבד",
+		Updated:        time.Now(),
+		Copyright:      copyright,
+		ItunesCategory: &feeds.ItunesCategory{Text: "Spirituality"},
+		ItunesImage:    &feeds.ItunesImage{Href: getHref("/cover_podcast.jpg", c)},
+		Author:         "info@kab.co.il",
+		Items:          make([]*feeds.Item, 0),
+	}
+
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	cur := ContentUnitsRequest{
 		ListRequest: ListRequest{
@@ -428,45 +437,29 @@ func FeedPodcast(c *gin.Context) {
 		},
 	}
 
-	items, herr := handleContentUnits(db, cur)
+	item, herr := handleContentUnits(db, cur)
 	if herr != nil {
 		herr.Abort(c)
 		return
 	}
-	cuids := make([]int64, len(items.ContentUnits))
-	for idx, cu := range items.ContentUnits {
-		id, err := mapCU2ID(cu.ID, db, c)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				// empty feed
-			} else {
-				NewInternalError(err).Abort(c)
-			}
-			return
+	cuids, err := mapCU2IDs(item.ContentUnits, db, c)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			createFeed(feed, config.Lang, false, c)
+		} else {
+			NewInternalError(err).Abort(c)
 		}
-		cuids[idx] = id
+		return
 	}
 
-	fileMap, err := loadCUFiles(db, cuids)
+	fileMap, err := loadCUFiles(db, cuids, nil, "")
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
 
-	feed := &feeds.Feed{
-		Title:          "שיעור הקבלה היומי",
-		Link:           getHref("/feeds/podcast.rss?DLANG="+config.DLANG, c),
-		Description:    "כאן תקבלו עדכונים יומיים של שיעורי קבלה. התכנים מבוססים על מקורות הקבלה האותנטיים בלבד",
-		Updated:        time.Now(),
-		Copyright:      copyright,
-		ItunesCategory: &feeds.ItunesCategory{Text: "Spirituality"},
-		ItunesImage:    &feeds.ItunesImage{Href: getHref("/cover_podcast.jpg", c)},
-		Author:         "info@kab.co.il",
-		Items:          make([]*feeds.Item, 0),
-	}
-
 	var validFild = regexp.MustCompile("kitei-makor|lelo-mikud")
-	for idx, cu := range items.ContentUnits {
+	for idx, cu := range item.ContentUnits {
 		files, ok := fileMap[cuids[idx]]
 		if !ok {
 			NewInternalError(errors.Errorf("Illegal state: unit %s not in file map", cu.ID)).Abort(c)
@@ -501,6 +494,7 @@ func FeedPodcast(c *gin.Context) {
 	createFeed(feed, config.DLANG, true, c)
 }
 
+// Lesson Downloader
 func FeedMorningLesson(c *gin.Context) {
 	var err error
 	var config feedConfig
@@ -516,25 +510,22 @@ func FeedMorningLesson(c *gin.Context) {
 	}
 
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	lessonParts, herr := handleLatestLesson(db, BaseRequest{Language: config.Lang}, true)
+	item, herr := handleLatestLesson(db, BaseRequest{Language: config.Lang}, true)
 	if herr != nil {
 		herr.Abort(c)
 	}
 
-	cuids := make([]int64, len(lessonParts.ContentUnits))
-	for idx, cu := range lessonParts.ContentUnits {
-		id, err := mapCU2ID(cu.ID, db, c)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				// empty feed
-			} else {
-				NewInternalError(err).Abort(c)
-			}
-			return
+	cuids, err := mapCU2IDs(item.ContentUnits, db, c)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			createFeed(feed, config.Lang, false, c)
+		} else {
+			NewInternalError(err).Abort(c)
 		}
-		cuids[idx] = id
+		return
 	}
-	fileMap, err := loadCUFiles(db, cuids)
+
+	fileMap, err := loadCUFiles(db, cuids, nil, "")
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -543,7 +534,7 @@ func FeedMorningLesson(c *gin.Context) {
 	listen := "<h4>" + t.Playlist + "</h4>"
 	download := "<h4>" + t.Download + "</h4>"
 
-	for idx, cu := range lessonParts.ContentUnits {
+	for idx, cu := range item.ContentUnits {
 		files, ok := fileMap[cuids[idx]]
 		if !ok {
 			NewInternalError(errors.Errorf("Illegal state: unit %s not in file map", cu.ID)).Abort(c)
@@ -555,29 +546,43 @@ func FeedMorningLesson(c *gin.Context) {
 		listen += "<div class='title'>" + cu.Name + "</div>" + video + audio
 		download += "<div class='title'>" + cu.Name + "</div>" + video + audio
 	}
-	link := "https://kabbalahmedia.info/ru/lessons/cu/" + lessonParts.ID
+	link := "https://kabbalahmedia.info/ru/lessons/cu/" + item.ID
 	feed.Items = []*feeds.Item{
 		{
-			Title:       t.LessonFrom + " " + lessonParts.FilmDate.Format("02.01.2006"),
+			Title:       t.LessonFrom + " " + item.FilmDate.Format("02.01.2006"),
 			Guid:        link,
 			Link:        link,
 			Description: &feeds.Description{Text: listen + download},
-			Created:     lessonParts.FilmDate.Time,
+			Created:     item.FilmDate.Time,
 		},
 	}
 
 	createFeed(feed, config.DLANG, false, c)
 }
 
+func rssPhpDescription(lang string) string {
+	switch lang {
+	case "tr":
+		return "Burada en son Kabala makale, video, haber, konuları ve Bney Baruh internet sitesi güncelleştirmeleri ve içerikleri bulacaksınız."
+	case "he":
+		return "כאן תקבלו עדכונים יומיים של שיחות, הרצאות ושיעורי קבלה. התכנים מבוססים על מקורות הקבלה האותנטיים בלבד"
+	case "ru":
+		return "МЕЖДУНАРОДНАЯ АКАДЕМИЯ КАББАЛЫ - крупнейший в мире учебно-образовательный интернет-ресурс, бесплатный и неограниченный источник получения достоверной информации о науке каббала!"
+	case "ua":
+		return "МІЖНАРОДНА АКАДЕМІЯ Каббали - найбільший в світі навчально освітній інтернет-ресурс, безкоштовне і необмежене джерело отримання достовірної інформації про науку каббала!"
+	default:
+		return "Here you will find all the latest Kabbalah articles, videos, audio, news, features, Bnei Baruch website updates and content additions."
+	}
+}
+
 func FeedRssPhp(c *gin.Context) {
-	//var err error
 	var config feedConfig
 	(&config).getConfig(c)
-
 	feed := &feeds.Feed{
 		Title:       "Bnei-Baruch Kabbalahmedia MP3 Podcast",
 		Link:        getHref("/rss.php?DLANG="+config.DLANG, c),
-		Description: "Here you will find all the latest Kabbalah articles, videos, audio, news, features, Bnei Baruch website updates and content additions.",
+		Description: rssPhpDescription(config.Lang),
+		Language:    config.Lang,
 		Updated:     time.Now(),
 		Copyright:   copyright,
 	}
@@ -591,50 +596,46 @@ func FeedRssPhp(c *gin.Context) {
 			},
 			StartIndex: 1,
 			StopIndex:  20,
-			OrderBy:    "(properties->>'film_date')::date desc, created_at desc",
+			OrderBy:    "created_at desc",
 		},
 		ContentTypesFilter: ContentTypesFilter{
 			ContentTypes: []string{consts.CT_LESSON_PART},
 		},
+		DateRangeFilter: DateRangeFilter{
+			StartDate: time.Now().AddDate(0, 0, -1).Format("2006-01-02"),
+		},
 	}
 
-	items, herr := handleContentUnits(db, cur)
+	item, herr := handleContentUnits(db, cur)
 	if herr != nil {
 		herr.Abort(c)
 		return
 	}
-	cuids := make([]int64, len(items.ContentUnits))
-	for idx, cu := range items.ContentUnits {
-		id, err := mapCU2ID(cu.ID, db, c)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				// empty feed
-			} else {
-				NewInternalError(err).Abort(c)
-			}
-			return
+	cuids, err := mapCU2IDs(item.ContentUnits, db, c)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			createFeed(feed, config.Lang, false, c)
+		} else {
+			NewInternalError(err).Abort(c)
 		}
-		cuids[idx] = id
+		return
 	}
 
-	fileMap, err := loadCUFiles(db, cuids)
+	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b,}
+	fileMap, err := loadCUFiles(db, cuids, mediaTypes, config.Lang)
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
 
 	feed.Items = make([]*feeds.Item, 0)
-	for idx, cu := range items.ContentUnits {
+	for idx, cu := range item.ContentUnits {
 		files, ok := fileMap[cuids[idx]]
 		if !ok {
 			NewInternalError(errors.Errorf("Illegal state: unit %s not in file map", cu.ID)).Abort(c)
 			return
 		}
 		for _, file := range files {
-			if file.MimeType.String != consts.MEDIA_MP4 {
-				continue
-			}
-
 			url := fmt.Sprintf("%s%s", consts.CDN, file.UID)
 			feed.Items = append(feed.Items, &feeds.Item{
 				Title: cu.Name,
@@ -646,14 +647,89 @@ func FeedRssPhp(c *gin.Context) {
 				Enclosure: &feeds.Enclosure{
 					Url:    url,
 					Length: file.Size,
-					Type:   consts.MEDIA_MP4,
+					Type:   file.MimeType.String,
 				},
-				Created: cu.FilmDate.Time,
+				Created: file.CreatedAt,
 			})
 		}
 	}
 
-	createFeed(feed, config.DLANG, false, c)
+	createFeed(feed, config.Lang, false, c)
+}
+
+func FeedRssVideo(c *gin.Context) {
+	var config feedConfig
+	(&config).getConfig(c)
+	feed := &feeds.Feed{
+		Title:       "Kabbalah Media Updates",
+		Link:        getHref("/feeds/rss_video.rss?&DLANG="+config.DLANG, c),
+		Description: "Video updates from Kabbalamedia Archive",
+		Language:    config.Lang,
+		Updated:     time.Now(),
+		Copyright:   copyright,
+	}
+
+	db := c.MustGet("MDB_DB").(*sql.DB)
+
+	cur := ContentUnitsRequest{
+		ListRequest: ListRequest{
+			BaseRequest: BaseRequest{
+				Language: config.Lang,
+			},
+			StartIndex: 1,
+			StopIndex:  20,
+			OrderBy:    "created_at asc",
+		},
+		DateRangeFilter: DateRangeFilter{
+			StartDate: time.Now().AddDate(0, 0, -1).Format("2006-01-02"),
+		},
+	}
+
+	item, herr := handleContentUnits(db, cur)
+	if herr != nil {
+		herr.Abort(c)
+		return
+	}
+	cuids, err := mapCU2IDs(item.ContentUnits, db, c)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			createFeed(feed, config.Lang, false, c)
+		} else {
+			NewInternalError(err).Abort(c)
+		}
+		return
+	}
+
+	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b, consts.MEDIA_MP4}
+	fileMap, err := loadCUFiles(db, cuids, mediaTypes, "")
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	feed.Items = make([]*feeds.Item, 0)
+	for idx, cu := range item.ContentUnits {
+		id := cuids[idx]
+		files, ok := fileMap[id]
+		if !ok {
+			// This content unit does not have files
+			continue
+		}
+
+		link := "https://kabbalahmedia.info/ru/lessons/cu/" + cu.ID // TODO
+		feed.Items = append(feed.Items, &feeds.Item{
+			Title: cu.Name + " " + cu.FilmDate.Format("(02-01-2006)"),
+			Guid:  link,
+			Link:  link,
+			Description: &feeds.Description{
+				Text: buildRssVideoHtmlFromFiles(files),
+			},
+			Created: cu.FilmDate.Time,
+		})
+
+	}
+
+	createFeed(feed, config.Lang, false, c)
 }
 
 func showAsset(language string, mimeType string, files []*mdbmodels.File, duration float64, name string) string {
@@ -692,6 +768,27 @@ func buildHtmlFromFile(language string, mimeType string, files []*mdbmodels.File
 	}
 
 	return "N/A"
+}
+
+func buildRssVideoHtmlFromFiles(files []*mdbmodels.File) (items string) {
+	var h = map[string][]*mdbmodels.File{}
+	for _, file := range files {
+		key := "<b>" + file.Type + ":</b><br/>"
+		h[key] = append(h[key], file)
+	}
+
+	items = ""
+	for key, f := range h {
+		items += key
+		for _, file := range f {
+			fileSize := convertSizeToMb(file.Size)
+			name := fmt.Sprintf("%s_%.2fMB", consts.LANG2CODE[file.Language.String], fileSize)
+			href := fmt.Sprintf("%s%s", consts.CDN, file.UID)
+
+			items += "<div><a href='" + href + "'>" + name + "</a></div>"
+		}
+	}
+	return
 }
 
 func convertSizeToMb(size int64) float64 {
