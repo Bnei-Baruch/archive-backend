@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -65,15 +66,15 @@ func (index *BlogIndex) Update(scope Scope) error {
 	return index.addToIndex(scope, removed)
 }
 
-func (index *BlogIndex) addToIndex(scope Scope, removedUIDs []string) error {
+func (index *BlogIndex) addToIndex(scope Scope, removedIDs []int64) error {
 	sqlScope := defaultBlogPostsSql()
-	uids := removedUIDs
-	if scope.BlogPostID != "" {
-		uids = append(uids, scope.BlogPostID)
+	ids := removedIDs
+	if scope.BlogPostID != 0 {
+		ids = append(ids, scope.BlogPostID)
 	}
-	quoted := make([]string, len(uids))
-	for i, uid := range uids {
-		quoted[i] = fmt.Sprintf("'%s'", uid)
+	quoted := make([]string, len(ids))
+	for i, id := range ids {
+		quoted[i] = fmt.Sprintf("%d", id)
 	}
 	sqlScope = fmt.Sprintf("%s AND p.id IN (%s)", sqlScope, strings.Join(quoted, ","))
 	if err := index.addToIndexSql(sqlScope); err != nil {
@@ -82,15 +83,26 @@ func (index *BlogIndex) addToIndex(scope Scope, removedUIDs []string) error {
 	return nil
 }
 
-func (index *BlogIndex) removeFromIndex(scope Scope) ([]string, error) {
-	if scope.BlogPostID != "" {
+func (index *BlogIndex) removeFromIndex(scope Scope) ([]int64, error) {
+	if scope.BlogPostID != 0 {
 		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_BLOG_POSTS).
 			Filter(elastic.NewTermsQuery("mdb_uid", scope.BlogPostID))
-		return index.RemoveFromIndexQuery(elasticScope)
+		removedStr, err := index.RemoveFromIndexQuery(elasticScope)
+		if err != nil {
+			return nil, err
+		}
+		removedInt := make([]int64, 0)
+		for _, rs := range removedStr {
+			ri, err := strconv.ParseInt(rs, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			removedInt = append(removedInt, ri)
+		}
 	}
 
 	// Nothing to remove.
-	return []string{}, nil
+	return []int64{}, nil
 }
 
 func (index *BlogIndex) bulkIndexPosts(offset int, limit int, sqlScope string) error {
@@ -161,7 +173,7 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 
 	langMapping := index.blogIdToLanguageMapping()
-	idStr := fmt.Sprintf("%v", mdbPost.BlogID)
+	idStr := fmt.Sprintf("%v", mdbPost.ID)
 
 	content, err := html2text.FromString(mdbPost.Content, html2text.Options{OmitLinks: true})
 
