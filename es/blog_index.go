@@ -144,7 +144,7 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 		limit := 20
 		for offset < int(count) {
 			tasks <- OffsetLimitJob{offset, limit}
-			tasksCount += 1
+			tasksCount++
 			offset += limit
 		}
 		close(tasks)

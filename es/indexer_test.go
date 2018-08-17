@@ -24,7 +24,6 @@ import (
 
 	"github.com/Bnei-Baruch/sqlboiler/boil"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
-	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
@@ -1183,27 +1182,6 @@ func (suite *IndexerSuite) validateCollectionsContentUnits(indexName string, ind
 	suite.validateMaps(expectedCUs, cus)
 }
 
-func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *es.Indexer, expectedNames []string) {
-	r := require.New(suite.T())
-	err := indexer.RefreshAll()
-	r.Nil(err)
-	var res *elastic.SearchResult
-	log.Infof("indexName: %+v", indexName)
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
-	if err != nil {
-		log.Infof("Error: %+v", err.Error())
-		r.Nil(err)
-	}
-	names := make([]string, len(res.Hits.Hits))
-	for i, hit := range res.Hits.Hits {
-		var cu es.Result
-		json.Unmarshal(*hit.Source, &cu)
-		names[i] = cu.Title
-	}
-	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
-	r.ElementsMatch(expectedNames, names)
-}
-
 func (suite *IndexerSuite) validateContentUnitTags(indexName string, indexer *es.Indexer, expectedTags []string) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
@@ -1324,43 +1302,6 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 
 }
 
-func (suite *IndexerSuite) validateSourceNames(indexName string, indexer *es.Indexer, expectedNames []string) {
-	r := require.New(suite.T())
-	err := indexer.RefreshAll()
-	r.Nil(err)
-	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
-	r.Nil(err)
-	names := make([]string, len(res.Hits.Hits))
-	matched := make([]string, 0)
-
-	for i, hit := range res.Hits.Hits {
-		var src es.Result
-		json.Unmarshal(*hit.Source, &src)
-		names[i] = src.Title
-	}
-
-	for _, name := range names {
-		for _, expected := range expectedNames {
-			if strings.Contains(name, expected) {
-				exist := false
-				for _, m := range matched {
-					if m == expected {
-						exist = true
-						break
-					}
-				}
-				if !exist {
-					matched = append(matched, expected)
-				}
-			}
-		}
-	}
-
-	r.Equal(len(expectedNames), len(matched))
-	r.ElementsMatch(expectedNames, matched)
-}
-
 func (suite *IndexerSuite) validateSourcesFullPath(indexName string, indexer *es.Indexer, expectedSources []string) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
@@ -1397,4 +1338,21 @@ func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Inde
 	}
 
 	r.True(reflect.DeepEqual(expectedContentsByNames, contentsByNames))
+}
+
+func (suite *IndexerSuite) validateNames(indexName string, indexer *es.Indexer, expectedNames []string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	names := make([]string, len(res.Hits.Hits))
+	for i, hit := range res.Hits.Hits {
+		var res es.Result
+		json.Unmarshal(*hit.Source, &res)
+		names[i] = res.Title
+	}
+	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
+	r.ElementsMatch(expectedNames, names)
 }

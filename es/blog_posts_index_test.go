@@ -38,37 +38,35 @@ func (suite *BlogIndexerSuite) TestBlogIndex() {
 	fmt.Printf("\nAdding English post and validate.\n\n")
 	suite.ibp(1, 2, "this is english post", false)
 	r.Nil(indexer.BlogPostUpdate(1))
-
-	// TBD consider make a single "validate names" function for all result types
-	suite.validateSourceNames(indexNameEn, indexer, []string{"this is english post"})
+	suite.validateNames(indexNameEn, indexer, []string{"this is english post"})
 
 	fmt.Printf("\nAdding Spanish post and validate.\n\n")
 	suite.ibp(2, 3, "this is spanish post", false)
 	r.Nil(indexer.BlogPostUpdate(2))
-	suite.validateSourceNames(indexNameEs, indexer, []string{"this is spanish post"})
+	suite.validateNames(indexNameEs, indexer, []string{"this is spanish post"})
 
 	fmt.Printf("\nAdding Hebrew post and validate.\n\n")
 	suite.ibp(3, 4, "this is hebrew post", false)
 	r.Nil(indexer.BlogPostUpdate(3))
-	suite.validateSourceNames(indexNameHe, indexer, []string{"this is hebrew post"})
+	suite.validateNames(indexNameHe, indexer, []string{"this is hebrew post"})
 
 	fmt.Printf("\nAdding Russian post and validate.\n\n")
 	suite.ibp(4, 1, "this is russian post", false)
 	r.Nil(indexer.BlogPostUpdate(4))
-	suite.validateSourceNames(indexNameRu, indexer, []string{"this is russian post"})
+	suite.validateNames(indexNameRu, indexer, []string{"this is russian post"})
 
 	fmt.Println("\nValidate adding filtered post - should not index.")
 	suite.ibp(5, 2, "today morning lesson", true)
 	r.Nil(indexer.BlogPostUpdate(5))
-	suite.validateSourceNames(indexNameEn, indexer, []string{"this is english post"})
+	suite.validateNames(indexNameEn, indexer, []string{"this is english post"})
 
 	fmt.Println("\nDelete posts from DB, reindex and validate we have 0 posts.")
 	r.Nil(deletePosts([]int64{1, 2, 3, 4}))
 	r.Nil(indexer.ReindexAll())
-	suite.validateSourceNames(indexNameEn, indexer, []string{})
-	suite.validateSourceNames(indexNameEs, indexer, []string{})
-	suite.validateSourceNames(indexNameRu, indexer, []string{})
-	suite.validateSourceNames(indexNameHe, indexer, []string{})
+	suite.validateNames(indexNameEn, indexer, []string{})
+	suite.validateNames(indexNameEs, indexer, []string{})
+	suite.validateNames(indexNameRu, indexer, []string{})
+	suite.validateNames(indexNameHe, indexer, []string{})
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())
