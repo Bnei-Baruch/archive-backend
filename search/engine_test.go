@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"context"
 
@@ -55,7 +55,7 @@ func (s ESLogAdapter) Printf(format string, v ...interface{}) { s.Logf(format, v
 func (suite *EngineSuite) TestESGetSuggestions() {
 	engine := ESEngine{esc: suite.esc}
 	_, err := engine.GetSuggestions(context.TODO(),
-		Query{Term: "pe", LanguageOrder: []string{consts.LANG_ENGLISH}})
+		Query{Term: "pe", LanguageOrder: []string{consts.LANG_ENGLISH}}, "pref")
 	suite.Require().Nil(err)
 }
 
@@ -212,7 +212,7 @@ func (suite *EngineSuite) TestJoinResponsesTimeOlderToNewer() {
 	r3, err := joinResponses(consts.SORT_BY_OLDER_TO_NEWER, 0, 4, r1, r2)
 	r.Nil(err)
 
-	expected := []SRR{SRR{1.6, "3", parse("2014-05-05")}, SRR{1.5, "c", parse("2015-05-21")}, SRR{2.2, "2", parse("2015-05-21")}, SRR{2.0, "b", parse("2015-05-22")}}
+	expected := []SRR{SRR{1.6, "3", parse("2014-05-05")}, SRR{2.2, "2", parse("2015-05-21")}, SRR{1.5, "c", parse("2015-05-21")}, SRR{2.0, "b", parse("2015-05-22")}}
 	r.Equal(len(expected), len(r3.Hits.Hits))
 	for i, h := range r3.Hits.Hits {
 		r.Equal(expected[i].Score, *h.Score)

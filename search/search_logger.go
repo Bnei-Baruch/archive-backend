@@ -7,31 +7,32 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 )
 
 type SearchLog struct {
-	Created     time.Time   `json:"created",omitempty`
+	SearchId    string      `json:"search_id"`
+	Created     time.Time   `json:"created"`
+	LogType     string      `json:"log_type"`
 	Query       Query       `json:"query"`
 	QueryResult interface{} `json:"query_result,omitempty"`
 	Error       interface{} `json:"error,omitempty"`
 	SortBy      string      `json:"sort_by,omitempty"`
-	From        uint64      `json:"from"`
+	From        uint64      `json:"from,omitempty"`
 	Size        uint64      `json:"size,omitempty"`
-	SearchId    string      `json:"search_id"`
-
-	// Deprecated field.
-	Results interface{} `json:"results,omitempty"`
+	Suggestion  string      `json:"suggestion,omitempty"`
 }
 
 type SearchClick struct {
-	Created  time.Time `json:"click_created,omitempty"`
-	MdbUid   string    `json:"mdb_uid",omitempty`
-	Index    string    `json:"index",omitempty`
-	Type     string    `json:"type",omitempty`
-	Rank     uint32    `json:"rank",omitempty`
-	SearchId string    `json:"search_id",omitempty`
+	SearchId   string    `json:"search_id"`
+	Created    time.Time `json:"created"`
+	LogType    string    `json:"log_type"`
+	MdbUid     string    `json:"mdb_uid",omitempty`
+	Index      string    `json:"index",omitempty`
+	ResultType string    `json:"result_type",omitempty`
+	Rank       uint32    `json:"rank",omitempty`
 }
 
 type CreatedSearchLogs []SearchLog
@@ -70,14 +71,15 @@ func MakeSearchLogger(esc *elastic.Client) *SearchLogger {
 	return &SearchLogger{esc: esc}
 }
 
-func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, indexType string, rank int, searchId string) error {
+func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultType string, rank int, searchId string) error {
 	sc := SearchClick{
-		Created:  time.Now(),
-		MdbUid:   mdbUid,
-		Index:    index,
-		Type:     indexType,
-		Rank:     uint32(rank),
-		SearchId: searchId,
+		SearchId:   searchId,
+		Created:    time.Now(),
+		LogType:    "click",
+		MdbUid:     mdbUid,
+		Index:      index,
+		ResultType: resultType,
+		Rank:       uint32(rank),
 	}
 
 	sr, err := elastic.NewSearchService(searchLogger.esc).
@@ -91,29 +93,28 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, indexTyp
 	if len(sr.Hits.Hits) > 1 {
 		return errors.Errorf("Found more then one search id %s", searchId)
 	}
-	parentId := sr.Hits.Hits[0].Id
 
 	resp, err := searchLogger.esc.Index().
 		Index("search_logs").
-		Type("search_clicks").
+		Type("search_logs").
 		BodyJson(sc).
-		Parent(parentId).
 		Do(context.TODO())
 	if err != nil {
 		return errors.Wrap(err, "Log Click")
 	}
-	if !resp.Created {
-		return errors.Errorf("Click log not created.")
-	}
+	log.Infof("Create resp: %+v", resp)
+	// if !resp.Created {
+	// 	return errors.Errorf("Click log not created.")
+	// }
 	return nil
 }
 
-func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, res *QueryResult) error {
-	return searchLogger.logSearch(query, sortBy, from, size, searchId, res, nil)
+func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult) error {
+	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, res, nil)
 }
 
-func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, from int, size int, searchId string, searchErr interface{}) error {
-	return searchLogger.logSearch(query, sortBy, from, size, searchId, nil, searchErr)
+func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, from int, size int, searchId string, suggestion string, searchErr interface{}) error {
+	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, nil, searchErr)
 }
 
 func (searchLogger *SearchLogger) fixHighlight(h *elastic.SearchHitHighlight) *elastic.SearchHitHighlight {
@@ -149,16 +150,18 @@ func (searchLogger *SearchLogger) fixResults(res *QueryResult) *QueryResult {
 	return res
 }
 
-func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, res *QueryResult, searchErr interface{}) error {
+func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, searchErr interface{}) error {
 	sl := SearchLog{
 		Created:     time.Now(),
+		SearchId:    searchId,
+		LogType:     "query",
 		Query:       query,
 		QueryResult: searchLogger.fixResults(res),
 		Error:       searchErr,
 		SortBy:      sortBy,
 		From:        uint64(from),
 		Size:        uint64(size),
-		SearchId:    searchId,
+		Suggestion:  suggestion,
 	}
 	resp, err := searchLogger.esc.Index().
 		Index("search_logs").
@@ -168,7 +171,7 @@ func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int
 	if err != nil {
 		return errors.Wrap(err, "Log Search")
 	}
-	if !resp.Created {
+	if resp.Result != "created" {
 		return errors.Errorf("Search log not created.")
 	}
 	return nil
@@ -189,7 +192,7 @@ func (searchLogger *SearchLogger) GetAllQueries() ([]SearchLog, error) {
 		scrollClient := searchLogger.esc.Scroll().
 			Index("search_logs").
 			Type("search_logs").
-			Query(elastic.NewMatchAllQuery()).
+			Query(elastic.NewTermsQuery("log_type", "query")).
 			Scroll("1m").
 			Size(100)
 		if searchResult != nil {
@@ -220,8 +223,8 @@ func (searchLogger *SearchLogger) GetAllClicks() ([]SearchClick, error) {
 		var err error
 		scrollClient := searchLogger.esc.Scroll().
 			Index("search_logs").
-			Type("search_clicks").
-			Query(elastic.NewMatchAllQuery()).
+			Type("search_logs").
+			Query(elastic.NewTermsQuery("log_type", "click")).
 			Scroll("1m").
 			Size(100)
 		if searchResult != nil {

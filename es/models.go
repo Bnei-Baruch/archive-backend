@@ -1,7 +1,7 @@
 package es
 
 import (
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
@@ -10,9 +10,37 @@ type EffectiveDate struct {
 	EffectiveDate *utils.Date `json:"effective_date"`
 }
 
+type ResultType struct {
+	ResultType string `json:"result_type"`
+}
+
+// For full description see make.py RESULTS TEMPLATE.
+type Result struct {
+	// Document type.
+	ResultType string `json:"result_type"`
+
+	MDB_UID      string   `json:"mdb_uid"`
+	TypedUids    []string `json:"typed_uids"`
+	FilterValues []string `json:"filter_values"`
+
+	// Result content fields.
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	Content     string `json:"content,omitempty"`
+
+	EffectiveDate *utils.Date `json:"effective_date,omitempty"`
+
+	// Suggest field for autocomplete.
+	TitleSuggest []string `json:"title_suggest"`
+}
+
 type ClassificationIntent struct {
-	MDB_UID        string                    `json:"mdb_uid"`
-	Name           string                    `json:"name"`
+	// Fields from result.
+	ResultType string `json:"result_type"`
+	MDB_UID    string `json:"mdb_uid"`
+	Title      string `json:"title"`
+
+	// Intent fields.
 	ContentType    string                    `json:"content_type"`
 	Exist          bool                      `json:"exist"`
 	Score          *float64                  `json:"score,omitempty"`
@@ -74,8 +102,10 @@ type Classification struct {
 }
 
 type Source struct {
-	MDB_UID     string   `json:"mdb_uid"`
-	Name        string   `json:"name"`
+	MDB_UID string `json:"mdb_uid"`
+	Name    string `json:"name"`
+
+	// Deprecated fields (since we use 'Result Template' in order to index the sources):
 	Description string   `json:"description"`
 	Content     string   `json:"content"`
 	Sources     []string `json:"sources"`

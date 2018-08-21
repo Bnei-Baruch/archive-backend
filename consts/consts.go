@@ -215,37 +215,37 @@ var CODE2LANG = map[string]string{
 }
 
 var LANG2CODE = map[string]string{
-	LANG_ENGLISH: "ENG",
-	LANG_HEBREW: "HEB",
-	LANG_RUSSIAN: "RUS",
-	LANG_SPANISH: "SPA",
-	LANG_ITALIAN: "ITA",
-	LANG_GERMAN: "GER",
-	LANG_DUTCH: "DUT",
-	LANG_FRENCH: "FRE",
+	LANG_ENGLISH:    "ENG",
+	LANG_HEBREW:     "HEB",
+	LANG_RUSSIAN:    "RUS",
+	LANG_SPANISH:    "SPA",
+	LANG_ITALIAN:    "ITA",
+	LANG_GERMAN:     "GER",
+	LANG_DUTCH:      "DUT",
+	LANG_FRENCH:     "FRE",
 	LANG_PORTUGUESE: "POR",
-	LANG_TURKISH: "TRK",
-	LANG_POLISH: "POL",
-	LANG_ARABIC: "ARB",
-	LANG_HUNGARIAN: "HUN",
-	LANG_FINNISH: "FIN",
+	LANG_TURKISH:    "TRK",
+	LANG_POLISH:     "POL",
+	LANG_ARABIC:     "ARB",
+	LANG_HUNGARIAN:  "HUN",
+	LANG_FINNISH:    "FIN",
 	LANG_LITHUANIAN: "LIT",
-	LANG_JAPANESE: "JPN",
-	LANG_BULGARIAN: "BUL",
-	LANG_GEORGIAN: "GEO",
-	LANG_NORWEGIAN: "NOR",
-	LANG_SWEDISH: "SWE",
-	LANG_CROATIAN: "HRV",
-	LANG_CHINESE: "CHN",
-	LANG_PERSIAN: "FAR",
-	LANG_ROMANIAN: "RON",
-	LANG_HINDI: "HIN",
-	LANG_UKRAINIAN: "UKR",
+	LANG_JAPANESE:   "JPN",
+	LANG_BULGARIAN:  "BUL",
+	LANG_GEORGIAN:   "GEO",
+	LANG_NORWEGIAN:  "NOR",
+	LANG_SWEDISH:    "SWE",
+	LANG_CROATIAN:   "HRV",
+	LANG_CHINESE:    "CHN",
+	LANG_PERSIAN:    "FAR",
+	LANG_ROMANIAN:   "RON",
+	LANG_HINDI:      "HIN",
+	LANG_UKRAINIAN:  "UKR",
 	LANG_MACEDONIAN: "MKD",
-	LANG_SLOVENIAN: "SLV",
-	LANG_LATVIAN: "LAV",
-	LANG_SLOVAK: "SLK",
-	LANG_CZECH: "CZE",
+	LANG_SLOVENIAN:  "SLV",
+	LANG_LATVIAN:    "LAV",
+	LANG_SLOVAK:     "SLK",
+	LANG_CZECH:      "CZE",
 }
 
 // api
@@ -282,20 +282,28 @@ const (
 // Use to identify and map request filters
 // Maps request filter name to index field name.
 var FILTERS = map[string]string{
-	FILTER_TAG:                       "tags",
+	FILTER_TAG:                       "tag",
 	FILTER_START_DATE:                "start_date",
 	FILTER_END_DATE:                  "end_date",
-	FILTER_SOURCE:                    "sources",
-	FILTER_AUTHOR:                    "sources",
+	FILTER_SOURCE:                    "source",
+	FILTER_AUTHOR:                    "source",
 	FILTER_UNITS_CONTENT_TYPES:       "content_type",
 	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
 	FILTER_SECTION_SOURCES:           "filter_section_sources",
 }
 
 // ElasticSearch 'es'
-const ES_CLASSIFICATIONS_INDEX = "classifications"
-const ES_UNITS_INDEX = "units"
-const ES_COLLECTIONS_INDEX = "collections"
+const ES_RESULTS_INDEX = "results"
+
+// Result type
+const ES_RESULT_TYPE = "result_type"
+const ES_RESULT_TYPE_UNITS = "units"
+const ES_RESULT_TYPE_SOURCES = "sources"
+const ES_RESULT_TYPE_COLLECTIONS = "collections"
+const ES_RESULT_TYPE_TAGS = "tags"
+
+var ES_SEARCH_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_SOURCES, ES_RESULT_TYPE_COLLECTIONS}
+var ES_ALL_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_TAGS, ES_RESULT_TYPE_SOURCES, ES_RESULT_TYPE_COLLECTIONS}
 
 const (
 	MEDIA_MP4 = "video/mp4"
@@ -315,14 +323,6 @@ const (
 	SEARCH_FILTER_WITHOUT_SOURCES SearchFilterType = iota
 )
 
-// Classicication index consts.
-const (
-	SOURCES_INDEX_TYPE         = "sources"
-	TAGS_INDEX_TYPE            = "tags"
-	SOURCE_CLASSIFICATION_TYPE = "source"
-	TAG_CLASSIFICATION_TYPE    = "tag"
-)
-
 // Search intents
 const (
 	INTENT_TYPE_TAG    = "tag"
@@ -334,9 +334,15 @@ const (
 	INTENT_HIT_TYPE_LESSONS  = "lessons"
 )
 
+// Fake index for intents.
 var INTENT_INDEX_BY_TYPE = map[string]string{
 	INTENT_TYPE_TAG:    INTENT_INDEX_TAG,
 	INTENT_TYPE_SOURCE: INTENT_INDEX_SOURCE,
+}
+
+var RESULT_TYPE_BY_INDEX_TYPE = map[string]string{
+	INTENT_TYPE_TAG:    ES_RESULT_TYPE_TAGS,
+	INTENT_TYPE_SOURCE: ES_RESULT_TYPE_SOURCES,
 }
 
 var INTENT_HIT_TYPE_BY_CT = map[string]string{

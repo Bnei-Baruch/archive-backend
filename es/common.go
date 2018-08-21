@@ -12,7 +12,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -82,19 +82,27 @@ func InitVars() {
 	}
 }
 
-func uidToTypedUID(t string, uid string) string {
+func keyValue(t string, uid string) string {
 	return fmt.Sprintf("%s:%s", t, uid)
 }
 
-func uidsToTypedUIDs(t string, uids []string) []string {
+func KeyValues(t string, uids []string) []string {
 	ret := make([]string, len(uids))
 	for i, uid := range uids {
-		ret[i] = uidToTypedUID(t, uid)
+		ret[i] = keyValue(t, uid)
 	}
 	return ret
 }
 
-func TypedUIDsToUids(t string, typedUIDs []string) ([]string, error) {
+func KeyIValues(t string, uids []string) []interface{} {
+	ret := make([]interface{}, len(uids))
+	for i, uid := range uids {
+		ret[i] = keyValue(t, uid)
+	}
+	return ret
+}
+
+func KeyValuesToValues(t string, typedUIDs []string) ([]string, error) {
 	ret := make([]string, 0)
 	for _, typedUid := range typedUIDs {
 		parts := strings.Split(typedUid, ":")
@@ -106,6 +114,27 @@ func TypedUIDsToUids(t string, typedUIDs []string) ([]string, error) {
 		}
 	}
 	return ret, nil
+}
+
+func (result *Result) ToString() string {
+	resultCopy := result
+	if len(resultCopy.Content) > 30 {
+		resultCopy.Content = fmt.Sprintf("%s...", resultCopy.Content[:30])
+	}
+	resultBytes, err := json.Marshal(resultCopy)
+	if err != nil {
+		return "<BAD Result>"
+	}
+	return string(resultBytes)
+}
+
+func Suffixes(title string) []string {
+	parts := strings.Split(strings.TrimSpace(title), " ")
+	ret := []string{}
+	for i, _ := range parts {
+		ret = append(ret, strings.Join(parts[i:], " "))
+	}
+	return ret
 }
 
 // Scopes - for detection of changes
@@ -247,11 +276,14 @@ func DumpDB(mdb *sql.DB, title string) error {
 	return nil
 }
 
-func DumpIndexes(esc *elastic.Client, title string, indexType string) error {
+func DumpIndexes(esc *elastic.Client, title string, resultType string) error {
 	fmt.Printf("\n\n ------------------- %s DUMP INDEXES ------------------- \n\n", title)
-	indexName := IndexName("test", indexType, consts.LANG_ENGLISH)
+	indexName := IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
 	fmt.Printf("\n\n\nINDEX %s\n\n", indexName)
-	indexer := MakeIndexer("test", []string{indexType}, nil, esc)
+	indexer, err := MakeIndexer("test", "test-date", []string{resultType}, nil, esc)
+	if err != nil {
+		return err
+	}
 	if err := indexer.RefreshAll(); err != nil {
 		return err
 	}

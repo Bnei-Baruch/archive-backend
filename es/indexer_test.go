@@ -23,11 +23,12 @@ import (
 
 	"github.com/Bnei-Baruch/sqlboiler/boil"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
+	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/olivere/elastic.v5"
+	"gopkg.in/olivere/elastic.v6"
 	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
@@ -246,11 +247,12 @@ type ESLogAdapter struct{ *testing.T }
 
 func (s ESLogAdapter) Printf(format string, v ...interface{}) { s.Logf(format, v...) }
 
+// MOVE THIS TO EACH RESULT TYPE TEST!
 // In order for 'go test' to run this suite, we need to create
 // a normal test function and pass our suite to suite.Run
-func TestIndexer(t *testing.T) {
-	suite.Run(t, new(IndexerSuite))
-}
+// func TestIndexer(t *testing.T) {
+// 	suite.Run(t, new(IndexerSuite))
+// }
 
 func (suite *IndexerSuite) SetupTest() {
 	r := require.New(suite.T())
@@ -262,7 +264,8 @@ func (suite *IndexerSuite) SetupTest() {
 	}
 	r.Nil(deleteContentUnits(uids))
 	// Remove test indexes.
-	indexer := es.MakeIndexer("test", []string{consts.ES_UNITS_INDEX, consts.ES_CLASSIFICATIONS_INDEX}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
+	r.Nil(err)
 	r.Nil(indexer.DeleteIndexes())
 	// Delete test directory
 	os.RemoveAll(viper.GetString("test.test-docx-folder"))
@@ -1134,7 +1137,7 @@ func (suite *IndexerSuite) validateCollectionsContentUnits(indexName string, ind
 	for _, hit := range res.Hits.Hits {
 		var c es.Collection
 		json.Unmarshal(*hit.Source, &c)
-		uids, err := es.TypedUIDsToUids("content_unit", c.TypedUIDs)
+		uids, err := es.KeyValuesToValues("content_unit", c.TypedUIDs)
 		r.Nil(err)
 		if val, ok := cus[c.MDB_UID]; ok {
 			r.Nil(errors.New(fmt.Sprintf(
@@ -1151,13 +1154,17 @@ func (suite *IndexerSuite) validateContentUnitNames(indexName string, indexer *e
 	err := indexer.RefreshAll()
 	r.Nil(err)
 	var res *elastic.SearchResult
+	log.Infof("indexName: %+v", indexName)
 	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
-	r.Nil(err)
+	if err != nil {
+		log.Infof("Error: %+v", err.Error())
+		r.Nil(err)
+	}
 	names := make([]string, len(res.Hits.Hits))
 	for i, hit := range res.Hits.Hits {
-		var cu es.ContentUnit
+		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
-		names[i] = cu.Name
+		names[i] = cu.Title
 	}
 	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
 	r.ElementsMatch(expectedNames, names)
@@ -1172,11 +1179,11 @@ func (suite *IndexerSuite) validateContentUnitTags(indexName string, indexer *es
 	r.Nil(err)
 	tags := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
-		var cu es.ContentUnit
+		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
-		for _, t := range cu.Tags {
-			tags = append(tags, t)
-		}
+		hitTags, err := es.KeyValuesToValues("tag", cu.FilterValues)
+		r.Nil(err)
+		tags = append(tags, hitTags...)
 	}
 	r.Equal(len(expectedTags), len(tags))
 	r.ElementsMatch(expectedTags, tags)
@@ -1191,17 +1198,17 @@ func (suite *IndexerSuite) validateContentUnitSources(indexName string, indexer 
 	r.Nil(err)
 	sources := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
-		var cu es.ContentUnit
+		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
-		for _, s := range cu.Sources {
-			sources = append(sources, s)
-		}
+		hitSources, err := es.KeyValuesToValues("source", cu.FilterValues)
+		r.Nil(err)
+		sources = append(sources, hitSources...)
 	}
 	r.Equal(len(expectedSources), len(sources))
 	r.ElementsMatch(expectedSources, sources)
 }
 
-func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *es.Indexer, expectedLangs []string, expectedTranscriptLength null.Int) {
+func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *es.Indexer, expectedTranscriptLength null.Int) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
@@ -1209,27 +1216,27 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *e
 	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 
-	if len(expectedLangs) > 0 {
-		langs := make([]string, 0)
-		for _, hit := range res.Hits.Hits {
-			var cu es.ContentUnit
-			json.Unmarshal(*hit.Source, &cu)
-			for _, t := range cu.Translations {
-				langs = append(langs, t)
-			}
-		}
-
-		r.Equal(len(expectedLangs), len(langs))
-		r.ElementsMatch(expectedLangs, langs)
-	}
+	// if len(expectedLangs) > 0 {
+	// 	langs := make([]string, 0)
+	// 	for _, hit := range res.Hits.Hits {
+	// 		var cu es.Result
+	// 		json.Unmarshal(*hit.Source, &cu)
+	// 		for _, t := range cu.Translations {
+	// 			langs = append(langs, t)
+	// 		}
+	// 	}
+	//
+	// 	r.Equal(len(expectedLangs), len(langs))
+	// 	r.ElementsMatch(expectedLangs, langs)
+	// }
 
 	// Get transcript,
 	transcriptLengths := make([]int, 0)
 	for _, hit := range res.Hits.Hits {
-		var cu es.ContentUnit
+		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
-		if cu.Transcript != "" {
-			transcriptLengths = append(transcriptLengths, len(cu.Transcript))
+		if cu.Content != "" {
+			transcriptLengths = append(transcriptLengths, len(cu.Content))
 		}
 	}
 
@@ -1262,9 +1269,9 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 	var res *elastic.SearchResult
 	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
-	cus := make(map[string]es.ContentUnit)
+	cus := make(map[string]es.Result)
 	for _, hit := range res.Hits.Hits {
-		var cu es.ContentUnit
+		var cu es.Result
 		json.Unmarshal(*hit.Source, &cu)
 		if val, ok := cus[cu.MDB_UID]; ok {
 			r.Nil(errors.New(fmt.Sprintf(
@@ -1275,7 +1282,9 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 	}
 	types := make(map[string][]string)
 	for k, cu := range cus {
-		types[k] = cu.CollectionsContentTypes
+		collectionsContentTypes, err := es.KeyValuesToValues("collections_content_type", cu.FilterValues)
+		r.Nil(err)
+		types[k] = collectionsContentTypes
 	}
 	suite.validateMaps(expectedTypes, types)
 
@@ -1289,32 +1298,33 @@ func (suite *IndexerSuite) validateSourceNames(indexName string, indexer *es.Ind
 	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	names := make([]string, len(res.Hits.Hits))
-	for i, hit := range res.Hits.Hits {
-		var cu es.Source
-		json.Unmarshal(*hit.Source, &cu)
-		names[i] = cu.Name
-	}
-	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
-	r.ElementsMatch(expectedNames, names)
-}
+	matched := make([]string, 0)
 
-func (suite *IndexerSuite) validateSourceAuthors(indexName string, indexer *es.Indexer, expectedAuthors []string) {
-	r := require.New(suite.T())
-	err := indexer.RefreshAll()
-	r.Nil(err)
-	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
-	r.Nil(err)
-	authors := make([]string, 0)
-	for _, hit := range res.Hits.Hits {
-		var source es.Source
-		json.Unmarshal(*hit.Source, &source)
-		for _, a := range source.Authors {
-			authors = append(authors, a)
+	for i, hit := range res.Hits.Hits {
+		var src es.Result
+		json.Unmarshal(*hit.Source, &src)
+		names[i] = src.Title
+	}
+
+	for _, name := range names {
+		for _, expected := range expectedNames {
+			if strings.Contains(name, expected) {
+				exist := false
+				for _, m := range matched {
+					if m == expected {
+						exist = true
+						break
+					}
+				}
+				if !exist {
+					matched = append(matched, expected)
+				}
+			}
 		}
 	}
-	r.Equal(len(expectedAuthors), len(authors))
-	r.ElementsMatch(expectedAuthors, authors)
+
+	r.Equal(len(expectedNames), len(matched))
+	r.ElementsMatch(expectedNames, matched)
 }
 
 func (suite *IndexerSuite) validateSourcesFullPath(indexName string, indexer *es.Indexer, expectedSources []string) {
@@ -1326,14 +1336,16 @@ func (suite *IndexerSuite) validateSourcesFullPath(indexName string, indexer *es
 	r.Nil(err)
 	sources := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
-		var src es.Source
+		var src es.Result
 		json.Unmarshal(*hit.Source, &src)
-		for _, s := range src.Sources {
+		for _, s := range src.FilterValues {
 			sources = append(sources, s)
 		}
 	}
-	r.Equal(len(expectedSources), len(sources))
-	r.ElementsMatch(expectedSources, sources)
+	formatedSources, err := es.KeyValuesToValues("source", sources)
+	r.Nil(err)
+	r.Equal(len(expectedSources), len(formatedSources))
+	r.ElementsMatch(expectedSources, formatedSources)
 }
 
 func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Indexer, expectedContentsByNames map[string]string) {
@@ -1345,414 +1357,10 @@ func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Inde
 	r.Nil(err)
 	contentsByNames := make(map[string]string)
 	for _, hit := range res.Hits.Hits {
-		var src es.Source
+		var src es.Result
 		json.Unmarshal(*hit.Source, &src)
-		contentsByNames[src.Name] = src.Content
+		contentsByNames[src.MDB_UID] = src.Content
 	}
 
 	r.True(reflect.DeepEqual(expectedContentsByNames, contentsByNames))
-}
-
-func (suite *IndexerSuite) TestContentUnitsCollectionIndex() {
-	fmt.Printf("\n\n\n--- TEST CONTENT UNITS COLLECTION INDEX ---\n\n\n")
-	// Show all SQLs
-	// boil.DebugMode = true
-	// defer func() { boil.DebugMode = false }()
-
-	// Add test for collection for multiple content units.
-	r := require.New(suite.T())
-	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
-	cu1UID := suite.ucu(es.ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
-	c3UID := suite.uc(es.Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID, "")
-	suite.uc(es.Collection{ContentType: consts.CT_CONGRESS}, cu1UID, "")
-	cu2UID := suite.ucu(es.ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
-	c2UID := suite.uc(es.Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID, "")
-	UIDs := []string{cu1UID, cu2UID}
-
-	fmt.Printf("\n\n\nReindexing everything.\n\n")
-	indexName := es.IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_ENGLISH)
-	indexer := es.MakeIndexer("test", []string{consts.ES_UNITS_INDEX}, common.DB, common.ESC)
-	// Index existing DB data.
-	r.Nil(indexer.ReindexAll())
-	r.Nil(indexer.RefreshAll())
-
-	fmt.Printf("\n\n\nValidate we have 2 searchable content units with proper content types.\n\n")
-	suite.validateContentUnitNames(indexName, indexer, []string{"something", "something else"})
-	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
-		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS},
-		cu2UID: {consts.CT_SPECIAL_LESSON},
-	})
-
-	fmt.Printf("\n\n\nValidate we have successfully added a content type.\n\n")
-	//r.Nil(es.DumpDB(common.DB, "Before DB"))
-	//r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_UNITS_INDEX))
-	c1UID := suite.uc(es.Collection{ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID, "")
-	r.Nil(indexer.CollectionUpdate(c1UID))
-	//r.Nil(es.DumpDB(common.DB, "After DB"))
-	//r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_UNITS_INDEX))
-	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
-		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
-		cu2UID: {consts.CT_SPECIAL_LESSON},
-	})
-
-	fmt.Printf("\n\n\nValidate we have successfully updated a content type.\n\n")
-	// r.Nil(es.DumpDB(common.DB, "Before DB"))
-	suite.uc(es.Collection{MDB_UID: c2UID, ContentType: consts.CT_MEALS}, cu2UID, "")
-	// r.Nil(es.DumpDB(common.DB, "After DB"))
-	// r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_UNITS_INDEX))
-	r.Nil(indexer.CollectionUpdate(c2UID))
-	// r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_UNITS_INDEX))
-	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
-		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
-		cu2UID: {consts.CT_MEALS},
-	})
-
-	fmt.Printf("\n\n\nValidate we have successfully deleted a content type.\n\n")
-	r.Nil(deleteCollection(c2UID))
-	// r.Nil(es.DumpDB(common.DB, "Before"))
-	// r.Nil(es.DumpIndexes(common.ESC, "Before", consts.ES_UNITS_INDEX))
-	r.Nil(indexer.CollectionUpdate(c2UID))
-	// r.Nil(es.DumpDB(common.DB, "After"))
-	// r.Nil(es.DumpIndexes(common.ESC, "After", consts.ES_UNITS_INDEX))
-	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
-		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
-		cu2UID: {},
-	})
-
-	fmt.Printf("\n\n\nUpdate collection, remove one unit and add another.\n\n")
-	// r.Nil(es.DumpDB(common.DB, "Before DB"))
-	suite.uc(es.Collection{MDB_UID: c3UID} /* Add */, cu2UID /* Remove */, cu1UID)
-	// r.Nil(es.DumpDB(common.DB, "After DB"))
-	// r.Nil(es.DumpIndexes(common.ESC, "Before Indexes", consts.ES_UNITS_INDEX))
-	r.Nil(indexer.CollectionUpdate(c3UID))
-	// r.Nil(es.DumpIndexes(common.ESC, "After Indexes", consts.ES_UNITS_INDEX))
-	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
-		cu1UID: {consts.CT_CONGRESS, consts.CT_VIDEO_PROGRAM},
-		cu2UID: {consts.CT_DAILY_LESSON},
-	})
-
-	fmt.Printf("\n\n\nDelete units, reindex and validate we have 0 searchable units.\n\n")
-	r.Nil(deleteContentUnits(UIDs))
-	r.Nil(indexer.ReindexAll())
-	suite.validateContentUnitNames(indexName, indexer, []string{})
-	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{})
-
-	// Remove test indexes.
-	r.Nil(indexer.DeleteIndexes())
-}
-
-func (suite *IndexerSuite) TestContentUnitsIndex() {
-	fmt.Printf("\n\n\n--- TEST CONTENT UNITS INDEX ---\n\n\n")
-
-	r := require.New(suite.T())
-	fmt.Printf("\n\n\nAdding content units.\n\n")
-	cu1UID := suite.ucu(es.ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
-	suite.ucu(es.ContentUnit{MDB_UID: cu1UID, Name: "משהוא"}, consts.LANG_HEBREW, true, true)
-	suite.ucu(es.ContentUnit{MDB_UID: cu1UID, Name: "чтото"}, consts.LANG_RUSSIAN, true, true)
-	cu2UID := suite.ucu(es.ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
-	cuNotPublishedUID := suite.ucu(es.ContentUnit{Name: "not published"}, consts.LANG_ENGLISH, false, true)
-	cuNotSecureUID := suite.ucu(es.ContentUnit{Name: "not secured"}, consts.LANG_ENGLISH, true, false)
-	UIDs := []string{cu1UID, cu2UID, cuNotPublishedUID, cuNotSecureUID}
-
-	fmt.Printf("\n\n\nReindexing everything.\n\n")
-	indexNameEn := es.IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_ENGLISH)
-	indexNameHe := es.IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_HEBREW)
-	indexNameRu := es.IndexName("test", consts.ES_UNITS_INDEX, consts.LANG_RUSSIAN)
-	indexer := es.MakeIndexer("test", []string{consts.ES_UNITS_INDEX}, common.DB, common.ESC)
-
-	// Index existing DB data.
-	r.Nil(indexer.ReindexAll())
-	r.Nil(indexer.RefreshAll())
-
-	fmt.Println("Validate we have 2 searchable content units.")
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
-
-	fmt.Println("Add a file to content unit and validate.")
-	transcriptContent := "1234"
-	suite.serverResponses["/dEvgPVpr"] = transcriptContent
-	file := mdbmodels.File{ID: 1, Name: "heb_o_rav_2017-05-25_lesson_achana_n1_p0.doc", UID: "dEvgPVpr", Language: null.String{"he", true}, Secure: 0, Published: true}
-	f1UID := suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
-	r.Nil(indexer.FileUpdate(f1UID))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
-	suite.validateContentUnitFiles(indexNameHe, indexer, []string{"he"}, null.Int{len(transcriptContent), true})
-	fmt.Println("Remove a file from content unit and validate.")
-	suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, false)
-	r.Nil(indexer.FileUpdate(f1UID))
-	r.Nil(es.DumpDB(common.DB, "DumpDB"))
-	r.Nil(es.DumpIndexes(common.ESC, "DumpIndexes", consts.ES_UNITS_INDEX))
-	suite.validateContentUnitFiles(indexNameHe, indexer, []string{}, null.Int{-1, false})
-
-	fmt.Println("Add a tag to content unit and validate.")
-	suite.ucut(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, true)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce"})
-	fmt.Println("Add second tag to content unit and validate.")
-	suite.ucut(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, true)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L2jMWyce", "L3jMWyce"})
-	fmt.Println("Remove one tag from content unit and validate.")
-	suite.ucut(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, false)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitTags(indexNameEn, indexer, []string{"L3jMWyce"})
-	fmt.Println("Remove the second tag.")
-	suite.ucut(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"arvut", true}, ID: 2, UID: "L3jMWyce"}, false)
-
-	fmt.Println("Add a source to content unit and validate.")
-	sourceUID1 := "ALlyoveA"
-	sourceUID2 := "1vCj4qN9"
-	sourceUIDs := []string{sourceUID1, sourceUID2}
-	suite.acus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, TypeID: 1, UID: sourceUID1}, mdbmodels.Author{ID: 1}, true)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitSources(indexNameEn, indexer, []string{sourceUID1})
-	fmt.Println("Add second source to content unit and validate.")
-	suite.acus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: sourceUID2}, mdbmodels.Author{ID: 1}, false)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitSources(indexNameEn, indexer, sourceUIDs)
-	fmt.Println("Remove one source from content unit and validate.")
-	suite.rcus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-zohar", true}, ID: 3, TypeID: 1, UID: sourceUID1})
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.validateContentUnitSources(indexNameEn, indexer, []string{sourceUID2})
-	fmt.Println("Remove the second source.")
-	suite.rcus(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Source{Pattern: null.String{"bs-akdama-pi-hacham", true}, ID: 4, TypeID: 1, UID: sourceUID2})
-
-	fmt.Println("Make content unit not published and validate.")
-	//r.Nil(es.DumpDB(common.DB, "TestContentUnitsIndex, BeforeDB"))
-	//r.Nil(es.DumpIndexes(common.ESC, "TestContentUnitsIndex, BeforeIndexes", consts.ES_UNITS_INDEX))
-	suite.ucu(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, false, true)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	//r.Nil(es.DumpDB(common.DB, "TestContentUnitsIndex, AfterDB"))
-	//r.Nil(es.DumpIndexes(common.ESC, "TestContentUnitsIndex, AfterIndexes", consts.ES_UNITS_INDEX))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something else"})
-	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
-	suite.validateContentUnitNames(indexNameRu, indexer, []string{})
-
-	fmt.Println("Make content unit not secured and validate.")
-	suite.ucu(es.ContentUnit{MDB_UID: cu2UID}, consts.LANG_ENGLISH, true, false)
-	r.Nil(indexer.ContentUnitUpdate(cu2UID))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
-	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
-	suite.validateContentUnitNames(indexNameRu, indexer, []string{})
-
-	fmt.Println("Secure and publish content units, but set type to KITEI_MAKOR and validate.")
-	suite.ucu(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, true, true)
-	suite.setCUType(es.ContentUnit{MDB_UID: cu1UID}, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.ucu(es.ContentUnit{MDB_UID: cu2UID}, consts.LANG_ENGLISH, true, true)
-	suite.setCUType(es.ContentUnit{MDB_UID: cu2UID}, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID)
-	r.Nil(indexer.ContentUnitUpdate(cu2UID))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
-	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
-	suite.validateContentUnitNames(indexNameRu, indexer, []string{})
-
-	fmt.Println("Remove KITEI_MAKOR type and check we have 2 searchable content units.")
-	suite.setCUType(es.ContentUnit{MDB_UID: cu1UID}, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID)
-	suite.setCUType(es.ContentUnit{MDB_UID: cu2UID}, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID)
-	suite.ucu(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, true, true)
-	r.Nil(indexer.ContentUnitUpdate(cu1UID))
-	suite.ucu(es.ContentUnit{MDB_UID: cu2UID}, consts.LANG_ENGLISH, true, true)
-	r.Nil(indexer.ContentUnitUpdate(cu2UID))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
-	suite.validateContentUnitNames(indexNameHe, indexer, []string{"משהוא"})
-	suite.validateContentUnitNames(indexNameRu, indexer, []string{"чтото"})
-
-	fmt.Println("Validate adding content unit incrementally.")
-	var cu3UID string
-	cu3UID = suite.ucu(es.ContentUnit{Name: "third something"}, consts.LANG_ENGLISH, true, true)
-	UIDs = append(UIDs, cu3UID)
-	r.Nil(indexer.ContentUnitUpdate(cu3UID))
-	suite.validateContentUnitNames(indexNameEn, indexer,
-		[]string{"something", "something else", "third something"})
-
-	fmt.Println("Update content unit and validate.")
-	suite.ucu(es.ContentUnit{MDB_UID: cu3UID, Name: "updated third something"}, consts.LANG_ENGLISH, true, true)
-	r.Nil(indexer.ContentUnitUpdate(cu3UID))
-	suite.validateContentUnitNames(indexNameEn, indexer,
-		[]string{"something", "something else", "updated third something"})
-
-	fmt.Println("Delete content unit and validate nothing changes as the database did not change!")
-	r.Nil(indexer.ContentUnitUpdate(cu2UID))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else", "updated third something"})
-
-	fmt.Println("Now actually delete the content unit also from database.")
-	r.Nil(deleteContentUnits([]string{cu2UID}))
-	r.Nil(indexer.ContentUnitUpdate(cu2UID))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "updated third something"})
-
-	fmt.Println("Delete units, reindex and validate we have 0 searchable units.")
-	r.Nil(deleteContentUnits(UIDs))
-	r.Nil(deleteSources(sourceUIDs))
-	r.Nil(indexer.ReindexAll())
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
-
-	//fmt.Println("Restore docx-folder path to original.")
-	//mdb.DocFolder = originalDocxPath
-
-	// Remove test indexes.
-	r.Nil(indexer.DeleteIndexes())
-}
-
-func (suite *IndexerSuite) TestCollectionsScopeByContentUnit() {
-	// Add test for collection for multiple content units.
-	r := require.New(suite.T())
-	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
-	cu1UID := suite.ucu(es.ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
-	c1UID := suite.uc(es.Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID, "")
-	c2UID := suite.uc(es.Collection{ContentType: consts.CT_CONGRESS}, cu1UID, "")
-	cu2UID := suite.ucu(es.ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
-	suite.uc(es.Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID, "")
-
-	// dumpDB("TestCollectionsScopeByContentUnit")
-
-	uids, err := es.CollectionsScopeByContentUnit(common.DB, cu1UID)
-	r.Nil(err)
-	r.ElementsMatch([]string{c2UID, c1UID}, uids)
-}
-
-func (suite *IndexerSuite) TestCollectionsScopeByFile() {
-	// Add test for collection for multiple content units.
-	r := require.New(suite.T())
-	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
-	cu1UID := suite.ucu(es.ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
-	c1UID := suite.uc(es.Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID, "")
-	c2UID := suite.uc(es.Collection{ContentType: consts.CT_CONGRESS}, cu1UID, "")
-	cu2UID := suite.ucu(es.ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
-	suite.uc(es.Collection{ContentType: consts.CT_SPECIAL_LESSON}, cu2UID, "")
-	f1UID := suite.uf(es.File{Name: "f1"}, cu1UID)
-	suite.uf(es.File{Name: "f2"}, cu1UID)
-	suite.uf(es.File{Name: "f3"}, cu2UID)
-	suite.uf(es.File{Name: "f4"}, cu2UID)
-
-	uids, err := es.CollectionsScopeByFile(common.DB, f1UID)
-	r.Nil(err)
-	r.ElementsMatch([]string{c2UID, c1UID}, uids)
-}
-
-func (suite *IndexerSuite) TestSourcesIndex() {
-	fmt.Printf("\n\n\n--- TEST SOURCES INDEX ---\n\n\n")
-
-	r := require.New(suite.T())
-
-	indexNameEn := es.IndexName("test", consts.ES_SOURCES_INDEX, consts.LANG_ENGLISH)
-	indexNameHe := es.IndexName("test", consts.ES_SOURCES_INDEX, consts.LANG_HEBREW)
-	indexer := es.MakeIndexer("test", []string{consts.ES_SOURCES_INDEX}, common.DB, common.ESC)
-
-	fmt.Printf("\n\n\nAdding source.\n\n")
-	source1UID := suite.us(es.Source{Name: "test-name-1", Description: "test-description-1"}, consts.LANG_ENGLISH)
-	suite.us(es.Source{MDB_UID: source1UID, Name: "שם-בדיקה-1", Description: "תיאור-בדיקה-1"}, consts.LANG_HEBREW)
-	suite.asa(es.Source{MDB_UID: source1UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name", ID: 3, Code: "t1", FullName: null.String{String: "Test Full Name", Valid: true}}, true, true)
-	suite.asa(es.Source{MDB_UID: source1UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם לבדיקה", ID: 4, Code: "t2", FullName: null.String{String: "שם מלא לבדיקה", Valid: true}}, true, true)
-	fmt.Printf("\n\n\nAdding content files for each language.\n\n")
-	suite.usfc(source1UID, consts.LANG_ENGLISH)
-	suite.usfc(source1UID, consts.LANG_HEBREW)
-
-	fmt.Printf("\n\n\nReindexing everything.\n\n")
-
-	// Index existing DB data.
-	r.Nil(indexer.ReindexAll())
-	r.Nil(indexer.RefreshAll())
-
-	fmt.Printf("\n\n\nValidate we have source with 2 languages.\n\n")
-	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1"})
-	suite.validateSourceNames(indexNameHe, indexer, []string{"שם-בדיקה-1"})
-
-	fmt.Println("Validate source files.")
-	suite.validateSourceFile(indexNameEn, indexer, map[string]string{
-		"test-name-1": "TEST CONTENT",
-	})
-	suite.validateSourceFile(indexNameHe, indexer, map[string]string{
-		"שם-בדיקה-1": "TEST CONTENT",
-	})
-
-	fmt.Println("Validate source full path.")
-	suite.validateSourcesFullPath(indexNameEn, indexer, []string{source1UID, "t1", "t2"})
-
-	fmt.Println("Validate adding source without file and author - should not index.")
-	source2UID := suite.us(es.Source{Name: "test-name-2", Description: "test-description-2"}, consts.LANG_ENGLISH)
-	suite.us(es.Source{MDB_UID: source2UID, Name: "שם-בדיקה-2", Description: "תיאור-בדיקה-2"}, consts.LANG_HEBREW)
-	r.Nil(indexer.SourceUpdate(source2UID))
-	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1"})
-
-	fmt.Println("Validate adding source with file but without author - should not index.")
-	suite.usfc(source2UID, consts.LANG_ENGLISH)
-	suite.usfc(source2UID, consts.LANG_HEBREW)
-	r.Nil(indexer.SourceUpdate(source2UID))
-	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1"})
-
-	fmt.Println("Validate adding source with file and author and validate.")
-	suite.asa(es.Source{MDB_UID: source2UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 5, Code: "t3", FullName: null.String{String: "Test Full Name 2", Valid: true}}, true, true)
-	suite.asa(es.Source{MDB_UID: source2UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם נוסף לבדיקה", ID: 6, Code: "t4", FullName: null.String{String: "שם מלא נוסף לבדיקה", Valid: true}}, true, true)
-	r.Nil(indexer.SourceUpdate(source2UID))
-	suite.validateSourceNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2"})
-	suite.validateSourceAuthors(indexNameEn, indexer, []string{"Test Name", "Test Full Name", "Test Name 2", "Test Full Name 2"})
-	suite.validateSourceAuthors(indexNameHe, indexer, []string{"שם נוסף לבדיקה", "שם מלא נוסף לבדיקה", "שם לבדיקה", "שם מלא לבדיקה"})
-
-	suite.validateSourceFile(indexNameEn, indexer, map[string]string{
-		"test-name-1": "TEST CONTENT",
-		"test-name-2": "TEST CONTENT",
-	})
-	suite.validateSourcesFullPath(indexNameEn, indexer, []string{source1UID, source2UID, "t1", "t2", "t3", "t4"})
-
-	fmt.Println("Remove 1 author and validate.")
-	suite.rsa(es.Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 5})
-	r.Nil(indexer.SourceUpdate(source2UID))
-	suite.validateSourceAuthors(indexNameEn, indexer, []string{"Test Name", "Test Full Name"})
-
-	fmt.Println("Delete sources from DB, reindex and validate we have 0 sources.")
-	suite.rsa(es.Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
-	suite.rsa(es.Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 4})
-	suite.rsa(es.Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 6})
-	UIDs := []string{source1UID, source2UID}
-	r.Nil(deleteSources(UIDs))
-	r.Nil(indexer.ReindexAll())
-	suite.validateSourceNames(indexNameEn, indexer, []string{})
-	suite.validateSourceNames(indexNameHe, indexer, []string{})
-
-	// Remove test indexes.
-	r.Nil(indexer.DeleteIndexes())
-}
-
-func (suite *IndexerSuite) TestCollectionsIndex() {
-	// Add test for collection for multiple content units.
-	r := require.New(suite.T())
-	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
-	cu1UID := suite.ucu(es.ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
-	c1UID := suite.uc(es.Collection{Name: "c1", ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID, "")
-	c2UID := suite.uc(es.Collection{Name: "c2", ContentType: consts.CT_CONGRESS}, cu1UID, "")
-	c3UID := suite.uc(es.Collection{Name: "c3", ContentType: consts.CT_DAILY_LESSON}, cu1UID, "")
-
-	fmt.Printf("\n\n\nReindexing everything.\n\n")
-	indexName := es.IndexName("test", consts.ES_COLLECTIONS_INDEX, consts.LANG_ENGLISH)
-	indexer := es.MakeIndexer("test", []string{consts.ES_COLLECTIONS_INDEX}, common.DB, common.ESC)
-
-	// Index existing DB data.
-	r.Nil(indexer.ReindexAll())
-	r.Nil(indexer.RefreshAll())
-	fmt.Printf("\n\n\nValidate we have 2 searchable collections with proper content units.\n\n")
-	r.Nil(es.DumpDB(common.DB, "Before validation"))
-	r.Nil(es.DumpIndexes(common.ESC, "Before validation", consts.ES_COLLECTIONS_INDEX))
-	suite.validateCollectionsContentUnits(indexName, indexer, map[string][]string{
-		c1UID: {cu1UID},
-		c2UID: {cu1UID},
-	})
-
-	fmt.Println("Update collection content unit and validate.")
-	cu2UID := suite.ucu(es.ContentUnit{Name: "something else"}, consts.LANG_ENGLISH, true, true)
-	r.Nil(indexer.ContentUnitUpdate(cu2UID))
-	suite.uc(es.Collection{MDB_UID: c2UID}, cu2UID, "")
-	r.Nil(indexer.CollectionUpdate(c2UID))
-	suite.validateCollectionsContentUnits(indexName, indexer, map[string][]string{
-		c1UID: {cu1UID},
-		c2UID: {cu1UID, cu2UID},
-	})
-
-	fmt.Println("Delete collections, reindex and validate we have 0 searchable units.")
-	r.Nil(deleteCollections([]string{c1UID, c2UID, c3UID}))
-	r.Nil(indexer.ReindexAll())
-	suite.validateCollectionsContentUnits(indexName, indexer, map[string][]string{})
-
-	//fmt.Println("Restore docx-folder path to original.")
-	//mdb.DocFolder = originalDocxPath
-
-	// Remove test indexes.
-	r.Nil(indexer.DeleteIndexes())
 }

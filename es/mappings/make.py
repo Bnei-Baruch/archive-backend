@@ -7,6 +7,13 @@
 # specific tokenization for CJK.
 
 # Mapping generated here requires the following Elasticsearch plugins:
+#   https://www.elastic.co/guide/en/elasticsearch/guide/current/hunspell.html
+#   To install download: he_IL.aff, he_IL.dic, settings.yml files from
+#   https://github.com/elastic/hunspell/tree/master/dicts/he_IL
+#   and put under: elasticsearch-6.3.0/config/hunspell/he_IL
+#
+#
+# Deprecated plugins (already not in use):
 # Hebrew analyzer plugin:
 #   https://github.com/synhershko/elasticsearch-analysis-hebrew
 # Phonetic plugin:
@@ -68,9 +75,9 @@ LANG_GROUPS = {
 }
 
 # Units indexing
-StandardAnalyzer = {
+LanguageAnalyzer = {
   ENGLISH: "english",
-  HEBREW: "hebrew",
+  HEBREW: "he",
   RUSSIAN: "russian",
   SPANISH: "spanish",
   ITALIAN: "italian",
@@ -136,16 +143,25 @@ SETTINGS = {
     "number_of_replicas": 0,
     "analysis": {
       "analyzer": {
-        "phonetic_analyzer": {
+        "he": {
           "tokenizer": "standard",
-          "char_filter": ["quotes"],
           "filter": [
-            "standard",
-            "lowercase",
-            lambda lang: IsCyrillic(lang, 'icu_transliterate'),
-            "custom_phonetic",
+            "he_IL"
           ],
+          "char_filter": [
+            "quotes"
+          ]
         },
+        # "phonetic_analyzer": {
+        #   "tokenizer": "standard",
+        #   "char_filter": ["quotes"],
+        #   "filter": [
+        #     "standard",
+        #     "lowercase",
+        #     lambda lang: IsCyrillic(lang, 'icu_transliterate'),
+        #     "custom_phonetic",
+        #   ],
+        # },
       },
       "char_filter": {
         "quotes": {
@@ -163,318 +179,114 @@ SETTINGS = {
         },
       },
       "filter": {
-        "icu_transliterate": lambda lang: IsCyrillic(lang, {
-          "type": "icu_transform",
-          "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
-        }),
-        "custom_phonetic": {
-          "type": "phonetic",
-          "encoder": "beider_morse",
-          "replace": True,
-          "languageset": BeiderMorseLanguageset,
+        "he_IL": {
+          "type": "hunspell",
+          "locale": "he_IL",
+          "dedup": True,
         },
+        # "icu_transliterate": lambda lang: IsCyrillic(lang, {
+        #   "type": "icu_transform",
+        #   "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
+        # }),
+        # "custom_phonetic": {
+        #   "type": "phonetic",
+        #   "encoder": "beider_morse",
+        #   "replace": True,
+        #   "languageset": BeiderMorseLanguageset,
+        # },
       },
     },
   },
 }
 
-UNITS_TEMPLATE = {
+
+RESULTS_TEMPLATE = {
+  # "settings": {
+  #   "index": {
+  #     "number_of_shards": 1,
+  #     "number_of_replicas": 0,
+  #   },
+  # },
   "settings": SETTINGS,
   "mappings": {
-    "content_units": {
-      "_all": {
-        "enabled": False,
-      },
+    "result": {
       "properties": {
+        # Document type, unit, collection, source, tag.
+        "result_type": {
+          "type": "keyword",
+        },
         "mdb_uid": {
           "type": "keyword",
         },
+        # Typed uids, are list of entities (uid and entity type) in MDB that
+        # this document depends on. For example: "content_unit:lHDLZWxq",
+        # "file:0uzDZVqV". We use this list to reindex the document if one
+        # the items in this list changes.
         "typed_uids": {
           "type": "keyword",
         },
-        "name": {
+        # List of keywords in format filter:value are required for correct
+        # filtering of this document by all different filters. Time is handled
+        # by effective_date.
+        # For example: content_type:DAILY_LESSON or tag:0db5BBS3
+        "filter_values": {
+          "type": "keyword",
+        },
+        # Title, Description and Content are the typical result fields which
+        # should have the same tf/idf across all different retult types such
+        # as units, collections, sources, topics and others to follow.
+        "title": {
           "type": "text",
-          "analyzer": "phonetic_analyzer",
+          "analyzer": "standard",
           "fields": {
-            "analyzed": {
+            "language": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-          },
-        },
-        "description": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-          },
-        },
-        "content_type": {
-          "type": "keyword",
-        },
-        "collections_content_types": {
-          "type": "keyword",
-        },
-        "effective_date": {
-          "type": "date",
-          "format": "strict_date",
-        },
-        "duration": {
-          "type": "short",
-          "index": False,
-        },
-        "original_language": {
-          "type": "keyword",
-          "index": False,
-        },
-        "translations": {
-          "type": "keyword",
-          "index": False,
-        },
-        "tags": {
-          "type": "keyword",
-        },
-        "sources": {
-          "type": "keyword",
-        },
-        "persons": {
-          "type": "keyword",
-          "index": False,
-        },
-        "transcript": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-          },
-        },
-      },
-    },
-  },
-}
-
-CLASSIFICATIONS_TEMPLATE = {
-  "settings": SETTINGS,
-  "mappings": {
-    "tags": {
-      "_all": {
-        "enabled": False,
-      },
-      "properties": {
-        "mdb_uid": {
-          "type": "keyword",
-        },
-        "classification_type": {
-          "type": "keyword",
-        },
-        "name": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-          },
-        },
-        "name_suggest": {
-          "type": "completion",
-          "contexts": [
-            {
-              "name": "classification",
-              "type": "category",
-              "path": "classification_type",
-            },
-          ],
-        },
-      },
-    },
-    "sources": {
-      "_all": {
-        "enabled": False,
-      },
-      "properties": {
-        "mdb_uid": {
-          "type": "keyword",
-        },
-        "classification_type": {
-          "type": "keyword",
-        },
-        "name": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-          },
-        },
-        "name_suggest": {
-          "type": "completion",
-          "contexts": [
-            {
-              "name": "classification",
-              "type": "category",
-              "path": "classification_type",
-            },
-          ],
-        },
-        "description": {
-          "type": "text",
-          "analyzer": lambda lang: StandardAnalyzer[lang],
-        },
-        "description_suggest": {
-          "type": "completion",
-          "contexts": [
-            {
-              "name": "classification",
-              "type": "category",
-              "path": "classification_type"
-            },
-          ],
-        },
-      },
-    },
-  },
-}
-
-COLLECTIONS_TEMPLATE = {
-  "settings": SETTINGS,
-  "mappings": {
-    "collections": {
-      "_all": {
-        "enabled": False,
-      },
-      "properties": {
-        "mdb_uid": {
-          "type": "keyword",
-        },
-        "typed_uids": {
-          "type": "keyword",
-        },
-        "name": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-          },
-        },
-        "description": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-          },
-        },
-        "content_type": {
-          "type": "keyword",
-        },
-        "content_units_content_types": {
-          "type": "keyword",
-        },
-        "effective_date": {
-          "type": "date",
-          "format": "strict_date",
-        },
-        "original_language": {
-          "type": "keyword",
-          "index": False,
-        },
-      },
-    },
-  },
-}
-
-SOURCES_TEMPLATE = {
-  "settings": SETTINGS,
-  "mappings": {
-    "sources": {
-      "_all": {
-        "enabled": False,
-      },
-      "properties": {
-        "mdb_uid": {
-          "type": "keyword",
-        },
-        "name": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-          },
-        },
-        "description": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            },
-          },
-        },
-        "authors": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
             }
-          },
+          }
         },
-        "path_names": {
+        "description": {
           "type": "text",
-          "analyzer": "phonetic_analyzer",
+          "analyzer": "standard",
           "fields": {
-            "analyzed": {
+            "language": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            }
-          },
-        },
-        "full_name": {
-          "type": "text",
-          "analyzer": "phonetic_analyzer",
-          "fields": {
-            "analyzed": {
-              "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            }
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
+            },
           },
         },
         "content": {
           "type": "text",
-          "analyzer": "phonetic_analyzer",
+          "analyzer": "standard",
           "fields": {
-            "analyzed": {
+            "language": {
               "type": "text",
-              "analyzer": lambda lang: StandardAnalyzer[lang],
-            }
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
+            },
           },
         },
-        "sources": {
-          "type": "keyword",
-        }
-      },
-    },
-  },
+
+        # Suggest field for autocomplete.
+        "title_suggest": {
+          "type": "completion",
+          "analyzer": lambda lang: LanguageAnalyzer[lang],
+          "contexts": [
+            {
+              "name": "result_type",
+              "type": "category",
+              "path": "result_type",
+            },
+          ],
+        },
+
+        # Content unit specific fields.
+        "effective_date": {
+          "type": "date",
+          "format": "strict_date",
+        },
+      }
+    }
+  }
 }
 
 
@@ -482,12 +294,20 @@ SEARCH_LOGS_TEMPLATE = {
     "mappings": {
         "search_logs": {
             "properties": {
+                # Search log key, search_id and timestamp.
                 "search_id": {
                     "type": "keyword",
                 },
                 "created": {
                     "type": "date",
                 },
+
+                # Search log type, i.e., "query" or "click".
+                "log_type": {
+                    "type": "keyword",
+                },
+
+                # Query log type fields.
                 "query": {
                     "type": "object",
                 },
@@ -497,42 +317,33 @@ SEARCH_LOGS_TEMPLATE = {
                 "size": {
                     "type": "integer",
                 },
-                "results": {
-                    "type": "object",
-                },
                 "sort_by": {
                     "type": "keyword",
                 },
+                "query_result": {
+                    "type": "object",
+                    "enabled": False,
+                },
                 "error": {
                     "type": "object",
+                    "enabled": False,
                 },
-            },
-        },
-        "search_clicks": {
-            "properties": {
-                "created": {
-                    "type": "date",
-                },
+
+                # Click log type fields.
                 "mdb_uid": {
                     "type": "keyword",
                 },
                 "index": {
                     "type": "keyword",
                 },
-                "type": {
+                "result_type": {
                     "type": "keyword",
                 },
                 "rank": {
                     "type": "integer",
                 },
-                "search_id": {
-                    "type": "keyword",
-                },
             },
-            "_parent": {
-                "type": "search_logs",
-            }
-        }
+        },
     },
 }
 
@@ -549,14 +360,8 @@ def Resolve(lang, value):
 
 
 for lang in LANG_GROUPS[ALL]:
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'units', 'units-%s.json' % lang), 'w') as f:
-    json.dump(Resolve(lang, UNITS_TEMPLATE), f, indent=4)
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'classifications', 'classifications-%s.json' % lang), 'w') as f:
-    json.dump(Resolve(lang, CLASSIFICATIONS_TEMPLATE), f, indent=4)
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'collections', 'collections-%s.json' % lang), 'w') as f:
-    json.dump(Resolve(lang, COLLECTIONS_TEMPLATE), f, indent=4)
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'sources', 'sources-%s.json' % lang), 'w') as f:
-    json.dump(Resolve(lang, SOURCES_TEMPLATE), f, indent=4)
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'results', 'results-%s.json' % lang), 'w') as f:
+    json.dump(Resolve(lang, RESULTS_TEMPLATE), f, indent=4)
 # Without languages
 with open(os.path.join('.', 'data', 'es', 'mappings', 'search_logs.json'), 'w') as f:
   json.dump(Resolve('xx', SEARCH_LOGS_TEMPLATE), f, indent=4)

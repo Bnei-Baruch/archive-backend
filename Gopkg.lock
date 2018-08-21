@@ -57,11 +57,6 @@
   revision = "2bba0603135d7d7f5cb73b2125beeda19c09f4ef"
 
 [[projects]]
-  name = "github.com/golang/sync"
-  packages = ["errgroup"]
-  revision = "f52d1811a62927559de87708c8913c1650ce4f26"
-
-[[projects]]
   name = "github.com/hashicorp/hcl"
   packages = [
     ".",
@@ -94,6 +89,17 @@
   name = "github.com/magiconair/properties"
   packages = ["."]
   revision = "51463bfca2576e06c62a8504b5c0f06d61312647"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/mailru/easyjson"
+  packages = [
+    ".",
+    "buffer",
+    "jlexer",
+    "jwriter"
+  ]
+  revision = "3fdea8d05856a0c8df22ed4bc71b3219245e4485"
 
 [[projects]]
   branch = "master"
@@ -133,6 +139,15 @@
   name = "github.com/nats-io/nuid"
   packages = ["."]
   revision = "33c603157d6fd1b0ac2599bcc4a286b36479a06d"
+
+[[projects]]
+  name = "github.com/olivere/elastic"
+  packages = [
+    "config",
+    "uritemplates"
+  ]
+  revision = "d06c9338b70fa11ac48eb82d8a84090a8d7dfd8d"
+  version = "v6.1.24"
 
 [[projects]]
   name = "github.com/pelletier/go-buffruneio"
@@ -214,11 +229,7 @@
 
 [[projects]]
   name = "golang.org/x/net"
-  packages = [
-    "context",
-    "html",
-    "html/atom"
-  ]
+  packages = ["context"]
   revision = "fe686d45ea04bc1bd4eff6a52865ce8757320325"
 
 [[projects]]
@@ -260,14 +271,10 @@
   version = "v8.18.1"
 
 [[projects]]
-  name = "gopkg.in/olivere/elastic.v5"
-  packages = [
-    ".",
-    "config",
-    "uritemplates"
-  ]
-  revision = "3f891f0d04aba0bba9a8bd365a9d3846efcb3527"
-  version = "v5.0.52"
+  name = "gopkg.in/olivere/elastic.v6"
+  packages = ["."]
+  revision = "d06c9338b70fa11ac48eb82d8a84090a8d7dfd8d"
+  version = "v6.1.24"
 
 [[projects]]
   name = "gopkg.in/volatiletech/null.v6"
@@ -286,6 +293,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "26be768a71bf3271afadaaaff20e0be41c23d2ad4702602f172b92a1363c45b2"
+  inputs-digest = "bc8797afe25a77071361fd5ff5ec69b15403421ebca4f672d28c8586e0239e53"
   solver-name = "gps-cdcl"
   solver-version = 1

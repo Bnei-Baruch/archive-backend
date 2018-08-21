@@ -25,7 +25,6 @@ var httpClient = &http.Client{
 }
 
 func DownloadAndConvert(docBatch [][]string) error {
-	log.Infof("DownloadAndConvert: %+v", docBatch)
 	var convertDocs []string
 	for _, docSource := range docBatch {
 		uid := docSource[0]
@@ -82,7 +81,6 @@ func DownloadAndConvert(docBatch [][]string) error {
 		}
 	}
 
-	log.Infof("Converting: %+v", convertDocs)
 	if len(convertDocs) > 0 {
 		sofficeMutex.Lock()
 		folder, err := DocFolder()
@@ -104,8 +102,6 @@ func DownloadAndConvert(docBatch [][]string) error {
 			return errors.Wrapf(err, "Execute soffice.")
 		}
 	}
-
-	log.Info("DownloadAndConvert done.")
 	return nil
 }
 

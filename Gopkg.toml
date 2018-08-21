@@ -46,8 +46,8 @@
   version = "8.18.1"
 
 [[constraint]]
-  name = "gopkg.in/olivere/elastic.v5"
-  version = "5.0.52"
+  name = "gopkg.in/olivere/elastic.v6"
+  version = "6.1.24"
 
 [[constraint]]
   name = "gopkg.in/volatiletech/null.v6"

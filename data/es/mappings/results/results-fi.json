@@ -1,0 +1,106 @@
+{
+    "mappings": {
+        "result": {
+            "properties": {
+                "title_suggest": {
+                    "contexts": [
+                        {
+                            "path": "result_type", 
+                            "type": "category", 
+                            "name": "result_type"
+                        }
+                    ], 
+                    "type": "completion", 
+                    "analyzer": "finnish"
+                }, 
+                "description": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "finnish"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "standard"
+                }, 
+                "title": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "finnish"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "standard"
+                }, 
+                "mdb_uid": {
+                    "type": "keyword"
+                }, 
+                "content": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "finnish"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "standard"
+                }, 
+                "effective_date": {
+                    "type": "date", 
+                    "format": "strict_date"
+                }, 
+                "filter_values": {
+                    "type": "keyword"
+                }, 
+                "typed_uids": {
+                    "type": "keyword"
+                }, 
+                "result_type": {
+                    "type": "keyword"
+                }
+            }
+        }
+    }, 
+    "settings": {
+        "index": {
+            "number_of_replicas": 0, 
+            "analysis": {
+                "filter": {
+                    "he_IL": {
+                        "locale": "he_IL", 
+                        "type": "hunspell", 
+                        "dedup": true
+                    }
+                }, 
+                "char_filter": {
+                    "quotes": {
+                        "type": "mapping", 
+                        "mappings": [
+                            "\\u0091=>\\u0027", 
+                            "\\u0092=>\\u0027", 
+                            "\\u2018=>\\u0027", 
+                            "\\u2019=>\\u0027", 
+                            "\\u201B=>\\u0027", 
+                            "\\u0022=>", 
+                            "\\u201C=>", 
+                            "\\u201D=>"
+                        ]
+                    }
+                }, 
+                "analyzer": {
+                    "he": {
+                        "filter": [
+                            "he_IL"
+                        ], 
+                        "char_filter": [
+                            "quotes"
+                        ], 
+                        "tokenizer": "standard"
+                    }
+                }
+            }, 
+            "number_of_shards": 1
+        }
+    }
+}
