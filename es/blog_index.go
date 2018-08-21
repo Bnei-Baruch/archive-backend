@@ -42,10 +42,10 @@ func defaultBlogPostsSql() string {
 
 func (index *BlogIndex) blogIdToLanguageMapping() map[int]string {
 	return map[int]string{
-		1: "ru",
-		2: "en",
-		3: "es",
-		4: "he",
+		1: consts.LANG_RUSSIAN,
+		2: consts.LANG_ENGLISH,
+		3: consts.LANG_SPANISH,
+		4: consts.LANG_HEBREW,
 	}
 }
 
