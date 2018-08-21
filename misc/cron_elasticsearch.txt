@@ -1,0 +1,3 @@
+# full snapshot backup of all indices for suitcase sync
+0 0 * * * root /backup/es_snapshot_full.sh
+

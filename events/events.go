@@ -117,6 +117,7 @@ var messageHandlers = map[string]MessageHandler{
 	E_FILE_REPLACE:   FileReplace,
 	E_FILE_INSERT:    FileInsert,
 	E_FILE_UPDATE:    FileUpdate,
+	E_FILE_REMOVE:    FileUpdate,
 
 	E_SOURCE_CREATE: SourceCreate,
 	E_SOURCE_UPDATE: SourceUpdate,
@@ -151,7 +152,9 @@ func msgHandler(msg *stan.Msg) {
 	handler, ok := messageHandlers[d.Type]
 	if !ok {
 		log.Errorf("Unknown event type: %v", d)
-		return
+
+		// Acknowledge the message so we won't stuck on it
+		msg.Ack()
 	}
 
 	if d.ReplicationLocation != "" {
