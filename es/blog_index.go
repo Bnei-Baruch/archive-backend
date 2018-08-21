@@ -42,10 +42,10 @@ func defaultBlogPostsSql() string {
 
 func (index *BlogIndex) blogIdToLanguageMapping() map[int]string {
 	return map[int]string{
-		1: "ru",
-		2: "en",
-		3: "es",
-		4: "he",
+		1: consts.LANG_RUSSIAN,
+		2: consts.LANG_ENGLISH,
+		3: consts.LANG_SPANISH,
+		4: consts.LANG_HEBREW,
 	}
 }
 
@@ -118,9 +118,11 @@ func (index *BlogIndex) bulkIndexPosts(offset int, limit int, sqlScope string) e
 	log.Infof("Adding %d blog posts (offset %d).", len(posts), offset)
 	for _, post := range posts {
 		if err := index.indexPost(post); err != nil {
+			log.Errorf("indexPost error: %s", err.Error)
 			return err
 		}
 	}
+	log.Info("Indexing posts - finished.")
 	return nil
 }
 
@@ -134,34 +136,51 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 	}
 	log.Infof("Blog Posts Index - Adding %d posts. Scope: %s.", count, sqlScope)
 
-	tasks := make(chan OffsetLimitJob, 300)
-	errors := make(chan error, 300)
+	tasks := make(chan OffsetLimitJob, (count/20)+20)
+	errors := make(chan error, (count/20)+20)
 	doneAdding := make(chan bool)
 
 	tasksCount := 0
-	go func() {
-		offset := 0
-		limit := 20
-		for offset < int(count) {
-			tasks <- OffsetLimitJob{offset, limit}
-			tasksCount++
-			offset += limit
-		}
-		close(tasks)
-		doneAdding <- true
-	}()
+	//go func() {
+	offset := 0
+	limit := 20
+	for offset < int(count) {
+		log.Infof("before OffsetLimitJob - offset=%d", offset)
+		tasks <- OffsetLimitJob{offset, limit}
+		log.Infof("after OffsetLimitJob")
+		tasksCount++
+		offset += limit
+	}
+	log.Infof("Done adding. tasksCount: %d", tasksCount)
+	close(tasks)
+	//doneAdding <- true
+	//}()
 
 	for w := 1; w <= 10; w++ {
-		go func(tasks <-chan OffsetLimitJob, errors chan<- error) {
+		go func(tasks <-chan OffsetLimitJob, errs chan<- error) {
 			for task := range tasks {
-				errors <- index.bulkIndexPosts(task.Offset, task.Limit, sqlScope)
+				myerr := index.bulkIndexPosts(task.Offset, task.Limit, sqlScope)
+				if myerr != nil {
+					log.Errorf("bulkIndexPosts error: %s", myerr.Error)
+				}
+				log.Infof("bulkIndexPosts finished. len(errs): %d", len(errs))
+				errs <- myerr
+				log.Info("After errors <- myerr")
 			}
+			log.Info("after tasks loop")
 		}(tasks, errors)
+		log.Infof("loop w=%d", w)
+		if w == 9 {
+			doneAdding <- true
+		}
 	}
-
+	log.Info("before doneAdding.")
 	<-doneAdding
+	log.Info("after doneAdding.")
 	for a := 1; a <= tasksCount; a++ {
+		log.Info("before reading error")
 		e := <-errors
+		log.Info("after reading error")
 		if e != nil {
 			return e
 		}
@@ -189,11 +208,12 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 	}
 
 	indexName := index.indexName(langMapping[int(mdbPost.BlogID)])
-	vBytes, err := json.Marshal(post)
+	//vBytes, err := json.Marshal(post)
+	_, err = json.Marshal(post)
 	if err != nil {
 		return err
 	}
-	log.Infof("Blog Posts Index - Add blog post %s to index %s", string(vBytes), indexName)
+	//log.Infof("Blog Posts Index - Add blog post %s to index %s", string(vBytes), indexName)
 	resp, err := index.esc.Index().
 		Index(indexName).
 		Type("result").
