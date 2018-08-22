@@ -44,6 +44,7 @@ func (q *IndexerQueue) Init() {
 				return
 
 			case job := <-q.jobs:
+				log.Infof("IndexerQueue.Dequeue(%d) - Task was taken from the queue: %+v", len(q.jobs), job)
 				job.Do()
 				if q.ctx.Err() != nil {
 					log.Info("IndexerQueue.Init(%d) - Worker: Context cancelled.", len(q.jobs))
