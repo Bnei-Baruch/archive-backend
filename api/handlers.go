@@ -61,7 +61,7 @@ func LatestLessonHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, true)
+	resp, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, true, false)
 	concludeRequest(c, resp, err)
 }
 
@@ -558,7 +558,7 @@ func HomePageHandler(c *gin.Context) {
 		return
 	}
 
-	latestLesson, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, false)
+	latestLesson, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, false, false)
 	if err != nil {
 		NewBadRequestError(err).Abort(c)
 		return
@@ -949,7 +949,7 @@ ORDER BY type_id, (coalesce(properties ->> 'film_date', created_at :: TEXT)) :: 
 	return cus, nil
 }
 
-func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool) (*Collection, *HttpError) {
+func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool, withFiles bool) (*Collection, *HttpError) {
 	mods := []qm.QueryMod{
 		SECURE_PUBLISHED_MOD,
 		qm.WhereIn("type_id in ?",
@@ -1028,9 +1028,37 @@ func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool) (*Col
 			u.NameInCollection = ccu.Name
 			cl.ContentUnits = append(cl.ContentUnits, u)
 		}
+
+		if withFiles {
+			ids := make([]int64, len(c.R.CollectionsContentUnits))
+			for i := range c.R.CollectionsContentUnits {
+				ids[i] = c.R.CollectionsContentUnits[i].R.ContentUnit.ID
+			}
+			err := loadFiles(ids, cl.ContentUnits, db)
+			if err != nil {
+				return nil, NewInternalError(err)
+			}
+		}
 	}
 
 	return cl, nil
+}
+
+func loadFiles(ids []int64, cus []*ContentUnit, db *sql.DB) (err error) {
+	fileMap, err := loadCUFiles(db, ids)
+	if err != nil {
+		return
+	}
+
+	for i := range cus {
+		cu := cus[i]
+		if files, ok := fileMap[ids[i]]; ok {
+			if err = setCUFiles(cu, files); err != nil {
+				return
+			}
+		}
+	}
+	return
 }
 
 func handleBanner(r BaseRequest) (*Banner, *HttpError) {
@@ -1156,24 +1184,12 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	// files
 	if r.WithFiles {
 		ids := make([]int64, len(units))
-		uidsMap := make(map[string]int64, len(units))
 		for i := range units {
 			ids[i] = units[i].ID
-			uidsMap[units[i].UID] = units[i].ID
 		}
-
-		fileMap, err := loadCUFiles(db, ids)
+		err := loadFiles(ids, cus, db)
 		if err != nil {
 			return nil, NewInternalError(err)
-		}
-
-		for i := range cus {
-			cu := cus[i]
-			if files, ok := fileMap[uidsMap[cu.ID]]; ok {
-				if err := setCUFiles(cu, files); err != nil {
-					return nil, NewInternalError(err)
-				}
-			}
 		}
 	}
 
@@ -1783,6 +1799,7 @@ func appendDRFBaseMods(mods *[]qm.QueryMod, f DateRangeFilter, field string) err
 		return errors.New("Invalid date range")
 	}
 
+	// TODO: use BETWEEN in case both StartDate and EndDate present
 	if f.StartDate != "" {
 		*mods = append(*mods, qm.Where(fmt.Sprintf("%s >= ?", field), s))
 	}
