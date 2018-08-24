@@ -113,14 +113,17 @@ func (index *BlogIndex) bulkIndexPosts(offset int, limit int, sqlScope string) e
 		qm.Offset(offset),
 		qm.Limit(limit)).Bind(&posts)
 	if err != nil {
+		log.Errorf("indexPost error at offset %d. error: %v", offset, err)
 		return errors.Wrap(err, "Fetch blog posts from mdb.")
 	}
 	log.Infof("Adding %d blog posts (offset %d).", len(posts), offset)
 	for _, post := range posts {
 		if err := index.indexPost(post); err != nil {
+			log.Errorf("indexPost error at post id %d. error: %v", post.ID, err)
 			return err
 		}
 	}
+	log.Info("Indexing posts - finished.")
 	return nil
 }
 
@@ -134,14 +137,14 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 	}
 	log.Infof("Blog Posts Index - Adding %d posts. Scope: %s.", count, sqlScope)
 
-	tasks := make(chan OffsetLimitJob, 300)
+	limit := 20
+	tasks := make(chan OffsetLimitJob, (count/int64(limit) + int64(limit)))
 	errors := make(chan error, 300)
 	doneAdding := make(chan bool)
 
 	tasksCount := 0
 	go func() {
 		offset := 0
-		limit := 20
 		for offset < int(count) {
 			tasks <- OffsetLimitJob{offset, limit}
 			tasksCount++
@@ -152,17 +155,17 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 	}()
 
 	for w := 1; w <= 10; w++ {
-		go func(tasks <-chan OffsetLimitJob, errors chan<- error) {
+		go func(tasks <-chan OffsetLimitJob, errs chan<- error) {
 			for task := range tasks {
-				errors <- index.bulkIndexPosts(task.Offset, task.Limit, sqlScope)
+				errs <- index.bulkIndexPosts(task.Offset, task.Limit, sqlScope)
 			}
 		}(tasks, errors)
 	}
-
 	<-doneAdding
 	for a := 1; a <= tasksCount; a++ {
 		e := <-errors
 		if e != nil {
+			log.Errorf("tasksCount loop error: %v", e)
 			return e
 		}
 	}
@@ -176,6 +179,9 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 	idStr := fmt.Sprintf("%v", mdbPost.ID)
 
 	content, err := html2text.FromString(mdbPost.Content, html2text.Options{OmitLinks: true})
+	if err != nil {
+		return err
+	}
 
 	post := Result{
 		ResultType:    consts.ES_RESULT_TYPE_BLOG_POSTS,
@@ -190,6 +196,7 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 
 	indexName := index.indexName(langMapping[int(mdbPost.BlogID)])
 	vBytes, err := json.Marshal(post)
+	_, err = json.Marshal(post)
 	if err != nil {
 		return err
 	}
