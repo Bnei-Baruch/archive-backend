@@ -275,6 +275,24 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, file)
 	}
 
+	sources, err := mdbmodels.Sources(mdb).All()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n\nSOURCES\n-------------\n\n")
+	for i, source := range sources {
+		fmt.Printf("%d: %+v\n", i, source)
+	}
+
+	tags, err := mdbmodels.Tags(mdb).All()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n\nTAGS\n-------------\n\n")
+	for i, tag := range tags {
+		fmt.Printf("%d: %+v\n", i, tag)
+	}
+
 	fmt.Printf("\n\n ------------------- END OF %s DUMP DB ------------------- \n\n", title)
 	return nil
 }

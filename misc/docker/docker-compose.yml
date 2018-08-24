@@ -2,7 +2,7 @@ version: '3'
 
 services:
   elastic:
-    image: joemama/elastic-with-plugins
+    image: bneibaruch/docker-files:archive-elasticsearch
     environment:
       discovery.type: "single-node"
       bootstrap.memory_lock: "true"

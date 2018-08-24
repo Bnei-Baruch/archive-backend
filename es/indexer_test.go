@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -843,6 +844,52 @@ func deleteSources(UIDs []string) error {
 	return mdbmodels.Sources(common.DB, qm.WhereIn("uid in ?", UIDsI...)).DeleteAll()
 }
 
+func updateTag(id int64, parentId null.Int64, name string, language string) (string, error) {
+	tag, err := mdbmodels.FindTag(common.DB, id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			tag = &mdbmodels.Tag{
+				ID:       id,
+				UID:      GenerateUID(8),
+				ParentID: parentId,
+			}
+			err = tag.Insert(common.DB)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			return "", err
+		}
+	}
+	tagI18n, err := mdbmodels.FindTagI18n(common.DB, tag.ID, language)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			tagI18n := mdbmodels.TagI18n{
+				TagID:    id,
+				Language: language,
+				Label:    null.String{Valid: true, String: name},
+			}
+			err := tag.AddTagI18ns(common.DB, true, &tagI18n)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			return "", err
+		}
+	} else {
+		tagI18n.Label = null.String{Valid: true, String: name}
+		tagI18n.Update(common.DB)
+	}
+	return tag.UID, nil
+}
+
+func removeTag(id int64) error {
+	if err := mdbmodels.TagI18ns(common.DB, qm.WhereIn("tag_id = ?", id)).DeleteAll(); err != nil {
+		return err
+	}
+	return mdbmodels.Tags(common.DB, qm.WhereIn("id = ?", id)).DeleteAll()
+}
+
 func updateSource(source es.Source, lang string) (string, error) {
 	var mdbSource mdbmodels.Source
 	if source.MDB_UID != "" {
@@ -1123,6 +1170,19 @@ func (suite *IndexerSuite) ucuf(cu es.ContentUnit, lang string, file mdbmodels.F
 	return uid
 }
 
+//update tag
+func (suite *IndexerSuite) ut(id int64, parentId null.Int64, name string, lang string) string {
+	r := require.New(suite.T())
+	uid, err := updateTag(id, parentId, name, lang)
+	r.Nil(err)
+	return uid
+}
+
+func (suite *IndexerSuite) rt(id int64) {
+	r := require.New(suite.T())
+	r.Nil(removeTag(id))
+}
+
 //update source
 func (suite *IndexerSuite) us(source es.Source, lang string) string {
 	r := require.New(suite.T())
@@ -1302,25 +1362,63 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 
 }
 
-func (suite *IndexerSuite) validateSourcesFullPath(indexName string, indexer *es.Indexer, expectedSources []string) {
+func ElementsMatch(r *require.Assertions, a [][]string, b [][]string) {
+	r.Equal(len(a), len(b), fmt.Sprintf("%+v is not the same length as %+v", a, b))
+
+	bSlice := b[:]
+	for _, arr := range a {
+		sort.Strings(arr)
+		index := -1
+		for i, brr := range bSlice {
+			sort.Strings(brr)
+			eq := false
+			if len(arr) == len(brr) {
+				eq = true
+				for i := range arr {
+					if arr[i] != brr[i] {
+						eq = false
+						break
+					}
+				}
+			}
+			if eq {
+				index = i
+				break
+			}
+		}
+		r.True(index >= 0, fmt.Sprintf("Did not find %+v of %+v in %+v", arr, a, b))
+		bSlice = append(bSlice[:index], bSlice[index+1:]...)
+	}
+
+}
+func (suite *IndexerSuite) validateTagsFullPath(indexName string, indexer *es.Indexer, expected [][]string) {
+	suite.validateFullPath(indexName, indexer, "tag", expected)
+}
+
+func (suite *IndexerSuite) validateSourcesFullPath(indexName string, indexer *es.Indexer, expected [][]string) {
+	suite.validateFullPath(indexName, indexer, "source", expected)
+}
+
+func (suite *IndexerSuite) validateFullPath(indexName string, indexer *es.Indexer, key string, expected [][]string) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
 	var res *elastic.SearchResult
 	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
-	sources := make([]string, 0)
+	sources := make([][]string, 0)
 	for _, hit := range res.Hits.Hits {
 		var src es.Result
 		json.Unmarshal(*hit.Source, &src)
+		source := []string{}
 		for _, s := range src.FilterValues {
-			sources = append(sources, s)
+			source = append(source, s)
 		}
+		formated, err := es.KeyValuesToValues(key, source)
+		r.Nil(err)
+		sources = append(sources, formated)
 	}
-	formatedSources, err := es.KeyValuesToValues("source", sources)
-	r.Nil(err)
-	r.Equal(len(expectedSources), len(formatedSources))
-	r.ElementsMatch(expectedSources, formatedSources)
+	ElementsMatch(r, sources, expected)
 }
 
 func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Indexer, expectedContentsByNames map[string]string) {

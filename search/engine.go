@@ -357,11 +357,11 @@ func haveHits(r *elastic.SearchResult) bool {
 }
 
 func score(score *float64) float64 {
-    if score == nil {
-        return 0
-    } else {
-        return *score
-    }
+	if score == nil {
+		return 0
+	} else {
+		return *score
+	}
 }
 
 func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (bool, error) {
@@ -396,7 +396,7 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 			return ed2.EffectiveDate.Time.After(ed1.EffectiveDate.Time) ||
 				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && score(h1.Score) > score(h2.Score), nil
 		} else {
-            log.Infof("%+v %+v %+v %+v", ed1, ed2, h1, h2)
+			log.Infof("%+v %+v %+v %+v", ed1, ed2, h1, h2)
 			// Order by newer to older, break ties using score.
 			return ed2.EffectiveDate.Time.Before(ed1.EffectiveDate.Time) ||
 				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && score(h1.Score) > score(h2.Score), nil

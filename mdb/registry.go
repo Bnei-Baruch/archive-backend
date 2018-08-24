@@ -20,6 +20,7 @@ var (
 	AUTHOR_REGISTRY            = &AuthorRegistry{}
 	SOURCE_TYPE_REGISTRY       = &SourceTypeRegistry{}
 	TWITTER_USERS_REGISTRY     = &TwitterUsersRegistry{}
+	BLOGS_REGISTRY             = &BlogsRegistry{}
 )
 
 func InitTypeRegistries(exec boil.Executor) error {
@@ -28,7 +29,8 @@ func InitTypeRegistries(exec boil.Executor) error {
 		PERSONS_REGISTRY,
 		AUTHOR_REGISTRY,
 		SOURCE_TYPE_REGISTRY,
-		TWITTER_USERS_REGISTRY}
+		TWITTER_USERS_REGISTRY,
+		BLOGS_REGISTRY}
 
 	for _, x := range registries {
 		if err := x.Init(exec); err != nil {
@@ -155,6 +157,27 @@ func (r *TwitterUsersRegistry) Init(exec boil.Executor) error {
 	for _, t := range users {
 		r.ByUsername[t.Username] = t
 		r.ByID[t.ID] = t
+	}
+
+	return nil
+}
+
+type BlogsRegistry struct {
+	ByName map[string]*mdbmodels.Blog
+	ByID   map[int64]*mdbmodels.Blog
+}
+
+func (r *BlogsRegistry) Init(exec boil.Executor) error {
+	blogs, err := mdbmodels.Blogs(exec).All()
+	if err != nil {
+		return errors.Wrap(err, "Load blogs from DB")
+	}
+
+	r.ByName = make(map[string]*mdbmodels.Blog)
+	r.ByID = make(map[int64]*mdbmodels.Blog)
+	for _, b := range blogs {
+		r.ByName[b.Name] = b
+		r.ByID[b.ID] = b
 	}
 
 	return nil

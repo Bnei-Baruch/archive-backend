@@ -80,12 +80,12 @@ func (index *BaseIndex) CreateIndex() error {
 		name := index.indexName(lang)
 		// Do nothing if index already exists.
 		exists, err := index.esc.IndexExists(name).Do(context.TODO())
-		log.Infof("Create index, exists: %t.", exists)
+		log.Debugf("Create index, exists: %t.", exists)
 		if err != nil {
 			return err
 		}
 		if exists {
-			log.Infof("Index already exists (%+v), skipping.", name)
+			log.Debugf("Index already exists (%+v), skipping.", name)
 			continue
 		}
 
@@ -108,7 +108,7 @@ func (index *BaseIndex) CreateIndex() error {
 		if !res.Acknowledged {
 			return errors.Errorf("Index creation wasn't acknowledged: %s", name)
 		}
-		log.Infof("Created index: %+v", name)
+		log.Debugf("Created index: %+v", name)
 	}
 	return nil
 }
