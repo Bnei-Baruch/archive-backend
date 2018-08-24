@@ -157,7 +157,7 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 	for w := 1; w <= 10; w++ {
 		go func(tasks <-chan OffsetLimitJob, errs chan<- error) {
 			for task := range tasks {
-				errs <- index.bulkIndexPosts(task.Offset, task.Limit, sqlScope)
+				errors <- index.bulkIndexPosts(task.Offset, task.Limit, sqlScope)
 			}
 		}(tasks, errors)
 	}
@@ -196,7 +196,6 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 
 	indexName := index.indexName(langMapping[int(mdbPost.BlogID)])
 	vBytes, err := json.Marshal(post)
-	_, err = json.Marshal(post)
 	if err != nil {
 		return err
 	}
