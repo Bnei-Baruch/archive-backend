@@ -41,6 +41,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/rss.php", FeedRssPhp)
 	router.GET("/feeds/podcast", FeedPodcast)
 	router.GET("/feeds/podcast.rss", FeedPodcast)
+	router.HEAD("/feeds/podcast.rss", FeedPodcast)
 	router.GET("/feeds/wsxml.xml", FeedWSXML)
 
 	//router.GET("/_recover", func(c *gin.Context) {
