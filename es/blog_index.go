@@ -176,7 +176,10 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 
 	langMapping := index.blogIdToLanguageMapping()
-	idStr := fmt.Sprintf("%v", mdbPost.ID)
+
+	// WPID is taken instead of ID for the building of correct URL in frontend.
+	// The API BlogPostHandler expects for WPID and not for ID.
+	idStr := fmt.Sprintf("%v", mdbPost.WPID)
 
 	content, err := html2text.FromString(mdbPost.Content, html2text.Options{OmitLinks: true})
 	if err != nil {
