@@ -39,27 +39,27 @@ type ContentUnitsIndex struct {
 
 func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
 	return cu.Secure == 0 && cu.Published && !utils.Int64InSlice(cu.TypeID, []int64{
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_CLIP),
+		//mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_LELO_MIKUD),
+		//mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_PUBLICATION),
+		//mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_SONG),
+		//mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_BOOK),
+		//mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_BLOG_POST),
+		mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_KITEI_MAKOR),
+		mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_UNKNOWN),
 	})
 }
 
 func defaultContentUnitSql() string {
-	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d)",
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d, %d)",
+		mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_CLIP),
+		//mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_LELO_MIKUD),
+		//mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_PUBLICATION),
+		//mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_SONG),
+		//mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_BOOK),
+		//mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_BLOG_POST),
+		mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_KITEI_MAKOR),
+		mdb.CONTENT_TYPE_REGISTRY.TryGetTypeIdByName(consts.CT_UNKNOWN),
 	)
 }
 
