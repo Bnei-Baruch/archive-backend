@@ -1078,11 +1078,11 @@ func removeAuthorFromSource(source es.Source, mdbAuthor mdbmodels.Author) error 
 	return nil
 }
 
-func insertPost(id int64, blogId int64, title string, filtered bool) error {
+func insertPost(wp_id int64, blogId int64, title string, filtered bool) error {
 	mdbPost := mdbmodels.BlogPost{
-		ID:        id,
+		ID:        wp_id,
 		BlogID:    blogId,
-		WPID:      100 + id,
+		WPID:      wp_id,
 		Title:     title,
 		Content:   "",
 		PostedAt:  time.Now(),

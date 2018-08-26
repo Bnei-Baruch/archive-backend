@@ -69,14 +69,14 @@ func (index *BlogIndex) Update(scope Scope) error {
 func (index *BlogIndex) addToIndex(scope Scope, removedIDs []int64) error {
 	sqlScope := defaultBlogPostsSql()
 	ids := removedIDs
-	if scope.BlogPostID != 0 {
-		ids = append(ids, scope.BlogPostID)
+	if scope.BlogPostWPID != 0 {
+		ids = append(ids, scope.BlogPostWPID)
 	}
 	quoted := make([]string, len(ids))
 	for i, id := range ids {
 		quoted[i] = fmt.Sprintf("%d", id)
 	}
-	sqlScope = fmt.Sprintf("%s AND p.id IN (%s)", sqlScope, strings.Join(quoted, ","))
+	sqlScope = fmt.Sprintf("%s AND p.wp_id IN (%s)", sqlScope, strings.Join(quoted, ","))
 	if err := index.addToIndexSql(sqlScope); err != nil {
 		return errors.Wrap(err, "blog posts index addToIndex addToIndexSql")
 	}
@@ -84,9 +84,9 @@ func (index *BlogIndex) addToIndex(scope Scope, removedIDs []int64) error {
 }
 
 func (index *BlogIndex) removeFromIndex(scope Scope) ([]int64, error) {
-	if scope.BlogPostID != 0 {
+	if scope.BlogPostWPID != 0 {
 		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_BLOG_POSTS).
-			Filter(elastic.NewTermsQuery("mdb_uid", scope.BlogPostID))
+			Filter(elastic.NewTermsQuery("mdb_uid", scope.BlogPostWPID))
 		removedStr, err := index.RemoveFromIndexQuery(elasticScope)
 		if err != nil {
 			return nil, err
