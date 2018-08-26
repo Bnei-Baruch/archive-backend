@@ -213,5 +213,7 @@ func FeedPodcast(c *gin.Context) {
 	}
 
 	feed := channel.CreateFeed()
-	c.XML(http.StatusOK, feed)
+	feedXml, err := xml.Marshal(feed)
+	xml := []byte(xml.Header + string(feedXml))
+	c.Data(http.StatusOK, "application/xml; charset=utf-8", []byte(xml))
 }
