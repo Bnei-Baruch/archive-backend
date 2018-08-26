@@ -54,7 +54,7 @@ type podcastItem struct {
 	Enclosure   *podcastEnclosure
 	Guid        string `xml:"guid"`
 	Duration    string `xml:"itunes:duration"`
-	Summary     string
+	Summary     string `xml:"itunes:summary"`
 	Image       *itunesImage
 	Keywords    string `xml:"itunes:keywords,omitempty"`
 	Explicit    string `xml:"itunes:explicit"`
@@ -124,7 +124,7 @@ func FeedPodcast(c *gin.Context) {
 		Language:        "he",
 		Copyright:       copyright,
 		PodcastAtomLink: &podcastAtomLink{Href: link, Rel: "self", Type: "application/rss+xml"},
-		LastBuildDate:   time.Now().Format(time.RFC1123Z), // TODO: get a newest created_at of files
+		LastBuildDate:   time.Now().Format(time.RFC1123), // TODO: get a newest created_at of files
 		Author:          "Dr. Michael Laitman",
 		Summary:         description,
 		Subtitle:        "",
@@ -133,7 +133,7 @@ func FeedPodcast(c *gin.Context) {
 		Keywords:        "קבלה,שיעור,מקור,אותנטי",
 		ItunesImage:     &itunesImage{Href: href},
 		Category:        &podcastCategory{Text: "Religion &amp; Spirituality", Category: &podcastCategory{Text: "Spirituality"}},
-		PubDate:         time.Now().Format(time.RFC1123Z),
+		PubDate:         time.Now().Format(time.RFC1123),
 
 		Items: make([]*podcastItem, 0),
 	}
@@ -195,7 +195,7 @@ func FeedPodcast(c *gin.Context) {
 			channel.Items = append(channel.Items, &podcastItem{
 				Title:       file.Name + "; " + file.CreatedAt.Format(time.RFC822),
 				Link:        url,
-				PubDate:     cu.FilmDate.Time.Format(time.RFC1123Z),
+				PubDate:     cu.FilmDate.Time.Format(time.RFC1123),
 				Description: description,
 				Enclosure: &podcastEnclosure{
 					Url:    url,
