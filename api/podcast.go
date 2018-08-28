@@ -133,7 +133,7 @@ func FeedPodcast(c *gin.Context) {
 		Explicit:        "no",
 		Keywords:        "קבלה,שיעור,מקור,אותנטי",
 		ItunesImage:     &itunesImage{Href: href},
-		Category:        &podcastCategory{Text: "Religion &amp; Spirituality", Category: &podcastCategory{Text: "Spirituality"}},
+		Category:        &podcastCategory{Text: "Religion & Spirituality", Category: &podcastCategory{Text: "Spirituality"}},
 		PubDate:         time.Now().Format(time.RFC1123),
 
 		Items: make([]*podcastItem, 0),
