@@ -195,7 +195,7 @@ func FeedPodcast(c *gin.Context) {
 			channel.Items = append(channel.Items, &podcastItem{
 				Title:       file.Name + "; " + file.CreatedAt.Format(time.RFC822),
 				Link:        url,
-				PubDate:     cu.FilmDate.Time.Format(time.RFC1123),
+				PubDate:     file.CreatedAt.Format(time.RFC822),
 				Description: description,
 				Enclosure: &podcastEnclosure{
 					Url:    url,
