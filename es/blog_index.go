@@ -110,6 +110,7 @@ func (index *BlogIndex) bulkIndexPosts(offset int, limit int, sqlScope string) e
 	err := mdbmodels.NewQuery(index.db,
 		qm.From("blog_posts as p"),
 		qm.Where(sqlScope),
+		qm.OrderBy("id"), // Required for same order results in each query
 		qm.Offset(offset),
 		qm.Limit(limit)).Bind(&posts)
 	if err != nil {
