@@ -175,7 +175,7 @@ func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB, c *gin.Context) (ids []i
 	for idx, cu := range contentUnits {
 		cuids[idx] = cu.ID
 	}
-	xus, err := mdbmodels.ContentUnits(db, qm.Select("id"), qm.WhereIn("uid in ?", cuids...), qm.OrderBy("created_at asc")).All()
+	xus, err := mdbmodels.ContentUnits(db, qm.Select("id"), qm.WhereIn("uid in ?", cuids...), qm.OrderBy("created_at desc")).All()
 	if err != nil {
 		if err != sql.ErrNoRows { // non-empty feed
 			NewInternalError(err).Abort(c)

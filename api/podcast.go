@@ -11,6 +11,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"regexp"
 	"fmt"
+	"path/filepath"
 )
 
 type podcastFeedXml struct {
@@ -187,7 +188,7 @@ func FeedPodcast(c *gin.Context) {
 			}
 
 			// TODO: change title and description
-			url := fmt.Sprintf("%s%s", consts.CDN, file.UID)
+			url := fmt.Sprintf("%s%s%s", consts.CDN, file.UID, filepath.Ext(file.Name))
 			description := cu.Description
 			if description == "" {
 				description = cu.Name
