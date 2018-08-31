@@ -262,7 +262,7 @@ func (indexer *Indexer) PublisherUpdate(uid string) error {
 	return nil
 }
 
-func (indexer *Indexer) BlogPostUpdate(id int64) error {
+func (indexer *Indexer) BlogPostUpdate(id string) error {
 	log.Infof("Indexer - Index blog post update event: %v", id)
 	for _, index := range indexer.indices {
 		if err := index.Update(Scope{BlogPostWPID: id}); err != nil {
