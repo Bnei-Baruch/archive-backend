@@ -6,7 +6,7 @@ This is a modified version of the github.com/Bnei-Baruch/mdb/api/registry.go
 */
 
 import (
-	"log"
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/Bnei-Baruch/sqlboiler/boil"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -56,7 +56,7 @@ func (r *ContentTypeRegistry) TryGetTypeIdByName(key string) int64 {
 	if ct, ok := r.ByName[key]; ok {
 		return ct.ID
 	}
-	log.Printf("Warning: Content Type '%s' is not found!", key)
+	log.Warnf("Warning: Content Type '%s' is not found!", key)
 	return -1
 }
 
