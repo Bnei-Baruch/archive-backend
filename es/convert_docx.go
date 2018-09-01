@@ -2,6 +2,7 @@ package es
 
 import (
 	"bytes"
+    "context"
 	"database/sql"
 	"fmt"
 	"io"
@@ -82,25 +83,40 @@ func DownloadAndConvert(docBatch [][]string) error {
 	}
 
 	if len(convertDocs) > 0 {
+        for _, docPath := range convertDocs {
+            if _, err := os.Stat(docPath); os.IsNotExist(err) {
+                return errors.Wrapf(err, "os.Stat %s", docPath)
+            }
+        }
+
 		sofficeMutex.Lock()
+		defer sofficeMutex.Unlock()
 		folder, err := DocFolder()
 		if err != nil {
 			return err
 		}
+        ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+        defer cancel()
 		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", folder}, convertDocs...)
 		log.Infof("Command [%s]", strings.Join(args, " "))
-		cmd := exec.Command(sofficeBin, args...)
+		cmd := exec.CommandContext(ctx, sofficeBin, args...)
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 		err = cmd.Run()
-		sofficeMutex.Unlock()
+        if ctx.Err() == context.DeadlineExceeded {
+			log.Errorf("DeadlineExceeded! soffice is '%s'. Error: %s", sofficeBin, err)
+			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
+            return errors.Wrapf(ctx.Err(), "DeadlineExceeded when executing soffice.")
+        }
 		if err != nil {
 			log.Errorf("soffice is '%s'. Error: %s", sofficeBin, err)
 			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
 			return errors.Wrapf(err, "Execute soffice.")
-		}
+		} else {
+            log.Infof("soffice successfully done.")
+        }
 	}
 	return nil
 }
