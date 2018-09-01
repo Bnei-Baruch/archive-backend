@@ -534,7 +534,7 @@ func FeedRssPhp(c *gin.Context) {
 		return
 	}
 
-	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b,}
+	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
 	fileMap, err := loadCUFiles(db, cuids, mediaTypes, config.Lang)
 	if err != nil {
 		NewInternalError(err).Abort(c)

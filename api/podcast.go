@@ -5,13 +5,13 @@ import (
 
 	"gopkg.in/gin-gonic/gin.v1"
 
-	"encoding/xml"
-	"net/http"
 	"database/sql"
-	"github.com/Bnei-Baruch/archive-backend/consts"
-	"regexp"
+	"encoding/xml"
 	"fmt"
+	"github.com/Bnei-Baruch/archive-backend/consts"
+	"net/http"
 	"path/filepath"
+	"regexp"
 )
 
 type podcastFeedXml struct {
@@ -169,7 +169,7 @@ func FeedPodcast(c *gin.Context) {
 		return
 	}
 
-	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b,}
+	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
 	fileMap, err := loadCUFiles(db, cuids, mediaTypes, config.Lang)
 	if err != nil {
 		NewInternalError(err).Abort(c)

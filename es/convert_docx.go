@@ -2,7 +2,7 @@ package es
 
 import (
 	"bytes"
-    "context"
+	"context"
 	"database/sql"
 	"fmt"
 	"io"
@@ -83,11 +83,11 @@ func DownloadAndConvert(docBatch [][]string) error {
 	}
 
 	if len(convertDocs) > 0 {
-        for _, docPath := range convertDocs {
-            if _, err := os.Stat(docPath); os.IsNotExist(err) {
-                return errors.Wrapf(err, "os.Stat %s", docPath)
-            }
-        }
+		for _, docPath := range convertDocs {
+			if _, err := os.Stat(docPath); os.IsNotExist(err) {
+				return errors.Wrapf(err, "os.Stat %s", docPath)
+			}
+		}
 
 		sofficeMutex.Lock()
 		defer sofficeMutex.Unlock()
@@ -95,8 +95,8 @@ func DownloadAndConvert(docBatch [][]string) error {
 		if err != nil {
 			return err
 		}
-        ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-        defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", folder}, convertDocs...)
 		log.Infof("Command [%s]", strings.Join(args, " "))
 		cmd := exec.CommandContext(ctx, sofficeBin, args...)
@@ -105,18 +105,18 @@ func DownloadAndConvert(docBatch [][]string) error {
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 		err = cmd.Run()
-        if ctx.Err() == context.DeadlineExceeded {
+		if ctx.Err() == context.DeadlineExceeded {
 			log.Errorf("DeadlineExceeded! soffice is '%s'. Error: %s", sofficeBin, err)
 			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
-            return errors.Wrapf(ctx.Err(), "DeadlineExceeded when executing soffice.")
-        }
+			return errors.Wrapf(ctx.Err(), "DeadlineExceeded when executing soffice.")
+		}
 		if err != nil {
 			log.Errorf("soffice is '%s'. Error: %s", sofficeBin, err)
 			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
 			return errors.Wrapf(err, "Execute soffice.")
 		} else {
-            log.Infof("soffice successfully done.")
-        }
+			log.Infof("soffice successfully done.")
+		}
 	}
 	return nil
 }
