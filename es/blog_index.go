@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -66,43 +65,35 @@ func (index *BlogIndex) Update(scope Scope) error {
 	return index.addToIndex(scope, removed)
 }
 
-func (index *BlogIndex) addToIndex(scope Scope, removedIDs []int64) error {
+func (index *BlogIndex) addToIndex(scope Scope, removedPosts []string) error {
 	sqlScope := defaultBlogPostsSql()
-	ids := removedIDs
-	if scope.BlogPostWPID != 0 {
+	ids := removedPosts
+	if scope.BlogPostWPID != "" {
 		ids = append(ids, scope.BlogPostWPID)
 	}
 	quoted := make([]string, len(ids))
 	for i, id := range ids {
-		quoted[i] = fmt.Sprintf("%d", id)
+		s := strings.Split(id, "-")
+		blogId := s[0]
+		wpId := s[1]
+		quoted[i] = fmt.Sprintf("(p.blog_id = %s and p.wp_id = %s)", blogId, wpId)
 	}
-	sqlScope = fmt.Sprintf("%s AND p.wp_id IN (%s)", sqlScope, strings.Join(quoted, ","))
+	sqlScope = fmt.Sprintf("%s AND (%s)", sqlScope, strings.Join(quoted, " or "))
 	if err := index.addToIndexSql(sqlScope); err != nil {
 		return errors.Wrap(err, "blog posts index addToIndex addToIndexSql")
 	}
 	return nil
 }
 
-func (index *BlogIndex) removeFromIndex(scope Scope) ([]int64, error) {
-	if scope.BlogPostWPID != 0 {
+func (index *BlogIndex) removeFromIndex(scope Scope) ([]string, error) {
+	if scope.BlogPostWPID != "" {
 		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_BLOG_POSTS).
 			Filter(elastic.NewTermsQuery("mdb_uid", scope.BlogPostWPID))
-		removedStr, err := index.RemoveFromIndexQuery(elasticScope)
-		if err != nil {
-			return nil, err
-		}
-		removedInt := make([]int64, 0)
-		for _, rs := range removedStr {
-			ri, err := strconv.ParseInt(rs, 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			removedInt = append(removedInt, ri)
-		}
+		return index.RemoveFromIndexQuery(elasticScope)
 	}
 
 	// Nothing to remove.
-	return []int64{}, nil
+	return []string{}, nil
 }
 
 func (index *BlogIndex) bulkIndexPosts(offset int, limit int, sqlScope string) error {
@@ -110,6 +101,7 @@ func (index *BlogIndex) bulkIndexPosts(offset int, limit int, sqlScope string) e
 	err := mdbmodels.NewQuery(index.db,
 		qm.From("blog_posts as p"),
 		qm.Where(sqlScope),
+		qm.OrderBy("id"), // Required for same order results in each query
 		qm.Offset(offset),
 		qm.Limit(limit)).Bind(&posts)
 	if err != nil {
@@ -177,9 +169,9 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 
 	langMapping := index.blogIdToLanguageMapping()
 
-	// WPID is taken instead of ID for the building of correct URL in frontend.
-	// The API BlogPostHandler expects for WPID and not for ID.
-	idStr := fmt.Sprintf("%v", mdbPost.WPID)
+	// Blog Id + WPID is taken instead of ID for the building of correct URL in frontend.
+	// The API BlogPostHandler expects for Blog Name + WPID and not for ID.
+	idStr := fmt.Sprintf("%v-%v", mdbPost.BlogID, mdbPost.WPID)
 
 	content, err := html2text.FromString(mdbPost.Content, html2text.Options{OmitLinks: true})
 	if err != nil {
@@ -209,10 +201,10 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 		BodyJson(post).
 		Do(context.TODO())
 	if err != nil {
-		return errors.Wrapf(err, "Index blog post %s %s", indexName, mdbPost.ID)
+		return errors.Wrapf(err, "Index blog post %s %s", indexName, idStr)
 	}
 	if resp.Result != "created" {
-		return errors.Errorf("Not created: blog post %s %s", indexName, mdbPost.ID)
+		return errors.Errorf("Not created: blog post %s %s", indexName, idStr)
 	}
 
 	atomic.AddUint64(&index.Progress, 1)
