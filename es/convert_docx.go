@@ -46,10 +46,6 @@ func DownloadAndConvert(docBatch [][]string) error {
 		if _, err := os.Stat(docxPath); !os.IsNotExist(err) {
 			continue
 		}
-		if filepath.Ext(name) == ".doc" {
-			convertDocs = append(convertDocs, docPath)
-			//defer os.Remove(docPath)
-		}
 
 		// Download doc.
 		resp, err := httpClient.Get(fmt.Sprintf("%s/%s", cdnUrl, uid))
@@ -79,6 +75,11 @@ func DownloadAndConvert(docBatch [][]string) error {
 
 		if err := out.Close(); err != nil {
 			log.Errorf("out.Close %s : %s", docPath, err.Error())
+		}
+
+		// all is good, file is here. Should we convert to docx first ?
+		if filepath.Ext(name) == ".doc" {
+			convertDocs = append(convertDocs, docPath)
 		}
 	}
 
