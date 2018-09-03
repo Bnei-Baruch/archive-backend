@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
@@ -94,7 +95,7 @@ func DownloadAndConvert(docBatch [][]string) error {
 		if err != nil {
 			return err
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(convertDocs))*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(utils.MaxInt(15, len(convertDocs)))*time.Second)
 		defer cancel()
 		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", folder}, convertDocs...)
 		log.Infof("Command [%s]", strings.Join(args, " "))
