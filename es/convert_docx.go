@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
@@ -95,7 +94,7 @@ func DownloadAndConvert(docBatch [][]string) error {
 		if err != nil {
 			return err
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(convertDocs))*time.Second)
 		defer cancel()
 		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", folder}, convertDocs...)
 		log.Infof("Command [%s]", strings.Join(args, " "))
@@ -187,71 +186,38 @@ func loadMap(rows *sql.Rows) ([][]string, error) {
 }
 
 func ConvertDocx(db *sql.DB) error {
-	var workersWG sync.WaitGroup
-	docsCH := make(chan []string)
-	workersWG.Add(1)
-	var loadErr error
-	var total uint64
-	go func(wg *sync.WaitGroup) {
-		defer close(docsCH)
-		defer wg.Done()
-		docs, err := loadDocs(db)
-		if err != nil {
-			loadErr = errors.Wrap(err, "Fetch docs from mdb")
-			return
-		}
-		log.Infof("%d docs in MDB", len(docs))
-		total = uint64(len(docs))
-		for _, doc := range docs {
-			if len(doc) > 0 {
-				docsCH <- doc
-			} else {
-				loadErr = errors.New("Empty doc, skipping. Should not happen.")
-				return
-			}
-		}
-	}(&workersWG)
+	docs, err := loadDocs(db)
+	if err != nil {
+		return errors.Wrap(err, "Fetch docs from mdb")
+	}
+	total := len(docs)
+	log.Infof("%d docs in MDB", total)
 
-	var done uint64 = 0
-	var errs [5]error
-	for i := 0; i < 5; i++ {
-		workersWG.Add(1)
-		go func(wg *sync.WaitGroup, i int) {
-			defer wg.Done()
-			for {
-				var docBatch [][]string
-				for j := 0; j < 50; j++ {
-					doc := <-docsCH
-					if len(doc) > 0 {
-						docBatch = append(docBatch, doc)
-					} else {
-						break
-					}
-				}
-				if len(docBatch) > 0 {
-					err := DownloadAndConvert(docBatch)
-					atomic.AddUint64(&done, uint64(len(docBatch)))
-					if err != nil {
-						errs[i] = err
-						return
-					}
-					log.Infof("Done %d / %d", done, total)
-				} else {
-					log.Infof("Worker %d done.", i)
-					return
-				}
+	var batch [][]string
+	for i, doc := range docs {
+		if len(doc) <= 0 {
+			log.Warn("Empty doc, skipping. Should not happen.")
+			continue
+		}
+
+		batch = append(batch, doc)
+
+		if len(batch) == 50 {
+			log.Infof("DownloadAndConvert %d / %d", i+1, total)
+			if err := DownloadAndConvert(batch); err != nil {
+				return errors.Wrapf(err, "DownloadAndConvert %d / %d", i, total)
 			}
-		}(&workersWG, i)
+			batch = make([][]string, 0)
+		}
 	}
 
-	workersWG.Wait()
-	if loadErr != nil {
-		return loadErr
-	}
-	for _, err := range errs {
-		if err != nil {
-			return err
+	// tail
+	if len(batch) > 0 {
+		log.Infof("DownloadAndConvert tail %d", len(batch))
+		if err := DownloadAndConvert(batch); err != nil {
+			return errors.Wrapf(err, "DownloadAndConvert tail %d", len(batch))
 		}
 	}
+
 	return nil
 }
