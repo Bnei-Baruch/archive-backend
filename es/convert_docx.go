@@ -46,10 +46,6 @@ func DownloadAndConvert(docBatch [][]string) error {
 		if _, err := os.Stat(docxPath); !os.IsNotExist(err) {
 			continue
 		}
-		if filepath.Ext(name) == ".doc" {
-			convertDocs = append(convertDocs, docPath)
-			//defer os.Remove(docPath)
-		}
 
 		// Download doc.
 		resp, err := httpClient.Get(fmt.Sprintf("%s/%s", cdnUrl, uid))
@@ -62,6 +58,10 @@ func DownloadAndConvert(docBatch [][]string) error {
 			continue
 		}
 
+		if filepath.Ext(name) == ".doc" {
+			convertDocs = append(convertDocs, docPath)
+			//defer os.Remove(docPath)
+		}
 		out, err := os.Create(docPath)
 		if err != nil {
 			return errors.Wrapf(err, "os.Create %s", docPath)
@@ -156,8 +156,7 @@ FROM files f
                                  AND f.secure = 0
                                  AND f.published IS TRUE
                                  AND cu.secure = 0
-                                 AND cu.published IS TRUE
-                                 AND cu.type_id != 42;`).Query()
+                                 AND cu.published IS TRUE;`).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load docs")
@@ -189,12 +188,10 @@ func loadMap(rows *sql.Rows) ([][]string, error) {
 func ConvertDocx(db *sql.DB) error {
 	var workersWG sync.WaitGroup
 	docsCH := make(chan []string)
-	workersWG.Add(1)
 	var loadErr error
 	var total uint64
 	go func(wg *sync.WaitGroup) {
 		defer close(docsCH)
-		defer wg.Done()
 		docs, err := loadDocs(db)
 		if err != nil {
 			loadErr = errors.Wrap(err, "Fetch docs from mdb")
@@ -206,10 +203,12 @@ func ConvertDocx(db *sql.DB) error {
 			if len(doc) > 0 {
 				docsCH <- doc
 			} else {
+				log.Infof("Empty doc!")
 				loadErr = errors.New("Empty doc, skipping. Should not happen.")
 				return
 			}
 		}
+		log.Infof("Done adding docs.")
 	}(&workersWG)
 
 	var done uint64 = 0
@@ -232,6 +231,7 @@ func ConvertDocx(db *sql.DB) error {
 					err := DownloadAndConvert(docBatch)
 					atomic.AddUint64(&done, uint64(len(docBatch)))
 					if err != nil {
+						log.Infof("Error DownloadAndConvert.")
 						errs[i] = err
 						return
 					}
@@ -244,7 +244,9 @@ func ConvertDocx(db *sql.DB) error {
 		}(&workersWG, i)
 	}
 
+	log.Infof("Waiting for all workers.")
 	workersWG.Wait()
+	log.Infof("All workers done.")
 	if loadErr != nil {
 		return loadErr
 	}
