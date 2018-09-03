@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
+	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 
@@ -54,6 +55,7 @@ func (indexData *IndexData) load(sqlScope string) error {
 	if err != nil {
 		return err
 	}
+	log.Infof("Transcripts: %+v", indexData.Transcripts)
 
 	return nil
 }

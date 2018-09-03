@@ -173,6 +173,9 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 
 func (index *ContentUnitsIndex) bulkIndexUnits(offset int, limit int, sqlScope string) error {
 	var units []*mdbmodels.ContentUnit
+
+	sqlScope = "cu.uid = 'CT5qya6m'"
+
 	err := mdbmodels.NewQuery(index.db,
 		qm.From("content_units as cu"),
 		qm.Load("ContentUnitI18ns"),
@@ -219,10 +222,13 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 	errors := make(chan error, 300)
 	doneAdding := make(chan bool)
 
+	count = 1
+
 	tasksCount := 0
 	go func() {
 		offset := 0
-		limit := 1000
+		// limit := 1000
+		limit := 1
 		for offset < int(count) {
 			tasks <- OffsetLimitJob{offset, limit}
 			tasksCount += 1
@@ -322,8 +328,11 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 			// 	unit.Translations = val[1]
 			// 	unit.TypedUids = append(unit.TypedUids, KeyValues("file", val[0])...)
 			// }
+			log.Infof("11111")
 			if byLang, ok := indexData.Transcripts[cu.UID]; ok {
+				log.Infof("22222")
 				if val, ok := byLang[i18n.Language]; ok {
+					log.Infof("3333")
 					var err error
 					fileName, err := LoadDocFilename(index.db, val[0])
 					if err != nil {
@@ -331,6 +340,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 					} else if fileName == "" {
 						log.Warnf("Content Units Index - Could not get transcript filename for %s, maybe it is not published or not secure.  Skipping.", val[0])
 					} else {
+						log.Infof("3333.55555 %s %s", val[0], fileName)
 						err = DownloadAndConvert([][]string{{val[0], fileName}})
 						if err != nil {
 							log.Errorf("Content Units Index - Error downloading or converting doc: %s", val[0])
@@ -345,6 +355,8 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 							unit.Content, err = ParseDocx(docxPath)
 							if unit.Content == "" {
 								log.Warnf("Content Units Index - Transcript empty: %s", val[0])
+							} else {
+								log.Infof("44444 content length %d", len(unit.Content))
 							}
 							if err != nil {
 								log.Errorf("Content Units Index - Error parsing docx: %s", val[0])
@@ -364,11 +376,24 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 	for k, v := range i18nMap {
 		name := index.indexName(k)
 
+		log.Infof("Indexing %s content length: %d", k, len(v.Content))
+		if len(v.Content) > 1000 {
+			log.Infof("Content: [%s]", v.Content[0:1000])
+		}
+
+		b, err := json.Marshal(v)
+		if err != nil {
+			fmt.Printf("Error: %s", err)
+			return errors.Wrapf(err, "BLAH!")
+		}
+		fmt.Println(string(b))
+
 		log.Infof("Content Units Index - Add content unit %s to index %s", v.ToString(), name)
 		resp, err := index.esc.Index().
 			Index(name).
 			Type("result").
-			BodyJson(v).
+			// BodyJson(v).
+			BodyString(string(b)).
 			Do(context.TODO())
 		if err != nil {
 			return errors.Wrapf(err, "Content Units Index - Index unit %s %s", name, cu.UID)
