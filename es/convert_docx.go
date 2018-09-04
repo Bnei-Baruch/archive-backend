@@ -2,6 +2,7 @@ package es
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"fmt"
 	"io"
@@ -12,9 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
@@ -44,10 +45,6 @@ func DownloadAndConvert(docBatch [][]string) error {
 		docxPath := path.Join(folder, docxFilename)
 		if _, err := os.Stat(docxPath); !os.IsNotExist(err) {
 			continue
-		}
-		if filepath.Ext(name) == ".doc" {
-			convertDocs = append(convertDocs, docPath)
-			//defer os.Remove(docPath)
 		}
 
 		// Download doc.
@@ -79,27 +76,47 @@ func DownloadAndConvert(docBatch [][]string) error {
 		if err := out.Close(); err != nil {
 			log.Errorf("out.Close %s : %s", docPath, err.Error())
 		}
+
+		// all is good, file is here. Should we convert to docx first ?
+		if filepath.Ext(name) == ".doc" {
+			convertDocs = append(convertDocs, docPath)
+		}
 	}
 
 	if len(convertDocs) > 0 {
+		for _, docPath := range convertDocs {
+			if _, err := os.Stat(docPath); os.IsNotExist(err) {
+				return errors.Wrapf(err, "os.Stat %s", docPath)
+			}
+		}
+
 		sofficeMutex.Lock()
+		defer sofficeMutex.Unlock()
 		folder, err := DocFolder()
 		if err != nil {
 			return err
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(utils.MaxInt(15, len(convertDocs)))*time.Second)
+		defer cancel()
 		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", folder}, convertDocs...)
 		log.Infof("Command [%s]", strings.Join(args, " "))
-		cmd := exec.Command(sofficeBin, args...)
+		cmd := exec.CommandContext(ctx, sofficeBin, args...)
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 		err = cmd.Run()
-		sofficeMutex.Unlock()
+		if ctx.Err() == context.DeadlineExceeded {
+			log.Errorf("DeadlineExceeded! soffice is '%s'. Error: %s", sofficeBin, err)
+			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
+			return errors.Wrapf(ctx.Err(), "DeadlineExceeded when executing soffice.")
+		}
 		if err != nil {
 			log.Errorf("soffice is '%s'. Error: %s", sofficeBin, err)
 			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
 			return errors.Wrapf(err, "Execute soffice.")
+		} else {
+			log.Infof("soffice successfully done.")
 		}
 	}
 	return nil
@@ -171,71 +188,38 @@ func loadMap(rows *sql.Rows) ([][]string, error) {
 }
 
 func ConvertDocx(db *sql.DB) error {
-	var workersWG sync.WaitGroup
-	docsCH := make(chan []string)
-	workersWG.Add(1)
-	var loadErr error
-	var total uint64
-	go func(wg *sync.WaitGroup) {
-		defer close(docsCH)
-		defer wg.Done()
-		docs, err := loadDocs(db)
-		if err != nil {
-			loadErr = errors.Wrap(err, "Fetch docs from mdb")
-			return
-		}
-		log.Infof("%d docs in MDB", len(docs))
-		total = uint64(len(docs))
-		for _, doc := range docs {
-			if len(doc) > 0 {
-				docsCH <- doc
-			} else {
-				loadErr = errors.New("Empty doc, skipping. Should not happen.")
-				return
-			}
-		}
-	}(&workersWG)
+	docs, err := loadDocs(db)
+	if err != nil {
+		return errors.Wrap(err, "Fetch docs from mdb")
+	}
+	total := len(docs)
+	log.Infof("%d docs in MDB", total)
 
-	var done uint64 = 0
-	var errs [5]error
-	for i := 0; i < 5; i++ {
-		workersWG.Add(1)
-		go func(wg *sync.WaitGroup, i int) {
-			defer wg.Done()
-			for {
-				var docBatch [][]string
-				for j := 0; j < 50; j++ {
-					doc := <-docsCH
-					if len(doc) > 0 {
-						docBatch = append(docBatch, doc)
-					} else {
-						break
-					}
-				}
-				if len(docBatch) > 0 {
-					err := DownloadAndConvert(docBatch)
-					atomic.AddUint64(&done, uint64(len(docBatch)))
-					if err != nil {
-						errs[i] = err
-						return
-					}
-					log.Infof("Done %d / %d", done, total)
-				} else {
-					log.Infof("Worker %d done.", i)
-					return
-				}
+	var batch [][]string
+	for i, doc := range docs {
+		if len(doc) <= 0 {
+			log.Warn("Empty doc, skipping. Should not happen.")
+			continue
+		}
+
+		batch = append(batch, doc)
+
+		if len(batch) == 50 {
+			log.Infof("DownloadAndConvert %d / %d", i+1, total)
+			if err := DownloadAndConvert(batch); err != nil {
+				return errors.Wrapf(err, "DownloadAndConvert %d / %d", i, total)
 			}
-		}(&workersWG, i)
+			batch = make([][]string, 0)
+		}
 	}
 
-	workersWG.Wait()
-	if loadErr != nil {
-		return loadErr
-	}
-	for _, err := range errs {
-		if err != nil {
-			return err
+	// tail
+	if len(batch) > 0 {
+		log.Infof("DownloadAndConvert tail %d", len(batch))
+		if err := DownloadAndConvert(batch); err != nil {
+			return errors.Wrapf(err, "DownloadAndConvert tail %d", len(batch))
 		}
 	}
+
 	return nil
 }

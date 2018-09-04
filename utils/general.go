@@ -24,7 +24,7 @@ func Min(x, y int) int {
 }
 
 // Like math.Min for int
-func Max(x, y uint16) uint16 {
+func MaxInt(x, y int) int {
 	if x > y {
 		return x
 	}
