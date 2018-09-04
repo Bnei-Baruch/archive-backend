@@ -280,6 +280,7 @@ type File struct {
 	Type      string  `json:"type,omitempty"`
 	SubType   string  `json:"subtype,omitempty"`
 	VideoSize string  `json:"video_size,omitempty"`
+	CreatedAt time.Time
 }
 
 type Source struct {
