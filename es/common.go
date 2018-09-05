@@ -116,7 +116,7 @@ func KeyValuesToValues(t string, typedUIDs []string) ([]string, error) {
 	return ret, nil
 }
 
-func (result *Result) ToString() string {
+func (result *Result) ToDebugString() string {
 	resultCopy := result
 	if len(resultCopy.Content) > 30 {
 		resultCopy.Content = fmt.Sprintf("%s...", resultCopy.Content[:30])

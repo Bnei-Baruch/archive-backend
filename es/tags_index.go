@@ -133,7 +133,7 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 				TitleSuggest: Suffixes(strings.Join(pathNames, " ")),
 			}
 			name := index.indexName(i18n.Language)
-			log.Infof("Tags Index - Add tag %s to index %s", r.ToString(), name)
+			log.Infof("Tags Index - Add tag %s to index %s", r.ToDebugString(), name)
 			resp, err := index.esc.Index().
 				Index(name).
 				Type("result").
