@@ -307,8 +307,10 @@ var ES_SEARCH_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_SOURC
 var ES_ALL_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_TAGS, ES_RESULT_TYPE_SOURCES, ES_RESULT_TYPE_COLLECTIONS, ES_RESULT_TYPE_BLOG_POSTS}
 
 const (
-	MEDIA_MP4 = "video/mp4"
-	MEDIA_MP3 = "audio/mpeg"
+	MEDIA_MP4  = "video/mp4"
+	MEDIA_MP3  = "audio/mpeg"
+	MEDIA_MP3a = "audio/mpeg"
+	MEDIA_MP3b = "audio/mp3"
 )
 
 const CDN = "https://cdn.kabbalahmedia.info/"

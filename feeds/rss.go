@@ -13,16 +13,6 @@ type AtomLink struct {
 	Type    string   `xml:"type,attr"`
 }
 
-type ItunesCategory struct {
-	XMLName xml.Name `xml:"itunes:category"`
-	Text    string   `xml:"text,attr"`
-}
-
-type ItunesImage struct {
-	XMLName xml.Name `xml:"itunes:image"`
-	Href    string   `xml:"href,attr"`
-}
-
 type Description struct {
 	XMLName xml.Name `xml:"description"`
 	Text    string   `xml:",cdata"`
@@ -36,18 +26,16 @@ type Enclosure struct {
 }
 
 type Feed struct {
-	Title          string    `xml:"title"`       // required
-	Link           string    `xml:"link"`        // required
-	Description    string    `xml:"description"` // required
-	Language       string    `xml:"language"`
-	Copyright      string    `xml:"copyright"`
-	Author         string    `xml:"author,omitempty"`
-	PubDate        string    `xml:"pubDate,omitempty"`
-	Created        time.Time `xml:"-"`
-	Updated        time.Time `xml:"-"`
-	ItunesCategory *ItunesCategory
-	ItunesImage    *ItunesImage
-	Items          []*Item
+	Title       string    `xml:"title"`       // required
+	Link        string    `xml:"link"`        // required
+	Description string    `xml:"description"` // required
+	Language    string    `xml:"language"`
+	Copyright   string    `xml:"copyright"`
+	Author      string    `xml:"author,omitempty"`
+	PubDate     string    `xml:"pubDate,omitempty"`
+	Created     time.Time `xml:"-"`
+	Updated     time.Time `xml:"-"`
+	Items       []*Item
 }
 
 type Channel struct {
@@ -76,10 +64,10 @@ type Item struct {
 
 func (r *Feed) RssFeed() (channel *Channel) {
 	if r.PubDate == "" {
-		r.PubDate = anyTimeFormat(time.RFC1123, r.Created, time.Now())
+		r.PubDate = anyTimeFormat(time.RFC1123Z, r.Created, time.Now())
 	}
 	for _, item := range r.Items {
-		item.PubDate = anyTimeFormat(time.RFC1123, r.Created, time.Now())
+		item.PubDate = anyTimeFormat(time.RFC1123Z, r.Created, time.Now())
 	}
 	channel = &Channel{
 		AtomLink: &AtomLink{
@@ -88,7 +76,7 @@ func (r *Feed) RssFeed() (channel *Channel) {
 			Type: "application/rss+xml",
 		},
 		Ttl:           600,
-		LastBuildDate: anyTimeFormat(time.RFC1123, r.Created, r.Updated, time.Now()),
+		LastBuildDate: anyTimeFormat(time.RFC1123Z, r.Created, r.Updated, time.Now()),
 		Feed:          r,
 	}
 	return channel
@@ -104,17 +92,11 @@ type rssFeedXml struct {
 }
 
 // return XML-ready object for a Channel
-func (c *Channel) FeedXml(isItunes bool) interface{} {
-	var media string
-	if isItunes {
-		media = "http://www.itunes.com/dtds/podcast-1.0.dtd"
-	} else {
-		media = "http://search.yahoo.com/mrss/"
-	}
+func (c *Channel) FeedXml() interface{} {
 	return &rssFeedXml{
 		Version:    "2.0",
 		XmlnsAtom:  "http://www.w3.org/2005/Atom",
-		XmlnsMedia: media,
+		XmlnsMedia: "http://search.yahoo.com/mrss/",
 		Channel:    c,
 	}
 }
@@ -133,8 +115,8 @@ func anyTimeFormat(format string, times ...time.Time) string {
 
 // turn a feed object (either a Feed, AtomFeed, or RssFeed) into xml
 // returns an error if xml marshaling fails
-func (c *Channel) ToXML(isItunes bool) (string, error) {
-	x := c.FeedXml(isItunes)
+func (c *Channel) ToXML() (string, error) {
+	x := c.FeedXml()
 	data, err := xml.MarshalIndent(x, "", "  ")
 	if err != nil {
 		return "", err
