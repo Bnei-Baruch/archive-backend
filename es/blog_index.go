@@ -99,6 +99,7 @@ func (index *BlogIndex) removeFromIndex(scope Scope) ([]int64, error) {
 			}
 			removedInt = append(removedInt, ri)
 		}
+		return removedInt, nil
 	}
 
 	// Nothing to remove.
