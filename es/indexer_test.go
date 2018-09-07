@@ -1112,7 +1112,9 @@ func insertTweet(id int64, tid string, userId int64, title string) error {
 
 			// save twitter user to DB:
 			usr := mdbmodels.TwitterUser{
-				ID: userId,
+				ID:        userId,
+				Username:  fmt.Sprintf("user-%v", userId),
+				AccountID: fmt.Sprintf("user-account-%v", userId),
 			}
 
 			err = usr.Insert(common.DB)
@@ -1125,8 +1127,8 @@ func insertTweet(id int64, tid string, userId int64, title string) error {
 		}
 	}
 
-	sraw := struct{ text string }{text: title}
-	raw, err := json.Marshal(&sraw)
+	sraw := struct{ Text string }{Text: title}
+	raw, err := json.Marshal(sraw)
 	if err != nil {
 		return err
 	}
