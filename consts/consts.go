@@ -47,6 +47,7 @@ const (
 	CT_SONG                  = "SONG"
 	CT_BOOK                  = "BOOK"
 	CT_BLOG_POST             = "BLOG_POST"
+	CT_TWEET                 = "TWEET"
 
 	// Content Role types
 	CR_LECTURER = "LECTURER"

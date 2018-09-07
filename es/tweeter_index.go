@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -13,7 +12,6 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
-	"jaytaylor.com/html2text"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -36,17 +34,12 @@ type TweeterIndex struct {
 	Progress uint64
 }
 
-func defaultTweetsSql() string { //TBD from here
-	return "1=1"
-}
-
-// TBD!
-func (index *TweeterIndex) tweeterIdToLanguageMapping() map[int]string {
+func (index *TweeterIndex) userIdToLanguageMapping() map[int]string {
 	return map[int]string{
 		1: consts.LANG_RUSSIAN,
-		2: consts.LANG_ENGLISH,
-		3: consts.LANG_SPANISH,
-		4: consts.LANG_HEBREW,
+		2: consts.LANG_HEBREW,
+		3: consts.LANG_ENGLISH,
+		4: consts.LANG_SPANISH,
 	}
 }
 
@@ -55,7 +48,7 @@ func (index *TweeterIndex) ReindexAll() error {
 	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_TWEETS)); err != nil {
 		return err
 	}
-	return index.addToIndexSql(defaultTweetsSql())
+	return index.addToIndexSql("1=1") // SQL to always match any tweet
 }
 
 func (index *TweeterIndex) Update(scope Scope) error {
@@ -67,82 +60,69 @@ func (index *TweeterIndex) Update(scope Scope) error {
 	return index.addToIndex(scope, removed)
 }
 
-// TBD !!!
-func (index *TweeterIndex) addToIndex(scope Scope, removedIDs []int64) error {
-	sqlScope := defaultTweetsSql()
+func (index *TweeterIndex) addToIndex(scope Scope, removedIDs []string) error {
 	ids := removedIDs
-	if scope.BlogPostWPID != 0 {
-		ids = append(ids, scope.BlogPostWPID)
+	if scope.TweetTID != "" {
+		ids = append(ids, scope.TweetTID)
 	}
 	quoted := make([]string, len(ids))
 	for i, id := range ids {
-		quoted[i] = fmt.Sprintf("%d", id)
+		quoted[i] = fmt.Sprintf("%s", id)
 	}
-	sqlScope = fmt.Sprintf("%s AND p.wp_id IN (%s)", sqlScope, strings.Join(quoted, ","))
+	sqlScope := fmt.Sprintf("p.wp_id IN (%s)", strings.Join(quoted, ","))
 	if err := index.addToIndexSql(sqlScope); err != nil {
-		return errors.Wrap(err, "blog posts index addToIndex addToIndexSql")
+		return errors.Wrap(err, "tweets index addToIndex addToIndexSql")
 	}
 	return nil
 }
 
-func (index *BlogIndex) removeFromIndex(scope Scope) ([]int64, error) {
-	if scope.BlogPostWPID != 0 {
-		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_BLOG_POSTS).
-			Filter(elastic.NewTermsQuery("mdb_uid", scope.BlogPostWPID))
-		removedStr, err := index.RemoveFromIndexQuery(elasticScope)
-		if err != nil {
-			return nil, err
-		}
-		removedInt := make([]int64, 0)
-		for _, rs := range removedStr {
-			ri, err := strconv.ParseInt(rs, 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			removedInt = append(removedInt, ri)
-		}
+func (index *TweeterIndex) removeFromIndex(scope Scope) ([]string, error) {
+	if scope.TweetTID != "" {
+		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_TWEETS).
+			Filter(elastic.NewTermsQuery("mdb_uid", scope.TweetTID))
+		return index.RemoveFromIndexQuery(elasticScope)
 	}
 
 	// Nothing to remove.
-	return []int64{}, nil
+	return []string{}, nil
 }
 
-func (index *BlogIndex) bulkIndexPosts(offset int, limit int, sqlScope string) error {
-	var posts []*mdbmodels.BlogPost
+func (index *TweeterIndex) bulkIndexTweets(offset int, limit int, sqlScope string) error {
+	var tweets []*mdbmodels.TwitterTweet
 	err := mdbmodels.NewQuery(index.db,
-		qm.From("blog_posts as p"),
+		qm.From("twitter_tweets as t"),
 		qm.Where(sqlScope),
 		qm.Offset(offset),
-		qm.Limit(limit)).Bind(&posts)
+		qm.Limit(limit)).Bind(&tweets)
 	if err != nil {
-		log.Errorf("indexPost error at offset %d. error: %v", offset, err)
-		return errors.Wrap(err, "Fetch blog posts from mdb.")
+		log.Errorf("bulkIndexTweets error at offset %d. error: %v", offset, err)
+		return errors.Wrap(err, "Fetch tweetsfrom mdb.")
 	}
-	log.Infof("Adding %d blog posts (offset %d).", len(posts), offset)
-	for _, post := range posts {
-		if err := index.indexPost(post); err != nil {
-			log.Errorf("indexPost error at post id %d. error: %v", post.ID, err)
+	log.Infof("Adding %d tweets (offset %d).", len(tweets), offset)
+	for _, tweet := range tweets {
+		if err := index.indexTweet(tweet); err != nil {
+			log.Errorf("indexTweet error at tweet id %d. error: %v", tweet.ID, err)
 			return err
 		}
 	}
-	log.Info("Indexing posts - finished.")
+	log.Info("Indexing tweets - finished.")
 	return nil
 }
 
-func (index *BlogIndex) addToIndexSql(sqlScope string) error {
+func (index *TweeterIndex) addToIndexSql(sqlScope string) error {
 	var count int64
 	if err := mdbmodels.NewQuery(index.db,
 		qm.Select("count(id)"),
-		qm.From("blog_posts as p"),
+		qm.From("twitter_tweets as t"),
 		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
 		return err
 	}
-	log.Infof("Blog Posts Index - Adding %d posts. Scope: %s.", count, sqlScope)
+	log.Infof("Tweeter Index - Adding %d tweets. Scope: %s.", count, sqlScope)
 
 	limit := 20
 	tasks := make(chan OffsetLimitJob, (count/int64(limit) + int64(limit)))
 	errors := make(chan error, 300)
-	doneAdding := make(chan bool)
+	doneAdding := make(chan bool, 1)
 
 	tasksCount := 0
 	go func() {
@@ -159,7 +139,7 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 	for w := 1; w <= 10; w++ {
 		go func(tasks <-chan OffsetLimitJob, errs chan<- error) {
 			for task := range tasks {
-				errors <- index.bulkIndexPosts(task.Offset, task.Limit, sqlScope)
+				errors <- index.bulkIndexTweets(task.Offset, task.Limit, sqlScope)
 			}
 		}(tasks, errors)
 	}
@@ -175,52 +155,56 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 	return nil
 }
 
-func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
+func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) error {
 
-	langMapping := index.blogIdToLanguageMapping()
+	langMapping := index.userIdToLanguageMapping()
 
-	// WPID is taken instead of ID for the building of correct URL in frontend.
-	// The API BlogPostHandler expects for WPID and not for ID.
-	idStr := fmt.Sprintf("%v", mdbPost.WPID)
+	title := ""
+	if mdbTweet.Raw.Valid {
+		var raw interface{}
+		err := json.Unmarshal(mdbTweet.Raw.JSON, &raw)
+		if err != nil {
+			return errors.Wrapf(err, "Cannot unmarshal raw from tweet id %d", mdbTweet.ID)
+		}
+		r := raw.(map[string]interface{})
+		if val, ok := r["text"]; ok {
+			title = val.(string)
+		}
+	}
 
-	content, err := html2text.FromString(mdbPost.Content, html2text.Options{OmitLinks: true})
+	tweet := Result{
+		ResultType:    consts.ES_RESULT_TYPE_TWEETS,
+		MDB_UID:       mdbTweet.TwitterID, // TwitterID is taken instead of ID
+		TypedUids:     []string{keyValue("tweet", mdbTweet.TwitterID)},
+		FilterValues:  []string{keyValue("content_type", consts.CT_TWEET)},
+		Title:         title,
+		TitleSuggest:  Suffixes(title),
+		EffectiveDate: &utils.Date{Time: mdbTweet.TweetAt},
+		Content:       mdbTweet.FullText,
+	}
+
+	indexName := index.indexName(langMapping[int(mdbTweet.UserID)])
+	vBytes, err := json.Marshal(tweet)
 	if err != nil {
 		return err
 	}
-
-	post := Result{
-		ResultType:    consts.ES_RESULT_TYPE_BLOG_POSTS,
-		MDB_UID:       idStr,
-		TypedUids:     []string{keyValue("blog_post", idStr)},
-		FilterValues:  []string{keyValue("content_type", consts.CT_BLOG_POST)},
-		Title:         mdbPost.Title,
-		TitleSuggest:  Suffixes(mdbPost.Title),
-		EffectiveDate: &utils.Date{Time: mdbPost.PostedAt},
-		Content:       content,
-	}
-
-	indexName := index.indexName(langMapping[int(mdbPost.BlogID)])
-	vBytes, err := json.Marshal(post)
-	if err != nil {
-		return err
-	}
-	log.Infof("Blog Posts Index - Add blog post %s to index %s", string(vBytes), indexName)
+	log.Infof("Tweets Index - Add tweet %s to index %s", string(vBytes), indexName)
 	resp, err := index.esc.Index().
 		Index(indexName).
 		Type("result").
-		BodyJson(post).
+		BodyJson(tweet).
 		Do(context.TODO())
 	if err != nil {
-		return errors.Wrapf(err, "Index blog post %s %s", indexName, mdbPost.ID)
+		return errors.Wrapf(err, "Index tweet %s %s", indexName, mdbTweet.ID)
 	}
 	if resp.Result != "created" {
-		return errors.Errorf("Not created: blog post %s %s", indexName, mdbPost.ID)
+		return errors.Errorf("Not created: tweet %s %s", indexName, mdbTweet.ID)
 	}
 
 	atomic.AddUint64(&index.Progress, 1)
 	progress := atomic.LoadUint64(&index.Progress)
 	if progress%10 == 0 {
-		log.Infof("Progress blog posts %d", progress)
+		log.Infof("Progress tweet %d", progress)
 	}
 
 	return nil
