@@ -132,7 +132,7 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 	limit := 20
 	tasks := make(chan OffsetLimitJob, (count/int64(limit) + int64(limit)))
 	errors := make(chan error, 300)
-	doneAdding := make(chan bool)
+	doneAdding := make(chan bool, 1)
 
 	tasksCount := 0
 	go func() {
