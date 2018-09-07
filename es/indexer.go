@@ -40,6 +40,8 @@ func MakeIndexer(namespace string, date string, names []string, mdb *sql.DB, esc
 			indexer.indices[i] = MakeTagsIndex(namespace, date, mdb, esc)
 		} else if name == consts.ES_RESULT_TYPE_COLLECTIONS {
 			indexer.indices[i] = MakeCollectionsIndex(namespace, date, mdb, esc)
+		} else if name == consts.ES_RESULT_TYPE_BLOG_POSTS {
+			indexer.indices[i] = MakeBlogIndex(namespace, date, mdb, esc)
 		} else {
 			return nil, errors.New(fmt.Sprintf("MakeIndexer - Invalid index name: %+v", name))
 		}
@@ -254,6 +256,16 @@ func (indexer *Indexer) PublisherUpdate(uid string) error {
 	log.Infof("Indexer - Index publisher update event: %s", uid)
 	for _, index := range indexer.indices {
 		if err := index.Update(Scope{PublisherUID: uid}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (indexer *Indexer) BlogPostUpdate(id string) error {
+	log.Infof("Indexer - Index blog post update event: %v", id)
+	for _, index := range indexer.indices {
+		if err := index.Update(Scope{BlogPostWPID: id}); err != nil {
 			return err
 		}
 	}
