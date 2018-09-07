@@ -726,6 +726,14 @@ func deletePosts(IDs []int64) error {
 	return mdbmodels.BlogPosts(common.DB, qm.WhereIn("id in ?", IDsI...)).DeleteAll()
 }
 
+func deleteTweets(TIDs []string) error {
+	TIDsI := make([]interface{}, len(TIDs))
+	for i, v := range TIDs {
+		TIDsI[i] = v
+	}
+	return mdbmodels.TwitterTweets(common.DB, qm.WhereIn("twitter_id in ?", TIDsI...)).DeleteAll()
+}
+
 func deleteContentUnits(UIDs []string) error {
 	if len(UIDs) == 0 {
 		return nil
@@ -1096,6 +1104,30 @@ func insertPost(wp_id int64, blogId int64, title string, filtered bool) error {
 	return nil
 }
 
+func insertTweet(id int64, tid string, userId int64, title string) error {
+
+	sraw := struct{ text string }{text: title}
+	raw, err := json.Marshal(sraw)
+	if err != nil {
+		return err
+	}
+
+	mdbTweet := mdbmodels.TwitterTweet{
+		ID:        id,
+		UserID:    userId,
+		TwitterID: tid,
+		FullText:  title,
+		TweetAt:   time.Now(),
+		Raw:       null.NewJSON(raw, true),
+		CreatedAt: time.Now(),
+	}
+
+	if err := mdbTweet.Insert(common.DB); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (suite *IndexerSuite) ucu(cu es.ContentUnit, lang string, published bool, secure bool) string {
 	r := require.New(suite.T())
 	uid, err := updateContentUnit(cu, lang, published, secure)
@@ -1216,6 +1248,13 @@ func (suite *IndexerSuite) rsa(source es.Source, mdbAuthor mdbmodels.Author) {
 func (suite *IndexerSuite) ibp(id int64, blogId int64, title string, filtered bool) {
 	r := require.New(suite.T())
 	err := insertPost(id, blogId, title, filtered)
+	r.Nil(err)
+}
+
+//insert tweet
+func (suite *IndexerSuite) it(id int64, tid string, userId int64, title string) {
+	r := require.New(suite.T())
+	err := insertTweet(id, tid, userId, title)
 	r.Nil(err)
 }
 
