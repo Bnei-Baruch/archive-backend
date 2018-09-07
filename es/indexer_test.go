@@ -1106,8 +1106,27 @@ func insertPost(wp_id int64, blogId int64, title string, filtered bool) error {
 
 func insertTweet(id int64, tid string, userId int64, title string) error {
 
+	_, err := mdbmodels.FindTwitterUser(common.DB, userId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+
+			// save twitter user to DB:
+			usr := mdbmodels.TwitterUser{
+				ID: userId,
+			}
+
+			err = usr.Insert(common.DB)
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return err
+		}
+	}
+
 	sraw := struct{ text string }{text: title}
-	raw, err := json.Marshal(sraw)
+	raw, err := json.Marshal(&sraw)
 	if err != nil {
 		return err
 	}

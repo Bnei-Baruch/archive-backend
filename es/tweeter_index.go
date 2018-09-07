@@ -67,9 +67,9 @@ func (index *TweeterIndex) addToIndex(scope Scope, removedIDs []string) error {
 	}
 	quoted := make([]string, len(ids))
 	for i, id := range ids {
-		quoted[i] = fmt.Sprintf("%s", id)
+		quoted[i] = fmt.Sprintf("'%s'", id)
 	}
-	sqlScope := fmt.Sprintf("p.wp_id IN (%s)", strings.Join(quoted, ","))
+	sqlScope := fmt.Sprintf("t.twitter_id IN (%s)", strings.Join(quoted, ","))
 	if err := index.addToIndexSql(sqlScope); err != nil {
 		return errors.Wrap(err, "tweets index addToIndex addToIndexSql")
 	}
