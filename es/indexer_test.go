@@ -1273,7 +1273,7 @@ func (suite *IndexerSuite) ibp(id int64, blogId int64, title string, filtered bo
 }
 
 //insert tweet
-func (suite *IndexerSuite) it(id int64, tid string, userId int64, title string) {
+func (suite *IndexerSuite) itt(id int64, tid string, userId int64, title string) {
 	r := require.New(suite.T())
 	err := insertTweet(id, tid, userId, title)
 	r.Nil(err)
