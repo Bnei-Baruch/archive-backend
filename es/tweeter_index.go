@@ -92,6 +92,7 @@ func (index *TweeterIndex) bulkIndexTweets(offset int, limit int, sqlScope strin
 	err := mdbmodels.NewQuery(index.db,
 		qm.From("twitter_tweets as t"),
 		qm.Where(sqlScope),
+		qm.OrderBy("id"), // Required for same order results in each query
 		qm.Offset(offset),
 		qm.Limit(limit)).Bind(&tweets)
 	if err != nil {
