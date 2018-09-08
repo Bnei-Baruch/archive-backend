@@ -718,12 +718,18 @@ func deleteCollections(UIDs []string) error {
 	return nil
 }
 
-func deletePosts(IDs []int64) error {
-	IDsI := make([]interface{}, len(IDs))
-	for i, v := range IDs {
-		IDsI[i] = v
+func deletePosts(IDs []string) error {
+
+	quoted := make([]string, len(IDs))
+	for i, id := range IDs {
+		s := strings.Split(id, "-")
+		blogId := s[0]
+		wpId := s[1]
+		quoted[i] = fmt.Sprintf("(blog_id = %s and wp_id = %s)", blogId, wpId)
 	}
-	return mdbmodels.BlogPosts(common.DB, qm.WhereIn("id in ?", IDsI...)).DeleteAll()
+	scope := strings.Join(quoted, " or ")
+
+	return mdbmodels.BlogPosts(common.DB, qm.WhereIn(scope)).DeleteAll()
 }
 
 func deleteTweets(TIDs []string) error {
@@ -1087,6 +1093,7 @@ func removeAuthorFromSource(source es.Source, mdbAuthor mdbmodels.Author) error 
 }
 
 func insertPost(wp_id int64, blogId int64, title string, filtered bool) error {
+
 	mdbPost := mdbmodels.BlogPost{
 		ID:        wp_id,
 		BlogID:    blogId,
@@ -1266,10 +1273,12 @@ func (suite *IndexerSuite) rsa(source es.Source, mdbAuthor mdbmodels.Author) {
 }
 
 //insert blog post
-func (suite *IndexerSuite) ibp(id int64, blogId int64, title string, filtered bool) {
+func (suite *IndexerSuite) ibp(wpId int64, blogId int64, title string, filtered bool) string {
+	idStr := fmt.Sprintf("%v-%v", blogId, wpId)
 	r := require.New(suite.T())
-	err := insertPost(id, blogId, title, filtered)
+	err := insertPost(wpId, blogId, title, filtered)
 	r.Nil(err)
+	return idStr
 }
 
 //insert tweet

@@ -191,7 +191,7 @@ func ContentUnitHandler(c *gin.Context) {
 	}
 
 	// files (all CUs)
-	fileMap, err := loadCUFiles(db, cuids)
+	fileMap, err := loadCUFiles(db, cuids, nil, "")
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -1162,7 +1162,7 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 			uidsMap[units[i].UID] = units[i].ID
 		}
 
-		fileMap, err := loadCUFiles(db, ids)
+		fileMap, err := loadCUFiles(db, ids, nil, "")
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
@@ -2185,17 +2185,25 @@ func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string
 	return i18nsMap, nil
 }
 
-func loadCUFiles(db *sql.DB, ids []int64) (map[int64][]*mdbmodels.File, error) {
+func loadCUFiles(db *sql.DB, ids []int64, mediaTypes []string, language string) (map[int64][]*mdbmodels.File, error) {
 	filesMap := make(map[int64][]*mdbmodels.File, len(ids))
 	if len(ids) == 0 {
 		return filesMap, nil
 	}
 
-	// Load from DB
-	allFiles, err := mdbmodels.Files(db,
+	mods := []qm.QueryMod{
 		SECURE_PUBLISHED_MOD,
-		qm.WhereIn("content_unit_id in ? and removed_at is null", utils.ConvertArgsInt64(ids)...)).
-		All()
+		qm.WhereIn("content_unit_id in ? and removed_at is null", utils.ConvertArgsInt64(ids)...),
+	}
+	if language != "" {
+		mods = append(mods, qm.Where("language = ?", language))
+	}
+	if len(mediaTypes) != 0 {
+		mods = append(mods, qm.WhereIn("mime_type in ?", utils.ConvertArgsString(mediaTypes)...))
+	}
+
+	// Load from DB
+	allFiles, err := mdbmodels.Files(db, mods...).All()
 	if err != nil {
 		return nil, errors.Wrap(err, "Load files from DB")
 	}
