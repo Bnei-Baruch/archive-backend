@@ -33,7 +33,6 @@ func (suite *TweeterIndexerSuite) TestTwitterIndex() {
 	r.Nil(err)
 
 	r.Nil(indexer.ReindexAll())
-	//r.Nil(indexer.RefreshAll())
 
 	fmt.Printf("\nAdding English tweet and validate.\n\n")
 	suite.itt(1, "1", 3, "this is english tweet")
