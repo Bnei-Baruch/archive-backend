@@ -45,8 +45,8 @@ func (suite *TagsIndexerSuite) TestTagsIndex() {
 	r.Nil(indexer.RefreshAll())
 
 	fmt.Printf("\n\n\nValidate we have tag with 2 languages.\n\n")
-	suite.validateTagNames(indexNameEn, indexer, []string{"root - branch"})
-	suite.validateTagNames(indexNameHe, indexer, []string{"שרש - ענף"})
+	suite.validateNames(indexNameEn, indexer, []string{"root - branch"})
+	suite.validateNames(indexNameHe, indexer, []string{"שרש - ענף"})
 
 	fmt.Println("Validate tag full path.")
 	suite.validateTagsFullPath(indexNameEn, indexer, [][]string{[]string{tUid1, tUid2}})
@@ -62,8 +62,8 @@ func (suite *TagsIndexerSuite) TestTagsIndex() {
 	r.Nil(es.DumpDB(common.DB, "TAGS Before validation"))
 	r.Nil(es.DumpIndexes(common.ESC, "TAGS Before validation", consts.ES_RESULT_TYPE_SOURCES))
 
-	suite.validateTagNames(indexNameEn, indexer, []string{})
-	suite.validateTagNames(indexNameHe, indexer, []string{})
+	suite.validateNames(indexNameEn, indexer, []string{})
+	suite.validateNames(indexNameHe, indexer, []string{})
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())

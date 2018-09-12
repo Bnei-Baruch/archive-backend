@@ -1433,27 +1433,6 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 
 }
 
-func (suite *IndexerSuite) validateTagNames(indexName string, indexer *es.Indexer, expectedNames []string) {
-	suite.validateSourceNames(indexName, indexer, expectedNames)
-}
-
-func (suite *IndexerSuite) validateSourceNames(indexName string, indexer *es.Indexer, expectedNames []string) {
-	r := require.New(suite.T())
-	err := indexer.RefreshAll()
-	r.Nil(err)
-	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
-	r.Nil(err)
-	names := make([]string, len(res.Hits.Hits))
-
-	for i, hit := range res.Hits.Hits {
-		var src es.Result
-		json.Unmarshal(*hit.Source, &src)
-		names[i] = src.Title
-	}
-	r.ElementsMatch(names, expectedNames, fmt.Sprintf("Expected names: %+v to be the same as expected names: %+v", names, expectedNames))
-}
-
 func ElementsMatch(r *require.Assertions, a [][]string, b [][]string) {
 	r.Equal(len(a), len(b), fmt.Sprintf("%+v is not the same length as %+v", a, b))
 
@@ -1545,5 +1524,5 @@ func (suite *IndexerSuite) validateNames(indexName string, indexer *es.Indexer, 
 		names[i] = res.Title
 	}
 	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
-	r.ElementsMatch(expectedNames, names)
+    r.ElementsMatch(names, expectedNames, fmt.Sprintf("Expected names: %+v to be the same as expected names: %+v", names, expectedNames))
 }
