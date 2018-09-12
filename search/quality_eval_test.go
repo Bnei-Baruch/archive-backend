@@ -130,6 +130,7 @@ func (m *TestDBManager) runMigrations(testDB *sql.DB) error {
 }
 
 func (suite *QualityEvalSuite) SetupSuite() {
+    rand.Seed(1234)
 	utils.InitConfig("", "../")
 	err := suite.InitTestDB()
 	if err != nil {
@@ -318,6 +319,7 @@ func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expect
 	// Expectation Source is not tested.
 
 	resultExp := search.ParseExpectation(url, common.DB)
+    fmt.Printf("Url: %s\nParsed: %+v\nExpeted: %+v\n", url, resultExp, exp)
 	r.Equal(resultExp.Uid, exp.Uid)
 	r.Equal(resultExp.Type, exp.Type)
 	if (exp.Filters != nil && resultExp.Filters == nil) || (exp.Filters == nil && resultExp.Filters != nil) {
@@ -327,6 +329,7 @@ func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expect
 		r.Equal(int64(len(resultExp.Filters)), int64(len(exp.Filters)))
 		r.ElementsMatch(resultExp.Filters, exp.Filters)
 	}
+    fmt.Printf("\n")
 }
 
 func (suite *QualityEvalSuite) updateSourceParent(child mdbmodels.Source, parentSource mdbmodels.Source, insertChild bool, insertParent bool) error {
