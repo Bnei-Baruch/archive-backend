@@ -9,7 +9,7 @@ import (
 )
 
 func (query *Query) ToString() string {
-	queryToPrint := query
+	queryToPrint := *query
 	for i := range queryToPrint.Intents {
 		if value, ok := queryToPrint.Intents[i].Value.(es.ClassificationIntent); ok {
 			value.Explanation = elastic.SearchExplanation{0.0, "Don't print.", nil}
