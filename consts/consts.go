@@ -278,6 +278,7 @@ const (
 	FILTER_UNITS_CONTENT_TYPES       = "units_content_types"
 	FILTER_COLLECTIONS_CONTENT_TYPES = "collections_content_types"
 	FILTER_SECTION_SOURCES           = "filter_section_sources"
+	FILTER_LANGUAGE                  = "filter_language"
 )
 
 // Use to identify and map request filters
@@ -291,6 +292,7 @@ var FILTERS = map[string]string{
 	FILTER_UNITS_CONTENT_TYPES:       "content_type",
 	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
 	FILTER_SECTION_SOURCES:           "filter_section_sources",
+	FILTER_LANGUAGE:                  "filter_language",
 }
 
 // ElasticSearch 'es'
