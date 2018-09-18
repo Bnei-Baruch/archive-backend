@@ -456,10 +456,21 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	return result, nil
 }
 
+func applyLanguageOrder(query *Query) {
+	for k, v := range query.Filters {
+		if k == consts.FILTER_LANGUAGE {
+			query.LanguageOrder = v
+			return
+		}
+	}
+}
+
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
 	if err := e.AddIntents(&query, preference); err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
 	}
+
+	applyLanguageOrder(&query)
 
 	multiSearchService := e.esc.MultiSearch()
 	multiSearchService.Add(NewResultsSearchRequests(

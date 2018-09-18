@@ -102,6 +102,8 @@ func createResultsQuery(resultTypes []string, q Query) elastic.Query {
 			filterByContentType = true
 		case consts.FILTERS[consts.FILTER_SECTION_SOURCES]:
 			boolQuery.Filter(elastic.NewTermsQuery("result_type", consts.ES_RESULT_TYPE_SOURCES))
+		case consts.FILTERS[consts.FILTER_LANGUAGE]:
+			continue
 		default:
 			boolQuery.Filter(elastic.NewTermsQuery("filter_values", es.KeyIValues(filter, s)...))
 		}
@@ -185,12 +187,12 @@ func NewResultsSuggestRequest(resultTypes []string, index string, query Query, p
 	searchSource := elastic.NewSearchSource().
 		FetchSourceContext(fetchSourceContext).
 		Suggester(
-		elastic.NewCompletionSuggester("title_suggest").
-			Field("title_suggest").
-			Text(query.Term).
-			ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
-			Size(NUM_SUGGESTS),
-	)
+			elastic.NewCompletionSuggester("title_suggest").
+				Field("title_suggest").
+				Text(query.Term).
+				ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
+				Size(NUM_SUGGESTS),
+		)
 
 	return elastic.NewSearchRequest().
 		SearchSource(searchSource).
