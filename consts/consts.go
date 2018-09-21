@@ -278,7 +278,7 @@ const (
 	FILTER_UNITS_CONTENT_TYPES       = "units_content_types"
 	FILTER_COLLECTIONS_CONTENT_TYPES = "collections_content_types"
 	FILTER_SECTION_SOURCES           = "filter_section_sources"
-	FILTER_LANGUAGE                  = "filter_language"
+	FILTER_LANGUAGE                  = "media_language"
 )
 
 // Use to identify and map request filters

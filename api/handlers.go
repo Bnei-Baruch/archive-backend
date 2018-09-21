@@ -472,6 +472,20 @@ func SearchHandler(c *gin.Context) {
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
 	log.Debugf("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
 	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
+	for k, v := range query.Filters {
+		if k == consts.FILTER_LANGUAGE {
+			for _, flang := range v {
+				for _, ilang := range query.LanguageOrder {
+					if flang == ilang {
+						// language already exist
+						break
+					}
+					query.LanguageOrder = append(query.LanguageOrder, flang)
+				}
+			}
+			break
+		}
+	}
 
 	res, err := se.DoSearch(
 		context.TODO(),
