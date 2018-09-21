@@ -169,7 +169,7 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) error {
 			return errors.Wrapf(err, "Cannot unmarshal raw from tweet id %d", mdbTweet.ID)
 		}
 		r := raw.(map[string]interface{})
-		if val, ok := r["Text"]; ok {
+		if val, ok := r["text"]; ok {
 			title = val.(string)
 		}
 	}
