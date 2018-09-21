@@ -201,7 +201,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 			typedUIDs := append([]string{keyValue("collection", c.UID)},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
 			filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name),
-				keyValue("media_language", i18n.Language)},
+				keyValue(consts.FILTER_LANGUAGE, i18n.Language)},
 				KeyValues("collections_content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))...)
 			collection := Result{
 				ResultType:   consts.ES_RESULT_TYPE_COLLECTIONS,

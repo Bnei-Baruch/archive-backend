@@ -292,7 +292,7 @@ var FILTERS = map[string]string{
 	FILTER_UNITS_CONTENT_TYPES:       "content_type",
 	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
 	FILTER_SECTION_SOURCES:           "filter_section_sources",
-	FILTER_LANGUAGE:                  "filter_language",
+	FILTER_LANGUAGE:                  "media_language",
 }
 
 // ElasticSearch 'es'

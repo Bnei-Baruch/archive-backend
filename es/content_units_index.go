@@ -315,7 +315,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 				unit.TypedUids = append(unit.TypedUids, KeyValues("tag", val)...)
 			}
 			if val, ok := indexData.MediaLanguages[cu.UID]; ok {
-				unit.FilterValues = append(unit.FilterValues, KeyValues("media_language", val)...)
+				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.FILTER_LANGUAGE, val)...)
 			}
 			// if val, ok := indexData.Persons[cu.UID]; ok {
 			// 	unit.Persons = val

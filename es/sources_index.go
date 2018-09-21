@@ -325,7 +325,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				content, err := ParseDocx(fPath)
 				if err == nil {
 					source.Content = content
-					source.FilterValues = append(source.FilterValues, keyValue("media_language", i18n.Language))
+					source.FilterValues = append(source.FilterValues, keyValue(consts.FILTER_LANGUAGE, i18n.Language))
 					hasDocxForSomeLanguage = true
 				} else {
 					log.Warnf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
