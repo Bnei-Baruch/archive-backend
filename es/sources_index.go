@@ -303,8 +303,8 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 
 func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []string, parentIds []int64, authorsByLanguage map[string][]string) error {
 	// Create documents in each language with available translation
-	hasDocxForSomeLanguage := false
 	i18nMap := make(map[string]Result)
+	allLanguages := []string{}
 	for _, i18n := range mdbSource.R.SourceI18ns {
 		if i18n.Name.Valid && i18n.Name.String != "" {
 			pathNames := []string{}
@@ -325,8 +325,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				content, err := ParseDocx(fPath)
 				if err == nil {
 					source.Content = content
-					source.FilterValues = append(source.FilterValues, keyValue(consts.FILTER_LANGUAGE, i18n.Language))
-					hasDocxForSomeLanguage = true
+					allLanguages = append(allLanguages, i18n.Language)
 				} else {
 					log.Warnf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
 				}
@@ -355,12 +354,15 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 		}
 	}
 
-	if !hasDocxForSomeLanguage {
+	if len(allLanguages) == 0 {
 		log.Warnf("SourcesIndex.indexSource - No docx files found for source %s", mdbSource.UID)
 	}
 
 	// Index each document in its language index
 	for k, v := range i18nMap {
+
+		v.FilterValues = append(v.FilterValues, KeyValues(consts.FILTER_LANGUAGE, allLanguages)...)
+
 		name := index.indexName(k)
 		log.Infof("Sources Index - Add source %s to index %s", mdbSource.UID, name)
 		resp, err := index.esc.Index().
