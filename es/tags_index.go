@@ -118,8 +118,9 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 					}
 				}
 				if !found || !parentI18n.Label.Valid {
-					return errors.New("Tag I18n not found or invalid label.")
-				}
+                    log.Warnf("Tag I18n not found or invalid label. Tag UID: %s Label: %s Language: %s.", t.UID, i18n.Label.String, i18n.Language)
+                    continue
+                }
 				pathNames = append([]string{parentI18n.Label.String}, pathNames...)
 				parentUids = append([]string{parentTag.UID}, parentUids...)
 			}
@@ -133,7 +134,7 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 				TitleSuggest: Suffixes(strings.Join(pathNames, " ")),
 			}
 			name := index.indexName(i18n.Language)
-			log.Infof("Tags Index - Add tag %s to index %s", r.ToString(), name)
+			log.Infof("Tags Index - Add tag %s to index %s", r.ToDebugString(), name)
 			resp, err := index.esc.Index().
 				Index(name).
 				Type("result").

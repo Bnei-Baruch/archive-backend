@@ -364,7 +364,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 	for k, v := range i18nMap {
 		name := index.indexName(k)
 
-		log.Infof("Content Units Index - Add content unit %s to index %s", v.ToString(), name)
+		log.Infof("Content Units Index - Add content unit %s to index %s", v.ToDebugString(), name)
 		resp, err := index.esc.Index().
 			Index(name).
 			Type("result").
