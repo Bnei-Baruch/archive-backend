@@ -126,7 +126,7 @@ func Round(f float64) float64 {
 
 func evalFn(cmd *cobra.Command, args []string) {
 	log.Infof("Evaluating eval set at %s.", evalSetPath)
-	evalSet, err := search.ReadEvalSet(evalSetPath)
+	evalSet, err := search.InitAndReadEvalSet(evalSetPath)
 	utils.Must(err)
 	if baseServerUrl != "" {
 		baseResults, baseLosses, expResults, expLosses, err := runSxS(evalSet, baseServerUrl, serverUrl)

@@ -1,10 +1,12 @@
 package search
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -83,6 +85,7 @@ var GOOD_EXPECTATION = map[int]bool{
 	ET_COLLECTIONS:   true,
 	ET_LESSONS:       true,
 	ET_PROGRAMS:      true,
+    ET_SOURCES:       true,
 	ET_LANDING_PAGE:  true,
 	ET_EMPTY:         false,
 	ET_FAILED_PARSE:  false,
@@ -192,8 +195,7 @@ func GoodExpectations(expectations []Expectation) int {
 	return ret
 }
 
-func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
-
+func InitAndReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 	db, err := sql.Open("postgres", viper.GetString("mdb.url"))
 	if err != nil {
 		return nil, errors.Wrap(err, "Unable to connect to DB.")
@@ -206,8 +208,12 @@ func ReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 	}
 	defer f.Close()
 
+	return ReadEvalSet(f, db)
+}
+
+func ReadEvalSet(reader io.Reader, db *sql.DB) ([]EvalQuery, error) {
 	// Read File into a Variable
-	r := csv.NewReader(f)
+	r := csv.NewReader(reader)
 	lines, err := r.ReadAll()
 	if err != nil {
 		return nil, err
@@ -618,7 +624,7 @@ func ExpectationToString(e Expectation) string {
 	return fmt.Sprintf("%s|%s|%s", EXPECTATION_TO_NAME[e.Type], e.Uid, strings.Join(filters, ":"))
 }
 
-func WriteResultsByExpectation(path string, queries []EvalQuery, results EvalResults) error {
+func ResultsByExpectation(queries []EvalQuery, results EvalResults) [][]string {
 	records := [][]string{{"Language", "Query", "Weight", "Bucket", "Comment",
 		"Expectation", "Parsed", "SearchQuality", "Rank"}}
 	for i, q := range queries {
@@ -632,8 +638,11 @@ func WriteResultsByExpectation(path string, queries []EvalQuery, results EvalRes
 			}
 		}
 	}
+	return records
+}
 
-	return WriteToCsv(path, records)
+func WriteResultsByExpectation(path string, queries []EvalQuery, results EvalResults) error {
+	return WriteToCsv(path, ResultsByExpectation(queries, results))
 }
 
 func WriteResults(path string, queries []EvalQuery, results EvalResults) error {
@@ -656,6 +665,24 @@ func WriteResults(path string, queries []EvalQuery, results EvalResults) error {
 	}
 
 	return WriteToCsv(path, records)
+}
+
+func CsvToString(records [][]string) (error, string) {
+	buf := new(bytes.Buffer)
+	w := csv.NewWriter(buf)
+
+	for _, record := range records {
+		if err := w.Write(record); err != nil {
+			return err, ""
+		}
+	}
+
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return err, ""
+	}
+
+	return nil, buf.String()
 }
 
 func WriteToCsv(path string, records [][]string) error {
