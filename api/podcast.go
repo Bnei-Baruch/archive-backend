@@ -1,17 +1,17 @@
 package api
 
 import (
+	"database/sql"
+	"encoding/xml"
+	"fmt"
+	"net/http"
+	"path/filepath"
+	"regexp"
 	"time"
 
 	"gopkg.in/gin-gonic/gin.v1"
 
-	"database/sql"
-	"encoding/xml"
-	"fmt"
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"net/http"
-	"path/filepath"
-	"regexp"
 )
 
 type podcastFeedXml struct {
@@ -154,7 +154,7 @@ func FeedPodcast(c *gin.Context) {
 		},
 	}
 
-	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b,}
+	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
 	languages := []string{config.Lang}
 	item, err := handleContentUnitsFull(db, cur, mediaTypes, languages)
 	if err != nil {
@@ -202,6 +202,6 @@ func FeedPodcast(c *gin.Context) {
 
 	feed := channel.CreateFeed()
 	feedXml, err := xml.Marshal(feed)
-	xml := []byte(xml.Header + string(feedXml))
-	c.Data(http.StatusOK, "application/xml; charset=utf-8", []byte(xml))
+	payload := []byte(xml.Header + string(feedXml))
+	c.Data(http.StatusOK, "application/xml; charset=utf-8", []byte(payload))
 }
