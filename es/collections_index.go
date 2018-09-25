@@ -200,8 +200,8 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 		if i18n.Name.Valid && i18n.Name.String != "" {
 			typedUIDs := append([]string{keyValue("collection", c.UID)},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
-			filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)})
-			KeyValues("collections_content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))
+			filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
+				KeyValues("collections_content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))...)
 			collection := Result{
 				ResultType:   consts.ES_RESULT_TYPE_COLLECTIONS,
 				MDB_UID:      c.UID,
