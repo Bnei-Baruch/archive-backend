@@ -1,17 +1,17 @@
 package api
 
 import (
+	"database/sql"
+	"encoding/xml"
+	"fmt"
+	"net/http"
+	"path/filepath"
+	"regexp"
 	"time"
 
 	"gopkg.in/gin-gonic/gin.v1"
 
-	"database/sql"
-	"encoding/xml"
-	"fmt"
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"net/http"
-	"path/filepath"
-	"regexp"
 )
 
 type podcastFeedXml struct {
@@ -129,7 +129,7 @@ func FeedPodcast(c *gin.Context) {
 		Author:          "Dr. Michael Laitman",
 		Summary:         description,
 		Subtitle:        "",
-		Owner:           &podcastOwner{Name: "Dr. Michael Laitman", Email: "info@kab.co.il"},
+		Owner:           &podcastOwner{Name: "Bnei Baruch Association", Email: "info@kab.co.il"},
 		Explicit:        "no",
 		Keywords:        "קבלה,שיעור,מקור,אותנטי",
 		ItunesImage:     &itunesImage{Href: href},
@@ -154,12 +154,9 @@ func FeedPodcast(c *gin.Context) {
 		},
 	}
 
-	item, herr := handleContentUnits(db, cur)
-	if herr != nil {
-		herr.Abort(c)
-		return
-	}
-	cuids, err := mapCU2IDs(item.ContentUnits, db, c)
+	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
+	languages := []string{config.Lang}
+	item, err := handleContentUnitsFull(db, cur, mediaTypes, languages)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.XML(http.StatusOK, channel.CreateFeed())
@@ -169,32 +166,22 @@ func FeedPodcast(c *gin.Context) {
 		return
 	}
 
-	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
-	fileMap, err := loadCUFiles(db, cuids, mediaTypes, config.Lang)
-	if err != nil {
-		NewInternalError(err).Abort(c)
-		return
-	}
-
 	var nameToIgnore = regexp.MustCompile("kitei-makor|lelo-mikud")
-	for idx, cu := range item.ContentUnits {
-		files, ok := fileMap[cuids[idx]]
-		if !ok { // CU without files
-			continue
-		}
+	for _, cu := range item.ContentUnits {
+		files := cu.Files
 		for _, file := range files {
 			if nameToIgnore.MatchString(file.Name) {
 				continue
 			}
 
 			// TODO: change title and description
-			url := fmt.Sprintf("%s%s%s", consts.CDN, file.UID, filepath.Ext(file.Name))
+			url := fmt.Sprintf("%s%s%s", consts.CDN, file.ID, filepath.Ext(file.Name))
 			description := cu.Description
 			if description == "" {
 				description = cu.Name
 			}
 			channel.Items = append(channel.Items, &podcastItem{
-				Title:       file.Name + "; " + file.CreatedAt.Format(time.RFC822),
+				Title:       file.CreatedAt.Format(time.RFC822) + "; " + cu.Name,
 				Link:        url,
 				PubDate:     file.CreatedAt.Format(time.RFC822),
 				Description: description,
@@ -215,6 +202,6 @@ func FeedPodcast(c *gin.Context) {
 
 	feed := channel.CreateFeed()
 	feedXml, err := xml.Marshal(feed)
-	xml := []byte(xml.Header + string(feedXml))
-	c.Data(http.StatusOK, "application/xml; charset=utf-8", []byte(xml))
+	payload := []byte(xml.Header + string(feedXml))
+	c.Data(http.StatusOK, "application/xml; charset=utf-8", []byte(payload))
 }

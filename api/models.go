@@ -271,15 +271,16 @@ type ContentUnit struct {
 }
 
 type File struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Size      int64   `json:"size"`
-	Duration  float64 `json:"duration,omitempty"`
-	Language  string  `json:"language,omitempty"`
-	MimeType  string  `json:"mimetype,omitempty"`
-	Type      string  `json:"type,omitempty"`
-	SubType   string  `json:"subtype,omitempty"`
-	VideoSize string  `json:"video_size,omitempty"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Size      int64     `json:"size"`
+	Duration  float64   `json:"duration,omitempty"`
+	Language  string    `json:"language,omitempty"`
+	MimeType  string    `json:"mimetype,omitempty"`
+	Type      string    `json:"type,omitempty"`
+	SubType   string    `json:"subtype,omitempty"`
+	VideoSize string    `json:"video_size,omitempty"`
+	CreatedAt time.Time `json:"-"`
 }
 
 type Source struct {

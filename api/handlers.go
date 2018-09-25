@@ -61,7 +61,7 @@ func LatestLessonHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, true)
+	resp, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, true, false)
 	concludeRequest(c, resp, err)
 }
 
@@ -191,7 +191,7 @@ func ContentUnitHandler(c *gin.Context) {
 	}
 
 	// files (all CUs)
-	fileMap, err := loadCUFiles(db, cuids, nil, "")
+	fileMap, err := loadCUFiles(db, cuids, nil, nil)
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -465,8 +465,8 @@ func SearchHandler(c *gin.Context) {
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
-	cache := c.MustGet("CACHE").(cache.CacheManager)
-	se := search.NewESEngine(esc, db, cache)
+	cacheM := c.MustGet("CACHE").(cache.CacheManager)
+	se := search.NewESEngine(esc, db, cacheM)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -502,7 +502,7 @@ func SearchHandler(c *gin.Context) {
 func ClickHandler(c *gin.Context) {
 	mdbUid := c.Query("mdb_uid")
 	index := c.Query("index")
-	result_type := c.Query("result_type")
+	resultType := c.Query("result_type")
 	rank, err := strconv.Atoi(c.Query("rank"))
 	if err != nil || rank < 0 {
 		NewBadRequestError(errors.New("rank expects a positive number")).Abort(c)
@@ -510,7 +510,7 @@ func ClickHandler(c *gin.Context) {
 	}
 	searchId := c.Query("search_id")
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
-	if err = logger.LogClick(mdbUid, index, result_type, rank, searchId); err != nil {
+	if err = logger.LogClick(mdbUid, index, resultType, rank, searchId); err != nil {
 		log.Warnf("Error logging click: %+v", err)
 	}
 	c.JSON(http.StatusOK, gin.H{})
@@ -525,8 +525,8 @@ func AutocompleteHandler(c *gin.Context) {
 
 	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	cache := c.MustGet("CACHE").(cache.CacheManager)
-	se := search.NewESEngine(esc, db, cache)
+	cacheM := c.MustGet("CACHE").(cache.CacheManager)
+	se := search.NewESEngine(esc, db, cacheM)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
@@ -558,7 +558,7 @@ func HomePageHandler(c *gin.Context) {
 		return
 	}
 
-	latestLesson, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, false)
+	latestLesson, err := handleLatestLesson(c.MustGet("MDB_DB").(*sql.DB), r, false, false)
 	if err != nil {
 		NewBadRequestError(err).Abort(c)
 		return
@@ -949,7 +949,35 @@ ORDER BY type_id, (coalesce(properties ->> 'film_date', created_at :: TEXT)) :: 
 	return cus, nil
 }
 
-func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool) (*Collection, *HttpError) {
+func handleContentUnitsFull(db *sql.DB, r ContentUnitsRequest, mediaTypes []string, languages []string) (cuResp *ContentUnitsResponse, err error) {
+	r.WithFiles = false
+	cuResp, herr := handleContentUnits(db, r)
+	if herr != nil {
+		err = herr.Err
+		return
+	}
+	cus := cuResp.ContentUnits
+	ids, err := mapCU2IDs(cus, db)
+	if err != nil {
+		return
+	}
+	fileMap, err := loadCUFiles(db, ids, mediaTypes, languages)
+	if err != nil {
+		return
+	}
+	for i := range cus {
+		cu := cus[i]
+		if files, ok := fileMap[ids[i]]; ok {
+			if err = setCUFiles(cu, files); err != nil {
+				return
+			}
+		}
+	}
+
+	return
+}
+
+func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool, withFiles bool) (*Collection, *HttpError) {
 	mods := []qm.QueryMod{
 		SECURE_PUBLISHED_MOD,
 		qm.WhereIn("type_id in ?",
@@ -1028,9 +1056,37 @@ func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool) (*Col
 			u.NameInCollection = ccu.Name
 			cl.ContentUnits = append(cl.ContentUnits, u)
 		}
+
+		if withFiles {
+			ids := make([]int64, len(c.R.CollectionsContentUnits))
+			for i := range c.R.CollectionsContentUnits {
+				ids[i] = c.R.CollectionsContentUnits[i].R.ContentUnit.ID
+			}
+			err := loadFiles(ids, cl.ContentUnits, db)
+			if err != nil {
+				return nil, NewInternalError(err)
+			}
+		}
 	}
 
 	return cl, nil
+}
+
+func loadFiles(ids []int64, cus []*ContentUnit, db *sql.DB) (err error) {
+	fileMap, err := loadCUFiles(db, ids, nil, nil)
+	if err != nil {
+		return
+	}
+
+	for i := range cus {
+		cu := cus[i]
+		if files, ok := fileMap[ids[i]]; ok {
+			if err = setCUFiles(cu, files); err != nil {
+				return
+			}
+		}
+	}
+	return
 }
 
 func handleBanner(r BaseRequest) (*Banner, *HttpError) {
@@ -1156,24 +1212,13 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	// files
 	if r.WithFiles {
 		ids := make([]int64, len(units))
-		uidsMap := make(map[string]int64, len(units))
 		for i := range units {
 			ids[i] = units[i].ID
-			uidsMap[units[i].UID] = units[i].ID
 		}
 
-		fileMap, err := loadCUFiles(db, ids, nil, "")
+		err = loadFiles(ids, cus, db)
 		if err != nil {
 			return nil, NewInternalError(err)
-		}
-
-		for i := range cus {
-			cu := cus[i]
-			if files, ok := fileMap[uidsMap[cu.ID]]; ok {
-				if err := setCUFiles(cu, files); err != nil {
-					return nil, NewInternalError(err)
-				}
-			}
 		}
 	}
 
@@ -1799,7 +1844,7 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
 	}
 
 	// slice of all source ids we want
-	source_uids := make([]string, 0)
+	sourceUids := make([]string, 0)
 
 	// fetch source ids by authors
 	if !utils.IsEmpty(f.Authors) {
@@ -1818,11 +1863,11 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
 		if err != nil {
 			return err
 		}
-		source_uids = append(source_uids, uids...)
+		sourceUids = append(sourceUids, uids...)
 	}
 
 	// blend in requested sources
-	source_uids = append(source_uids, f.Sources...)
+	sourceUids = append(sourceUids, f.Sources...)
 
 	// find all nested source_uids
 	q := `WITH RECURSIVE rec_sources AS (
@@ -1832,7 +1877,7 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
           )
           SELECT array_agg(distinct id) FROM rec_sources`
 	var ids pq.Int64Array
-	err := queries.Raw(exec, q, pq.Array(source_uids)).QueryRow().Scan(&ids)
+	err := queries.Raw(exec, q, pq.Array(sourceUids)).QueryRow().Scan(&ids)
 	if err != nil {
 		return err
 	}
@@ -2100,6 +2145,7 @@ func mdbToFile(file *mdbmodels.File) (*File, error) {
 		Size:      file.Size,
 		Type:      file.Type,
 		SubType:   file.SubType,
+		CreatedAt: file.CreatedAt,
 		Duration:  props.Duration,
 		VideoSize: props.VideoSize,
 	}
@@ -2185,7 +2231,7 @@ func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string
 	return i18nsMap, nil
 }
 
-func loadCUFiles(db *sql.DB, ids []int64, mediaTypes []string, language string) (map[int64][]*mdbmodels.File, error) {
+func loadCUFiles(db *sql.DB, ids []int64, mediaTypes []string, languages []string) (map[int64][]*mdbmodels.File, error) {
 	filesMap := make(map[int64][]*mdbmodels.File, len(ids))
 	if len(ids) == 0 {
 		return filesMap, nil
@@ -2195,8 +2241,8 @@ func loadCUFiles(db *sql.DB, ids []int64, mediaTypes []string, language string) 
 		SECURE_PUBLISHED_MOD,
 		qm.WhereIn("content_unit_id in ? and removed_at is null", utils.ConvertArgsInt64(ids)...),
 	}
-	if language != "" {
-		mods = append(mods, qm.Where("language = ?", language))
+	if len(languages) != 0 {
+		mods = append(mods, qm.WhereIn("language in ?", utils.ConvertArgsString(languages)...))
 	}
 	if len(mediaTypes) != 0 {
 		mods = append(mods, qm.WhereIn("mime_type in ?", utils.ConvertArgsString(mediaTypes)...))
@@ -2260,4 +2306,21 @@ func mdbToBlogPost(post *mdbmodels.BlogPost) *BlogPost {
 		Content:      post.Content,
 		CreatedAt:    post.PostedAt,
 	}
+}
+
+func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error) {
+	cuids := make([]interface{}, len(contentUnits))
+	for idx, cu := range contentUnits {
+		cuids[idx] = cu.ID
+	}
+	xus, err := mdbmodels.ContentUnits(db, qm.Select("id"), qm.WhereIn("uid in ?", cuids...), qm.OrderBy("created_at desc")).All()
+	if err != nil {
+		ids = []int64{}
+		return
+	}
+	ids = make([]int64, len(xus))
+	for idx, xu := range xus {
+		ids[idx] = xu.ID
+	}
+	return
 }
