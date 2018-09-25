@@ -169,10 +169,13 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		return nil
 	}
 
-	// Don't do intents, if sources are selected in section filter.
-	if _, ok := query.Filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
-		return nil
+	// Don't do intents, if sources are selected in section filter or filtering the results by media language.
+	for filterKey := range query.Filters {
+		if filterKey == consts.FILTERS[consts.FILTER_SECTION_SOURCES] || filterKey == consts.FILTERS[consts.FILTER_LANGUAGE] {
+			return nil
+		}
 	}
+
 	checkContentUnitsTypes := []string{}
 	if values, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
 		for _, value := range values {

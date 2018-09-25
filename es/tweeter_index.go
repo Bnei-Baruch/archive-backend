@@ -159,6 +159,7 @@ func (index *TweeterIndex) addToIndexSql(sqlScope string) error {
 func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) error {
 
 	langMapping := index.userIdToLanguageMapping()
+	tweetLang := langMapping[int(mdbTweet.UserID)]
 
 	title := ""
 	if mdbTweet.Raw.Valid {
@@ -168,7 +169,7 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) error {
 			return errors.Wrapf(err, "Cannot unmarshal raw from tweet id %d", mdbTweet.ID)
 		}
 		r := raw.(map[string]interface{})
-		if val, ok := r["Text"]; ok {
+		if val, ok := r["text"]; ok {
 			title = val.(string)
 		}
 	}
@@ -177,14 +178,14 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) error {
 		ResultType:    consts.ES_RESULT_TYPE_TWEETS,
 		MDB_UID:       mdbTweet.TwitterID, // TwitterID is taken instead of ID
 		TypedUids:     []string{keyValue("tweet", mdbTweet.TwitterID)},
-		FilterValues:  []string{keyValue("content_type", consts.CT_TWEET)},
+		FilterValues:  []string{keyValue("content_type", consts.CT_TWEET), keyValue(consts.FILTER_LANGUAGE, tweetLang)},
 		Title:         title,
 		TitleSuggest:  Suffixes(title),
 		EffectiveDate: &utils.Date{Time: mdbTweet.TweetAt},
 		Content:       mdbTweet.FullText,
 	}
 
-	indexName := index.indexName(langMapping[int(mdbTweet.UserID)])
+	indexName := index.indexName(tweetLang)
 	vBytes, err := json.Marshal(tweet)
 	if err != nil {
 		return err
