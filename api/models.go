@@ -283,15 +283,17 @@ type File struct {
 }
 
 type Source struct {
-	UID         string      `json:"id"`
-	ParentUID   string      `json:"parent_id"`
-	Type        string      `json:"type"`
-	Name        null.String `json:"name"`
-	Description null.String `json:"description,omitempty"`
-	Children    []*Source   `json:"children,omitempty"`
-	ID          int64       `json:"-"`
-	ParentID    null.Int64  `json:"-"`
-	Position    null.Int    `json:"-"`
+	UID         string     `json:"id"`
+	ParentUID   string     `json:"parent_id"`
+	Type        string     `json:"type"`
+	Name        string     `json:"name"`
+	Description string     `json:"description,omitempty"`
+	Year        string     `json:"year,omitempty"`
+	Number      string     `json:"number,omitempty"`
+	Children    []*Source  `json:"children,omitempty"`
+	ID          int64      `json:"-"`
+	ParentID    null.Int64 `json:"-"`
+	Position    null.Int   `json:"-"`
 }
 
 type Author struct {
