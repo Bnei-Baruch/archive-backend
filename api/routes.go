@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/spf13/viper"
 	"gopkg.in/gin-gonic/gin.v1"
 )
 
@@ -30,6 +31,12 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/posts", BlogPostsHandler)
 	router.GET("/posts/:blog/:id", BlogPostHandler)
 	router.GET("/simple", SimpleModeHandler)
+
+	if onlineEval := viper.GetBool("test.enable-online-eval"); onlineEval {
+		router.StaticFile("/eval.html", "./search/eval.html")
+		router.POST("/eval/query", EvalQueryHandler)
+		router.POST("/eval/set", EvalSetHandler)
+	}
 
 	router.GET("/feeds/rus_zohar", FeedRusZohar)
 	router.GET("/feeds/rus_zohar.rss", FeedRusZohar)

@@ -18,6 +18,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v6"
 
@@ -2333,4 +2334,70 @@ func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error)
 		ids[idx] = xu.ID
 	}
 	return
+}
+
+func EvalIndexHandler(c *gin.Context) {
+	r := CollectionsRequest{
+		WithUnits: true,
+	}
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
+func EvalQueryHandler(c *gin.Context) {
+	r := EvalQueryRequest{}
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	if r.serverUrl == "" {
+		r.serverUrl = fmt.Sprintf("http://localhost%s", viper.GetString("server.bind-address"))
+	}
+
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	r.EvalQuery.Expectations = []search.Expectation{}
+	for _, es := range r.ExpectationStrings {
+		parsed := search.ParseExpectation(es, db)
+		r.EvalQuery.Expectations = append(r.EvalQuery.Expectations, parsed)
+	}
+
+	resp := EvalQueryResponse{EvalResult: search.EvaluateQuery(r.EvalQuery, r.serverUrl)}
+	concludeRequest(c, resp, nil)
+}
+
+func EvalSetHandler(c *gin.Context) {
+	r := EvalSetRequest{}
+	if err := c.Bind(&r); err != nil {
+		return
+	}
+
+	log.Infof("Request: %+v.", r)
+
+	if r.ServerUrl == "" {
+		r.ServerUrl = fmt.Sprintf("http://localhost%s", viper.GetString("server.bind-address"))
+	}
+
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	queries, err := search.ReadEvalSet(strings.NewReader(r.RecallSetCSV), db)
+	if err != nil {
+		concludeRequest(c, nil, NewInternalError(err))
+	} else {
+		results, losses, err := search.Eval(queries, r.ServerUrl)
+		resp := EvalSetResponse{Results: results, Losses: losses}
+		err, flatReport := search.CsvToString(search.ResultsByExpectation(queries, results))
+		if err != nil {
+			concludeRequest(c, resp, NewInternalError(err))
+		} else {
+			resp.FlatReport = flatReport
+			if err != nil {
+				concludeRequest(c, resp, NewInternalError(err))
+			} else {
+				concludeRequest(c, resp, nil)
+			}
+		}
+	}
 }
