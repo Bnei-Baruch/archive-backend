@@ -30,7 +30,7 @@ WITH RECURSIVE rec_sources AS (
              (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'he'),
 			  '') "description",
 	coalesce(properties->>'year', '') "year",
-	coalesce(properties->>'number', s.position::text, '') "number",
+	coalesce(properties->>'number', '') "number",
     1 "depth"
   FROM sources s
   WHERE s.%s
@@ -46,7 +46,7 @@ WITH RECURSIVE rec_sources AS (
              (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'he'),
  			  '') "description",
 	coalesce(properties->>'year', '') "year",
-	coalesce(properties->>'number', s.position::text, '') "number",
+	coalesce(properties->>'number', '') "number",
     depth + 1
   FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
   WHERE rs.depth < %d
