@@ -1134,7 +1134,9 @@ func insertTweet(id int64, tid string, userId int64, title string) error {
 		}
 	}
 
-	sraw := struct{ Text string }{Text: title}
+	sraw := struct {
+		Text string `json:"text,omitempty"`
+	}{Text: title}
 	raw, err := json.Marshal(sraw)
 	if err != nil {
 		return err

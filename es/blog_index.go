@@ -171,6 +171,7 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 
 	langMapping := index.blogIdToLanguageMapping()
+	postLang := langMapping[int(mdbPost.BlogID)]
 
 	// Blog Id + WPID is taken instead of ID for the building of correct URL in frontend.
 	// The API BlogPostHandler expects for Blog Name + WPID and not for ID.
@@ -185,14 +186,14 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 		ResultType:    consts.ES_RESULT_TYPE_BLOG_POSTS,
 		MDB_UID:       idStr,
 		TypedUids:     []string{keyValue("blog_post", idStr)},
-		FilterValues:  []string{keyValue("content_type", consts.CT_BLOG_POST)},
+		FilterValues:  []string{keyValue("content_type", consts.CT_BLOG_POST), keyValue(consts.FILTER_LANGUAGE, postLang)},
 		Title:         mdbPost.Title,
 		TitleSuggest:  Suffixes(mdbPost.Title),
 		EffectiveDate: &utils.Date{Time: mdbPost.PostedAt},
 		Content:       content,
 	}
 
-	indexName := index.indexName(langMapping[int(mdbPost.BlogID)])
+	indexName := index.indexName(postLang)
 	vBytes, err := json.Marshal(post)
 	if err != nil {
 		return err
