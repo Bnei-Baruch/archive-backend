@@ -955,7 +955,7 @@ func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool) (*Col
 		qm.WhereIn("type_id in ?",
 			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
 			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SPECIAL_LESSON].ID),
-		qm.OrderBy("(properties->>'film_date')::date desc"),
+		qm.OrderBy("(properties->>'film_date')::date desc, (properties->>'number')::int desc"),
 	}
 	if bringContentUnits {
 		mods = append(mods, qm.Load(
