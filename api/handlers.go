@@ -308,6 +308,15 @@ func LessonsHandler(c *gin.Context) {
 		if r.OrderBy == "" {
 			r.OrderBy = "(properties->>'film_date')::date desc, created_at desc"
 		}
+
+		// We parse with_files query string parameter here
+		// since we bind the request to the base struct at the top of this method.
+		// This is rather ugly...
+		withFiles, pErr := strconv.ParseBool(c.Request.Form.Get("with_files"))
+		if pErr != nil {
+			withFiles = false
+		}
+
 		cur := ContentUnitsRequest{
 			ContentTypesFilter: ContentTypesFilter{
 				ContentTypes: []string{consts.CT_LESSON_PART},
@@ -316,6 +325,7 @@ func LessonsHandler(c *gin.Context) {
 			DateRangeFilter: r.DateRangeFilter,
 			SourcesFilter:   r.SourcesFilter,
 			TagsFilter:      r.TagsFilter,
+			WithFiles:       withFiles,
 		}
 		resp, err := handleContentUnits(c.MustGet("MDB_DB").(*sql.DB), cur)
 		concludeRequest(c, resp, err)
