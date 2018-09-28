@@ -23,10 +23,14 @@ WITH RECURSIVE rec_sources AS (
     s.id, s.uid, s.parent_id, s.position, s.type_id,
     coalesce((SELECT name FROM source_i18n WHERE source_id = s.id AND language = '%s'),
 			 (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'en'),
-             (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'he')) "name",
+             (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'he'),
+			  '') "name",
     coalesce((SELECT description FROM source_i18n WHERE source_id = s.id AND language = '%s'),
 			 (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'en'),
-             (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'he')) "description",
+             (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'he'),
+			  '') "description",
+	coalesce(properties->>'year', '') "year",
+	coalesce(properties->>'number', '') "number",
     1 "depth"
   FROM sources s
   WHERE s.%s
@@ -35,10 +39,14 @@ WITH RECURSIVE rec_sources AS (
     s.id, s.uid, s.parent_id, s.position, s.type_id,
     coalesce((SELECT name FROM source_i18n WHERE source_id = s.id AND language = '%s'),
 			 (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'en'),
-             (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'he')) "name",
+             (SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'he'),
+			  '') "name",
     coalesce((SELECT description FROM source_i18n WHERE source_id = s.id AND language = '%s'),
 			 (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'en'),
-             (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'he')) "description",
+             (SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'he'),
+ 			  '') "description",
+	coalesce(properties->>'year', '') "year",
+	coalesce(properties->>'number', '') "number",
     depth + 1
   FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
   WHERE rs.depth < %d
@@ -145,7 +153,7 @@ func handleSources(db *sql.DB, r HierarchyRequest) (interface{}, *HttpError) {
 		// Scan source
 		s := new(Source)
 		var typeID, d int64
-		err := rows.Scan(&s.ID, &s.UID, &s.ParentID, &s.Position, &typeID, &s.Name, &s.Description, &d)
+		err := rows.Scan(&s.ID, &s.UID, &s.ParentID, &s.Position, &typeID, &s.Name, &s.Description, &s.Year, &s.Number, &d)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}

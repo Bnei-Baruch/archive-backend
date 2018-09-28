@@ -5,6 +5,7 @@ import (
 
 	"gopkg.in/volatiletech/null.v6"
 
+	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -198,6 +199,27 @@ type SimpleModeResponse struct {
 	Others  []*ContentUnit `json:"others"`
 }
 
+type EvalQueryRequest struct {
+	serverUrl          string           `json:"server_url"`
+	EvalQuery          search.EvalQuery `json:"eval_query"`
+	ExpectationStrings []string         `json:"expectation_strings"`
+}
+
+type EvalQueryResponse struct {
+	EvalResult search.EvalResult `json:"eval_result"`
+}
+
+type EvalSetRequest struct {
+	ServerUrl    string `json:"server_url"`
+	RecallSetCSV string `json:"recall_set_csv"`
+}
+
+type EvalSetResponse struct {
+	Results    search.EvalResults    `json:"results"`
+	Losses     map[int][]search.Loss `json:"losses"`
+	FlatReport string                `json:"flat_report"`
+}
+
 func NewCollectionsResponse() *CollectionsResponse {
 	return &CollectionsResponse{Collections: make([]*Collection, 0)}
 }
@@ -271,27 +293,30 @@ type ContentUnit struct {
 }
 
 type File struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Size      int64   `json:"size"`
-	Duration  float64 `json:"duration,omitempty"`
-	Language  string  `json:"language,omitempty"`
-	MimeType  string  `json:"mimetype,omitempty"`
-	Type      string  `json:"type,omitempty"`
-	SubType   string  `json:"subtype,omitempty"`
-	VideoSize string  `json:"video_size,omitempty"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Size      int64     `json:"size"`
+	Duration  float64   `json:"duration,omitempty"`
+	Language  string    `json:"language,omitempty"`
+	MimeType  string    `json:"mimetype,omitempty"`
+	Type      string    `json:"type,omitempty"`
+	SubType   string    `json:"subtype,omitempty"`
+	VideoSize string    `json:"video_size,omitempty"`
+	CreatedAt time.Time `json:"-"`
 }
 
 type Source struct {
-	UID         string      `json:"id"`
-	ParentUID   string      `json:"parent_id"`
-	Type        string      `json:"type"`
-	Name        null.String `json:"name"`
-	Description null.String `json:"description,omitempty"`
-	Children    []*Source   `json:"children,omitempty"`
-	ID          int64       `json:"-"`
-	ParentID    null.Int64  `json:"-"`
-	Position    null.Int    `json:"-"`
+	UID         string     `json:"id"`
+	ParentUID   string     `json:"parent_id"`
+	Type        string     `json:"type"`
+	Name        string     `json:"name"`
+	Description string     `json:"description,omitempty"`
+	Year        string     `json:"year,omitempty"`
+	Number      string     `json:"number,omitempty"`
+	Children    []*Source  `json:"children,omitempty"`
+	ID          int64      `json:"-"`
+	ParentID    null.Int64 `json:"-"`
+	Position    null.Int   `json:"-"`
 }
 
 type Author struct {

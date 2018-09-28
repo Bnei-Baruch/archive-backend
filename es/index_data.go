@@ -18,7 +18,8 @@ type IndexData struct {
 	Tags    map[string][]string
 	// Persons      map[string][]string
 	// Translations map[string][][]string
-	Transcripts map[string]map[string][]string
+	MediaLanguages map[string][]string
+	Transcripts    map[string]map[string][]string
 }
 
 func MakeIndexData(db *sql.DB, sqlScope string) (*IndexData, error) {
@@ -51,6 +52,11 @@ func (indexData *IndexData) load(sqlScope string) error {
 	// }
 
 	indexData.Transcripts, err = indexData.loadTranscripts(sqlScope)
+	if err != nil {
+		return err
+	}
+
+	indexData.MediaLanguages, err = indexData.loadMediaLanguages(sqlScope)
 	if err != nil {
 		return err
 	}
@@ -128,7 +134,7 @@ GROUP BY cu.uid;`, sqlScope)).Query()
 	return indexData.rowsToUIDToValues(rows)
 }
 
-func (indexData *IndexData) loadPersons(sqlScope string) (map[string][]string, error) {
+/*func (indexData *IndexData) loadPersons(sqlScope string) (map[string][]string, error) {
 	rows, err := queries.Raw(indexData.DB, fmt.Sprintf(`
 SELECT
   cu.uid,
@@ -145,9 +151,9 @@ GROUP BY cu.uid;`, sqlScope)).Query()
 	defer rows.Close()
 
 	return indexData.rowsToUIDToValues(rows)
-}
+}*/
 
-func (indexData *IndexData) loadTranslations(sqlScope string) (map[string][][]string, error) {
+/*func (indexData *IndexData) loadTranslations(sqlScope string) (map[string][][]string, error) {
 	rows, err := queries.Raw(indexData.DB, fmt.Sprintf(`
 SELECT
   cu.uid,
@@ -164,46 +170,7 @@ GROUP BY cu.uid;`, sqlScope)).Query()
 	defer rows.Close()
 
 	return indexData.rowsToIdToUIDsAndValues(rows)
-}
-
-func (indexData *IndexData) rowsToUIDToValues(rows *sql.Rows) (map[string][]string, error) {
-	m := make(map[string][]string)
-
-	for rows.Next() {
-		var cuUID string
-		var values pq.StringArray
-		err := rows.Scan(&cuUID, &values)
-		if err != nil {
-			return nil, errors.Wrap(err, "rows.Scan")
-		}
-		m[cuUID] = values
-	}
-	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "rows.Err()")
-	}
-
-	return m, nil
-}
-
-func (indexData *IndexData) rowsToIdToUIDsAndValues(rows *sql.Rows) (map[string][][]string, error) {
-	m := make(map[string][][]string)
-
-	for rows.Next() {
-		var cuid string
-		var values pq.StringArray
-		var uids pq.StringArray
-		err := rows.Scan(&cuid, &uids, &values)
-		if err != nil {
-			return nil, errors.Wrap(err, "rows.Scan")
-		}
-		m[cuid] = [][]string{uids, values}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "rows.Err()")
-	}
-
-	return m, nil
-}
+}*/
 
 func (indexData *IndexData) loadTranscripts(sqlScope string) (map[string]map[string][]string, error) {
 	kmID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID
@@ -245,6 +212,66 @@ func loadTranscriptsMap(rows *sql.Rows) (map[string]map[string][]string, error) 
 			m[cuUID] = make(map[string][]string)
 		}
 		m[cuUID][language] = []string{fUID, name}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows.Err()")
+	}
+
+	return m, nil
+}
+
+func (indexData *IndexData) loadMediaLanguages(sqlScope string) (map[string][]string, error) {
+
+	rows, err := queries.Raw(indexData.DB,
+		fmt.Sprintf(`SELECT cu.uid, array_agg(DISTINCT f.language) 
+		FROM files f
+			INNER JOIN content_units AS cu ON f.content_unit_id = cu.id
+		WHERE f.secure = 0  and f.published = true
+		AND (f.type = 'audio' or f.type = 'video')
+		AND f.language NOT IN ('zz', 'xx')
+		AND f.content_unit_id IS NOT NULL
+		AND %s
+		GROUP BY cu.uid`, sqlScope)).Query()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Load media languages")
+	}
+	defer rows.Close()
+
+	return indexData.rowsToUIDToValues(rows)
+}
+
+func (indexData *IndexData) rowsToUIDToValues(rows *sql.Rows) (map[string][]string, error) {
+	m := make(map[string][]string)
+
+	for rows.Next() {
+		var cuUID string
+		var values pq.StringArray
+		err := rows.Scan(&cuUID, &values)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		m[cuUID] = values
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows.Err()")
+	}
+
+	return m, nil
+}
+
+func (indexData *IndexData) rowsToIdToUIDsAndValues(rows *sql.Rows) (map[string][][]string, error) {
+	m := make(map[string][][]string)
+
+	for rows.Next() {
+		var cuid string
+		var values pq.StringArray
+		var uids pq.StringArray
+		err := rows.Scan(&cuid, &uids, &values)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		m[cuid] = [][]string{uids, values}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, errors.Wrap(err, "rows.Err()")

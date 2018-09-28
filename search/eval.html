@@ -1,0 +1,257 @@
+<html>
+    <head>
+        <script src="https://www.papaparse.com/resources/js/papaparse.js"></script>
+        <style>
+            .loader {
+                border: 6px solid #f3f3f3; /* Light grey */
+                border-top: 6px solid #3498db; /* Blue */
+                border-radius: 50%;
+                width: 30px;
+                height: 30px;
+                animation: spin 2s linear infinite;
+            }
+
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+        <script>
+            const sq = (s) => document.querySelector(s);
+            const show = (s) => sq(s).style.display = 'block';
+            const hide = (s) => sq(s).style.display = 'none';
+            const clear = (s) => sq(s).innerHTML = '';
+            const tableAddRow = (s, row) => {
+                const table = sq(s);
+                const tr = document.createElement('tr');
+                table.appendChild(tr);
+                row.forEach(cellText => {
+                    const cell = document.createElement('td');
+                    cell.innerHTML = cellText;
+                    tr.appendChild(cell);
+                });
+            };
+
+            const Evaluate = () => {
+                console.log('Evaluate');
+                hide('#eval')
+
+                const serverUrl = sq('#server-url');
+                const query = sq('#query');
+                const language = sq('#language');
+                const expectation1 = sq('#expectation-1');
+                const expectation2 = sq('#expectation-2');
+                const expectation3 = sq('#expectation-3');
+                const expectation4 = sq('#expectation-4');
+                const expectation5 = sq('#expectation-5');
+                console.log(serverUrl, query, language, expectation1, expectation2, expectation3, expectation4, expectation5);
+                const expectations = [expectation1, expectation2, expectation3, expectation4, expectation5];
+                if (!query.value || !language.value || !expectations.filter(e => !!e.value).length) {
+                    alert(`Expecting query, language and at least one expectation. Got [${query.value}], [${language.value}], [${expectations.map(e => e.value)}].`);
+                }
+                const request = {
+                    server_url: serverUrl,
+                    eval_query: {
+                        query: query.value,
+                        language: language.value,
+                    },
+                    expectation_strings: expectations.map(e => e.value).filter(v => !!v)
+                };
+                fetch('/eval/query', {
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    method: "POST",
+                    body: JSON.stringify(request),
+                }).then(response => {
+                    console.log(response);
+                    response.json().then(data => {
+                        show('#eval');
+
+                        const debugDiv = sq('#debug');
+                        debugDiv.innerHTML = JSON.stringify(data);
+                        const { eval_result: { search_quality, rank }} = data;
+
+                        console.log(search_quality, rank);
+
+                        const searchQualityDiv = sq('#search-quality');
+                        const rankDiv = sq('#rank');
+
+                        searchQualityDiv.innerHTML = search_quality.join(', ');
+                        rankDiv.innerHTML = rank.join(', ');
+                    });
+                });
+            };
+
+            const BulkEval = () => {
+                const fileInput = sq('#recall-set-csv');
+                if (fileInput.files.length != 1) {
+                    alert('Expecting one file as recall set in csv format.');
+                    return;
+                }
+                hide('#bulk-eval');
+                show('#bulk-loader');
+                const reader = new FileReader();
+                reader.onerror = function(err) {
+                    alert(`Error loading csv file: ${err}.`);
+                    hide('#bulk-loader');
+                }
+                reader.onload = function(e) {
+                    const request = {
+                        server_url: sq('#server-url').value,
+                        recall_set_csv: reader.result,
+                    };
+                    console.log(request);
+                    fetch('/eval/set', {
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        },
+                        method: 'POST',
+                        body: JSON.stringify(request),
+                    }).then(response => {
+                        console.log(response);
+                        if (response.status !== 200) {
+                            response.text().then(text => {
+                                alert(`Error from server: ${response.status}. Status text: ${response.statusText}.\nPayload: ${text}.`);
+                            });
+                        } else {
+                            response.json().then(data => {
+                                show('#bulk-eval');
+                                console.log(data);
+                                sq('#results').innerHTML = JSON.stringify(data.results);
+                                sq('#losses').innerHTML = JSON.stringify(data.losses);
+                                const flatReport = Papa.parse(data.flat_report).data;
+                                clear('#flat-report');
+                                flatReport.forEach(row => tableAddRow('#flat-report', row));
+                            });
+                        }
+                    }).finally(() => {
+                        hide('#bulk-loader');
+                    });
+                }
+                reader.readAsText(fileInput.files[0]);
+            };
+        </script>
+    </head>
+    <body>
+        <h2>Online Eval Tool</h2>
+        <hr />
+        <table>
+            <tr>
+                <td>
+                    <label>Server Url:</label>
+                </td>
+                <td>
+                    <input id="server-url" type="text">
+                </td>
+                <td>
+                    <span>Leave empty for this server. Example: http://kabbalahmedia.info/backend</span>
+                </td>
+            </tr>
+        </table>
+        <hr />
+        <h2>Single Query</h2>
+        <table>
+            </tr>
+            <tr>
+                <td>
+                    <label>Query</label>
+                </td>
+                <td>
+                    <input id="query" type="text">
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <label>Language</label>
+                </td>
+                <td>
+                    <input id="language" type="text">
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <label>Expectation #1</label>
+                </td>
+                <td>
+                    <input id="expectation-1" type="text">
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <label>Expectation #2</label>
+                </td>
+                <td>
+                    <input id="expectation-2" type="text">
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <label>Expectation #3</label>
+                </td>
+                <td>
+                    <input id="expectation-3" type="text">
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <label>Expectation #4</label>
+                </td>
+                <td>
+                    <input id="expectation-4" type="text">
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <label>Expectation #5</label>
+                </td>
+                <td>
+                    <input id="expectation-5" type="text">
+                </td>
+            </tr>
+        </table>
+        <button onclick="Evaluate()">Evaluate</button>
+        <div id="eval" style="display: none;">
+            <hr />
+            <h2>Eval Result</h2>
+            <table>
+                <tr>
+                    <td>
+                        Searh Quality
+                    </td>
+                    <td>
+                        <div id="search-quality"></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        Rank
+                    </td>
+                    <td>
+                        <div id="rank"></div>
+                    </td>
+                </tr>
+            </table>
+            <div id="debug"></div>
+        </div>
+        <div>
+            <hr />
+            <h2>Bulk Eval</h2>
+            <input id="recall-set-csv" type="file">
+            <button onclick="BulkEval()">Bulk Eval</button>
+        </div>
+        <div id="bulk-loader" class="loader" style="display: none;"></div>
+        <div id="bulk-eval" style="display: none;">
+            <hr />
+            <h2>Bulk Eval Results</h2>
+            <h3>Flat Report</h3>
+            <table id="flat-report"></table>
+            <h3>Results</h3>
+            <div id="results"></div>
+            <h3>Losses</h3>
+            <div id="losses"></div>
+        </div>
+    </body>
+</html>
