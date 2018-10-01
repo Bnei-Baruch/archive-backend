@@ -485,12 +485,16 @@ func SearchHandler(c *gin.Context) {
 	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 	for k, v := range query.Filters {
 		if k == consts.FILTER_LANGUAGE {
+			addLang := true
 			for _, flang := range v {
 				for _, ilang := range query.LanguageOrder {
 					if flang == ilang {
 						// language already exist
+						addLang = false
 						break
 					}
+				}
+				if addLang {
 					query.LanguageOrder = append(query.LanguageOrder, flang)
 				}
 			}
