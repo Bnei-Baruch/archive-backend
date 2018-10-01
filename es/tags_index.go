@@ -102,6 +102,7 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 			parentI18n := i18n
 			pathNames := []string{i18n.Label.String}
 			parentUids := []string{t.UID}
+			found := false
 			for parentTag.ParentID.Valid {
 				var err error
 				parentTag, err = mdbmodels.Tags(index.db,
@@ -110,7 +111,6 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 				if err != nil {
 					return err
 				}
-				found := false
 				for _, pI18n := range parentTag.R.TagI18ns {
 					if pI18n.Language == parentI18n.Language {
 						parentI18n = pI18n
@@ -118,10 +118,16 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 					}
 				}
 				if !found || !parentI18n.Label.Valid {
-					return errors.New("Tag I18n not found or invalid label.")
+					found = false
+					break
 				}
 				pathNames = append([]string{parentI18n.Label.String}, pathNames...)
 				parentUids = append([]string{parentTag.UID}, parentUids...)
+			}
+
+			if !found {
+				log.Warnf("Tag I18n not found or invalid label. Tag UID: %s Label: %s Language: %s. Skipping language.", t.UID, i18n.Label.String, i18n.Language)
+				continue
 			}
 
 			r := Result{
@@ -133,7 +139,7 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 				TitleSuggest: Suffixes(strings.Join(pathNames, " ")),
 			}
 			name := index.indexName(i18n.Language)
-			log.Infof("Tags Index - Add tag %s to index %s", r.ToString(), name)
+			log.Infof("Tags Index - Add tag %s to index %s", r.ToDebugString(), name)
 			resp, err := index.esc.Index().
 				Index(name).
 				Type("result").

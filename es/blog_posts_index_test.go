@@ -33,7 +33,6 @@ func (suite *BlogIndexerSuite) TestBlogIndex() {
 	r.Nil(err)
 
 	r.Nil(indexer.ReindexAll())
-	//r.Nil(indexer.RefreshAll())
 
 	fmt.Printf("\nAdding English post and validate.\n\n")
 	id1 := suite.ibp(1, 2, "this is english post", false)
@@ -60,8 +59,18 @@ func (suite *BlogIndexerSuite) TestBlogIndex() {
 	r.Nil(indexer.BlogPostUpdate(id5))
 	suite.validateNames(indexNameEn, indexer, []string{"this is english post"})
 
+	fmt.Println("\nAdding another English post and validate.")
+	id6 := suite.ibp(6, 2, "this is another english post", false)
+	r.Nil(indexer.BlogPostUpdate(id6))
+	suite.validateNames(indexNameEn, indexer, []string{"this is english post", "this is another english post"})
+
+	fmt.Println("\nDelete first English post and validate.")
+	r.Nil(deletePosts([]string{id1}))
+	r.Nil(indexer.BlogPostUpdate(id1))
+	suite.validateNames(indexNameEn, indexer, []string{"this is another english post"})
+
 	fmt.Println("\nDelete posts from DB, reindex and validate we have 0 posts.")
-	r.Nil(deletePosts([]string{id1, id2, id3, id4}))
+	r.Nil(deletePosts([]string{id2, id3, id4, id6}))
 	r.Nil(indexer.ReindexAll())
 	suite.validateNames(indexNameEn, indexer, []string{})
 	suite.validateNames(indexNameEs, indexer, []string{})

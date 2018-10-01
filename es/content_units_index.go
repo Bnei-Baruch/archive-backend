@@ -314,6 +314,9 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 				unit.FilterValues = append(unit.FilterValues, KeyValues("tag", val)...)
 				unit.TypedUids = append(unit.TypedUids, KeyValues("tag", val)...)
 			}
+			if val, ok := indexData.MediaLanguages[cu.UID]; ok {
+				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.FILTER_LANGUAGE, val)...)
+			}
 			// if val, ok := indexData.Persons[cu.UID]; ok {
 			// 	unit.Persons = val
 			// 	unit.TypedUids = append(unit.TypedUids, KeyValues("person", val)...)
@@ -364,7 +367,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 	for k, v := range i18nMap {
 		name := index.indexName(k)
 
-		log.Infof("Content Units Index - Add content unit %s to index %s", v.ToString(), name)
+		log.Infof("Content Units Index - Add content unit %s to index %s", v.ToDebugString(), name)
 		resp, err := index.esc.Index().
 			Index(name).
 			Type("result").

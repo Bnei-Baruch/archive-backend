@@ -732,6 +732,14 @@ func deletePosts(IDs []string) error {
 	return mdbmodels.BlogPosts(common.DB, qm.WhereIn(scope)).DeleteAll()
 }
 
+func deleteTweets(TIDs []string) error {
+	TIDsI := make([]interface{}, len(TIDs))
+	for i, v := range TIDs {
+		TIDsI[i] = v
+	}
+	return mdbmodels.TwitterTweets(common.DB, qm.WhereIn("twitter_id in ?", TIDsI...)).DeleteAll()
+}
+
 func deleteContentUnits(UIDs []string) error {
 	if len(UIDs) == 0 {
 		return nil
@@ -1103,6 +1111,53 @@ func insertPost(wp_id int64, blogId int64, title string, filtered bool) error {
 	return nil
 }
 
+func insertTweet(id int64, tid string, userId int64, title string) error {
+
+	_, err := mdbmodels.FindTwitterUser(common.DB, userId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+
+			// save twitter user to DB:
+			usr := mdbmodels.TwitterUser{
+				ID:        userId,
+				Username:  fmt.Sprintf("user-%v", userId),
+				AccountID: fmt.Sprintf("user-account-%v", userId),
+			}
+
+			err = usr.Insert(common.DB)
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return err
+		}
+	}
+
+	sraw := struct {
+		Text string `json:"text,omitempty"`
+	}{Text: title}
+	raw, err := json.Marshal(sraw)
+	if err != nil {
+		return err
+	}
+
+	mdbTweet := mdbmodels.TwitterTweet{
+		ID:        id,
+		UserID:    userId,
+		TwitterID: tid,
+		FullText:  title,
+		TweetAt:   time.Now(),
+		Raw:       null.NewJSON(raw, true),
+		CreatedAt: time.Now(),
+	}
+
+	if err := mdbTweet.Insert(common.DB); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (suite *IndexerSuite) ucu(cu es.ContentUnit, lang string, published bool, secure bool) string {
 	r := require.New(suite.T())
 	uid, err := updateContentUnit(cu, lang, published, secure)
@@ -1226,6 +1281,13 @@ func (suite *IndexerSuite) ibp(wpId int64, blogId int64, title string, filtered 
 	err := insertPost(wpId, blogId, title, filtered)
 	r.Nil(err)
 	return idStr
+}
+
+//insert tweet
+func (suite *IndexerSuite) itt(id int64, tid string, userId int64, title string) {
+	r := require.New(suite.T())
+	err := insertTweet(id, tid, userId, title)
+	r.Nil(err)
 }
 
 func (suite *IndexerSuite) validateCollectionsContentUnits(indexName string, indexer *es.Indexer, expectedCUs map[string][]string) {
@@ -1371,6 +1433,27 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 
 }
 
+func (suite *IndexerSuite) validateTagNames(indexName string, indexer *es.Indexer, expectedNames []string) {
+	suite.validateSourceNames(indexName, indexer, expectedNames)
+}
+
+func (suite *IndexerSuite) validateSourceNames(indexName string, indexer *es.Indexer, expectedNames []string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	names := make([]string, len(res.Hits.Hits))
+
+	for i, hit := range res.Hits.Hits {
+		var src es.Result
+		json.Unmarshal(*hit.Source, &src)
+		names[i] = src.Title
+	}
+	r.ElementsMatch(names, expectedNames, fmt.Sprintf("Expected names: %+v to be the same as expected names: %+v", names, expectedNames))
+}
+
 func ElementsMatch(r *require.Assertions, a [][]string, b [][]string) {
 	r.Equal(len(a), len(b), fmt.Sprintf("%+v is not the same length as %+v", a, b))
 
@@ -1400,6 +1483,7 @@ func ElementsMatch(r *require.Assertions, a [][]string, b [][]string) {
 	}
 
 }
+
 func (suite *IndexerSuite) validateTagsFullPath(indexName string, indexer *es.Indexer, expected [][]string) {
 	suite.validateFullPath(indexName, indexer, "tag", expected)
 }
