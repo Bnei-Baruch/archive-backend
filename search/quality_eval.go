@@ -720,11 +720,11 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 
 	query := fmt.Sprintf(queryMask,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		//mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
+		//mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
+		//mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
+		//mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
+		//mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
 		collectionUID)
 
@@ -810,11 +810,11 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 
 	query += fmt.Sprintf(queryMask,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		//mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
+		//mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
+		//mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
+		//mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
+		//mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
 		filterByUidQuery)
 
