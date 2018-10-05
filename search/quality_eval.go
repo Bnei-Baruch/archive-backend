@@ -85,7 +85,7 @@ var GOOD_EXPECTATION = map[int]bool{
 	ET_COLLECTIONS:   true,
 	ET_LESSONS:       true,
 	ET_PROGRAMS:      true,
-	ET_SOURCES:       true,
+    ET_SOURCES:       true,
 	ET_LANDING_PAGE:  true,
 	ET_EMPTY:         false,
 	ET_FAILED_PARSE:  false,

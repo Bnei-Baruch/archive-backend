@@ -147,7 +147,7 @@
                     <input id="server-url" type="text">
                 </td>
                 <td>
-                    <span>Leave empty for this server. Example: http://kabbalahmedia.info/backend</span>
+                    <span>Leave empty for this server. Example: http://rt-dev.kbb1.com:8080/</span>
                 </td>
             </tr>
         </table>
@@ -243,6 +243,22 @@
             <button onclick="BulkEval()">Bulk Eval</button>
         </div>
         <div id="bulk-loader" class="loader" style="display: none;"></div>
+        <table>
+            <tr>
+                <td><h3>Search Quality</h3></td>
+            </tr>
+            <tr>
+                <td>
+                    <pre>
+SQ_SERVER_ERROR   = 0
+SQ_NO_EXPECTATION = 1
+SQ_UNKNOWN        = 2
+SQ_REGULAR        = 3
+SQ_GOOD           = 4
+                    </pre>
+                </td>
+            </tr>
+        </table>
         <div id="bulk-eval" style="display: none;">
             <hr />
             <h2>Bulk Eval Results</h2>

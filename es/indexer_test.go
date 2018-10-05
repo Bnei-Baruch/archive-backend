@@ -1524,5 +1524,5 @@ func (suite *IndexerSuite) validateNames(indexName string, indexer *es.Indexer, 
 		names[i] = res.Title
 	}
 	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
-	r.ElementsMatch(expectedNames, names)
+    r.ElementsMatch(names, expectedNames, fmt.Sprintf("Expected names: %+v to be the same as expected names: %+v", names, expectedNames))
 }
