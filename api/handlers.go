@@ -461,7 +461,7 @@ func SearchHandler(c *gin.Context) {
 	if _, ok := consts.SORT_BY_VALUES[sortBy]; ok {
 		sortByVal = sortBy
 	}
-	if len(query.Term) == 0 {
+	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
 		sortByVal = consts.SORT_BY_SOURCE_FIRST
 	}
 
