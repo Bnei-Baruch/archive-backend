@@ -186,7 +186,7 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 		ResultType:    consts.ES_RESULT_TYPE_BLOG_POSTS,
 		MDB_UID:       idStr,
 		TypedUids:     []string{keyValue("blog_post", idStr)},
-		FilterValues:  []string{keyValue("content_type", consts.CT_BLOG_POST), keyValue(consts.FILTER_LANGUAGE, postLang)},
+		FilterValues:  []string{keyValue("content_type", consts.SCT_BLOG_POST), keyValue(consts.FILTER_LANGUAGE, postLang)},
 		Title:         mdbPost.Title,
 		TitleSuggest:  Suffixes(mdbPost.Title),
 		EffectiveDate: &utils.Date{Time: mdbPost.PostedAt},
