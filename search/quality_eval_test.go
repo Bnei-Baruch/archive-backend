@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/olivere/elastic.v6"
+
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -154,6 +156,17 @@ func (suite *QualityEvalSuite) TearDownSuite() {
 // a normal test function and pass our suite to suite.Run
 func TestEval(t *testing.T) {
 	suite.Run(t, new(QualityEvalSuite))
+}
+
+func createHitSourceExpectation(index string, hitType string, resultType string, mdbUid string, expectation string) (elastic.SearchHit, search.HitSource, search.Expectation) {
+    return elastic.SearchHit{Index: index, Type: hitType}, search.HitSource{ResultType: resultType, MdbUid: mdbUid}, search.ParseExpectation(expectation, nil)
+}
+
+func (suite *QualityEvalSuite) TestHitMatchesExpectation() {
+    fmt.Printf("\n------ TestHitMatchesExpectation ------\n\n")
+	r := require.New(suite.T())
+    hit, hitSource, expectation := createHitSourceExpectation("intent-tag", "lessons", "tags", "zuwiS72C", "https://kabbalahmedia.info/he/lessons?topic=0db5BBS3_Gvm4nh0t_zuwiS72C")
+    r.True(search.HitMatchesExpectation(&hit, hitSource, expectation))
 }
 
 func (suite *QualityEvalSuite) TestParseExpectation() {

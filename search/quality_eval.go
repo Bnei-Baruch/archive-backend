@@ -424,7 +424,11 @@ func FilterValueToUid(value string) string {
 }
 
 func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expectation) bool {
-	if hitSource.ResultType != EXPECTATION_HIT_TYPE[e.Type] {
+    hitType := hit.Type
+    if hitType == "result" {
+        hitType = hitSource.ResultType
+    }
+	if hitType != EXPECTATION_HIT_TYPE[e.Type] {
 		return false
 	}
 
