@@ -1690,19 +1690,24 @@ func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *Ht
 		return nil, err
 	}
 
+	cuByMDBID := make(map[int64]string)
 	lpCUs := make(map[string]*ContentUnit)
+	derivedCUs := make(map[string]*ContentUnit)
 	others := make([]*ContentUnit, 0)
 	for i := range respCUs.ContentUnits {
 		cu := respCUs.ContentUnits[i]
 		switch cu.ContentType {
 		case consts.CT_LESSON_PART:
 			lpCUs[cu.ID] = cu
-		case consts.CT_KITEI_MAKOR, consts.CT_LELO_MIKUD, consts.CT_PUBLICATION:
+		case consts.CT_KITEI_MAKOR, consts.CT_LELO_MIKUD:
+			derivedCUs[cu.ID] = cu
+		case consts.CT_PUBLICATION:
 			// skip these for now (they should be properly attached as derived units)
 			break
 		default:
 			others = append(others, cu)
 		}
+		cuByMDBID[cu.mdbID] = cu.ID
 	}
 
 	// lessons
@@ -1727,6 +1732,36 @@ func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *Ht
 		cus := resp.Collections[i].ContentUnits
 		for j := range cus {
 			cus[j] = lpCUs[cus[j].ID]
+		}
+	}
+
+	// attach derived units to their source units
+	dcuIDs := make([]int64, 0)
+	for i := range derivedCUs {
+		dcuIDs = append(dcuIDs, derivedCUs[i].mdbID)
+	}
+	if len(dcuIDs) > 0 {
+		cuds, err2 := mdbmodels.ContentUnitDerivations(db,
+			qm.WhereIn("derived_id in ?", utils.ConvertArgsInt64(dcuIDs)...)).
+			All()
+		if err2 != nil {
+			return nil, NewInternalError(err2)
+		}
+
+		for i := range cuds {
+			if srcUID, ok := cuByMDBID[cuds[i].SourceID]; ok {
+				if src, ok := lpCUs[srcUID]; ok {
+					if len(src.DerivedUnits) == 0 {
+						src.DerivedUnits = make(map[string]*ContentUnit)
+					}
+
+					duUID := cuByMDBID[cuds[i].DerivedID]
+					du := derivedCUs[duUID]
+					// Dirty hack for unique mapping - needs to parse in client...
+					key := fmt.Sprintf("%s____%s", du.ID, cuds[i].Name)
+					src.DerivedUnits[key] = du
+				}
+			}
 		}
 	}
 
