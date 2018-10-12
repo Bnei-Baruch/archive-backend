@@ -4,19 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"math/rand"
-	"os"
-	"path/filepath"
-	"regexp"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
-	"github.com/Bnei-Baruch/archive-backend/migrations"
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/Bnei-Baruch/sqlboiler/boil"
@@ -25,108 +19,13 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	null "gopkg.in/volatiletech/null.v6"
+	"gopkg.in/volatiletech/null.v6"
 )
 
 type QualityEvalSuite struct {
 	suite.Suite
-	TestDBManager
+	utils.TestDBManager
 	ctx context.Context
-}
-
-type TestDBManager struct {
-	DB     *sql.DB
-	testDB string
-}
-
-const uidBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-const lettersBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-func GenerateUID(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = uidBytes[rand.Intn(len(uidBytes))]
-	}
-	return string(b)
-}
-
-func GenerateName(n int) string {
-	b := make([]byte, n)
-	b[0] = lettersBytes[rand.Intn(len(lettersBytes))]
-	for i := range b[1:] {
-		b[i+1] = uidBytes[rand.Intn(len(uidBytes))]
-	}
-	return string(b)
-}
-
-func (m *TestDBManager) InitTestDB() error {
-	m.testDB = fmt.Sprintf("test_%s", strings.ToLower(GenerateName(10)))
-
-	// Open connection to RDBMS
-	db, err := sql.Open("postgres", viper.GetString("test.mdb-url"))
-	if err != nil {
-		return err
-	}
-
-	// Create a new temporary test database
-	if _, err := db.Exec("CREATE DATABASE " + m.testDB); err != nil {
-		return err
-	}
-
-	// Close first connection and connect to temp database
-	db.Close()
-	db, err = sql.Open("postgres", fmt.Sprintf(viper.GetString("test.url-template"), m.testDB))
-	if err != nil {
-		return err
-	}
-	m.DB = db
-
-	// Run migrations
-	return m.runMigrations(db)
-}
-
-func (m *TestDBManager) DestroyTestDB() error {
-	// Close temp DB
-	err := m.DB.Close()
-	if err != nil {
-		return err
-	}
-
-	// Connect to MDB
-	db, err := sql.Open("postgres", viper.GetString("test.mdb-url"))
-	if err != nil {
-		return err
-	}
-
-	// Drop test DB
-	_, err = db.Exec("DROP DATABASE " + m.testDB)
-	return err
-}
-
-func (m *TestDBManager) runMigrations(testDB *sql.DB) error {
-	var visit = func(path string, f os.FileInfo, err error) error {
-		match, _ := regexp.MatchString(".*\\.sql$", path)
-		if !match {
-			return nil
-		}
-
-		//fmt.Printf("Applying migration %s\n", path)
-		m, err := migrations.NewMigration(path)
-		if err != nil {
-			fmt.Printf("Error migrating %s, %s", path, err.Error())
-			return err
-		}
-
-		for _, statement := range m.Up() {
-			if _, err := testDB.Exec(statement); err != nil {
-				return fmt.Errorf("Unable to apply migration %s: %s\nStatement: %s\n", m.Name, err, statement)
-			}
-		}
-
-		return nil
-	}
-
-	return filepath.Walk("../migrations", visit)
 }
 
 func (suite *QualityEvalSuite) SetupSuite() {
@@ -392,7 +291,7 @@ func (suite *QualityEvalSuite) addContentUnitTag(cu mdbmodels.ContentUnit, lang 
 		}
 		cu = *cuFromDB
 	} else {
-		cu.UID = GenerateUID(8)
+		cu.UID = utils.GenerateUID(8)
 		if err := cu.Insert(common.DB); err != nil {
 			return "", err
 		}
@@ -419,7 +318,7 @@ func (suite *QualityEvalSuite) addContentUnitSource(cu mdbmodels.ContentUnit, la
 		}
 		cu = *cuFromDB
 	} else {
-		cu.UID = GenerateUID(8)
+		cu.UID = utils.GenerateUID(8)
 		cu.TypeID = mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID
 		if err := cu.Insert(common.DB); err != nil {
 			return "", err
@@ -454,7 +353,7 @@ func (suite *QualityEvalSuite) updateCollection(c mdbmodels.Collection, cuUID st
 		}
 		c = *cFromDB
 	} else {
-		c.UID = GenerateUID(8)
+		c.UID = utils.GenerateUID(8)
 		c.TypeID = c.TypeID
 		c.Secure = int16(0)
 		c.Published = true

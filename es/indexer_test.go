@@ -2,24 +2,17 @@ package es_test
 
 import (
 	"context"
-	"crypto/sha1"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/rand"
-	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"reflect"
-	"regexp"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/Bnei-Baruch/sqlboiler/boil"
@@ -37,156 +30,12 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
-	"github.com/Bnei-Baruch/archive-backend/migrations"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-var UID_REGEX = regexp.MustCompile("[a-zA-z0-9]{8}")
-
-type TestDBManager struct {
-	DB     *sql.DB
-	testDB string
-}
-
-// Move to more general utils.
-const uidBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-const lettersBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-func GenerateUID(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = uidBytes[rand.Intn(len(uidBytes))]
-	}
-	return string(b)
-}
-
-func GenerateName(n int) string {
-	b := make([]byte, n)
-	b[0] = lettersBytes[rand.Intn(len(lettersBytes))]
-	for i := range b[1:] {
-		b[i+1] = uidBytes[rand.Intn(len(uidBytes))]
-	}
-	return string(b)
-}
-
-func (m *TestDBManager) InitTestDB() error {
-	m.testDB = fmt.Sprintf("test_%s", strings.ToLower(GenerateName(10)))
-
-	// Open connection to RDBMS
-	db, err := sql.Open("postgres", viper.GetString("test.mdb-url"))
-	if err != nil {
-		return err
-	}
-
-	// Create a new temporary test database
-	if _, err := db.Exec("CREATE DATABASE " + m.testDB); err != nil {
-		return err
-	}
-
-	// Close first connection and connect to temp database
-	db.Close()
-	db, err = sql.Open("postgres", fmt.Sprintf(viper.GetString("test.url-template"), m.testDB))
-	if err != nil {
-		return err
-	}
-	m.DB = db
-
-	// Run migrations
-	return m.runMigrations(db)
-}
-
-func (m *TestDBManager) DestroyTestDB() error {
-	// Close temp DB
-	err := m.DB.Close()
-	if err != nil {
-		return err
-	}
-
-	// Connect to MDB
-	db, err := sql.Open("postgres", viper.GetString("test.mdb-url"))
-	if err != nil {
-		return err
-	}
-
-	// Drop test DB
-	_, err = db.Exec("DROP DATABASE " + m.testDB)
-	return err
-}
-
-// Supports:
-// postgres://<host>/<dbname>?sslmode=disable&user=<user>&password=<password>"
-// postgres://<user>:<password>@<host>/<dbname>?sslmode=disable"
-// Returns host, dbname, user, password
-func parseConnectionString(cs string) (string, string, string, string, error) {
-	u, err := url.Parse(cs)
-	if err != nil {
-		return "", "", "", "", err
-	}
-	host, _, err := net.SplitHostPort(u.Host)
-	if err != nil {
-		host = u.Host
-	}
-	dbname := strings.TrimLeft(u.Path, "/")
-	var user, password string
-	if u.User != nil {
-		user = u.User.Username()
-		password, _ = u.User.Password()
-	} else {
-		m, _ := url.ParseQuery(u.RawQuery)
-		if val, ok := m["user"]; ok {
-			user = val[0]
-		} else {
-			return "", "", "", "", errors.New("User not found in connection string.")
-		}
-		if val, ok := m["password"]; ok {
-			password = val[0]
-		} else {
-			return "", "", "", "", errors.New("Password not found in connection string.")
-		}
-	}
-
-	return host, dbname, user, password, nil
-}
-
-func (m *TestDBManager) runMigrations(testDB *sql.DB) error {
-	var visit = func(path string, f os.FileInfo, err error) error {
-		match, _ := regexp.MatchString(".*\\.sql$", path)
-		if !match {
-			return nil
-		}
-
-		//fmt.Printf("Applying migration %s\n", path)
-		m, err := migrations.NewMigration(path)
-		if err != nil {
-			fmt.Printf("Error migrating %s, %s", path, err.Error())
-			return err
-		}
-
-		for _, statement := range m.Up() {
-			if _, err := testDB.Exec(statement); err != nil {
-				return fmt.Errorf("Unable to apply migration %s: %s\nStatement: %s\n", m.Name, err, statement)
-			}
-		}
-
-		return nil
-	}
-
-	return filepath.Walk("../migrations", visit)
-}
-
-func Sha1(s string) string {
-	h := sha1.New()
-	io.WriteString(h, s)
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-func RandomSHA1() string {
-	return Sha1(GenerateName(1024))
-}
-
 type IndexerSuite struct {
 	suite.Suite
-	TestDBManager
+	utils.TestDBManager
 	esc             *elastic.Client
 	ctx             context.Context
 	server          *httptest.Server
@@ -284,7 +133,7 @@ func updateCollection(c es.Collection, cuUID string, removeContentUnitUID string
 		mdbCollection = *cp
 	} else {
 		mdbCollection = mdbmodels.Collection{
-			UID:    GenerateUID(8),
+			UID:    utils.GenerateUID(8),
 			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[c.ContentType].ID,
 		}
 		if err := mdbCollection.Insert(common.DB); err != nil {
@@ -400,7 +249,7 @@ func addContentUnitTag(cu es.ContentUnit, lang string, tag mdbmodels.Tag) (strin
 		mdbContentUnit = *cup
 	} else {
 		mdbContentUnit = mdbmodels.ContentUnit{
-			UID:    GenerateUID(8),
+			UID:    utils.GenerateUID(8),
 			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
 		}
 		if err := mdbContentUnit.Insert(common.DB); err != nil {
@@ -457,7 +306,7 @@ func addContentUnitSource(cu es.ContentUnit, lang string, src mdbmodels.Source, 
 		mdbContentUnit = *cup
 	} else {
 		mdbContentUnit = mdbmodels.ContentUnit{
-			UID:    GenerateUID(8),
+			UID:    utils.GenerateUID(8),
 			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
 		}
 		if err := mdbContentUnit.Insert(common.DB); err != nil {
@@ -524,7 +373,7 @@ func addContentUnitFile(cu es.ContentUnit, lang string, file mdbmodels.File) (st
 		mdbContentUnit = *cup
 	} else {
 		mdbContentUnit = mdbmodels.ContentUnit{
-			UID:    GenerateUID(8),
+			UID:    utils.GenerateUID(8),
 			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
 		}
 		if err := mdbContentUnit.Insert(common.DB); err != nil {
@@ -606,7 +455,7 @@ func updateContentUnit(cu es.ContentUnit, lang string, published bool, secure bo
 		mdbContentUnit = *cup
 	} else {
 		mdbContentUnit = mdbmodels.ContentUnit{
-			UID:    GenerateUID(8),
+			UID:    utils.GenerateUID(8),
 			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
 		}
 		if err := mdbContentUnit.Insert(common.DB); err != nil {
@@ -668,7 +517,7 @@ func updateFile(f es.File, cuUID string) (string, error) {
 		mdbFile = *fp
 	} else {
 		mdbFile = mdbmodels.File{
-			UID: GenerateUID(8),
+			UID: utils.GenerateUID(8),
 		}
 		if err := mdbFile.Insert(common.DB); err != nil {
 			return "", err
@@ -842,7 +691,7 @@ func updateTag(id int64, parentId null.Int64, name string, language string) (str
 		if err == sql.ErrNoRows {
 			tag = &mdbmodels.Tag{
 				ID:       id,
-				UID:      GenerateUID(8),
+				UID:      utils.GenerateUID(8),
 				ParentID: parentId,
 			}
 			err = tag.Insert(common.DB)
@@ -892,7 +741,7 @@ func updateSource(source es.Source, lang string) (string, error) {
 		mdbSource = *s
 	} else {
 		mdbSource = mdbmodels.Source{
-			UID:    GenerateUID(8),
+			UID:    utils.GenerateUID(8),
 			TypeID: 2,
 			Name:   source.Name,
 		}
@@ -1002,7 +851,7 @@ func addAuthorToSource(source es.Source, lang string, mdbAuthor mdbmodels.Author
 		mdbSource = *src
 	} else {
 		mdbSource = mdbmodels.Source{
-			UID:    GenerateUID(8),
+			UID:    utils.GenerateUID(8),
 			TypeID: 2,
 		}
 		if err := mdbSource.Insert(common.DB); err != nil {
