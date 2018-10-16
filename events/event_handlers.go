@@ -188,11 +188,19 @@ func BlogPostUpdate(d Data) {
 	putToIndexer(indexer.BlogPostUpdate, d.Payload["id"].(string))
 }
 
+func BlogPostDelete(d Data) {
+	putToIndexer(indexer.BlogPostUpdate, d.Payload["id"].(string))
+}
+
 func TweetCreate(d Data) {
 	putToIndexer(indexer.TweetUpdate, d.Payload["tid"].(string))
 }
 
 func TweetUpdate(d Data) {
+	putToIndexer(indexer.TweetUpdate, d.Payload["tid"].(string))
+}
+
+func TweetDelete(d Data) {
 	putToIndexer(indexer.TweetUpdate, d.Payload["tid"].(string))
 }
 
