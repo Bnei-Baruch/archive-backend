@@ -110,9 +110,6 @@ func (index *BlogIndex) bulkIndexPosts(offset int, limit int, sqlScope string) e
 	}
 	log.Infof("Adding %d blog posts (offset %d).", len(posts), offset)
 	for _, post := range posts {
-		/*if post.WPID == 160504 {
-			log.Infof("GOING TO INDEX WPID 160504. OFFSET IS %d. LIMIT IS %s.", offset, limit)
-		}*/
 		if err := index.indexPost(post); err != nil {
 			log.Errorf("indexPost error at post id %d. error: %v", post.ID, err)
 			return err
