@@ -47,7 +47,10 @@ const (
 	CT_SONG                  = "SONG"
 	CT_BOOK                  = "BOOK"
 	CT_BLOG_POST             = "BLOG_POST"
-	CT_TWEET                 = "TWEET"
+
+	// Content types for additional Elastic results
+	SCT_BLOG_POST = "R_BLOG_POST"
+	SCT_TWEET     = "R_TWEET"
 
 	// Content Role types
 	CR_LECTURER = "LECTURER"
