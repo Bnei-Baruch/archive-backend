@@ -131,6 +131,14 @@ var messageHandlers = map[string]MessageHandler{
 
 	E_PUBLISHER_CREATE: PublisherCreate,
 	E_PUBLISHER_UPDATE: PublisherUpdate,
+
+	E_BLOG_POST_CREATE: BlogPostCreate,
+	E_BLOG_POST_UPDATE: BlogPostUpdate,
+	E_BLOG_POST_DELETE: BlogPostDelete,
+
+	E_TWEET_CREATE: TweetCreate,
+	E_TWEET_UPDATE: TweetUpdate,
+	E_TWEET_DELETE: TweetDelete,
 }
 
 // msgHandler checks message type and calls "eventHandler"

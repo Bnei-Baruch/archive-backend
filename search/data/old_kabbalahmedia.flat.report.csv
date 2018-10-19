@@ -1,169 +1,271 @@
 Language,Query,Weight,Bucket,Comment,Expectation,Parsed,SearchQuality,Rank
-he,542,5772.00,מספר תכנית (חיים חדשים),,https://archive.kbb1.com/he/programs/cu/AsNLozeK,cu|AsNLozeK|,Good,2
-he,707,5772.00,מספר תכנית (חיים חדשים),,https://archive.kbb1.com/he/programs/cu/fMJtiizU,cu|fMJtiizU|,Good,3
-he,103,2886.00,מספר תכנית (חיים חדשים),"All results are 103fm, should be more various",https://archive.kbb1.com/he/programs?program=%7CDx8UewbL,p||program - %7CDx8UewbL,Unknown,-1
-he,103,2886.00,מספר תכנית (חיים חדשים),"All results are 103fm, should be more various",https://archive.kbb1.com/he/programs/cu/VrwG8S4o,cu|VrwG8S4o|,Unknown,-1
-he,209,5772.00,מספר תכנית (חיים חדשים),,https://archive.kbb1.com/he/programs/cu/g0s6w9ze,cu|g0s6w9ze|,Good,1
-he,פתיחה,790.33,מאמר בקבלה,"If date older then week, article goes first.",https://archive.kbb1.com/he/lessons?source=bs_L2jMWyce_kB3eD83I,l||source - bs_L2jMWyce_kB3eD83I,Unknown,-1
-he,פתיחה,790.33,מאמר בקבלה,"If date older then week, article goes first.",https://archive.kbb1.com/he/sources/kB3eD83I,s|kB3eD83I|,Regular,7
-he,פתיחה,790.33,מאמר בקבלה,"If date older then week, article goes first.",https://archive.kbb1.com/he/lessons/cu/lktYc6eC,cu|lktYc6eC|,Unknown,-1
-he,הקדמה לספר הזוהר,790.33,מאמר בקבלה,unclear which one is the correct....,https://archive.kbb1.com/he/lessons?source=bs_L2jMWyce_ALlyoveA,l||source - bs_L2jMWyce_ALlyoveA,Unknown,-1
-he,הקדמה לספר הזוהר,790.33,מאמר בקבלה,unclear which one is the correct....,https://archive.kbb1.com/he/sources/ALlyoveA,s|ALlyoveA|,Good,2
-he,הקדמה לספר הזוהר,790.33,מאמר בקבלה,unclear which one is the correct....,https://archive.kbb1.com/he/lessons/cu/ujFce7WX?language=he,cu|ujFce7WX|,Regular,10
-he,מתן תורה,790.33,מאמר בקבלה,,https://archive.kbb1.com/he/lessons?source=bs_qMeV5M3Y_2bscFWf4,l||source - bs_qMeV5M3Y_2bscFWf4,Unknown,-1
-he,מתן תורה,790.33,מאמר בקבלה,,https://archive.kbb1.com/he/sources/2bscFWf4,s|2bscFWf4|,Good,2
-he,מתן תורה,790.33,מאמר בקבלה,,https://archive.kbb1.com/he/lessons/cu/cDfMlyqU,cu|cDfMlyqU|,Unknown,-1
-he,מאמר השלום,790.33,מאמר בקבלה,,https://archive.kbb1.com/he/lessons?source=bs_qMeV5M3Y_28Cmp7gl,l||source - bs_qMeV5M3Y_28Cmp7gl,Unknown,-1
-he,מאמר השלום,790.33,מאמר בקבלה,,https://archive.kbb1.com/he/sources/28Cmp7gl,s|28Cmp7gl|,Unknown,-1
-he,מאמר השלום,790.33,מאמר בקבלה,,https://archive.kbb1.com/he/lessons/cu/eK9Jqxup?language=he,cu|eK9Jqxup|,Unknown,-1
-he,מבוא לספר הזוהר,790.33,מאמר בקבלה,,https://archive.kbb1.com/he/lessons?source=bs_L2jMWyce_tswzgnWk,l||source - bs_L2jMWyce_tswzgnWk,Unknown,-1
-he,מבוא לספר הזוהר,790.33,מאמר בקבלה,,https://archive.kbb1.com/he/sources/tswzgnWk,s|tswzgnWk|,Good,2
-he,מבוא לספר הזוהר,790.33,מאמר בקבלה,,https://archive.kbb1.com/he/lessons/cu/TP0R1939,cu|TP0R1939|,Unknown,-1
-he,מקובלים כותבים,1666.00,תכנית טלוויזיה,unrelated results,https://archive.kbb1.com/he/programs/c/fLWpcUjQ,c|fLWpcUjQ|,Good,1
-he,עולמות נפגשים,1666.00,תכנית טלוויזיה,,https://archive.kbb1.com/he/programs/c/FOOoTpLR,c|FOOoTpLR|,Good,1
-he,שאל את המקובל,1666.00,תכנית טלוויזיה,,https://archive.kbb1.com/he/programs/c/TXrFZRBE,c|TXrFZRBE|,Good,2
-he,הפתרון,1666.00,תכנית טלוויזיה,,https://archive.kbb1.com/he/programs/c/MvD8Dk2S,c|MvD8Dk2S|,Good,1
-he,מורים דרך,1666.00,תכנית טלוויזיה,unrelated results,https://archive.kbb1.com/he/programs/c/JMkKQ7ZZ,c|JMkKQ7ZZ|,Good,1
-he,חיים חדשים,1586.00,חיים חדשים,groups,https://archive.kbb1.com/he/programs/c/zf4lLwyI,c|zf4lLwyI|,Good,1
-he,חיים,1586.00,חיים חדשים,groups,https://archive.kbb1.com/he/programs/c/zf4lLwyI,c|zf4lLwyI|,Good,1
-he,תוכנית חיים חדשים,1586.00,חיים חדשים,groups,https://archive.kbb1.com/he/programs/c/zf4lLwyI,c|zf4lLwyI|,Unknown,-1
-he,אין עוד מלבדו,756.50,נושא בקבלה,unclear what is good,https://archive.kbb1.com/he/sources/hFeGidcS,s|hFeGidcS|,Good,3
-he,אין עוד מלבדו,756.50,נושא בקבלה,unclear what is good,https://archive.kbb1.com/he/lessons?source=bs_qMUUn22b_hFeGidcS,l||source - bs_qMUUn22b_hFeGidcS,Unknown,-1
-he,תפיסת המציאות,504.33,נושא בקבלה,unclear what is good,https://archive.kbb1.com/he/lessons/cu/fQ9F5Rrn,cu|fQ9F5Rrn|,Unknown,-1
-he,תפיסת המציאות,504.33,נושא בקבלה,unclear what is good,https://archive.kbb1.com/he/lessons?topic=0db5BBS3_fF9Awl9y_VmPWCNvo,l||topic - 0db5BBS3_fF9Awl9y_VmPWCNvo,Unknown,-1
-he,תפיסת המציאות,504.33,נושא בקבלה,unclear what is good,https://archive.kbb1.com/he/programs?topic=0db5BBS3_fF9Awl9y_VmPWCNvo,p||topic - 0db5BBS3_fF9Awl9y_VmPWCNvo,Unknown,-1
-he,אהבת חברים,756.50,נושא בקבלה,unclear what is good,https://archive.kbb1.com/he/sources/jXgT6Pa1,s|jXgT6Pa1|,Good,3
-he,אהבת חברים,756.50,נושא בקבלה,unclear what is good,https://archive.kbb1.com/he/programs/cu/JnlqMWvo,cu|JnlqMWvo|,Unknown,-1
-he,זוהר,617.50,זוהר,groups,https://archive.kbb1.com/he/lessons/cu/skGMOXD8,cu|skGMOXD8|,Unknown,-1
-he,זוהר,617.50,זוהר,groups,https://archive.kbb1.com/he/sources/AwGBQX2L,s|AwGBQX2L|,Good,2
-he,זוהר לעם,617.50,זוהר,groups,https://archive.kbb1.com/he/lessons/cu/skGMOXD8,cu|skGMOXD8|,Unknown,-1
-he,זוהר לעם,617.50,זוהר,groups,https://archive.kbb1.com/he/sources/AwGBQX2L,s|AwGBQX2L|,Good,1
-he,ספר הזוהר,1235.00,זוהר,groups,https://archive.kbb1.com/he/sources/AwGBQX2L,s|AwGBQX2L|,Unknown,-1
-he,אותיות דרב המנונא סבא,617.50,זוהר,groups too old,https://archive.kbb1.com/he/sources/M07beI2F,s|M07beI2F|,Good,1
-he,אותיות דרב המנונא סבא,617.50,זוהר,groups too old,https://archive.kbb1.com/he/lessons?source=rh_AwGBQX2L_cSyh3vQM_43BXTx3C_M07beI2F,l||source - rh_AwGBQX2L_cSyh3vQM_43BXTx3C_M07beI2F,Unknown,-1
-he,זוהר לעם הקדמת ספר הזוהר,617.50,זוהר,groups too old,https://archive.kbb1.com/he/sources/AwGBQX2L,s|AwGBQX2L|,Unknown,-1
-he,זוהר לעם הקדמת ספר הזוהר,617.50,זוהר,groups too old,https://archive.kbb1.com/he/lessons?source=rh_AwGBQX2L_cSyh3vQM_43BXTx3C,l||source - rh_AwGBQX2L_cSyh3vQM_43BXTx3C,Unknown,-1
-he,ליל הכלה,308.75,זוהר,groups too old,https://archive.kbb1.com/he/sources/jnB9Pwgl,s|jnB9Pwgl|,Good,1
-he,ליל הכלה,308.75,זוהר,groups too old,https://archive.kbb1.com/he/events/c/9DJ1NO35?language=he,c|9DJ1NO35|,Unknown,-1
-he,ליל הכלה,308.75,זוהר,groups too old,https://archive.kbb1.com/he/lessons/cu/7DWcJ3wb,cu|7DWcJ3wb|,Regular,5
-he,ליל הכלה,308.75,זוהר,groups too old,https://archive.kbb1.com/he/programs/cu/Y1x3GKhP,cu|Y1x3GKhP|,Unknown,-1
-he,לילה דכלא,308.75,זוהר,groups too old,https://archive.kbb1.com/he/sources/jnB9Pwgl,s|jnB9Pwgl|,Unknown,-1
-he,לילה דכלא,308.75,זוהר,groups too old,https://archive.kbb1.com/he/events/c/9DJ1NO35?language=he,c|9DJ1NO35|,Unknown,-1
-he,לילה דכלא,308.75,זוהר,groups too old,https://archive.kbb1.com/he/lessons/cu/7DWcJ3wb,cu|7DWcJ3wb|,Unknown,-1
-he,לילה דכלא,308.75,זוהר,groups too old,https://archive.kbb1.com/he/programs/cu/Y1x3GKhP,cu|Y1x3GKhP|,Unknown,-1
-he,"תע""ס",606.00,"תע""ס",groups Should show by default the last lesson?,https://archive.kbb1.com/he/sources/xtKmrbb9?page=1,s|xtKmrbb9|,Good,3
-he,"תע""ס",606.00,"תע""ס",groups Should show by default the last lesson?,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,l||source - bs_xtKmrbb9,Unknown,-1
-he,תלמוד עשר הספירות,1212.00,"תע""ס",groups Should show by default the last lesson?,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,l||source - bs_xtKmrbb9,Unknown,-1
-he,תעס,606.00,"תע""ס",groups 2003 lesson is first,https://archive.kbb1.com/he/sources/xtKmrbb9,s|xtKmrbb9|,Unknown,-1
-he,תעס,606.00,"תע""ס",groups 2003 lesson is first,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,l||source - bs_xtKmrbb9,Unknown,-1
-he,הסתכלות פנימית,606.00,"תע""ס",groups Should show by default the last lesson?,https://archive.kbb1.com/he/sources/9xNFLSSp?page=13,s|9xNFLSSp|,Unknown,-1
-he,הסתכלות פנימית,606.00,"תע""ס",groups Should show by default the last lesson?,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,l||source - bs_xtKmrbb9,Unknown,-1
-he,"תע""ס כרך א' חלק ב'",606.00,"תע""ס",groups not finding chapter,https://archive.kbb1.com/he/sources/XlukqLH8?page=37,s|XlukqLH8|,Good,1
-he,"תע""ס כרך א' חלק ב'",606.00,"תע""ס",groups not finding chapter,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,l||source - bs_xtKmrbb9,Unknown,-1
-he,"תע""ס כרך א",606.00,"תע""ס",groups not finding part,https://archive.kbb1.com/he/sources/9xNFLSSp?page=1,s|9xNFLSSp|,Unknown,-1
-he,"תע""ס כרך א",606.00,"תע""ס",groups not finding part,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,l||source - bs_xtKmrbb9,Unknown,-1
-he,תלמוד עשר,606.00,"תע""ס",groups Should show by default the last lesson?,https://archive.kbb1.com/he/sources/9xNFLSSp?page=1,s|9xNFLSSp|,Unknown,-1
-he,תלמוד עשר,606.00,"תע""ס",groups Should show by default the last lesson?,https://archive.kbb1.com/he/lessons?source=bs_xtKmrbb9,l||source - bs_xtKmrbb9,Unknown,-1
-he,פרשת השבוע,294.00,תנך,groups,https://archive.kbb1.com/he/programs/c/FMekSMpp,c|FMekSMpp|,Good,1
-he,פרשת השבוע,294.00,תנך,groups,https://archive.kbb1.com/he/programs/c/yGQYLsbV,c|yGQYLsbV|,Good,3
-he,פרשת השבוע,294.00,תנך,groups,https://archive.kbb1.com/he/programs/c/4D87X3Oo,c|4D87X3Oo|,Good,2
-he,בראשית,220.50,תנך,groups,https://archive.kbb1.com/he/sources/NslF3LJh,s|NslF3LJh|,Unknown,-1
-he,בראשית,220.50,תנך,groups,https://archive.kbb1.com/he/lessons/cu/Kcbm97ny,cu|Kcbm97ny|,Unknown,-1
-he,בראשית,220.50,תנך,groups,https://archive.kbb1.com/he/programs/cu/KgldULKU?language=he,cu|KgldULKU|,Unknown,-1
-he,בראשית,220.50,תנך,groups,https://archive.kbb1.com/he/programs/cu/dO8qg4SK,cu|dO8qg4SK|,Unknown,-1
-he,פרשת שבוע,294.00,תנך,groups,https://archive.kbb1.com/he/programs/c/FMekSMpp,c|FMekSMpp|,Good,1
-he,פרשת שבוע,294.00,תנך,groups,https://archive.kbb1.com/he/programs/c/yGQYLsbV,c|yGQYLsbV|,Good,3
-he,פרשת שבוע,294.00,תנך,groups,https://archive.kbb1.com/he/programs/c/4D87X3Oo,c|4D87X3Oo|,Good,2
-he,ויצא,220.50,תנך,groups,https://archive.kbb1.com/he/sources/pCllz58I,s|pCllz58I|,Regular,5
-he,ויצא,220.50,תנך,groups,https://archive.kbb1.com/he/lessons/cu/ZWV7sRUB,cu|ZWV7sRUB|,Unknown,-1
-he,ויצא,220.50,תנך,groups,https://archive.kbb1.com/he/programs/cu/RPHaK0bQ,cu|RPHaK0bQ|,Unknown,-1
-he,ויצא,220.50,תנך,groups,https://archive.kbb1.com/he/programs/cu/ZEG4FXf4,cu|ZEG4FXf4|,Unknown,-1
-he,פרשת השבוע במדבר,220.50,תנך,groups,https://archive.kbb1.com/he/lessons/cu/Oy9AIPNu,cu|Oy9AIPNu|,Good,1
-he,פרשת השבוע במדבר,220.50,תנך,groups,https://archive.kbb1.com/he/lessons/cu/Oy9AIPNu,cu|Oy9AIPNu|,Good,1
-he,פרשת השבוע במדבר,220.50,תנך,groups,https://archive.kbb1.com/he/programs/cu/WYbNrqMa,cu|WYbNrqMa|,Regular,5
-he,פרשת השבוע במדבר,220.50,תנך,groups,https://archive.kbb1.com/he/programs/cu/czD5IOia,cu|czD5IOia|,Regular,7
-he,פסח,177.75,חגים,מדור חגים groups,https://archive.kbb1.com/he/events/c/PWOJ9aPK?language=he,c|PWOJ9aPK|,Unknown,-1
-he,פסח,177.75,חגים,מדור חגים groups,https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj,p||topic - g3ml0jum_1nyptSIo_RWqjxgkj,Unknown,-1
-he,פסח,177.75,חגים,מדור חגים groups,https://archive.kbb1.com/he/programs/cu/sQLBSVm9,cu|sQLBSVm9|,Unknown,-1
-he,פסח,177.75,חגים,מדור חגים groups,https://archive.kbb1.com/he/programs/cu/zGraxAov,cu|zGraxAov|,Unknown,-1
-he,חנוכה,355.50,חגים,מדור חגים groups,https://archive.kbb1.com/he/events/c/6CMNoQ6i?language=he,c|6CMNoQ6i|,Good,3
-he,חנוכה,355.50,חגים,מדור חגים groups,https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_rxNl0zXg,p||topic - g3ml0jum_1nyptSIo_rxNl0zXg,Unknown,-1
-he,פורים,355.50,חגים,מדור חגים groups,https://archive.kbb1.com/he/events/c/BTc81T71?language=he,c|BTc81T71|,Unknown,-1
-he,פורים,355.50,חגים,מדור חגים groups,https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_ZjqGWdYE,p||topic - g3ml0jum_1nyptSIo_ZjqGWdYE,Unknown,-1
-he,יום כיפור,355.50,חגים,מדור חגים groups,https://archive.kbb1.com/he/programs?topic=g3ml0jum_1nyptSIo_oXRmGfzj,p||topic - g3ml0jum_1nyptSIo_oXRmGfzj,Unknown,-1
-he,יום כיפור,355.50,חגים,מדור חגים groups,https://archive.kbb1.com/he/programs/cu/Wzhb9v1Z?language=he,cu|Wzhb9v1Z|,Unknown,-1
-he,שמעתי,316.50,ספר קבלה,groups - books,https://archive.kbb1.com/he/sources/qMUUn22b,s|qMUUn22b|,Good,2
-he,שמעתי,316.50,ספר קבלה,groups - books,https://archive.kbb1.com/he/lessons?source=bs_qMUUn22b,l||source - bs_qMUUn22b,Unknown,-1
-he,שלבי הסולם,633.00,ספר קבלה,groups - books,https://archive.kbb1.com/he/sources/jXgT6Pa1,s|jXgT6Pa1|,Unknown,-1
-he,תהילים,316.50,ספר קבלה,groups - books,https://archive.kbb1.com/he/programs/cu/pay6i9Ts?language=he,cu|pay6i9Ts|,Regular,9
-he,תהילים,316.50,ספר קבלה,groups - books,https://archive.kbb1.com/he/programs/c/4J0HCOhJ,c|4J0HCOhJ|,Good,1
-he,זוגיות,240.50,נושא חינוך אינטגראלי,,https://archive.kbb1.com/he/programs?topic=VUpFlBnu_pXpozaXB_BdfLfqsa,p||topic - VUpFlBnu_pXpozaXB_BdfLfqsa,Unknown,-1
-he,זוגיות,240.50,נושא חינוך אינטגראלי,,https://archive.kbb1.com/he/programs/cu/U52m4xoG,cu|U52m4xoG|,Unknown,-1
-he,ילדים,481.00,נושא חינוך אינטגראלי,,https://archive.kbb1.com/he/programs?program=children%7C,p||program - children%7C,Unknown,-1
-he,חינוך,481.00,נושא חינוך אינטגראלי,,https://archive.kbb1.com/he/programs/c/zf4lLwyI?topic=VUpFlBnu_pXpozaXB_g4WzYPpT,c|zf4lLwyI|,Unknown,-1
-he,אהבה,481.00,נושא חינוך אינטגראלי,,https://archive.kbb1.com/he/programs?topic=VUpFlBnu_jwqdSTx0_BMeF4yJe,p||topic - VUpFlBnu_jwqdSTx0_BMeF4yJe,Unknown,-1
-he,הדור האחרון,201.00,מוזיקה,אין חומר על מוזיקה,https://archive.kbb1.com/he/sources/oIrPpKn2,s|oIrPpKn2|,Regular,4
-he,הדור האחרון,201.00,מוזיקה,אין חומר על מוזיקה,https://archive.kbb1.com/he/lessons?source=bs_qMeV5M3Y_oIrPpKn2,l||source - bs_qMeV5M3Y_oIrPpKn2,Unknown,-1
-he,שירת העולמות,201.00,מוזיקה,נשמר כשיעור?,https://archive.kbb1.com/he/lessons/cu/l0GVJhAD?language=he,cu|l0GVJhAD|,Good,2
-he,שירת העולמות,201.00,מוזיקה,נשמר כשיעור?,https://archive.kbb1.com/he/lessons/cu/AvV2BJPk?language=he,cu|AvV2BJPk|,Good,1
-he,"רב""ש",131.50,מקובל,group - mekorot,https://archive.kbb1.com/he/programs/cu/5i0S9RMc?language=he,cu|5i0S9RMc|,Unknown,-1
-he,"רב""ש",131.50,מקובל,group - mekorot,https://archive.kbb1.com/he/programs?topic=0db5BBS3_ssPpRE7p_NreYiGEg,p||topic - 0db5BBS3_ssPpRE7p_NreYiGEg,Unknown,-1
-he,רמחל,87.67,מקובל,group - mekorot,https://archive.kbb1.com/he/programs/cu/OlRfxapi?language=he,cu|OlRfxapi|,Unknown,-1
-he,רמחל,87.67,מקובל,group - mekorot,https://archive.kbb1.com/he/programs/cu/zyqpiTc3?language=he,cu|zyqpiTc3|,Unknown,-1
-he,רמחל,87.67,מקובל,group - mekorot,https://archive.kbb1.com/he/programs?topic=0db5BBS3_ssPpRE7p_skJPR8fN,p||topic - 0db5BBS3_ssPpRE7p_skJPR8fN,Unknown,-1
-he,בעל הסולם,131.50,מקובל,group - mekorot,https://archive.kbb1.com/he/programs/cu/maMk3db9?language=he,cu|maMk3db9|,Unknown,-1
-he,בעל הסולם,131.50,מקובל,group - mekorot,https://archive.kbb1.com/he/programs/cu/AdgO5KVE?language=he,cu|AdgO5KVE|,Unknown,-1
-he,משה,131.50,מקובל,group - mekorot,https://archive.kbb1.com/he/programs/cu/gC2tRWrH,cu|gC2tRWrH|,Unknown,-1
-he,משה,131.50,מקובל,group - mekorot,https://archive.kbb1.com/he/programs/cu/AsNLozeK,cu|AsNLozeK|,Unknown,-1
-he,טיש,246.00,סעודות,,https://archive.kbb1.com/he/events/cu/WhlWTpbB?language=he,cu|WhlWTpbB|,Regular,5
-he,שיחות,104.00,שיעור קבלה כללי,,https://archive.kbb1.com/he/programs?program=%7Ce7yLP2D2,p||program - %7Ce7yLP2D2,Unknown,-1
-he,שיחות,104.00,שיעור קבלה כללי,,https://archive.kbb1.com/he/programs/c/YvPmFc3Z,c|YvPmFc3Z|,Good,1
-he,שיעור ווירטואלי,104.00,שיעור קבלה כללי,,https://archive.kbb1.com/he/lectures/c/VwCQ0OBq,c|VwCQ0OBq|,Unknown,-1
-he,שיעור ווירטואלי,104.00,שיעור קבלה כללי,,https://archive.kbb1.com/he/lectures/c/pjoTcgvx,c|pjoTcgvx|,Unknown,-1
-he,שיעור למתחילים,104.00,שיעור קבלה כללי,,https://archive.kbb1.com/he/lectures/c/VwCQ0OBq,c|VwCQ0OBq|,Unknown,-1
-he,שיעור למתחילים,104.00,שיעור קבלה כללי,,https://archive.kbb1.com/he/lectures/c/pjoTcgvx,c|pjoTcgvx|,Unknown,-1
-he,מרשמלו,200.00,תכניות ילדים,,https://archive.kbb1.com/he/programs?program=%7CJRR182e6,p||program - %7CJRR182e6,Unknown,-1
-he,משחק ילדים,200.00,תכניות ילדים,,https://archive.kbb1.com/he/programs?program=%7CzQ1D7FeD,p||program - %7CzQ1D7FeD,Unknown,-1
-he,מאירה והחברים,200.00,תכניות ילדים,,https://archive.kbb1.com/he/programs?program=%7CGGNcvo1Y,p||program - %7CGGNcvo1Y,Unknown,-1
-he,שרטוטים,199.00,שיעור בוקר,אין שרטוטים?,https://archive.kbb1.com/he/lessons,l|| - ,Unknown,-1
-he,שיעור בוקר,199.00,שיעור בוקר,,https://archive.kbb1.com/he/lessons,l|| - ,Unknown,-1
-he,חיים חדשים זוגיות,59.67,חיים חדשים + נושא,,https://archive.kbb1.com/he/programs/cu/U52m4xoG,cu|U52m4xoG|,Unknown,-1
-he,חיים חדשים זוגיות,59.67,חיים חדשים + נושא,,https://archive.kbb1.com/he/programs/cu/JIJqiB7M,cu|JIJqiB7M|,Unknown,-1
-he,חיים חדשים זוגיות,59.67,חיים חדשים + נושא,,https://archive.kbb1.com/he/programs/cu/Xrk8LEb5,cu|Xrk8LEb5|,Unknown,-1
-he,חיים חדשים משפחה,179.00,חיים חדשים + נושא,,https://archive.kbb1.com/he/programs/cu/gPGEY3cl,cu|gPGEY3cl|,Unknown,-1
-he,חיים חדשים נוער,179.00,חיים חדשים + נושא,,https://archive.kbb1.com/he/programs/cu/5BlnVH4Q,cu|5BlnVH4Q|,Good,1
-he,חיים חדשים הריון,89.50,חיים חדשים + נושא,,https://archive.kbb1.com/he/programs/cu/Hxxmgpb0,cu|Hxxmgpb0|,Unknown,-1
-he,חיים חדשים הריון,89.50,חיים חדשים + נושא,,https://archive.kbb1.com/he/programs/cu/Eumgl3Jo,cu|Eumgl3Jo|,Unknown,-1
-he,חיים חדשים קטעים נבחרים,179.00,חיים חדשים + נושא,groups,https://archive.kbb1.com/he/programs/c/G30TMsPn,c|G30TMsPn|,Good,1
-he,הכנה לישיבת החברים,155.00,הכנות,,https://archive.kbb1.com/he/lessons/cu/Fs4Pajlx,cu|Fs4Pajlx|,Unknown,-1
-he,הכנה לכנס רומניה,155.00,הכנות,,https://archive.kbb1.com/he/lessons/cu/Cf8xzLNH,cu|Cf8xzLNH|,Good,1
-he,הכנה לפסח,155.00,הכנות,,https://archive.kbb1.com/he/events/c/PWOJ9aPK?language=he,c|PWOJ9aPK|,Unknown,-1
-he,קבוצה צעירה,148.00,קבוצה מהכלי,,https://archive.kbb1.com/he/programs/cu/dhwDY32y?language=he,cu|dhwDY32y|,Good,1
-he,שיחה על הפצה,118.00,הפצה,,https://archive.kbb1.com/he/lessons/cu/Fl6EkY5L,cu|Fl6EkY5L|,Good,1
-he,נשים,104.00,נשים,מדור נשים groups,https://archive.kbb1.com/he/programs/c/Mx6yjJ5F,c|Mx6yjJ5F|,Good,1
-he,תפקיד האישה,104.00,נשים,מדור נשים groups,https://archive.kbb1.com/he/lectures/cu/VwqLxdyT,cu|VwqLxdyT|,Unknown,-1
-he,אגרת נ,41.00,אגרות,,https://archive.kbb1.com/he/sources/ib0w1sqv,s|ib0w1sqv|,Good,3
-he,אגרת נ,41.00,אגרות,,https://archive.kbb1.com/he/sources/cT6IAU0f,s|cT6IAU0f|,Good,1
-he,אגרת,41.00,אגרות,,https://archive.kbb1.com/he/sources/9ZIJ9CkI,s|9ZIJ9CkI|,Unknown,-1
-he,אגרת,41.00,אגרות,,https://archive.kbb1.com/he/sources/VUcyhrcS,s|VUcyhrcS|,Good,1
-he,אגרות,41.00,אגרות,,https://archive.kbb1.com/he/sources/DVSS0xAR,s|DVSS0xAR|,Regular,4
-he,אגרות,41.00,אגרות,,https://archive.kbb1.com/he/sources/b8SHlrfH,s|b8SHlrfH|,Good,1
-he,"אגרת ט""ז",41.00,אגרות,,https://archive.kbb1.com/he/sources/OHNHBjqH,s|OHNHBjqH|,Good,2
-he,"אגרת ט""ז",41.00,אגרות,,https://archive.kbb1.com/he/sources/0UXdbMmk,s|0UXdbMmk|,Good,1
-he,אגרת טז,41.00,אגרות,,https://archive.kbb1.com/he/sources/OHNHBjqH,s|OHNHBjqH|,Good,2
-he,אגרת טז,41.00,אגרות,,https://archive.kbb1.com/he/sources/0UXdbMmk,s|0UXdbMmk|,Good,1
-he,הנקודה שבלב,66.00,ספר הפצה,,https://archive.kbb1.com/he/programs?program=%7CJZkZxLgv,p||program - %7CJZkZxLgv,Unknown,-1
-he,מבט לקבלה,33.00,ספר הפצה,,https://archive.kbb1.com/he/programs/cu/24gMqvTk,cu|24gMqvTk|,Good,1
-he,מבט לקבלה,33.00,ספר הפצה,,https://archive.kbb1.com/he/programs/cu/24gMqvTk?language=he,cu|24gMqvTk|,Good,1
-he,01/09/2015,31.50,תאריך,Not showing the lessons of that day,https://archive.kbb1.com/he/lessons/c/yEmCC7kf?language=he,c|yEmCC7kf|,Unknown,-1
-he,01/09/2015,31.50,תאריך,Not showing the lessons of that day,https://archive.kbb1.com/he/programs?dates=2015-09-01_2015-09-01,p||dates - 2015-09-01_2015-09-01,Unknown,-1
-he,2012-10-28,31.50,תאריך,Not showing the lessons of that day,https://archive.kbb1.com/he/lessons/c/P8JL6hln?language=he,c|P8JL6hln|,Unknown,-1
-he,2012-10-28,31.50,תאריך,Not showing the lessons of that day,https://archive.kbb1.com/he/programs?dates=2015-10-28_2015-10-28,p||dates - 2015-10-28_2015-10-28,Unknown,-1
-he,דרורי,56.00,אורח,no uid,https://archive.kbb1.com/he/events/cu/mgLQmqkl?language=he,cu|mgLQmqkl|,Good,1
-he,גיל קופטש,14.00,אורח,,https://archive.kbb1.com/he/programs/c/4D87X3Oo,c|4D87X3Oo|,Good,1
-he,גיל קופטש,14.00,אורח,,https://archive.kbb1.com/he/programs/cu/es60Vfio?language=he,cu|es60Vfio|,Regular,4
-he,גיל קופטש,14.00,אורח,,https://archive.kbb1.com/he/programs/cu/vTCcgK1w?language=he,cu|vTCcgK1w|,Regular,5
-he,גיל קופטש,14.00,אורח,,https://archive.kbb1.com/he/lessons/cu/xlxAzvjI?language=he,cu|xlxAzvjI|,Good,2
-he,האומה,18.00,מאמר הפצה,,https://archive.kbb1.com/he/sources/Zo6BQz8E,s|Zo6BQz8E|,Unknown,-1
-he,מסמך ארוסה,18.00,מאמר הפצה,,https://archive.kbb1.com/he/lessons/cu/I3d6eaKU?language=en,cu|I3d6eaKU|,Unknown,-1
-he,ארוסה,18.00,מאמר הפצה,,https://archive.kbb1.com/he/lessons/cu/I3d6eaKU?language=en,cu|I3d6eaKU|,Unknown,-1
+he,542,5772.00,מספר תכנית (חיים חדשים),,https://kabbalahmedia.info/he/programs/cu/AsNLozeK,cu|AsNLozeK|,Good,3
+he,707,5772.00,מספר תכנית (חיים חדשים),,https://kabbalahmedia.info/he/programs/cu/fMJtiizU,cu|fMJtiizU|,Good,3
+he,103,2886.00,מספר תכנית (חיים חדשים),"All results are 103fm, should be more various",https://kabbalahmedia.info/he/programs/c/l4WQAsm9,c|l4WQAsm9|,Good,1
+he,103,2886.00,מספר תכנית (חיים חדשים),"All results are 103fm, should be more various",https://kabbalahmedia.info/he/programs/cu/VrwG8S4o,cu|VrwG8S4o|,Unknown,-1
+he,209,5772.00,מספר תכנית (חיים חדשים),,https://kabbalahmedia.info/he/programs/cu/g0s6w9ze,cu|g0s6w9ze|,Good,2
+he,פתיחה,474.20,מאמר בקבלה,"If date older then week, article goes first.",https://kabbalahmedia.info/he/sources/kB3eD83I,s|kB3eD83I|,Regular,10
+he,פתיחה,474.20,מאמר בקבלה,"If date older then week, article goes first.",https://kabbalahmedia.info/he/lessons/cu/CX7SbRGn,cu|CX7SbRGn|,Unknown,-1
+he,פתיחה,474.20,מאמר בקבלה,"If date older then week, article goes first.",https://kabbalahmedia.info/he/lessons/series/c/XZoflItG,c|XZoflItG|,Unknown,-1
+he,פתיחה,474.20,מאמר בקבלה,"If date older then week, article goes first.",https://kabbalahmedia.info/he/lessons/series/c/Y4ybN1qM,c|Y4ybN1qM|,Unknown,-1
+he,פתיחה,474.20,מאמר בקבלה,"If date older then week, article goes first.",https://kabbalahmedia.info/he/lessons/series/c/yoLixtE4,c|yoLixtE4|,Unknown,-1
+he,הקדמה לספר הזוהר,592.75,מאמר בקבלה,unclear which one is the correct....,https://kabbalahmedia.info/he/sources/ALlyoveA,s|ALlyoveA|,Good,3
+he,הקדמה לספר הזוהר,592.75,מאמר בקבלה,unclear which one is the correct....,https://kabbalahmedia.info/he/lessons/cu/B4FChlLC,cu|B4FChlLC|,Unknown,-1
+he,הקדמה לספר הזוהר,592.75,מאמר בקבלה,unclear which one is the correct....,https://kabbalahmedia.info/he/lessons/series/c/MTFgU93m,c|MTFgU93m|,Unknown,-1
+he,הקדמה לספר הזוהר,592.75,מאמר בקבלה,unclear which one is the correct....,https://kabbalahmedia.info/he/lessons/series/c/Si44p2MQ,c|Si44p2MQ|,Unknown,-1
+he,מתן תורה,592.75,מאמר בקבלה,,https://kabbalahmedia.info/he/sources/2bscFWf4,s|2bscFWf4|,Regular,6
+he,מתן תורה,592.75,מאמר בקבלה,,https://kabbalahmedia.info/he/lessons/cu/OPaI97Lo,cu|OPaI97Lo|,Unknown,-1
+he,מתן תורה,592.75,מאמר בקבלה,,https://kabbalahmedia.info/he/lessons/series/c/aMqw2MH4?language=he,c|aMqw2MH4|,Unknown,-1
+he,מתן תורה,592.75,מאמר בקבלה,,https://kabbalahmedia.info/he/lessons/series/c/ZuAHvIQ5?language=he,c|ZuAHvIQ5|,Unknown,-1
+he,מאמר השלום,592.75,מאמר בקבלה,,https://kabbalahmedia.info/he/sources/28Cmp7gl,s|28Cmp7gl|,Unknown,-1
+he,מאמר השלום,592.75,מאמר בקבלה,,https://kabbalahmedia.info/he/lessons/cu/Il1wp93y,cu|Il1wp93y|,Unknown,-1
+he,מאמר השלום,592.75,מאמר בקבלה,,https://kabbalahmedia.info/he/lessons/series/c/7YCqviDG?language=he,c|7YCqviDG|,Unknown,-1
+he,מאמר השלום,592.75,מאמר בקבלה,,https://kabbalahmedia.info/he/lessons/series/c/8d7OLC30?language=he,c|8d7OLC30|,Unknown,-1
+he,מבוא לספר הזוהר,1185.50,מאמר בקבלה,,https://kabbalahmedia.info/he/sources/tswzgnWk,s|tswzgnWk|,Good,3
+he,מבוא לספר הזוהר,1185.50,מאמר בקבלה,,https://kabbalahmedia.info/he/lessons/cu/TP0R1939,cu|TP0R1939|,Unknown,-1
+he,מקובלים כותבים,1666.00,תכנית טלוויזיה,results unsorted inside program,https://kabbalahmedia.info/he/programs/c/fLWpcUjQ,c|fLWpcUjQ|,Good,1
+he,עולמות נפגשים,1666.00,תכנית טלוויזיה,,https://kabbalahmedia.info/he/programs/c/FOOoTpLR,c|FOOoTpLR|,Good,1
+he,שאל את המקובל,1666.00,תכנית טלוויזיה,,https://kabbalahmedia.info/he/programs/c/TXrFZRBE,c|TXrFZRBE|,Good,2
+he,הפתרון,1666.00,תכנית טלוויזיה,,https://kabbalahmedia.info/he/programs/c/MvD8Dk2S,c|MvD8Dk2S|,Good,1
+he,מורים דרך,1666.00,תכנית טלוויזיה,unrelated results,https://kabbalahmedia.info/he/programs/c/JMkKQ7ZZ,c|JMkKQ7ZZ|,Good,1
+he,חיים חדשים,793.00,חיים חדשים,groups,https://kabbalahmedia.info/he/programs/c/zf4lLwyI,c|zf4lLwyI|,Good,1
+he,חיים חדשים,793.00,חיים חדשים,groups,https://kabbalahmedia.info/he/programs/cu/X9HQGsp3,cu|X9HQGsp3|,Unknown,-1
+he,חיים,793.00,חיים חדשים,groups,https://kabbalahmedia.info/he/programs/c/zf4lLwyI,c|zf4lLwyI|,Good,1
+he,חיים,793.00,חיים חדשים,groups,https://kabbalahmedia.info/he/programs/cu/X9HQGsp3,cu|X9HQGsp3|,Unknown,-1
+he,תוכנית חיים חדשים,793.00,חיים חדשים,groups,https://kabbalahmedia.info/he/programs/c/zf4lLwyI,c|zf4lLwyI|,Unknown,-1
+he,תוכנית חיים חדשים,793.00,חיים חדשים,groups,https://kabbalahmedia.info/he/programs/cu/X9HQGsp3,cu|X9HQGsp3|,Unknown,-1
+he,אין עוד מלבדו,378.25,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/sources/hFeGidcS,s|hFeGidcS|,Regular,4
+he,אין עוד מלבדו,378.25,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/lessons/cu/HkJjgorV,cu|HkJjgorV|,Regular,5
+he,אין עוד מלבדו,378.25,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/lessons?topic=0db5BBS3_Gvm4nh0t_zuwiS72C,l||topic - 0db5BBS3_Gvm4nh0t_zuwiS72C,Good,2
+he,אין עוד מלבדו,378.25,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/programs?topic=0db5BBS3_Gvm4nh0t_zuwiS72C,p||topic - 0db5BBS3_Gvm4nh0t_zuwiS72C,Good,3
+he,ערבות זולת נשמות,504.33,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/lessons?topic=0db5BBS3_Gvm4nh0t_wJqY3829,l||topic - 0db5BBS3_Gvm4nh0t_wJqY3829,Unknown,-1
+he,ערבות זולת נשמות,504.33,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/sources/itcVAcFn,s|itcVAcFn|,Unknown,-1
+he,ערבות זולת נשמות,504.33,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/lessons?source=bs_qMeV5M3Y_itcVAcFn,l||source - bs_qMeV5M3Y_itcVAcFn,Unknown,-1
+he,תפיסת המציאות,504.33,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/lessons/cu/fQ9F5Rrn,cu|fQ9F5Rrn|,Unknown,-1
+he,תפיסת המציאות,504.33,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/lessons?topic=0db5BBS3_fF9Awl9y_VmPWCNvo,l||topic - 0db5BBS3_fF9Awl9y_VmPWCNvo,Good,1
+he,תפיסת המציאות,504.33,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/programs?topic=0db5BBS3_fF9Awl9y_VmPWCNvo,p||topic - 0db5BBS3_fF9Awl9y_VmPWCNvo,Good,2
+he,אהבת חברים,378.25,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/lessons?topic=0db5BBS3_Gvm4nh0t_1fCA7U1x,l||topic - 0db5BBS3_Gvm4nh0t_1fCA7U1x,Regular,4
+he,אהבת חברים,378.25,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/sources/jXgT6Pa1,s|jXgT6Pa1|,Regular,7
+he,אהבת חברים,378.25,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/programs/cu/JnlqMWvo,cu|JnlqMWvo|,Unknown,-1
+he,אהבת חברים,378.25,נושא בקבלה,unclear what is good,https://kabbalahmedia.info/he/lessons/cu/8cc8800i,cu|8cc8800i|,Unknown,-1
+he,זוהר,308.75,זוהר,groups,https://kabbalahmedia.info/he/lessons?source=rh_AwGBQX2L,l||source - rh_AwGBQX2L,Good,3
+he,זוהר,308.75,זוהר,groups,https://kabbalahmedia.info/he/sources/yUcfylRm,s|yUcfylRm|,Unknown,-1
+he,זוהר,308.75,זוהר,groups,https://kabbalahmedia.info/he/programs?topic=0db5BBS3_fF9Awl9y_m3u0BC6T,p||topic - 0db5BBS3_fF9Awl9y_m3u0BC6T,Unknown,-1
+he,זוהר,308.75,זוהר,groups,https://kabbalahmedia.info/he/lessons/cu/kEYrJHZU,cu|kEYrJHZU|,Unknown,-1
+he,זוהר לעם,308.75,זוהר,groups,https://kabbalahmedia.info/he/lessons?source=rh_AwGBQX2L,l||source - rh_AwGBQX2L,Good,1
+he,זוהר לעם,308.75,זוהר,groups,https://kabbalahmedia.info/he/sources/yUcfylRm,s|yUcfylRm|,Unknown,-1
+he,זוהר לעם,308.75,זוהר,groups,https://kabbalahmedia.info/he/programs?topic=0db5BBS3_fF9Awl9y_m3u0BC6T,p||topic - 0db5BBS3_fF9Awl9y_m3u0BC6T,Unknown,-1
+he,זוהר לעם,308.75,זוהר,groups,https://kabbalahmedia.info/he/lessons/cu/kEYrJHZU,cu|kEYrJHZU|,Unknown,-1
+he,ספר הזוהר,411.67,זוהר,groups,https://kabbalahmedia.info/he/lessons?source=rh_AwGBQX2L,l||source - rh_AwGBQX2L,Unknown,-1
+he,ספר הזוהר,411.67,זוהר,groups,https://kabbalahmedia.info/he/programs?topic=0db5BBS3_fF9Awl9y_m3u0BC6T,p||topic - 0db5BBS3_fF9Awl9y_m3u0BC6T,Regular,5
+he,ספר הזוהר,411.67,זוהר,groups,https://kabbalahmedia.info/he/lessons/cu/kEYrJHZU,cu|kEYrJHZU|,Unknown,-1
+he,אותיות דרב המנונא סבא,411.67,זוהר,groups too old,https://kabbalahmedia.info/he/sources/M07beI2F,s|M07beI2F|,Good,2
+he,אותיות דרב המנונא סבא,411.67,זוהר,groups too old,https://kabbalahmedia.info/he/lessons/cu/B4FChlLC,cu|B4FChlLC|,Good,3
+he,אותיות דרב המנונא סבא,411.67,זוהר,groups too old,https://kabbalahmedia.info/he/lessons?source=rh_AwGBQX2L_cSyh3vQM_43BXTx3C_M07beI2F,l||source - rh_AwGBQX2L_cSyh3vQM_43BXTx3C_M07beI2F,Good,1
+he,זוהר לעם הקדמת ספר הזוהר,411.67,זוהר,groups too old,https://kabbalahmedia.info/he/sources/yUcfylRm,s|yUcfylRm|,Unknown,-1
+he,זוהר לעם הקדמת ספר הזוהר,411.67,זוהר,groups too old,https://kabbalahmedia.info/he/lessons/cu/onMo9PLG,cu|onMo9PLG|,Unknown,-1
+he,זוהר לעם הקדמת ספר הזוהר,411.67,זוהר,groups too old,https://kabbalahmedia.info/he/lessons?source=rh_AwGBQX2L_cSyh3vQM_43BXTx3C,l||source - rh_AwGBQX2L_cSyh3vQM_43BXTx3C,Unknown,-1
+he,ליל הכלה,247.00,זוהר,groups too old,https://kabbalahmedia.info/he/sources/jnB9Pwgl,s|jnB9Pwgl|,Good,3
+he,ליל הכלה,247.00,זוהר,groups too old,https://kabbalahmedia.info/he/events/c/CENjlZNr?language=he,c|CENjlZNr|,Unknown,-1
+he,ליל הכלה,247.00,זוהר,groups too old,https://kabbalahmedia.info/he/lessons/cu/onMo9PLG,cu|onMo9PLG|,Unknown,-1
+he,ליל הכלה,247.00,זוהר,groups too old,https://kabbalahmedia.info/he/programs/cu/Y1x3GKhP,cu|Y1x3GKhP|,Unknown,-1
+he,ליל הכלה,247.00,זוהר,groups too old,https://kabbalahmedia.info/he/lessons?source=rh_AwGBQX2L_cSyh3vQM_43BXTx3C,l||source - rh_AwGBQX2L_cSyh3vQM_43BXTx3C,Unknown,-1
+he,לילה דכלא,247.00,זוהר,groups too old,https://kabbalahmedia.info/he/sources/jnB9Pwgl,s|jnB9Pwgl|,Unknown,-1
+he,לילה דכלא,247.00,זוהר,groups too old,https://kabbalahmedia.info/he/events/c/CENjlZNr?language=he,c|CENjlZNr|,Unknown,-1
+he,לילה דכלא,247.00,זוהר,groups too old,https://kabbalahmedia.info/he/lessons/cu/onMo9PLG,cu|onMo9PLG|,Unknown,-1
+he,לילה דכלא,247.00,זוהר,groups too old,https://kabbalahmedia.info/he/programs/cu/Y1x3GKhP,cu|Y1x3GKhP|,Unknown,-1
+he,לילה דכלא,247.00,זוהר,groups too old,https://kabbalahmedia.info/he/lessons?source=rh_AwGBQX2L_cSyh3vQM_43BXTx3C,l||source - rh_AwGBQX2L_cSyh3vQM_43BXTx3C,Unknown,-1
+he,"תע""ס",404.00,"תע""ס",groups Should show by default the last lesson?,https://kabbalahmedia.info/he/sources/9xNFLSSp,s|9xNFLSSp|,Unknown,-1
+he,"תע""ס",404.00,"תע""ס",groups Should show by default the last lesson?,https://kabbalahmedia.info/he/lessons/cu/gAAY1HmE,cu|gAAY1HmE|,Unknown,-1
+he,"תע""ס",404.00,"תע""ס",groups Should show by default the last lesson?,https://kabbalahmedia.info/he/lessons?source=bs_xtKmrbb9,l||source - bs_xtKmrbb9,Unknown,-1
+he,תלמוד עשר הספירות,404.00,"תע""ס",groups Should show by default the last lesson?,https://kabbalahmedia.info/he/sources/9xNFLSSp,s|9xNFLSSp|,Unknown,-1
+he,תלמוד עשר הספירות,404.00,"תע""ס",groups Should show by default the last lesson?,https://kabbalahmedia.info/he/lessons/cu/gAAY1HmE,cu|gAAY1HmE|,Unknown,-1
+he,תלמוד עשר הספירות,404.00,"תע""ס",groups Should show by default the last lesson?,https://kabbalahmedia.info/he/lessons?source=bs_xtKmrbb9,l||source - bs_xtKmrbb9,Good,3
+he,תעס,404.00,"תע""ס",groups 2003 lesson is first,https://kabbalahmedia.info/he/sources/9xNFLSSp,s|9xNFLSSp|,Unknown,-1
+he,תעס,404.00,"תע""ס",groups 2003 lesson is first,https://kabbalahmedia.info/he/lessons/cu/gAAY1HmE,cu|gAAY1HmE|,Unknown,-1
+he,תעס,404.00,"תע""ס",groups 2003 lesson is first,https://kabbalahmedia.info/he/lessons?source=bs_xtKmrbb9,l||source - bs_xtKmrbb9,Unknown,-1
+he,הסתכלות פנימית,404.00,"תע""ס",,https://kabbalahmedia.info/he/sources/9xNFLSSp?page=13,s|9xNFLSSp|,Unknown,-1
+he,הסתכלות פנימית,404.00,"תע""ס",,https://kabbalahmedia.info/he/lessons/cu/bAW6pFjf,cu|bAW6pFjf|,Unknown,-1
+he,הסתכלות פנימית,404.00,"תע""ס",,https://kabbalahmedia.info/he/lessons?source=bs_xtKmrbb9_e2jgBKLL_9xNFLSSp,l||source - bs_xtKmrbb9_e2jgBKLL_9xNFLSSp,Unknown,-1
+he,"תע""ס כרך א' חלק ב'",404.00,"תע""ס",groups not finding chapter,https://kabbalahmedia.info/he/sources/XlukqLH8?page=37,s|XlukqLH8|,Unknown,-1
+he,"תע""ס כרך א' חלק ב'",404.00,"תע""ס",groups not finding chapter,https://kabbalahmedia.info/he/lessons/cu/UHOz5yv1,cu|UHOz5yv1|,Regular,10
+he,"תע""ס כרך א' חלק ב'",404.00,"תע""ס",groups not finding chapter,https://kabbalahmedia.info/he/lessons?source=bs_xtKmrbb9_e2jgBKLL_XlukqLH8,l||source - bs_xtKmrbb9_e2jgBKLL_XlukqLH8,Unknown,-1
+he,"תע""ס כרך א",404.00,"תע""ס",groups not finding part,https://kabbalahmedia.info/he/sources/9xNFLSSp?page=1,s|9xNFLSSp|,Unknown,-1
+he,"תע""ס כרך א",404.00,"תע""ס",groups not finding part,https://kabbalahmedia.info/he/lessons/cu/T6GjILkc,cu|T6GjILkc|,Unknown,-1
+he,"תע""ס כרך א",404.00,"תע""ס",groups not finding part,https://kabbalahmedia.info/he/lessons?source=bs_xtKmrbb9_e2jgBKLL,l||source - bs_xtKmrbb9_e2jgBKLL,Unknown,-1
+he,תלמוד עשר,404.00,"תע""ס",groups Should show by default the last lesson?,https://kabbalahmedia.info/he/sources/9xNFLSSp?page=1,s|9xNFLSSp|,Unknown,-1
+he,תלמוד עשר,404.00,"תע""ס",groups Should show by default the last lesson?,https://kabbalahmedia.info/he/lessons/cu/gAAY1HmE,cu|gAAY1HmE|,Unknown,-1
+he,תלמוד עשר,404.00,"תע""ס",groups Should show by default the last lesson?,https://kabbalahmedia.info/he/lessons?source=bs_xtKmrbb9,l||source - bs_xtKmrbb9,Good,3
+he,פרשת השבוע,294.00,תנך,groups,https://kabbalahmedia.info/he/programs/c/FMekSMpp,c|FMekSMpp|,Good,1
+he,פרשת השבוע,294.00,תנך,groups,https://kabbalahmedia.info/he/programs/c/yGQYLsbV,c|yGQYLsbV|,Good,3
+he,פרשת השבוע,294.00,תנך,groups,https://kabbalahmedia.info/he/programs/c/4D87X3Oo,c|4D87X3Oo|,Good,2
+he,בראשית,220.50,תנך,groups,https://kabbalahmedia.info/he/sources/NslF3LJh,s|NslF3LJh|,Unknown,-1
+he,בראשית,220.50,תנך,groups,https://kabbalahmedia.info/he/lessons/cu/Kcbm97ny,cu|Kcbm97ny|,Unknown,-1
+he,בראשית,220.50,תנך,groups,https://kabbalahmedia.info/he/programs/cu/KgldULKU?language=he,cu|KgldULKU|,Unknown,-1
+he,בראשית,220.50,תנך,groups,https://kabbalahmedia.info/he/programs/cu/dO8qg4SK,cu|dO8qg4SK|,Unknown,-1
+he,פרשת שבוע,294.00,תנך,groups,https://kabbalahmedia.info/he/programs/c/FMekSMpp,c|FMekSMpp|,Good,1
+he,פרשת שבוע,294.00,תנך,groups,https://kabbalahmedia.info/he/programs/c/yGQYLsbV,c|yGQYLsbV|,Good,3
+he,פרשת שבוע,294.00,תנך,groups,https://kabbalahmedia.info/he/programs/c/4D87X3Oo,c|4D87X3Oo|,Good,2
+he,ויצא,220.50,תנך,groups,https://kabbalahmedia.info/he/sources/pCllz58I,s|pCllz58I|,Regular,6
+he,ויצא,220.50,תנך,groups,https://kabbalahmedia.info/he/programs/cu/ZWV7sRUB,cu|ZWV7sRUB|,Unknown,-1
+he,ויצא,220.50,תנך,groups,https://kabbalahmedia.info/he/programs/cu/RPHaK0bQ,cu|RPHaK0bQ|,Unknown,-1
+he,ויצא,220.50,תנך,groups,https://kabbalahmedia.info/he/programs/cu/ZEG4FXf4,cu|ZEG4FXf4|,Unknown,-1
+he,פרשת השבוע במדבר,220.50,תנך,groups,https://kabbalahmedia.info/he/lessons/cu/Oy9AIPNu,cu|Oy9AIPNu|,Good,1
+he,פרשת השבוע במדבר,220.50,תנך,groups,https://kabbalahmedia.info/he/lessons/cu/Oy9AIPNu,cu|Oy9AIPNu|,Good,1
+he,פרשת השבוע במדבר,220.50,תנך,groups,https://kabbalahmedia.info/he/programs/cu/WYbNrqMa,cu|WYbNrqMa|,Regular,9
+he,פרשת השבוע במדבר,220.50,תנך,groups,https://kabbalahmedia.info/he/programs/cu/czD5IOia,cu|czD5IOia|,Unknown,-1
+he,כנס,404.50,כנס,groups,https://kabbalahmedia.info/he/events,|events|,Unknown,-1
+he,כנס,404.50,כנס,groups,https://kabbalahmedia.info/he/events/c/s3uPMmM9,c|s3uPMmM9|,Unknown,-1
+he,כנס מוסקבה,809.00,כנס,,https://kabbalahmedia.info/he/events?location=Russia%7CMoscow,|events|location - Russia%7CMoscow,Unknown,-1
+he,ערבה,809.00,כנס,groups,https://kabbalahmedia.info/he/events?location=Israel%7CArava,|events|location - Israel%7CArava,Unknown,-1
+he,כנס ערבה,404.50,כנס,groups,https://kabbalahmedia.info/he/events?location=Israel%7CArava,|events|location - Israel%7CArava,Unknown,-1
+he,כנס ערבה,404.50,כנס,groups,https://kabbalahmedia.info/he/events/c/uxQtAVZy?language=he,c|uxQtAVZy|,Good,1
+he,כנס ניו ג'רזי,809.00,כנס,groups,https://kabbalahmedia.info/he/events?location=United%20States%7CNew%20Jersey,|events|location - United%20States%7CNew%20Jersey,Unknown,-1
+he,שבת,261.00,מושג בקבלה,,https://kabbalahmedia.info/he/programs/cu/Il2LP4Z4,cu|Il2LP4Z4|,Unknown,-1
+he,שבת,261.00,מושג בקבלה,,https://kabbalahmedia.info/he/programs/cu/ofPjKepN,cu|ofPjKepN|,Unknown,-1
+he,שבת,261.00,מושג בקבלה,,https://kabbalahmedia.info/he/programs/cu/9SMgzyOn,cu|9SMgzyOn|,Unknown,-1
+he,תיקון יצר,391.50,מושג בקבלה,,https://kabbalahmedia.info/he/programs/cu/d8iJzkSM,cu|d8iJzkSM|,Unknown,-1
+he,תיקון יצר,391.50,מושג בקבלה,,https://kabbalahmedia.info/he/programs/cu/WkH9ympw,cu|WkH9ympw|,Unknown,-1
+he,פסח,142.20,חגים,מדור חגים groups,https://kabbalahmedia.info/he/events/c/PWOJ9aPK?language=he,c|PWOJ9aPK|,Regular,4
+he,פסח,142.20,חגים,מדור חגים groups,https://kabbalahmedia.info/he/events/holidays?holidays=RWqjxgkj,|holidays|,Unknown,-1
+he,פסח,142.20,חגים,מדור חגים groups,https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_RWqjxgkj,p||topic - g3ml0jum_1nyptSIo_RWqjxgkj,Unknown,-1
+he,פסח,142.20,חגים,מדור חגים groups,https://kabbalahmedia.info/he/programs/cu/sQLBSVm9,cu|sQLBSVm9|,Unknown,-1
+he,פסח,142.20,חגים,מדור חגים groups,https://kabbalahmedia.info/he/programs/cu/zGraxAov,cu|zGraxAov|,Unknown,-1
+he,חנוכה,237.00,חגים,מדור חגים groups,https://kabbalahmedia.info/he/events/c/6CMNoQ6i?language=he,c|6CMNoQ6i|,Good,1
+he,חנוכה,237.00,חגים,מדור חגים groups,https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_rxNl0zXg,p||topic - g3ml0jum_1nyptSIo_rxNl0zXg,Unknown,-1
+he,חנוכה,237.00,חגים,מדור חגים groups,https://kabbalahmedia.info/he/events/holidays?holidays=rxNl0zXg,|holidays|,Unknown,-1
+he,פורים,237.00,חגים,מדור חגים groups,https://kabbalahmedia.info/he/events/c/BTc81T71?language=he,c|BTc81T71|,Good,3
+he,פורים,237.00,חגים,מדור חגים groups,https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_ZjqGWdYE,p||topic - g3ml0jum_1nyptSIo_ZjqGWdYE,Unknown,-1
+he,פורים,237.00,חגים,מדור חגים groups,https://kabbalahmedia.info/he/events/holidays?holidays=ZjqGWdYE,|holidays|,Unknown,-1
+he,יום כיפור,355.50,חגים,מדור חגים groups,https://kabbalahmedia.info/he/programs?topic=g3ml0jum_1nyptSIo_oXRmGfzj,p||topic - g3ml0jum_1nyptSIo_oXRmGfzj,Good,2
+he,יום כיפור,355.50,חגים,מדור חגים groups,https://kabbalahmedia.info/he/programs/cu/Wzhb9v1Z?language=he,cu|Wzhb9v1Z|,Unknown,-1
+he,שמעתי,316.50,ספר קבלה,groups - books,https://kabbalahmedia.info/he/sources/qMUUn22b,s|qMUUn22b|,Regular,4
+he,שמעתי,316.50,ספר קבלה,groups - books,https://kabbalahmedia.info/he/lessons?source=bs_qMUUn22b,l||source - bs_qMUUn22b,Good,2
+he,שלבי הסולם,633.00,ספר קבלה,groups - books,https://kabbalahmedia.info/he/sources/jXgT6Pa1,s|jXgT6Pa1|,Unknown,-1
+he,כתבי בעל הסולם,633.00,ספר קבלה,groups - books,https://kabbalahmedia.info/he/sources,s||,Unknown,-1
+he,תהילים,316.50,ספר קבלה,groups - books,https://kabbalahmedia.info/he/programs/cu/pay6i9Ts?language=he,cu|pay6i9Ts|,Unknown,-1
+he,תהילים,316.50,ספר קבלה,groups - books,https://kabbalahmedia.info/he/programs/c/4J0HCOhJ,c|4J0HCOhJ|,Good,1
+he,זוגיות,240.50,נושא חינוך אינטגראלי,,https://kabbalahmedia.info/he/programs?topic=VUpFlBnu_pXpozaXB_BdfLfqsa,p||topic - VUpFlBnu_pXpozaXB_BdfLfqsa,Good,2
+he,זוגיות,240.50,נושא חינוך אינטגראלי,,https://kabbalahmedia.info/he/programs/cu/U52m4xoG,cu|U52m4xoG|,Unknown,-1
+he,ילדים,481.00,נושא חינוך אינטגראלי,,https://kabbalahmedia.info/he/programs?program=children%7C,p||program - children%7C,Unknown,-1
+he,חינוך,481.00,נושא חינוך אינטגראלי,,https://kabbalahmedia.info/he/programs/c/zf4lLwyI?topic=VUpFlBnu_pXpozaXB_g4WzYPpT,c|zf4lLwyI|,Unknown,-1
+he,אהבה,481.00,נושא חינוך אינטגראלי,,https://kabbalahmedia.info/he/programs?topic=VUpFlBnu_jwqdSTx0_BMeF4yJe,p||topic - VUpFlBnu_jwqdSTx0_BMeF4yJe,Good,1
+he,הדור האחרון,201.00,מוזיקה,אין חומר על מוזיקה,https://kabbalahmedia.info/he/sources/oIrPpKn2,s|oIrPpKn2|,Regular,6
+he,הדור האחרון,201.00,מוזיקה,אין חומר על מוזיקה,https://kabbalahmedia.info/he/lessons?source=bs_qMeV5M3Y_oIrPpKn2,l||source - bs_qMeV5M3Y_oIrPpKn2,Good,2
+he,שירת העולמות,201.00,מוזיקה,נשמר כשיעור?,https://kabbalahmedia.info/he/lessons/cu/l0GVJhAD?language=he,cu|l0GVJhAD|,Good,2
+he,שירת העולמות,201.00,מוזיקה,נשמר כשיעור?,https://kabbalahmedia.info/he/lessons/cu/AvV2BJPk?language=he,cu|AvV2BJPk|,Good,1
+he,"רב""ש",87.67,מקובל,group - mekorot,https://kabbalahmedia.info/he/sources,s||,Unknown,-1
+he,"רב""ש",87.67,מקובל,group - mekorot,https://kabbalahmedia.info/he/programs/cu/5i0S9RMc?language=he,cu|5i0S9RMc|,Unknown,-1
+he,"רב""ש",87.67,מקובל,group - mekorot,https://kabbalahmedia.info/he/programs?topic=0db5BBS3_ssPpRE7p_NreYiGEg,p||topic - 0db5BBS3_ssPpRE7p_NreYiGEg,Unknown,-1
+he,רמחל,87.67,מקובל,group - mekorot,https://kabbalahmedia.info/he/programs/cu/OlRfxapi?language=he,cu|OlRfxapi|,Unknown,-1
+he,רמחל,87.67,מקובל,group - mekorot,https://kabbalahmedia.info/he/programs/cu/zyqpiTc3?language=he,cu|zyqpiTc3|,Unknown,-1
+he,רמחל,87.67,מקובל,group - mekorot,https://kabbalahmedia.info/he/programs?topic=0db5BBS3_ssPpRE7p_skJPR8fN,p||topic - 0db5BBS3_ssPpRE7p_skJPR8fN,Unknown,-1
+he,בעל הסולם,87.67,מקובל,group - mekorot,https://kabbalahmedia.info/he/sources,s||,Unknown,-1
+he,בעל הסולם,87.67,מקובל,group - mekorot,https://kabbalahmedia.info/he/programs/cu/maMk3db9?language=he,cu|maMk3db9|,Unknown,-1
+he,בעל הסולם,87.67,מקובל,group - mekorot,https://kabbalahmedia.info/he/programs/cu/AdgO5KVE?language=he,cu|AdgO5KVE|,Unknown,-1
+he,משה,131.50,מקובל,group - mekorot,https://kabbalahmedia.info/he/programs/cu/gC2tRWrH,cu|gC2tRWrH|,Unknown,-1
+he,משה,131.50,מקובל,group - mekorot,https://kabbalahmedia.info/he/programs/cu/AsNLozeK,cu|AsNLozeK|,Unknown,-1
+he,לייטמן,263.00,מקובל,group - mekorot,https://kabbalahmedia.info/he/sources,s||,Unknown,-1
+he,סעודה,123.00,סעודות,,https://kabbalahmedia.info/he/events/meals,|meals|,Unknown,-1
+he,סעודה,123.00,סעודות,,https://kabbalahmedia.info/he/events/cu/pT5iKH5j,cu|pT5iKH5j|,Unknown,-1
+he,סעודות,123.00,סעודות,,https://kabbalahmedia.info/he/events/meals,|meals|,Unknown,-1
+he,סעודות,123.00,סעודות,,https://kabbalahmedia.info/he/events/cu/pT5iKH5j,cu|pT5iKH5j|,Unknown,-1
+he,טיש,123.00,סעודות,,https://kabbalahmedia.info/he/events/cu/pT5iKH5j,cu|pT5iKH5j|,Unknown,-1
+he,טיש,123.00,סעודות,,https://kabbalahmedia.info/he/events/meals,|meals|,Unknown,-1
+he,סעוד,123.00,סעודות,,https://kabbalahmedia.info/he/events/meals,|meals|,Unknown,-1
+he,סעוד,123.00,סעודות,,https://kabbalahmedia.info/he/events/cu/pT5iKH5j,cu|pT5iKH5j|,Unknown,-1
+he,סעודת ראש חודש,246.00,סעודות,,https://kabbalahmedia.info/he/events/meals,|meals|,Unknown,-1
+he,2010,70.67,שנה,Should show congress? grouped material,https://kabbalahmedia.info/he/events?year=2010,|events|year - 2010,Unknown,-1
+he,2010,70.67,שנה,Should show congress? grouped material,https://kabbalahmedia.info/he/events/holidays?year=2010,|holidays|,Unknown,-1
+he,2010,70.67,שנה,Should show congress? grouped material,https://kabbalahmedia.info/he/events/unity-days?year=2010,|unity-days|,Unknown,-1
+he,2013,212.00,שנה,Should show congress? grouped material,https://kabbalahmedia.info/he/events?year=2013,|events|year - 2013,Unknown,-1
+he,2005,212.00,שנה,Should show congress? grouped material,https://kabbalahmedia.info/he/events?year=2005,|events|year - 2005,Unknown,-1
+he,ישיבת חברים,105.00,ישיבת חברים,,https://kabbalahmedia.info/he/events/friends-gatherings,|friends-gatherings|,Unknown,-1
+he,ישיבת חברים,105.00,ישיבת חברים,,https://kabbalahmedia.info/he/events/cu/yz1AmRaJ,cu|yz1AmRaJ|,Unknown,-1
+he,ישיבת החברים,105.00,ישיבת חברים,,https://kabbalahmedia.info/he/events/friends-gatherings,|friends-gatherings|,Unknown,-1
+he,ישיבת החברים,105.00,ישיבת חברים,,https://kabbalahmedia.info/he/events/cu/yz1AmRaJ,cu|yz1AmRaJ|,Unknown,-1
+he,ישיבת,105.00,ישיבת חברים,,https://kabbalahmedia.info/he/events/friends-gatherings,|friends-gatherings|,Unknown,-1
+he,ישיבת,105.00,ישיבת חברים,,https://kabbalahmedia.info/he/events/cu/yz1AmRaJ,cu|yz1AmRaJ|,Unknown,-1
+he,ישיבת החברים העולמית,105.00,ישיבת חברים,,https://kabbalahmedia.info/he/events/friends-gatherings,|friends-gatherings|,Unknown,-1
+he,ישיבת החברים העולמית,105.00,ישיבת חברים,,https://kabbalahmedia.info/he/events/cu/yz1AmRaJ,cu|yz1AmRaJ|,Unknown,-1
+he,שיחות,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/programs?program=%7Ce7yLP2D2,p||program - %7Ce7yLP2D2,Unknown,-1
+he,שיחות,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/programs/c/YvPmFc3Z,c|YvPmFc3Z|,Good,1
+he,שיחות,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/lectures,|lectures|,Unknown,-1
+he,שיחות,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/cu/vEsdFJMI,cu|vEsdFJMI|,Unknown,-1
+he,שיעור ווירטואלי,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/lectures/c/VwCQ0OBq,c|VwCQ0OBq|,Unknown,-1
+he,שיעור ווירטואלי,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/lectures/c/pjoTcgvx,c|pjoTcgvx|,Unknown,-1
+he,שיעור ווירטואלי,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/virtual,|virtual|,Unknown,-1
+he,שיעור ווירטואלי,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/cu/028ChjrL,cu|028ChjrL|,Unknown,-1
+he,שיעור למתחילים,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/lectures/c/VwCQ0OBq,c|VwCQ0OBq|,Unknown,-1
+he,שיעור למתחילים,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/lectures/c/pjoTcgvx,c|pjoTcgvx|,Unknown,-1
+he,שיעור למתחילים,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/lectures,|lectures|,Unknown,-1
+he,שיעור למתחילים,52.00,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/cu/vEsdFJMI,cu|vEsdFJMI|,Unknown,-1
+he,הרצאה,69.33,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/lectures,|lectures|,Unknown,-1
+he,הרצאה,69.33,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/lectures,|lectures|,Unknown,-1
+he,הרצאה,69.33,שיעור קבלה כללי,,https://kabbalahmedia.info/he/lessons/cu/vEsdFJMI,cu|vEsdFJMI|,Good,1
+he,מרשמלו,200.00,תכניות ילדים,,https://kabbalahmedia.info/he/programs?program=%7CJRR182e6,p||program - %7CJRR182e6,Unknown,-1
+he,משחק ילדים,200.00,תכניות ילדים,,https://kabbalahmedia.info/he/programs?program=%7CzQ1D7FeD,p||program - %7CzQ1D7FeD,Unknown,-1
+he,מאירה והחברים,200.00,תכניות ילדים,,https://kabbalahmedia.info/he/programs?program=%7CGGNcvo1Y,p||program - %7CGGNcvo1Y,Unknown,-1
+he,שרטוטים,199.00,שיעור בוקר,אין שרטוטים?,https://kabbalahmedia.info/he/lessons,|lessons|,Unknown,-1
+he,שיעור בוקר,99.50,שיעור בוקר,,https://kabbalahmedia.info/he/lessons,|lessons|,Unknown,-1
+he,שיעור בוקר,99.50,שיעור בוקר,,https://kabbalahmedia.info/he/lessons/cu/NqXlcgay,cu|NqXlcgay|,Unknown,-1
+he,קטעים נבחרים,199.00,שיעור בוקר,no uid,https://kabbalahmedia.info/he/programs/c/G30TMsPn,c|G30TMsPn|,Good,1
+he,חיים חדשים זוגיות,59.67,חיים חדשים + נושא,,https://kabbalahmedia.info/he/programs/cu/U52m4xoG,cu|U52m4xoG|,Unknown,-1
+he,חיים חדשים זוגיות,59.67,חיים חדשים + נושא,,https://kabbalahmedia.info/he/programs/cu/JIJqiB7M,cu|JIJqiB7M|,Unknown,-1
+he,חיים חדשים זוגיות,59.67,חיים חדשים + נושא,,https://kabbalahmedia.info/he/programs/cu/Xrk8LEb5,cu|Xrk8LEb5|,Unknown,-1
+he,חיים חדשים משפחה,179.00,חיים חדשים + נושא,,https://kabbalahmedia.info/he/programs/cu/gPGEY3cl,cu|gPGEY3cl|,Unknown,-1
+he,חיים חדשים נוער,179.00,חיים חדשים + נושא,,https://kabbalahmedia.info/he/programs/cu/5BlnVH4Q,cu|5BlnVH4Q|,Good,3
+he,חיים חדשים הריון,89.50,חיים חדשים + נושא,,https://kabbalahmedia.info/he/programs/cu/Hxxmgpb0,cu|Hxxmgpb0|,Unknown,-1
+he,חיים חדשים הריון,89.50,חיים חדשים + נושא,,https://kabbalahmedia.info/he/programs/cu/Eumgl3Jo,cu|Eumgl3Jo|,Unknown,-1
+he,חיים חדשים קטעים נבחרים,179.00,חיים חדשים + נושא,groups,https://kabbalahmedia.info/he/programs/c/G30TMsPn,c|G30TMsPn|,Good,1
+he,רדיו,158.00,אתר,,https://kabbalahmedia.info/he/programs/c/Dx8UewbL,c|Dx8UewbL|,Unknown,-1
+he,הכנה לישיבת החברים,155.00,הכנות,,https://kabbalahmedia.info/he/lessons/cu/Fs4Pajlx,cu|Fs4Pajlx|,Regular,5
+he,הכנה לשיעור,77.50,הכנות,,https://kabbalahmedia.info/he/lessons/cu/NqXlcgay,cu|NqXlcgay|,Unknown,-1
+he,הכנה לשיעור,77.50,הכנות,,https://kabbalahmedia.info/he/lessons,|lessons|,Unknown,-1
+he,הכנה לכנס רומניה,155.00,הכנות,,https://kabbalahmedia.info/he/lessons/cu/Cf8xzLNH,cu|Cf8xzLNH|,Regular,4
+he,הכנה לפסח,155.00,הכנות,missing group by event (all pesah) and latest,https://kabbalahmedia.info/he/events/c/PWOJ9aPK?language=he,c|PWOJ9aPK|,Unknown,-1
+he,קבוצה צעירה,148.00,קבוצה מהכלי,,https://kabbalahmedia.info/he/programs/cu/dhwDY32y?language=he,cu|dhwDY32y|,Good,2
+he,מוסקבה,148.00,קבוצה מהכלי,,https://kabbalahmedia.info/he/events?location=Russia%7CMoscow,|events|location - Russia%7CMoscow,Unknown,-1
+he,צרפת,148.00,קבוצה מהכלי,,https://kabbalahmedia.info/he/events?location=France,|events|location - France,Unknown,-1
+he,פיטר,148.00,קבוצה מהכלי,,https://kabbalahmedia.info/he/events?location=Russia%7CSaint%20Petersburg,|events|location - Russia%7CSaint%20Petersburg,Unknown,-1
+he,שיחה על הפצה,118.00,הפצה,,https://kabbalahmedia.info/he/lessons/cu/Fl6EkY5L,cu|Fl6EkY5L|,Good,1
+he,נשים,34.67,נשים,מדור נשים groups,https://kabbalahmedia.info/he/lessons/cu/LCESK6sL,cu|LCESK6sL|,Unknown,-1
+he,נשים,34.67,נשים,מדור נשים groups,https://kabbalahmedia.info/he/lessons/women,|women|,Unknown,-1
+he,נשים,34.67,נשים,מדור נשים groups,https://kabbalahmedia.info/he/programs/c/Mx6yjJ5F,c|Mx6yjJ5F|,Good,1
+he,סדנאות נשים,52.00,נשים,מדור נשים groups,https://kabbalahmedia.info/he/lessons/women,|women|,Unknown,-1
+he,סדנאות נשים,52.00,נשים,מדור נשים groups,https://kabbalahmedia.info/he/lessons/cu/LCESK6sL,cu|LCESK6sL|,Unknown,-1
+he,שיעור נשים,52.00,נשים,מדור נשים groups,https://kabbalahmedia.info/he/lessons/women,|women|,Unknown,-1
+he,שיעור נשים,52.00,נשים,מדור נשים groups,https://kabbalahmedia.info/he/lessons/cu/LCESK6sL,cu|LCESK6sL|,Unknown,-1
+he,תפקיד האישה,104.00,נשים,מדור נשים groups,https://kabbalahmedia.info/he/lessons/cu/VwqLxdyT?language=he,cu|VwqLxdyT|,Unknown,-1
+he,אגרת נ,41.00,אגרות,,https://kabbalahmedia.info/he/sources/ib0w1sqv,s|ib0w1sqv|,Regular,4
+he,אגרת נ,41.00,אגרות,,https://kabbalahmedia.info/he/sources/cT6IAU0f,s|cT6IAU0f|,Good,2
+he,אגרת,41.00,אגרות,,https://kabbalahmedia.info/he/sources/9ZIJ9CkI,s|9ZIJ9CkI|,Unknown,-1
+he,אגרת,41.00,אגרות,,https://kabbalahmedia.info/he/sources/VUcyhrcS,s|VUcyhrcS|,Unknown,-1
+he,אגרות,41.00,אגרות,,https://kabbalahmedia.info/he/sources/DVSS0xAR,s|DVSS0xAR|,Unknown,-1
+he,אגרות,41.00,אגרות,,https://kabbalahmedia.info/he/sources/b8SHlrfH,s|b8SHlrfH|,Good,3
+he,"אגרת ט""ז",41.00,אגרות,,https://kabbalahmedia.info/he/sources/OHNHBjqH,s|OHNHBjqH|,Regular,4
+he,"אגרת ט""ז",41.00,אגרות,,https://kabbalahmedia.info/he/sources/0UXdbMmk,s|0UXdbMmk|,Good,3
+he,אגרת טז,41.00,אגרות,,https://kabbalahmedia.info/he/sources/OHNHBjqH,s|OHNHBjqH|,Regular,4
+he,אגרת טז,41.00,אגרות,,https://kabbalahmedia.info/he/sources/0UXdbMmk,s|0UXdbMmk|,Good,3
+he,הנקודה שבלב,66.00,ספר הפצה,,https://kabbalahmedia.info/he/programs?program=%7CJZkZxLgv,p||program - %7CJZkZxLgv,Unknown,-1
+he,מבט לקבלה,33.00,ספר הפצה,,https://kabbalahmedia.info/he/programs/cu/24gMqvTk,cu|24gMqvTk|,Good,1
+he,מבט לקבלה,33.00,ספר הפצה,,https://kabbalahmedia.info/he/programs/cu/24gMqvTk?language=he,cu|24gMqvTk|,Good,1
+he,01/09/2015,31.50,תאריך,Not showing the lessons of that day,https://kabbalahmedia.info/he/lessons/c/yEmCC7kf?language=he,c|yEmCC7kf|,Unknown,-1
+he,01/09/2015,31.50,תאריך,Not showing the lessons of that day,https://kabbalahmedia.info/he/programs?dates=2015-09-01_2015-09-01,p||dates - 2015-09-01_2015-09-01,Unknown,-1
+he,2012-10-28,31.50,תאריך,Not showing the lessons of that day,https://kabbalahmedia.info/he/lessons/c/P8JL6hln?language=he,c|P8JL6hln|,Unknown,-1
+he,2012-10-28,31.50,תאריך,Not showing the lessons of that day,https://kabbalahmedia.info/he/programs?dates=2015-10-28_2015-10-28,p||dates - 2015-10-28_2015-10-28,Unknown,-1
+he,דרורי,56.00,אורח,no uid,https://kabbalahmedia.info/he/events/cu/mgLQmqkl?language=he,cu|mgLQmqkl|,Good,1
+he,גיל קופטש,14.00,אורח,,https://kabbalahmedia.info/he/programs/c/4D87X3Oo,c|4D87X3Oo|,Good,1
+he,גיל קופטש,14.00,אורח,,https://kabbalahmedia.info/he/programs/cu/es60Vfio?language=he,cu|es60Vfio|,Regular,6
+he,גיל קופטש,14.00,אורח,,https://kabbalahmedia.info/he/programs/cu/vTCcgK1w?language=he,cu|vTCcgK1w|,Regular,8
+he,גיל קופטש,14.00,אורח,,https://kabbalahmedia.info/he/lessons/cu/xlxAzvjI?language=he,cu|xlxAzvjI|,Regular,4
+he,"הקלטות רב""ש",24.00,"הקלטות רב""ש",,https://kabbalahmedia.info/he/lessons/rabash,|rabash|,Unknown,-1
+he,"שיעורי רב""ש",24.00,"הקלטות רב""ש",,https://kabbalahmedia.info/he/lessons/rabash,|rabash|,Unknown,-1
+he,הקלטות רבש,24.00,"הקלטות רב""ש",,https://kabbalahmedia.info/he/lessons/rabash,|rabash|,Unknown,-1
+he,יורצהייט,22.00,ייורצאייט,,https://kabbalahmedia.info/he/events/meals,|meals|,Unknown,-1
+he,יורצ,22.00,ייורצאייט,,https://kabbalahmedia.info/he/events/meals,|meals|,Unknown,-1
+he,יורצאייט,22.00,ייורצאייט,,https://kabbalahmedia.info/he/events/meals,|meals|,Unknown,-1
+he,האומה,18.00,מאמר הפצה,,https://kabbalahmedia.info/he/sources/Zo6BQz8E,s|Zo6BQz8E|,Unknown,-1
+he,מסמך ארוסה,18.00,מאמר הפצה,,https://kabbalahmedia.info/he/lessons/cu/I3d6eaKU?language=en,cu|I3d6eaKU|,Unknown,-1
+he,ארוסה,18.00,מאמר הפצה,,https://kabbalahmedia.info/he/lessons/cu/I3d6eaKU?language=en,cu|I3d6eaKU|,Unknown,-1
+he,אמריקה,8.00,אקטואליה,,https://kabbalahmedia.info/he/events?location=United%20States,|events|location - United%20States,Unknown,-1

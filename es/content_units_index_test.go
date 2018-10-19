@@ -47,7 +47,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	r.Nil(indexer.RefreshAll())
 
 	fmt.Println("Validate we have 2 searchable content units.")
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
+	suite.validateNames(indexNameEn, indexer, []string{"something", "something else"})
 
 	fmt.Println("Add a file to content unit and validate.")
 	transcriptContent := "1234"
@@ -55,7 +55,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	file := mdbmodels.File{ID: 1, Name: "heb_o_rav_2017-05-25_lesson_achana_n1_p0.doc", UID: "dEvgPVpr", Language: null.String{"he", true}, Secure: 0, Published: true}
 	f1UID := suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
 	r.Nil(indexer.FileUpdate(f1UID))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
+	suite.validateNames(indexNameEn, indexer, []string{"something", "something else"})
 	suite.validateContentUnitFiles(indexNameHe, indexer, null.Int{len(transcriptContent), true})
 	fmt.Println("Remove a file from content unit and validate.")
 	suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, false)
@@ -104,54 +104,54 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	//r.Nil(es.DumpDB(common.DB, "TestContentUnitsIndex, AfterDB"))
 	//r.Nil(es.DumpIndexes(common.ESC, "TestContentUnitsIndex, AfterIndexes", consts.ES_RESULT_TYPE_UNITS))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something else"})
-	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
-	suite.validateContentUnitNames(indexNameRu, indexer, []string{})
+	suite.validateNames(indexNameEn, indexer, []string{"something else"})
+	suite.validateNames(indexNameHe, indexer, []string{})
+	suite.validateNames(indexNameRu, indexer, []string{})
 
 	fmt.Println("Make content unit not secured and validate.")
 	suite.ucu(es.ContentUnit{MDB_UID: cu2UID}, consts.LANG_ENGLISH, true, false)
 	r.Nil(indexer.ContentUnitUpdate(cu2UID))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
-	suite.validateContentUnitNames(indexNameHe, indexer, []string{})
-	suite.validateContentUnitNames(indexNameRu, indexer, []string{})
+	suite.validateNames(indexNameEn, indexer, []string{})
+	suite.validateNames(indexNameHe, indexer, []string{})
+	suite.validateNames(indexNameRu, indexer, []string{})
 
 	fmt.Println("Secure and publish content units again and check we have 2 searchable content units.")
 	suite.ucu(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, true, true)
 	r.Nil(indexer.ContentUnitUpdate(cu1UID))
 	suite.ucu(es.ContentUnit{MDB_UID: cu2UID}, consts.LANG_ENGLISH, true, true)
 	r.Nil(indexer.ContentUnitUpdate(cu2UID))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else"})
-	suite.validateContentUnitNames(indexNameHe, indexer, []string{"משהוא"})
-	suite.validateContentUnitNames(indexNameRu, indexer, []string{"чтото"})
+	suite.validateNames(indexNameEn, indexer, []string{"something", "something else"})
+	suite.validateNames(indexNameHe, indexer, []string{"משהוא"})
+	suite.validateNames(indexNameRu, indexer, []string{"чтото"})
 
 	fmt.Println("Validate adding content unit incrementally.")
 	var cu3UID string
 	cu3UID = suite.ucu(es.ContentUnit{Name: "third something"}, consts.LANG_ENGLISH, true, true)
 	UIDs = append(UIDs, cu3UID)
 	r.Nil(indexer.ContentUnitUpdate(cu3UID))
-	suite.validateContentUnitNames(indexNameEn, indexer,
+	suite.validateNames(indexNameEn, indexer,
 		[]string{"something", "something else", "third something"})
 
 	fmt.Println("Update content unit and validate.")
 	suite.ucu(es.ContentUnit{MDB_UID: cu3UID, Name: "updated third something"}, consts.LANG_ENGLISH, true, true)
 	r.Nil(indexer.ContentUnitUpdate(cu3UID))
-	suite.validateContentUnitNames(indexNameEn, indexer,
+	suite.validateNames(indexNameEn, indexer,
 		[]string{"something", "something else", "updated third something"})
 
 	fmt.Println("Delete content unit and validate nothing changes as the database did not change!")
 	r.Nil(indexer.ContentUnitUpdate(cu2UID))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "something else", "updated third something"})
+	suite.validateNames(indexNameEn, indexer, []string{"something", "something else", "updated third something"})
 
 	fmt.Println("Now actually delete the content unit also from database.")
 	r.Nil(deleteContentUnits([]string{cu2UID}))
 	r.Nil(indexer.ContentUnitUpdate(cu2UID))
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{"something", "updated third something"})
+	suite.validateNames(indexNameEn, indexer, []string{"something", "updated third something"})
 
 	fmt.Println("Delete units, reindex and validate we have 0 searchable units.")
 	r.Nil(deleteContentUnits(UIDs))
 	r.Nil(deleteSources(sourceUIDs))
 	r.Nil(indexer.ReindexAll())
-	suite.validateContentUnitNames(indexNameEn, indexer, []string{})
+	suite.validateNames(indexNameEn, indexer, []string{})
 
 	//fmt.Println("Restore docx-folder path to original.")
 	//mdb.DocFolder = originalDocxPath
@@ -185,7 +185,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 	r.Nil(indexer.RefreshAll())
 
 	fmt.Printf("\n\n\nValidate we have 2 searchable content units with proper content types.\n\n")
-	suite.validateContentUnitNames(indexName, indexer, []string{"something", "something else"})
+	suite.validateNames(indexName, indexer, []string{"something", "something else"})
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{
 		cu1UID: {consts.CT_DAILY_LESSON, consts.CT_CONGRESS},
 		cu2UID: {consts.CT_SPECIAL_LESSON},
@@ -242,7 +242,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 	fmt.Printf("\n\n\nDelete units, reindex and validate we have 0 searchable units.\n\n")
 	r.Nil(deleteContentUnits(UIDs))
 	r.Nil(indexer.ReindexAll())
-	suite.validateContentUnitNames(indexName, indexer, []string{})
+	suite.validateNames(indexName, indexer, []string{})
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{})
 
 	// Remove test indexes.

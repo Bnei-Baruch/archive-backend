@@ -129,6 +129,9 @@ func (result *Result) ToDebugString() string {
 }
 
 func Suffixes(title string) []string {
+	if title == "" {
+		return []string{}
+	}
 	parts := strings.Split(strings.TrimSpace(title), " ")
 	ret := []string{}
 	for i, _ := range parts {

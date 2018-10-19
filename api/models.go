@@ -5,6 +5,7 @@ import (
 
 	"gopkg.in/volatiletech/null.v6"
 
+	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -196,6 +197,27 @@ type SimpleModeResponse struct {
 	ListResponse
 	Lessons []*Collection  `json:"lessons"`
 	Others  []*ContentUnit `json:"others"`
+}
+
+type EvalQueryRequest struct {
+	serverUrl          string           `json:"server_url"`
+	EvalQuery          search.EvalQuery `json:"eval_query"`
+	ExpectationStrings []string         `json:"expectation_strings"`
+}
+
+type EvalQueryResponse struct {
+	EvalResult search.EvalResult `json:"eval_result"`
+}
+
+type EvalSetRequest struct {
+	ServerUrl    string `json:"server_url"`
+	RecallSetCSV string `json:"recall_set_csv"`
+}
+
+type EvalSetResponse struct {
+	Results    search.EvalResults    `json:"results"`
+	Losses     map[int][]search.Loss `json:"losses"`
+	FlatReport string                `json:"flat_report"`
 }
 
 func NewCollectionsResponse() *CollectionsResponse {

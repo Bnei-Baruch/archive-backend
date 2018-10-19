@@ -48,6 +48,10 @@ const (
 	CT_BOOK                  = "BOOK"
 	CT_BLOG_POST             = "BLOG_POST"
 
+	// Content types for additional Elastic results
+	SCT_BLOG_POST = "R_BLOG_POST"
+	SCT_TWEET     = "R_TWEET"
+
 	// Content Role types
 	CR_LECTURER = "LECTURER"
 
@@ -277,6 +281,7 @@ const (
 	FILTER_UNITS_CONTENT_TYPES       = "units_content_types"
 	FILTER_COLLECTIONS_CONTENT_TYPES = "collections_content_types"
 	FILTER_SECTION_SOURCES           = "filter_section_sources"
+	FILTER_LANGUAGE                  = "media_language"
 )
 
 // Use to identify and map request filters
@@ -290,6 +295,7 @@ var FILTERS = map[string]string{
 	FILTER_UNITS_CONTENT_TYPES:       "content_type",
 	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
 	FILTER_SECTION_SOURCES:           "filter_section_sources",
+	FILTER_LANGUAGE:                  "media_language",
 }
 
 // ElasticSearch 'es'
@@ -301,9 +307,26 @@ const ES_RESULT_TYPE_UNITS = "units"
 const ES_RESULT_TYPE_SOURCES = "sources"
 const ES_RESULT_TYPE_COLLECTIONS = "collections"
 const ES_RESULT_TYPE_TAGS = "tags"
+const ES_RESULT_TYPE_BLOG_POSTS = "posts"
+const ES_RESULT_TYPE_TWEETS = "tweets"
 
-var ES_SEARCH_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_SOURCES, ES_RESULT_TYPE_COLLECTIONS}
-var ES_ALL_RESULT_TYPES = []string{ES_RESULT_TYPE_UNITS, ES_RESULT_TYPE_TAGS, ES_RESULT_TYPE_SOURCES, ES_RESULT_TYPE_COLLECTIONS}
+//  ToDo: Add ES_RESULT_TYPE_TWEETS to ES_SEARCH_RESULT_TYPES when the tweets handling in front end will be ready.
+var ES_SEARCH_RESULT_TYPES = []string{
+	ES_RESULT_TYPE_UNITS,
+	ES_RESULT_TYPE_SOURCES,
+	ES_RESULT_TYPE_COLLECTIONS,
+	ES_RESULT_TYPE_BLOG_POSTS,
+	// ES_RESULT_TYPE_TWEETS,
+}
+
+var ES_ALL_RESULT_TYPES = []string{
+	ES_RESULT_TYPE_UNITS,
+	ES_RESULT_TYPE_TAGS,
+	ES_RESULT_TYPE_SOURCES,
+	ES_RESULT_TYPE_COLLECTIONS,
+	ES_RESULT_TYPE_BLOG_POSTS,
+	ES_RESULT_TYPE_TWEETS,
+}
 
 const (
 	MEDIA_MP4  = "video/mp4"

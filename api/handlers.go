@@ -18,6 +18,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/olivere/elastic.v6"
 
@@ -460,7 +461,7 @@ func SearchHandler(c *gin.Context) {
 	if _, ok := consts.SORT_BY_VALUES[sortBy]; ok {
 		sortByVal = sortBy
 	}
-	if len(query.Term) == 0 {
+    if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
 		sortByVal = consts.SORT_BY_SOURCE_FIRST
 	}
 
@@ -482,6 +483,24 @@ func SearchHandler(c *gin.Context) {
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
 	log.Debugf("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
 	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
+	for k, v := range query.Filters {
+		if k == consts.FILTER_LANGUAGE {
+			addLang := true
+			for _, flang := range v {
+				for _, ilang := range query.LanguageOrder {
+					if flang == ilang {
+						// language already exist
+						addLang = false
+						break
+					}
+				}
+				if addLang {
+					query.LanguageOrder = append(query.LanguageOrder, flang)
+				}
+			}
+			break
+		}
+	}
 
 	res, err := se.DoSearch(
 		context.TODO(),
@@ -2368,4 +2387,70 @@ func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error)
 		ids[idx] = xu.ID
 	}
 	return
+}
+
+func EvalIndexHandler(c *gin.Context) {
+	r := CollectionsRequest{
+		WithUnits: true,
+	}
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
+func EvalQueryHandler(c *gin.Context) {
+	r := EvalQueryRequest{}
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	if r.serverUrl == "" {
+		r.serverUrl = fmt.Sprintf("http://localhost%s", viper.GetString("server.bind-address"))
+	}
+
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	r.EvalQuery.Expectations = []search.Expectation{}
+	for _, es := range r.ExpectationStrings {
+		parsed := search.ParseExpectation(es, db)
+		r.EvalQuery.Expectations = append(r.EvalQuery.Expectations, parsed)
+	}
+
+	resp := EvalQueryResponse{EvalResult: search.EvaluateQuery(r.EvalQuery, r.serverUrl)}
+	concludeRequest(c, resp, nil)
+}
+
+func EvalSetHandler(c *gin.Context) {
+	r := EvalSetRequest{}
+	if err := c.Bind(&r); err != nil {
+		return
+	}
+
+	log.Infof("Request: %+v.", r)
+
+	if r.ServerUrl == "" {
+		r.ServerUrl = fmt.Sprintf("http://localhost%s", viper.GetString("server.bind-address"))
+	}
+
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	queries, err := search.ReadEvalSet(strings.NewReader(r.RecallSetCSV), db)
+	if err != nil {
+		concludeRequest(c, nil, NewInternalError(err))
+	} else {
+		results, losses, err := search.Eval(queries, r.ServerUrl)
+		resp := EvalSetResponse{Results: results, Losses: losses}
+		err, flatReport := search.CsvToString(search.ResultsByExpectation(queries, results))
+		if err != nil {
+			concludeRequest(c, resp, NewInternalError(err))
+		} else {
+			resp.FlatReport = flatReport
+			if err != nil {
+				concludeRequest(c, resp, NewInternalError(err))
+			} else {
+				concludeRequest(c, resp, nil)
+			}
+		}
+	}
 }

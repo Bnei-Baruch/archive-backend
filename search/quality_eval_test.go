@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"testing"
 
+	"gopkg.in/olivere/elastic.v6"
+
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -29,6 +31,7 @@ type QualityEvalSuite struct {
 }
 
 func (suite *QualityEvalSuite) SetupSuite() {
+	rand.Seed(1234)
 	utils.InitConfig("", "../")
 	err := suite.InitTestDB()
 	if err != nil {
@@ -52,6 +55,17 @@ func (suite *QualityEvalSuite) TearDownSuite() {
 // a normal test function and pass our suite to suite.Run
 func TestEval(t *testing.T) {
 	suite.Run(t, new(QualityEvalSuite))
+}
+
+func createHitSourceExpectation(index string, hitType string, resultType string, mdbUid string, expectation string) (elastic.SearchHit, search.HitSource, search.Expectation) {
+    return elastic.SearchHit{Index: index, Type: hitType}, search.HitSource{ResultType: resultType, MdbUid: mdbUid}, search.ParseExpectation(expectation, nil)
+}
+
+func (suite *QualityEvalSuite) TestHitMatchesExpectation() {
+    fmt.Printf("\n------ TestHitMatchesExpectation ------\n\n")
+	r := require.New(suite.T())
+    hit, hitSource, expectation := createHitSourceExpectation("intent-tag", "lessons", "tags", "zuwiS72C", "https://kabbalahmedia.info/he/lessons?topic=0db5BBS3_Gvm4nh0t_zuwiS72C")
+    r.True(search.HitMatchesExpectation(&hit, hitSource, expectation))
 }
 
 func (suite *QualityEvalSuite) TestParseExpectation() {
@@ -217,6 +231,7 @@ func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expect
 	// Expectation Source is not tested.
 
 	resultExp := search.ParseExpectation(url, common.DB)
+	fmt.Printf("Url: %s\nParsed: %+v\nExpeted: %+v\n", url, resultExp, exp)
 	r.Equal(resultExp.Uid, exp.Uid)
 	r.Equal(resultExp.Type, exp.Type)
 	if (exp.Filters != nil && resultExp.Filters == nil) || (exp.Filters == nil && resultExp.Filters != nil) {
@@ -226,6 +241,7 @@ func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expect
 		r.Equal(int64(len(resultExp.Filters)), int64(len(exp.Filters)))
 		r.ElementsMatch(resultExp.Filters, exp.Filters)
 	}
+	fmt.Printf("\n")
 }
 
 func (suite *QualityEvalSuite) updateSourceParent(child mdbmodels.Source, parentSource mdbmodels.Source, insertChild bool, insertParent bool) error {
