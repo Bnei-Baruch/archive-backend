@@ -180,16 +180,17 @@ func PublisherUpdate(d Data) {
 	putToIndexer(indexer.PublisherUpdate, d.Payload["uid"].(string))
 }
 
-func BlogPostCreate(d Data) {
-	putToIndexer(indexer.BlogPostUpdate, d.Payload["id"].(string))
+func BlogPostUpdate(d Data) {
+	id := fmt.Sprintf("%d-%s", d.Payload["blogId"].(int64), d.Payload["wpId"].(string))
+	putToIndexer(indexer.BlogPostUpdate, id)
 }
 
-func BlogPostUpdate(d Data) {
-	putToIndexer(indexer.BlogPostUpdate, d.Payload["id"].(string))
+func BlogPostCreate(d Data) {
+	BlogPostUpdate(d)
 }
 
 func BlogPostDelete(d Data) {
-	putToIndexer(indexer.BlogPostUpdate, d.Payload["id"].(string))
+	BlogPostUpdate(d)
 }
 
 func TweetCreate(d Data) {
