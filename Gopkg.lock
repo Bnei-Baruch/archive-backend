@@ -114,6 +114,12 @@
   version = "v0.0.2"
 
 [[projects]]
+  name = "github.com/mattn/go-runewidth"
+  packages = ["."]
+  revision = "ce7b0b5c7b45a81508558cd1dba6bb1e4ddb51bb"
+  version = "v0.0.3"
+
+[[projects]]
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
   revision = "d0303fe809921458f417bcf828397a65db30a7e4"
@@ -139,6 +145,12 @@
   name = "github.com/nats-io/nuid"
   packages = ["."]
   revision = "33c603157d6fd1b0ac2599bcc4a286b36479a06d"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/olekukonko/tablewriter"
+  packages = ["."]
+  revision = "be2c049b30ccd4d3fd795d6bf7dce74e42eeedaa"
 
 [[projects]]
   name = "github.com/olivere/elastic"
@@ -207,6 +219,12 @@
   revision = "c1de95864d73a5465492829d7cb2dd422b19ac96"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/ssor/bom"
+  packages = ["."]
+  revision = "6386211fdfcf24c0bfbdaceafd02849ed9a8a509"
+
+[[projects]]
   name = "github.com/stretchr/testify"
   packages = [
     "assert",
@@ -229,7 +247,11 @@
 
 [[projects]]
   name = "golang.org/x/net"
-  packages = ["context"]
+  packages = [
+    "context",
+    "html",
+    "html/atom"
+  ]
   revision = "fe686d45ea04bc1bd4eff6a52865ce8757320325"
 
 [[projects]]
@@ -290,9 +312,15 @@
   packages = ["."]
   revision = "cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b"
 
+[[projects]]
+  branch = "master"
+  name = "jaytaylor.com/html2text"
+  packages = ["."]
+  revision = "57d518f124b0cf46ea2021f25a01396b3522e6fb"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "bc8797afe25a77071361fd5ff5ec69b15403421ebca4f672d28c8586e0239e53"
+  inputs-digest = "663c4f98dc22d3bc7b59f22991938a0899c626e607a038e1e3bd83c34f9d587b"
   solver-name = "gps-cdcl"
   solver-version = 1
