@@ -2373,28 +2373,29 @@ func mdbToBlogPost(post *mdbmodels.BlogPost) *BlogPost {
 }
 
 func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error) {
+	if len(contentUnits) == 0 {
+		return
+	}
+
 	cuids := make([]interface{}, len(contentUnits))
 	list := make([]string, len(contentUnits))
 	for idx, cu := range contentUnits {
 		cuids[idx] = cu.ID
 		list[idx] = string(cu.ID)
 	}
+
+	// keep order of records exactly as in cuids
+	idsList := strings.Join(list, ",")
+
 	mods := []qm.QueryMod{
 		qm.Select("id"),
+		qm.WhereIn("uid in ?", cuids...),
+		qm.InnerJoin("unnest('{" + idsList + "}'::varchar[]) WITH ORDINALITY t(uid, ord) USING(uid)"),
+		qm.OrderBy("t.ord"),
 	}
-	if len(cuids) > 0 {
-		mods = append(mods, qm.WhereIn("uid in ?", cuids...))
-		// keep order of records exactly as in cuids
-		id_order := strings.Join(list, ",")
-		mods = append(mods, qm.InnerJoin("unnest('{" + id_order + "}'::varchar[]) WITH ORDINALITY t(uid, ord) USING(uid)"))
-		mods = append(mods, qm.OrderBy("t.ord"))
-	} else {
-		mods = append(mods, qm.OrderBy("created_at desc"))
-		mods = append(mods, qm.Limit(20))
-	}
+
 	xus, err := mdbmodels.ContentUnits(db, mods...).All()
 	if err != nil {
-		ids = []int64{}
 		return
 	}
 	ids = make([]int64, len(xus))
