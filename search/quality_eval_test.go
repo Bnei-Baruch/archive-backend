@@ -4,10 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"testing"
 
+	"github.com/Bnei-Baruch/sqlboiler/boil"
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
+	"github.com/pkg/errors"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -15,13 +23,6 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
-	"github.com/Bnei-Baruch/sqlboiler/boil"
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"gopkg.in/volatiletech/null.v6"
 )
 
 type QualityEvalSuite struct {
@@ -58,14 +59,14 @@ func TestEval(t *testing.T) {
 }
 
 func createHitSourceExpectation(index string, hitType string, resultType string, mdbUid string, expectation string) (elastic.SearchHit, search.HitSource, search.Expectation) {
-    return elastic.SearchHit{Index: index, Type: hitType}, search.HitSource{ResultType: resultType, MdbUid: mdbUid}, search.ParseExpectation(expectation, nil)
+	return elastic.SearchHit{Index: index, Type: hitType}, search.HitSource{ResultType: resultType, MdbUid: mdbUid}, search.ParseExpectation(expectation, nil)
 }
 
 func (suite *QualityEvalSuite) TestHitMatchesExpectation() {
-    fmt.Printf("\n------ TestHitMatchesExpectation ------\n\n")
+	fmt.Printf("\n------ TestHitMatchesExpectation ------\n\n")
 	r := require.New(suite.T())
-    hit, hitSource, expectation := createHitSourceExpectation("intent-tag", "lessons", "tags", "zuwiS72C", "https://kabbalahmedia.info/he/lessons?topic=0db5BBS3_Gvm4nh0t_zuwiS72C")
-    r.True(search.HitMatchesExpectation(&hit, hitSource, expectation))
+	hit, hitSource, expectation := createHitSourceExpectation("intent-tag", "lessons", "tags", "zuwiS72C", "https://kabbalahmedia.info/he/lessons?topic=0db5BBS3_Gvm4nh0t_zuwiS72C")
+	r.True(search.HitMatchesExpectation(&hit, hitSource, expectation))
 }
 
 func (suite *QualityEvalSuite) TestParseExpectation() {
