@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"runtime/debug"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 type WorkQueue interface {
