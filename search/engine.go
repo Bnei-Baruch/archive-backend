@@ -176,6 +176,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		}
 	}
 
+	defer utils.TimeTrack(time.Now(), "AddIntents")
+
 	checkContentUnitsTypes := []string{}
 	if values, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
 		for _, value := range values {

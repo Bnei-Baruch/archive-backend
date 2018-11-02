@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 )
-
 
 const uidBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 const lettersBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -137,4 +137,9 @@ func PrintMap(m interface{}) (string, error) {
 		}
 	}
 	return strings.Join(values, ","), nil
+}
+
+func TimeTrack(start time.Time, operation string) {
+	elapsed := time.Since(start)
+	log.Infof("%s took %s", operation, elapsed)
 }
