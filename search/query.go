@@ -1,6 +1,8 @@
 package search
 
 import (
+	"time"
+
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -167,6 +169,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 }
 
 func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchRequest {
+	defer utils.TimeTrack(time.Now(), "DoSearch.NewResultsSearchRequests")
 	requests := make([]*elastic.SearchRequest, 0)
 	indices := make([]string, len(options.query.LanguageOrder))
 	for i := range options.query.LanguageOrder {
