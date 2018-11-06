@@ -141,5 +141,5 @@ func PrintMap(m interface{}) (string, error) {
 
 func TimeTrack(start time.Time, operation string) {
 	elapsed := time.Since(start)
-	log.Infof("%s took %s", operation, elapsed)
+	log.Infof("PERFORMANCE MEASURMENT: %s took %s", operation, elapsed)
 }

@@ -468,7 +468,6 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
 	defer utils.TimeTrack(time.Now(), "DoSearch")
 
-	//  TBD more time trackings inside AddIntents
 	if err := e.AddIntents(&query, preference); err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
 	}
