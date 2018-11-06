@@ -105,12 +105,15 @@ func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 }
 
 func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference string) (interface{}, error) {
+	utils.TimeTrack(time.Now(), "GetSuggestions")
 	multiSearchService := e.esc.MultiSearch()
 	requests := NewResultsSuggestRequests([]string{consts.ES_RESULT_TYPE_TAGS, consts.ES_RESULT_TYPE_SOURCES}, query, preference)
 	multiSearchService.Add(requests...)
 
 	// Actual call to elastic
+	beforeMssDo := time.Now()
 	mr, err := multiSearchService.Do(ctx)
+	utils.TimeTrack(beforeMssDo, "GetSuggestions.MultisearchDo")
 	if err != nil {
 		// don't kill entire request if ctx was cancelled
 		if ue, ok := err.(*url.Error); ok {
