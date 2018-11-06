@@ -4,6 +4,7 @@ mode="debug"  # GIN mode. Either debug, release or test
 boiler-mode="debug"  # Either debug or something else.
 rollbar-token=""
 rollbar-environment="development"
+http-pprof-pass=
 
 [mdb]
 url="postgres://localhost/mdb?sslmode=disable&user=postgres"
