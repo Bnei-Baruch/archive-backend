@@ -148,7 +148,7 @@ func TimeTrack(start time.Time, operation string, query string) {
 	log.Infof("PERFORMANCE MEASURMENT: %s %s took %s", operation, qs, elapsed)
 }
 
-func TimeTrackWithPage(start time.Time, operation string, query string, page int) {
-	query = fmt.Sprintf("%s, page: %d", query, page)
+func TimeTrackWithPage(start time.Time, operation string, query string, from int) {
+	query = fmt.Sprintf("%s, from: %d", query, from)
 	TimeTrack(start, operation, query)
 }
