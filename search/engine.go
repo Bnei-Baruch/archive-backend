@@ -105,7 +105,7 @@ func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 }
 
 func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference string) (interface{}, error) {
-	utils.TimeTrack(time.Now(), "GetSuggestions")
+	utils.TimeTrack(time.Now(), "GetSuggestions", query.Term)
 	multiSearchService := e.esc.MultiSearch()
 	requests := NewResultsSuggestRequests([]string{consts.ES_RESULT_TYPE_TAGS, consts.ES_RESULT_TYPE_SOURCES}, query, preference)
 	multiSearchService.Add(requests...)
@@ -113,7 +113,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	// Actual call to elastic
 	beforeMssDo := time.Now()
 	mr, err := multiSearchService.Do(ctx)
-	utils.TimeTrack(beforeMssDo, "GetSuggestions.MultisearchDo")
+	utils.TimeTrack(beforeMssDo, "GetSuggestions.MultisearchDo", query.Term)
 	if err != nil {
 		// don't kill entire request if ctx was cancelled
 		if ue, ok := err.(*url.Error); ok {
@@ -179,7 +179,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		}
 	}
 
-	defer utils.TimeTrack(time.Now(), "DoSearch.AddIntents")
+	defer utils.TimeTrack(time.Now(), "DoSearch.AddIntents", query.Term)
 
 	checkContentUnitsTypes := []string{}
 	if values, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
@@ -215,7 +215,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 	}
 	beforeFirstRoundDo := time.Now()
 	mr, err := mssFirstRound.Do(context.TODO())
-	utils.TimeTrack(beforeFirstRoundDo, "DoSearch.AddIntents.FirstRoundDo")
+	utils.TimeTrack(beforeFirstRoundDo, "DoSearch.AddIntents.FirstRoundDo", query.Term)
 	if err != nil {
 		return errors.Wrap(err, "ESEngine.AddIntents - Error multisearch Do.")
 	}
@@ -250,7 +250,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 
 	beforeSecondRoundDo := time.Now()
 	mr, err = mssSecondRound.Do(context.TODO())
-	utils.TimeTrack(beforeSecondRoundDo, "DoSearch.AddIntents.SecondRoundDo")
+	utils.TimeTrack(beforeSecondRoundDo, "DoSearch.AddIntents.SecondRoundDo", query.Term)
 	for i := 0; i < len(finalIntents); i++ {
 		res := mr.Responses[i]
 		if res.Error != nil {
@@ -469,7 +469,7 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
-	defer utils.TimeTrack(time.Now(), "DoSearch")
+	defer utils.TimeTrackWithPage(time.Now(), "DoSearch", query.Term, from)
 
 	if err := e.AddIntents(&query, preference); err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
@@ -483,7 +483,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// Do search.
 	beforeDoSearch := time.Now()
 	mr, err := multiSearchService.Do(context.TODO())
-	utils.TimeTrack(beforeDoSearch, "DoSearch.MultisearchDo")
+	utils.TimeTrackWithPage(beforeDoSearch, "DoSearch.MultisearchDo", query.Term, from)
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do.")
 	}
@@ -535,7 +535,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	ret, err := joinResponses(sortBy, from, size, results...)
-	utils.TimeTrack(beforeSortFilterJoin, "DoSearch.SortFilterJoin")
+	utils.TimeTrackWithPage(beforeSortFilterJoin, "DoSearch.SortFilterJoin", query.Term, from)
 
 	if ret != nil && ret.Hits != nil {
 		return &QueryResult{ret, query.Intents}, err

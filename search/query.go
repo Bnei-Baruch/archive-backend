@@ -169,7 +169,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 }
 
 func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchRequest {
-	defer utils.TimeTrack(time.Now(), "DoSearch.NewResultsSearchRequests")
+	defer utils.TimeTrack(time.Now(), "DoSearch.NewResultsSearchRequests", "")
 	requests := make([]*elastic.SearchRequest, 0)
 	indices := make([]string, len(options.query.LanguageOrder))
 	for i := range options.query.LanguageOrder {

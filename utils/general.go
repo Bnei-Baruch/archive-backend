@@ -139,7 +139,16 @@ func PrintMap(m interface{}) (string, error) {
 	return strings.Join(values, ","), nil
 }
 
-func TimeTrack(start time.Time, operation string) {
+func TimeTrack(start time.Time, operation string, query string) {
 	elapsed := time.Since(start)
-	log.Infof("PERFORMANCE MEASURMENT: %s took %s", operation, elapsed)
+	var qs string
+	if query != "" {
+		qs = fmt.Sprintf("(query: %s)", query)
+	}
+	log.Infof("PERFORMANCE MEASURMENT: %s %s took %s", operation, qs, elapsed)
+}
+
+func TimeTrackWithPage(start time.Time, operation string, query string, page int) {
+	query = fmt.Sprintf("%s, page: %d", query, page)
+	TimeTrack(start, operation, query)
 }
