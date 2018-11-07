@@ -119,8 +119,10 @@ func (suite *IndexerSuite) SetupTest() {
 	r.Nil(err)
 	r.Nil(indexer.DeleteIndexes())
 	// Delete test directory
-	os.RemoveAll(viper.GetString("test.test-docx-folder"))
-	utils.Must(os.MkdirAll(viper.GetString("test.test-docx-folder"), 0777))
+	testDocxFolder := viper.GetString("test.test-docx-folder")
+	fmt.Printf("Restting test.test-docx-folder: [%s]", testDocxFolder)
+	os.RemoveAll(testDocxFolder)
+	utils.Must(os.MkdirAll(testDocxFolder, 0777))
 	utils.Must(os.MkdirAll(viper.GetString("test.test-sources-folder"), 0777))
 }
 
