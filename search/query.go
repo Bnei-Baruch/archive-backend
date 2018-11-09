@@ -188,12 +188,12 @@ func NewResultsSuggestRequest(resultTypes []string, index string, query Query, p
 	searchSource := elastic.NewSearchSource().
 		FetchSourceContext(fetchSourceContext).
 		Suggester(
-			elastic.NewCompletionSuggester("title_suggest").
-				Field("title_suggest").
-				Text(query.Term).
-				ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
-				Size(NUM_SUGGESTS),
-		)
+		elastic.NewCompletionSuggester("title_suggest").
+			Field("title_suggest").
+			Text(query.Term).
+			ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
+			Size(NUM_SUGGESTS),
+	)
 
 	return elastic.NewSearchRequest().
 		SearchSource(searchSource).
