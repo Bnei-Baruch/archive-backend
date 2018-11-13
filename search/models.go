@@ -32,13 +32,14 @@ type Engine interface {
 }
 
 type SearchRequestOptions struct {
-	resultTypes []string
-	index       string
-	query       Query
-	sortBy      string
-	from        int
-	size        int
-	preference  string
+	resultTypes  []string
+	index        string
+	query        Query
+	sortBy       string
+	from         int
+	size         int
+	preference   string
+	useHighlight bool
 	// Following field comes to solve elastic bug with highlight.
 	// Just removed the analyzed fields and uses only standard fields
 	// for highlighting. Only happens with intents.
