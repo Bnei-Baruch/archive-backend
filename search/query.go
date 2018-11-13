@@ -1,8 +1,6 @@
 package search
 
 import (
-	"time"
-
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -138,16 +136,19 @@ func createResultsQuery(resultTypes []string, q Query) elastic.Query {
 
 func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchRequest {
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title")
-	highlightQuery := elastic.NewHighlight().Fields(
-		elastic.NewHighlighterField("title").NumOfFragments(0),
-		elastic.NewHighlighterField("description"),
-		elastic.NewHighlighterField("content"),
-		elastic.NewHighlighterField("description.language"),
-		elastic.NewHighlighterField("content.language"))
-	if !options.partialHighlight {
-		// Following field not used in intents to solve elastic bug with highlight.
-		highlightQuery.Fields(
-			elastic.NewHighlighterField("title.language").NumOfFragments(0))
+	var highlightQuery *elastic.Highlight
+	if options.useHighlight {
+		highlightQuery = elastic.NewHighlight().Fields(
+			elastic.NewHighlighterField("title").NumOfFragments(0),
+			elastic.NewHighlighterField("description"),
+			elastic.NewHighlighterField("content"),
+			elastic.NewHighlighterField("description.language"),
+			elastic.NewHighlighterField("content.language"))
+		if !options.partialHighlight {
+			// Following field not used in intents to solve elastic bug with highlight.
+			highlightQuery.Fields(
+				elastic.NewHighlighterField("title.language").NumOfFragments(0))
+		}
 	}
 
 	source := elastic.NewSearchSource().
@@ -169,7 +170,6 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 }
 
 func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchRequest {
-	defer utils.TimeTrack(time.Now(), "DoSearch.NewResultsSearchRequests", "")
 	requests := make([]*elastic.SearchRequest, 0)
 	indices := make([]string, len(options.query.LanguageOrder))
 	for i := range options.query.LanguageOrder {
@@ -188,12 +188,12 @@ func NewResultsSuggestRequest(resultTypes []string, index string, query Query, p
 	searchSource := elastic.NewSearchSource().
 		FetchSourceContext(fetchSourceContext).
 		Suggester(
-		elastic.NewCompletionSuggester("title_suggest").
-			Field("title_suggest").
-			Text(query.Term).
-			ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
-			Size(NUM_SUGGESTS),
-	)
+			elastic.NewCompletionSuggester("title_suggest").
+				Field("title_suggest").
+				Text(query.Term).
+				ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
+				Size(NUM_SUGGESTS),
+		)
 
 	return elastic.NewSearchRequest().
 		SearchSource(searchSource).

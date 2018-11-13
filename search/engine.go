@@ -206,11 +206,11 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		index := es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, language)
 		mssFirstRound.Add(NewResultsSearchRequest(
 			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_TAGS}, index, queryWithoutFilters,
-				consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
+				consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, false, true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
 		mssFirstRound.Add(NewResultsSearchRequest(
 			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_SOURCES}, index, queryWithoutFilters,
-				consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
+				consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, false, true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
 	beforeFirstRoundDo := time.Now()
@@ -241,7 +241,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 						SearchRequestOptions{[]string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
 							es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, intent.Language),
 							*secondRoundQuery, consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE,
-							preference, true}))
+							preference, false, true}))
 					finalIntents = append(finalIntents, *intent)
 				}
 			}
@@ -478,7 +478,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	multiSearchService := e.esc.MultiSearch()
 	multiSearchService.Add(NewResultsSearchRequests(
 		SearchRequestOptions{consts.ES_SEARCH_RESULT_TYPES, "", query, sortBy,
-			0, from + size, preference, false})...)
+			0, from + size, preference, true, false})...)
 
 	// Do search.
 	beforeDoSearch := time.Now()
@@ -492,9 +492,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
 			len(mr.Responses), len(query.LanguageOrder)))
 	}
-
-	beforeSortFilterJoin := time.Now()
-
 	resultsByLang := make(map[string][]*elastic.SearchResult)
 
 	// Responses are ordered by language by index, i.e., for languages [bg, ru, en].
@@ -535,7 +532,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	ret, err := joinResponses(sortBy, from, size, results...)
-	utils.TimeTrack(beforeSortFilterJoin, "DoSearch.SortFilterJoin", query.ToFullSimpleString(sortBy, from, size))
 
 	if ret != nil && ret.Hits != nil {
 		return &QueryResult{ret, query.Intents}, err
