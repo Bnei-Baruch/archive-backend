@@ -205,12 +205,28 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		// Order here provides the priority in results, i.e., tags are more importnt then sources.
 		index := es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, language)
 		mssFirstRound.Add(NewResultsSearchRequest(
-			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_TAGS}, index, queryWithoutFilters,
-				consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, false, true}))
+			SearchRequestOptions{
+				resultTypes:      []string{consts.ES_RESULT_TYPE_TAGS},
+				index:            index,
+				query:            queryWithoutFilters,
+				sortBy:           consts.SORT_BY_RELEVANCE,
+				from:             0,
+				size:             consts.API_DEFAULT_PAGE_SIZE,
+				preference:       preference,
+				useHighlight:     false,
+				partialHighlight: true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
 		mssFirstRound.Add(NewResultsSearchRequest(
-			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_SOURCES}, index, queryWithoutFilters,
-				consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, false, true}))
+			SearchRequestOptions{
+				resultTypes:      []string{consts.ES_RESULT_TYPE_SOURCES},
+				index:            index,
+				query:            queryWithoutFilters,
+				sortBy:           consts.SORT_BY_RELEVANCE,
+				from:             0,
+				size:             consts.API_DEFAULT_PAGE_SIZE,
+				preference:       preference,
+				useHighlight:     false,
+				partialHighlight: true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
 	beforeFirstRoundDo := time.Now()
@@ -238,10 +254,16 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 				}
 				if intent != nil {
 					mssSecondRound.Add(NewResultsSearchRequest(
-						SearchRequestOptions{[]string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
-							es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, intent.Language),
-							*secondRoundQuery, consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE,
-							preference, false, true}))
+						SearchRequestOptions{
+							resultTypes:      []string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
+							index:            es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, intent.Language),
+							query:            *secondRoundQuery,
+							sortBy:           consts.SORT_BY_RELEVANCE,
+							from:             0,
+							size:             consts.API_DEFAULT_PAGE_SIZE,
+							preference:       preference,
+							useHighlight:     false,
+							partialHighlight: true}))
 					finalIntents = append(finalIntents, *intent)
 				}
 			}
@@ -477,8 +499,16 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	multiSearchService := e.esc.MultiSearch()
 	multiSearchService.Add(NewResultsSearchRequests(
-		SearchRequestOptions{consts.ES_SEARCH_RESULT_TYPES, "", query, sortBy,
-			0, from + size, preference, true, false})...)
+		SearchRequestOptions{
+			resultTypes:      consts.ES_SEARCH_RESULT_TYPES,
+			index:            "",
+			query:            query,
+			sortBy:           sortBy,
+			from:             0,
+			size:             from + size,
+			preference:       preference,
+			useHighlight:     true,
+			partialHighlight: false})...)
 
 	// Do search.
 	beforeDoSearch := time.Now()

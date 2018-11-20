@@ -136,9 +136,15 @@ func createResultsQuery(resultTypes []string, q Query) elastic.Query {
 
 func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchRequest {
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title")
-	var highlightQuery *elastic.Highlight
+	source := elastic.NewSearchSource().
+		Query(createResultsQuery(options.resultTypes, options.query)).
+		FetchSourceContext(fetchSourceContext).
+		From(options.from).
+		Size(options.size).
+		Explain(options.query.Deb)
+
 	if options.useHighlight {
-		highlightQuery = elastic.NewHighlight().Fields(
+		highlightQuery := elastic.NewHighlight().Fields(
 			elastic.NewHighlighterField("title").NumOfFragments(0),
 			elastic.NewHighlighterField("description"),
 			elastic.NewHighlighterField("content"),
@@ -149,14 +155,9 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 			highlightQuery.Fields(
 				elastic.NewHighlighterField("title.language").NumOfFragments(0))
 		}
+		source = source.Highlight(highlightQuery)
 	}
 
-	source := elastic.NewSearchSource().
-		Query(createResultsQuery(options.resultTypes, options.query)).Highlight(highlightQuery).
-		FetchSourceContext(fetchSourceContext).
-		From(options.from).
-		Size(options.size).
-		Explain(options.query.Deb)
 	switch options.sortBy {
 	case consts.SORT_BY_OLDER_TO_NEWER:
 		source = source.Sort("effective_date", true)
@@ -188,12 +189,12 @@ func NewResultsSuggestRequest(resultTypes []string, index string, query Query, p
 	searchSource := elastic.NewSearchSource().
 		FetchSourceContext(fetchSourceContext).
 		Suggester(
-			elastic.NewCompletionSuggester("title_suggest").
-				Field("title_suggest").
-				Text(query.Term).
-				ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
-				Size(NUM_SUGGESTS),
-		)
+		elastic.NewCompletionSuggester("title_suggest").
+			Field("title_suggest").
+			Text(query.Term).
+			ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
+			Size(NUM_SUGGESTS),
+	)
 
 	return elastic.NewSearchRequest().
 		SearchSource(searchSource).
