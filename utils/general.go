@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 )
 
@@ -137,13 +136,4 @@ func PrintMap(m interface{}) (string, error) {
 		}
 	}
 	return strings.Join(values, ","), nil
-}
-
-func TimeTrack(start time.Time, operation string, query string) {
-	elapsed := time.Since(start)
-	var qs string
-	if query != "" {
-		qs = fmt.Sprintf(" %s", query)
-	}
-	log.Infof("Execution Time: %s%s took %v", operation, qs, elapsed)
 }
