@@ -42,6 +42,9 @@
                 }, 
                 "size": {
                     "type": "integer"
+                },
+                "execution_time_log": {
+                    "type": "object"
                 }
             }
         }
