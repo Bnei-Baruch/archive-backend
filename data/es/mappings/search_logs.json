@@ -30,6 +30,13 @@
                 "query": {
                     "type": "object"
                 }, 
+                "execution_time_log": {
+                    "properties":
+                    {
+                        "operation": {"type": "keyword"},
+                        "time": {"type": "integer"}
+                    }
+                }, 
                 "sort_by": {
                     "type": "keyword"
                 }, 
@@ -42,9 +49,6 @@
                 }, 
                 "size": {
                     "type": "integer"
-                },
-                "execution_time_log": {
-                    "type": "object"
                 }
             }
         }
