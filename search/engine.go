@@ -513,7 +513,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			from:             0,
 			size:             from + size,
 			preference:       preference,
-			useHighlight:     true,
+			useHighlight:     false,
 			partialHighlight: false})...)
 
 	// Do search.
@@ -569,7 +569,29 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	ret, err := joinResponses(sortBy, from, size, results...)
 
-	if ret != nil && ret.Hits != nil {
+	if ret != nil && ret.Hits != nil && ret.Hits.Hits != nil {
+		mssHighlights := e.esc.MultiSearch()
+		for _, h := range ret.Hits.Hits {
+			var result es.Result
+			if err := json.Unmarshal(*h.Source, &result); err != nil {
+				//TBC maybe continue
+				return nil, err
+			}
+
+			mssHighlights.Add(NewResultsSearchRequest(
+				SearchRequestOptions{
+					resultTypes:      consts.ES_SEARCH_RESULT_TYPES,
+					index:            "",
+					query:            Query{ExactTerms: []string{result.Title}, Term: ""},
+					sortBy:           consts.SORT_BY_RELEVANCE,
+					from:             0,
+					size:             consts.API_DEFAULT_PAGE_SIZE,
+					preference:       preference,
+					useHighlight:     true,
+					partialHighlight: true}))
+		}
+		// TBD!
+
 		return &QueryResult{ret, query.Intents}, err
 	}
 
