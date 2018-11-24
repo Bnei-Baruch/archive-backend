@@ -344,6 +344,7 @@ SEARCH_LOGS_TEMPLATE = {
                 },
 
                 "execution_time_log": {
+                    "type": "nested",
                     "properties":
                     {
                         "operation": {"type": "keyword"},
