@@ -39,7 +39,7 @@ func (index *TagsIndex) ReindexAll() error {
 }
 
 func (index *TagsIndex) Update(scope Scope) error {
-	log.Infof("Tags Index - Update. Scope: %+v.", scope)
+	log.Debugf("Tags Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
 	if err != nil {
 		return err
@@ -63,7 +63,7 @@ func (index *TagsIndex) addToIndex(scope Scope, removedUIDs []string) error {
 }
 
 func (index *TagsIndex) removeFromIndex(scope Scope) ([]string, error) {
-	log.Infof("Tags Index - removeFromIndex. Scope: %+v.", scope)
+	log.Debugf("Tags Index - removeFromIndex. Scope: %+v.", scope)
 	if scope.TagUID != "" {
 		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_TAGS).
 			Filter(elastic.NewTermsQuery("typed_uids", keyValue("tag", scope.TagUID)))
@@ -81,10 +81,9 @@ func (index *TagsIndex) addToIndexSql(sqlScope string) error {
 		return errors.Wrap(err, "Tags Index - Fetch tags from mdb.")
 	}
 	log.Infof("Tags Index - Adding %d tags. Scope: %s.", len(tags), sqlScope)
-
 	for _, tag := range tags {
 		if !tag.ParentID.Valid {
-			log.Infof("Tags Index - Skipping root tag [%s].", tag.UID)
+			log.Debugf("Tags Index - Skipping root tag [%s].", tag.UID)
 			continue
 		}
 		if err := index.indexTag(tag); err != nil {
@@ -139,7 +138,7 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 				TitleSuggest: Suffixes(strings.Join(pathNames, " ")),
 			}
 			name := index.indexName(i18n.Language)
-			log.Infof("Tags Index - Add tag %s to index %s", r.ToDebugString(), name)
+			log.Debugf("Tags Index - Add tag %s to index %s", r.ToDebugString(), name)
 			resp, err := index.esc.Index().
 				Index(name).
 				Type("result").

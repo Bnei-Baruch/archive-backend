@@ -49,9 +49,17 @@ func Min(x, y int) int {
 	return y
 }
 
-// Like math.Min for int
+// Like math.Max for int
 func MaxInt(x, y int) int {
 	if x > y {
+		return x
+	}
+	return y
+}
+
+// Like math.Min for int
+func MinInt(x, y int) int {
+	if x < y {
 		return x
 	}
 	return y
