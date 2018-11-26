@@ -1,155 +1,109 @@
 package es
 
 import (
-	"bytes"
-	"context"
 	"database/sql"
+    "encoding/json"
 	"fmt"
-	"io"
+    "io/ioutil"
 	"net/http"
-	"os"
-	"os/exec"
-	"path"
-	"path/filepath"
 	"strings"
-	"sync"
+    "sync"
 	"time"
 
-	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 )
 
 var httpClient = &http.Client{
-	Timeout: 10 * time.Second,
+	Timeout: 600 * time.Second,
 }
 
-func DownloadAndConvert(docBatch [][]string) error {
-	var convertDocs []string
-	for _, docSource := range docBatch {
-		uid := docSource[0]
-		name := docSource[1]
-		if filepath.Ext(name) != ".docx" && filepath.Ext(name) != ".doc" {
-			log.Warnf("File type not supported %s %s, skipping.", uid, name)
-			continue
-		}
-
-		docFilename := fmt.Sprintf("%s%s", uid, filepath.Ext(name))
-		docxFilename := fmt.Sprintf("%s.docx", uid)
-		folder, err := DocFolder()
-		if err != nil {
-			return err
-		}
-		docPath := path.Join(folder, docFilename)
-		docxPath := path.Join(folder, docxFilename)
-		if _, err := os.Stat(docxPath); !os.IsNotExist(err) {
-			continue
-		}
-
-		// Download doc.
-		resp, err := httpClient.Get(fmt.Sprintf("%s/%s", cdnUrl, uid))
-		if err != nil {
-			log.Warnf("Error downloading, Error: %+v", err)
-			return err
-		}
-		if resp.StatusCode != 200 { // OK
-			log.Warnf("Response code %d for %s, skip.", resp.StatusCode, uid)
-			continue
-		}
-
-		out, err := os.Create(docPath)
-		if err != nil {
-			return errors.Wrapf(err, "os.Create %s", docPath)
-		}
-
-		_, err = io.Copy(out, resp.Body)
-
-		if err := resp.Body.Close(); err != nil {
-			log.Errorf("resp.Body.Close %s : %s", docPath, err.Error())
-		}
-
-		if err != nil {
-			return errors.Wrapf(err, "io.Copy %s", docPath)
-		}
-
-		if err := out.Close(); err != nil {
-			log.Errorf("out.Close %s : %s", docPath, err.Error())
-		}
-
-		// all is good, file is here. Should we convert to docx first ?
-		if filepath.Ext(name) == ".doc" {
-			convertDocs = append(convertDocs, docPath)
-		}
-	}
-
-	if len(convertDocs) > 0 {
-		for _, docPath := range convertDocs {
-			if _, err := os.Stat(docPath); os.IsNotExist(err) {
-				return errors.Wrapf(err, "os.Stat %s", docPath)
-			}
-		}
-
-		sofficeMutex.Lock()
-		defer sofficeMutex.Unlock()
-		folder, err := DocFolder()
-		if err != nil {
-			return err
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(utils.MaxInt(15, len(convertDocs)))*time.Second)
-		defer cancel()
-		args := append([]string{"--headless", "--convert-to", "docx", "--outdir", folder}, convertDocs...)
-		log.Infof("Command [%s]", strings.Join(args, " "))
-		cmd := exec.CommandContext(ctx, sofficeBin, args...)
-		var stdout bytes.Buffer
-		var stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err = cmd.Run()
-		if ctx.Err() == context.DeadlineExceeded {
-			log.Errorf("DeadlineExceeded! soffice is '%s'. Error: %s", sofficeBin, err)
-			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
-			return errors.Wrapf(ctx.Err(), "DeadlineExceeded when executing soffice.")
-		}
-		if err != nil {
-			log.Errorf("soffice is '%s'. Error: %s", sofficeBin, err)
-			log.Warnf("soffice\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
-			return errors.Wrapf(err, "Execute soffice.")
-		} else {
-			log.Infof("soffice successfully done.")
-		}
-	}
-	return nil
+func DocText(uid string) (string, error) {
+    resp, err := httpClient.Get(fmt.Sprintf("%s/doc2text/%s", unzipUrl, uid))
+    if err != nil {
+        log.Warnf("Error preparing docs, Error: %+v", err)
+        return "", err
+    }
+    if resp.StatusCode == http.StatusOK {
+        defer resp.Body.Close()
+        bodyBytes, err := ioutil.ReadAll(resp.Body)
+        if err != nil {
+            return "", err
+        }
+        bodyString := string(bodyBytes)
+        return bodyString, nil
+    } else {
+        log.Warnf("Response code %d for %s, skip.", resp.StatusCode, uid)
+        return "", nil
+    }
 }
 
-// Will return empty string if no rows returned.
-func LoadDocFilename(db *sql.DB, fileUID string) (string, error) {
-	var fileName string
-	err := queries.Raw(db, `
-SELECT name
-FROM files
-WHERE name ~ '.docx?' AND
-    language NOT IN ('zz', 'xx') AND
-    content_unit_id IS NOT NULL AND
-	secure=0 AND published IS TRUE
-	AND uid = $1;`, fileUID).QueryRow().Scan(&fileName)
-
-	if err == sql.ErrNoRows {
-		return "", nil
-	} else if err != nil {
-		return "", errors.Wrapf(err, "LoadDocFilename - %s", fileUID)
-	} else {
-		return fileName, nil
-	}
+type unzipResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 
-var sofficeMutex = &sync.Mutex{}
+func Prepare(uids []string) (error, bool, map[string]int) {
+    successMap := make(map[string]int)
+    for _, uid := range uids {
+        successMap[uid] = -1;
+    }
+    // Prepare docs batch.
+    log.Infof("Preparing %s docs to docx.", strings.Join(uids, ","))
+    resp, err := httpClient.Get(fmt.Sprintf("%s/prepare/%s", unzipUrl, strings.Join(uids, ",")))
+    log.Info("Finished Trying Get.")
+    if err != nil {
+        log.Warnf("Error preparing docs, Error: %+v.", err)
+        return err, false, successMap
+    }
+    if resp.StatusCode != http.StatusOK { // OK
+        log.Errorf("Response code %d for %s, error.", resp.StatusCode, strings.Join(uids, ","))
+		return err, false, successMap
+    }
+    body, err := ioutil.ReadAll(resp.Body)
+    log.Info("Finished reading body.")
+    if err != nil {
+        log.Error("Could not read response body.")
+        return err, false, successMap
+    }
 
-func loadDocs(db *sql.DB) ([][]string, error) {
+    var data []unzipResponse
+    json.Unmarshal(body, &data)
+
+    if len(data) != len(uids) {
+        return errors.New(fmt.Sprintf("Response length is not as request uids length. Expected %d, got %d", len(uids), len(data))), false, successMap
+    }
+
+    backoff := false
+    var errors []string
+    log.Infof("Ranging over data: %v", data)
+    for i, internalResponse := range data {
+        successMap[uids[i]] = internalResponse.Code
+        if (internalResponse.Code == http.StatusServiceUnavailable) {
+            // Backoff
+            backoff = true
+        } else if (internalResponse.Code != http.StatusOK) {
+            // Don't repeat request, continue.
+            errors = append(errors, internalResponse.Message)
+        }
+    }
+    if len(errors) > 0 {
+        log.Warn(strings.Join(errors, ","))
+    }
+    if backoff {
+        log.Info("Successfully done, backoff: true.")
+        return nil, true, successMap
+    } else {
+        log.Info("Successfully done, backoff: false.")
+        return nil, false, successMap
+    }
+}
+
+func loadDocs(db *sql.DB) ([]string, error) {
 	rows, err := queries.Raw(db, `
 SELECT
-  f.uid,
-  f.name
+  f.uid
 FROM files f
   INNER JOIN content_units cu ON f.content_unit_id = cu.id
                                  AND f.name ~ '.docx?$'
@@ -168,17 +122,16 @@ FROM files f
 	return loadMap(rows)
 }
 
-func loadMap(rows *sql.Rows) ([][]string, error) {
-	var m [][]string
+func loadMap(rows *sql.Rows) ([]string, error) {
+	var m []string
 
 	for rows.Next() {
 		var uid string
-		var name string
-		err := rows.Scan(&uid, &name)
+		err := rows.Scan(&uid)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
-		m = append(m, []string{uid, name})
+		m = append(m, uid)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, errors.Wrap(err, "rows.Err()")
@@ -195,31 +148,151 @@ func ConvertDocx(db *sql.DB) error {
 	total := len(docs)
 	log.Infof("%d docs in MDB", total)
 
-	var batch [][]string
-	for i, doc := range docs {
+	var notEmptyDocs []string
+	for _, doc := range docs {
 		if len(doc) <= 0 {
 			log.Warn("Empty doc, skipping. Should not happen.")
 			continue
 		}
+        notEmptyDocs = append(notEmptyDocs, doc)
+    }
 
-		batch = append(batch, doc)
+    batches := make(chan []string)
+    batchSize := 50
 
-		if len(batch) == 50 {
-			log.Infof("DownloadAndConvert %d / %d", i+1, total)
-			if err := DownloadAndConvert(batch); err != nil {
-				return errors.Wrapf(err, "DownloadAndConvert %d / %d", i, total)
-			}
-			batch = make([][]string, 0)
-		}
-	}
+    go func(notEmptyDocs []string, batches chan []string) {
+        for start := 0; start < len(notEmptyDocs); start += batchSize {
+            end := start + batchSize
+            if end > len(notEmptyDocs) {
+                end = len(notEmptyDocs)
+            }
+            batches <- notEmptyDocs[start:end]
+        }
+        close(batches)
+    }(notEmptyDocs, batches)
 
-	// tail
-	if len(batch) > 0 {
-		log.Infof("DownloadAndConvert tail %d", len(batch))
-		if err := DownloadAndConvert(batch); err != nil {
-			return errors.Wrapf(err, "DownloadAndConvert tail %d", len(batch))
-		}
-	}
+    parallelism := 5
+    var waitDone sync.WaitGroup
+    waitDone.Add(parallelism)
+    batchesDone := 0
 
+    prepareMutex := &sync.Mutex{}
+    prepareErr := error(nil)
+    successMap := make(map[string]int)
+    for i := 0; i < parallelism; i++ {
+        go func(j int, batches chan []string) {
+            for batch := range batches {
+                prepareMutex.Lock()
+                batchesDone += 1
+                currentBatchDone := batchesDone
+                prepareMutex.Unlock()
+                log.Infof("[%d] Prepare %d / %d", j, currentBatchDone, len(notEmptyDocs) / batchSize)
+                sleep := 0 * time.Second
+                tryRetry := true
+                retries := 5
+                for ;retries > 0 && tryRetry; retries-- {
+                    log.Infof("Retry[%d]: %d, tryRetry: %t", j, retries, tryRetry)
+                    if sleep > 0 {
+                        log.Infof("Bakoff[%d], sleep %.2f, retry: %d", j, sleep.Seconds(), 5 - retries)
+                        time.Sleep(sleep)
+                    }
+                    var batchSuccessMap map[string]int
+                    // ERR SHOULD BE LAST
+                    err, tryRetry, batchSuccessMap = Prepare(batch)
+                    if tryRetry {
+                        log.Infof("Try retry[%d]: true", j)
+                    } else {
+                        log.Infof("Try retry[%d]: false", j)
+                    }
+                    shouldBreak := false
+                    nextBatch := []string{}
+                    prepareMutex.Lock()
+                    for uid, code := range batchSuccessMap {
+                        currentCode, ok := successMap[uid]
+                        if ok {
+                            if currentCode != http.StatusOK {
+                                successMap[uid] = code
+                            } else if code != http.StatusOK {
+                                errStr := fmt.Sprintf("Making things worse, had %d for uid %s not got %d.", currentCode, uid, code)
+                                log.Error(errStr)
+                                if prepareErr == nil {
+                                    prepareErr = errors.New(errStr)
+                                }
+                            }
+                        } else {
+                            successMap[uid] = code
+                        }
+                        if currentCode != http.StatusOK {
+                            nextBatch = append(nextBatch, uid)
+                        }
+                    }
+                    reason := ""
+                    if prepareErr != nil {
+                        shouldBreak = true
+                        reason = prepareErr.Error()
+                    }
+                    prepareMutex.Unlock()
+                    if shouldBreak {
+                        log.Errorf("Breaking[%d]... Due to: %s.", j, reason)
+                        break
+                    }
+                    if err != nil {
+                        log.Infof("Error while Prepare %d / %d. Error: %s", currentBatchDone, len(notEmptyDocs) / batchSize, err)
+                        prepareMutex.Lock()
+                        if prepareErr != nil {
+                            prepareErr = err
+                        }
+                        prepareMutex.Unlock()
+                        break
+                    }
+                    if tryRetry {
+                        log.Infof("Trying to retry [%d].", j)
+                        if sleep == 0 {
+                            sleep = 10 * time.Second
+                        } else {
+                            sleep += 10 * time.Second
+                        }
+                    } else {
+                        log.Infof("Trying not to retry [%d]. Retries: %d.", j, retries)
+                    }
+                    // At next retry, we want to try only failed uids.
+                    batch = nextBatch
+                }
+                shouldBreak := false
+                reason := ""
+                log.Infof("[%d] Locking...", j)
+                prepareMutex.Lock()
+                if prepareErr != nil {
+                    reason = prepareErr.Error()
+                    shouldBreak = true
+                } else if retries == 0 {
+                    prepareErr = errors.New(fmt.Sprintf("No more retries[%d]. Exiting.", j))
+                    reason = prepareErr.Error()
+                    shouldBreak = true
+                }
+                prepareMutex.Unlock()
+                log.Infof("[%d] Unlocking...", j)
+                if shouldBreak {
+                    log.Errorf("Breaking... Due to: %s.", reason)
+                    break
+                }
+            }
+            log.Infof("[%d] Done", j)
+            waitDone.Done()
+        }(i, batches)
+    }
+    waitDone.Wait()
+
+    reverseSuccessMap := make(map[int]int)
+    for _, code := range successMap {
+        if _, ok := reverseSuccessMap[code]; ok {
+            reverseSuccessMap[code]++
+        } else {
+            reverseSuccessMap[code] = 1
+        }
+    }
+    for code, count := range reverseSuccessMap {
+        log.Infof("Code: %d Count: %d.", code, count)
+    }
 	return nil
 }

@@ -5,15 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"path"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
-	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -64,7 +63,7 @@ func defaultContentUnitSql() string {
 }
 
 func (index *ContentUnitsIndex) ReindexAll() error {
-	log.Infof("Content Units Index - Reindex all.")
+	log.Info("Content Units Index - Reindex all.")
 	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_UNITS)); err != nil {
 		return err
 	}
@@ -72,7 +71,7 @@ func (index *ContentUnitsIndex) ReindexAll() error {
 }
 
 func (index *ContentUnitsIndex) Update(scope Scope) error {
-	log.Infof("Content Units Index - Update. Scope: %+v.", scope)
+	log.Debugf("Content Units Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
 	if err != nil {
 		return err
@@ -171,7 +170,7 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	}
 }
 
-func (index *ContentUnitsIndex) bulkIndexUnits(offset int, limit int, sqlScope string) error {
+func (index *ContentUnitsIndex) bulkIndexUnits(bulk OffsetLimitJob, sqlScope string) error {
 	var units []*mdbmodels.ContentUnit
 	err := mdbmodels.NewQuery(index.db,
 		qm.From("content_units as cu"),
@@ -179,12 +178,12 @@ func (index *ContentUnitsIndex) bulkIndexUnits(offset int, limit int, sqlScope s
 		qm.Load("CollectionsContentUnits"),
 		qm.Load("CollectionsContentUnits.Collection"),
 		qm.Where(sqlScope),
-		qm.Offset(offset),
-		qm.Limit(limit)).Bind(&units)
+		qm.Offset(bulk.Offset),
+		qm.Limit(bulk.Limit)).Bind(&units)
 	if err != nil {
 		return errors.Wrap(err, "Fetch units from mdb")
 	}
-	log.Infof("Content Units Index - Adding %d units (offset: %d).", len(units), offset)
+    log.Infof("Content Units Index - Adding %d units (offset: %d total: %d).", len(units), bulk.Offset, bulk.Total)
 
 	indexData, err := MakeIndexData(index.db, sqlScope)
 	if err != nil {
@@ -201,10 +200,11 @@ func (index *ContentUnitsIndex) bulkIndexUnits(offset int, limit int, sqlScope s
 type OffsetLimitJob struct {
 	Offset int
 	Limit  int
+    Total  int
 }
 
 func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
-	var count int64
+	var count int
 	err := mdbmodels.NewQuery(index.db,
 		qm.Select("COUNT(1)"),
 		qm.From("content_units as cu"),
@@ -213,7 +213,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 		return err
 	}
 
-	log.Infof("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
+	log.Debugf("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
 
 	tasks := make(chan OffsetLimitJob, 300)
 	errors := make(chan error, 300)
@@ -223,8 +223,8 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 	go func() {
 		offset := 0
 		limit := 1000
-		for offset < int(count) {
-			tasks <- OffsetLimitJob{offset, limit}
+		for offset < count {
+			tasks <- OffsetLimitJob{offset, limit, count}
 			tasksCount += 1
 			offset += limit
 		}
@@ -235,7 +235,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 	for w := 1; w <= 10; w++ {
 		go func(tasks <-chan OffsetLimitJob, errors chan<- error) {
 			for task := range tasks {
-				errors <- index.bulkIndexUnits(task.Offset, task.Limit, sqlScope)
+				errors <- index.bulkIndexUnits(task, sqlScope)
 			}
 		}(tasks, errors)
 	}
@@ -327,35 +327,16 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 			// }
 			if byLang, ok := indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
-					var err error
-					fileName, err := LoadDocFilename(index.db, val[0])
-					if err != nil {
-						log.Errorf("Content Units Index - Error retrieving doc from DB: %s. Error: %+v", val[0], err)
-					} else if fileName == "" {
-						log.Warnf("Content Units Index - Could not get transcript filename for %s, maybe it is not published or not secure.  Skipping.", val[0])
-					} else {
-						err = DownloadAndConvert([][]string{{val[0], fileName}})
-						if err != nil {
-							log.Errorf("Content Units Index - Error downloading or converting doc: %s", val[0])
-							log.Errorf("Content Units Index - Error %+v", err)
-						} else {
-							docxFilename := fmt.Sprintf("%s.docx", val[0])
-							folder, err := DocFolder()
-							if err != nil {
-								return err
-							}
-							docxPath := path.Join(folder, docxFilename)
-							unit.Content, err = ParseDocx(docxPath)
-							if unit.Content == "" {
-								log.Warnf("Content Units Index - Transcript empty: %s", val[0])
-							}
-							if err != nil {
-								log.Errorf("Content Units Index - Error parsing docx: %s", val[0])
-							} else {
-								unit.TypedUids = append(unit.TypedUids, keyValue("file", val[0]))
-							}
-						}
-					}
+                    var err error
+                    unit.Content, err = DocText(val[0])
+                    if unit.Content == "" {
+                        log.Warnf("Content Units Index - Transcript empty: %s", val[0])
+                    }
+                    if err != nil {
+                        log.Errorf("Content Units Index - Error parsing docx: %s", val[0])
+                    } else {
+                        unit.TypedUids = append(unit.TypedUids, keyValue("file", val[0]))
+                    }
 				}
 			}
 
@@ -367,7 +348,7 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 	for k, v := range i18nMap {
 		name := index.indexName(k)
 
-		log.Infof("Content Units Index - Add content unit %s to index %s", v.ToDebugString(), name)
+		log.Debugf("Content Units Index - Add content unit %s to index %s", v.ToDebugString(), name)
 		resp, err := index.esc.Index().
 			Index(name).
 			Type("result").
@@ -383,8 +364,8 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 
 	atomic.AddUint64(&index.Progress, 1)
 	progress := atomic.LoadUint64(&index.Progress)
-	if progress%100 == 0 {
-		log.Infof("Progress units %d", progress)
+	if progress % 1000 == 0 {
+		log.Debugf("Progress units %d", progress)
 	}
 
 	return nil

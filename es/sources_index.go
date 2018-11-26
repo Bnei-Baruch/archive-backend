@@ -3,20 +3,20 @@ package es
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+    "encoding/json"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path"
+    "io/ioutil"
+    "os"
+    "path"
 	"strings"
 	"sync/atomic"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
-	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -39,7 +39,7 @@ type SourcesIndex struct {
 }
 
 func (index *SourcesIndex) ReindexAll() error {
-	log.Infof("SourcesIndex.Reindex All.")
+	log.Info("SourcesIndex.Reindex All.")
 	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_SOURCES)); err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func (index *SourcesIndex) ReindexAll() error {
 }
 
 func (index *SourcesIndex) Update(scope Scope) error {
-	log.Infof("SourcesIndex.Update - Scope: %+v.", scope)
+	log.Debugf("SourcesIndex.Update - Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func (index *SourcesIndex) removeFromIndex(scope Scope) ([]string, error) {
 }
 
 func (index *SourcesIndex) bulkIndexSources(
-	offset int, limit int, sqlScope string,
+    bulk OffsetLimitJob, sqlScope string,
 	codesMap map[string][]string,
 	idsMap map[string][]int64,
 	authorsByLanguageMap map[string]map[string][]string) error {
@@ -93,13 +93,13 @@ func (index *SourcesIndex) bulkIndexSources(
 		qm.Load("SourceI18ns"),
 		qm.Load("Authors"),
 		qm.Where(sqlScope),
-		qm.Offset(offset),
-		qm.Limit(limit)).Bind(&sources)
+		qm.Offset(bulk.Offset),
+		qm.Limit(bulk.Limit)).Bind(&sources)
 	if err != nil {
 		return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources from mdb")
 	}
 
-	log.Infof("SourcesIndex.addToIndexSql - Adding %d sources (offset: %d).", len(sources), offset)
+    log.Infof("SourcesIndex.addToIndexSql - Adding %d sources (offset: %d total: %d).", len(sources), bulk.Offset, bulk.Total)
 
 	for _, source := range sources {
 		if parents, ok := codesMap[source.UID]; !ok {
@@ -112,13 +112,12 @@ func (index *SourcesIndex) bulkIndexSources(
 			log.Warnf("SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
 		}
 	}
-
 	return nil
 }
 
 // Note: scope usage is limited to source.uid only (e.g. source.uid='L2jMWyce')
 func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
-	var count int64
+	var count int
 	err := mdbmodels.NewQuery(index.db,
 		qm.Select("COUNT(1)"),
 		qm.From("sources as source"),
@@ -127,7 +126,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 		return err
 	}
 
-	log.Infof("SourcesIndex.addToIndexSql - Sources Index - Adding %d sources. Scope: %s", count, sqlScope)
+	log.Debugf("SourcesIndex.addToIndexSql - Sources Index - Adding %d sources. Scope: %s", count, sqlScope)
 
 	// Loading all sources path in all languages.
 	// codesMap from uid => codes
@@ -145,9 +144,9 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 	tasksCount := 0
 	go func() {
 		offset := 0
-		limit := 20
+		limit := 100
 		for offset < int(count) {
-			tasks <- OffsetLimitJob{offset, limit}
+			tasks <- OffsetLimitJob{offset, limit, count}
 			tasksCount += 1
 			offset += limit
 		}
@@ -158,7 +157,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 	for w := 1; w <= 10; w++ {
 		go func(tasks <-chan OffsetLimitJob, errors chan<- error) {
 			for task := range tasks {
-				errors <- index.bulkIndexSources(task.Offset, task.Limit, sqlScope, codesMap, idsMap, authorsByLanguageMap)
+				errors <- index.bulkIndexSources(task, sqlScope, codesMap, idsMap, authorsByLanguageMap)
 			}
 		}(tasks, errors)
 	}
@@ -277,28 +276,28 @@ func (index *SourcesIndex) loadSources(db *sql.DB, sqlScope string) (map[string]
 }
 
 func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) {
-	folder, err := SourcesFolder()
-	if err != nil {
-		return "", err
-	}
-	uidPath := path.Join(folder, uid)
-	jsonPath := path.Join(uidPath, "index.json")
-	jsonCnt, err := ioutil.ReadFile(jsonPath)
-	if err != nil {
-		return "", fmt.Errorf("SourcesIndex.getDocxPath - Unable to read from file %s. Error: %+v", jsonPath, err)
-	}
-	var m map[string]map[string]string
-	err = json.Unmarshal(jsonCnt, &m)
-	if err != nil {
-		return "", err
-	}
-	if val, ok := m[lang]; ok {
-		docxPath := path.Join(uidPath, val["docx"])
-		if _, err := os.Stat(docxPath); err == nil {
-			return path.Join(docxPath), nil
-		}
-	}
-	return "", errors.New("SourcesIndex.getDocxPath - Docx not found in index.json.")
+    folder, err := SourcesFolder()
+    if err != nil {
+        return "", err
+    }
+    uidPath := path.Join(folder, uid)
+    jsonPath := path.Join(uidPath, "index.json")
+    jsonCnt, err := ioutil.ReadFile(jsonPath)
+    if err != nil {
+        return "", fmt.Errorf("SourcesIndex.getDocxPath - Unable to read from file %s. Error: %+v", jsonPath, err)
+    }
+    var m map[string]map[string]string
+    err = json.Unmarshal(jsonCnt, &m)
+    if err != nil {
+        return "", err
+    }
+    if val, ok := m[lang]; ok {
+        docxPath := path.Join(uidPath, val["docx"])
+        if _, err := os.Stat(docxPath); err == nil {
+            return path.Join(docxPath), nil
+        }
+    }
+    return "", errors.New("SourcesIndex.getDocxPath - Docx not found in index.json.")
 }
 
 func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []string, parentIds []int64, authorsByLanguage map[string][]string) error {
@@ -317,19 +316,20 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			if i18n.Description.Valid && i18n.Description.String != "" {
 				source.Description = i18n.Description.String
 			}
-			fPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
-			if err != nil {
-				log.Warnf("SourcesIndex.indexSource - Unable to retrieving docx path for source %s with language %s.  Skipping indexing.", mdbSource.UID, i18n.Language)
-			} else {
-				// Found docx.
-				content, err := ParseDocx(fPath)
-				if err == nil {
-					source.Content = content
-					allLanguages = append(allLanguages, i18n.Language)
-				} else {
-					log.Warnf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s. Skipping indexing.", mdbSource.UID, i18n.Language)
-				}
-			}
+            fPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
+            if err != nil {
+                // WarnHide(fmt.Sprintf("SourcesIndex.indexSource - Unable to retrieving docx path for source %s with language %s. Skipping indexing.",
+                //     mdbSource.UID, i18n.Language), mdbSource.UID)
+            } else {
+                // Found docx.
+                content, err := ParseDocx(fPath)
+                if err == nil {
+                    source.Content = content
+                    allLanguages = append(allLanguages, i18n.Language)
+                } else {
+                    log.Warnf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language)
+                }
+            }
 			for _, i := range parentIds {
 				ni18n, err := mdbmodels.FindSourceI18n(index.db, i, i18n.Language)
 				if err != nil {
@@ -364,7 +364,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 		v.FilterValues = append(v.FilterValues, KeyValues(consts.FILTER_LANGUAGE, allLanguages)...)
 
 		name := index.indexName(k)
-		log.Infof("Sources Index - Add source %s to index %s", mdbSource.UID, name)
+		log.Debugf("Sources Index - Add source %s to index %s", mdbSource.UID, name)
 		resp, err := index.esc.Index().
 			Index(name).
 			Type("result").
@@ -380,8 +380,8 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 
 	atomic.AddUint64(&index.Progress, 1)
 	progress := atomic.LoadUint64(&index.Progress)
-	if progress%10 == 0 {
-		log.Infof("Progress sources %d", progress)
+	if progress % 100 == 0 {
+		log.Debugf("Progress sources %d", progress)
 	}
 
 	return nil
