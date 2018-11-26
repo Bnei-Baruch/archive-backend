@@ -51,7 +51,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 
 	fmt.Println("Add a file to content unit and validate.")
 	transcriptContent := "1234"
-	suite.serverResponses["/dEvgPVpr"] = transcriptContent
+	suite.serverResponses["/doc2text/dEvgPVpr"] = transcriptContent
 	file := mdbmodels.File{ID: 1, Name: "heb_o_rav_2017-05-25_lesson_achana_n1_p0.doc", UID: "dEvgPVpr", Language: null.String{"he", true}, Secure: 0, Published: true}
 	f1UID := suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
 	r.Nil(indexer.FileUpdate(f1UID))
