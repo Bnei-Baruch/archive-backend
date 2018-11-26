@@ -44,7 +44,7 @@ func (index *TweeterIndex) userIdToLanguageMapping() map[int]string {
 }
 
 func (index *TweeterIndex) ReindexAll() error {
-	log.Infof("TweeterIndex.Reindex All.")
+	log.Info("TweeterIndex.Reindex All.")
 	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_TWEETS)); err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func (index *TweeterIndex) ReindexAll() error {
 }
 
 func (index *TweeterIndex) Update(scope Scope) error {
-	log.Infof("TweeterIndex.Update - Scope: %+v.", scope)
+	log.Debugf("TweeterIndex.Update - Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
 	if err != nil {
 		return err
@@ -87,41 +87,40 @@ func (index *TweeterIndex) removeFromIndex(scope Scope) ([]string, error) {
 	return []string{}, nil
 }
 
-func (index *TweeterIndex) bulkIndexTweets(offset int, limit int, sqlScope string) error {
+func (index *TweeterIndex) bulkIndexTweets(bulk OffsetLimitJob, sqlScope string) error {
 	var tweets []*mdbmodels.TwitterTweet
 	err := mdbmodels.NewQuery(index.db,
 		qm.From("twitter_tweets as t"),
 		qm.Where(sqlScope),
 		qm.OrderBy("id"), // Required for same order results in each query
-		qm.Offset(offset),
-		qm.Limit(limit)).Bind(&tweets)
+		qm.Offset(bulk.Offset),
+		qm.Limit(bulk.Limit)).Bind(&tweets)
 	if err != nil {
-		log.Errorf("bulkIndexTweets error at offset %d. error: %v", offset, err)
+		log.Errorf("bulkIndexTweets error at offset %d. error: %v", bulk.Offset, err)
 		return errors.Wrap(err, "Fetch tweetsfrom mdb.")
 	}
-	log.Infof("Adding %d tweets (offset %d).", len(tweets), offset)
+	log.Infof("Adding %d tweets (offset %d, total %d).", len(tweets), bulk.Offset, bulk.Total)
 	for _, tweet := range tweets {
 		if err := index.indexTweet(tweet); err != nil {
 			log.Errorf("indexTweet error at tweet id %d. error: %v", tweet.ID, err)
 			return err
 		}
 	}
-	log.Info("Indexing tweets - finished.")
 	return nil
 }
 
 func (index *TweeterIndex) addToIndexSql(sqlScope string) error {
-	var count int64
+	var count int
 	if err := mdbmodels.NewQuery(index.db,
 		qm.Select("count(id)"),
 		qm.From("twitter_tweets as t"),
 		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
 		return err
 	}
-	log.Infof("Tweeter Index - Adding %d tweets. Scope: %s.", count, sqlScope)
+	log.Debugf("Tweeter Index - Adding %d tweets. Scope: %s.", count, sqlScope)
 
-	limit := 20
-	tasks := make(chan OffsetLimitJob, (count/int64(limit) + int64(limit)))
+	limit := 1000
+	tasks := make(chan OffsetLimitJob, (count/limit + limit))
 	errors := make(chan error, 300)
 	doneAdding := make(chan bool, 1)
 
@@ -129,7 +128,7 @@ func (index *TweeterIndex) addToIndexSql(sqlScope string) error {
 	go func() {
 		offset := 0
 		for offset < int(count) {
-			tasks <- OffsetLimitJob{offset, limit}
+			tasks <- OffsetLimitJob{offset, limit, count}
 			tasksCount++
 			offset += limit
 		}
@@ -140,7 +139,7 @@ func (index *TweeterIndex) addToIndexSql(sqlScope string) error {
 	for w := 1; w <= 10; w++ {
 		go func(tasks <-chan OffsetLimitJob, errs chan<- error) {
 			for task := range tasks {
-				errors <- index.bulkIndexTweets(task.Offset, task.Limit, sqlScope)
+				errors <- index.bulkIndexTweets(task, sqlScope)
 			}
 		}(tasks, errors)
 	}
@@ -190,7 +189,7 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("Tweets Index - Add tweet %s to index %s", string(vBytes), indexName)
+	log.Debugf("Tweets Index - Add tweet %s to index %s", string(vBytes), indexName)
 	resp, err := index.esc.Index().
 		Index(indexName).
 		Type("result").
@@ -206,7 +205,7 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) error {
 	atomic.AddUint64(&index.Progress, 1)
 	progress := atomic.LoadUint64(&index.Progress)
 	if progress%10 == 0 {
-		log.Infof("Progress tweet %d", progress)
+		log.Debugf("Progress tweet %d", progress)
 	}
 
 	return nil
