@@ -13,16 +13,22 @@ import (
 )
 
 type SearchLog struct {
-	SearchId    string      `json:"search_id"`
-	Created     time.Time   `json:"created"`
-	LogType     string      `json:"log_type"`
-	Query       Query       `json:"query"`
-	QueryResult interface{} `json:"query_result,omitempty"`
-	Error       interface{} `json:"error,omitempty"`
-	SortBy      string      `json:"sort_by,omitempty"`
-	From        uint64      `json:"from,omitempty"`
-	Size        uint64      `json:"size,omitempty"`
-	Suggestion  string      `json:"suggestion,omitempty"`
+	SearchId         string      `json:"search_id"`
+	Created          time.Time   `json:"created"`
+	LogType          string      `json:"log_type"`
+	Query            Query       `json:"query"`
+	QueryResult      interface{} `json:"query_result,omitempty"`
+	Error            interface{} `json:"error,omitempty"`
+	SortBy           string      `json:"sort_by,omitempty"`
+	From             uint64      `json:"from,omitempty"`
+	Size             uint64      `json:"size,omitempty"`
+	Suggestion       string      `json:"suggestion,omitempty"`
+	ExecutionTimeLog []TimeLog   `json:"execution_time_log,omitempty"`
+}
+
+type TimeLog struct {
+	Operation string `json:"operation"`
+	Time      int64  `json:"time"`
 }
 
 type SearchClick struct {
@@ -109,12 +115,12 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultTy
 	return nil
 }
 
-func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult) error {
-	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, res, nil)
+func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, executionTimeLog map[string]time.Duration) error {
+	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, res, nil, executionTimeLog)
 }
 
-func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, from int, size int, searchId string, suggestion string, searchErr interface{}) error {
-	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, nil, searchErr)
+func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, from int, size int, searchId string, suggestion string, searchErr interface{}, executionTimeLog map[string]time.Duration) error {
+	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, nil, searchErr, executionTimeLog)
 }
 
 func (searchLogger *SearchLogger) fixHighlight(h *elastic.SearchHitHighlight) *elastic.SearchHitHighlight {
@@ -150,18 +156,26 @@ func (searchLogger *SearchLogger) fixResults(res *QueryResult) *QueryResult {
 	return res
 }
 
-func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, searchErr interface{}) error {
+func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, searchErr interface{}, executionTimeLog map[string]time.Duration) error {
+
+	timeLogArr := []TimeLog{}
+	for k := range executionTimeLog {
+		ms := int64(executionTimeLog[k] / time.Millisecond)
+		timeLogArr = append(timeLogArr, TimeLog{Operation: k, Time: ms})
+	}
+
 	sl := SearchLog{
-		Created:     time.Now(),
-		SearchId:    searchId,
-		LogType:     "query",
-		Query:       query,
-		QueryResult: searchLogger.fixResults(res),
-		Error:       searchErr,
-		SortBy:      sortBy,
-		From:        uint64(from),
-		Size:        uint64(size),
-		Suggestion:  suggestion,
+		Created:          time.Now(),
+		SearchId:         searchId,
+		LogType:          "query",
+		Query:            query,
+		QueryResult:      searchLogger.fixResults(res),
+		Error:            searchErr,
+		SortBy:           sortBy,
+		From:             uint64(from),
+		Size:             uint64(size),
+		Suggestion:       suggestion,
+		ExecutionTimeLog: timeLogArr,
 	}
 	resp, err := searchLogger.esc.Index().
 		Index("search_logs").
