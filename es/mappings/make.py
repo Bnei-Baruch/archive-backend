@@ -342,6 +342,15 @@ SEARCH_LOGS_TEMPLATE = {
                 "rank": {
                     "type": "integer",
                 },
+
+                "execution_time_log": {
+                    "type": "nested",
+                    "properties":
+                    {
+                        "operation": {"type": "keyword"},
+                        "time": {"type": "integer"}
+                    }
+                },
             },
         },
     },
