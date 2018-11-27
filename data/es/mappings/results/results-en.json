@@ -1,6 +1,7 @@
 {
     "mappings": {
         "result": {
+            "dynamic": "strict", 
             "properties": {
                 "title_suggest": {
                     "contexts": [
