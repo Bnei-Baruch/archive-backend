@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -577,7 +578,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		mssHighlights := e.esc.MultiSearch()
 
 		for _, h := range ret.Hits.Hits {
-			//TBD add to search only if not intent
+
+			if h.Id == "" || strings.HasPrefix(h.Index, "intent-") {
+				//  Bypass intent
+				continue
+			}
 
 			mssHighlights.Add(NewResultsSearchRequest(
 				SearchRequestOptions{
@@ -609,6 +614,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				for _, hr := range highlightedResults.Hits.Hits {
 					for i, h := range ret.Hits.Hits {
 						if h.Id == hr.Id {
+
+							// TBC if assigned correctly when we have pagination
+
 							ret.Hits.Hits[i] = hr
 						}
 					}
