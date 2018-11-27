@@ -491,71 +491,6 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	return result, nil
 }
 
-func (e *ESEngine) addHighlights(ret *elastic.SearchResult) error {
-
-	return errors.New("IN PROGRESS")
-
-	hitsByTitle := make(map[string]*elastic.SearchHit)
-	for _, h := range ret.Hits.Hits {
-		var result es.Result
-		if err := json.Unmarshal(*h.Source, &result); err != nil {
-			log.Errorf("Cannot unmarshal hit result: %+v", err)
-			continue
-		}
-		hitsByTitle[result.Title] = h
-	}
-
-	if len(hitsByTitle) > 0 {
-		mssHighlights := e.esc.MultiSearch()
-		for title, hit := range hitsByTitle {
-			//TBD add to search only if not intent
-			mssHighlights.Add(NewResultsSearchRequest(
-				SearchRequestOptions{
-					resultTypes: consts.ES_SEARCH_RESULT_TYPES,
-					index:       hit.Index, //TBC
-					query:       Query{ExactTerms: []string{title}, Term: ""},
-					sortBy:      consts.SORT_BY_RELEVANCE,
-					from:        0,
-					size:        1, //TBC
-					//preference:       preference, //TBC
-					useHighlight:     true,
-					partialHighlight: true}))
-		}
-
-		beforeHighlightsDoSearch := time.Now()
-		mr, err := mssHighlights.Do(context.TODO())
-		e.timeTrack(beforeHighlightsDoSearch, "DoSearch.MultisearcHighlightsDo")
-		if err != nil {
-			return errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
-		}
-
-		for _, currentResults := range mr.Responses {
-			if currentResults.Error != nil {
-				log.Warnf("%+v", currentResults.Error)
-				return errors.New(fmt.Sprintf("Failed multi get highlights: %+v", currentResults.Error))
-			}
-			if haveHits(currentResults) {
-				for _, h := range currentResults.Hits.Hits {
-					var result es.Result
-					if err := json.Unmarshal(*h.Source, &result); err != nil {
-						log.Errorf("Cannot unmarshal hit result: %+v", err)
-						continue
-					}
-					for title, _ := range hitsByTitle {
-						if result.Title == title {
-							hitsByTitle[title] = h
-						}
-					}
-				}
-			}
-		}
-	}
-	// TBC what if we have different results with same title???
-
-	//TBD reassign ret
-	return nil
-}
-
 func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	elapsed := time.Since(start)
 	e.ExecutionTimeLog[operation] = elapsed
@@ -624,10 +559,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
+	var currentLang string
 	results := make([]*elastic.SearchResult, 0)
 	for _, lang := range query.LanguageOrder {
 		if r, ok := resultsByLang[lang]; ok {
 			results = r
+			currentLang = lang
 			break
 		}
 	}
@@ -636,9 +573,47 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	if ret != nil && ret.Hits != nil && ret.Hits.Hits != nil {
 
-		err = e.addHighlights(ret)
+		log.Info("Preparing highlights search")
+		mssHighlights := e.esc.MultiSearch()
+
+		for _, h := range ret.Hits.Hits {
+			//TBD add to search only if not intent
+
+			mssHighlights.Add(NewResultsSearchRequest(
+				SearchRequestOptions{
+					resultTypes:      consts.ES_SEARCH_RESULT_TYPES,
+					docIds:           []string{h.Id},
+					index:            h.Index, //TBC
+					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: []string{currentLang}},
+					sortBy:           consts.SORT_BY_RELEVANCE,
+					from:             0,
+					size:             1,          //TBC
+					preference:       preference, //TBC
+					useHighlight:     true,
+					partialHighlight: true}))
+		}
+
+		beforeHighlightsDoSearch := time.Now()
+		mr, err := mssHighlights.Do(context.TODO())
+		e.timeTrack(beforeHighlightsDoSearch, "DoSearch.MultisearcHighlightsDo")
 		if err != nil {
-			// TBD
+			return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
+		}
+
+		for _, highlightedResults := range mr.Responses {
+			if highlightedResults.Error != nil {
+				log.Warnf("%+v", highlightedResults.Error)
+				return nil, errors.New(fmt.Sprintf("Failed multi get highlights: %+v", highlightedResults.Error))
+			}
+			if haveHits(highlightedResults) {
+				for _, hr := range highlightedResults.Hits.Hits {
+					for i, h := range ret.Hits.Hits {
+						if h.Id == hr.Id {
+							ret.Hits.Hits[i] = hr
+						}
+					}
+				}
+			}
 		}
 
 		return &QueryResult{ret, query.Intents}, err
