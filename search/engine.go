@@ -543,6 +543,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			if _, ok := resultsByLang[lang]; !ok {
 				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 			}
+
 			resultsByLang[lang] = append(resultsByLang[lang], currentResults)
 		}
 	}
@@ -574,7 +575,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	if ret != nil && ret.Hits != nil && ret.Hits.Hits != nil {
 
-		log.Info("Preparing highlights search")
+		log.Info("Preparing highlights search.")
 		mssHighlights := e.esc.MultiSearch()
 
 		for _, h := range ret.Hits.Hits {
@@ -588,15 +589,17 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				SearchRequestOptions{
 					resultTypes:      consts.ES_SEARCH_RESULT_TYPES,
 					docIds:           []string{h.Id},
-					index:            h.Index, //TBC
+					index:            h.Index,
 					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: []string{currentLang}},
 					sortBy:           consts.SORT_BY_RELEVANCE,
 					from:             0,
-					size:             1,          //TBC
-					preference:       preference, //TBC
+					size:             1,
+					preference:       preference,
 					useHighlight:     true,
 					partialHighlight: true}))
 		}
+
+		log.Info("Searching for highlights and replacing original results with highlighted results.")
 
 		beforeHighlightsDoSearch := time.Now()
 		mr, err := mssHighlights.Do(context.TODO())
@@ -614,13 +617,18 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				for _, hr := range highlightedResults.Hits.Hits {
 					for i, h := range ret.Hits.Hits {
 						if h.Id == hr.Id {
-
-							// TBC if assigned correctly when we have pagination
-
+							//  Replacing original search result with highlighted result.
 							ret.Hits.Hits[i] = hr
 						}
 					}
 				}
+			}
+		}
+
+		//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
+		for _, hit := range ret.Hits.Hits {
+			if hit.Highlight == nil {
+				hit.Highlight = elastic.SearchHitHighlight{}
 			}
 		}
 
