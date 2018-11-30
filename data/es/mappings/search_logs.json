@@ -1,6 +1,7 @@
 {
     "mappings": {
         "search_logs": {
+            "dynamic": "strict", 
             "properties": {
                 "index": {
                     "type": "keyword"
@@ -28,7 +29,40 @@
                     "enabled": false
                 }, 
                 "query": {
-                    "type": "object"
+                    "type": "object", 
+                    "properties": {
+                        "intents": {
+                            "type": "object", 
+                            "enabled": false
+                        }, 
+                        "term": {
+                            "type": "keyword"
+                        }, 
+                        "language_order": {
+                            "type": "keyword"
+                        }, 
+                        "filters": {
+                            "dynamic": true, 
+                            "type": "object"
+                        }, 
+                        "deb": {
+                            "type": "boolean"
+                        }, 
+                        "exact_terms": {
+                            "type": "keyword"
+                        }
+                    }
+                }, 
+                "execution_time_log": {
+                    "type": "nested", 
+                    "properties": {
+                        "operation": {
+                            "type": "keyword"
+                        }, 
+                        "time": {
+                            "type": "integer"
+                        }
+                    }
                 }, 
                 "execution_time_log": {
                     "type": "nested",
@@ -51,7 +85,17 @@
                 "size": {
                     "type": "integer"
                 }
-            }
+            }, 
+            "dynamic_templates": [
+                {
+                    "strings_as_keywords": {
+                        "match_mapping_type": "string", 
+                        "mapping": {
+                            "type": "keyword"
+                        }
+                    }
+                }
+            ]
         }
     }
 }
