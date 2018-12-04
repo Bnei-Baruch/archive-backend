@@ -149,7 +149,7 @@ type Loss struct {
 type EvalQuery struct {
 	Language     string        `json:"language"`
 	Query        string        `json:"query"`
-	Weight       uint64        `json:"weight,omitempty"`
+	Weight       float64       `json:"weight,omitempty"`
 	Bucket       string        `json:"bucket,omitempty"`
 	Expectations []Expectation `json:"expectations"`
 	Comment      string        `json:"comment,omitempty"`
@@ -158,7 +158,7 @@ type EvalQuery struct {
 type EvalResults struct {
 	Results       []EvalResult    `json:"results"`
 	TotalUnique   uint64          `json:"total_unique"`
-	TotalWeighted uint64          `json:"total_weighted"`
+	TotalWeighted float64         `json:"total_weighted"`
 	TotalErrors   uint64          `json:"total_errors"`
 	UniqueMap     map[int]float64 `json:"unique_map"`
 	WeightedMap   map[int]float64 `json:"weighted_map"`
@@ -223,7 +223,7 @@ func ReadEvalSet(reader io.Reader, db *sql.DB) ([]EvalQuery, error) {
 	queriesWithExpectationsCount := 0
 	var ret []EvalQuery
 	for _, line := range lines {
-		w, err := strconv.ParseUint(strings.TrimSpace(line[2]), 10, 64)
+		w, err := strconv.ParseFloat(strings.TrimSpace(line[2]), 64)
 		if err != nil {
 			log.Warnf("Failed parsing query [%s] weight [%s].", line[1], line[2])
 			continue
@@ -658,7 +658,7 @@ func WriteResults(path string, queries []EvalQuery, results EvalResults) error {
 		records[0] = append(records[0], fmt.Sprintf("#%d Rank", i+1))
 	}
 	for i, q := range queries {
-		record := []string{q.Language, q.Query, fmt.Sprintf("%d", q.Weight), q.Bucket, q.Comment}
+		record := []string{q.Language, q.Query, fmt.Sprintf("%.2f", q.Weight), q.Bucket, q.Comment}
 		for j, sq := range results.Results[i].SearchQuality {
 			record = append(record, q.Expectations[j].Source)
 			record = append(record, ExpectationToString(q.Expectations[j]))
