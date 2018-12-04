@@ -32,11 +32,8 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		).Boost(0.0),
 	)
 	if docIds != nil && len(docIds) > 0 {
-		boolQuery.Must(
-			elastic.NewConstantScoreQuery(
-				elastic.NewTermsQuery("_id", utils.ConvertArgsString(docIds)...),
-			).Boost(0.0),
-		)
+		idsQuery := elastic.NewIdsQuery().Ids(docIds...)
+		boolQuery.Filter(idsQuery)
 	}
 	if q.Term != "" {
 		boolQuery = boolQuery.Must(
