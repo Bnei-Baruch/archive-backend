@@ -585,6 +585,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				continue
 			}
 
+			//  We use multiple search request because we saw that a single request
+			//	filtered by id's list take more time than multiple requests.
 			mssHighlights.Add(NewResultsSearchRequest(
 				SearchRequestOptions{
 					resultTypes:      consts.ES_SEARCH_RESULT_TYPES,
