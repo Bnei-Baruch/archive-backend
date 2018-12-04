@@ -575,7 +575,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	if ret != nil && ret.Hits != nil && ret.Hits.Hits != nil {
 
-		log.Info("Preparing highlights search.")
+		//  Preparing highlights search.
 		mssHighlights := e.esc.MultiSearch()
 
 		for _, h := range ret.Hits.Hits {
@@ -599,7 +599,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					partialHighlight: true}))
 		}
 
-		log.Info("Searching for highlights and replacing original results with highlighted results.")
+		log.Debug("Searching for highlights and replacing original results with highlighted results.")
 
 		beforeHighlightsDoSearch := time.Now()
 		mr, err := mssHighlights.Do(context.TODO())
