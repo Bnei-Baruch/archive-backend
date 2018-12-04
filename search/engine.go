@@ -169,7 +169,7 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	return nil, nil, nil
 }
 
-func (e *ESEngine) AddIntents(query *Query, preference string) error {
+func (e *ESEngine) AddIntents(query *Query, preference string, size int) error {
 	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
 		return nil
 	}
@@ -213,7 +213,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 				query:            queryWithoutFilters,
 				sortBy:           consts.SORT_BY_RELEVANCE,
 				from:             0,
-				size:             consts.API_DEFAULT_PAGE_SIZE,
+				size:             size,
 				preference:       preference,
 				useHighlight:     false,
 				partialHighlight: true}))
@@ -225,7 +225,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 				query:            queryWithoutFilters,
 				sortBy:           consts.SORT_BY_RELEVANCE,
 				from:             0,
-				size:             consts.API_DEFAULT_PAGE_SIZE,
+				size:             size,
 				preference:       preference,
 				useHighlight:     false,
 				partialHighlight: true}))
@@ -262,7 +262,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 							query:            *secondRoundQuery,
 							sortBy:           consts.SORT_BY_RELEVANCE,
 							from:             0,
-							size:             consts.API_DEFAULT_PAGE_SIZE,
+							size:             size,
 							preference:       preference,
 							useHighlight:     false,
 							partialHighlight: true}))
@@ -500,7 +500,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), "DoSearch")
 
-	if err := e.AddIntents(&query, preference); err != nil {
+	if err := e.AddIntents(&query, preference, size); err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
 	}
 
