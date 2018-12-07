@@ -169,15 +169,18 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	return nil, nil, nil
 }
 
-func (e *ESEngine) AddIntents(query *Query, preference string, size int) error {
+func (e *ESEngine) AddIntents(query *Query, preference string, size int) ([]Intent, error) {
+
+	intents := make([]Intent, 0)
+
 	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
-		return nil
+		return intents, nil
 	}
 
 	// Don't do intents, if sources are selected in section filter or filtering the results by media language.
 	for filterKey := range query.Filters {
 		if filterKey == consts.FILTERS[consts.FILTER_SECTION_SOURCES] || filterKey == consts.FILTERS[consts.FILTER_LANGUAGE] {
-			return nil
+			return intents, nil
 		}
 	}
 
@@ -235,7 +238,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) error {
 	mr, err := mssFirstRound.Do(context.TODO())
 	e.timeTrack(beforeFirstRoundDo, "DoSearch.AddIntents.FirstRoundDo")
 	if err != nil {
-		return errors.Wrap(err, "ESEngine.AddIntents - Error multisearch Do.")
+		return intents, errors.Wrap(err, "ESEngine.AddIntents - Error multisearch Do.")
 	}
 
 	// Build second request to evaluate how close the search is toward the full name.
@@ -245,14 +248,14 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) error {
 		res := mr.Responses[i]
 		if res.Error != nil {
 			log.Warnf("ESEngine.AddIntents - First Run %+v", res.Error)
-			return errors.New("ESEngine.AddIntents - First Run Failed multi get (S).")
+			return intents, errors.New("ESEngine.AddIntents - First Run Failed multi get (S).")
 		}
 		if haveHits(res) {
 			for _, h := range res.Hits.Hits {
 				err, intent, secondRoundQuery := e.AddIntentSecondRound(h, potentialIntents[i], queryWithoutFilters)
 				// log.Infof("Adding second round for %+v %+v %+v", intent, secondRoundQuery, potentialIntents[i])
 				if err != nil {
-					return errors.Wrapf(err, "ESEngine.AddIntents - Error second run for intent %+v", potentialIntents[i])
+					return intents, errors.Wrapf(err, "ESEngine.AddIntents - Error second run for intent %+v", potentialIntents[i])
 				}
 				if intent != nil {
 					mssSecondRound.Add(NewResultsSearchRequest(
@@ -280,11 +283,11 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) error {
 		if res.Error != nil {
 			log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error)
 			log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error.RootCause[0])
-			return errors.New("ESEngine.AddIntents - Second Run Failed multi get (S).")
+			return intents, errors.New("ESEngine.AddIntents - Second Run Failed multi get (S).")
 		}
 		intentValue, intentOk := finalIntents[i].Value.(es.ClassificationIntent)
 		if !intentOk {
-			return errors.New(fmt.Sprintf("ESEngine.AddIntents - Unexpected intent value: %+v", finalIntents[i].Value))
+			return intents, errors.New(fmt.Sprintf("ESEngine.AddIntents - Unexpected intent value: %+v", finalIntents[i].Value))
 		}
 		if haveHits(res) {
 			// log.Infof("Found Hits for %+v", intentValue)
@@ -292,7 +295,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) error {
 			for _, h := range res.Hits.Hits {
 				var classificationIntent es.ClassificationIntent
 				if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
-					return errors.Wrap(err, "ESEngine.AddIntents - Unmarshal classification intent filed.")
+					return intents, errors.Wrap(err, "ESEngine.AddIntents - Unmarshal classification intent filed.")
 				}
 				if query.Deb {
 					intentValue.MaxExplanation = *h.Explanation
@@ -307,7 +310,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) error {
 							log.Warnf("ESEngine.AddIntents - Not expected score %f to be larger then max score %f for %s - %s.",
 								*intentValue.Score, *intentValue.MaxScore, intentValue.MDB_UID, intentValue.Title)
 						}
-						query.Intents = append(query.Intents, Intent{finalIntents[i].Type, finalIntents[i].Language, intentValue})
+						intents = append(intents, Intent{finalIntents[i].Type, finalIntents[i].Language, intentValue})
 					}
 				}
 			}
@@ -321,14 +324,14 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) error {
 	// Set content unit type and exists for intents that are in the query, i.e., those who passed the second round.
 	// If more then one content unit type exist for this intent, we will have to duplicate that intent.
 	moreIntents := make([]Intent, 0)
-	for intentIdx := range query.Intents {
+	for intentIdx := range intents {
 		for _, contentUnitType := range checkContentUnitsTypes {
-			if intentValue, ok := query.Intents[intentIdx].Value.(es.ClassificationIntent); ok {
-				intentP := &query.Intents[intentIdx]
+			if intentValue, ok := intents[intentIdx].Value.(es.ClassificationIntent); ok {
+				intentP := &intents[intentIdx]
 				intentValueP := &intentValue
 				if intentValue.ContentType != "" {
 					// We need to copy the intent as we have more than one existing content types for that intent.
-					moreIntents = append(moreIntents, query.Intents[intentIdx])
+					moreIntents = append(moreIntents, intents[intentIdx])
 					intentP = &moreIntents[len(moreIntents)-1]
 					copyIntentValue := intentP.Value.(es.ClassificationIntent)
 					intentValueP = &copyIntentValue
@@ -344,8 +347,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) error {
 			}
 		}
 	}
-	query.Intents = append(query.Intents, moreIntents...)
-	return nil
+	intents = append(intents, moreIntents...)
+	return intents, nil
 }
 
 func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.SearchResult) {
@@ -500,9 +503,16 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), "DoSearch")
 
-	if err := e.AddIntents(&query, preference, size); err != nil {
-		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
-	}
+	done := make(chan bool)
+	go func() {
+		intents, err := e.AddIntents(&query, preference, size)
+		if err != nil {
+			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
+		} else {
+			query.Intents = append(query.Intents, intents...)
+		}
+		done <- true
+	}()
 
 	multiSearchService := e.esc.MultiSearch()
 	multiSearchService.Add(NewResultsSearchRequests(
@@ -548,6 +558,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
+	<-done
 	err, intentResultsMap := e.IntentsToResults(&query)
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents to results.")
