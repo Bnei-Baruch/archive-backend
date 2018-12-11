@@ -360,6 +360,23 @@ const (
 	INTENT_HIT_TYPE_LESSONS  = "lessons"
 )
 
+var ES_INTENT_SUPPORTED_FILTERS = []string{
+	FILTERS[FILTER_UNITS_CONTENT_TYPES],
+	FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES], // Collections filter appears in any search except when filtering by sources section
+	FILTER_TAG,
+	FILTER_SOURCE,
+}
+
+var ES_INTENT_SUPPORTED_CONTENT_TYPES = []string{
+	CT_LESSON_PART,
+	CT_LECTURE,
+	CT_VIRTUAL_LESSON,
+	CT_CHILDREN_LESSON,
+	CT_WOMEN_LESSON,
+	CT_VIDEO_PROGRAM_CHAPTER,
+	CT_FULL_LESSON,
+}
+
 // Fake index for intents.
 var INTENT_INDEX_BY_TYPE = map[string]string{
 	INTENT_TYPE_TAG:    INTENT_INDEX_TAG,
