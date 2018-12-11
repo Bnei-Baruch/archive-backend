@@ -177,7 +177,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) ([]Inte
 		return intents, nil
 	}
 
-	// Don't do intents, if sources are selected in section filter or filtering the results by media language.
+	// Don't do intents, if sources are selected in section filter or filtering the results by media language (we dont know by what rule we should decide what is the intent media language).
 	for filterKey := range query.Filters {
 		if filterKey == consts.FILTERS[consts.FILTER_SECTION_SOURCES] || filterKey == consts.FILTERS[consts.FILTER_LANGUAGE] {
 			return intents, nil
@@ -505,7 +505,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	done := make(chan bool)
 	go func() {
-		intents, err := e.AddIntents(&query, preference, size)
+		intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT)
 		if err != nil {
 			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 		} else {
