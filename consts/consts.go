@@ -255,6 +255,7 @@ var LANG2CODE = map[string]string{
 // api
 
 const (
+	INTENTS_SEARCH_COUNT  = 10
 	API_DEFAULT_PAGE_SIZE = 50
 	API_MAX_PAGE_SIZE     = 1000
 )
