@@ -169,11 +169,12 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	return nil, nil, nil
 }
 
-func (e *ESEngine) AddIntents(query *Query, preference string, size int) ([]Intent, error) {
+func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy string) ([]Intent, error) {
 
 	intents := make([]Intent, 0)
 
-	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
+	if len(query.Term) == 0 && len(query.ExactTerms) == 0 &&
+		(sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER) {
 		return intents, nil
 	}
 
@@ -527,7 +528,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	done := make(chan bool)
 	go func() {
-		intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT)
+		intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy)
 		if err != nil {
 			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 		} else {
@@ -536,10 +537,22 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		done <- true
 	}()
 
+	var resultTypes []string
+	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
+		resultTypes = make([]string, 0)
+		for _, str := range consts.ES_SEARCH_RESULT_TYPES {
+			if str != consts.ES_RESULT_TYPE_COLLECTIONS {
+				resultTypes = append(resultTypes, str)
+			}
+		}
+	} else {
+		resultTypes = consts.ES_SEARCH_RESULT_TYPES
+	}
+
 	multiSearchService := e.esc.MultiSearch()
 	multiSearchService.Add(NewResultsSearchRequests(
 		SearchRequestOptions{
-			resultTypes:      consts.ES_SEARCH_RESULT_TYPES,
+			resultTypes:      resultTypes,
 			index:            "",
 			query:            query,
 			sortBy:           sortBy,
@@ -622,7 +635,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			//	filtered by id's list take more time than multiple requests.
 			mssHighlights.Add(NewResultsSearchRequest(
 				SearchRequestOptions{
-					resultTypes:      consts.ES_SEARCH_RESULT_TYPES,
+					resultTypes:      resultTypes,
 					docIds:           []string{h.Id},
 					index:            h.Index,
 					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: []string{currentLang}},
