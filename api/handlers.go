@@ -512,7 +512,7 @@ func SearchHandler(c *gin.Context) {
 	)
 	if err == nil {
 		// TODO: How does this slows the search query? Consider logging in parallel.
-		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
+		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog, query.Deb)
 		if err != nil {
 			log.Warnf("Error logging search: %+v %+v", err, res)
 		}
@@ -520,7 +520,7 @@ func SearchHandler(c *gin.Context) {
 	} else {
 		// TODO: Remove following line, we should not log this.
 		log.Infof("Error on search: %+v", err)
-		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, suggestion, err, se.ExecutionTimeLog)
+		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, suggestion, err, se.ExecutionTimeLog, query.Deb)
 		if logErr != nil {
 			log.Warnf("Erro logging search error: %+v %+v", logErr, err)
 		}
@@ -532,6 +532,10 @@ func ClickHandler(c *gin.Context) {
 	mdbUid := c.Query("mdb_uid")
 	index := c.Query("index")
 	resultType := c.Query("result_type")
+	isDebug := false
+	if c.Query("deb") == "true" {
+		isDebug = true
+	}
 	rank, err := strconv.Atoi(c.Query("rank"))
 	if err != nil || rank < 0 {
 		NewBadRequestError(errors.New("rank expects a positive number")).Abort(c)
@@ -539,7 +543,7 @@ func ClickHandler(c *gin.Context) {
 	}
 	searchId := c.Query("search_id")
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
-	if err = logger.LogClick(mdbUid, index, resultType, rank, searchId); err != nil {
+	if err = logger.LogClick(mdbUid, index, resultType, rank, searchId, isDebug); err != nil {
 		log.Warnf("Error logging click: %+v", err)
 	}
 	c.JSON(http.StatusOK, gin.H{})

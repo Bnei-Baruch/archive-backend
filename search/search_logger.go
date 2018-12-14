@@ -24,6 +24,7 @@ type SearchLog struct {
 	Size             uint64      `json:"size,omitempty"`
 	Suggestion       string      `json:"suggestion,omitempty"`
 	ExecutionTimeLog []TimeLog   `json:"execution_time_log,omitempty"`
+	IsDebug          bool        `json:"is_debug"`
 }
 
 type TimeLog struct {
@@ -39,6 +40,7 @@ type SearchClick struct {
 	Index      string    `json:"index",omitempty`
 	ResultType string    `json:"result_type",omitempty`
 	Rank       uint32    `json:"rank",omitempty`
+	IsDebug    bool      `json:"is_debug"`
 }
 
 type CreatedSearchLogs []SearchLog
@@ -77,7 +79,7 @@ func MakeSearchLogger(esc *elastic.Client) *SearchLogger {
 	return &SearchLogger{esc: esc}
 }
 
-func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultType string, rank int, searchId string) error {
+func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultType string, rank int, searchId string, isDebug bool) error {
 	sc := SearchClick{
 		SearchId:   searchId,
 		Created:    time.Now(),
@@ -86,6 +88,7 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultTy
 		Index:      index,
 		ResultType: resultType,
 		Rank:       uint32(rank),
+		IsDebug:    isDebug,
 	}
 
 	sr, err := elastic.NewSearchService(searchLogger.esc).
@@ -115,12 +118,12 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultTy
 	return nil
 }
 
-func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, executionTimeLog map[string]time.Duration) error {
-	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, res, nil, executionTimeLog)
+func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, executionTimeLog map[string]time.Duration, isDebug bool) error {
+	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, res, nil, executionTimeLog, isDebug)
 }
 
-func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, from int, size int, searchId string, suggestion string, searchErr interface{}, executionTimeLog map[string]time.Duration) error {
-	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, nil, searchErr, executionTimeLog)
+func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, from int, size int, searchId string, suggestion string, searchErr interface{}, executionTimeLog map[string]time.Duration, isDebug bool) error {
+	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, nil, searchErr, executionTimeLog, isDebug)
 }
 
 func (searchLogger *SearchLogger) fixHighlight(h *elastic.SearchHitHighlight) *elastic.SearchHitHighlight {
@@ -156,7 +159,7 @@ func (searchLogger *SearchLogger) fixResults(res *QueryResult) *QueryResult {
 	return res
 }
 
-func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, searchErr interface{}, executionTimeLog map[string]time.Duration) error {
+func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, searchErr interface{}, executionTimeLog map[string]time.Duration, isDebug bool) error {
 
 	timeLogArr := []TimeLog{}
 	for k := range executionTimeLog {
@@ -176,6 +179,7 @@ func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int
 		Size:             uint64(size),
 		Suggestion:       suggestion,
 		ExecutionTimeLog: timeLogArr,
+		IsDebug:          isDebug,
 	}
 	resp, err := searchLogger.esc.Index().
 		Index("search_logs").
