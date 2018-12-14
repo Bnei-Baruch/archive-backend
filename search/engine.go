@@ -173,8 +173,9 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 
 	intents := make([]Intent, 0)
 
-	if len(query.Term) == 0 && len(query.ExactTerms) == 0 &&
-		(sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER) {
+	if (len(query.Term) == 0 && len(query.ExactTerms) == 0) ||
+		sortBy == consts.SORT_BY_NEWER_TO_OLDER ||
+		sortBy == consts.SORT_BY_OLDER_TO_NEWER {
 		return intents, nil
 	}
 
@@ -623,6 +624,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 		//  Preparing highlights search.
 		mssHighlights := e.esc.MultiSearch()
+		highlightRequestAdded := false
 
 		for _, h := range ret.Hits.Hits {
 
@@ -645,28 +647,32 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					preference:       preference,
 					useHighlight:     true,
 					partialHighlight: true}))
+
+			highlightRequestAdded = true
 		}
 
-		log.Debug("Searching for highlights and replacing original results with highlighted results.")
+		if highlightRequestAdded {
+			log.Debug("Searching for highlights and replacing original results with highlighted results.")
 
-		beforeHighlightsDoSearch := time.Now()
-		mr, err := mssHighlights.Do(context.TODO())
-		e.timeTrack(beforeHighlightsDoSearch, "DoSearch.MultisearcHighlightsDo")
-		if err != nil {
-			return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
-		}
-
-		for _, highlightedResults := range mr.Responses {
-			if highlightedResults.Error != nil {
-				log.Warnf("%+v", highlightedResults.Error)
-				return nil, errors.New(fmt.Sprintf("Failed multi get highlights: %+v", highlightedResults.Error))
+			beforeHighlightsDoSearch := time.Now()
+			mr, err := mssHighlights.Do(context.TODO())
+			e.timeTrack(beforeHighlightsDoSearch, "DoSearch.MultisearcHighlightsDo")
+			if err != nil {
+				return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
 			}
-			if haveHits(highlightedResults) {
-				for _, hr := range highlightedResults.Hits.Hits {
-					for i, h := range ret.Hits.Hits {
-						if h.Id == hr.Id {
-							//  Replacing original search result with highlighted result.
-							ret.Hits.Hits[i] = hr
+
+			for _, highlightedResults := range mr.Responses {
+				if highlightedResults.Error != nil {
+					log.Warnf("%+v", highlightedResults.Error)
+					return nil, errors.New(fmt.Sprintf("Failed multi get highlights: %+v", highlightedResults.Error))
+				}
+				if haveHits(highlightedResults) {
+					for _, hr := range highlightedResults.Hits.Hits {
+						for i, h := range ret.Hits.Hits {
+							if h.Id == hr.Id {
+								//  Replacing original search result with highlighted result.
+								ret.Hits.Hits[i] = hr
+							}
 						}
 					}
 				}
