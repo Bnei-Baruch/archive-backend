@@ -387,6 +387,9 @@ SEARCH_LOGS_TEMPLATE = {
                         "time": {"type": "integer"}
                     }
                 },
+                "is_debug": {
+                    "type": "boolean",
+                },
             },
         },
     },
