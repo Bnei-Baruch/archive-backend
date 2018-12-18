@@ -64,6 +64,9 @@
                         }
                     }
                 }, 
+                "is_debug": {
+                    "type": "boolean"
+                },
                 "sort_by": {
                     "type": "keyword"
                 }, 
