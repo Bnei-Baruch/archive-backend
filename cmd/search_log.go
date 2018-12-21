@@ -43,6 +43,7 @@ func init() {
 	logCmd.PersistentFlags().StringVar(&elasticUrl, "elastic", "", "URL of Elastic.")
 	logCmd.MarkFlagRequired("elastic")
 	viper.BindPFlag("elasticsearch.url", logCmd.PersistentFlags().Lookup("elastic"))
+
 	logCmd.AddCommand(queriesCmd)
 	logCmd.AddCommand(clicksCmd)
 }
