@@ -43,7 +43,6 @@ func init() {
 	logCmd.PersistentFlags().StringVar(&elasticUrl, "elastic", "", "URL of Elastic.")
 	logCmd.MarkFlagRequired("elastic")
 	viper.BindPFlag("elasticsearch.url", logCmd.PersistentFlags().Lookup("elastic"))
-
 	logCmd.AddCommand(queriesCmd)
 	logCmd.AddCommand(clicksCmd)
 }
@@ -119,6 +118,8 @@ func queriesFn(cmd *cobra.Command, args []string) {
 
 func clicksFn(cmd *cobra.Command, args []string) {
 	logger := initLogger()
+	printCsv([][]string{[]string{
+		"#", "SearchId", "Created", "Rank", "MdbUid", "Index", "ResultType"}})
 	clicks, err := logger.GetAllClicks()
 	utils.Must(err)
 	log.Infof("Found %d clicks.", len(clicks))
@@ -128,14 +129,18 @@ func clicksFn(cmd *cobra.Command, args []string) {
 		sortedClicks = append(sortedClicks, q)
 	}
 	sort.Sort(sortedClicks)
+	records := [][]string{}
 	for i, sq := range sortedClicks {
-		log.Infof("%5d\t%16s\t%20s\t%3d\t%10s\t%20s\t%17s",
-			i+1,
+
+		records = append(records, []string{
+			fmt.Sprintf("%d", i+1),
 			sq.SearchId,
 			sq.Created.Format("2006-01-02 15:04:05"),
-			sq.Rank,
+			fmt.Sprintf("%d", sq.Rank),
 			sq.MdbUid,
 			sq.Index,
-			sq.ResultType)
+			sq.ResultType,
+		})
 	}
+	printCsv(records)
 }
