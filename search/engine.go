@@ -180,25 +180,14 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 	}
 
 	for filterKey := range query.Filters {
-		inSupportedList := false
-		for _, f := range consts.ES_INTENT_SUPPORTED_FILTERS {
-			if filterKey == f {
-				inSupportedList = true
-			}
-		}
-		if !inSupportedList {
+		if _, ok := consts.ES_INTENT_SUPPORTED_FILTERS[filterKey]; !ok {
 			return intents, nil
 		}
 	}
+
 	if contentTypes, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
 		for _, contentType := range contentTypes {
-			inSupportedList := false
-			for _, ct := range consts.ES_INTENT_SUPPORTED_CONTENT_TYPES {
-				if contentType == ct {
-					inSupportedList = true
-				}
-			}
-			if !inSupportedList {
+			if _, ok := consts.ES_INTENT_SUPPORTED_CONTENT_TYPES[contentType]; !ok {
 				return intents, nil
 			}
 		}
@@ -652,6 +641,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 
 		if highlightRequestAdded {
+
 			log.Debug("Searching for highlights and replacing original results with highlighted results.")
 
 			beforeHighlightsDoSearch := time.Now()
@@ -677,6 +667,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					}
 				}
 			}
+
 		}
 
 		//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
