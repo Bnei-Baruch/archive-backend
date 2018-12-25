@@ -178,25 +178,14 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) ([]Inte
 	}
 
 	for filterKey := range query.Filters {
-		inSupportedList := false
-		for _, f := range consts.ES_INTENT_SUPPORTED_FILTERS {
-			if filterKey == f {
-				inSupportedList = true
-			}
-		}
-		if !inSupportedList {
+		if _, ok := consts.ES_INTENT_SUPPORTED_FILTERS[filterKey]; !ok {
 			return intents, nil
 		}
 	}
+
 	if contentTypes, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
 		for _, contentType := range contentTypes {
-			inSupportedList := false
-			for _, ct := range consts.ES_INTENT_SUPPORTED_CONTENT_TYPES {
-				if contentType == ct {
-					inSupportedList = true
-				}
-			}
-			if !inSupportedList {
+			if _, ok := consts.ES_INTENT_SUPPORTED_CONTENT_TYPES[contentType]; !ok {
 				return intents, nil
 			}
 		}
