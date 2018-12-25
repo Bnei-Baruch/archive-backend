@@ -208,6 +208,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) ([]Inte
 	}
 
 	queryWithoutFilters := *query
+	//  Keep only source and tag filters.
 	if _, ok := queryWithoutFilters.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
 		delete(queryWithoutFilters.Filters, consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES])
 	}
