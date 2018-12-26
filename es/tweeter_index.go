@@ -197,10 +197,10 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) error {
 		BodyJson(tweet).
 		Do(context.TODO())
 	if err != nil {
-		return errors.Wrapf(err, "Index tweet %s %s", indexName, mdbTweet.ID)
+		return errors.Wrapf(err, "Index tweet %s %d", indexName, mdbTweet.ID)
 	}
 	if resp.Result != "created" {
-		return errors.Errorf("Not created: tweet %s %s", indexName, mdbTweet.ID)
+		return errors.Errorf("Not created: tweet %s %d", indexName, mdbTweet.ID)
 	}
 
 	atomic.AddUint64(&index.Progress, 1)

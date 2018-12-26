@@ -41,14 +41,14 @@ func (q *IndexerQueue) Init() {
 		for {
 			select {
 			case <-q.ctx.Done():
-				log.Info("IndexerQueue.Init(%d) - Worker: ctx.Done.", len(q.jobs))
+				log.Infof("IndexerQueue.Init(%d) - Worker: ctx.Done.", len(q.jobs))
 				return
 
 			case job := <-q.jobs:
 				log.Infof("IndexerQueue.Dequeue(%d) - Task was taken from the queue: %+v", len(q.jobs), job)
 				job.Do()
 				if q.ctx.Err() != nil {
-					log.Info("IndexerQueue.Init(%d) - Worker: Context cancelled.", len(q.jobs))
+					log.Infof("IndexerQueue.Init(%d) - Worker: Context cancelled.", len(q.jobs))
 					return
 				}
 			}
@@ -60,7 +60,7 @@ func (q *IndexerQueue) Init() {
 }
 
 func (q *IndexerQueue) Close() {
-	log.Info("IndexerQueue.Close(%d) - Close jobs channel.", len(q.jobs))
+	log.Infof("IndexerQueue.Close(%d) - Close jobs channel.", len(q.jobs))
 	close(q.jobs)
 
 	log.Info("IndexerQueue.Close(closed) - Cancel worker context.")
@@ -76,7 +76,7 @@ func (q *IndexerQueue) Enqueue(task WorkTask) {
 	for {
 		select {
 		case <-time.After(2 * time.Second):
-			log.Warn("IndexerQueue.Enqueue(%d) - Enqueue timeout.", len(q.jobs))
+			log.Warnf("IndexerQueue.Enqueue(%d) - Enqueue timeout.", len(q.jobs))
 		case q.jobs <- task:
 			log.Infof("IndexerQueue.Enqueue(%d) - Task was added to queue: %+v", len(q.jobs), task)
 			return
