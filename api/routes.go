@@ -1,6 +1,9 @@
 package api
 
 import (
+	"net/http"
+	"net/http/pprof"
+
 	"github.com/spf13/viper"
 	"gopkg.in/gin-gonic/gin.v1"
 )
@@ -54,4 +57,26 @@ func SetupRoutes(router *gin.Engine) {
 	//router.GET("/_recover", func(c *gin.Context) {
 	//	panic("test recover")
 	//})
+
+	if pass := viper.GetString("server.http-pprof-pass"); pass != "" {
+		pRouter := router.Group("debug/pprof", gin.BasicAuth(gin.Accounts{"debug": pass}))
+		pRouter.GET("/", pprofHandler(pprof.Index))
+		pRouter.GET("/cmdline", pprofHandler(pprof.Cmdline))
+		pRouter.GET("/profile", pprofHandler(pprof.Profile))
+		pRouter.POST("/symbol", pprofHandler(pprof.Symbol))
+		pRouter.GET("/symbol", pprofHandler(pprof.Symbol))
+		pRouter.GET("/trace", pprofHandler(pprof.Trace))
+		pRouter.GET("/block", pprofHandler(pprof.Handler("block").ServeHTTP))
+		pRouter.GET("/goroutine", pprofHandler(pprof.Handler("goroutine").ServeHTTP))
+		pRouter.GET("/heap", pprofHandler(pprof.Handler("heap").ServeHTTP))
+		pRouter.GET("/mutex", pprofHandler(pprof.Handler("mutex").ServeHTTP))
+		pRouter.GET("/threadcreate", pprofHandler(pprof.Handler("threadcreate").ServeHTTP))
+	}
+}
+
+func pprofHandler(h http.HandlerFunc) gin.HandlerFunc {
+	handler := http.HandlerFunc(h)
+	return func(c *gin.Context) {
+		handler.ServeHTTP(c.Writer, c.Request)
+	}
 }

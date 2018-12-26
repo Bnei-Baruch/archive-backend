@@ -210,6 +210,7 @@ RESULTS_TEMPLATE = {
   "settings": SETTINGS,
   "mappings": {
     "result": {
+      "dynamic": "strict",
       "properties": {
         # Document type, unit, collection, source, tag.
         "result_type": {
@@ -293,6 +294,18 @@ RESULTS_TEMPLATE = {
 SEARCH_LOGS_TEMPLATE = {
     "mappings": {
         "search_logs": {
+            # We use dynamic mappinng only for search logs.
+            "dynamic_templates": [
+                {
+                    "strings_as_keywords": {
+                        "match_mapping_type": "string",
+                        "mapping": {
+                            "type": "keyword",
+                        },
+                    },
+                },
+            ],
+            "dynamic": "strict",
             "properties": {
                 # Search log key, search_id and timestamp.
                 "search_id": {
@@ -310,6 +323,28 @@ SEARCH_LOGS_TEMPLATE = {
                 # Query log type fields.
                 "query": {
                     "type": "object",
+                    "properties": {
+                        "term": {
+                            "type": "keyword",
+                        },
+                        "exact_terms": {
+                            "type": "keyword",
+                        },
+                        "filters": {
+                            "dynamic": True,
+                            "type": "object",
+                        },
+                        "language_order": {
+                            "type": "keyword",
+                        },
+                        "deb": {
+                            "type": "boolean",
+                        },
+                        "intents": {
+                            "type": "object",
+                            "enabled": False,
+                        },
+                    },
                 },
                 "from": {
                     "type": "integer",
@@ -341,6 +376,16 @@ SEARCH_LOGS_TEMPLATE = {
                 },
                 "rank": {
                     "type": "integer",
+                },
+
+                # Log execition time for search components.
+                "execution_time_log": {
+                    "type": "nested",
+                    "properties":
+                    {
+                        "operation": {"type": "keyword"},
+                        "time": {"type": "integer"}
+                    }
                 },
             },
         },

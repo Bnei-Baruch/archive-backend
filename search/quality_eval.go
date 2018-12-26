@@ -85,7 +85,7 @@ var GOOD_EXPECTATION = map[int]bool{
 	ET_COLLECTIONS:   true,
 	ET_LESSONS:       true,
 	ET_PROGRAMS:      true,
-    ET_SOURCES:       true,
+	ET_SOURCES:       true,
 	ET_LANDING_PAGE:  true,
 	ET_EMPTY:         false,
 	ET_FAILED_PARSE:  false,
@@ -223,7 +223,7 @@ func ReadEvalSet(reader io.Reader, db *sql.DB) ([]EvalQuery, error) {
 	queriesWithExpectationsCount := 0
 	var ret []EvalQuery
 	for _, line := range lines {
-		w, err := strconv.ParseUint(line[2], 10, 64)
+		w, err := strconv.ParseUint(strings.TrimSpace(line[2]), 10, 64)
 		if err != nil {
 			log.Warnf("Failed parsing query [%s] weight [%s].", line[1], line[2])
 			continue
@@ -231,7 +231,7 @@ func ReadEvalSet(reader io.Reader, db *sql.DB) ([]EvalQuery, error) {
 		var expectations []Expectation
 		hasGoodExpectations := false
 		for i := EVAL_SET_EXPECTATION_FIRST_COLUMN; i <= EVAL_SET_EXPECTATION_LAST_COLUMN; i++ {
-			e := ParseExpectation(line[i], db)
+			e := ParseExpectation(strings.TrimSpace(line[i]), db)
 			expectations = append(expectations, e)
 			if GOOD_EXPECTATION[e.Type] {
 				expectationsCount++
@@ -242,10 +242,10 @@ func ReadEvalSet(reader io.Reader, db *sql.DB) ([]EvalQuery, error) {
 			queriesWithExpectationsCount++
 		}
 		ret = append(ret, EvalQuery{
-			Language:     line[0],
-			Query:        line[1],
+			Language:     strings.TrimSpace(line[0]),
+			Query:        strings.TrimSpace(line[1]),
 			Weight:       w,
-			Bucket:       line[3],
+			Bucket:       strings.TrimSpace(line[3]),
 			Expectations: expectations,
 			Comment:      line[EVAL_SET_EXPECTATION_LAST_COLUMN+1],
 		})
@@ -424,10 +424,10 @@ func FilterValueToUid(value string) string {
 }
 
 func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expectation) bool {
-    hitType := hit.Type
-    if hitType == "result" {
-        hitType = hitSource.ResultType
-    }
+	hitType := hit.Type
+	if hitType == "result" {
+		hitType = hitSource.ResultType
+	}
 	if hitType != EXPECTATION_HIT_TYPE[e.Type] {
 		return false
 	}
@@ -483,9 +483,9 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			r.err = errors.Wrapf(err, "Status not ok (%d), failed reading body.", resp.StatusCode)
+			r.err = errors.Wrapf(err, "Status not ok (%d), failed reading body. Url: %s.", resp.StatusCode, url)
 		}
-		errMsg := fmt.Sprintf("Status not ok (%d), body: %s", resp.StatusCode, string(bodyBytes))
+		errMsg := fmt.Sprintf("Status not ok (%d), body: %s, url: %s.", resp.StatusCode, string(bodyBytes), url)
 		log.Warn(errMsg)
 		for i := range q.Expectations {
 			if GOOD_EXPECTATION[q.Expectations[i].Type] {

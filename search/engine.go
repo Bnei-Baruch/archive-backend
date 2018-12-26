@@ -21,9 +21,10 @@ import (
 )
 
 type ESEngine struct {
-	esc   *elastic.Client
-	mdb   *sql.DB
-	cache cache.CacheManager
+	esc              *elastic.Client
+	mdb              *sql.DB
+	cache            cache.CacheManager
+	ExecutionTimeLog map[string]time.Duration
 }
 
 type byRelevance []*elastic.SearchHit
@@ -90,7 +91,7 @@ func (s bySourceFirst) Less(i, j int) bool {
 // TODO: All interactions with ES should be throttled to prevent downstream pressure
 
 func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager) *ESEngine {
-	return &ESEngine{esc: esc, mdb: db, cache: cache}
+	return &ESEngine{esc: esc, mdb: db, cache: cache, ExecutionTimeLog: make(map[string]time.Duration)}
 }
 
 func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
@@ -105,12 +106,15 @@ func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 }
 
 func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference string) (interface{}, error) {
+	e.timeTrack(time.Now(), "GetSuggestions")
 	multiSearchService := e.esc.MultiSearch()
 	requests := NewResultsSuggestRequests([]string{consts.ES_RESULT_TYPE_TAGS, consts.ES_RESULT_TYPE_SOURCES}, query, preference)
 	multiSearchService.Add(requests...)
 
 	// Actual call to elastic
+	beforeMssDo := time.Now()
 	mr, err := multiSearchService.Do(ctx)
+	e.timeTrack(beforeMssDo, "GetSuggestions.MultisearchDo")
 	if err != nil {
 		// don't kill entire request if ctx was cancelled
 		if ue, ok := err.(*url.Error); ok {
@@ -176,6 +180,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		}
 	}
 
+	defer e.timeTrack(time.Now(), "DoSearch.AddIntents")
+
 	checkContentUnitsTypes := []string{}
 	if values, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
 		for _, value := range values {
@@ -200,15 +206,33 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 		// Order here provides the priority in results, i.e., tags are more importnt then sources.
 		index := es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, language)
 		mssFirstRound.Add(NewResultsSearchRequest(
-			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_TAGS}, index, queryWithoutFilters,
-				consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
+			SearchRequestOptions{
+				resultTypes:      []string{consts.ES_RESULT_TYPE_TAGS},
+				index:            index,
+				query:            queryWithoutFilters,
+				sortBy:           consts.SORT_BY_RELEVANCE,
+				from:             0,
+				size:             consts.API_DEFAULT_PAGE_SIZE,
+				preference:       preference,
+				useHighlight:     false,
+				partialHighlight: true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
 		mssFirstRound.Add(NewResultsSearchRequest(
-			SearchRequestOptions{[]string{consts.ES_RESULT_TYPE_SOURCES}, index, queryWithoutFilters,
-				consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE, preference, true}))
+			SearchRequestOptions{
+				resultTypes:      []string{consts.ES_RESULT_TYPE_SOURCES},
+				index:            index,
+				query:            queryWithoutFilters,
+				sortBy:           consts.SORT_BY_RELEVANCE,
+				from:             0,
+				size:             consts.API_DEFAULT_PAGE_SIZE,
+				preference:       preference,
+				useHighlight:     false,
+				partialHighlight: true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
+	beforeFirstRoundDo := time.Now()
 	mr, err := mssFirstRound.Do(context.TODO())
+	e.timeTrack(beforeFirstRoundDo, "DoSearch.AddIntents.FirstRoundDo")
 	if err != nil {
 		return errors.Wrap(err, "ESEngine.AddIntents - Error multisearch Do.")
 	}
@@ -231,17 +255,25 @@ func (e *ESEngine) AddIntents(query *Query, preference string) error {
 				}
 				if intent != nil {
 					mssSecondRound.Add(NewResultsSearchRequest(
-						SearchRequestOptions{[]string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
-							es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, intent.Language),
-							*secondRoundQuery, consts.SORT_BY_RELEVANCE, 0, consts.API_DEFAULT_PAGE_SIZE,
-							preference, true}))
+						SearchRequestOptions{
+							resultTypes:      []string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
+							index:            es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, intent.Language),
+							query:            *secondRoundQuery,
+							sortBy:           consts.SORT_BY_RELEVANCE,
+							from:             0,
+							size:             consts.API_DEFAULT_PAGE_SIZE,
+							preference:       preference,
+							useHighlight:     false,
+							partialHighlight: true}))
 					finalIntents = append(finalIntents, *intent)
 				}
 			}
 		}
 	}
 
+	beforeSecondRoundDo := time.Now()
 	mr, err = mssSecondRound.Do(context.TODO())
+	e.timeTrack(beforeSecondRoundDo, "DoSearch.AddIntents.SecondRoundDo")
 	for i := 0; i < len(finalIntents); i++ {
 		res := mr.Responses[i]
 		if res.Error != nil {
@@ -459,18 +491,35 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	return result, nil
 }
 
+func (e *ESEngine) timeTrack(start time.Time, operation string) {
+	elapsed := time.Since(start)
+	e.ExecutionTimeLog[operation] = elapsed
+}
+
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
+	defer e.timeTrack(time.Now(), "DoSearch")
+
 	if err := e.AddIntents(&query, preference); err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents.")
 	}
 
 	multiSearchService := e.esc.MultiSearch()
 	multiSearchService.Add(NewResultsSearchRequests(
-		SearchRequestOptions{consts.ES_SEARCH_RESULT_TYPES, "", query, sortBy,
-			0, from + size, preference, false})...)
+		SearchRequestOptions{
+			resultTypes:      consts.ES_SEARCH_RESULT_TYPES,
+			index:            "",
+			query:            query,
+			sortBy:           sortBy,
+			from:             0,
+			size:             from + size,
+			preference:       preference,
+			useHighlight:     true,
+			partialHighlight: false})...)
 
 	// Do search.
+	beforeDoSearch := time.Now()
 	mr, err := multiSearchService.Do(context.TODO())
+	e.timeTrack(beforeDoSearch, "DoSearch.MultisearchDo")
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do.")
 	}
@@ -479,7 +528,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
 			len(mr.Responses), len(query.LanguageOrder)))
 	}
-
 	resultsByLang := make(map[string][]*elastic.SearchResult)
 
 	// Responses are ordered by language by index, i.e., for languages [bg, ru, en].
@@ -520,6 +568,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	ret, err := joinResponses(sortBy, from, size, results...)
+
 	if ret != nil && ret.Hits != nil {
 		return &QueryResult{ret, query.Intents}, err
 	}

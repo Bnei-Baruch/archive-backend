@@ -43,7 +43,7 @@ func FeedRusZohar(c *gin.Context) {
 		SourcesFilter: SourcesFilter{Sources: []string{"AwGBQX2L"}}, // Zohar
 	}
 
-	mediaTypes := []string{consts.MEDIA_MP3, consts.MEDIA_MP4,}
+	mediaTypes := []string{consts.MEDIA_MP3, consts.MEDIA_MP4}
 	languages := []string{consts.LANG_RUSSIAN, consts.LANG_HEBREW}
 	item, err := handleContentUnitsFull(db, cur, mediaTypes, languages)
 	if err != nil {
@@ -418,7 +418,7 @@ func FeedRssPhp(c *gin.Context) {
 		},
 	}
 
-	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b,}
+	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
 	languages := []string{config.Lang}
 	item, err := handleContentUnitsFull(db, cur, mediaTypes, languages)
 	if err != nil {
