@@ -181,6 +181,7 @@ type BlogPostsRequest struct {
 	ListRequest
 	DateRangeFilter
 	BlogFilter
+	IDsFilter
 }
 
 type BlogPostsResponse struct {
