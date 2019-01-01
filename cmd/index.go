@@ -36,9 +36,9 @@ var restartSearchLogsCmd = &cobra.Command{
 }
 
 var switchAliasCmd = &cobra.Command{
-    Use:   "switch_alias",
-    Short: "Switch Elastic to use different index.",
-    Run:   switchAliasFn,
+	Use:   "switch_alias",
+	Short: "Switch Elastic to use different index.",
+	Run:   switchAliasFn,
 }
 
 var indexDate string
@@ -49,8 +49,8 @@ func init() {
 	deleteIndexCmd.MarkFlagRequired("index_date")
 	RootCmd.AddCommand(deleteIndexCmd)
 	RootCmd.AddCommand(restartSearchLogsCmd)
-    RootCmd.AddCommand(switchAliasCmd)
-    switchAliasCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to switch to.")
+	RootCmd.AddCommand(switchAliasCmd)
+	switchAliasCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to switch to.")
 	switchAliasCmd.MarkFlagRequired("index_date")
 }
 
@@ -91,16 +91,16 @@ func indexFn(cmd *cobra.Command, args []string) {
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
 
-func switchAliasFn(cmd* cobra.Command, args []string) {
+func switchAliasFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
-    err := es.SwitchProdAliasToCurrentIndex(strings.ToLower(indexDate), common.ESC)
-    if err != nil {
-        log.Error(err)
-        return
-    }
-    log.Info("Success")
+	err := es.SwitchProdAliasToCurrentIndex(strings.ToLower(indexDate), common.ESC)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
 
