@@ -53,7 +53,7 @@ type ESLogAdapter struct{ *testing.T }
 func (s ESLogAdapter) Printf(format string, v ...interface{}) { s.Logf(format, v...) }
 
 func (suite *EngineSuite) TestESGetSuggestions() {
-    engine := ESEngine{esc: suite.esc, ExecutionTimeLog: make(map[string]time.Duration)}
+	engine := ESEngine{esc: suite.esc, ExecutionTimeLog: make(map[string]time.Duration)}
 	_, err := engine.GetSuggestions(context.TODO(),
 		Query{Term: "pe", LanguageOrder: []string{consts.LANG_ENGLISH}}, "pref")
 	suite.Require().Nil(err)
