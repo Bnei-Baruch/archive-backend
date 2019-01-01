@@ -607,7 +607,7 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, e
 		for j, sq := range ret.Results[i].SearchQuality {
 			e := q.Expectations[j]
 			goodExpectationsLen := GoodExpectations(q.Expectations)
-			if sq == SQ_UNKNOWN {
+			if sq == SQ_UNKNOWN || sq == SQ_NO_EXPECTATION {
 				if _, ok := losses[e.Type]; !ok {
 					losses[e.Type] = make([]Loss, 0)
 				}
@@ -634,12 +634,10 @@ func ResultsByExpectation(queries []EvalQuery, results EvalResults) [][]string {
 	for i, q := range queries {
 		goodExpectationsLen := GoodExpectations(q.Expectations)
 		for j, sq := range results.Results[i].SearchQuality {
-			if GOOD_EXPECTATION[q.Expectations[j].Type] {
-				record := []string{q.Language, q.Query, fmt.Sprintf("%.2f", float64(q.Weight)/float64(goodExpectationsLen)),
-					q.Bucket, q.Comment, q.Expectations[j].Source, ExpectationToString(q.Expectations[j]),
-					SEARCH_QUALITY_NAME[sq], fmt.Sprintf("%d", results.Results[i].Rank[j])}
-				records = append(records, record)
-			}
+			record := []string{q.Language, q.Query, fmt.Sprintf("%.2f", float64(q.Weight)/float64(goodExpectationsLen)),
+				q.Bucket, q.Comment, q.Expectations[j].Source, ExpectationToString(q.Expectations[j]),
+				SEARCH_QUALITY_NAME[sq], fmt.Sprintf("%d", results.Results[i].Rank[j])}
+			records = append(records, record)
 		}
 	}
 	return records
