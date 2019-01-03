@@ -198,6 +198,10 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/programs/c/%s", cUID),
 		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByPosition, nil, ""}, r)
 
+	fmt.Printf("Test [latest] by collection, not in DB\n")
+	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/programs/c/baduid"),
+		search.Expectation{search.ET_FAILED_SQL, "baduid", nil, ""}, r)
+
 	fmt.Printf("Test [latest] by women lesson \n")
 	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/lessons/women",
 		search.Expectation{search.ET_CONTENT_UNITS, latestWomenLessonUID, nil, ""}, r)
