@@ -96,7 +96,7 @@ func printResults(results search.EvalResults) {
 }
 
 func printLosses(results search.EvalResults, losses map[int][]search.Loss) {
-	log.Infof("Found %d loss types (Unknown).", len(losses))
+	log.Infof("Found %d loss types.", len(losses))
 	var lKeys []int
 	for k, _ := range losses {
 		lKeys = append(lKeys, k)
