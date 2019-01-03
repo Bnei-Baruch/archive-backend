@@ -68,6 +68,7 @@ var COMPARE_RESULTS_NAME = map[int]string{
 }
 
 const (
+	ET_NOT_SET       = -1
 	ET_CONTENT_UNITS = iota
 	ET_COLLECTIONS   = iota
 	ET_LESSONS       = iota
@@ -78,9 +79,10 @@ const (
 	ET_EMPTY         = iota
 	ET_FAILED_PARSE  = iota
 	ET_BAD_STRUCTURE = iota
+	ET_FAILED_SQL    = iota
 )
 
-var GOOD_EXPECTATION = map[int]bool{
+var EXPECTATIONS_FOR_EVALUATION = map[int]bool{
 	ET_CONTENT_UNITS: true,
 	ET_COLLECTIONS:   true,
 	ET_LESSONS:       true,
@@ -89,18 +91,21 @@ var GOOD_EXPECTATION = map[int]bool{
 	ET_LANDING_PAGE:  true,
 	ET_EMPTY:         false,
 	ET_FAILED_PARSE:  false,
-	ET_BAD_STRUCTURE: false,
+	ET_BAD_STRUCTURE: true,
+	ET_FAILED_SQL:    true,
 }
 
 var EXPECTATION_TO_NAME = map[int]string{
-	ET_CONTENT_UNITS: "cu",
-	ET_COLLECTIONS:   "c",
-	ET_LESSONS:       "l",
-	ET_PROGRAMS:      "p",
-	ET_SOURCES:       "s",
-	ET_EMPTY:         "e",
-	ET_FAILED_PARSE:  "fp",
-	ET_BAD_STRUCTURE: "bs",
+	ET_CONTENT_UNITS: "et_content_units",
+	ET_COLLECTIONS:   "et_collections",
+	ET_LESSONS:       "et_lessons",
+	ET_PROGRAMS:      "et_programs",
+	ET_SOURCES:       "et_sources",
+	ET_LANDING_PAGE:  "et_landing_page",
+	ET_EMPTY:         "et_empty",
+	ET_FAILED_PARSE:  "et_failed_parse",
+	ET_BAD_STRUCTURE: "et_bad_structure",
+	ET_FAILED_SQL:    "et_failed_sql",
 }
 
 var EXPECTATION_URL_PATH = map[int]string{
@@ -188,7 +193,7 @@ func CompareResults(base int, exp int) int {
 func GoodExpectations(expectations []Expectation) int {
 	ret := 0
 	for i := range expectations {
-		if GOOD_EXPECTATION[expectations[i].Type] {
+		if EXPECTATIONS_FOR_EVALUATION[expectations[i].Type] {
 			ret++
 		}
 	}
@@ -233,7 +238,7 @@ func ReadEvalSet(reader io.Reader, db *sql.DB) ([]EvalQuery, error) {
 		for i := EVAL_SET_EXPECTATION_FIRST_COLUMN; i <= EVAL_SET_EXPECTATION_LAST_COLUMN; i++ {
 			e := ParseExpectation(strings.TrimSpace(line[i]), db)
 			expectations = append(expectations, e)
-			if GOOD_EXPECTATION[e.Type] {
+			if EXPECTATIONS_FOR_EVALUATION[e.Type] {
 				expectationsCount++
 				hasGoodExpectations = true
 			}
@@ -278,7 +283,7 @@ type HitSource struct {
 // https://kabbalahmedia.info/he/events?year=2013
 func ParseExpectation(e string, db *sql.DB) Expectation {
 	originalE := e
-	if e == "" {
+	if strings.Trim(e, " ") == "" {
 		return Expectation{ET_EMPTY, "", nil, e}
 	}
 	takeLatest := strings.HasPrefix(strings.ToLower(e), PREFIX_LATEST)
@@ -300,7 +305,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	uidOrSection := path.Base(p)
 	// One before last part .../he/programs/cu/AsNLozeK => cu
 	contentUnitOrCollection := path.Base(path.Dir(p))
-	t := -1
+	t := ET_NOT_SET
 	subSection := ""
 	switch uidOrSection {
 	case EXPECTATION_URL_PATH[ET_LESSONS]:
@@ -311,10 +316,8 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		t = ET_LANDING_PAGE
 		subSection = uidOrSection
 	}
-	if t != -1 {
-
+	if t != ET_NOT_SET {
 		var filters []Filter
-
 		if q != "" {
 			queryParts := strings.Split(q, "&")
 			filters = make([]Filter, len(queryParts))
@@ -343,10 +346,8 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 				latestUID, err = getLatestUIDByFilters(filters, db)
 			}
 			if err != nil {
-				if err == sql.ErrNoRows {
-					return Expectation{ET_EMPTY, "", filters, originalE}
-				}
-				return Expectation{ET_FAILED_PARSE, "", filters, originalE}
+				log.Warnf("Sql Error %+v", err)
+				return Expectation{ET_FAILED_SQL, "", filters, originalE}
 			}
 			newE := fmt.Sprintf("%s://%s%s/%s/%s", u.Scheme, u.Host, p, entityType, latestUID)
 			return ParseExpectation(newE, db)
@@ -361,10 +362,8 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		if takeLatest {
 			latestUID, err := getLatestUIDByCollection(uidOrSection, db)
 			if err != nil {
-				if err == sql.ErrNoRows {
-					return Expectation{ET_EMPTY, uidOrSection, nil, originalE}
-				}
-				return Expectation{ET_FAILED_PARSE, uidOrSection, nil, originalE}
+				log.Warnf("Sql Error %+v", err)
+				return Expectation{ET_FAILED_SQL, uidOrSection, nil, originalE}
 			}
 			uriParts := strings.Split(p, "/")
 			newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
@@ -402,16 +401,17 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			latestUID, err = getLatestUIDByContentType(consts.CT_VIRTUAL_LESSON, db)
 		}
 		if err != nil || latestUID == "" {
-			if err == sql.ErrNoRows {
-				return Expectation{ET_EMPTY, uidOrSection, nil, originalE}
-			}
-			return Expectation{ET_FAILED_PARSE, uidOrSection, nil, originalE}
+			log.Warnf("Sql Error %+v", err)
+			return Expectation{ET_FAILED_SQL, uidOrSection, nil, originalE}
 		}
 		uriParts := strings.Split(p, "/")
 		newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
 		return ParseExpectation(newE, db)
 	}
 
+	if t == ET_NOT_SET {
+		panic(errors.New("Expectation not set."))
+	}
 	return Expectation{t, uidOrSection, nil, e}
 }
 
@@ -458,7 +458,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	for i := range q.Expectations {
 		r.SearchQuality[i] = SQ_NO_EXPECTATION
 		r.Rank[i] = -1
-		if GOOD_EXPECTATION[q.Expectations[i].Type] {
+		if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
 			hasGoodExpectation = true
 		}
 	}
@@ -473,7 +473,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	if err != nil {
 		log.Warnf("Error %+v", err)
 		for i := range q.Expectations {
-			if GOOD_EXPECTATION[q.Expectations[i].Type] {
+			if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
 				r.SearchQuality[i] = SQ_SERVER_ERROR
 			}
 		}
@@ -488,7 +488,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 		errMsg := fmt.Sprintf("Status not ok (%d), body: %s, url: %s.", resp.StatusCode, string(bodyBytes), url)
 		log.Warn(errMsg)
 		for i := range q.Expectations {
-			if GOOD_EXPECTATION[q.Expectations[i].Type] {
+			if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
 				r.SearchQuality[i] = SQ_SERVER_ERROR
 			}
 		}
@@ -500,7 +500,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	if err := json.NewDecoder(resp.Body).Decode(&queryResult); err != nil {
 		log.Warnf("Error decoding %+v", err)
 		for i := range q.Expectations {
-			if GOOD_EXPECTATION[q.Expectations[i].Type] {
+			if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
 				r.SearchQuality[i] = SQ_SERVER_ERROR
 			}
 		}
@@ -508,7 +508,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 		return r
 	}
 	for i := range q.Expectations {
-		if GOOD_EXPECTATION[q.Expectations[i].Type] {
+		if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
 			sq := SQ_UNKNOWN
 			rank := -1
 			for j, hit := range queryResult.SearchResult.Hits.Hits {
@@ -573,7 +573,7 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, e
 		goodExpectations := GoodExpectations(q.Expectations)
 		if goodExpectations > 0 {
 			for i, sq := range r.SearchQuality {
-				if GOOD_EXPECTATION[q.Expectations[i].Type] {
+				if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
 					ret.UniqueMap[sq] += 1 / float64(goodExpectations)
 					// Each expectation has equal weight for the query.
 					ret.WeightedMap[sq] += float64(q.Weight) / float64(goodExpectations)
@@ -607,7 +607,7 @@ func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, e
 		for j, sq := range ret.Results[i].SearchQuality {
 			e := q.Expectations[j]
 			goodExpectationsLen := GoodExpectations(q.Expectations)
-			if sq == SQ_UNKNOWN {
+			if sq == SQ_UNKNOWN || sq == SQ_SERVER_ERROR {
 				if _, ok := losses[e.Type]; !ok {
 					losses[e.Type] = make([]Loss, 0)
 				}
@@ -634,7 +634,7 @@ func ResultsByExpectation(queries []EvalQuery, results EvalResults) [][]string {
 	for i, q := range queries {
 		goodExpectationsLen := GoodExpectations(q.Expectations)
 		for j, sq := range results.Results[i].SearchQuality {
-			if GOOD_EXPECTATION[q.Expectations[j].Type] {
+			if EXPECTATIONS_FOR_EVALUATION[q.Expectations[j].Type] {
 				record := []string{q.Language, q.Query, fmt.Sprintf("%.2f", float64(q.Weight)/float64(goodExpectationsLen)),
 					q.Bucket, q.Comment, q.Expectations[j].Source, ExpectationToString(q.Expectations[j]),
 					SEARCH_QUALITY_NAME[sq], fmt.Sprintf("%d", results.Results[i].Rank[j])}
