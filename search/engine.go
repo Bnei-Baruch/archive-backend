@@ -177,10 +177,17 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) ([]Inte
 		return intents, nil
 	}
 
-	// Don't do intents, if sources are selected in section filter or filtering the results by media language (we dont know by what rule we should decide what is the intent media language).
 	for filterKey := range query.Filters {
-		if filterKey == consts.FILTERS[consts.FILTER_SECTION_SOURCES] || filterKey == consts.FILTERS[consts.FILTER_LANGUAGE] {
+		if _, ok := consts.ES_INTENT_SUPPORTED_FILTERS[filterKey]; !ok {
 			return intents, nil
+		}
+	}
+
+	if contentTypes, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
+		for _, contentType := range contentTypes {
+			if _, ok := consts.ES_INTENT_SUPPORTED_CONTENT_TYPES[contentType]; !ok {
+				return intents, nil
+			}
 		}
 	}
 
@@ -200,9 +207,14 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int) ([]Inte
 		checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_LESSON_PART, consts.CT_VIDEO_PROGRAM_CHAPTER)
 	}
 
-	// Clear filters. We don't want filters on Intents. Filters should be applied to final hits.
 	queryWithoutFilters := *query
-	queryWithoutFilters.Filters = map[string][]string{}
+	//  Keep only source and tag filters.
+	if _, ok := queryWithoutFilters.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
+		delete(queryWithoutFilters.Filters, consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES])
+	}
+	if _, ok := queryWithoutFilters.Filters[consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]]; ok {
+		delete(queryWithoutFilters.Filters, consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES])
+	}
 
 	mssFirstRound := e.esc.MultiSearch()
 	potentialIntents := make([]Intent, 0)
