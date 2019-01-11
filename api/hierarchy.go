@@ -65,7 +65,8 @@ SELECT
 		   (SELECT full_name FROM author_i18n WHERE author_id = a.id AND language = 'en'),
            (SELECT full_name FROM author_i18n WHERE author_id = a.id AND language = 'he')) "full_name",
   (SELECT array_agg(source_id) FROM authors_sources WHERE author_id = a.id GROUP BY author_id) "sources"
-FROM authors a;
+FROM authors a
+ORDER BY id;
 `
 
 // args:

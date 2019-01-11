@@ -1628,6 +1628,9 @@ func handleBlogPosts(db *sql.DB, r BlogPostsRequest) (*BlogPostsResponse, *HttpE
 	var mods = []qm.QueryMod{qm.Where("filtered is false")}
 
 	// filters
+	if err := appendIDsFilterBlogPostsMods(&mods, r.IDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 	if err := appendDateRangeFilterModsBlog(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
@@ -1846,6 +1849,54 @@ func appendIDsFilterMods(mods *[]qm.QueryMod, f IDsFilter) error {
 	}
 
 	*mods = append(*mods, qm.WhereIn("uid IN ?", utils.ConvertArgsString(f.IDs)...))
+
+	return nil
+}
+
+func appendIDsFilterBlogPostsMods(mods *[]qm.QueryMod, f IDsFilter) error {
+	if utils.IsEmpty(f.IDs) {
+		return nil
+	}
+
+	// parse and group ids by blog
+	byBlog := make(map[int][]int)
+	for i := range f.IDs {
+		s := strings.Split(f.IDs[i], "-")
+		if len(s) != 2 {
+			return errors.Errorf("Invalid blog post id %s expected <blog_id>-<post_id>", f.IDs[i])
+		}
+		blogID, err := strconv.Atoi(s[0])
+		if err != nil {
+			return errors.Errorf("Invalid blog id %s: %s", s[0], err.Error())
+		}
+		postID, err := strconv.Atoi(s[1])
+		if err != nil {
+			return errors.Errorf("Invalid post id %s: %s", s[1], err.Error())
+		}
+
+		v, ok := byBlog[blogID]
+		if !ok {
+			byBlog[blogID] = make([]int, 0)
+			v = byBlog[blogID]
+		}
+		byBlog[blogID] = append(v, postID)
+	}
+
+	// generate blog_id = ? and wp_id in ? clauses
+	clauses := make([]string, 0)
+	for k, v := range byBlog {
+		if len(v) == 0 {
+			continue
+		}
+		wp_ids := make([]string, len(v))
+		for i := range v {
+			wp_ids[i] = strconv.Itoa(int(v[i]))
+		}
+		clauses = append(clauses, fmt.Sprintf("(blog_id = %d and wp_id in (%s))", k, strings.Join(wp_ids, ",")))
+	}
+
+	// join clauses with an OR
+	*mods = append(*mods, qm.Where(strings.Join(clauses, " or ")))
 
 	return nil
 }
