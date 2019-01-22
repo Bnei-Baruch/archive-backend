@@ -81,7 +81,7 @@ func runSxS(evalSet []search.EvalQuery, baseUrl string, expUrl string) (
 
 func printResults(results search.EvalResults) {
 	log.Infof("Unique queries: %d", results.TotalUnique)
-	log.Infof("Weighted queries: %d", results.TotalWeighted)
+	log.Infof("Weighted queries: %f", results.TotalWeighted)
 	log.Infof("Errors: %d", results.TotalErrors)
 	var keys []int
 	for k, _ := range results.UniqueMap {
