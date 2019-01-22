@@ -163,6 +163,10 @@ https://www.python.org/downloads/
     4. Move the modified bindata.go file to /bindata folder (delete old bindata.go from /bindata if exist and make sure the bindata.go is not exist any more in the root folder).
     5. Repeat this steps any time make.py is changed and executed.
 
+## Install go-bindata
+
+go get -u github.com/jteeuwen/go-bindata/...
+
 ## License
 
 MIT
