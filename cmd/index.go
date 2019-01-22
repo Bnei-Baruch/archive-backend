@@ -23,6 +23,12 @@ var indexCmd = &cobra.Command{
 	Run:   indexFn,
 }
 
+var prepareDocsCmd = &cobra.Command{
+	Use:   "prepare_docs",
+	Short: "Prepares all docs via Unzip service.",
+	Run:   prepareDocsFn,
+}
+
 var deleteIndexCmd = &cobra.Command{
 	Use:   "delete_index",
 	Short: "Delete index.",
@@ -45,6 +51,7 @@ var indexDate string
 
 func init() {
 	RootCmd.AddCommand(indexCmd)
+	RootCmd.AddCommand(prepareDocsCmd)
 	deleteIndexCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be deleted.")
 	deleteIndexCmd.MarkFlagRequired("index_date")
 	RootCmd.AddCommand(deleteIndexCmd)
@@ -77,6 +84,13 @@ func indexFn(cmd *cobra.Command, args []string) {
 		log.Error(err)
 		return
 	}
+	log.Info("Preparing all documents with Unzip.")
+	err = es.ConvertDocx(common.DB)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	log.Info("Done preparing documents.")
 	err = indexer.ReindexAll()
 	if err != nil {
 		log.Error(err)
@@ -87,6 +101,21 @@ func indexFn(cmd *cobra.Command, args []string) {
 		log.Error(err)
 		return
 	}
+	log.Info("Success")
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+}
+
+func prepareDocsFn(cmd *cobra.Command, args []string) {
+	clock := common.Init()
+	defer common.Shutdown()
+
+	log.Info("Preparing all documents with Unzip.")
+	err := es.ConvertDocx(common.DB)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	log.Info("Done preparing documents.")
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
