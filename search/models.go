@@ -33,6 +33,7 @@ type Engine interface {
 
 type SearchRequestOptions struct {
 	resultTypes  []string
+	docIds       []string
 	index        string
 	query        Query
 	sortBy       string

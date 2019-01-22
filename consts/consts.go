@@ -255,6 +255,7 @@ var LANG2CODE = map[string]string{
 // api
 
 const (
+	INTENTS_SEARCH_COUNT  = 10
 	API_DEFAULT_PAGE_SIZE = 50
 	API_MAX_PAGE_SIZE     = 1000
 )
@@ -358,6 +359,23 @@ const (
 	INTENT_HIT_TYPE_PROGRAMS = "programs"
 	INTENT_HIT_TYPE_LESSONS  = "lessons"
 )
+
+var ES_INTENT_SUPPORTED_FILTERS = map[string]bool{
+	FILTERS[FILTER_UNITS_CONTENT_TYPES]:       true,
+	FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: true,
+	FILTER_TAG:    true,
+	FILTER_SOURCE: true,
+}
+
+var ES_INTENT_SUPPORTED_CONTENT_TYPES = map[string]bool{
+	CT_LESSON_PART:           true,
+	CT_LECTURE:               true,
+	CT_VIRTUAL_LESSON:        true,
+	CT_CHILDREN_LESSON:       true,
+	CT_WOMEN_LESSON:          true,
+	CT_VIDEO_PROGRAM_CHAPTER: true,
+	CT_FULL_LESSON:           true,
+}
 
 // Fake index for intents.
 var INTENT_INDEX_BY_TYPE = map[string]string{

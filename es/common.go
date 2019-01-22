@@ -19,17 +19,12 @@ import (
 )
 
 var (
+	unzipUrl string
+	// Required for sources.
 	sourcesFolder string
-	sofficeBin    string
-	docFolder     string
-	parseDocsBin  string
-	cdnUrl        string
 	pythonPath    string
+	parseDocsBin  string
 )
-
-func DocFolder() (string, error) {
-	return InitConfigFolder("elasticsearch.docx-folder", &docFolder)
-}
 
 func SourcesFolder() (string, error) {
 	return InitConfigFolder("elasticsearch.sources-folder", &sourcesFolder)
@@ -43,7 +38,7 @@ func InitConfigFolder(configKey string, value *string) (string, error) {
 	path := viper.GetString(configKey)
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
-			err := os.MkdirAll(docFolder, 0777)
+			err := os.MkdirAll(path, 0777)
 			if err != nil {
 				*value = path
 			}
@@ -61,24 +56,19 @@ func IsWindows() bool {
 }
 
 func InitVars() {
-	pythonPath = viper.GetString("elasticsearch.python-path")
-	sofficeBin = viper.GetString("elasticsearch.soffice-bin")
-	if sofficeBin == "" {
-		panic("Soffice binary should be set in config.")
-	}
-	if _, err := os.Stat(sofficeBin); os.IsNotExist(err) {
-		panic("Soffice binary not found.")
+	if IsWindows() {
+		pythonPath = viper.GetString("elasticsearch.python-path")
+		if pythonPath == "" {
+			panic("python path should be set in config.")
+		}
 	}
 	parseDocsBin = viper.GetString("elasticsearch.parse-docs-bin")
 	if parseDocsBin == "" {
 		panic("parse_docs.py binary should be set in config.")
 	}
-	if _, err := os.Stat(parseDocsBin); os.IsNotExist(err) {
-		panic("parse_docs.py not found.")
-	}
-	cdnUrl = viper.GetString("elasticsearch.cdn-url")
-	if cdnUrl == "" {
-		panic("cdn url should be set in config.")
+	unzipUrl = viper.GetString("elasticsearch.unzip-url")
+	if unzipUrl == "" {
+		panic("unzip url should be set in config.")
 	}
 }
 

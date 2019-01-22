@@ -23,6 +23,12 @@ var indexCmd = &cobra.Command{
 	Run:   indexFn,
 }
 
+var prepareDocsCmd = &cobra.Command{
+	Use:   "prepare_docs",
+	Short: "Prepares all docs via Unzip service.",
+	Run:   prepareDocsFn,
+}
+
 var deleteIndexCmd = &cobra.Command{
 	Use:   "delete_index",
 	Short: "Delete index.",
@@ -35,14 +41,24 @@ var restartSearchLogsCmd = &cobra.Command{
 	Run:   restartSearchLogsFn,
 }
 
+var switchAliasCmd = &cobra.Command{
+	Use:   "switch_alias",
+	Short: "Switch Elastic to use different index.",
+	Run:   switchAliasFn,
+}
+
 var indexDate string
 
 func init() {
 	RootCmd.AddCommand(indexCmd)
+	RootCmd.AddCommand(prepareDocsCmd)
 	deleteIndexCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be deleted.")
 	deleteIndexCmd.MarkFlagRequired("index_date")
 	RootCmd.AddCommand(deleteIndexCmd)
 	RootCmd.AddCommand(restartSearchLogsCmd)
+	RootCmd.AddCommand(switchAliasCmd)
+	switchAliasCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to switch to.")
+	switchAliasCmd.MarkFlagRequired("index_date")
 }
 
 func indexFn(cmd *cobra.Command, args []string) {
@@ -68,12 +84,47 @@ func indexFn(cmd *cobra.Command, args []string) {
 		log.Error(err)
 		return
 	}
+	log.Info("Preparing all documents with Unzip.")
+	err = es.ConvertDocx(common.DB)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	log.Info("Done preparing documents.")
 	err = indexer.ReindexAll()
 	if err != nil {
 		log.Error(err)
 		return
 	}
 	err = es.SwitchProdAliasToCurrentIndex(date, common.ESC)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	log.Info("Success")
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+}
+
+func prepareDocsFn(cmd *cobra.Command, args []string) {
+	clock := common.Init()
+	defer common.Shutdown()
+
+	log.Info("Preparing all documents with Unzip.")
+	err := es.ConvertDocx(common.DB)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	log.Info("Done preparing documents.")
+	log.Info("Success")
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+}
+
+func switchAliasFn(cmd *cobra.Command, args []string) {
+	clock := common.Init()
+	defer common.Shutdown()
+
+	err := es.SwitchProdAliasToCurrentIndex(strings.ToLower(indexDate), common.ESC)
 	if err != nil {
 		log.Error(err)
 		return

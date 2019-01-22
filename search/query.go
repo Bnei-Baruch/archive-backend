@@ -25,12 +25,16 @@ const (
 	NUM_SUGGESTS = 500
 )
 
-func createResultsQuery(resultTypes []string, q Query) elastic.Query {
+func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.Query {
 	boolQuery := elastic.NewBoolQuery().Must(
 		elastic.NewConstantScoreQuery(
 			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(resultTypes)...),
 		).Boost(0.0),
 	)
+	if docIds != nil && len(docIds) > 0 {
+		idsQuery := elastic.NewIdsQuery().Ids(docIds...)
+		boolQuery.Filter(idsQuery)
+	}
 	if q.Term != "" {
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
@@ -137,7 +141,7 @@ func createResultsQuery(resultTypes []string, q Query) elastic.Query {
 func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchRequest {
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title")
 	source := elastic.NewSearchSource().
-		Query(createResultsQuery(options.resultTypes, options.query)).
+		Query(createResultsQuery(options.resultTypes, options.query, options.docIds)).
 		FetchSourceContext(fetchSourceContext).
 		From(options.from).
 		Size(options.size).
