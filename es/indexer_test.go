@@ -51,15 +51,11 @@ func (suite *IndexerSuite) SetupSuite() {
 	}
 	suite.ctx = context.Background()
 
-	fmt.Println("Replace docx-folder with temp. path.")
-	testingsDocxPath := viper.GetString("test.test-docx-folder")
-	viper.Set("elasticsearch.docx-folder", testingsDocxPath)
-
 	fmt.Println("Replace sources folder with temp. path.")
 	testingsSourcesFolder := viper.GetString("test.test-sources-folder")
 	viper.Set("elasticsearch.sources-folder", testingsSourcesFolder)
 
-	fmt.Println("Replace cdn-url with test.")
+	fmt.Println("Replace unzip-url with test.")
 	suite.serverResponses = make(map[string]string)
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		key := ""
@@ -73,11 +69,17 @@ func (suite *IndexerSuite) SetupSuite() {
 			key += fmt.Sprintf("#%s", r.URL.Fragment)
 		}
 		w.Header().Set("Content-Type", "plain/text")
-		fmt.Printf("LOOKUP KEY [%s]\tRESPONSE [%s]\n", key, suite.serverResponses[key])
-		io.WriteString(w, suite.serverResponses[key])
+		if val, ok := suite.serverResponses[key]; ok {
+			fmt.Printf("LOOKUP KEY [%s]\tRESPONSE [%s]\n", key, val)
+			io.WriteString(w, val)
+		} else {
+			fmt.Printf("LOOKUP KEY [%s]\tNot found!\n", key)
+			w.WriteHeader(http.StatusInternalServerError)
+			io.WriteString(w, "Lookup not found.")
+		}
 	}
 	suite.server = httptest.NewServer(http.HandlerFunc(handler))
-	viper.Set("elasticsearch.cdn-url", suite.server.URL)
+	viper.Set("elasticsearch.unzip-url", suite.server.URL)
 
 	// Set package db and esc variables.
 	common.InitWithDefault(suite.DB)
@@ -119,10 +121,6 @@ func (suite *IndexerSuite) SetupTest() {
 	r.Nil(err)
 	r.Nil(indexer.DeleteIndexes())
 	// Delete test directory
-	testDocxFolder := viper.GetString("test.test-docx-folder")
-	fmt.Printf("Restting test.test-docx-folder: [%s]", testDocxFolder)
-	os.RemoveAll(testDocxFolder)
-	utils.Must(os.MkdirAll(testDocxFolder, 0777))
 	utils.Must(os.MkdirAll(viper.GetString("test.test-sources-folder"), 0777))
 }
 

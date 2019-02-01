@@ -45,7 +45,7 @@ func defaultCollectionsSql() string {
 }
 
 func (index *CollectionsIndex) ReindexAll() error {
-	log.Infof("Collections Index - Reindex all.")
+	log.Info("Collections Index - Reindex all.")
 	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_COLLECTIONS)); err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (index *CollectionsIndex) ReindexAll() error {
 }
 
 func (index *CollectionsIndex) Update(scope Scope) error {
-	log.Infof("Collections Index - Update. Scope: %+v.", scope)
+	log.Debugf("Collections Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 		if err != nil {
 			return errors.Wrap(err, "Fetch collections from mdb.")
 		}
-		log.Infof("Adding %d collections (offset %d).", len(collections), offset)
+		log.Debugf("Adding %d collections (offset %d).", len(collections), offset)
 
 		cuUIDs := make([]string, 0)
 		for _, c := range collections {
@@ -250,7 +250,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 		if err != nil {
 			return err
 		}
-		log.Infof("Collections Index - Add collection %s to index %s", string(vBytes), name)
+		log.Debugf("Collections Index - Add collection %s to index %s", string(vBytes), name)
 		resp, err := index.esc.Index().
 			Index(name).
 			Type("result").
