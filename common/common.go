@@ -53,9 +53,12 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 
 	LOGGER = search.MakeSearchLogger(ESC)
 
-	//esversion, err := ESC.ElasticsearchVersion(url)
-	//utils.Must(err)
-	//log.Infof("Elasticsearch version %s", esversion)
+	esc, err := ESC.GetClient()
+	if esc != nil && err == nil {
+		esversion, err := esc.ElasticsearchVersion(url)
+		utils.Must(err)
+		log.Infof("Elasticsearch version %s", esversion)
+	}
 
 	es.InitVars()
 
