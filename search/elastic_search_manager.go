@@ -33,9 +33,6 @@ func (esManager *ESManager) GetClient() (*elastic.Client, error) {
 			elastic.SetSniff(false),
 			elastic.SetHealthcheckInterval(10*time.Second),
 			elastic.SetErrorLog(log.StandardLogger()),
-			// Should be commented out in prod.
-			// elastic.SetInfoLog(log.StandardLogger()),
-			// elastic.SetTraceLog(log.StandardLogger()),
 		)
 	}
 	return esManager.esc, err
