@@ -158,7 +158,7 @@ func ConvertDocx(db *sql.DB) error {
 	}
 
 	batches := make(chan []string)
-	batchSize := 50
+	batchSize := prepareDocsBatchSize
 
 	go func(notEmptyDocs []string, batches chan []string) {
 		for start := 0; start < len(notEmptyDocs); start += batchSize {
@@ -171,7 +171,7 @@ func ConvertDocx(db *sql.DB) error {
 		close(batches)
 	}(notEmptyDocs, batches)
 
-	parallelism := 5
+	parallelism := prepareDocsParallelism
 	var waitDone sync.WaitGroup
 	waitDone.Add(parallelism)
 	batchesDone := 0

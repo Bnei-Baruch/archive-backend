@@ -16,6 +16,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 var (
@@ -24,6 +25,9 @@ var (
 	sourcesFolder string
 	pythonPath    string
 	parseDocsBin  string
+	// prepare_docs
+	prepareDocsBatchSize   int
+	prepareDocsParallelism int
 )
 
 func SourcesFolder() (string, error) {
@@ -70,6 +74,9 @@ func InitVars() {
 	if unzipUrl == "" {
 		panic("unzip url should be set in config.")
 	}
+
+	prepareDocsBatchSize = utils.MinInt(viper.GetInt("elasticsearch.prepare-docs-batch-size"), 50)
+	prepareDocsParallelism = utils.MaxInt(1, viper.GetInt("elasticsearch.prepare-docs-parallelism"))
 }
 
 func keyValue(t string, uid string) string {
