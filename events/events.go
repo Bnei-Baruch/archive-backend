@@ -63,7 +63,7 @@ func RunListener() {
 
 	log.Info("Initialize search engine indexer")
 	esc, err := common.ESC.GetClient()
-	if esc != nil && err != nil {
+	if err != nil {
 		if viper.GetBool("server.fake-indexer") {
 			indexer, err = es.MakeFakeIndexer(common.DB, esc)
 			utils.Must(err)
@@ -74,7 +74,7 @@ func RunListener() {
 			utils.Must(err)
 		}
 	} else {
-		log.Errorf("Elastic is not available in RunListener(): %s\n", err)
+		log.Errorf("Elastic is not available in RunListener():  %+v", err)
 	}
 
 	log.Info("Initialize indexer queue")

@@ -1,6 +1,7 @@
 package search
 
 import (
+	"errors"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -21,10 +22,8 @@ func MakeESManager(url string) *ESManager {
 }
 
 func (esManager *ESManager) GetClient() (*elastic.Client, error) {
-
 	var err error
 	if esManager.esc == nil {
-
 		log.Info("Trying to set up new connection to ElasticSearch")
 		url := viper.GetString("elasticsearch.url")
 
@@ -33,7 +32,13 @@ func (esManager *ESManager) GetClient() (*elastic.Client, error) {
 			elastic.SetSniff(false),
 			elastic.SetHealthcheckInterval(10*time.Second),
 			elastic.SetErrorLog(log.StandardLogger()),
+			// Should be commented out in prod.
+			// elastic.SetInfoLog(log.StandardLogger()),
+			// elastic.SetTraceLog(log.StandardLogger()),
 		)
+		if err == nil && esManager.esc == nil {
+			err = errors.New("Initializing elastic client returns nil.")
+		}
 	}
 	return esManager.esc, err
 }

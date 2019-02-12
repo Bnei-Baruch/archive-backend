@@ -89,8 +89,8 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultTy
 	}
 
 	esc, err := searchLogger.esManager.GetClient()
-	if esc == nil || err != nil {
-		return errors.Errorf("No elastic found.")
+	if err != nil {
+		return errors.Wrap(err, "Failed to connect to ElasticSearch.")
 	}
 
 	sr, err := elastic.NewSearchService(esc).
@@ -164,8 +164,8 @@ func (searchLogger *SearchLogger) fixResults(res *QueryResult) *QueryResult {
 func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, searchErr interface{}, executionTimeLog map[string]time.Duration) error {
 
 	esc, err := searchLogger.esManager.GetClient()
-	if esc == nil || err != nil {
-		return errors.Errorf("No elastic found.")
+	if err != nil {
+		return errors.Wrap(err, "Failed to connect to ElasticSearch.")
 	}
 
 	timeLogArr := []TimeLog{}
@@ -206,8 +206,8 @@ func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]Search
 	var searchResult *elastic.SearchResult
 
 	esc, err := searchLogger.esManager.GetClient()
-	if esc == nil || err != nil {
-		return nil, errors.Errorf("No elastic found.")
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to connect to ElasticSearch.")
 	}
 
 	for true {
@@ -246,8 +246,8 @@ func (searchLogger *SearchLogger) GetAllClicks() ([]SearchClick, error) {
 	var searchResult *elastic.SearchResult
 
 	esc, err := searchLogger.esManager.GetClient()
-	if esc == nil || err != nil {
-		return nil, errors.Errorf("No elastic found.")
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to connect to ElasticSearch.")
 	}
 
 	for true {

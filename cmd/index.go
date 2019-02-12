@@ -69,8 +69,8 @@ func indexFn(cmd *cobra.Command, args []string) {
 	date := strings.ToLower(t.Format(time.RFC3339))
 
 	esc, err := common.ESC.GetClient()
-	if esc == nil || err != nil {
-		log.Error(errors.Errorf("No elastic found."))
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
 		return
 	}
 
@@ -131,8 +131,8 @@ func switchAliasFn(cmd *cobra.Command, args []string) {
 	defer common.Shutdown()
 
 	esc, err := common.ESC.GetClient()
-	if esc == nil || err != nil {
-		log.Error(errors.Errorf("No elastic found."))
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
 		return
 	}
 
@@ -150,8 +150,8 @@ func deleteIndexFn(cmd *cobra.Command, args []string) {
 	defer common.Shutdown()
 
 	esc, err := common.ESC.GetClient()
-	if esc == nil || err != nil {
-		log.Error(errors.Errorf("No elastic found."))
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
 		return
 	}
 
@@ -183,8 +183,8 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 	defer common.Shutdown()
 
 	esc, err := common.ESC.GetClient()
-	if esc == nil || err != nil {
-		log.Error(errors.Errorf("No elastic found."))
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
 		return
 	}
 

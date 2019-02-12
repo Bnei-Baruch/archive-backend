@@ -479,8 +479,8 @@ func SearchHandler(c *gin.Context) {
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
 
 	esc, err := esManager.GetClient()
-	if esc == nil || err != nil {
-		NewBadRequestError(errors.New("No elastic found.")).Abort(c)
+	if err != nil {
+		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
 		return
 	}
 
@@ -564,8 +564,8 @@ func AutocompleteHandler(c *gin.Context) {
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
 
 	esc, err := esManager.GetClient()
-	if esc == nil || err != nil {
-		NewBadRequestError(errors.New("No elastic found.")).Abort(c)
+	if err != nil {
+		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
 		return
 	}
 
