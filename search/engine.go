@@ -612,25 +612,25 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	if ret != nil && ret.Hits != nil && ret.Hits.Hits != nil {
 
-		//  Preparing highlights search.
+		// Preparing highlights search.
 		mssHighlights := e.esc.MultiSearch()
 		highlightRequestAdded := false
 
 		for _, h := range ret.Hits.Hits {
 
 			if h.Id == "" || strings.HasPrefix(h.Index, "intent-") {
-				//  Bypass intent
+				// Bypass intent
 				continue
 			}
 
-			//  We use multiple search request because we saw that a single request
-			//	filtered by id's list take more time than multiple requests.
+			// We use multiple search request because we saw that a single request
+			// filtered by id's list take more time than multiple requests.
 			mssHighlights.Add(NewResultsSearchRequest(
 				SearchRequestOptions{
 					resultTypes:      resultTypes,
 					docIds:           []string{h.Id},
 					index:            h.Index,
-					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: []string{currentLang}},
+					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: []string{currentLang}, Deb: query.Deb},
 					sortBy:           consts.SORT_BY_RELEVANCE,
 					from:             0,
 					size:             1,
