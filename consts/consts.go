@@ -47,6 +47,7 @@ const (
 	CT_SONG                  = "SONG"
 	CT_BOOK                  = "BOOK"
 	CT_BLOG_POST             = "BLOG_POST"
+	CT_RESEARCH_MATERIAL     = "RESEARCH_MATERIAL"
 
 	// Content types for additional Elastic results
 	SCT_BLOG_POST = "R_BLOG_POST"

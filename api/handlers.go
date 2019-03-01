@@ -1723,7 +1723,7 @@ func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *Ht
 			lpCUs[cu.ID] = cu
 		case consts.CT_KITEI_MAKOR, consts.CT_LELO_MIKUD:
 			derivedCUs[cu.ID] = cu
-		case consts.CT_PUBLICATION:
+		case consts.CT_PUBLICATION, consts.CT_RESEARCH_MATERIAL:
 			// skip these for now (they should be properly attached as derived units)
 			break
 		default:

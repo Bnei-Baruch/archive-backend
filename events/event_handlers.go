@@ -71,6 +71,7 @@ func ContentUnitPublishedChange(d Data) {
 		ct != consts.CT_KITEI_MAKOR &&
 		ct != consts.CT_LELO_MIKUD &&
 		ct != consts.CT_PUBLICATION &&
+		ct != consts.CT_RESEARCH_MATERIAL &&
 		ct != consts.CT_ARTICLE
 
 	if createThumbnail {
