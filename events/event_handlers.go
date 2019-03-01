@@ -181,7 +181,7 @@ func PublisherUpdate(d Data) {
 }
 
 func BlogPostUpdate(d Data) {
-	id := fmt.Sprintf("%d-%s", int64(d.Payload["blogId"].(float64)), d.Payload["wpId"].(string))
+	id := fmt.Sprintf("%d-%d", int64(d.Payload["blogId"].(float64)), int64(d.Payload["wpId"].(float64)))
 	putToIndexer(indexer.BlogPostUpdate, id)
 }
 
