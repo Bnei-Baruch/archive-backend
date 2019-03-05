@@ -1569,6 +1569,9 @@ func handleTweets(db *sql.DB, r TweetsRequest) (*TweetsResponse, *HttpError) {
 	if err := appendDateRangeFilterModsTwitter(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
+	if err := appendIDsFilterTwitterMods(&mods, r.IDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 	if err := appendUsernameFilterMods(db, &mods, r.UsernameFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
@@ -1849,6 +1852,16 @@ func appendIDsFilterMods(mods *[]qm.QueryMod, f IDsFilter) error {
 	}
 
 	*mods = append(*mods, qm.WhereIn("uid IN ?", utils.ConvertArgsString(f.IDs)...))
+
+	return nil
+}
+
+func appendIDsFilterTwitterMods(mods *[]qm.QueryMod, f IDsFilter) error {
+	if utils.IsEmpty(f.IDs) {
+		return nil
+	}
+
+	*mods = append(*mods, qm.WhereIn("twitter_id IN ?", utils.ConvertArgsString(f.IDs)...))
 
 	return nil
 }
