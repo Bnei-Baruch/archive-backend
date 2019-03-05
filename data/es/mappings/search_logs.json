@@ -63,7 +63,7 @@
                             "type": "integer"
                         }
                     }
-                },
+                }, 
                 "sort_by": {
                     "type": "keyword"
                 }, 
