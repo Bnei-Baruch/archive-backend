@@ -171,7 +171,7 @@ var T = map[string]translation{
 	"SWE": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
 	"HRV": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
 	"CHN": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"FAR": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
+	"PER": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
 	"RON": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
 	"HIN": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
 	"UKR": {LessonFrom: "Урок від", Playlist: "Плейлист:", Download: "Завантажити:", Video: "відео", Audio: "аудіо"},
