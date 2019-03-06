@@ -96,7 +96,7 @@ func aliasedIndexDate(esc *elastic.Client, namespace string, name string) (error
 			}
 		} else {
 			if indicesExist {
-				return errors.New(fmt.Sprintf("Did not find index name for %s", alias)), ""
+				log.Warnf("Indexer - Did not find index name for %s", alias)
 			}
 		}
 	}
