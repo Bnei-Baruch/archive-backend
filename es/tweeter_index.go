@@ -65,6 +65,9 @@ func (index *TweeterIndex) addToIndex(scope Scope, removedIDs []string) error {
 	if scope.TweetTID != "" {
 		ids = append(ids, scope.TweetTID)
 	}
+	if len(ids) == 0 {
+		return nil
+	}
 	quoted := make([]string, len(ids))
 	for i, id := range ids {
 		quoted[i] = fmt.Sprintf("'%s'", id)

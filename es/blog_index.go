@@ -71,6 +71,9 @@ func (index *BlogIndex) addToIndex(scope Scope, removedPosts []string) error {
 	if scope.BlogPostWPID != "" {
 		ids = append(ids, scope.BlogPostWPID)
 	}
+	if len(ids) == 0 {
+		return nil
+	}
 	quoted := make([]string, len(ids))
 	for i, id := range ids {
 		s := strings.Split(id, "-")
