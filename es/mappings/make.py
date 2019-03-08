@@ -162,6 +162,10 @@ SETTINGS = {
         #     "custom_phonetic",
         #   ],
         # },
+        "synonym" : {
+           "tokenizer" : "standard",
+           "filter" : ["synonym"],
+        }
       },
       "char_filter": {
         "quotes": {
@@ -194,6 +198,10 @@ SETTINGS = {
         #   "replace": True,
         #   "languageset": BeiderMorseLanguageset,
         # },
+        "synonym" : {
+            "type" : "synonym",
+            "synonyms" : [],
+        },
       },
     },
   },
