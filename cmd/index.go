@@ -10,6 +10,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	elastic "gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/common"
@@ -45,6 +46,12 @@ var switchAliasCmd = &cobra.Command{
 	Use:   "switch_alias",
 	Short: "Switch Elastic to use different index.",
 	Run:   switchAliasFn,
+}
+
+var updateSynonymsCmd = &cobra.Command{
+	Use:   "update_synonyms",
+	Short: "Update synonym keywords list.",
+	Run:   updateSynonymsFn,
 }
 
 var indexDate string
@@ -206,4 +213,37 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 	}
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+}
+
+func updateSynonymsFn(cmd *cobra.Command, args []string) {
+	/* Steps:
+	1. Read config file.
+	2. Prepare PerformRequest body
+	3. Prepare PerformRequest and exec
+	*/
+
+	/*
+	   "index" : {
+	       "analysis" : {
+	           "filter" : {
+	               "synonym" : {
+	                   "type" : "synonym",
+	                   "synonyms" : [
+	                       "זהר, הזהר, זוהר, הזוהר"
+	                   ]
+	               }
+	           }
+	       }
+	   }
+	*/
+
+	_, err := common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
+		Method: "PUT",
+		Path:   "prod_results_he/_settings",
+		//Params:      params, // TBC
+		//Body: body, // TBD
+	})
+	if err != nil {
+		// TBD
+	}
 }
