@@ -627,10 +627,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			// filtered by id's list take more time than multiple requests.
 			mssHighlights.Add(NewResultsSearchRequest(
 				SearchRequestOptions{
-					resultTypes:      resultTypes,
-					docIds:           []string{h.Id},
-					index:            h.Index,
-					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: []string{currentLang}, Deb: query.Deb},
+					resultTypes: resultTypes,
+					docIds:      []string{h.Id},
+					index:       h.Index,
+					query:       Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: []string{currentLang}, Deb: query.Deb},
+					//  ToDo: Consider removing filter from inside query as we have doc id
 					sortBy:           consts.SORT_BY_RELEVANCE,
 					from:             0,
 					size:             1,
