@@ -325,6 +325,8 @@ SEARCH_LOGS_TEMPLATE = {
                 # Query log type fields.
                 "query": {
                     "type": "object",
+                    "enabled": True,
+                    "dynamic": "strict",
                     "properties": {
                         "term": {
                             "type": "keyword",
@@ -333,8 +335,9 @@ SEARCH_LOGS_TEMPLATE = {
                             "type": "keyword",
                         },
                         "filters": {
-                            "dynamic": True,
                             "type": "object",
+                            "enabled": True,
+                            "dynamic": True,
                         },
                         "language_order": {
                             "type": "keyword",
@@ -345,6 +348,7 @@ SEARCH_LOGS_TEMPLATE = {
                         "intents": {
                             "type": "object",
                             "enabled": False,
+                            "dynamic": "strict",
                         },
                     },
                 },
@@ -360,10 +364,12 @@ SEARCH_LOGS_TEMPLATE = {
                 "query_result": {
                     "type": "object",
                     "enabled": False,
+                    "dynamic": "strict",
                 },
                 "error": {
                     "type": "object",
                     "enabled": False,
+                    "dynamic": "strict",
                 },
 
                 # Click log type fields.
