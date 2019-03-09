@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -222,6 +224,24 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 	3. Prepare PerformRequest and exec
 	*/
 
+	synonymsConfigPath := "synonym.txt" // TBD from config
+	keywords := ""
+	file, err := os.Open(synonymsConfigPath)
+	if err != nil {
+		log.Error(errors.Wrap(err, "Unable to open synonyms file."))
+		return
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		// TBD
+		//fmt.Println(scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+
 	/*
 	   "index" : {
 	       "analysis" : {
@@ -237,13 +257,30 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 	   }
 	*/
 
-	_, err := common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
+	bodyMask := `\"index\" : {
+		\"analysis\" : {
+			\"filter\" : {
+				\"synonym\" : {
+					\"type\" : \"synonym\",
+					\"synonyms\" : [
+						%s
+					]
+				}
+			}
+		}
+	}`
+
+	body := fmt.Sprintf(bodyMask, keywords)
+
+	_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
 		Method: "PUT",
 		Path:   "prod_results_he/_settings",
 		//Params:      params, // TBC
-		//Body: body, // TBD
+		Body: body,
 	})
 	if err != nil {
 		// TBD
 	}
+
+	// TBD
 }
