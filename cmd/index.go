@@ -12,6 +12,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	elastic "gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
@@ -218,14 +219,11 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 }
 
 func updateSynonymsFn(cmd *cobra.Command, args []string) {
-	/* Steps:
-	1. Read config file.
-	2. Prepare PerformRequest body
-	3. Prepare PerformRequest and exec
-	*/
+	clock := common.Init()
+	defer common.Shutdown()
 
-	synonymsConfigPath := "synonym.txt" // TBD from config
-	keywords := ""
+	synonymsConfigPath := viper.GetString("elasticsearch.synonyms-config-path")
+	keywords := make([]string, 0)
 	file, err := os.Open(synonymsConfigPath)
 	if err != nil {
 		log.Error(errors.Wrap(err, "Unable to open synonyms file."))
@@ -234,28 +232,14 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 	defer file.Close()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		// TBD
-		//fmt.Println(scanner.Text())
+		line := fmt.Sprintf("/*%s*/", scanner.Text())
+		keywords = append(keywords, line)
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		log.Error(errors.Wrap(err, "Synonym config file scan error."))
+		return
 	}
-
-	/*
-	   "index" : {
-	       "analysis" : {
-	           "filter" : {
-	               "synonym" : {
-	                   "type" : "synonym",
-	                   "synonyms" : [
-	                       "זהר, הזהר, זוהר, הזוהר"
-	                   ]
-	               }
-	           }
-	       }
-	   }
-	*/
 
 	bodyMask := `\"index\" : {
 		\"analysis\" : {
@@ -270,7 +254,7 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		}
 	}`
 
-	body := fmt.Sprintf(bodyMask, keywords)
+	body := fmt.Sprintf(bodyMask, strings.Join(keywords, ","))
 
 	_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
 		Method: "PUT",
@@ -279,8 +263,10 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		Body: body,
 	})
 	if err != nil {
-		// TBD
+		log.Error(errors.Wrap(err, "Updating synonyms to elastic index error."))
+		return
 	}
 
-	// TBD
+	log.Info("Success")
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
