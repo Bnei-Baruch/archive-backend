@@ -25,7 +25,7 @@ sources-folder="/tmp/sources-folder"
 unzip-url=""
 prepare-docs-batch-size=20
 prepare-docs-parallelism=2
-synonyms-config-path="$GOPATH/src/github.com/Bnei-Baruch/archive-backend/es/synonyms.txt"
+synonyms-folder="$GOPATH/src/github.com/Bnei-Baruch/archive-backend/es/synonyms"
 synonyms-index = "prod_results_he"
 
 [nats]

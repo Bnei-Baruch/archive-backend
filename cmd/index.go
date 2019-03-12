@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -223,30 +225,43 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
-	synonymsConfigPath := viper.GetString("elasticsearch.synonyms-config-path")
 	synonymsIndex := viper.GetString("elasticsearch.synonyms-index")
 
 	keywords := make([]string, 0)
-	file, err := os.Open(synonymsConfigPath)
+
+	folder, err := es.SynonymsFolder()
 	if err != nil {
-		log.Error(errors.Wrap(err, "Unable to open synonyms file."))
+		log.Error(errors.Wrap(err, "SynonymsFolder not vailable."))
 		return
 	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
+	files, err := ioutil.ReadDir(folder)
+	if err != nil {
+		log.Error(errors.Wrap(err, "Cannot read synonym files list."))
+		return
+	}
 
-		//  Blank lines and lines starting with pound are comments (like Solr format).
-		if line != "" && !strings.HasPrefix(line, "#") {
-			fline := fmt.Sprintf("\"%s\"", line)
-			keywords = append(keywords, fline)
+	for _, fileInfo := range files {
+		filePath := filepath.Join(folder, fileInfo.Name())
+		file, err := os.Open(filePath)
+		if err != nil {
+			log.Error(errors.Wrapf(err, "Unable to open synonyms file: %s.", filePath))
+			return
 		}
-	}
+		defer file.Close()
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
 
-	if err := scanner.Err(); err != nil {
-		log.Error(errors.Wrap(err, "Synonym config file scan error."))
-		return
+			//  Blank lines and lines starting with pound are comments (like Solr format).
+			if line != "" && !strings.HasPrefix(line, "#") {
+				fline := fmt.Sprintf("\"%s\"", line)
+				keywords = append(keywords, fline)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			log.Error(errors.Wrapf(err, "Error at scanning synonym config file: %s.", filePath))
+			return
+		}
 	}
 
 	//log.Printf("Keywords: %v", keywords)
