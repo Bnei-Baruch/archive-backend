@@ -237,7 +237,7 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 
 		//  Blank lines and lines starting with pound are comments (like Solr format).
 		if line != "" && !strings.HasPrefix(line, "#") {
-			fline := fmt.Sprintf("/*%s*/", scanner.Text())
+			fline := fmt.Sprintf("\"%s\"", scanner.Text())
 			keywords = append(keywords, fline)
 		}
 	}
@@ -268,14 +268,41 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 
 	log.Printf("Update synonyms request body: %v", body)
 
+	closeRes, err := common.ESC.CloseIndex("prod_results_he").Do(context.TODO())
+	if err != nil {
+		log.Error(errors.Wrap(err, "CloseIndex"))
+		return
+	}
+	if !closeRes.Acknowledged {
+		log.Errorf("CloseIndex not Acknowledged")
+		return
+	}
+
 	_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
 		Method: "PUT",
 		Path:   "/prod_results_he/_settings",
-		//Params:      params, // TBC
-		Body: body,
+		Body:   body,
 	})
 	if err != nil {
 		log.Error(errors.Wrap(err, "Updating synonyms to elastic index error."))
+		log.Info("Reopening the index")
+		openRes, err := common.ESC.OpenIndex("prod_results_he").Do(context.TODO())
+		if err != nil {
+			log.Error(errors.Wrap(err, "OpenIndex"))
+		}
+		if !openRes.Acknowledged {
+			log.Errorf("OpenIndex not Acknowledged")
+		}
+		return
+	}
+
+	openRes, err := common.ESC.OpenIndex("prod_results_he").Do(context.TODO())
+	if err != nil {
+		log.Error(errors.Wrap(err, "OpenIndex"))
+		return
+	}
+	if !openRes.Acknowledged {
+		log.Errorf("OpenIndex not Acknowledged")
 		return
 	}
 
