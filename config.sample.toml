@@ -26,6 +26,7 @@ unzip-url=""
 prepare-docs-batch-size=20
 prepare-docs-parallelism=2
 synonyms-config-path="$GOPATH/src/github.com/Bnei-Baruch/archive-backend/es/synonyms.txt"
+synonyms-index = "prod_results_he"
 
 [nats]
 url="nats://localhost:4222"

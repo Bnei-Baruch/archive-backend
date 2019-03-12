@@ -224,6 +224,8 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 	defer common.Shutdown()
 
 	synonymsConfigPath := viper.GetString("elasticsearch.synonyms-config-path")
+	synonymsIndex := viper.GetString("elasticsearch.synonyms-index")
+
 	keywords := make([]string, 0)
 	file, err := os.Open(synonymsConfigPath)
 	if err != nil {
@@ -268,7 +270,8 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 
 	//log.Printf("Update synonyms request body: %v", body)
 
-	closeRes, err := common.ESC.CloseIndex("prod_results_he").Do(context.TODO())
+	// Close the index in order to update the synonyms
+	closeRes, err := common.ESC.CloseIndex(synonymsIndex).Do(context.TODO())
 	if err != nil {
 		log.Error(errors.Wrap(err, "CloseIndex"))
 		return
@@ -280,13 +283,13 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 
 	_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
 		Method: "PUT",
-		Path:   "/prod_results_he/_settings",
+		Path:   fmt.Sprintf("/%s/_settings", synonymsIndex),
 		Body:   body,
 	})
 	if err != nil {
 		log.Error(errors.Wrap(err, "Updating synonyms to elastic index error."))
 		log.Info("Reopening the index")
-		openRes, err := common.ESC.OpenIndex("prod_results_he").Do(context.TODO())
+		openRes, err := common.ESC.OpenIndex(synonymsIndex).Do(context.TODO())
 		if err != nil {
 			log.Error(errors.Wrap(err, "OpenIndex"))
 		}
@@ -296,7 +299,8 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	openRes, err := common.ESC.OpenIndex("prod_results_he").Do(context.TODO())
+	//  Now reopen the index
+	openRes, err := common.ESC.OpenIndex(synonymsIndex).Do(context.TODO())
 	if err != nil {
 		log.Error(errors.Wrap(err, "OpenIndex"))
 		return
