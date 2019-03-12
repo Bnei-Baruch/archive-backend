@@ -67,6 +67,7 @@ func init() {
 	RootCmd.AddCommand(deleteIndexCmd)
 	RootCmd.AddCommand(restartSearchLogsCmd)
 	RootCmd.AddCommand(switchAliasCmd)
+	RootCmd.AddCommand(updateSynonymsCmd)
 	switchAliasCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to switch to.")
 	switchAliasCmd.MarkFlagRequired("index_date")
 }
@@ -232,8 +233,13 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 	defer file.Close()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		line := fmt.Sprintf("/*%s*/", scanner.Text())
-		keywords = append(keywords, line)
+		line := scanner.Text()
+
+		//  Blank lines and lines starting with pound are comments (like Solr format).
+		if line != "" && !strings.HasPrefix(line, "#") {
+			fline := fmt.Sprintf("/*%s*/", scanner.Text())
+			keywords = append(keywords, fline)
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -241,24 +247,30 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	bodyMask := `\"index\" : {
-		\"analysis\" : {
-			\"filter\" : {
-				\"synonym\" : {
-					\"type\" : \"synonym\",
-					\"synonyms\" : [
-						%s
-					]
+	log.Printf("Keywords: %v", keywords)
+
+	bodyMask := `{
+			"index" : {
+				"analysis" : {
+					"filter" : {
+						"synonym" : {
+							"type" : "synonym",
+							"synonyms" : [
+								%s
+							]
+						}
+					}
 				}
 			}
-		}
-	}`
+		}`
 
 	body := fmt.Sprintf(bodyMask, strings.Join(keywords, ","))
 
+	log.Printf("Update synonyms request body: %v", body)
+
 	_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
 		Method: "PUT",
-		Path:   "prod_results_he/_settings",
+		Path:   "/prod_results_he/_settings",
 		//Params:      params, // TBC
 		Body: body,
 	})
