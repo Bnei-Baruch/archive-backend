@@ -247,7 +247,7 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	log.Printf("Keywords: %v", keywords)
+	//log.Printf("Keywords: %v", keywords)
 
 	bodyMask := `{
 			"index" : {
@@ -266,7 +266,7 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 
 	body := fmt.Sprintf(bodyMask, strings.Join(keywords, ","))
 
-	log.Printf("Update synonyms request body: %v", body)
+	//log.Printf("Update synonyms request body: %v", body)
 
 	closeRes, err := common.ESC.CloseIndex("prod_results_he").Do(context.TODO())
 	if err != nil {
