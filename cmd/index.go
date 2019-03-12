@@ -237,7 +237,7 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 
 		//  Blank lines and lines starting with pound are comments (like Solr format).
 		if line != "" && !strings.HasPrefix(line, "#") {
-			fline := fmt.Sprintf("\"%s\"", scanner.Text())
+			fline := fmt.Sprintf("\"%s\"", line)
 			keywords = append(keywords, fline)
 		}
 	}
