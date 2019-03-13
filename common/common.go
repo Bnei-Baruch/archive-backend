@@ -8,7 +8,6 @@ import (
 	log "github.com/Sirupsen/logrus"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
-	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -19,7 +18,7 @@ import (
 
 var (
 	DB     *sql.DB
-	ESC    *elastic.Client
+	ESC    *search.ESManager
 	LOGGER *search.SearchLogger
 	CACHE  cache.CacheManager
 )
@@ -50,22 +49,16 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 
 	log.Info("Setting up connection to ElasticSearch")
 	url := viper.GetString("elasticsearch.url")
-	ESC, err = elastic.NewClient(
-		elastic.SetURL(url),
-		elastic.SetSniff(false),
-		elastic.SetHealthcheckInterval(10*time.Second),
-		elastic.SetErrorLog(log.StandardLogger()),
-		// Should be commented out in prod.
-		// elastic.SetInfoLog(log.StandardLogger()),
-		// elastic.SetTraceLog(log.StandardLogger()),
-	)
-	utils.Must(err)
+	ESC = search.MakeESManager(url)
 
 	LOGGER = search.MakeSearchLogger(ESC)
 
-	esversion, err := ESC.ElasticsearchVersion(url)
-	utils.Must(err)
-	log.Infof("Elasticsearch version %s", esversion)
+	esc, err := ESC.GetClient()
+	if esc != nil && err == nil {
+		esversion, err := esc.ElasticsearchVersion(url)
+		utils.Must(err)
+		log.Infof("Elasticsearch version %s", esversion)
+	}
 
 	es.InitVars()
 

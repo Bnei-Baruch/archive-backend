@@ -84,7 +84,11 @@ func (suite *IndexerSuite) SetupSuite() {
 	// Set package db and esc variables.
 	common.InitWithDefault(suite.DB)
 	boil.DebugMode = viper.GetString("boiler-mode") == "debug"
-	suite.esc = common.ESC
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		panic(err)
+	}
+	suite.esc = esc
 }
 
 func (suite *IndexerSuite) TearDownSuite() {
@@ -111,13 +115,15 @@ func (suite *IndexerSuite) SetupTest() {
 	r := require.New(suite.T())
 	units, err := mdbmodels.ContentUnits(common.DB).All()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var uids []string
 	for _, unit := range units {
 		uids = append(uids, unit.UID)
 	}
 	r.Nil(deleteContentUnits(uids))
 	// Remove test indexes.
-	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, esc)
 	r.Nil(err)
 	r.Nil(indexer.DeleteIndexes())
 	// Delete test directory
@@ -1144,8 +1150,10 @@ func (suite *IndexerSuite) validateCollectionsContentUnits(indexName string, ind
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	cus := make(map[string][]string)
 	for _, hit := range res.Hits.Hits {
@@ -1167,8 +1175,10 @@ func (suite *IndexerSuite) validateContentUnitTags(indexName string, indexer *es
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	tags := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
@@ -1186,8 +1196,10 @@ func (suite *IndexerSuite) validateContentUnitSources(indexName string, indexer 
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	sources := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
@@ -1205,8 +1217,10 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *e
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 
 	// if len(expectedLangs) > 0 {
@@ -1259,8 +1273,10 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	cus := make(map[string]es.Result)
 	for _, hit := range res.Hits.Hits {
@@ -1325,8 +1341,10 @@ func (suite *IndexerSuite) validateFullPath(indexName string, indexer *es.Indexe
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	sources := make([][]string, 0)
 	for _, hit := range res.Hits.Hits {
@@ -1347,8 +1365,10 @@ func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Inde
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	contentsByNames := make(map[string]string)
 	for _, hit := range res.Hits.Hits {
@@ -1364,8 +1384,10 @@ func (suite *IndexerSuite) validateNames(indexName string, indexer *es.Indexer, 
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	names := make([]string, len(res.Hits.Hits))
 	for i, hit := range res.Hits.Hits {

@@ -25,11 +25,14 @@ func (suite *BlogIndexerSuite) TestBlogIndex() {
 
 	r := require.New(suite.T())
 
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
+
 	indexNameEn := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
 	indexNameEs := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_SPANISH, "test-date")
 	indexNameRu := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_RUSSIAN, "test-date")
 	indexNameHe := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_HEBREW, "test-date")
-	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_BLOG_POSTS}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_BLOG_POSTS}, common.DB, esc)
 	r.Nil(err)
 
 	r.Nil(indexer.ReindexAll())

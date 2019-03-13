@@ -75,7 +75,13 @@ func indexFn(cmd *cobra.Command, args []string) {
 	t := time.Now()
 	date := strings.ToLower(t.Format(time.RFC3339))
 
-	err, prevDate := es.ProdAliasedIndexDate(common.ESC)
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+		return
+	}
+
+	err, prevDate := es.ProdAliasedIndexDate(esc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -86,7 +92,7 @@ func indexFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	indexer, err := es.MakeProdIndexer(date, common.DB, common.ESC)
+	indexer, err := es.MakeProdIndexer(date, common.DB, esc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -103,7 +109,7 @@ func indexFn(cmd *cobra.Command, args []string) {
 		log.Error(err)
 		return
 	}
-	err = es.SwitchProdAliasToCurrentIndex(date, common.ESC)
+	err = es.SwitchProdAliasToCurrentIndex(date, esc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -131,7 +137,13 @@ func switchAliasFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
-	err := es.SwitchProdAliasToCurrentIndex(strings.ToLower(indexDate), common.ESC)
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+		return
+	}
+
+	err = es.SwitchProdAliasToCurrentIndex(strings.ToLower(indexDate), esc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -144,15 +156,21 @@ func deleteIndexFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+		return
+	}
+
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		name := es.IndexName("prod", consts.ES_RESULTS_INDEX, lang, strings.ToLower(indexDate))
-		exists, err := common.ESC.IndexExists(name).Do(context.TODO())
+		exists, err := esc.IndexExists(name).Do(context.TODO())
 		if err != nil {
 			log.Error(err)
 			return
 		}
 		if exists {
-			res, err := common.ESC.DeleteIndex(name).Do(context.TODO())
+			res, err := esc.DeleteIndex(name).Do(context.TODO())
 			if err != nil {
 				log.Error(errors.Wrap(err, "Delete index"))
 				return
@@ -171,14 +189,20 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+		return
+	}
+
 	name := "search_logs"
-	exists, err := common.ESC.IndexExists(name).Do(context.TODO())
+	exists, err := esc.IndexExists(name).Do(context.TODO())
 	if err != nil {
 		log.Error(err)
 		return
 	}
 	if exists {
-		res, err := common.ESC.DeleteIndex(name).Do(context.TODO())
+		res, err := esc.DeleteIndex(name).Do(context.TODO())
 		if err != nil {
 			log.Error(errors.Wrap(err, "Delete index"))
 			return
@@ -202,7 +226,7 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 		return
 	}
 	// Create index.
-	res, err := common.ESC.CreateIndex(name).BodyJson(bodyJson).Do(context.TODO())
+	res, err := esc.CreateIndex(name).BodyJson(bodyJson).Do(context.TODO())
 	if err != nil {
 		log.Error(errors.Wrap(err, "Create index"))
 		return
@@ -219,13 +243,19 @@ func simulateUpdateFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
-	err, date := es.ProdAliasedIndexDate(common.ESC)
+	client, err := common.ESC.GetClient()
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	indexer, err := es.MakeProdIndexer(date, common.DB, common.ESC)
+	err, date := es.ProdAliasedIndexDate(client)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	indexer, err := es.MakeProdIndexer(date, common.DB, client)
 	if err != nil {
 		log.Error(err)
 		return

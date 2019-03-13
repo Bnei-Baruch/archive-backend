@@ -20,7 +20,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"gopkg.in/gin-gonic/gin.v1"
-	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -473,10 +472,18 @@ func SearchHandler(c *gin.Context) {
 	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
 	preference := fmt.Sprintf("%x", md5.Sum([]byte(c.ClientIP())))
 
-	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
+	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
+
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
+
+	esc, err := esManager.GetClient()
+	if err != nil {
+		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
+		return
+	}
+
 	se := search.NewESEngine(esc, db, cacheM)
 
 	// Detect input language
@@ -552,9 +559,16 @@ func AutocompleteHandler(c *gin.Context) {
 		return
 	}
 
-	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
+	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
+
+	esc, err := esManager.GetClient()
+	if err != nil {
+		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
+		return
+	}
+
 	se := search.NewESEngine(esc, db, cacheM)
 
 	// Detect input language
