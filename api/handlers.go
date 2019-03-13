@@ -1583,6 +1583,9 @@ func handleTweets(db *sql.DB, r TweetsRequest) (*TweetsResponse, *HttpError) {
 	if err := appendDateRangeFilterModsTwitter(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
+	if err := appendIDsFilterTwitterMods(&mods, r.IDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 	if err := appendUsernameFilterMods(db, &mods, r.UsernameFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
@@ -1737,7 +1740,7 @@ func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *Ht
 			lpCUs[cu.ID] = cu
 		case consts.CT_KITEI_MAKOR, consts.CT_LELO_MIKUD:
 			derivedCUs[cu.ID] = cu
-		case consts.CT_PUBLICATION:
+		case consts.CT_PUBLICATION, consts.CT_RESEARCH_MATERIAL:
 			// skip these for now (they should be properly attached as derived units)
 			break
 		default:
@@ -1863,6 +1866,16 @@ func appendIDsFilterMods(mods *[]qm.QueryMod, f IDsFilter) error {
 	}
 
 	*mods = append(*mods, qm.WhereIn("uid IN ?", utils.ConvertArgsString(f.IDs)...))
+
+	return nil
+}
+
+func appendIDsFilterTwitterMods(mods *[]qm.QueryMod, f IDsFilter) error {
+	if utils.IsEmpty(f.IDs) {
+		return nil
+	}
+
+	*mods = append(*mods, qm.WhereIn("twitter_id IN ?", utils.ConvertArgsString(f.IDs)...))
 
 	return nil
 }

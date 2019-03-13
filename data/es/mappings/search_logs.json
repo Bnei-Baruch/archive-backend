@@ -26,14 +26,17 @@
                 }, 
                 "error": {
                     "type": "object", 
-                    "enabled": false
+                    "enabled": false, 
+                    "dynamic": "strict"
                 }, 
                 "query": {
                     "type": "object", 
+                    "enabled": true, 
                     "properties": {
                         "intents": {
                             "type": "object", 
-                            "enabled": false
+                            "enabled": false, 
+                            "dynamic": "strict"
                         }, 
                         "term": {
                             "type": "keyword"
@@ -42,8 +45,9 @@
                             "type": "keyword"
                         }, 
                         "filters": {
-                            "dynamic": true, 
-                            "type": "object"
+                            "type": "object", 
+                            "enabled": true, 
+                            "dynamic": true
                         }, 
                         "deb": {
                             "type": "boolean"
@@ -51,7 +55,8 @@
                         "exact_terms": {
                             "type": "keyword"
                         }
-                    }
+                    }, 
+                    "dynamic": "strict"
                 }, 
                 "execution_time_log": {
                     "type": "nested", 
@@ -63,13 +68,14 @@
                             "type": "integer"
                         }
                     }
-                },
+                }, 
                 "sort_by": {
                     "type": "keyword"
                 }, 
                 "query_result": {
                     "type": "object", 
-                    "enabled": false
+                    "enabled": false, 
+                    "dynamic": "strict"
                 }, 
                 "log_type": {
                     "type": "keyword"

@@ -23,6 +23,8 @@ url-template="postgres://localhost/%s?sslmode=disable&user=postgres"
 url="http://127.0.0.1:9200"
 sources-folder="/tmp/sources-folder"
 unzip-url=""
+prepare-docs-batch-size=20
+prepare-docs-parallelism=2
 
 [nats]
 url="nats://localhost:4222"

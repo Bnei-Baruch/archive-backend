@@ -96,7 +96,7 @@ func aliasedIndexDate(esc *elastic.Client, namespace string, name string) (error
 			}
 		} else {
 			if indicesExist {
-				return errors.New(fmt.Sprintf("Did not find index name for %s", alias)), ""
+				log.Warnf("Indexer - Did not find index name for %s", alias)
 			}
 		}
 	}
@@ -129,7 +129,7 @@ func SwitchAliasToCurrentIndex(namespace string, name string, date string, esc *
 	}
 	res, err := aliasService.Do(context.TODO())
 	if err != nil || !res.Acknowledged {
-		errors.Wrap(err, "Failed due to error or Acknowledged is false.")
+		return errors.Wrap(err, "Failed due to error or Acknowledged is false.")
 	}
 	return nil
 }
@@ -187,99 +187,62 @@ func (indexer *Indexer) DeleteIndexes() error {
 	return nil
 }
 
+func (indexer *Indexer) Update(scope Scope) error {
+    combinedError := (error)(nil)
+	for _, index := range indexer.indices {
+		if err := index.Update(scope); err != nil {
+			if combinedError != nil {
+				combinedError = errors.Wrap(err, fmt.Sprintf(" and %s", err.Error()))
+			} else {
+				combinedError = err
+			}
+		}
+	}
+	return combinedError
+}
+
 // Set of MDB event handlers to incrementally change all indexes.
 func (indexer *Indexer) CollectionUpdate(uid string) error {
 	log.Infof("Indexer - Index collection upadate event: %s", uid)
-	for _, index := range indexer.indices {
-		if err := index.Update(Scope{CollectionUID: uid}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return indexer.Update(Scope{CollectionUID: uid})
 }
 
 func (indexer *Indexer) ContentUnitUpdate(uid string) error {
 	log.Infof("Indexer - Index content unit update  event: %s", uid)
-	for _, index := range indexer.indices {
-		// TODO: Optimize update to update elastic and not delete and then
-		// add. It might be a problem on bulk updates, i.e., of someone added
-		// some kind of tag for 1000 documents.
-		// In that case removeing and adding will be much slower then updating
-		// existing documents in elastic.
-		// Decicded to not optimize prematurly.
-		if err := index.Update(Scope{ContentUnitUID: uid}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return indexer.Update(Scope{ContentUnitUID: uid})
 }
 
 func (indexer *Indexer) FileUpdate(uid string) error {
 	log.Infof("Indexer - Index file update event: %s", uid)
-	for _, index := range indexer.indices {
-		if err := index.Update(Scope{FileUID: uid}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return indexer.Update(Scope{FileUID: uid})
 }
 
 func (indexer *Indexer) SourceUpdate(uid string) error {
 	log.Infof("Indexer - Index source update event: %s", uid)
-	for _, index := range indexer.indices {
-		if err := index.Update(Scope{SourceUID: uid}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return indexer.Update(Scope{SourceUID: uid})
 }
 
 func (indexer *Indexer) TagUpdate(uid string) error {
 	log.Infof("Indexer - Index tag update  event: %s", uid)
-	for _, index := range indexer.indices {
-		if err := index.Update(Scope{TagUID: uid}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return indexer.Update(Scope{TagUID: uid})
 }
 
 func (indexer *Indexer) PersonUpdate(uid string) error {
 	log.Infof("Indexer - Index person update  event: %s", uid)
-	for _, index := range indexer.indices {
-		if err := index.Update(Scope{PersonUID: uid}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return indexer.Update(Scope{PersonUID: uid})
 }
 
 func (indexer *Indexer) PublisherUpdate(uid string) error {
 	log.Infof("Indexer - Index publisher update event: %s", uid)
-	for _, index := range indexer.indices {
-		if err := index.Update(Scope{PublisherUID: uid}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return indexer.Update(Scope{PublisherUID: uid})
 }
 
 func (indexer *Indexer) BlogPostUpdate(id string) error {
 	log.Infof("Indexer - Index blog post update event: %v", id)
-	for _, index := range indexer.indices {
-		if err := index.Update(Scope{BlogPostWPID: id}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return indexer.Update(Scope{BlogPostWPID: id})
 }
 
 func (indexer *Indexer) TweetUpdate(tid string) error {
 	log.Infof("Indexer - Index tweet update event: %v", tid)
-	for _, index := range indexer.indices {
-		if err := index.Update(Scope{TweetTID: tid}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return indexer.Update(Scope{TweetTID: tid})
 }

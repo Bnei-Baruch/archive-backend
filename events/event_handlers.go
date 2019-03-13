@@ -71,6 +71,7 @@ func ContentUnitPublishedChange(d Data) {
 		ct != consts.CT_KITEI_MAKOR &&
 		ct != consts.CT_LELO_MIKUD &&
 		ct != consts.CT_PUBLICATION &&
+		ct != consts.CT_RESEARCH_MATERIAL &&
 		ct != consts.CT_ARTICLE
 
 	if createThumbnail {
@@ -181,7 +182,7 @@ func PublisherUpdate(d Data) {
 }
 
 func BlogPostUpdate(d Data) {
-	id := fmt.Sprintf("%d-%s", d.Payload["blogId"].(int64), d.Payload["wpId"].(string))
+	id := fmt.Sprintf("%d-%d", int64(d.Payload["blogId"].(float64)), int64(d.Payload["wpId"].(float64)))
 	putToIndexer(indexer.BlogPostUpdate, id)
 }
 

@@ -170,6 +170,7 @@ type TweetsRequest struct {
 	ListRequest
 	DateRangeFilter
 	UsernameFilter
+	IDsFilter
 }
 
 type TweetsResponse struct {
