@@ -8,6 +8,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
@@ -49,6 +50,14 @@ func IndexAliasName(namespace string, name string, lang string) string {
 		panic(fmt.Sprintf("Not expecting empty parameter for IndexName, provided: (%s, %s, %s)", namespace, name, lang))
 	}
 	return fmt.Sprintf("%s_%s_%s", namespace, name, lang)
+}
+
+func IndexNameByDefinedDateOrAlias(namespace string, name string, lang string) string {
+	indexDate := viper.GetString("elasticsearch.index-date")
+	if indexDate == "" {
+		return IndexAliasName(namespace, name, lang)
+	}
+	return IndexName(namespace, name, lang, indexDate)
 }
 
 func IndexName(namespace string, name string, lang string, date string) string {

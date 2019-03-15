@@ -14,7 +14,6 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	elastic "gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
@@ -225,10 +224,6 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
-	synonymsIndex := viper.GetString("elasticsearch.synonyms-index")
-
-	keywords := make([]string, 0)
-
 	folder, err := es.SynonymsFolder()
 	if err != nil {
 		log.Error(errors.Wrap(err, "SynonymsFolder not vailable."))
@@ -240,7 +235,31 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
+	bodyMask := `{
+		"index" : {
+			"analysis" : {
+				"filter" : {
+					"synonym" : {
+						"type" : "synonym",
+						"synonyms" : [
+							%s
+						]
+					}
+				}
+			}
+		}
+	}`
+
 	for _, fileInfo := range files {
+
+		keywords := make([]string, 0)
+
+		//  Convention: file name without extension is the language code.
+		var ext = filepath.Ext(fileInfo.Name())
+		var lang = fileInfo.Name()[0 : len(fileInfo.Name())-len(ext)]
+
+		indexName := es.IndexNameByDefinedDateOrAlias("prod", consts.ES_RESULTS_INDEX, lang)
+
 		filePath := filepath.Join(folder, fileInfo.Name())
 		file, err := os.Open(filePath)
 		if err != nil {
@@ -262,67 +281,52 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 			log.Error(errors.Wrapf(err, "Error at scanning synonym config file: %s.", filePath))
 			return
 		}
-	}
 
-	//log.Printf("Keywords: %v", keywords)
+		//log.Printf("Keywords: %v", keywords)
+		body := fmt.Sprintf(bodyMask, strings.Join(keywords, ","))
 
-	bodyMask := `{
-			"index" : {
-				"analysis" : {
-					"filter" : {
-						"synonym" : {
-							"type" : "synonym",
-							"synonyms" : [
-								%s
-							]
-						}
-					}
-				}
-			}
-		}`
+		//log.Printf("Update synonyms request body: %v", body)
 
-	body := fmt.Sprintf(bodyMask, strings.Join(keywords, ","))
-
-	//log.Printf("Update synonyms request body: %v", body)
-
-	// Close the index in order to update the synonyms
-	closeRes, err := common.ESC.CloseIndex(synonymsIndex).Do(context.TODO())
-	if err != nil {
-		log.Error(errors.Wrap(err, "CloseIndex"))
-		return
-	}
-	if !closeRes.Acknowledged {
-		log.Errorf("CloseIndex not Acknowledged")
-		return
-	}
-
-	_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
-		Method: "PUT",
-		Path:   fmt.Sprintf("/%s/_settings", synonymsIndex),
-		Body:   body,
-	})
-	if err != nil {
-		log.Error(errors.Wrap(err, "Updating synonyms to elastic index error."))
-		log.Info("Reopening the index")
-		openRes, err := common.ESC.OpenIndex(synonymsIndex).Do(context.TODO())
+		// Close the index in order to update the synonyms
+		closeRes, err := common.ESC.CloseIndex(indexName).Do(context.TODO())
 		if err != nil {
-			log.Error(errors.Wrap(err, "OpenIndex"))
+			log.Error(errors.Wrapf(err, "CloseIndex: %s", indexName))
+			return
+		}
+		if !closeRes.Acknowledged {
+			log.Errorf("CloseIndex not Acknowledged: %s", indexName)
+			return
+		}
+
+		_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
+			Method: "PUT",
+			Path:   fmt.Sprintf("/%s/_settings", indexName),
+			Body:   body,
+		})
+		if err != nil {
+			log.Error(errors.Wrapf(err, "Error on updating synonyms to elastic index: %s", indexName))
+			log.Info("Reopening the index")
+			openRes, err := common.ESC.OpenIndex(indexName).Do(context.TODO())
+			if err != nil {
+				log.Error(errors.Wrapf(err, "OpenIndex: %s", indexName))
+			}
+			if !openRes.Acknowledged {
+				log.Errorf("OpenIndex not Acknowledged: %s", indexName)
+			}
+			return
+		}
+
+		//  Now reopen the index
+		openRes, err := common.ESC.OpenIndex(indexName).Do(context.TODO())
+		if err != nil {
+			log.Error(errors.Wrapf(err, "OpenIndex: %s", indexName))
+			return
 		}
 		if !openRes.Acknowledged {
-			log.Errorf("OpenIndex not Acknowledged")
+			log.Errorf("OpenIndex not Acknowledged: %s", indexName)
+			return
 		}
-		return
-	}
 
-	//  Now reopen the index
-	openRes, err := common.ESC.OpenIndex(synonymsIndex).Do(context.TODO())
-	if err != nil {
-		log.Error(errors.Wrap(err, "OpenIndex"))
-		return
-	}
-	if !openRes.Acknowledged {
-		log.Errorf("OpenIndex not Acknowledged")
-		return
 	}
 
 	log.Info("Success")
