@@ -59,10 +59,8 @@ func (index *BlogIndex) ReindexAll() error {
 func (index *BlogIndex) Update(scope Scope) error {
 	log.Debugf("BlogIndex.Update - Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
-	if err != nil {
-		return err
-	}
-	return index.addToIndex(scope, removed)
+	// We want to run addToIndex anyway and return joint error.
+	return utils.JoinErrors(err, index.addToIndex(scope, removed))
 }
 
 func (index *BlogIndex) addToIndex(scope Scope, removedPosts []string) error {
@@ -113,10 +111,11 @@ func (index *BlogIndex) bulkIndexPosts(bulk OffsetLimitJob, sqlScope string) err
 	}
 	log.Infof("Adding %d blog posts (offset %d total %d).", len(posts), bulk.Offset, bulk.Total)
 	for _, post := range posts {
-		if err := index.indexPost(post); err != nil {
-			log.Errorf("indexPost error at post id %d. error: %v", post.ID, err)
-			return err
-		}
+		err = utils.JoinErrors(err, index.indexPost(post))
+	}
+	if err != nil {
+		log.Errorf("indexPost error at post bulk. error: %v", err)
+		return err
 	}
 	return nil
 }
@@ -156,19 +155,19 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 		}(tasks, errors)
 	}
 	<-doneAdding
+	err := (error)(nil)
 	for a := 1; a <= tasksCount; a++ {
-		e := <-errors
-		if e != nil {
-			log.Errorf("tasksCount loop error: %v", e)
-			return e
-		}
+		err = utils.JoinErrors(err, <-errors)
+	}
+	if err != nil {
+		log.Errorf("tasksCount loop error: %v", err)
+		return err
 	}
 
 	return nil
 }
 
 func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
-
 	langMapping := index.blogIdToLanguageMapping()
 	postLang := langMapping[int(mdbPost.BlogID)]
 
@@ -178,7 +177,7 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 
 	content, err := html2text.FromString(mdbPost.Content, html2text.Options{OmitLinks: true})
 	if err != nil {
-		return err
+		return errors.Wrapf(err, " blog_id: %d", mdbPost.BlogID)
 	}
 
 	post := Result{
@@ -195,7 +194,7 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 	indexName := index.indexName(postLang)
 	vBytes, err := json.Marshal(post)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, " blog_id: %d", mdbPost.BlogID)
 	}
 	log.Debugf("Blog Posts Index - Add blog post %s to index %s", string(vBytes), indexName)
 	resp, err := index.esc.Index().

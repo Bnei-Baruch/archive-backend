@@ -41,6 +41,20 @@ func Must(err error) {
 	}
 }
 
+// Joins two errors to one.
+func JoinErrors(one error, two error) error {
+	if one == nil && two == nil {
+		return nil
+	}
+	if one != nil && two != nil {
+		return errors.Wrapf(one, ", %s", two.Error())
+	}
+	if one != nil {
+		return one
+	}
+	return two
+}
+
 // Like math.Min for int
 func Min(x, y int) int {
 	if x < y {
