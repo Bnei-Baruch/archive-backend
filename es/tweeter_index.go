@@ -54,10 +54,8 @@ func (index *TweeterIndex) ReindexAll() error {
 func (index *TweeterIndex) Update(scope Scope) error {
 	log.Debugf("TweeterIndex.Update - Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
-	if err != nil {
-		return err
-	}
-	return index.addToIndex(scope, removed)
+	// We want to run addToIndex anyway and return joint error.
+	return utils.JoinErrors(err, index.addToIndex(scope, removed))
 }
 
 func (index *TweeterIndex) addToIndex(scope Scope, removedIDs []string) error {
@@ -104,10 +102,11 @@ func (index *TweeterIndex) bulkIndexTweets(bulk OffsetLimitJob, sqlScope string)
 	}
 	log.Infof("Adding %d tweets (offset %d, total %d).", len(tweets), bulk.Offset, bulk.Total)
 	for _, tweet := range tweets {
-		if err := index.indexTweet(tweet); err != nil {
-			log.Errorf("indexTweet error at tweet id %d. error: %v", tweet.ID, err)
-			return err
-		}
+		err = utils.JoinErrors(err, index.indexTweet(tweet))
+	}
+	if err != nil {
+		log.Errorf("indexTweet error: %v", err)
+		return err
 	}
 	return nil
 }
@@ -147,19 +146,19 @@ func (index *TweeterIndex) addToIndexSql(sqlScope string) error {
 		}(tasks, errors)
 	}
 	<-doneAdding
+	err := (error)(nil)
 	for a := 1; a <= tasksCount; a++ {
-		e := <-errors
-		if e != nil {
-			log.Errorf("tasksCount loop error: %v", e)
-			return e
-		}
+		err = utils.JoinErrors(err, <-errors)
+	}
+	if err != nil {
+		log.Errorf("tasksCount loop error: %v", err)
+		return err
 	}
 
 	return nil
 }
 
 func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) error {
-
 	langMapping := index.userIdToLanguageMapping()
 	tweetLang := langMapping[int(mdbTweet.UserID)]
 
@@ -178,7 +177,7 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) error {
 
 	tweet := Result{
 		ResultType:    consts.ES_RESULT_TYPE_TWEETS,
-		MDB_UID:       mdbTweet.TwitterID, // TwitterID is taken instead of ID
+		MDB_UID:       mdbTweet.TwitterID, // TwitterID is taken instead of UID
 		TypedUids:     []string{keyValue("tweet", mdbTweet.TwitterID)},
 		FilterValues:  []string{keyValue("content_type", consts.SCT_TWEET), keyValue(consts.FILTER_LANGUAGE, tweetLang)},
 		Title:         title,

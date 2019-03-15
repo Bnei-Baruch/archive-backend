@@ -144,7 +144,7 @@ func contentUnitsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {
 		qm.InnerJoin("files AS f on f.content_unit_id = content_units.id"),
 		qm.Where("f.uid = ?", fileUID)).All()
 	if err != nil {
-		return nil, err
+		return []string{}, err
 	}
 	uids := make([]string, len(units))
 	for i, unit := range units {
@@ -160,7 +160,7 @@ func CollectionsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {
 		qm.InnerJoin("files AS f on f.content_unit_id = cu.id"),
 		qm.Where("f.uid = ?", fileUID)).All()
 	if err != nil {
-		return nil, err
+		return []string{}, err
 	}
 	uids := make([]string, len(collections))
 	for i, collection := range collections {
@@ -175,7 +175,7 @@ func contentUnitsScopeByCollection(mdb *sql.DB, cUID string) ([]string, error) {
 		qm.InnerJoin("collections AS c ON ccu.collection_id = c.id"),
 		qm.Where("c.uid = ?", cUID)).All()
 	if err != nil {
-		return nil, err
+		return []string{}, err
 	}
 	uids := make([]string, len(units))
 	for i, unit := range units {
@@ -190,7 +190,7 @@ func CollectionsScopeByContentUnit(mdb *sql.DB, cuUID string) ([]string, error) 
 		qm.InnerJoin("content_units AS cu ON ccu.content_unit_id = cu.id"),
 		qm.Where("cu.uid = ?", cuUID)).All()
 	if err != nil {
-		return nil, err
+		return []string{}, err
 	}
 	uids := make([]string, len(collections))
 	for i, collection := range collections {
@@ -205,7 +205,7 @@ func contentUnitsScopeBySource(mdb *sql.DB, sourceUID string) ([]string, error) 
 		qm.InnerJoin("sources AS s ON s.id = cus.source_id"),
 		qm.Where("s.uid = ?", sourceUID)).All()
 	if err != nil {
-		return nil, err
+		return []string{}, err
 	}
 	uids := make([]string, len(sources))
 	for i, sources := range sources {

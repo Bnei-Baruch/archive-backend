@@ -15,6 +15,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 func MakeCollectionsIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *CollectionsIndex {
@@ -55,10 +56,8 @@ func (index *CollectionsIndex) ReindexAll() error {
 func (index *CollectionsIndex) Update(scope Scope) error {
 	log.Debugf("Collections Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
-	if err != nil {
-		return err
-	}
-	return index.addToIndex(scope, removed)
+	// We want to run addToIndex anyway and return joint error.
+	return utils.JoinErrors(err, index.addToIndex(scope, removed))
 }
 
 func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) error {
@@ -67,25 +66,26 @@ func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) err
 	if scope.CollectionUID != "" {
 		uids = append(uids, scope.CollectionUID)
 	}
+	err := (error)(nil)
 	if scope.ContentUnitUID != "" {
-		moreUIDs, err := CollectionsScopeByContentUnit(index.db, scope.ContentUnitUID)
-		if err != nil {
-			return errors.Wrap(err, "collections index addToIndex collectionsScopeByContentUnit")
+		moreUIDs, e := CollectionsScopeByContentUnit(index.db, scope.ContentUnitUID)
+		if e != nil {
+			err = utils.JoinErrors(err, errors.Wrap(e, "collections index addToIndex collectionsScopeByContentUnit"))
 		}
 		uids = append(uids, moreUIDs...)
 	}
 	if len(uids) == 0 {
-		return nil
+		return err
 	}
 	quoted := make([]string, len(uids))
 	for i, uid := range uids {
 		quoted[i] = fmt.Sprintf("'%s'", uid)
 	}
 	sqlScope = fmt.Sprintf("%s AND c.uid IN (%s)", sqlScope, strings.Join(quoted, ","))
-	if err := index.addToIndexSql(sqlScope); err != nil {
-		return errors.Wrap(err, "collections index addToIndex addToIndexSql")
+	if e := index.addToIndexSql(sqlScope); e != nil {
+		err = utils.JoinErrors(err, errors.Wrap(e, "collections index addToIndex addToIndexSql"))
 	}
-	return nil
+	return err
 }
 
 func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
@@ -96,12 +96,11 @@ func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	if scope.FileUID != "" {
 		typedUIDs = append(typedUIDs, keyValue("file", scope.FileUID))
 	}
+	err := (error)(nil)
 	if scope.ContentUnitUID != "" {
 		typedUIDs = append(typedUIDs, keyValue("content_unit", scope.ContentUnitUID))
-		moreUIDs, err := CollectionsScopeByContentUnit(index.db, scope.ContentUnitUID)
-		if err != nil {
-			return []string{}, err
-		}
+		moreUIDs, e := CollectionsScopeByContentUnit(index.db, scope.ContentUnitUID)
+		err = utils.JoinErrors(err, e)
 		typedUIDs = append(typedUIDs, KeyValues("content_unit", moreUIDs)...)
 	}
 	if scope.TagUID != "" {
@@ -116,10 +115,11 @@ func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
 			typedUIDsI[i] = typedUID
 		}
 		elasticScope := elastic.NewTermsQuery("typed_uids", typedUIDsI...)
-		return index.RemoveFromIndexQuery(elasticScope)
+		uids, e := index.RemoveFromIndexQuery(elasticScope)
+		return uids, utils.JoinErrors(err, e)
 	} else {
 		// Nothing to remove.
-		return []string{}, nil
+		return []string{}, err
 	}
 }
 
@@ -134,9 +134,10 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 	log.Infof("Collections Index - Adding %d collections. Scope: %s.", count, sqlScope)
 	offset := 0
 	limit := 10
+	err := (error)(nil)
 	for offset < int(count) {
 		var collections []*mdbmodels.Collection
-		err := mdbmodels.NewQuery(index.db,
+		e := mdbmodels.NewQuery(index.db,
 			qm.From("collections as c"),
 			qm.Load("CollectionI18ns"),
 			qm.Load("CollectionsContentUnits"),
@@ -144,8 +145,9 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 			qm.Where(sqlScope),
 			qm.Offset(offset),
 			qm.Limit(limit)).Bind(&collections)
-		if err != nil {
-			return errors.Wrap(err, "Fetch collections from mdb.")
+		if e != nil {
+			err = utils.JoinErrors(err, errors.Wrap(err, "Fetch collections from mdb."))
+			continue
 		}
 		log.Debugf("Adding %d collections (offset %d).", len(collections), offset)
 
@@ -162,13 +164,11 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 		}
 
 		for _, collection := range collections {
-			if err := index.indexCollection(collection); err != nil {
-				return err
-			}
+			err = utils.JoinErrors(err, index.indexCollection(collection))
 		}
 		offset += limit
 	}
-	return nil
+	return err
 }
 
 func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
@@ -244,23 +244,27 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 	}
 
 	// Index each document in its language index
+	err := (error)(nil)
 	for k, v := range i18nMap {
 		name := index.indexName(k)
-		vBytes, err := json.Marshal(v)
-		if err != nil {
-			return err
+		vBytes, e := json.Marshal(v)
+		if e != nil {
+			err = utils.JoinErrors(err, e)
+			continue
 		}
 		log.Debugf("Collections Index - Add collection %s to index %s", string(vBytes), name)
-		resp, err := index.esc.Index().
+		resp, e := index.esc.Index().
 			Index(name).
 			Type("result").
 			BodyJson(v).
 			Do(context.TODO())
-		if err != nil {
-			return errors.Wrapf(err, "Index collection %s %s", name, c.UID)
+		if e != nil {
+			utils.JoinErrors(err, errors.Wrapf(err, "Index collection %s %s", name, c.UID))
+			continue
 		}
 		if resp.Result != "created" {
-			return errors.Errorf("Not created: collection %s %s", name, c.UID)
+			utils.JoinErrors(err, errors.Errorf("Not created: collection %s %s", name, c.UID))
+			continue
 		}
 	}
 

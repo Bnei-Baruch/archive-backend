@@ -75,10 +75,8 @@ func (index *ContentUnitsIndex) ReindexAll() error {
 func (index *ContentUnitsIndex) Update(scope Scope) error {
 	log.Debugf("Content Units Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
-	if err != nil {
-		return err
-	}
-	return index.addToIndex(scope, removed)
+	// We want to run addToIndex anyway and return joint error.
+	return utils.JoinErrors(err, index.addToIndex(scope, removed))
 }
 
 func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) error {
@@ -88,36 +86,31 @@ func (index *ContentUnitsIndex) addToIndex(scope Scope, removedUIDs []string) er
 	if scope.ContentUnitUID != "" {
 		uids = append(uids, scope.ContentUnitUID)
 	}
+	err := (error)(nil)
 	if scope.FileUID != "" {
-		moreUIDs, err := contentUnitsScopeByFile(index.db, scope.FileUID)
-		if err != nil {
-			return err
-		}
+		moreUIDs, e := contentUnitsScopeByFile(index.db, scope.FileUID)
+		err = utils.JoinErrors(err, e)
 		uids = append(uids, moreUIDs...)
 	}
 	if scope.CollectionUID != "" {
-		moreUIDs, err := contentUnitsScopeByCollection(index.db, scope.CollectionUID)
-		if err != nil {
-			return err
-		}
+		moreUIDs, e := contentUnitsScopeByCollection(index.db, scope.CollectionUID)
+		err = utils.JoinErrors(err, e)
 		uids = append(uids, moreUIDs...)
 	}
 	if scope.SourceUID != "" {
-		moreUIDs, err := contentUnitsScopeBySource(index.db, scope.SourceUID)
-		if err != nil {
-			return err
-		}
+		moreUIDs, e := contentUnitsScopeBySource(index.db, scope.SourceUID)
+		err = utils.JoinErrors(err, e)
 		uids = append(uids, moreUIDs...)
 	}
 	if len(uids) == 0 {
-		return nil
+		return err
 	}
 	quoted := make([]string, len(uids))
 	for i, uid := range uids {
 		quoted[i] = fmt.Sprintf("'%s'", uid)
 	}
 	sqlScope = fmt.Sprintf("%s AND cu.uid IN (%s)", sqlScope, strings.Join(quoted, ","))
-	return index.addToIndexSql(sqlScope)
+	return utils.JoinErrors(err, index.addToIndexSql(sqlScope))
 }
 
 func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
@@ -125,20 +118,17 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	if scope.ContentUnitUID != "" {
 		typedUids = append(typedUids, keyValue("content_unit", scope.ContentUnitUID))
 	}
+	err := (error)(nil)
 	if scope.FileUID != "" {
 		typedUids = append(typedUids, keyValue("file", scope.FileUID))
-		moreUIDs, err := contentUnitsScopeByFile(index.db, scope.FileUID)
-		if err != nil {
-			return []string{}, err
-		}
+		moreUIDs, e := contentUnitsScopeByFile(index.db, scope.FileUID)
+		err = utils.JoinErrors(err, e)
 		typedUids = append(typedUids, KeyValues("content_unit", moreUIDs)...)
 	}
 	if scope.CollectionUID != "" {
 		typedUids = append(typedUids, keyValue("collection", scope.CollectionUID))
-		moreUIDs, err := contentUnitsScopeByCollection(index.db, scope.CollectionUID)
-		if err != nil {
-			return []string{}, err
-		}
+		moreUIDs, e := contentUnitsScopeByCollection(index.db, scope.CollectionUID)
+		err = utils.JoinErrors(err, e)
 		typedUids = append(typedUids, KeyValues("content_unit", moreUIDs)...)
 	}
 	if scope.TagUID != "" {
@@ -146,10 +136,8 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 	}
 	if scope.SourceUID != "" {
 		typedUids = append(typedUids, keyValue("source", scope.SourceUID))
-		moreUIDs, err := contentUnitsScopeBySource(index.db, scope.SourceUID)
-		if err != nil {
-			return []string{}, err
-		}
+		moreUIDs, e := contentUnitsScopeBySource(index.db, scope.SourceUID)
+		err = utils.JoinErrors(err, e)
 		typedUids = append(typedUids, KeyValues("content_unit", moreUIDs)...)
 	}
 	// if scope.PersonUID != "" {
@@ -165,10 +153,11 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) ([]string, error) {
 		}
 		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_UNITS).
 			Filter(elastic.NewTermsQuery("typed_uids", typedUidsI...))
-		return index.RemoveFromIndexQuery(elasticScope)
+		uids, e := index.RemoveFromIndexQuery(elasticScope)
+		return uids, utils.JoinErrors(err, e)
 	} else {
 		// Nothing to remove.
-		return []string{}, nil
+		return []string{}, err
 	}
 }
 
@@ -192,11 +181,9 @@ func (index *ContentUnitsIndex) bulkIndexUnits(bulk OffsetLimitJob, sqlScope str
 		return err
 	}
 	for _, unit := range units {
-		if err := index.indexUnit(unit, indexData); err != nil {
-			return err
-		}
+		err = utils.JoinErrors(err, index.indexUnit(unit, indexData))
 	}
-	return nil
+	return err
 }
 
 type OffsetLimitJob struct {
@@ -244,13 +231,10 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) error {
 
 	<-doneAdding
 	for a := 1; a <= tasksCount; a++ {
-		e := <-errors
-		if e != nil {
-			return e
-		}
+		err = utils.JoinErrors(err, <-errors)
 	}
 
-	return nil
+	return err
 }
 
 func collectionsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
@@ -272,6 +256,7 @@ func collectionsTypedUids(collectionsContentUnits mdbmodels.CollectionsContentUn
 func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *IndexData) error {
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
+	err := (error)(nil)
 	for _, i18n := range cu.R.ContentUnitI18ns {
 		if i18n.Name.Valid && strings.TrimSpace(i18n.Name.String) != "" {
 			typedUids := append([]string{keyValue("content_unit", cu.UID)},
@@ -294,15 +279,17 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 
 			if cu.Properties.Valid {
 				var props map[string]interface{}
-				err := json.Unmarshal(cu.Properties.JSON, &props)
-				if err != nil {
-					return errors.Wrapf(err, "json.Unmarshal properties %s", cu.UID)
+				e := json.Unmarshal(cu.Properties.JSON, &props)
+				if e != nil {
+					err = utils.JoinErrors(err, errors.Wrapf(err, "json.Unmarshal properties %s", cu.UID))
+					continue
 				}
 
 				if filmDate, ok := props["film_date"]; ok {
-					val, err := time.Parse("2006-01-02", filmDate.(string))
-					if err != nil {
-						return errors.Wrapf(err, "time.Parse film_date %s", cu.UID)
+					val, e := time.Parse("2006-01-02", filmDate.(string))
+					if e != nil {
+						err = utils.JoinErrors(err, errors.Wrapf(err, "time.Parse film_date %s", cu.UID))
+						continue
 					}
 					unit.EffectiveDate = &utils.Date{Time: val}
 				}
@@ -329,13 +316,13 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 			// }
 			if byLang, ok := indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
-					var err error
-					unit.Content, err = DocText(val[0])
+					var e error
+					unit.Content, e = DocText(val[0])
 					if unit.Content == "" {
 						log.Warnf("Content Units Index - Transcript empty: %s", val[0])
 					}
-					if err != nil {
-						log.Errorf("Content Units Index - Error parsing docx: %s", val[0])
+					if e != nil {
+						err = utils.JoinErrors(err, errors.New(fmt.Sprintf("Content Units Index - Error parsing docx: %s", val[0])))
 					} else {
 						unit.TypedUids = append(unit.TypedUids, keyValue("file", val[0]))
 					}
@@ -351,16 +338,18 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 		name := index.indexName(k)
 
 		log.Debugf("Content Units Index - Add content unit %s to index %s", v.ToDebugString(), name)
-		resp, err := index.esc.Index().
+		resp, e := index.esc.Index().
 			Index(name).
 			Type("result").
 			BodyJson(v).
 			Do(context.TODO())
-		if err != nil {
-			return errors.Wrapf(err, "Content Units Index - Index unit %s %s", name, cu.UID)
+		if e != nil {
+			err = utils.JoinErrors(err, errors.Wrapf(e, "Content Units Index - Index unit %s %s", name, cu.UID))
+			continue
 		}
 		if resp.Result != "created" {
-			return errors.Errorf("Content Units Index - Not created: unit %s %s %+v", name, cu.UID, resp)
+			err = utils.JoinErrors(err, errors.New(fmt.Sprintf("Content Units Index - Not created: unit %s %s %+v", name, cu.UID, resp)))
+			continue
 		}
 	}
 
@@ -370,5 +359,5 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 		log.Debugf("Progress units %d", progress)
 	}
 
-	return nil
+	return err
 }
