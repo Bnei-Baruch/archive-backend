@@ -20,6 +20,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 func MakeSourcesIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *SourcesIndex {
@@ -49,10 +50,8 @@ func (index *SourcesIndex) ReindexAll() error {
 func (index *SourcesIndex) Update(scope Scope) error {
 	log.Debugf("SourcesIndex.Update - Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
-	if err != nil {
-		return err
-	}
-	return index.addToIndex(scope, removed)
+	// We want to run addToIndex anyway and return joint error.
+	return utils.JoinErrors(err, index.addToIndex(scope, removed))
 }
 
 func (index *SourcesIndex) addToIndex(scope Scope, removedUIDs []string) error {
@@ -108,11 +107,11 @@ func (index *SourcesIndex) bulkIndexSources(
 			log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in idsMap: %+v", source.UID, idsMap)
 		} else if authors, ok := authorsByLanguageMap[source.UID]; !ok {
 			log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in authorsByLanguageMap: %+v", source.UID, idsMap)
-		} else if err := index.indexSource(source, parents, parentIds, authors); err != nil {
-			log.Warnf("SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
+		} else if e := index.indexSource(source, parents, parentIds, authors); e != nil {
+			err = utils.JoinErrors(err, errors.Wrapf(err, "SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s).", source.Name, source.UID))
 		}
 	}
-	return nil
+	return err
 }
 
 // Note: scope usage is limited to source.uid only (e.g. source.uid='L2jMWyce')
@@ -164,13 +163,9 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 
 	<-doneAdding
 	for a := 1; a <= tasksCount; a++ {
-		e := <-errors
-		if e != nil {
-			return e
-		}
+		err = utils.JoinErrors(err, <-errors)
 	}
-
-	return nil
+	return err
 }
 
 func (index *SourcesIndex) loadSources(db *sql.DB, sqlScope string) (map[string][]string, map[string][]int64, map[string]map[string][]string, error) {
@@ -304,6 +299,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
 	allLanguages := []string{}
+	err := (error)(nil)
 	for _, i18n := range mdbSource.R.SourceI18ns {
 		if i18n.Name.Valid && i18n.Name.String != "" {
 			pathNames := []string{}
@@ -316,27 +312,29 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			if i18n.Description.Valid && i18n.Description.String != "" {
 				source.Description = i18n.Description.String
 			}
-			fPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
-			if err != nil {
-				// WarnHide(fmt.Sprintf("SourcesIndex.indexSource - Unable to retrieving docx path for source %s with language %s. Skipping indexing.",
-				//     mdbSource.UID, i18n.Language), mdbSource.UID)
-			} else {
+			fPath, missingSourceFileErr := index.getDocxPath(mdbSource.UID, i18n.Language)
+			// Ignore err here as if missing source for a language in very common and is ok.
+			if missingSourceFileErr == nil {
 				// Found docx.
-				content, err := ParseDocx(fPath)
-				if err == nil {
+				content, parseErr := ParseDocx(fPath)
+				err = utils.JoinErrors(err, parseErr)
+				if parseErr == nil {
 					source.Content = content
 					allLanguages = append(allLanguages, i18n.Language)
 				} else {
 					log.Warnf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language)
 				}
 			}
+			// Find parents...
+			findParentsErr := (error)(nil)
 			for _, i := range parentIds {
-				ni18n, err := mdbmodels.FindSourceI18n(index.db, i, i18n.Language)
-				if err != nil {
-					if err == sql.ErrNoRows {
+				ni18n, e := mdbmodels.FindSourceI18n(index.db, i, i18n.Language)
+				if e != nil {
+					if e == sql.ErrNoRows {
 						continue
 					}
-					return err
+					findParentsErr = e
+					break
 				}
 				if ni18n.Name.Valid && ni18n.Name.String != "" {
 					pathNames = append(pathNames, ni18n.Name.String)
@@ -346,16 +344,16 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 					pathNames = append(pathNames, ni18n.Description.String)
 				}*/
 			}
+			err = utils.JoinErrors(err, findParentsErr)
+			if findParentsErr != nil {
+				continue
+			}
 			authors := authorsByLanguage[i18n.Language]
 			s := append(authors, pathNames...)
 			source.Title = strings.Join(s, " > ")
 			source.TitleSuggest = Suffixes(strings.Join(s, " "))
 			i18nMap[i18n.Language] = source
 		}
-	}
-
-	if len(allLanguages) == 0 {
-		log.Warnf("SourcesIndex.indexSource - No docx files found for source %s", mdbSource.UID)
 	}
 
 	// Index each document in its language index
@@ -365,16 +363,16 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 
 		name := index.indexName(k)
 		log.Debugf("Sources Index - Add source %s to index %s", mdbSource.UID, name)
-		resp, err := index.esc.Index().
+		resp, e := index.esc.Index().
 			Index(name).
 			Type("result").
 			BodyJson(v).
 			Do(context.TODO())
-		if err != nil {
-			return errors.Wrapf(err, "Sources Index - Source %s %s", name, mdbSource.UID)
+		if e != nil {
+			err = utils.JoinErrors(err, errors.Wrapf(err, "Sources Index - Source %s %s", name, mdbSource.UID))
 		}
 		if resp.Result != "created" {
-			return errors.Errorf("Sources Index - Not created: source %s %s", name, mdbSource.UID)
+			err = utils.JoinErrors(err, errors.Errorf("Sources Index - Not created: source %s %s", name, mdbSource.UID))
 		}
 	}
 
@@ -384,5 +382,5 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 		log.Debugf("Progress sources %d", progress)
 	}
 
-	return nil
+	return err
 }

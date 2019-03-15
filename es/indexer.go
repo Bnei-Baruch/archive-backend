@@ -12,6 +12,7 @@ import (
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type Indexer struct {
@@ -188,17 +189,11 @@ func (indexer *Indexer) DeleteIndexes() error {
 }
 
 func (indexer *Indexer) Update(scope Scope) error {
-    combinedError := (error)(nil)
+	err := (error)(nil)
 	for _, index := range indexer.indices {
-		if err := index.Update(scope); err != nil {
-			if combinedError != nil {
-				combinedError = errors.Wrap(err, fmt.Sprintf(" and %s", err.Error()))
-			} else {
-				combinedError = err
-			}
-		}
+		err = utils.JoinErrors(err, index.Update(scope))
 	}
-	return combinedError
+	return err
 }
 
 // Set of MDB event handlers to incrementally change all indexes.

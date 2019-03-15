@@ -13,6 +13,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 func MakeTagsIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *TagsIndex {
@@ -41,10 +42,8 @@ func (index *TagsIndex) ReindexAll() error {
 func (index *TagsIndex) Update(scope Scope) error {
 	log.Debugf("Tags Index - Update. Scope: %+v.", scope)
 	removed, err := index.removeFromIndex(scope)
-	if err != nil {
-		return err
-	}
-	return index.addToIndex(scope, removed)
+	// We want to run addToIndex anyway and return joint error.
+	return utils.JoinErrors(err, index.addToIndex(scope, removed))
 }
 
 func (index *TagsIndex) addToIndex(scope Scope, removedUIDs []string) error {
@@ -86,14 +85,13 @@ func (index *TagsIndex) addToIndexSql(sqlScope string) error {
 			log.Debugf("Tags Index - Skipping root tag [%s].", tag.UID)
 			continue
 		}
-		if err := index.indexTag(tag); err != nil {
-			return err
-		}
+		err = utils.JoinErrors(err, index.indexTag(tag))
 	}
-	return nil
+	return err
 }
 
 func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
+	err := (error)(nil)
 	for i := range t.R.TagI18ns {
 		i18n := t.R.TagI18ns[i]
 		if i18n.Label.Valid && strings.TrimSpace(i18n.Label.String) != "" {
@@ -102,13 +100,13 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 			pathNames := []string{i18n.Label.String}
 			parentUids := []string{t.UID}
 			found := false
+			errFetching := (error)(nil)
 			for parentTag.ParentID.Valid {
-				var err error
-				parentTag, err = mdbmodels.Tags(index.db,
+				parentTag, errFetching = mdbmodels.Tags(index.db,
 					qm.Load("TagI18ns"),
 					qm.Where(fmt.Sprintf("id = %d", parentTag.ParentID.Int64))).One()
-				if err != nil {
-					return err
+				if errFetching != nil {
+					break
 				}
 				for _, pI18n := range parentTag.R.TagI18ns {
 					if pI18n.Language == parentI18n.Language {
@@ -124,8 +122,15 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 				parentUids = append([]string{parentTag.UID}, parentUids...)
 			}
 
+			err = utils.JoinErrors(err, errFetching)
+			if errFetching != nil {
+				log.Errorf("Tag I18n failed fetching tags. Tag UID: %s Label: %s Language: %s. Skipping language.", t.UID, i18n.Label.String, i18n.Language)
+				continue
+			}
+
 			if !found {
-				log.Warnf("Tag I18n not found or invalid label. Tag UID: %s Label: %s Language: %s. Skipping language.", t.UID, i18n.Label.String, i18n.Language)
+				// Don't log this, this is very common.
+				// log.Warnf("Tag I18n not found or invalid label. Tag UID: %s Label: %s Language: %s. Skipping language.", t.UID, i18n.Label.String, i18n.Language)
 				continue
 			}
 
@@ -145,12 +150,12 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 				BodyJson(r).
 				Do(context.TODO())
 			if err != nil {
-				return errors.Wrapf(err, "Tags Index - Index tag %s %s", name, t.UID)
+				err = utils.JoinErrors(err, errors.Wrapf(err, "Tags Index - Index tag %s %s", name, t.UID))
 			}
 			if resp.Result != "created" {
-				return errors.Errorf("Tags Index - Not created: tag %s %s", name, t.UID)
+				err = utils.JoinErrors(err, errors.Errorf("Tags Index - Not created: tag %s %s", name, t.UID))
 			}
 		}
 	}
-	return nil
+	return err
 }
