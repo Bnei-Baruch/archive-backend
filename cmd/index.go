@@ -47,6 +47,12 @@ var switchAliasCmd = &cobra.Command{
 	Run:   switchAliasFn,
 }
 
+var simulateUpdateCmd = &cobra.Command{
+	Use:   "simulate_update",
+	Short: "Simulate index update.",
+	Run:   simulateUpdateFn,
+}
+
 var indexDate string
 
 func init() {
@@ -59,6 +65,7 @@ func init() {
 	RootCmd.AddCommand(switchAliasCmd)
 	switchAliasCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to switch to.")
 	switchAliasCmd.MarkFlagRequired("index_date")
+	RootCmd.AddCommand(simulateUpdateCmd)
 }
 
 func indexFn(cmd *cobra.Command, args []string) {
@@ -204,6 +211,32 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 		log.Error(errors.Errorf("Index creation wasn't acknowledged: %s", name))
 		return
 	}
+	log.Info("Success")
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+}
+
+func simulateUpdateFn(cmd *cobra.Command, args []string) {
+	clock := common.Init()
+	defer common.Shutdown()
+
+	err, date := es.ProdAliasedIndexDate(common.ESC)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	indexer, err := es.MakeProdIndexer(date, common.DB, common.ESC)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	err = indexer.Update(es.Scope{CollectionUID: "zf4lLwyI"})
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
