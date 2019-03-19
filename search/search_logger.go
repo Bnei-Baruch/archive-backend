@@ -120,11 +120,11 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultTy
 	return nil
 }
 
-func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, executionTimeLog map[string]time.Duration) error {
+func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, executionTimeLog *TimeLogMap) error {
 	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, res, nil, executionTimeLog)
 }
 
-func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, from int, size int, searchId string, suggestion string, searchErr interface{}, executionTimeLog map[string]time.Duration) error {
+func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, from int, size int, searchId string, suggestion string, searchErr interface{}, executionTimeLog *TimeLogMap) error {
 	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, nil, searchErr, executionTimeLog)
 }
 
@@ -161,7 +161,7 @@ func (searchLogger *SearchLogger) fixResults(res *QueryResult) *QueryResult {
 	return res
 }
 
-func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, searchErr interface{}, executionTimeLog map[string]time.Duration) error {
+func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, searchErr interface{}, executionTimeLog *TimeLogMap) error {
 
 	esc, err := searchLogger.esManager.GetClient()
 	if err != nil {
@@ -169,8 +169,8 @@ func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int
 	}
 
 	timeLogArr := []TimeLog{}
-	for k := range executionTimeLog {
-		ms := int64(executionTimeLog[k] / time.Millisecond)
+	for k, v := range executionTimeLog.ToMap() {
+		ms := int64(v / time.Millisecond)
 		timeLogArr = append(timeLogArr, TimeLog{Operation: k, Time: ms})
 	}
 

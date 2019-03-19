@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -25,7 +26,41 @@ type ESEngine struct {
 	esc              *elastic.Client
 	mdb              *sql.DB
 	cache            cache.CacheManager
-	ExecutionTimeLog map[string]time.Duration
+	ExecutionTimeLog *TimeLogMap
+}
+
+type TimeLogMap struct {
+	mx sync.Mutex
+	m  map[string]time.Duration
+}
+
+func NewTimeLogMap() *TimeLogMap {
+	return &TimeLogMap{
+		m: make(map[string]time.Duration),
+	}
+}
+
+func (c *TimeLogMap) Load(key string) (time.Duration, bool) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	val, ok := c.m[key]
+	return val, ok
+}
+
+func (c *TimeLogMap) Store(key string, value time.Duration) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	c.m[key] = value
+}
+
+func (c *TimeLogMap) ToMap() map[string]time.Duration {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	copyMap := map[string]time.Duration{}
+	for k, v := range c.m {
+		copyMap[k] = v
+	}
+	return copyMap
 }
 
 type byRelevance []*elastic.SearchHit
@@ -92,7 +127,7 @@ func (s bySourceFirst) Less(i, j int) bool {
 // TODO: All interactions with ES should be throttled to prevent downstream pressure
 
 func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager) *ESEngine {
-	return &ESEngine{esc: esc, mdb: db, cache: cache, ExecutionTimeLog: make(map[string]time.Duration)}
+	return &ESEngine{esc: esc, mdb: db, cache: cache, ExecutionTimeLog: NewTimeLogMap()}
 }
 
 func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
@@ -511,7 +546,7 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 
 func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	elapsed := time.Since(start)
-	e.ExecutionTimeLog[operation] = elapsed
+	e.ExecutionTimeLog.Store(operation, elapsed)
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
