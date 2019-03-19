@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -298,9 +299,10 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 			return
 		}
 
+		decodedIndexName := url.QueryEscape(indexName)
 		_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
 			Method: "PUT",
-			Path:   fmt.Sprintf("/%s/_settings", indexName),
+			Path:   fmt.Sprintf("/%s/_settings", decodedIndexName),
 			Body:   body,
 		})
 		if err != nil {
