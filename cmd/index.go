@@ -299,10 +299,10 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 			return
 		}
 
-		decodedIndexName := url.QueryEscape(indexName)
+		encodedIndexName := url.QueryEscape(indexName)
 		_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
 			Method: "PUT",
-			Path:   fmt.Sprintf("/%s/_settings", decodedIndexName),
+			Path:   fmt.Sprintf("/%s/_settings", encodedIndexName),
 			Body:   body,
 		})
 		if err != nil {
