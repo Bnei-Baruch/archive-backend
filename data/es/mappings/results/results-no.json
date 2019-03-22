@@ -72,6 +72,10 @@
                         "locale": "he_IL", 
                         "type": "hunspell", 
                         "dedup": true
+                    }, 
+                    "synonym": {
+                        "synonyms": [], 
+                        "type": "synonym"
                     }
                 }, 
                 "char_filter": {
@@ -90,6 +94,12 @@
                     }
                 }, 
                 "analyzer": {
+                    "synonym": {
+                        "filter": [
+                            "synonym"
+                        ], 
+                        "tokenizer": "standard"
+                    }, 
                     "he": {
                         "filter": [
                             "he_IL"
