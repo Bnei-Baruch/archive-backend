@@ -222,6 +222,26 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 }
 
 func updateSynonymsFn(cmd *cobra.Command, args []string) {
+
+	/*
+		Remove this comment later (after reindexing with new assets):
+		Do not forget to add analyzer definition for all languages before using synonyms (close the indices, add analyzer and reopen).
+
+		PUT prod_results_[asterisk]/_settings
+		{
+			"index" : {
+				"analysis" : {
+					"analyzer" : {
+						"synonym" : {
+							"tokenizer" : "standard",
+							"filter" : ["synonym"]
+						}
+					}
+				}
+			}
+		}
+	*/
+
 	clock := common.Init()
 	defer common.Shutdown()
 
