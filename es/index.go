@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
@@ -12,6 +14,12 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/utils"
+)
+
+const (
+	LANGUAGES_MAX_FAILURE      = 3
+	DOCUMENT_MAX_FAILIRE_RATIO = 0.1
 )
 
 type Scope struct {
@@ -28,11 +36,13 @@ type Scope struct {
 
 type Index interface {
 	ReindexAll() error
-	Update(scope Scope) error
+	RemoveFromIndex(scope Scope) (map[string][]string, error)
+	AddToIndex(scope Scope, removedUIDs []string) error
 	CreateIndex() error
 	DeleteIndex() error
 	RefreshIndex() error
 	ResultType() string
+	IndexName(language string) string
 }
 
 type BaseIndex struct {
@@ -42,6 +52,154 @@ type BaseIndex struct {
 	indexDate  string
 	db         *sql.DB
 	esc        *elastic.Client
+}
+
+type DocumentError struct {
+	Error error
+	Count int
+}
+
+type IndexErrors struct {
+	Error           error
+	LanguageErrors  map[string][]error
+	DocumentsCount  map[string]int
+	DocumentsErrors map[string][]DocumentError
+}
+
+func MakeIndexErrors() *IndexErrors {
+	return &IndexErrors{
+		Error:           (error)(nil),
+		LanguageErrors:  make(map[string][]error),
+		DocumentsCount:  make(map[string]int),
+		DocumentsErrors: make(map[string][]DocumentError),
+	}
+}
+
+func (indexErrors *IndexErrors) SetError(err error) *IndexErrors {
+	indexErrors.Error = utils.JoinErrors(indexErrors.Error, err)
+	return indexErrors
+}
+
+func (indexErrors *IndexErrors) Wrap(info string) *IndexErrors {
+	indexErrors.Error = errors.Wrap(indexErrors.Error, info)
+	return indexErrors
+}
+
+func (indexErrors *IndexErrors) Join(other *IndexErrors, info string) *IndexErrors {
+	indexErrors.Error = utils.JoinErrorsWrap(indexErrors.Error, other.Error, info)
+	for lang, otherErrors := range other.LanguageErrors {
+		if errors, ok := indexErrors.LanguageErrors[lang]; ok {
+			indexErrors.LanguageErrors[lang] = append(errors, otherErrors...)
+		} else {
+			indexErrors.LanguageErrors[lang] = otherErrors
+		}
+	}
+	for lang, otherCount := range other.DocumentsCount {
+		if count, ok := indexErrors.DocumentsCount[lang]; ok {
+			indexErrors.DocumentsCount[lang] = count + otherCount
+		} else {
+			indexErrors.DocumentsCount[lang] = otherCount
+		}
+	}
+	for lang, otherErrors := range other.DocumentsErrors {
+		if errors, ok := indexErrors.DocumentsErrors[lang]; ok {
+			indexErrors.DocumentsErrors[lang] = append(errors, otherErrors...)
+		} else {
+			indexErrors.DocumentsErrors[lang] = otherErrors
+		}
+	}
+	return indexErrors
+}
+
+func (indexErrors *IndexErrors) LanguageError(language string, e error, info string) *IndexErrors {
+	if e != nil {
+		indexErrors.LanguageErrors[language] = append(indexErrors.LanguageErrors[language], errors.Wrap(e, info))
+	}
+	return indexErrors
+}
+
+func (indexErrors *IndexErrors) DocumentErrorCount(language string, e error, info string, count int) *IndexErrors {
+	if e != nil {
+		indexErrors.DocumentsErrors[language] = append(indexErrors.DocumentsErrors[language], DocumentError{Error: errors.Wrap(e, info), Count: count})
+	}
+	if existingCount, ok := indexErrors.DocumentsCount[language]; ok {
+		indexErrors.DocumentsCount[language] = existingCount
+	} else {
+		indexErrors.DocumentsCount[language] = existingCount + count
+	}
+	return indexErrors
+}
+
+func (indexErrors *IndexErrors) DocumentError(language string, e error, info string) *IndexErrors {
+	return indexErrors.DocumentErrorCount(language, e, info, 1)
+}
+
+func (indexErrors *IndexErrors) PrintLanguageErrors(info string) {
+	log.Infof("Language Errors: %s", info)
+	for lang, errors := range indexErrors.LanguageErrors {
+		fmt.Printf("Language: %s\n", lang)
+		for _, err := range errors {
+			fmt.Printf("	Error: %+v", err)
+		}
+	}
+}
+
+func (indexErrors *IndexErrors) PrintDocumentsErrors(info string) {
+	log.Infof("Documents Errors: %s", info)
+	for lang, errors := range indexErrors.DocumentsErrors {
+		fmt.Printf("Language: %s\n", lang)
+		for _, err := range errors {
+			fmt.Printf("	Error: %+v", err)
+		}
+	}
+}
+
+func (indexErrors *IndexErrors) FailedLanguages() string {
+	keys := []string{}
+	for lang := range indexErrors.LanguageErrors {
+		keys = append(keys, lang)
+	}
+	return strings.Join(keys, ",")
+}
+
+func (indexErrors *IndexErrors) LanguagesError() error {
+	err := (error)(nil)
+	for lang, languageErrors := range indexErrors.LanguageErrors {
+		errorsStr := []string{}
+		for _, err := range languageErrors {
+			errorsStr = append(errorsStr, err.Error())
+		}
+		err = utils.JoinErrors(err, errors.New(fmt.Sprintf("%s: %s", lang, strings.Join(errorsStr, ". "))))
+	}
+	return err
+}
+
+func (indexErrors *IndexErrors) PrintShort() {
+}
+
+func (indexErrors *IndexErrors) Print() {
+}
+
+func (indexErrors *IndexErrors) CheckErrors(languagesMaxFailure int, documentsMaxFailure float32, index string) error {
+	err := indexErrors.Error
+	if len(indexErrors.LanguageErrors) > languagesMaxFailure {
+		err = utils.JoinErrors(err, errors.Wrapf(indexErrors.LanguagesError(), "[%s] Too many languages failed: %s.", index, indexErrors.FailedLanguages()))
+		log.Errorf("[%s] Too many languages failed: %s.", index, indexErrors.FailedLanguages())
+	}
+	indexErrors.PrintLanguageErrors(index)
+	for lang, documentErrors := range indexErrors.DocumentsErrors {
+		count := indexErrors.DocumentsCount[lang]
+		errCount := 0
+		for _, de := range documentErrors {
+			errCount = errCount + de.Count
+		}
+		if float32(errCount)/float32(count) > documentsMaxFailure {
+			err = utils.JoinErrors(err, errors.New(fmt.Sprintf("[%s] Too many document errors, lang: %s - %d / %d", index, lang, len(documentErrors), count)))
+			log.Errorf("[%s] Too many document errors, lang: %s - %d / %d", index, lang, len(documentErrors), count)
+		}
+		indexErrors.PrintDocumentsErrors(index)
+	}
+	return err
 }
 
 func IndexAliasName(namespace string, name string, lang string) string {
@@ -62,7 +220,7 @@ func (index *BaseIndex) ResultType() string {
 	return index.resultType
 }
 
-func (index *BaseIndex) indexName(lang string) string {
+func (index *BaseIndex) IndexName(lang string) string {
 	if index.namespace == "" || index.baseName == "" || index.indexDate == "" {
 		panic("Index namespace, baseName and indexDate should be set.")
 	}
@@ -78,12 +236,12 @@ func (index *BaseIndex) indexAliasName(lang string) string {
 
 func (index *BaseIndex) CreateIndex() error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
-		name := index.indexName(lang)
+		name := index.IndexName(lang)
 		// Do nothing if index already exists.
 		exists, err := index.esc.IndexExists(name).Do(context.TODO())
 		log.Debugf("Create index, exists: %t.", exists)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "Create index, lang: %s, name: %s.", lang, name)
 		}
 		if exists {
 			log.Debugf("Index already exists (%+v), skipping.", name)
@@ -124,7 +282,7 @@ func (index *BaseIndex) DeleteIndex() error {
 }
 
 func (index *BaseIndex) deleteIndexByLang(lang string) error {
-	i18nName := index.indexName(lang)
+	i18nName := index.IndexName(lang)
 	exists, err := index.esc.IndexExists(i18nName).Do(context.TODO())
 	if err != nil {
 		return err
@@ -142,16 +300,17 @@ func (index *BaseIndex) deleteIndexByLang(lang string) error {
 }
 
 func (index *BaseIndex) RefreshIndex() error {
+	err := (error)(nil)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		if err := index.RefreshIndexByLang(lang); err != nil {
-			return err
+			err = utils.JoinErrors(err, errors.Wrapf(err, "Error refreshing index for lang: %s", lang))
 		}
 	}
-	return nil
+	return err
 }
 
 func (index *BaseIndex) RefreshIndexByLang(lang string) error {
-	_, err := index.esc.Refresh(index.indexName(lang)).Do(context.TODO())
+	_, err := index.esc.Refresh(index.IndexName(lang)).Do(context.TODO())
 	// fmt.Printf("\n\n\nShards: %+v \n\n\n", shards)
 	return err
 }
@@ -160,48 +319,97 @@ func (index *BaseIndex) FilterByResultTypeQuery(resultType string) *elastic.Bool
 	return elastic.NewBoolQuery().Filter(elastic.NewTermsQuery(consts.ES_RESULT_TYPE, resultType))
 }
 
-func (index *BaseIndex) RemoveFromIndexQuery(elasticScope elastic.Query) ([]string, error) {
+type ScrollResult struct {
+	MdbUid     string
+	Id         string
+	ResultType string
+}
+
+func (index *BaseIndex) Scroll(indexName string, elasticScope elastic.Query) ([]ScrollResult, error) {
+	var ret []ScrollResult
+	var searchResult *elastic.SearchResult
+	for true {
+		log.Infof("Scrolling...")
+		if searchResult != nil && searchResult.Hits != nil {
+			for _, h := range searchResult.Hits.Hits {
+				result := Result{}
+				json.Unmarshal(*h.Source, &result)
+				ret = append(ret, ScrollResult{MdbUid: result.MDB_UID, Id: h.Id, ResultType: result.ResultType})
+			}
+		}
+		var err error
+		scrollClient := index.esc.Scroll().Index(indexName).Query(elasticScope).Scroll("10m").Size(100)
+		if searchResult != nil {
+			scrollClient = scrollClient.ScrollId(searchResult.ScrollId)
+		}
+		searchResult, err = scrollClient.Do(context.TODO())
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+	}
+	return ret, nil
+}
+
+func (index *BaseIndex) RemoveFromIndexQuery(elasticScope elastic.Query) (map[string][]string, *IndexErrors) {
 	source, err := elasticScope.Source()
+	indexErrors := MakeIndexErrors()
 	if err != nil {
-		return []string{}, err
+		return make(map[string][]string), indexErrors.SetError(errors.Wrapf(err, "Error getting scope query source for %s", index.resultType))
 	}
 	jsonBytes, err := json.Marshal(source)
 	if err != nil {
-		return []string{}, err
+		return make(map[string][]string), indexErrors.SetError(errors.Wrapf(err, "Error marshling scope query source for %s", index.resultType))
 	}
 	log.Infof("Results Index - Removing from index. Scope: %s", string(jsonBytes))
-	removed := make(map[string]bool)
+	removed := make(map[string]map[string]bool)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
-		indexName := index.indexName(lang)
-		searchRes, err := index.esc.Search(indexName).Query(elasticScope).Do(context.TODO())
-		if err != nil {
-			return []string{}, err
+		indexName := index.IndexName(lang)
+		scrollResults, e := index.Scroll(indexName, elasticScope)
+		if e != nil {
+			indexErrors.LanguageError(lang, e, fmt.Sprintf("Error scrolling for deleting %s from index: %s", string(jsonBytes), indexName))
+			continue
 		}
-		for _, h := range searchRes.Hits.Hits {
-			var cu ContentUnit
-			err := json.Unmarshal(*h.Source, &cu)
-			if err != nil {
-				return []string{}, err
+		bulkService := elastic.NewBulkService(index.esc).Index(indexName)
+		shouldRemoveCount := 0
+		for _, scrollResult := range scrollResults {
+			bulkService.Add(elastic.NewBulkDeleteRequest().Id(scrollResult.Id)).Type("result")
+			shouldRemoveCount++
+			if _, ok := removed[scrollResult.ResultType]; !ok {
+				removed[scrollResult.ResultType] = make(map[string]bool)
 			}
-			removed[cu.MDB_UID] = true
+			removed[scrollResult.ResultType][scrollResult.MdbUid] = true
 		}
-		delRes, err := index.esc.DeleteByQuery(indexName).
-			Query(elasticScope).
-			Do(context.TODO())
-		if err != nil {
-			return []string{}, errors.Wrapf(err, "Results Index - Remove from index %s %+v\n", indexName, elasticScope)
-		}
-		if delRes.Deleted > 0 {
-			fmt.Printf("Results Index - Deleted %d documents from %s.\n", delRes.Deleted, indexName)
+		if shouldRemoveCount > 0 {
+			log.Infof("Should remove: %d from %s", shouldRemoveCount, indexName)
+			bulkRes, e := bulkService.Do(context.TODO())
+			if e != nil {
+				indexErrors.LanguageError(lang, e, fmt.Sprintf("Results Index - Remove from index %s %+v.", indexName, elasticScope))
+				continue
+			}
+			log.Info("Bulk delete:")
+			for _, itemMap := range bulkRes.Items {
+				for op, res := range itemMap {
+					log.Infof("%s: %+v", op, res)
+				}
+			}
+			log.Info("Bulk delete end.")
 		}
 	}
 	if len(removed) == 0 {
-		fmt.Println("Results Index - Nothing was delete.")
-		return []string{}, nil
+		log.Infof("Results Index - Nothing was delete.")
+		return make(map[string][]string), indexErrors
 	}
-	keys := make([]string, 0)
-	for k := range removed {
-		keys = append(keys, k)
+	removedByType := make(map[string][]string)
+	for resultType, removedByUID := range removed {
+		for uid := range removedByUID {
+			if _, ok := removedByType[resultType]; !ok {
+				removedByType[resultType] = []string{}
+			}
+			removedByType[resultType] = append(removedByType[resultType], uid)
+		}
 	}
-	return keys, nil
+	return removedByType, indexErrors
 }
