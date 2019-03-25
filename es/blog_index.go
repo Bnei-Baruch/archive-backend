@@ -50,27 +50,32 @@ func (index *BlogIndex) blogIdToLanguageMapping() map[int]string {
 
 func (index *BlogIndex) ReindexAll() error {
 	log.Info("BlogIndex.Reindex All.")
-	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_BLOG_POSTS)); err != nil {
+	_, indexErrors := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(index.resultType))
+	if err := indexErrors.CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "BlogIndex"); err != nil {
 		return err
 	}
-	return index.addToIndexSql(defaultBlogPostsSql())
+	return indexErrors.Join(index.addToIndexSql(defaultBlogPostsSql()), "").CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "BlogIndex")
 }
 
-func (index *BlogIndex) Update(scope Scope) error {
-	log.Debugf("BlogIndex.Update - Scope: %+v.", scope)
-	removed, err := index.removeFromIndex(scope)
-	// We want to run addToIndex anyway and return joint error.
-	return utils.JoinErrors(err, index.addToIndex(scope, removed))
+func (index *BlogIndex) RemoveFromIndex(scope Scope) (map[string][]string, error) {
+	log.Debugf("BlogIndex.RemovedFromIndex - Scope: %+v.", scope)
+	removed, indexErrors := index.removeFromIndex(scope)
+	return removed, indexErrors.CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "BlogIndex")
 }
 
-func (index *BlogIndex) addToIndex(scope Scope, removedPosts []string) error {
+func (index *BlogIndex) AddToIndex(scope Scope, removedUIDs []string) error {
+	log.Debugf("BlogIndex.AddToIndex - Scope: %+v, removedUIDs: %+v.", scope, removedUIDs)
+	return index.addToIndex(scope, removedUIDs).CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "BlogIndex")
+}
+
+func (index *BlogIndex) addToIndex(scope Scope, removedPosts []string) *IndexErrors {
 	sqlScope := defaultBlogPostsSql()
 	ids := removedPosts
 	if scope.BlogPostWPID != "" {
 		ids = append(ids, scope.BlogPostWPID)
 	}
 	if len(ids) == 0 {
-		return nil
+		return MakeIndexErrors()
 	}
 	quoted := make([]string, len(ids))
 	for i, id := range ids {
@@ -80,59 +85,51 @@ func (index *BlogIndex) addToIndex(scope Scope, removedPosts []string) error {
 		quoted[i] = fmt.Sprintf("(p.blog_id = %s and p.wp_id = %s)", blogId, wpId)
 	}
 	sqlScope = fmt.Sprintf("%s AND (%s)", sqlScope, strings.Join(quoted, " or "))
-	if err := index.addToIndexSql(sqlScope); err != nil {
-		return errors.Wrap(err, "blog posts index addToIndex addToIndexSql")
-	}
-	return nil
+	return index.addToIndexSql(sqlScope).Wrap("blog posts index addToIndex addToIndexSql")
 }
 
-func (index *BlogIndex) removeFromIndex(scope Scope) ([]string, error) {
+func (index *BlogIndex) removeFromIndex(scope Scope) (map[string][]string, *IndexErrors) {
 	if scope.BlogPostWPID != "" {
-		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_BLOG_POSTS).
+		elasticScope := index.FilterByResultTypeQuery(index.resultType).
 			Filter(elastic.NewTermsQuery("mdb_uid", scope.BlogPostWPID))
 		return index.RemoveFromIndexQuery(elasticScope)
 	}
 
 	// Nothing to remove.
-	return []string{}, nil
+	return make(map[string][]string), MakeIndexErrors()
 }
 
-func (index *BlogIndex) bulkIndexPosts(bulk OffsetLimitJob, sqlScope string) error {
+func (index *BlogIndex) bulkIndexPosts(bulk OffsetLimitJob, sqlScope string) *IndexErrors {
 	var posts []*mdbmodels.BlogPost
-	err := mdbmodels.NewQuery(index.db,
+	if err := mdbmodels.NewQuery(index.db,
 		qm.From("blog_posts as p"),
 		qm.Where(sqlScope),
 		qm.OrderBy("id"), // Required for same order results in each query
 		qm.Offset(bulk.Offset),
-		qm.Limit(bulk.Limit)).Bind(&posts)
-	if err != nil {
-		log.Errorf("indexPost error at offset %d. error: %v", bulk.Offset, err)
-		return errors.Wrap(err, "Fetch blog posts from mdb.")
+		qm.Limit(bulk.Limit)).Bind(&posts); err != nil {
+		return MakeIndexErrors().SetError(err).Wrap(fmt.Sprintf("Fetch blog posts from mdb. Offset: %d", bulk.Offset))
 	}
 	log.Infof("Adding %d blog posts (offset %d total %d).", len(posts), bulk.Offset, bulk.Total)
+	indexErrors := MakeIndexErrors()
 	for _, post := range posts {
-		err = utils.JoinErrors(err, index.indexPost(post))
+		indexErrors.Join(index.indexPost(post), "BlogIndex, bulkIndexPosts")
 	}
-	if err != nil {
-		log.Errorf("indexPost error at post bulk. error: %v", err)
-		return err
-	}
-	return nil
+	return indexErrors
 }
 
-func (index *BlogIndex) addToIndexSql(sqlScope string) error {
+func (index *BlogIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	var count int
 	if err := mdbmodels.NewQuery(index.db,
 		qm.Select("count(id)"),
 		qm.From("blog_posts as p"),
 		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
-		return err
+		return MakeIndexErrors().SetError(err)
 	}
 	log.Infof("Blog Posts Index - Adding %d posts. Scope: %s.", count, sqlScope)
 
-	limit := 1000
+	limit := utils.MaxInt(1, utils.MinInt(1000, (int)(count/10)))
 	tasks := make(chan OffsetLimitJob, (count/limit + limit))
-	errors := make(chan error, 300)
+	errors := make(chan *IndexErrors, 300)
 	doneAdding := make(chan bool, 1)
 
 	tasksCount := 0
@@ -148,26 +145,21 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) error {
 	}()
 
 	for w := 1; w <= 10; w++ {
-		go func(tasks <-chan OffsetLimitJob, errs chan<- error) {
+		go func(tasks <-chan OffsetLimitJob, errs chan<- *IndexErrors) {
 			for task := range tasks {
 				errors <- index.bulkIndexPosts(task, sqlScope)
 			}
 		}(tasks, errors)
 	}
 	<-doneAdding
-	err := (error)(nil)
+	indexErrors := MakeIndexErrors()
 	for a := 1; a <= tasksCount; a++ {
-		err = utils.JoinErrors(err, <-errors)
+		indexErrors.Join(<-errors, "")
 	}
-	if err != nil {
-		log.Errorf("tasksCount loop error: %v", err)
-		return err
-	}
-
-	return nil
+	return indexErrors
 }
 
-func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
+func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) *IndexErrors {
 	langMapping := index.blogIdToLanguageMapping()
 	postLang := langMapping[int(mdbPost.BlogID)]
 
@@ -175,15 +167,16 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 	// The API BlogPostHandler expects for Blog Name + WPID and not for ID.
 	idStr := fmt.Sprintf("%v-%v", mdbPost.BlogID, mdbPost.WPID)
 
+	indexErrors := MakeIndexErrors()
 	content, err := html2text.FromString(mdbPost.Content, html2text.Options{OmitLinks: true})
 	if err != nil {
-		return errors.Wrapf(err, " blog_id: %d", mdbPost.BlogID)
+		return indexErrors.DocumentError(postLang, err, fmt.Sprintf("BlogIndex, indexPost, FromString, blog_id: %d", mdbPost.BlogID))
 	}
 
 	post := Result{
-		ResultType:    consts.ES_RESULT_TYPE_BLOG_POSTS,
+		ResultType:    index.resultType,
 		MDB_UID:       idStr,
-		TypedUids:     []string{keyValue("blog_post", idStr)},
+		TypedUids:     []string{keyValue(consts.ES_UID_TYPE_BLOG_POST, idStr)},
 		FilterValues:  []string{keyValue("content_type", consts.SCT_BLOG_POST), keyValue(consts.FILTER_LANGUAGE, postLang)},
 		Title:         mdbPost.Title,
 		TitleSuggest:  Suffixes(mdbPost.Title),
@@ -191,10 +184,10 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 		Content:       content,
 	}
 
-	indexName := index.indexName(postLang)
+	indexName := index.IndexName(postLang)
 	vBytes, err := json.Marshal(post)
 	if err != nil {
-		return errors.Wrapf(err, " blog_id: %d", mdbPost.BlogID)
+		return indexErrors.DocumentError(postLang, err, fmt.Sprintf("BlogIndex, indexPost, Marshal, blog_id: %d", mdbPost.BlogID))
 	}
 	log.Debugf("Blog Posts Index - Add blog post %s to index %s", string(vBytes), indexName)
 	resp, err := index.esc.Index().
@@ -203,10 +196,10 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 		BodyJson(post).
 		Do(context.TODO())
 	if err != nil {
-		return errors.Wrapf(err, "Index blog post %s %s", indexName, idStr)
+		return indexErrors.DocumentError(postLang, err, fmt.Sprintf("BlogIndex, indexPost, Index blog post %s %s", indexName, idStr))
 	}
 	if resp.Result != "created" {
-		return errors.Errorf("Not created: blog post %s %s", indexName, idStr)
+		return indexErrors.DocumentError(postLang, errors.Errorf("Not created: blog post %s %s", indexName, idStr), "BlogIndex")
 	}
 
 	atomic.AddUint64(&index.Progress, 1)
@@ -215,5 +208,5 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) error {
 		log.Debugf("Progress blog posts %d", progress)
 	}
 
-	return nil
+	return indexErrors
 }
