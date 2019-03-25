@@ -317,6 +317,15 @@ const ES_RESULT_TYPE_TAGS = "tags"
 const ES_RESULT_TYPE_BLOG_POSTS = "posts"
 const ES_RESULT_TYPE_TWEETS = "tweets"
 
+// Typed UIDs and Filter
+const ES_UID_TYPE_CONTENT_UNIT = "content_unit"
+const ES_UID_TYPE_FILE = "file"
+const ES_UID_TYPE_TAG = "tag"
+const ES_UID_TYPE_COLLECTION = "collection"
+const ES_UID_TYPE_SOURCE = "source"
+const ES_UID_TYPE_TWEET = "tweet"
+const ES_UID_TYPE_BLOG_POST = "blog_post"
+
 //  ToDo: Add ES_RESULT_TYPE_TWEETS to ES_SEARCH_RESULT_TYPES when the tweets handling in front end will be ready.
 var ES_SEARCH_RESULT_TYPES = []string{
 	ES_RESULT_TYPE_UNITS,
@@ -343,8 +352,6 @@ const (
 )
 
 const CDN = "https://cdn.kabbalahmedia.info/"
-
-const ES_SOURCES_INDEX = "sources"
 
 // Search filter.
 type SearchFilterType int

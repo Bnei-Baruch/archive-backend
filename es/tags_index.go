@@ -13,7 +13,6 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
-	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 func MakeTagsIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *TagsIndex {
@@ -33,26 +32,31 @@ type TagsIndex struct {
 
 func (index *TagsIndex) ReindexAll() error {
 	log.Info("Tags Index - Reindexing all.")
-	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_TAGS)); err != nil {
+	_, indexErrors := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(index.resultType))
+	if err := indexErrors.CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "TagsIndex"); err != nil {
 		return err
 	}
-	return index.addToIndexSql("TRUE")
+	return indexErrors.Join(index.addToIndexSql("TRUE"), "").CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "TagsIndex")
 }
 
-func (index *TagsIndex) Update(scope Scope) error {
-	log.Debugf("Tags Index - Update. Scope: %+v.", scope)
-	removed, err := index.removeFromIndex(scope)
-	// We want to run addToIndex anyway and return joint error.
-	return utils.JoinErrors(err, index.addToIndex(scope, removed))
+func (index *TagsIndex) RemoveFromIndex(scope Scope) (map[string][]string, error) {
+	log.Debugf("Tags Index - RemoveFromIndex. Scope: %+v.", scope)
+	removed, indexErrors := index.removeFromIndex(scope)
+	return removed, indexErrors.CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "TagsIndex")
 }
 
-func (index *TagsIndex) addToIndex(scope Scope, removedUIDs []string) error {
+func (index *TagsIndex) AddToIndex(scope Scope, removedUIDs []string) error {
+	log.Debugf("Tags Index - AddToIndex. Scope: %+v, removedUIDs: %+v.", scope, removedUIDs)
+	return index.addToIndex(scope, removedUIDs).CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "TagsIndex")
+}
+
+func (index *TagsIndex) addToIndex(scope Scope, removedUIDs []string) *IndexErrors {
 	uids := removedUIDs
 	if scope.TagUID != "" {
 		uids = append(uids, scope.TagUID)
 	}
 	if len(uids) == 0 {
-		return nil
+		return MakeIndexErrors()
 	}
 	quoted := make([]string, len(uids))
 	for i, uid := range uids {
@@ -61,40 +65,42 @@ func (index *TagsIndex) addToIndex(scope Scope, removedUIDs []string) error {
 	return index.addToIndexSql(fmt.Sprintf("uid IN (%s)", strings.Join(quoted, ",")))
 }
 
-func (index *TagsIndex) removeFromIndex(scope Scope) ([]string, error) {
+func (index *TagsIndex) removeFromIndex(scope Scope) (map[string][]string, *IndexErrors) {
 	log.Debugf("Tags Index - removeFromIndex. Scope: %+v.", scope)
 	if scope.TagUID != "" {
-		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_TAGS).
-			Filter(elastic.NewTermsQuery("typed_uids", keyValue("tag", scope.TagUID)))
+		elasticScope := index.FilterByResultTypeQuery(index.resultType).
+			Filter(elastic.NewTermsQuery("typed_uids", keyValue(consts.ES_UID_TYPE_TAG, scope.TagUID)))
 		return index.RemoveFromIndexQuery(elasticScope)
 	}
 	// Nothing to remove.
-	return []string{}, nil
+	return make(map[string][]string), MakeIndexErrors()
 }
 
-func (index *TagsIndex) addToIndexSql(sqlScope string) error {
+func (index *TagsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	tags, err := mdbmodels.Tags(index.db,
 		qm.Load("TagI18ns"),
 		qm.Where(sqlScope)).All()
 	if err != nil {
-		return errors.Wrap(err, "Tags Index - Fetch tags from mdb.")
+		return MakeIndexErrors().SetError(err).Wrap("Tags Index - Fetch tags from mdb.")
 	}
 	log.Infof("Tags Index - Adding %d tags. Scope: %s.", len(tags), sqlScope)
+	indexErrors := MakeIndexErrors()
 	for _, tag := range tags {
 		if !tag.ParentID.Valid {
 			log.Debugf("Tags Index - Skipping root tag [%s].", tag.UID)
 			continue
 		}
-		err = utils.JoinErrors(err, index.indexTag(tag))
+		indexErrors.Join(index.indexTag(tag), "")
 	}
-	return err
+	return indexErrors
 }
 
-func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
-	err := (error)(nil)
+func (index *TagsIndex) indexTag(t *mdbmodels.Tag) *IndexErrors {
+	indexErrors := MakeIndexErrors()
 	for i := range t.R.TagI18ns {
 		i18n := t.R.TagI18ns[i]
 		if i18n.Label.Valid && strings.TrimSpace(i18n.Label.String) != "" {
+			indexErrors.ShouldIndex(i18n.Language)
 			parentTag := t
 			parentI18n := i18n
 			pathNames := []string{i18n.Label.String}
@@ -121,10 +127,8 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 				pathNames = append([]string{parentI18n.Label.String}, pathNames...)
 				parentUids = append([]string{parentTag.UID}, parentUids...)
 			}
-
-			err = utils.JoinErrors(err, errFetching)
+			indexErrors.DocumentError(i18n.Language, errFetching, fmt.Sprintf("Tag I18n failed fetching tags. Tag UID: %s Label: %s Language: %s. Skipping language.", t.UID, i18n.Label.String, i18n.Language))
 			if errFetching != nil {
-				log.Errorf("Tag I18n failed fetching tags. Tag UID: %s Label: %s Language: %s. Skipping language.", t.UID, i18n.Label.String, i18n.Language)
 				continue
 			}
 
@@ -135,27 +139,32 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) error {
 			}
 
 			r := Result{
-				ResultType:   consts.ES_RESULT_TYPE_TAGS,
+				ResultType:   index.resultType,
 				MDB_UID:      t.UID,
-				FilterValues: KeyValues("tag", parentUids),
-				TypedUids:    []string{keyValue("tag", t.UID)},
+				FilterValues: KeyValues(consts.ES_UID_TYPE_TAG, parentUids),
+				TypedUids:    []string{keyValue(consts.ES_UID_TYPE_TAG, t.UID)},
 				Title:        strings.Join(pathNames, " - "),
 				TitleSuggest: Suffixes(strings.Join(pathNames, " ")),
 			}
-			name := index.indexName(i18n.Language)
+			name := index.IndexName(i18n.Language)
 			log.Debugf("Tags Index - Add tag %s to index %s", r.ToDebugString(), name)
 			resp, err := index.esc.Index().
 				Index(name).
 				Type("result").
 				BodyJson(r).
 				Do(context.TODO())
+			indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("Tags Index - Index tag %s %s", name, t.UID))
 			if err != nil {
-				err = utils.JoinErrors(err, errors.Wrapf(err, "Tags Index - Index tag %s %s", name, t.UID))
+				continue
 			}
-			if resp.Result != "created" {
-				err = utils.JoinErrors(err, errors.Errorf("Tags Index - Not created: tag %s %s", name, t.UID))
+			errNotCreated := (error)(nil)
+			if err == nil && resp.Result != "created" {
+				errNotCreated = errors.New(fmt.Sprintf("Not created: tag %s %s", name, t.UID))
+			} else {
+				indexErrors.Indexed(i18n.Language)
 			}
+			indexErrors.DocumentError(i18n.Language, errNotCreated, "Tags Index")
 		}
 	}
-	return err
+	return indexErrors
 }

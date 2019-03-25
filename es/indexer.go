@@ -61,12 +61,12 @@ func aliasedIndexDate(esc *elastic.Client, namespace string, name string) (error
 	prevIndicesByAlias := make(map[string]string)
 	aliasesRes, err := aliasesService.Do(context.TODO())
 	if err != nil {
-		return err, ""
+		return errors.Wrapf(err, "Error fetching asiases, namespace: %s, name: %s", namespace, name), ""
 	}
 	for indexName, indexResult := range aliasesRes.Indices {
 		matched, err := regexp.MatchString(IndexName(namespace, name, ".*", ".*"), indexName)
 		if err != nil {
-			return err, ""
+			return errors.Wrapf(err, "Error matching regex, namespace: %s, name: %s, indexName: %s", namespace, name, indexName), ""
 		}
 		if matched {
 			if len(indexResult.Aliases) > 1 {
@@ -116,7 +116,7 @@ func SwitchProdAliasToCurrentIndex(date string, esc *elastic.Client) error {
 func SwitchAliasToCurrentIndex(namespace string, name string, date string, esc *elastic.Client) error {
 	err, prevDate := aliasedIndexDate(esc, namespace, name)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "Error getting prev date, namespace: %s, name: %s, date: %s.", namespace, name, date)
 	}
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		aliasService := elastic.NewAliasService(esc)
@@ -129,7 +129,7 @@ func SwitchAliasToCurrentIndex(namespace string, name string, date string, esc *
 		aliasService.Add(indexName, alias)
 		res, err := aliasService.Do(context.TODO())
 		if err != nil || !res.Acknowledged {
-			err = utils.JoinErrors(err, errors.Wrap(err, "Failed due to error or Acknowledged is false."))
+			err = utils.JoinErrors(err, errors.Wrapf(err, "Failed due to error or Acknowledged is false. indexName: %s, alias: %s.", indexName, alias))
 			continue
 		}
 	}
@@ -139,7 +139,7 @@ func SwitchAliasToCurrentIndex(namespace string, name string, date string, esc *
 func (indexer *Indexer) ReindexAll() error {
 	log.Info("Indexer - Re-Indexing everything")
 	if err := indexer.CreateIndexes(); err != nil {
-		return err
+		return errors.Wrapf(err, "Error creating indexes.")
 	}
 	done := make(chan string)
 	errs := make([]error, len(indexer.indices))
@@ -153,46 +153,62 @@ func (indexer *Indexer) ReindexAll() error {
 		name := <-done
 		log.Infof("Finished: %s", name)
 	}
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
+	err := (error)(nil)
+	for i, e := range errs {
+		err = utils.JoinErrorsWrap(err, e, fmt.Sprintf("Reindex of: %s", indexer.indices[i].IndexName("xx")))
 	}
-	return nil
+	return err
 }
 
 func (indexer *Indexer) RefreshAll() error {
 	log.Info("Indexer - Refresh (sync new indexed documents) all indices.")
+	err := (error)(nil)
 	for _, index := range indexer.indices {
-		index.RefreshIndex()
+		err = utils.JoinErrorsWrap(err, index.RefreshIndex(), fmt.Sprintf("Error creating index: %s.", index.IndexName("xx")))
 	}
-	return nil
+	return err
 }
 
 func (indexer *Indexer) CreateIndexes() error {
 	log.Infof("Indexer - Create new indices in elastic: %+v", indexer.indices)
+	err := (error)(nil)
 	for _, index := range indexer.indices {
-		if err := index.CreateIndex(); err != nil {
-			return err
-		}
+		err = utils.JoinErrorsWrap(err, index.CreateIndex(), fmt.Sprintf("Error creating index: %s.", index.IndexName("xx")))
 	}
-	return nil
+	return err
 }
 
 func (indexer *Indexer) DeleteIndexes() error {
 	log.Info("Indexer - Delete indices from elastic.")
+	err := (error)(nil)
 	for _, index := range indexer.indices {
-		if err := index.DeleteIndex(); err != nil {
-			return err
-		}
+		err = utils.JoinErrorsWrap(err, index.DeleteIndex(), fmt.Sprintf("Error creating index: %s.", index.IndexName("xx")))
 	}
-	return nil
+	return err
 }
 
 func (indexer *Indexer) Update(scope Scope) error {
+	// Maps const.ES_UID_TYPE_* to list of uids.
+	// This is required to correctly add the removed uids per type.
+	removedByResultType := make(map[string][]string)
 	err := (error)(nil)
 	for _, index := range indexer.indices {
-		err = utils.JoinErrors(err, index.Update(scope))
+		removed, e := index.RemoveFromIndex(scope)
+		for resultType, removedUIDs := range removed {
+			if _, ok := removedByResultType[resultType]; !ok {
+				removedByResultType[resultType] = []string{}
+			}
+			removedByResultType[resultType] = append(removedByResultType[resultType], removedUIDs...)
+		}
+		err = utils.JoinErrorsWrap(err, e, fmt.Sprintf("Error updating: %+v", scope))
+	}
+	err = utils.JoinErrorsWrap(err, indexer.RefreshAll(), fmt.Sprintf("Error Refreshing: %+v", scope))
+	for _, index := range indexer.indices {
+		removed, ok := removedByResultType[index.ResultType()]
+		if !ok {
+			removed = []string{}
+		}
+		err = utils.JoinErrorsWrap(err, index.AddToIndex(scope, removed), fmt.Sprintf("Error updating: %+v", scope))
 	}
 	return err
 }
