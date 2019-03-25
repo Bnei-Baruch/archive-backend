@@ -118,6 +118,7 @@ func (index *SourcesIndex) bulkIndexSources(
 			indexErrors.Join(sourceIndexErrors, fmt.Sprintf("SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s).", source.Name, source.UID))
 		}
 	}
+	indexErrors.PrintIndexCounts(fmt.Sprintf("SourcedIndex %d - %d", bulk.Offset, bulk.Offset+bulk.Limit))
 	return indexErrors
 }
 
@@ -149,7 +150,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	tasksCount := 0
 	go func() {
 		offset := 0
-		limit := utils.MaxInt(1, utils.MinInt(100, (int)(count/10)))
+		limit := utils.MaxInt(10, utils.MinInt(100, (int)(count/10)))
 		for offset < int(count) {
 			tasks <- OffsetLimitJob{offset, limit, count}
 			tasksCount += 1
@@ -309,6 +310,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 	indexErrors := MakeIndexErrors()
 	for _, i18n := range mdbSource.R.SourceI18ns {
 		if i18n.Name.Valid && i18n.Name.String != "" {
+			indexErrors.ShouldIndex(i18n.Language)
 			pathNames := []string{}
 			source := Result{
 				ResultType:   index.resultType,
@@ -324,11 +326,10 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			if missingSourceFileErr == nil {
 				// Found docx.
 				content, parseErr := ParseDocx(fPath)
+				indexErrors.DocumentError(i18n.Language, parseErr, fmt.Sprintf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language))
 				if parseErr == nil {
 					source.Content = content
 					allLanguages = append(allLanguages, i18n.Language)
-				} else {
-					indexErrors.DocumentError(i18n.Language, parseErr, fmt.Sprintf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language))
 				}
 			}
 			// Find parents...
@@ -350,6 +351,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 					pathNames = append(pathNames, ni18n.Description.String)
 				}*/
 			}
+			indexErrors.DocumentError(i18n.Language, findParentsErr, "SourcesIndex.indexSource - Error finding parent")
 			if findParentsErr != nil {
 				indexErrors.DocumentError(i18n.Language, findParentsErr, "SourcesIndex.indexSource - Error finding parent")
 				continue
@@ -364,9 +366,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 
 	// Index each document in its language index
 	for k, v := range i18nMap {
-
 		v.FilterValues = append(v.FilterValues, KeyValues(consts.FILTER_LANGUAGE, allLanguages)...)
-
 		name := index.IndexName(k)
 		log.Debugf("Sources Index - Add source %s to index %s", mdbSource.UID, name)
 		resp, err := index.esc.Index().
@@ -374,11 +374,17 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			Type("result").
 			BodyJson(v).
 			Do(context.TODO())
+		indexErrors.DocumentError(k, err, fmt.Sprintf("Sources Index - Source %s %s", name, mdbSource.UID))
 		if err != nil {
-			indexErrors.DocumentError(k, err, fmt.Sprintf("Sources Index - Source %s %s", name, mdbSource.UID))
-		} else if resp.Result != "created" {
-			indexErrors.DocumentError(k, err, fmt.Sprintf("Sources Index - Not created: source %s %s", name, mdbSource.UID))
+			continue
 		}
+		errNotCreated := (error)(nil)
+		if resp.Result != "created" {
+			errNotCreated = errors.New(fmt.Sprintf("Not created: source %s %s", name, mdbSource.UID))
+		} else {
+			indexErrors.Indexed(k)
+		}
+		indexErrors.DocumentError(k, errNotCreated, "Sources Index")
 	}
 
 	atomic.AddUint64(&index.Progress, 1)

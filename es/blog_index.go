@@ -114,6 +114,7 @@ func (index *BlogIndex) bulkIndexPosts(bulk OffsetLimitJob, sqlScope string) *In
 	for _, post := range posts {
 		indexErrors.Join(index.indexPost(post), "BlogIndex, bulkIndexPosts")
 	}
+	indexErrors.PrintIndexCounts(fmt.Sprintf("BlogIndex %d - %d", bulk.Offset, bulk.Offset+bulk.Limit))
 	return indexErrors
 }
 
@@ -127,7 +128,7 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	}
 	log.Infof("Blog Posts Index - Adding %d posts. Scope: %s.", count, sqlScope)
 
-	limit := utils.MaxInt(1, utils.MinInt(1000, (int)(count/10)))
+	limit := utils.MaxInt(10, utils.MinInt(1000, (int)(count/10)))
 	tasks := make(chan OffsetLimitJob, (count/limit + limit))
 	errors := make(chan *IndexErrors, 300)
 	doneAdding := make(chan bool, 1)
@@ -167,10 +168,11 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) *IndexErrors {
 	// The API BlogPostHandler expects for Blog Name + WPID and not for ID.
 	idStr := fmt.Sprintf("%v-%v", mdbPost.BlogID, mdbPost.WPID)
 
-	indexErrors := MakeIndexErrors()
+	indexErrors := MakeIndexErrors().ShouldIndex(postLang)
 	content, err := html2text.FromString(mdbPost.Content, html2text.Options{OmitLinks: true})
+	indexErrors.DocumentError(postLang, err, fmt.Sprintf("BlogIndex, indexPost, FromString, blog_id: %d", mdbPost.BlogID))
 	if err != nil {
-		return indexErrors.DocumentError(postLang, err, fmt.Sprintf("BlogIndex, indexPost, FromString, blog_id: %d", mdbPost.BlogID))
+		return indexErrors
 	}
 
 	post := Result{
@@ -186,8 +188,9 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) *IndexErrors {
 
 	indexName := index.IndexName(postLang)
 	vBytes, err := json.Marshal(post)
+	indexErrors.DocumentError(postLang, err, fmt.Sprintf("BlogIndex, indexPost, Marshal, blog_id: %d", mdbPost.BlogID))
 	if err != nil {
-		return indexErrors.DocumentError(postLang, err, fmt.Sprintf("BlogIndex, indexPost, Marshal, blog_id: %d", mdbPost.BlogID))
+		return indexErrors
 	}
 	log.Debugf("Blog Posts Index - Add blog post %s to index %s", string(vBytes), indexName)
 	resp, err := index.esc.Index().
@@ -195,12 +198,17 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) *IndexErrors {
 		Type("result").
 		BodyJson(post).
 		Do(context.TODO())
+	indexErrors.DocumentError(postLang, err, fmt.Sprintf("BlogIndex, indexPost, Index blog post %s %s", indexName, idStr))
 	if err != nil {
-		return indexErrors.DocumentError(postLang, err, fmt.Sprintf("BlogIndex, indexPost, Index blog post %s %s", indexName, idStr))
+		return indexErrors
 	}
+	errNotCreated := (error)(nil)
 	if resp.Result != "created" {
-		return indexErrors.DocumentError(postLang, errors.Errorf("Not created: blog post %s %s", indexName, idStr), "BlogIndex")
+		errNotCreated = errors.Errorf("Not created: blog post %s %s", indexName, idStr)
+	} else {
+		indexErrors.Indexed(postLang)
 	}
+	indexErrors.DocumentError(postLang, errNotCreated, "BlogIndex")
 
 	atomic.AddUint64(&index.Progress, 1)
 	progress := atomic.LoadUint64(&index.Progress)

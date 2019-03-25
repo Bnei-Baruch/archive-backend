@@ -10,6 +10,7 @@ import (
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -105,6 +106,7 @@ func (index *TweeterIndex) bulkIndexTweets(bulk OffsetLimitJob, sqlScope string)
 	for _, tweet := range tweets {
 		indexErrors.Join(index.indexTweet(tweet), "")
 	}
+	indexErrors.PrintIndexCounts(fmt.Sprintf("TweeterIndex %d - %d", bulk.Offset, bulk.Offset+bulk.Limit))
 	return indexErrors
 }
 
@@ -118,7 +120,7 @@ func (index *TweeterIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	}
 	log.Debugf("Tweeter Index - Adding %d tweets. Scope: %s.", count, sqlScope)
 
-	limit := utils.MaxInt(1, utils.MinInt(1000, (int)(count/10)))
+	limit := utils.MaxInt(10, utils.MinInt(1000, (int)(count/10)))
 	tasks := make(chan OffsetLimitJob, (count/limit + limit))
 	errors := make(chan *IndexErrors, 300)
 	doneAdding := make(chan bool, 1)
@@ -154,13 +156,14 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) *IndexEr
 	langMapping := index.userIdToLanguageMapping()
 	tweetLang := langMapping[int(mdbTweet.UserID)]
 
-	indexErrors := MakeIndexErrors()
+	indexErrors := MakeIndexErrors().ShouldIndex(tweetLang)
 	title := ""
 	if mdbTweet.Raw.Valid {
 		var raw interface{}
 		err := json.Unmarshal(mdbTweet.Raw.JSON, &raw)
+		indexErrors.DocumentError(tweetLang, err, fmt.Sprintf("Cannot unmarshal raw from tweet id %d", mdbTweet.ID))
 		if err != nil {
-			return indexErrors.DocumentError(tweetLang, err, fmt.Sprintf("Cannot unmarshal raw from tweet id %d", mdbTweet.ID))
+			return indexErrors
 		}
 		r := raw.(map[string]interface{})
 		if val, ok := r["text"]; ok {
@@ -181,8 +184,9 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) *IndexEr
 
 	indexName := index.IndexName(tweetLang)
 	vBytes, err := json.Marshal(tweet)
+	indexErrors.DocumentError(tweetLang, err, fmt.Sprintf("Failed marshling tweet: %d", mdbTweet.ID))
 	if err != nil {
-		return indexErrors.DocumentError(tweetLang, err, fmt.Sprintf("Failed marshling tweet: %d", mdbTweet.ID))
+		return indexErrors
 	}
 	log.Debugf("Tweets Index - Add tweet %s to index %s", string(vBytes), indexName)
 	resp, err := index.esc.Index().
@@ -190,11 +194,17 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) *IndexEr
 		Type("result").
 		BodyJson(tweet).
 		Do(context.TODO())
+	indexErrors.DocumentError(tweetLang, err, fmt.Sprintf("Index tweet %s %d", indexName, mdbTweet.ID))
 	if err != nil {
-		return indexErrors.DocumentError(tweetLang, err, fmt.Sprintf("Index tweet %s %d", indexName, mdbTweet.ID))
-	} else if resp.Result != "created" {
-		return indexErrors.DocumentError(tweetLang, err, fmt.Sprintf("Not created: tweet %s %d", indexName, mdbTweet.ID))
+		return indexErrors
 	}
+	errNotCreated := (error)(nil)
+	if resp.Result != "created" {
+		errNotCreated = errors.New(fmt.Sprintf("Not created: tweet %s %d", indexName, mdbTweet.ID))
+	} else {
+		indexErrors.Indexed(tweetLang)
+	}
+	indexErrors.DocumentError(tweetLang, errNotCreated, "TweeterIndex")
 
 	atomic.AddUint64(&index.Progress, 1)
 	progress := atomic.LoadUint64(&index.Progress)
@@ -202,5 +212,5 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) *IndexEr
 		log.Debugf("Progress tweet %d", progress)
 	}
 
-	return MakeIndexErrors()
+	return indexErrors
 }
