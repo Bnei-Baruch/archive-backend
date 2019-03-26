@@ -68,6 +68,7 @@ func RunListener() {
 	} else {
 		err, date := es.ProdAliasedIndexDate(common.ESC)
 		utils.Must(err)
+		log.Infof("Making prod indexer for date: %s", date)
 		indexer, err = es.MakeProdIndexer(date, common.DB, common.ESC)
 		utils.Must(err)
 	}

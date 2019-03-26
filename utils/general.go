@@ -47,12 +47,23 @@ func JoinErrors(one error, two error) error {
 		return nil
 	}
 	if one != nil && two != nil {
-		return errors.Wrapf(one, ", %s", two.Error())
+		return errors.Wrapf(two, "%s\nPrev Error", one.Error())
 	}
 	if one != nil {
 		return one
 	}
 	return two
+}
+
+func JoinErrorsWrap(one error, two error, twoErrorMessage string) error {
+	if two != nil {
+		if twoErrorMessage == "" {
+			return JoinErrors(one, two)
+		} else {
+			return JoinErrors(one, errors.Wrap(two, twoErrorMessage))
+		}
+	}
+	return one
 }
 
 // Like math.Min for int
