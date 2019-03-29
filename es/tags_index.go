@@ -8,6 +8,7 @@ import (
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -99,6 +100,7 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) *IndexErrors {
 	for i := range t.R.TagI18ns {
 		i18n := t.R.TagI18ns[i]
 		if i18n.Label.Valid && strings.TrimSpace(i18n.Label.String) != "" {
+			indexErrors.ShouldIndex(i18n.Language)
 			parentTag := t
 			parentI18n := i18n
 			pathNames := []string{i18n.Label.String}
@@ -125,8 +127,8 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) *IndexErrors {
 				pathNames = append([]string{parentI18n.Label.String}, pathNames...)
 				parentUids = append([]string{parentTag.UID}, parentUids...)
 			}
+			indexErrors.DocumentError(i18n.Language, errFetching, fmt.Sprintf("Tag I18n failed fetching tags. Tag UID: %s Label: %s Language: %s. Skipping language.", t.UID, i18n.Label.String, i18n.Language))
 			if errFetching != nil {
-				indexErrors.DocumentError(i18n.Language, errFetching, fmt.Sprintf("Tag I18n failed fetching tags. Tag UID: %s Label: %s Language: %s. Skipping language.", t.UID, i18n.Label.String, i18n.Language))
 				continue
 			}
 
@@ -151,11 +153,17 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) *IndexErrors {
 				Type("result").
 				BodyJson(r).
 				Do(context.TODO())
+			indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("Tags Index - Index tag %s %s", name, t.UID))
 			if err != nil {
-				indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("Tags Index - Index tag %s %s", name, t.UID))
-			} else if resp.Result != "created" {
-				indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("Tags Index - Not created: tag %s %s", name, t.UID))
+				continue
 			}
+			errNotCreated := (error)(nil)
+			if err == nil && resp.Result != "created" {
+				errNotCreated = errors.New(fmt.Sprintf("Not created: tag %s %s", name, t.UID))
+			} else {
+				indexErrors.Indexed(i18n.Language)
+			}
+			indexErrors.DocumentError(i18n.Language, errNotCreated, "Tags Index")
 		}
 	}
 	return indexErrors

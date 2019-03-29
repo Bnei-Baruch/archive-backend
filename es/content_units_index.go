@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -179,9 +178,38 @@ func (index *ContentUnitsIndex) bulkIndexUnits(bulk OffsetLimitJob, sqlScope str
 	if err != nil {
 		return indexErrors.SetError(errors.Wrap(err, "Failed making index data."))
 	}
+	i18nMap := make(map[string][]Result)
 	for _, unit := range units {
-		indexErrors.Join(index.indexUnit(unit, indexData), "")
+		i18nUnit, unitIndexErrors := index.prepareIndexUnit(unit, indexData)
+		for lang, result := range i18nUnit {
+			i18nMap[lang] = append(i18nMap[lang], result)
+		}
+		indexErrors.Join(unitIndexErrors, "")
 	}
+
+	// Index each document in its language index
+	for lang, results := range i18nMap {
+		indexName := index.IndexName(lang)
+
+		bulkService := elastic.NewBulkService(index.esc).Index(indexName)
+		for _, result := range results {
+			indexErrors.ShouldIndex(lang)
+			bulkService.Add(elastic.NewBulkIndexRequest().Index(indexName).Type("result").Doc(result))
+		}
+		bulkRes, e := bulkService.Do(context.TODO())
+		if e != nil {
+			indexErrors.LanguageError(lang, e, fmt.Sprintf("Results Index - bulkIndexUnits %s %+v.", indexName, sqlScope))
+			continue
+		}
+		for _, itemMap := range bulkRes.Items {
+			for _, res := range itemMap {
+				if res.Result == "created" {
+					indexErrors.Indexed(lang)
+				}
+			}
+		}
+	}
+	indexErrors.PrintIndexCounts(fmt.Sprintf("ContentUnitIndex %d - %d / %d", bulk.Offset, bulk.Offset+bulk.Limit, bulk.Total))
 	return indexErrors
 }
 
@@ -211,7 +239,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	tasksCount := 0
 	go func() {
 		offset := 0
-		limit := utils.MaxInt(1, utils.MinInt(1000, (int)(count/10)))
+		limit := utils.MaxInt(10, utils.MinInt(250, (int)(count/10)))
 		for offset < count {
 			tasks <- OffsetLimitJob{offset, limit, count}
 			tasksCount += 1
@@ -253,7 +281,7 @@ func collectionsTypedUids(collectionsContentUnits mdbmodels.CollectionsContentUn
 	return ret
 }
 
-func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *IndexData) *IndexErrors {
+func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, indexData *IndexData) (map[string]Result, *IndexErrors) {
 	indexErrors := MakeIndexErrors()
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
@@ -280,15 +308,14 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 			if cu.Properties.Valid {
 				var props map[string]interface{}
 				err := json.Unmarshal(cu.Properties.JSON, &props)
+				indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("json.Unmarshal properties %s", cu.UID))
 				if err != nil {
-					indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("json.Unmarshal properties %s", cu.UID))
 					continue
 				}
-
 				if filmDate, ok := props["film_date"]; ok {
 					val, err := time.Parse("2006-01-02", filmDate.(string))
+					indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("time.Parse film_date %s", cu.UID))
 					if err != nil {
-						indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("time.Parse film_date %s", cu.UID))
 						continue
 					}
 					unit.EffectiveDate = &utils.Date{Time: val}
@@ -313,9 +340,8 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 					if unit.Content == "" {
 						log.Warnf("Content Units Index - Transcript empty: %s", val[0])
 					}
-					if err != nil {
-						indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("Content Units Index - Error parsing docx: %s", val[0]))
-					} else {
+					indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("Content Units Index - Error parsing docx: %s", val[0]))
+					if err == nil {
 						unit.TypedUids = append(unit.TypedUids, keyValue(consts.ES_UID_TYPE_FILE, val[0]))
 					}
 				}
@@ -325,31 +351,5 @@ func (index *ContentUnitsIndex) indexUnit(cu *mdbmodels.ContentUnit, indexData *
 		}
 	}
 
-	// Index each document in its language index
-	for k, v := range i18nMap {
-		name := index.IndexName(k)
-
-		log.Debugf("Content Units Index - Add content unit %s to index %s", v.ToDebugString(), name)
-		resp, err := index.esc.Index().
-			Index(name).
-			Type("result").
-			BodyJson(v).
-			Do(context.TODO())
-		if err != nil {
-			indexErrors.DocumentError(k, err, fmt.Sprintf("Content Units Index - Index unit %s %s", name, cu.UID))
-			continue
-		}
-		if resp.Result != "created" {
-			indexErrors.DocumentError(k, err, fmt.Sprintf("Content Units Index - Not created: unit %s %s %+v", name, cu.UID, resp))
-			continue
-		}
-	}
-
-	atomic.AddUint64(&index.Progress, 1)
-	progress := atomic.LoadUint64(&index.Progress)
-	if progress%1000 == 0 {
-		log.Debugf("Progress units %d", progress)
-	}
-
-	return indexErrors
+	return i18nMap, indexErrors
 }

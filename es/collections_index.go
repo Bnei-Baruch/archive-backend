@@ -9,6 +9,7 @@ import (
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -133,20 +134,18 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	log.Infof("Collections Index - Adding %d collections. Scope: %s.", count, sqlScope)
 	offset := 0
 	limit := 10
-	indexErrors := MakeIndexErrors()
+	totalIndexErrors := MakeIndexErrors()
 	for offset < int(count) {
 		var collections []*mdbmodels.Collection
-		err := mdbmodels.NewQuery(index.db,
+		if err := mdbmodels.NewQuery(index.db,
 			qm.From("collections as c"),
 			qm.Load("CollectionI18ns"),
 			qm.Load("CollectionsContentUnits"),
 			qm.Load("CollectionsContentUnits.ContentUnit"),
 			qm.Where(sqlScope),
 			qm.Offset(offset),
-			qm.Limit(limit)).Bind(&collections)
-		if err != nil {
-			indexErrors.DocumentErrorCount("", err, fmt.Sprintf("Fetch collections from mdb. Offset: %d", offset), limit)
-			continue
+			qm.Limit(limit)).Bind(&collections); err != nil {
+			return totalIndexErrors.SetError(err).Wrap(fmt.Sprintf("Fetch collections from mdb. Offset: %d", offset))
 		}
 		log.Debugf("Adding %d collections (offset %d).", len(collections), offset)
 
@@ -162,12 +161,15 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 				"%s AND cu.uid in (%s)", contentUnitsSqlScope, strings.Join(cuUIDs, ","))
 		}
 
+		indexErrors := MakeIndexErrors()
 		for _, collection := range collections {
 			indexErrors.Join(index.indexCollection(collection), "")
 		}
+		indexErrors.PrintIndexCounts(fmt.Sprintf("CollectionsIndex %d - %d", offset, offset+limit))
 		offset += limit
+		totalIndexErrors.Join(indexErrors, "")
 	}
-	return indexErrors
+	return totalIndexErrors
 }
 
 func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
@@ -193,10 +195,12 @@ func contentUnitsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentU
 }
 
 func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexErrors {
+	indexErrors := MakeIndexErrors()
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
 	for _, i18n := range c.R.CollectionI18ns {
 		if i18n.Name.Valid && i18n.Name.String != "" {
+			indexErrors.ShouldIndex(i18n.Language)
 			typedUIDs := append([]string{keyValue(consts.ES_UID_TYPE_COLLECTION, c.UID)},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
 			filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
@@ -219,12 +223,11 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 	}
 
 	// Index each document in its language index
-	indexErrors := MakeIndexErrors()
 	for k, v := range i18nMap {
 		name := index.IndexName(k)
 		vBytes, err := json.Marshal(v)
+		indexErrors.DocumentError(k, err, "CollectionsIndex, Failed marshal")
 		if err != nil {
-			indexErrors.DocumentError(k, err, "CollectionsIndex, Failed marshal")
 			continue
 		}
 		log.Debugf("Collections Index - Add collection %s to index %s", string(vBytes), name)
@@ -233,14 +236,17 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 			Type("result").
 			BodyJson(v).
 			Do(context.TODO())
+		indexErrors.DocumentError(k, err, fmt.Sprintf("Index collection %s %s", name, c.UID))
 		if err != nil {
-			indexErrors.DocumentError(k, err, fmt.Sprintf("Index collection %s %s", name, c.UID))
 			continue
 		}
+		errNotCreated := (error)(nil)
 		if resp.Result != "created" {
-			indexErrors.DocumentError(k, err, fmt.Sprintf("Not created: collection %s %s", name, c.UID))
-			continue
+			errNotCreated = errors.New(fmt.Sprintf("Not created: collection %s %s", name, c.UID))
+		} else {
+			indexErrors.Indexed(k)
 		}
+		indexErrors.DocumentError(k, errNotCreated, "CollectionsIndex")
 	}
 
 	return indexErrors

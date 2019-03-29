@@ -202,6 +202,7 @@ func (indexer *Indexer) Update(scope Scope) error {
 		}
 		err = utils.JoinErrorsWrap(err, e, fmt.Sprintf("Error updating: %+v", scope))
 	}
+	err = utils.JoinErrorsWrap(err, indexer.RefreshAll(), fmt.Sprintf("Error Refreshing: %+v", scope))
 	for _, index := range indexer.indices {
 		removed, ok := removedByResultType[index.ResultType()]
 		if !ok {
