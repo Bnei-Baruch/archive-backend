@@ -114,7 +114,8 @@ func (index *CollectionsIndex) removeFromIndex(scope Scope) (map[string][]string
 		for i, typedUID := range typedUIDs {
 			typedUIDsI[i] = typedUID
 		}
-		elasticScope := elastic.NewTermsQuery("typed_uids", typedUIDsI...)
+		elasticScope := index.FilterByResultTypeQuery(index.resultType).
+			Filter(elastic.NewTermsQuery("typed_uids", typedUIDsI...))
 		uids, removeIndexErrors := index.RemoveFromIndexQuery(elasticScope)
 		return uids, indexErrors.Join(removeIndexErrors, "CollectionsIndex, removeFromIndex")
 	} else {
