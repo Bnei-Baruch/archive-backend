@@ -29,7 +29,7 @@ func MakeFakeIndexer(mdb *sql.DB, esc *elastic.Client) (*Indexer, error) {
 
 // Receives namespace and list of indexes names.
 func MakeIndexer(namespace string, date string, names []string, mdb *sql.DB, esc *elastic.Client) (*Indexer, error) {
-	log.Infof("Indexer - Make indexer - %s - %s", namespace, strings.Join(names, ", "))
+	log.Infof("Indexer - Make indexer - %s - %s - %s", namespace, date, strings.Join(names, ", "))
 	indexer := new(Indexer)
 	indexer.indices = make([]Index, len(names))
 	for i, name := range names {
