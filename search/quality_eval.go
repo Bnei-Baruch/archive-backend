@@ -284,7 +284,7 @@ type HitSource struct {
 func ParseExpectation(e string, db *sql.DB) Expectation {
 	originalE := e
 	if strings.Trim(e, " ") == "" {
-		return Expectation{ET_EMPTY, "", nil, e}
+		return Expectation{ET_EMPTY, "", nil, originalE}
 	}
 	takeLatest := strings.HasPrefix(strings.ToLower(e), PREFIX_LATEST)
 	if takeLatest {
@@ -292,7 +292,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	}
 	u, err := url.Parse(e)
 	if err != nil {
-		return Expectation{ET_FAILED_PARSE, "", nil, e}
+		return Expectation{ET_FAILED_PARSE, "", nil, originalE}
 	}
 	p := u.RequestURI()
 	idx := strings.Index(p, "?")
@@ -350,9 +350,11 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 				return Expectation{ET_FAILED_SQL, "", filters, originalE}
 			}
 			newE := fmt.Sprintf("%s://%s%s/%s/%s", u.Scheme, u.Host, p, entityType, latestUID)
-			return ParseExpectation(newE, db)
+			recExpectation := ParseExpectation(newE, db)
+			recExpectation.Source = originalE
+			return recExpectation
 		}
-		return Expectation{t, subSection, filters, e}
+		return Expectation{t, subSection, filters, originalE}
 	}
 	switch contentUnitOrCollection {
 	case EXPECTATION_URL_PATH[ET_CONTENT_UNITS]:
@@ -367,7 +369,9 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 			}
 			uriParts := strings.Split(p, "/")
 			newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
-			return ParseExpectation(newE, db)
+			recExpectation := ParseExpectation(newE, db)
+			recExpectation.Source = originalE
+			return recExpectation
 		}
 	case EXPECTATION_URL_PATH[ET_SOURCES]:
 		t = ET_SOURCES
@@ -377,11 +381,11 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		t = ET_LANDING_PAGE
 	default:
 		if uidOrSection == EXPECTATION_URL_PATH[ET_SOURCES] {
-			return Expectation{ET_SOURCES, "", nil, e}
+			return Expectation{ET_SOURCES, "", nil, originalE}
 		} else if uidOrSection == EXPECTATION_URL_PATH[ET_LESSONS] {
-			return Expectation{ET_LANDING_PAGE, "", nil, e}
+			return Expectation{ET_LANDING_PAGE, "", nil, originalE}
 		} else {
-			return Expectation{ET_BAD_STRUCTURE, "", nil, e}
+			return Expectation{ET_BAD_STRUCTURE, "", nil, originalE}
 		}
 	}
 
@@ -406,13 +410,15 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		}
 		uriParts := strings.Split(p, "/")
 		newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
-		return ParseExpectation(newE, db)
+		recExpectation := ParseExpectation(newE, db)
+		recExpectation.Source = originalE
+		return recExpectation
 	}
 
 	if t == ET_NOT_SET {
 		panic(errors.New("Expectation not set."))
 	}
-	return Expectation{t, uidOrSection, nil, e}
+	return Expectation{t, uidOrSection, nil, originalE}
 }
 
 func FilterValueToUid(value string) string {
