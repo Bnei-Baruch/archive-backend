@@ -2483,18 +2483,6 @@ func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error)
 	return
 }
 
-func EvalIndexHandler(c *gin.Context) {
-	r := CollectionsRequest{
-		WithUnits: true,
-	}
-	if c.Bind(&r) != nil {
-		return
-	}
-
-	resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), r)
-	concludeRequest(c, resp, err)
-}
-
 func EvalQueryHandler(c *gin.Context) {
 	r := EvalQueryRequest{}
 	if c.Bind(&r) != nil {
