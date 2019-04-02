@@ -1,0 +1,3 @@
+# Sanity check that search works properly.
+0 * * * * root /sites/archive-backend/logs/es/search_sanity.sh
+
