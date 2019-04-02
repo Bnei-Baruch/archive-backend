@@ -66,6 +66,10 @@ func (suite *IndexerSuite) TestCollectionsIndex() {
 
 	// Add test for collection for multiple content units.
 	r := require.New(suite.T())
+
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
+
 	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
 	cu1UID := suite.ucu(es.ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
 	c1UID := suite.uc(es.Collection{Name: "c1", ContentType: consts.CT_VIDEO_PROGRAM}, cu1UID, "")
@@ -74,7 +78,7 @@ func (suite *IndexerSuite) TestCollectionsIndex() {
 
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
 	indexName := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
-	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_COLLECTIONS}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_COLLECTIONS}, common.DB, esc)
 	r.Nil(err)
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll())

@@ -26,10 +26,12 @@ func (suite *TagsIndexerSuite) TestTagsIndex() {
 	fmt.Printf("\n\n\n--- TEST TAGS INDEX ---\n\n\n")
 
 	r := require.New(suite.T())
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 
 	indexNameEn := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
 	indexNameHe := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_HEBREW, "test-date")
-	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_TAGS}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_TAGS}, common.DB, esc)
 	r.Nil(err)
 
 	fmt.Printf("\n\n\nAdding tag.\n\n")
@@ -60,7 +62,7 @@ func (suite *TagsIndexerSuite) TestTagsIndex() {
 	r.Nil(indexer.RefreshAll())
 
 	r.Nil(es.DumpDB(common.DB, "TAGS Before validation"))
-	r.Nil(es.DumpIndexes(common.ESC, "TAGS Before validation", consts.ES_RESULT_TYPE_SOURCES))
+	r.Nil(es.DumpIndexes(esc, "TAGS Before validation", consts.ES_RESULT_TYPE_SOURCES))
 
 	suite.validateNames(indexNameEn, indexer, []string{})
 	suite.validateNames(indexNameHe, indexer, []string{})

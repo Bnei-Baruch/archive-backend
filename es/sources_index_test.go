@@ -26,9 +26,12 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 
 	r := require.New(suite.T())
 
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
+
 	indexNameEn := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
 	indexNameHe := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_HEBREW, "test-date")
-	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_SOURCES}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_SOURCES}, common.DB, esc)
 	r.Nil(err)
 
 	fmt.Printf("\n\n\nAdding source.\n\n")
@@ -47,7 +50,7 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	r.Nil(indexer.RefreshAll())
 
 	r.Nil(es.DumpDB(common.DB, "Before validation"))
-	r.Nil(es.DumpIndexes(common.ESC, "Before validation", consts.ES_RESULT_TYPE_SOURCES))
+	r.Nil(es.DumpIndexes(esc, "Before validation", consts.ES_RESULT_TYPE_SOURCES))
 
 	fmt.Printf("\n\n\nValidate we have source with 2 languages.\n\n")
 	suite.validateNames(indexNameEn, indexer, []string{"Test Name > test-name-1"})

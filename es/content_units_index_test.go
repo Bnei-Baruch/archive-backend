@@ -26,6 +26,10 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	fmt.Printf("\n\n\n--- TEST CONTENT UNITS INDEX ---\n\n\n")
 
 	r := require.New(suite.T())
+
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
+
 	fmt.Printf("\n\n\nAdding content units.\n\n")
 	cu1UID := suite.ucu(es.ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
 	suite.ucu(es.ContentUnit{MDB_UID: cu1UID, Name: "משהוא"}, consts.LANG_HEBREW, true, true)
@@ -39,7 +43,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	indexNameEn := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
 	indexNameHe := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_HEBREW, "test-date")
 	indexNameRu := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_RUSSIAN, "test-date")
-	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, esc)
 	r.Nil(err)
 
 	// Index existing DB data.
@@ -61,7 +65,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	suite.ucuf(es.ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, false)
 	r.Nil(indexer.FileUpdate(f1UID))
 	r.Nil(es.DumpDB(common.DB, "DumpDB"))
-	r.Nil(es.DumpIndexes(common.ESC, "DumpIndexes", consts.ES_RESULT_TYPE_UNITS))
+	r.Nil(es.DumpIndexes(esc, "DumpIndexes", consts.ES_RESULT_TYPE_UNITS))
 	suite.validateContentUnitFiles(indexNameHe, indexer, null.Int{-1, false})
 
 	fmt.Println("Add a tag to content unit and validate.")
@@ -168,6 +172,10 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 
 	// Add test for collection for multiple content units.
 	r := require.New(suite.T())
+
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
+
 	fmt.Printf("\n\n\nAdding content units and collections.\n\n")
 	cu1UID := suite.ucu(es.ContentUnit{Name: "something"}, consts.LANG_ENGLISH, true, true)
 	c3UID := suite.uc(es.Collection{ContentType: consts.CT_DAILY_LESSON}, cu1UID, "")
@@ -178,7 +186,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
 	indexName := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
-	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, esc)
 	r.Nil(err)
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll())
