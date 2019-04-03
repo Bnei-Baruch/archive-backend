@@ -128,21 +128,21 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 		latestVirtualLessonUID = virtualLessonCUUID
 	}
 
-	fmt.Printf("Test content_units \n")
+	fmt.Printf("Test content_units d\n")
 	suite.validateExpectation(fmt.Sprintf("https://kabbalahmedia.info/he/programs/cu/%s", latestUIDByDate), // Using arbitrary UID
-		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByDate, nil, "https://kabbalahmedia.info/he/programs/cu/ygrd51U6"}, r)
+		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByDate, nil, fmt.Sprintf("https://kabbalahmedia.info/he/programs/cu/%s", latestUIDByDate)}, r)
 
 	fmt.Printf("Test program collections \n")
 	suite.validateExpectation(fmt.Sprintf("https://kabbalahmedia.info/he/programs/c/%s", cUID),
-		search.Expectation{search.ET_COLLECTIONS, cUID, nil, "https://kabbalahmedia.info/he/programs/c/ZZc07Y5r"}, r)
+		search.Expectation{search.ET_COLLECTIONS, cUID, nil, fmt.Sprintf("https://kabbalahmedia.info/he/programs/c/%s", cUID)}, r)
 
 	fmt.Printf("Test event collections \n")
 	suite.validateExpectation(fmt.Sprintf("https://kabbalahmedia.info/he/events/c/%s?language=he", cUID),
-		search.Expectation{search.ET_COLLECTIONS, cUID, nil, "https://kabbalahmedia.info/he/events/c/ZZc07Y5r?language=he"}, r)
+		search.Expectation{search.ET_COLLECTIONS, cUID, nil, fmt.Sprintf("https://kabbalahmedia.info/he/events/c/%s?language=he", cUID)}, r)
 
 	fmt.Printf("Test lesson collections \n")
 	suite.validateExpectation(fmt.Sprintf("https://kabbalahmedia.info/he/lessons/series/c/%s", cUID),
-		search.Expectation{search.ET_COLLECTIONS, cUID, nil, "https://kabbalahmedia.info/he/lessons/series/c/ZZc07Y5r"}, r)
+		search.Expectation{search.ET_COLLECTIONS, cUID, nil, fmt.Sprintf("https://kabbalahmedia.info/he/lessons/series/c/%s", cUID)}, r)
 
 	fmt.Printf("Test lessons \n")
 	src := fmt.Sprintf("bs_%s_%s", parentSource.UID, childSource.UID)
@@ -196,11 +196,11 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 
 	fmt.Printf("Test [latest] by collection \n")
 	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/programs/c/%s", cUID),
-		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByPosition, nil, "[latest]https://kabbalahmedia.info/he/programs/c/ZZc07Y5r"}, r)
+		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByPosition, nil, fmt.Sprintf("[latest]https://kabbalahmedia.info/he/programs/c/%s", cUID)}, r)
 
 	fmt.Printf("Test [Latest] by collection (Upper case) \n")
 	suite.validateExpectation(fmt.Sprintf("[Latest]https://kabbalahmedia.info/he/programs/c/%s", cUID),
-		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByPosition, nil, "[Latest]https://kabbalahmedia.info/he/programs/c/ZZc07Y5r"}, r)
+		search.Expectation{search.ET_CONTENT_UNITS, latestUIDByPosition, nil, fmt.Sprintf("[Latest]https://kabbalahmedia.info/he/programs/c/%s", cUID)}, r)
 
 	fmt.Printf("Test [latest] by collection, not in DB\n")
 	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/programs/c/baduid"),
