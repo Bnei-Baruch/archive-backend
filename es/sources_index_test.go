@@ -35,10 +35,10 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	r.Nil(err)
 
 	fmt.Printf("\n\n\nAdding source.\n\n")
-	source1UID := suite.us(es.Source{Name: "test-name-1"}, consts.LANG_ENGLISH)
-	suite.us(es.Source{MDB_UID: source1UID, Name: "שם-בדיקה-1"}, consts.LANG_HEBREW)
-	suite.asa(es.Source{MDB_UID: source1UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name", ID: 3, Code: "t1"}, true, true)
-	suite.asa(es.Source{MDB_UID: source1UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם לבדיקה", ID: 4, Code: "t2"}, true, true)
+	source1UID := suite.us(Source{Name: "test-name-1"}, consts.LANG_ENGLISH)
+	suite.us(Source{MDB_UID: source1UID, Name: "שם-בדיקה-1"}, consts.LANG_HEBREW)
+	suite.asa(Source{MDB_UID: source1UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name", ID: 3, Code: "t1"}, true, true)
+	suite.asa(Source{MDB_UID: source1UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם לבדיקה", ID: 4, Code: "t2"}, true, true)
 	fmt.Printf("\n\n\nAdding content files for each language.\n\n")
 	suite.usfc(source1UID, consts.LANG_ENGLISH)
 	suite.usfc(source1UID, consts.LANG_HEBREW)
@@ -68,8 +68,8 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.validateSourcesFullPath(indexNameEn, indexer, [][]string{[]string{source1UID, "t1", "t2"}})
 
 	fmt.Println("Validate adding source without file and author - should not index.")
-	source2UID := suite.us(es.Source{Name: "test-name-2"}, consts.LANG_ENGLISH)
-	suite.us(es.Source{MDB_UID: source2UID, Name: "שם-בדיקה-2"}, consts.LANG_HEBREW)
+	source2UID := suite.us(Source{Name: "test-name-2"}, consts.LANG_ENGLISH)
+	suite.us(Source{MDB_UID: source2UID, Name: "שם-בדיקה-2"}, consts.LANG_HEBREW)
 	r.Nil(indexer.SourceUpdate(source2UID))
 	suite.validateNames(indexNameEn, indexer, []string{"Test Name > test-name-1"})
 
@@ -80,8 +80,8 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.validateNames(indexNameEn, indexer, []string{"Test Name > test-name-1"})
 
 	fmt.Println("Validate adding source with file and author and validate.")
-	suite.asa(es.Source{MDB_UID: source2UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 5, Code: "t3"}, true, true)
-	suite.asa(es.Source{MDB_UID: source2UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם נוסף לבדיקה", ID: 6, Code: "t4"}, true, true)
+	suite.asa(Source{MDB_UID: source2UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 5, Code: "t3"}, true, true)
+	suite.asa(Source{MDB_UID: source2UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם נוסף לבדיקה", ID: 6, Code: "t4"}, true, true)
 	r.Nil(indexer.SourceUpdate(source2UID))
 	suite.validateNames(indexNameEn, indexer, []string{"Test Name > test-name-1", "Test Name 2 > test-name-2"})
 
@@ -92,10 +92,10 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.validateSourcesFullPath(indexNameEn, indexer, [][]string{[]string{source1UID, "t1", "t2"}, []string{source2UID, "t3", "t4"}})
 
 	fmt.Println("Delete sources from DB, reindex and validate we have 0 sources.")
-	suite.rsa(es.Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
-	suite.rsa(es.Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 4})
-	suite.rsa(es.Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 5})
-	suite.rsa(es.Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 6})
+	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
+	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 4})
+	suite.rsa(Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 5})
+	suite.rsa(Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 6})
 	UIDs := []string{source1UID, source2UID}
 	r.Nil(deleteSources(UIDs))
 	r.Nil(indexer.ReindexAll())

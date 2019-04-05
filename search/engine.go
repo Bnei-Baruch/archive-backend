@@ -29,6 +29,21 @@ type ESEngine struct {
 	ExecutionTimeLog *TimeLogMap
 }
 
+type ClassificationIntent struct {
+	// Fields from result.
+	ResultType string `json:"result_type"`
+	MDB_UID    string `json:"mdb_uid"`
+	Title      string `json:"title"`
+
+	// Intent fields.
+	ContentType    string                    `json:"content_type"`
+	Exist          bool                      `json:"exist"`
+	Score          *float64                  `json:"score,omitempty"`
+	Explanation    elastic.SearchExplanation `json:"explanation,omitempty"`
+	MaxScore       *float64                  `json:"max_score,omitempty"`
+	MaxExplanation elastic.SearchExplanation `json:"max_explanation,omitempty"`
+}
+
 type TimeLogMap struct {
 	mx sync.Mutex
 	m  map[string]time.Duration
@@ -184,7 +199,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 }
 
 func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, query Query) (error, *Intent, *Query) {
-	var classificationIntent es.ClassificationIntent
+	var classificationIntent ClassificationIntent
 	if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
 		return err, nil, nil
 	}
@@ -334,7 +349,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 			log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error.RootCause[0])
 			return intents, errors.New("ESEngine.AddIntents - Second Run Failed multi get (S).")
 		}
-		intentValue, intentOk := finalIntents[i].Value.(es.ClassificationIntent)
+		intentValue, intentOk := finalIntents[i].Value.(ClassificationIntent)
 		if !intentOk {
 			return intents, errors.New(fmt.Sprintf("ESEngine.AddIntents - Unexpected intent value: %+v", finalIntents[i].Value))
 		}
@@ -342,7 +357,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 			// log.Infof("Found Hits for %+v", intentValue)
 			found := false
 			for _, h := range res.Hits.Hits {
-				var classificationIntent es.ClassificationIntent
+				var classificationIntent ClassificationIntent
 				if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
 					return intents, errors.Wrap(err, "ESEngine.AddIntents - Unmarshal classification intent filed.")
 				}
@@ -375,14 +390,14 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 	moreIntents := make([]Intent, 0)
 	for intentIdx := range intents {
 		for _, contentUnitType := range checkContentUnitsTypes {
-			if intentValue, ok := intents[intentIdx].Value.(es.ClassificationIntent); ok {
+			if intentValue, ok := intents[intentIdx].Value.(ClassificationIntent); ok {
 				intentP := &intents[intentIdx]
 				intentValueP := &intentValue
 				if intentValue.ContentType != "" {
 					// We need to copy the intent as we have more than one existing content types for that intent.
 					moreIntents = append(moreIntents, intents[intentIdx])
 					intentP = &moreIntents[len(moreIntents)-1]
-					copyIntentValue := intentP.Value.(es.ClassificationIntent)
+					copyIntentValue := intentP.Value.(ClassificationIntent)
 					intentValueP = &copyIntentValue
 				}
 				intentValueP.ContentType = contentUnitType
@@ -410,7 +425,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 	// log.Infof("IntentsToResults - %d intents.", len(query.Intents))
 	for _, intent := range query.Intents {
 		// Convert intent to result with score.
-		intentValue := intent.Value.(es.ClassificationIntent)
+		intentValue := intent.Value.(ClassificationIntent)
 		boostedScore := float64(0.0)
 		if intentValue.Exist {
 			sh := srMap[intent.Language].Hits
@@ -552,15 +567,16 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), "DoSearch")
 
-	done := make(chan bool)
+	// Seach intents and grammars in parallel to native search.
+	intentsChannel := make(chan []Intent)
 	go func() {
 		intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy)
 		if err != nil {
 			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
+			intentsChannel <- []Intent{}
 		} else {
-			query.Intents = append(query.Intents, intents...)
+			intentsChannel <- intents
 		}
-		done <- true
 	}()
 
 	var resultTypes []string
@@ -614,12 +630,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			if _, ok := resultsByLang[lang]; !ok {
 				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 			}
-
 			resultsByLang[lang] = append(resultsByLang[lang], currentResults)
 		}
 	}
 
-	<-done
+	// Wait for intent, expecting exactly two items in intentsChannel channel.
+	query.Intents = append(query.Intents, <-intentsChannel...)
+
+	// Convert intents to results.
 	err, intentResultsMap := e.IntentsToResults(&query)
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents to results.")

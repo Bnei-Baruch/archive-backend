@@ -23,7 +23,8 @@ type Query struct {
 
 type QueryResult struct {
 	SearchResult *elastic.SearchResult `json:"search_result,omitempty"`
-	Intents      []Intent              `json:"intents,omitempty"`
+	// TODO: Intents field below is deprecated and not being used.
+	Intents []Intent `json:"intents,omitempty"`
 }
 
 type Engine interface {
