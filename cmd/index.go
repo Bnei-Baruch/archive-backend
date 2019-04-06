@@ -325,7 +325,7 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		}
 
 		//log.Printf("Keywords: %v", keywords)
-		synonymsBody := fmt.Sprintf(bodyMask, "synonym_graph", "\"type\" : \"synonym\",", strings.Join(keywords, ","))
+		synonymsBody := fmt.Sprintf(bodyMask, "synonym_graph", "\"type\" : \"synonym_graph\",", strings.Join(keywords, ","))
 
 		//log.Printf("Update synonyms request body: %v", body)
 
