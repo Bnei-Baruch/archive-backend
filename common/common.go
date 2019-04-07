@@ -17,10 +17,11 @@ import (
 )
 
 var (
-	DB     *sql.DB
-	ESC    *search.ESManager
-	LOGGER *search.SearchLogger
-	CACHE  cache.CacheManager
+	DB       *sql.DB
+	ESC      *search.ESManager
+	LOGGER   *search.SearchLogger
+	CACHE    cache.CacheManager
+	GRAMMARS search.Grammars
 )
 
 func Init() time.Time {
@@ -61,6 +62,9 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	}
 
 	es.InitVars()
+
+	GRAMMARS, err = search.MakeGrammars(viper.GetString("elasticsearch.grammars"))
+	utils.Must(err)
 
 	viper.SetDefault("cache.refresh-search-stats", 5*time.Minute)
 	refreshIntervals := map[string]time.Duration{

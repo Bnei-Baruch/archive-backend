@@ -170,3 +170,21 @@ func PrintMap(m interface{}) (string, error) {
 	}
 	return strings.Join(values, ","), nil
 }
+
+func IntersectSortedStringSlices(first []string, second []string) []string {
+	ret := []string{}
+	i := 0
+	j := 0
+	for i < len(first) && j < len(second) {
+		cmp := strings.Compare(first[i], second[j])
+		if cmp == 0 {
+			ret = append(ret, first[i])
+			i++
+		} else if cmp < 0 {
+			i++
+		} else {
+			j++
+		}
+	}
+	return ret
+}
