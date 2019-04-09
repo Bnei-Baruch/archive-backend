@@ -164,7 +164,7 @@ SETTINGS = {
         # },
         "synonym" : {
            "tokenizer" : "standard",
-           "filter" : ["autophrase_syn", "synonym"],
+           "filter" : ["synonym_graph"],
         }
       },
       "char_filter": {
@@ -198,12 +198,9 @@ SETTINGS = {
         #   "replace": True,
         #   "languageset": BeiderMorseLanguageset,
         # },
-        "synonym" : {
-            "type" : "synonym",
-            "synonyms" : [],
-        },
-        "autophrase_syn" : {
-            "type" : "synonym",
+        "synonym_graph" : {
+            "type" : "synonym_graph",
+            "tokenizer": "keyword",
             "synonyms" : [],
         },
       },

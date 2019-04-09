@@ -73,9 +73,10 @@
                         "type": "hunspell", 
                         "dedup": true
                     }, 
-                    "synonym": {
+                    "synonym_graph": {
                         "synonyms": [], 
-                        "type": "synonym"
+                        "type": "synonym_graph", 
+                        "tokenizer": "keyword"
                     }
                 }, 
                 "char_filter": {
@@ -96,7 +97,7 @@
                 "analyzer": {
                     "synonym": {
                         "filter": [
-                            "synonym"
+                            "synonym_graph"
                         ], 
                         "tokenizer": "standard"
                     }, 

@@ -256,14 +256,12 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// TBC add "tokenizer": "keyword"?
-
 	bodyMask := `{
 		"index" : {
 			"analysis" : {
 				"filter" : {
 					"%s" : {
-						%s
+						"type": "%s",
 						"tokenizer": "keyword",
 						"synonyms" : [
 							%s
@@ -277,7 +275,6 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 	for _, fileInfo := range files {
 
 		keywords := make([]string, 0)
-		//autophrases := make([]string, 0)
 
 		//  Convention: file name without extension is the language code.
 		var ext = filepath.Ext(fileInfo.Name())
@@ -298,23 +295,7 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 
 			//  Blank lines and lines starting with pound are comments (like Solr format).
 			if line != "" && !strings.HasPrefix(line, "#") {
-
-				keyphrases := strings.Split(line, ",")
-				/*for i := range keyphrases {
-					trimmed := strings.TrimSpace(keyphrases[i])
-					if strings.Contains(trimmed, " ") {
-						autophrase := strings.Replace(trimmed, " ", "_", -1)
-						fp := fmt.Sprintf("\"%s => %s\"", trimmed, autophrase)
-						autophrases = append(autophrases, fp)
-						keyphrases[i] = autophrase
-					} else {
-						keyphrases[i] = trimmed
-					}
-					//keyphrases[i] = trimmed
-				}*/
-
-				kline := strings.Join(keyphrases, ",")
-				fline := fmt.Sprintf("\"%s\"", kline)
+				fline := fmt.Sprintf("\"%s\"", line)
 				keywords = append(keywords, fline)
 			}
 		}
@@ -325,11 +306,9 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		}
 
 		//log.Printf("Keywords: %v", keywords)
-		synonymsBody := fmt.Sprintf(bodyMask, "synonym_graph", "\"type\" : \"synonym_graph\",", strings.Join(keywords, ","))
+		synonymsBody := fmt.Sprintf(bodyMask, "synonym_graph", "synonym_graph", strings.Join(keywords, ","))
 
 		//log.Printf("Update synonyms request body: %v", body)
-
-		//autophraseBody := fmt.Sprintf(bodyMask, "autophrase_syn", "", strings.Join(autophrases, ","))
 
 		// Close the index in order to update the synonyms
 		closeRes, err := common.ESC.CloseIndex(indexName).Do(context.TODO())
@@ -360,24 +339,6 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 			}
 			return
 		}
-
-		/*_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
-			Method: "PUT",
-			Path:   fmt.Sprintf("/%s/_settings", encodedIndexName),
-			Body:   autophraseBody,
-		})
-		if err != nil {
-			log.Error(errors.Wrapf(err, "Error on updating autophrase_syn to elastic index: %s", indexName))
-			log.Info("Reopening the index")
-			openRes, err := common.ESC.OpenIndex(indexName).Do(context.TODO())
-			if err != nil {
-				log.Error(errors.Wrapf(err, "OpenIndex: %s", indexName))
-			}
-			if !openRes.Acknowledged {
-				log.Errorf("OpenIndex not Acknowledged: %s", indexName)
-			}
-			return
-		}*/
 
 		//  Now reopen the index
 		openRes, err := common.ESC.OpenIndex(indexName).Do(context.TODO())
