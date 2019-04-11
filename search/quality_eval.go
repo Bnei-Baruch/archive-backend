@@ -717,7 +717,6 @@ func WriteToCsv(path string, records [][]string) error {
 }
 
 func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) {
-
 	var latestUID string
 
 	queryMask := `select cu.uid from content_units cu
@@ -750,25 +749,6 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 }
 
 func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
-
-	sourcesTempTableMask := `CREATE TEMP TABLE temp_rec_sources ON COMMIT DROP AS
-	(WITH RECURSIVE rec_sources AS (
-		SELECT id, parent_id FROM sources s
-			WHERE uid in (%s)
-		UNION SELECT
-			s.id, s.parent_id
-		FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id)
-	SELECT id FROM rec_sources);`
-
-	tagsTempTableMask := `CREATE TEMP TABLE temp_rec_tags ON COMMIT DROP AS
-	(WITH RECURSIVE rec_tags AS (
-		SELECT id, parent_id FROM tags t
-			WHERE uid in (%s)
-		UNION SELECT
-			t.id, t.parent_id
-		FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id)
-	SELECT id FROM rec_tags);`
-
 	queryMask := `
 		select cu.uid from content_units cu
 		left join content_units_tags cut on cut.content_unit_id = cu.id
@@ -806,14 +786,26 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 	}
 
 	if len(sourceUids) > 0 {
-		filterByUidQuery += "and s.id in (select id from temp_rec_sources) "
-		sourcesTempTableQuery := fmt.Sprintf(sourcesTempTableMask, strings.Join(sourceUids, ","))
-		query += sourcesTempTableQuery
+		filterByUidQuery += fmt.Sprintf(`and s.id in (select AA.id from (
+            WITH RECURSIVE rec_sources AS (
+                SELECT id, parent_id FROM sources s
+                    WHERE uid in (%s)
+                UNION SELECT
+                    s.id, s.parent_id
+                FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
+            )
+            SELECT id FROM rec_sources) AS AA) `, strings.Join(sourceUids, ","))
 	}
 	if len(tagsUids) > 0 {
-		filterByUidQuery += "and t.id in (select id from temp_rec_tags) "
-		tagsTempTableQuery := fmt.Sprintf(tagsTempTableMask, strings.Join(tagsUids, ","))
-		query += tagsTempTableQuery
+		filterByUidQuery += fmt.Sprintf(`and t.id in (select AA.id from (
+            WITH RECURSIVE rec_tags AS (
+                SELECT id, parent_id FROM tags t
+                    WHERE uid in (%s)
+                UNION SELECT
+                    t.id, t.parent_id
+                FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
+            )
+            SELECT id FROM rec_tags) AS AA) `, strings.Join(tagsUids, ","))
 	}
 	if contentType != "" {
 		filterByUidQuery += fmt.Sprintf("and cu.type_id = %d ", mdb.CONTENT_TYPE_REGISTRY.ByName[contentType].ID)
