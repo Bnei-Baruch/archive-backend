@@ -31,12 +31,12 @@
                 "query": {
                     "type": "object", 
                     "properties": {
+                        "term": {
+                            "type": "keyword"
+                        }, 
                         "intents": {
                             "type": "object", 
                             "enabled": false
-                        }, 
-                        "term": {
-                            "type": "keyword"
                         }, 
                         "language_order": {
                             "type": "keyword"

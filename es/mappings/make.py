@@ -143,15 +143,15 @@ SETTINGS = {
     "number_of_replicas": 0,
     "analysis": {
       "analyzer": {
-        "he": {
-          "tokenizer": "standard",
-          "filter": [
-            "he_IL"
-          ],
-          "char_filter": [
-            "quotes"
-          ]
-        },
+        #"he": {
+        #  "tokenizer": "standard",
+        #  "filter": [
+        #    "he_IL"
+        #  ],
+        #  "char_filter": [
+        #    "quotes"
+        #  ]
+        #},
         # "phonetic_analyzer": {
         #   "tokenizer": "standard",
         #   "char_filter": ["quotes"],
@@ -164,7 +164,10 @@ SETTINGS = {
         # },
         "synonym" : {
            "tokenizer" : "standard",
-           "filter" : ["synonym_graph"],
+           "filter" : ["synonym_graph", "he_IL"],
+          "char_filter": [
+            "quotes"
+          ]
         }
       },
       "char_filter": {

@@ -234,7 +234,7 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 					"analyzer" : {
 						"synonym" : {
 							"tokenizer" : "standard",
-							"filter" : ["synonym_graph"]
+							"filter" : ["synonym_graph", "he_IL"]
 						}
 					}
 				}

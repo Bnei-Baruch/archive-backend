@@ -97,12 +97,7 @@
                 "analyzer": {
                     "synonym": {
                         "filter": [
-                            "synonym_graph"
-                        ], 
-                        "tokenizer": "standard"
-                    }, 
-                    "he": {
-                        "filter": [
+                            "synonym_graph", 
                             "he_IL"
                         ], 
                         "char_filter": [
