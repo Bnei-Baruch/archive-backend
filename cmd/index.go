@@ -280,7 +280,7 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		var ext = filepath.Ext(fileInfo.Name())
 		var lang = fileInfo.Name()[0 : len(fileInfo.Name())-len(ext)]
 
-		indexName := es.IndexNameByDefinedDateOrAlias("prod", consts.ES_RESULTS_INDEX, lang)
+		indexName := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, lang)
 
 		filePath := filepath.Join(folder, fileInfo.Name())
 		file, err := os.Open(filePath)

@@ -178,7 +178,7 @@ func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchReq
 	requests := make([]*elastic.SearchRequest, 0)
 	indices := make([]string, len(options.query.LanguageOrder))
 	for i := range options.query.LanguageOrder {
-		indices[i] = es.IndexNameByDefinedDateOrAlias("prod", consts.ES_RESULTS_INDEX, options.query.LanguageOrder[i])
+		indices[i] = es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, options.query.LanguageOrder[i])
 	}
 	for _, index := range indices {
 		options.index = index
@@ -210,7 +210,7 @@ func NewResultsSuggestRequests(resultTypes []string, query Query, preference str
 	requests := make([]*elastic.SearchRequest, 0)
 	indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
-		indices[i] = es.IndexNameByDefinedDateOrAlias("prod", consts.ES_RESULTS_INDEX, query.LanguageOrder[i])
+		indices[i] = es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, query.LanguageOrder[i])
 	}
 	for _, index := range indices {
 		request := NewResultsSuggestRequest(resultTypes, index, query, preference)

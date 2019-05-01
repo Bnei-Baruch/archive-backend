@@ -52,12 +52,8 @@ func IndexAliasName(namespace string, name string, lang string) string {
 	return fmt.Sprintf("%s_%s_%s", namespace, name, lang)
 }
 
-func IndexNameByDefinedDateOrAlias(namespace string, name string, lang string) string {
-	indexDate := viper.GetString("elasticsearch.index-date")
-	if indexDate == "" {
-		return IndexAliasName(namespace, name, lang)
-	}
-	return IndexName(namespace, name, lang, indexDate)
+func IndexNameForServing(namespace string, name string, lang string) string {
+	return indexNameByDefinedDateOrAlias(namespace, name, lang)
 }
 
 func IndexName(namespace string, name string, lang string, date string) string {
@@ -76,6 +72,14 @@ func (index *BaseIndex) indexName(lang string) string {
 		panic("Index namespace, baseName and indexDate should be set.")
 	}
 	return IndexName(index.namespace, index.baseName, lang, index.indexDate)
+}
+
+func indexNameByDefinedDateOrAlias(namespace string, name string, lang string) string {
+	indexDate := viper.GetString("elasticsearch.index-date")
+	if indexDate == "" {
+		return IndexAliasName(namespace, name, lang)
+	}
+	return IndexName(namespace, name, lang, indexDate)
 }
 
 func (index *BaseIndex) indexAliasName(lang string) string {
