@@ -260,8 +260,8 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		"index" : {
 			"analysis" : {
 				"filter" : {
-					"%s" : {
-						"type": "%s",
+					"synonym_graph" : {
+						"type": "synonym_graph",
 						"tokenizer": "keyword",
 						"synonyms" : [
 							%s
@@ -308,10 +308,7 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 			return
 		}
 
-		//log.Printf("Keywords: %v", keywords)
-		synonymsBody := fmt.Sprintf(bodyMask, "synonym_graph", "synonym_graph", strings.Join(keywords, ","))
-
-		//log.Printf("Update synonyms request body: %v", body)
+		synonymsBody := fmt.Sprintf(bodyMask, strings.Join(keywords, ","))
 
 		// Close the index in order to update the synonyms
 		closeRes, err := common.ESC.CloseIndex(indexName).Do(context.TODO())
