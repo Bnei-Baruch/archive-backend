@@ -143,15 +143,7 @@ SETTINGS = {
     "number_of_replicas": 0,
     "analysis": {
       "analyzer": {
-        #"he": {
-        #  "tokenizer": "standard",
-        #  "filter": [
-        #    "he_IL"
-        #  ],
-        #  "char_filter": [
-        #    "quotes"
-        #  ]
-        #},
+        #  Tested, but didnt bring quality enough results:
         # "phonetic_analyzer": {
         #   "tokenizer": "standard",
         #   "char_filter": ["quotes"],
