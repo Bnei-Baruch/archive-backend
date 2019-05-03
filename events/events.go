@@ -66,7 +66,7 @@ func RunListener() {
 		indexer, err = es.MakeFakeIndexer(common.DB, common.ESC)
 		utils.Must(err)
 	} else {
-		err, date := es.ProdAliasedIndexDate(common.ESC)
+		err, date := es.ProdIndexDateForEvents(common.ESC)
 		utils.Must(err)
 		indexer, err = es.MakeProdIndexer(date, common.DB, common.ESC)
 		utils.Must(err)
