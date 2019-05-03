@@ -273,7 +273,6 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 	}`
 
 	for _, fileInfo := range files {
-
 		keywords := make([]string, 0)
 
 		//  Convention: file name without extension is the language code.
@@ -293,10 +292,14 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		for scanner.Scan() {
 			line := scanner.Text()
 
-			//  Blank lines and lines starting with pound are comments (like Solr format).
-			if line != "" && !strings.HasPrefix(line, "#") {
-				fline := fmt.Sprintf("\"%s\"", line)
-				keywords = append(keywords, fline)
+			if line != "" {
+				trimmed := strings.TrimSpace(line)
+
+				//  Blank lines and lines starting with pound are comments (like Solr format).
+				if !strings.HasPrefix(trimmed, "#") {
+					fline := fmt.Sprintf("\"%s\"", trimmed)
+					keywords = append(keywords, fline)
+				}
 			}
 		}
 
