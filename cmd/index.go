@@ -320,13 +320,13 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 			return
 		}
 
+		defer openIndex(indexName)
 		encodedIndexName := url.QueryEscape(indexName)
 		_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
 			Method: "PUT",
 			Path:   fmt.Sprintf("/%s/_settings", encodedIndexName),
 			Body:   synonymsBody,
 		})
-		defer openIndex(indexName)
 		if err != nil {
 			log.Error(errors.Wrapf(err, "Error on updating synonym to elastic index: %s", indexName))
 			return
