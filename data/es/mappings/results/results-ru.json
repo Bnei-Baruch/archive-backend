@@ -12,13 +12,13 @@
                         }
                     ], 
                     "type": "completion", 
-                    "analyzer": "russian"
+                    "analyzer": "russian_synonym"
                 }, 
                 "description": {
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "russian"
+                            "analyzer": "russian_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -28,7 +28,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "russian"
+                            "analyzer": "russian_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -41,7 +41,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "russian"
+                            "analyzer": "russian_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -68,10 +68,56 @@
             "number_of_replicas": 0, 
             "analysis": {
                 "filter": {
+                    "russian_stemmer": {
+                        "type": "stemmer", 
+                        "language": "russian"
+                    }, 
+                    "english_stemmer": {
+                        "type": "stemmer", 
+                        "language": "english"
+                    }, 
+                    "russian_stop": {
+                        "stopwords": "_russian_", 
+                        "type": "stop"
+                    }, 
+                    "spanish_stop": {
+                        "stopwords": "_spanish_", 
+                        "type": "stop"
+                    }, 
+                    "english_keywords": {
+                        "keywords": [
+                            "example"
+                        ], 
+                        "type": "keyword_marker"
+                    }, 
+                    "spanish_keywords": {
+                        "keywords": [
+                            "ejemplo"
+                        ], 
+                        "type": "keyword_marker"
+                    }, 
+                    "english_stop": {
+                        "stopwords": "_english_", 
+                        "type": "stop"
+                    }, 
+                    "russian_keywords": {
+                        "keywords": [
+                            "\u043f\u0440\u0438\u043c\u0435\u0440"
+                        ], 
+                        "type": "keyword_marker"
+                    }, 
+                    "english_possessive_stemmer": {
+                        "type": "stemmer", 
+                        "language": "possessive_english"
+                    }, 
                     "he_IL": {
                         "locale": "he_IL", 
                         "type": "hunspell", 
                         "dedup": true
+                    }, 
+                    "spanish_stemmer": {
+                        "type": "stemmer", 
+                        "language": "light_spanish"
                     }, 
                     "synonym_graph": {
                         "synonyms": [], 
@@ -95,7 +141,37 @@
                     }
                 }, 
                 "analyzer": {
-                    "synonym": {
+                    "english_synonym": {
+                        "filter": [
+                            "english_possessive_stemmer", 
+                            "lowercase", 
+                            "english_stop", 
+                            "english_keywords", 
+                            "english_stemmer", 
+                            "synonym_graph"
+                        ], 
+                        "tokenizer": "standard"
+                    }, 
+                    "spanish_synonym": {
+                        "filter": [
+                            "lowercase", 
+                            "spanish_stop", 
+                            "spanish_keywords", 
+                            "spanish_stemmer"
+                        ], 
+                        "tokenizer": "standard"
+                    }, 
+                    "russian_synonym": {
+                        "filter": [
+                            "lowercase", 
+                            "russian_stop", 
+                            "russian_keywords", 
+                            "russian_stemmer", 
+                            "synonym_graph"
+                        ], 
+                        "tokenizer": "standard"
+                    }, 
+                    "hebrew_synonym": {
                         "filter": [
                             "synonym_graph", 
                             "he_IL"

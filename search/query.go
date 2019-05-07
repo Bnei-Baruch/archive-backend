@@ -40,29 +40,29 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
-					elastic.NewMatchQuery("title.language", q.Term).Analyzer("synonym"),
-					elastic.NewMatchQuery("description.language", q.Term).Analyzer("synonym"),
-					elastic.NewMatchQuery("content.language", q.Term).Analyzer("synonym"),
+					elastic.NewMatchQuery("title.language", q.Term),
+					elastic.NewMatchQuery("description.language", q.Term),
+					elastic.NewMatchQuery("content.language", q.Term),
 				).MinimumNumberShouldMatch(1),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
 				// Language analyzed
-				elastic.NewMatchPhraseQuery("title.language", q.Term).Analyzer("synonym").Slop(SLOP).Boost(TITLE_BOOST),
-				elastic.NewMatchPhraseQuery("description.language", q.Term).Analyzer("synonym").Slop(SLOP).Boost(DESCRIPTION_BOOST),
-				elastic.NewMatchPhraseQuery("content.language", q.Term).Analyzer("synonym").Slop(SLOP),
+				elastic.NewMatchPhraseQuery("title.language", q.Term).Slop(SLOP).Boost(TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("description.language", q.Term).Slop(SLOP).Boost(DESCRIPTION_BOOST),
+				elastic.NewMatchPhraseQuery("content.language", q.Term).Slop(SLOP),
 				// Language analyzed, exact (no slop)
-				elastic.NewMatchPhraseQuery("title.language", q.Term).Analyzer("synonym").Boost(EXACT_BOOST*TITLE_BOOST),
-				elastic.NewMatchPhraseQuery("description.language", q.Term).Analyzer("synonym").Boost(EXACT_BOOST*DESCRIPTION_BOOST),
-				elastic.NewMatchPhraseQuery("content.language", q.Term).Analyzer("synonym").Boost(EXACT_BOOST),
+				elastic.NewMatchPhraseQuery("title.language", q.Term).Boost(EXACT_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("description.language", q.Term).Boost(EXACT_BOOST*DESCRIPTION_BOOST),
+				elastic.NewMatchPhraseQuery("content.language", q.Term).Boost(EXACT_BOOST),
 				// Standard analyzed
-				elastic.NewMatchPhraseQuery("title", q.Term).Analyzer("synonym").Slop(SLOP).Boost(STANDARD_BOOST*TITLE_BOOST),
-				elastic.NewMatchPhraseQuery("description", q.Term).Analyzer("synonym").Slop(SLOP).Boost(STANDARD_BOOST*DESCRIPTION_BOOST),
-				elastic.NewMatchPhraseQuery("content", q.Term).Analyzer("synonym").Slop(SLOP).Boost(STANDARD_BOOST),
+				elastic.NewMatchPhraseQuery("title", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("description", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*DESCRIPTION_BOOST),
+				elastic.NewMatchPhraseQuery("content", q.Term).Slop(SLOP).Boost(STANDARD_BOOST),
 				// Standard analyzed, exact (no slop).
-				elastic.NewMatchPhraseQuery("title", q.Term).Analyzer("synonym").Boost(STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST),
-				elastic.NewMatchPhraseQuery("description", q.Term).Analyzer("synonym").Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
-				elastic.NewMatchPhraseQuery("content", q.Term).Analyzer("synonym").Boost(STANDARD_BOOST*EXACT_BOOST),
+				elastic.NewMatchPhraseQuery("title", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("description", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
+				elastic.NewMatchPhraseQuery("content", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST),
 			),
 		)
 	}

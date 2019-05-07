@@ -1,4 +1,5 @@
 #!/usr/bin/python2
+# -*- coding: utf-8 -*-
 
 # TODO: Rewrite this into go.
 # This file creates all mapping for Elastic. It is required because some
@@ -76,10 +77,17 @@ LANG_GROUPS = {
 
 # Units indexing
 LanguageAnalyzer = {
-  ENGLISH: "english",
-  HEBREW: "he",
-  RUSSIAN: "russian",
-  SPANISH: "spanish",
+  ENGLISH: "english_synonym",
+  HEBREW: "hebrew_synonym",
+  RUSSIAN: "russian_synonym",
+  SPANISH: "spanish_synonym",
+
+  # In order to allow synonyms in other languages,
+  # reimplement their analyzer by adding the necessary filters for each language
+  # and defining a new analyzer that include this filters AND a synonym_graph filter.
+  # List of definitions for each language analyzer are available here:
+  # https://www.elastic.co/guide/en/elasticsearch/reference/6.7/analysis-lang-analyzer.html#spanish-analyzer
+
   ITALIAN: "italian",
   GERMAN: "german",
   DUTCH: "dutch",
@@ -154,9 +162,39 @@ SETTINGS = {
         #     "custom_phonetic",
         #   ],
         # },
-        "synonym" : {
-           "tokenizer" : "standard",
-           "filter" : ["synonym_graph", "he_IL"],
+        "english_synonym" : {
+          "tokenizer":  "standard",
+          "filter": [
+            "english_possessive_stemmer",
+            "lowercase",
+            "english_stop",
+            "english_keywords",
+            "english_stemmer",
+            "synonym_graph"
+          ]
+        },
+        "russian_synonym": {
+          "tokenizer":  "standard",
+          "filter": [
+            "lowercase",
+            "russian_stop",
+            "russian_keywords",
+            "russian_stemmer",
+            "synonym_graph"
+          ]
+        },
+        "spanish_synonym": {
+          "tokenizer":  "standard",
+          "filter": [
+            "lowercase",
+            "spanish_stop",
+            "spanish_keywords",
+            "spanish_stemmer"
+          ]
+        },
+        "hebrew_synonym": {
+          "tokenizer" : "standard",
+          "filter" : ["synonym_graph", "he_IL"],
           "char_filter": [
             "quotes"
           ]
@@ -178,6 +216,46 @@ SETTINGS = {
         },
       },
       "filter": {
+        "english_stop": {
+          "type":       "stop",
+          "stopwords":  "_english_" 
+        },
+        "english_keywords": {
+          "type":       "keyword_marker",
+          "keywords":   ["example"] 
+        },
+        "english_stemmer": {
+          "type":       "stemmer",
+          "language":   "english"
+        },
+        "english_possessive_stemmer": {
+          "type":       "stemmer",
+          "language":   "possessive_english"
+        },
+        "russian_stop": {
+          "type":       "stop",
+          "stopwords":  "_russian_" 
+        },
+        "russian_keywords": {
+          "type":       "keyword_marker",
+          "keywords":   ["пример"] 
+        },
+        "russian_stemmer": {
+          "type":       "stemmer",
+          "language":   "russian"
+        },
+        "spanish_stop": {
+          "type":       "stop",
+          "stopwords":  "_spanish_" 
+        },
+        "spanish_keywords": {
+          "type":       "keyword_marker",
+          "keywords":   ["ejemplo"] 
+        },
+        "spanish_stemmer": {
+          "type":       "stemmer",
+          "language":   "light_spanish"
+        },
         "he_IL": {
           "type": "hunspell",
           "locale": "he_IL",
