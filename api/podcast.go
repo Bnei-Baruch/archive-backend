@@ -156,7 +156,7 @@ func FeedPodcast(c *gin.Context) {
 	title := t.Title
 	description := t.Description
 	href := "https://old.kabbalahmedia.info/cover_podcast.jpg"
-	link := getHref("/feeds/podcast.rss?DLANG="+config.DLANG, c)
+	link := getHref("/feeds/podcast/"+config.DLANG+"/"+config.DF, c)
 
 	channel := &podcastChannel{
 		Title:           title,
