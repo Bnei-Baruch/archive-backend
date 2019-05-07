@@ -153,8 +153,23 @@ func FeedPodcast(c *gin.Context) {
 	}
 
 	t := T[config.DLANG]
-	title := t.Title
-	description := t.Description
+
+	//DF=[A]/V
+	var mediaTypes []string
+	var mediaType string
+	if config.DF == "V" {
+		mediaTypes = []string{consts.MEDIA_MP4}
+		mediaType = "video"
+	} else if config.DF == "A" {
+		mediaTypes = []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
+		mediaType = "audio"
+	} else {
+		mediaTypes = []string{consts.MEDIA_MP4, consts.MEDIA_MP3a, consts.MEDIA_MP3b}
+		mediaType = "audio, video"
+	}
+
+	title := t.Title + " " + mediaType
+	description := t.Description + " (" + mediaType + ")"
 	href := "https://old.kabbalahmedia.info/cover_podcast.jpg"
 	link := getHref("/feeds/podcast/"+config.DLANG+"/"+config.DF, c)
 
@@ -195,15 +210,6 @@ func FeedPodcast(c *gin.Context) {
 		},
 	}
 
-	//DF=[A]/V
-	var mediaTypes []string
-	if config.DF == "V" {
-		mediaTypes = []string{consts.MEDIA_MP4}
-	} else if config.DF == "A" {
-		mediaTypes = []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
-	} else {
-		mediaTypes = []string{consts.MEDIA_MP4, consts.MEDIA_MP3a, consts.MEDIA_MP3b}
-	}
 	languages := []string{config.Lang}
 	item, err := handleContentUnitsFull(db, cur, mediaTypes, languages)
 	if err != nil {
