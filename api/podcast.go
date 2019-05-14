@@ -112,26 +112,85 @@ func FeedPodcast(c *gin.Context) {
 	var config feedConfig
 	(&config).getConfig(c)
 
-	title := "שיעור הקבלה היומי"
+	type translation struct {
+		Title       string
+		Description string
+		Keywords    string
+		Author      string
+		A           string
+		V           string
+		X           string
+	}
+	var T = map[string]translation{
+		"ENG": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"HEB": {A: "אודיו", V: "וידאו", X: "אודיו-וידאו", Title: "שיעור הקבלה היומי", Description: "במשך אלפי שנים, היו המקובלים לומדים על בסיס יומי, למען התפתחותם הרוחנית הפרטית ולמען התקדמותה הרוחנית של האנושות. בימינו, ממשיכים את אותה המסורת קבוצת המקובלים ״בני ברוך״, הלומדים מדי יום מתוך כתבי הקבלה האותנטיים, לימודים המלווים בביאור והדרכה מפי הרב ד״ר מיכאל לייטמן.", Keywords: "קבלה,שיעור,רוחניות,אותנטי", Author: "ד״ר מיכאל לייטמן"},
+		"RUS": {A: "Аудио", V: "Видео", X: "Аудио-Видео", Title: "Ежедневный урок по каббале", Description: "На протяжении тысячелетий каббалисты учились каждый день, ради своего личного духовного возвышения, и ради духовного возвышения человечества. В наше время продолжает эту традицию каббалистическая группа \"Бней Барух\",  занимаясь ежедневно по подлинным каббалистическим источникам, под руководством ученого – каббалиста, основателя Международной академии каббалы, Михаэля Лайтмана.", Keywords: "каббала,уроки,духовность,аутентичная", Author: "Михаэль Лайтман"},
+		"UKR": {A: "Аудио", V: "Видео", X: "Аудио-Видео", Title: "Ежедневный урок по каббале (UKR)", Description: "На протяжении тысячелетий каббалисты учились каждый день, ради своего личного духовного возвышения, и ради духовного возвышения человечества. В наше время продолжает эту традицию каббалистическая группа \"Бней Барух\",  занимаясь ежедневно по подлинным каббалистическим источникам, под руководством ученого – каббалиста, основателя Международной академии каббалы, Михаэля Лайтмана.", Keywords: "каббала,уроки,духовность,аутентичная", Author: "Михаэль Лайтман"},
+		"SPA": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (SPA)", Description: "Durante miles de años, los cabalistas se consagraron a estudiar día tras día para alcanzar el progreso espiritual de la humanidad y el suyo propio. En el Instituto Bnei Baruj para la Educación y la Investigación de la Cabalá continuamos con esta tradición en el mundo globalizado de hoy, estudiando diariamente las fuentes auténticas cabalísticas, enriquecidas con los comentarios del Rav doctor Michael Laitman", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"ITA": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (ITA)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"GER": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (GER)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"DUT": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (DUT)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"FRE": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (FRE)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"POR": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (POR)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"TRK": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (TRK)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"POL": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (POL)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"ARB": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (ARB)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"HUN": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (HUN)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"FIN": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (FIN)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"LIT": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (LIT)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"JPN": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (JPN)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"BUL": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (BUL)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"GEO": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (GEO)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"NOR": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (NOR)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"SWE": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (SWE)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"HRV": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (HRV)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"CHN": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (CHN)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"PER": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (PER)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"RON": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (RON)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"HIN": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (HIN)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"MKD": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (MKD)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"SLV": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (SLV)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"LAV": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (LAV)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"SLK": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (SLK)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+		"CZE": {A: "Audio", V: "Video", X: "Audio-Video", Title: "Daily Kabbalah Lesson (CZE)", Description: "For thousands of years, Kabbalists have been studying on a daily basis for their and humanity's spiritual progress. Continuing this tradition into today's globally connected world, the Bnei Baruch Kabbalah Education & Research Institute, studies daily from authentic Kabbalistic sources, with commentary by Dr. Michael Laitman.", Keywords: "kabbalah,lessons,spirituality,authentic", Author: "Dr. Michael Laitman"},
+	}
+
+	t := T[config.DLANG]
+
+	//DF=[A]/V
+	var mediaTypes []string
+	var mediaType string
+	if config.DF == "V" {
+		mediaTypes = []string{consts.MEDIA_MP4}
+		mediaType = t.V
+	} else if config.DF == "A" {
+		mediaTypes = []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
+		mediaType = t.A
+	} else {
+		mediaTypes = []string{consts.MEDIA_MP4, consts.MEDIA_MP3a, consts.MEDIA_MP3b}
+		mediaType = t.X
+	}
+
+	title := t.Title + " (" + mediaType + ")"
+	description := t.Description + " (" + mediaType + ")"
 	href := "https://old.kabbalahmedia.info/cover_podcast.jpg"
-	link := getHref("/feeds/podcast.rss?DLANG="+config.DLANG, c)
-	description := "כאן תקבלו עדכונים יומיים של שיעורי קבלה. התכנים מבוססים על מקורות הקבלה האותנטיים בלבד"
+	link := getHref("/feeds/podcast/"+config.DLANG+"/"+config.DF, c)
 
 	channel := &podcastChannel{
 		Title:           title,
 		Link:            "https://www.kabbalahmedia.info/",
 		Description:     description,
 		Image:           &podcastImage{Url: href, Title: title, Link: link},
-		Language:        "he",
+		Language:        config.Lang,
 		Copyright:       copyright,
 		PodcastAtomLink: &podcastAtomLink{Href: link, Rel: "self", Type: "application/rss+xml"},
 		LastBuildDate:   time.Now().Format(time.RFC1123), // TODO: get a newest created_at of files
-		Author:          "Dr. Michael Laitman",
+		Author:          t.Author,
 		Summary:         description,
 		Subtitle:        "",
 		Owner:           &podcastOwner{Name: "Bnei Baruch Association", Email: "info@kab.co.il"},
 		Explicit:        "no",
-		Keywords:        "קבלה,שיעור,מקור,אותנטי",
+		Keywords:        t.Keywords,
 		ItunesImage:     &itunesImage{Href: href},
 		Category:        &podcastCategory{Text: "Religion & Spirituality", Category: &podcastCategory{Text: "Spirituality"}},
 		PubDate:         time.Now().Format(time.RFC1123),
@@ -154,7 +213,6 @@ func FeedPodcast(c *gin.Context) {
 		},
 	}
 
-	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
 	languages := []string{config.Lang}
 	item, err := handleContentUnitsFull(db, cur, mediaTypes, languages)
 	if err != nil {
@@ -194,7 +252,7 @@ func FeedPodcast(c *gin.Context) {
 				Duration: convertDuration(cu.Duration),
 				Summary:  description,
 				Image:    &itunesImage{Href: href},
-				Keywords: "קבלה,שיעור,מקור,אותנטי",
+				Keywords: t.Keywords,
 				Explicit: "no",
 			})
 		}

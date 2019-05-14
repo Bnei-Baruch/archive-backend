@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/Bnei-Baruch/sqlboiler/boil"
 	"github.com/Bnei-Baruch/sqlboiler/queries"
@@ -342,84 +341,10 @@ func PublishersHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
-func IsTokenStart(i int, runes []rune, lastQuote rune) bool {
-	return i == 0 && !unicode.IsSpace(runes[0]) ||
-		(i > 0 && !unicode.IsSpace(runes[i]) && unicode.IsSpace(runes[i-1]))
-}
-
-func IsTokenEnd(i int, runes []rune, lastQuote rune, lastQuoteIdx int) bool {
-	return i == len(runes)-1 ||
-		(i < len(runes)-1 && unicode.IsSpace(runes[i+1]) &&
-			(lastQuote == rune(0) || runes[i] == lastQuote && lastQuoteIdx >= 0 && lastQuoteIdx < i))
-}
-
-func IsRuneQuotationMark(r rune) bool {
-	return unicode.In(r, unicode.Quotation_Mark) || r == rune(1523) || r == rune(1524)
-}
-
-// Tokenizes string to work with user friendly escapings of quotes (see tests).
-func Tokenize(str string) []string {
-	runes := []rune(str)
-	start := -1
-	lastQuote := rune(0)
-	lastQuoteIdx := -1
-	parts := 0
-	var tokens []string
-	for i, r := range runes {
-		if start == -1 && IsTokenStart(i, runes, lastQuote) {
-			start = i
-		}
-		if i == start && lastQuote == rune(0) && IsRuneQuotationMark(r) {
-			lastQuote = r
-			lastQuoteIdx = i
-		}
-		if start >= 0 && IsTokenEnd(i, runes, lastQuote, lastQuoteIdx) {
-			tokens = append(tokens, string(runes[start:i+1]))
-			lastQuote = rune(0)
-			lastQuoteIdx = -1
-			start = -1
-			parts += 1
-		}
-	}
-
-	return tokens
-}
-
-// Parses query and extracts terms and filters.
-func ParseQuery(q string) search.Query {
-	filters := make(map[string][]string)
-	var terms []string
-	var exactTerms []string
-	for _, t := range Tokenize(q) {
-		isFilter := false
-		for filter := range consts.FILTERS {
-			prefix := fmt.Sprintf("%s:", filter)
-			if isFilter = strings.HasPrefix(t, prefix); isFilter {
-				filters[consts.FILTERS[filter]] = strings.Split(strings.TrimPrefix(t, prefix), ",")
-				break
-			}
-		}
-		if !isFilter {
-			// Not clear what kind of decoding is happening here, utf-8?!
-			runes := []rune(t)
-			// For debug
-			// for _, c := range runes {
-			//     fmt.Printf("%04x %s\n", c, string(c))
-			// }
-			if len(runes) >= 2 && IsRuneQuotationMark(runes[0]) && runes[0] == runes[len(runes)-1] {
-				exactTerms = append(exactTerms, string(runes[1:len(runes)-1]))
-			} else {
-				terms = append(terms, t)
-			}
-		}
-	}
-	return search.Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Filters: filters}
-}
-
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
-	query := ParseQuery(c.Query("q"))
+	query := search.ParseQuery(c.Query("q"))
 	query.Deb = false
 	if c.Query("deb") == "true" {
 		query.Deb = true
@@ -477,6 +402,7 @@ func SearchHandler(c *gin.Context) {
 
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
+	grammars := c.MustGet("GRAMMARS").(search.Grammars)
 
 	esc, err := esManager.GetClient()
 	if err != nil {
@@ -484,7 +410,7 @@ func SearchHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM)
+	se := search.NewESEngine(esc, db, cacheM, grammars)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -562,6 +488,7 @@ func AutocompleteHandler(c *gin.Context) {
 	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
+	grammars := c.MustGet("GRAMMARS").(search.Grammars)
 
 	esc, err := esManager.GetClient()
 	if err != nil {
@@ -569,7 +496,7 @@ func AutocompleteHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM)
+	se := search.NewESEngine(esc, db, cacheM, grammars)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))

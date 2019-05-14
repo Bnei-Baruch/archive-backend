@@ -334,6 +334,9 @@ SEARCH_LOGS_TEMPLATE = {
                         "exact_terms": {
                             "type": "keyword",
                         },
+                        "original": {
+                            "type": "keyword",
+                        },
                         "filters": {
                             "type": "object",
                             "enabled": True,
