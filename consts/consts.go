@@ -408,6 +408,8 @@ var INTENT_HIT_TYPE_BY_CT = map[string]string{
 }
 
 const (
+	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
+
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS            = "lessons"
 	GRAMMAR_INTENT_LANDING_PAGE_VIRTUAL_LESSONS    = "virtual_lessons"
 	GRAMMAR_INTENT_LANDING_PAGE_LECTURES           = "lectures"
@@ -420,7 +422,7 @@ const (
 	GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS        = "conventions"
 	GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS           = "holidays"
 	GRAMMAR_INTENT_LANDING_PAGE_UNITY_DAYS         = "unity_days"
-	GRAMMAR_INTENT_LANDING_PAGE_FRIENDS_GATHERINGS = "friends_gratherings"
+	GRAMMAR_INTENT_LANDING_PAGE_FRIENDS_GATHERINGS = "friends_gatherings"
 	GRAMMAR_INTENT_LANDING_PAGE_MEALS              = "meals"
 	GRAMMAR_INTENT_LANDING_PAGE_TOPICS             = "topics"
 	GRAMMAR_INTENT_LANDING_PAGE_BLOG               = "blog"

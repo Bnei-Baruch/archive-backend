@@ -80,5 +80,5 @@ find ${LOGS_DIR} -name "eval_en_*.log" -type f -mtime +7 -exec rm -f {} \;
 echo -e "Done.\nHE\n${RECALL_DIFF_HE}\nDIFF\n${QUERIES_DIFF_HE}\n\n\nRU\n${RECALL_DIFF_RU}\nDIFF\n${QUERIES_DIFF_RU}\n\n\nEN\n${RECALL_DIFF_EN}\nDIFF\n${QUERIES_DIFF_EN}" | \
     mail -s "Daily Eval: Done." -r "mdb@bbdomain.org" -a ${REPORT_FILE_HE} -a ${REPORT_FILE_RU} \
         -a ${REPORT_FILE_EN} -a ${LOG_FILE_HE} -a ${LOG_FILE_RU} -a ${LOG_FILE_EN} \
-        kolmanv@gmail.com edoshor@gmail.com eranminuchin@gmail.com yurihechter@gmail.com
+        kolmanv@gmail.com edoshor@gmail.com eranminuchin@gmail.com yurihechter@gmail.com alex.mizrachi@gmail.com
 exit 0
