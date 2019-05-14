@@ -191,7 +191,7 @@ func (ssc *SearchStatsCacheImpl) load() (ClassByTypeStats, ClassByTypeStats, err
   count(cu.id)
 from tags t
   left join content_units_tags cut on t.id = cut.tag_id
-  left join content_units cu on cut.content_unit_id = cu.id
+  left join (select * from content_units where content_units.secure = 0 and content_units.published is true) as cu on cut.content_unit_id = cu.id
 group by t.id, cu.type_id
 union
 select
@@ -202,7 +202,7 @@ select
   count(cu.id)
 from sources s
   left join content_units_sources cus on s.id = cus.source_id
-  left join content_units cu on cus.content_unit_id = cu.id
+  left join (select * from content_units where content_units.secure = 0 and content_units.published is true) as cu on cus.content_unit_id = cu.id
 group by s.id, cu.type_id;`).Query()
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "queries.Raw")
