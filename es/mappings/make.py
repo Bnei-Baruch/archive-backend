@@ -389,14 +389,13 @@ SEARCH_LOGS_TEMPLATE = {
                     "type": "integer",
                 },
 
-                # Log execition time for search components.
+                # Log execution time for search components.
                 "execution_time_log": {
                     "type": "nested",
-                    "properties":
-                    {
+                    "properties": {
                         "operation": {"type": "keyword"},
-                        "time": {"type": "integer"}
-                    }
+                        "time": {"type": "integer"},
+                    },
                 },
             },
         },
