@@ -426,10 +426,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do.")
 	}
-	hasSpanish := false
+	shouldMergeResults := false
+	//  Right now we are testing the language results merge for Spanish UI only
 	for _, lang := range query.LanguageOrder {
 		if lang == consts.LANG_SPANISH {
-			hasSpanish = true
+			shouldMergeResults = true
 			break
 		}
 	}
@@ -479,7 +480,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	results := make([]*elastic.SearchResult, 0)
 	for _, lang := range query.LanguageOrder {
 		if r, ok := resultsByLang[lang]; ok {
-			if hasSpanish {
+			if shouldMergeResults {
 				results = append(results, resultsByLang[lang]...)
 			} else {
 				results = r
@@ -504,9 +505,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				continue
 			}
 
-			highlightsLang := query.LanguageOrder
-			if !hasSpanish {
-				highlightsLang = []string{currentLang}
+			highlightsLangs := query.LanguageOrder
+			if !shouldMergeResults {
+				highlightsLangs = []string{currentLang}
 			}
 
 			// We use multiple search request because we saw that a single request
@@ -516,7 +517,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					resultTypes:      resultTypes,
 					docIds:           []string{h.Id},
 					index:            h.Index,
-					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: highlightsLang, Deb: query.Deb},
+					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
 					sortBy:           consts.SORT_BY_RELEVANCE,
 					from:             0,
 					size:             1,
