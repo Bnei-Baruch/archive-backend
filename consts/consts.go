@@ -408,6 +408,8 @@ var INTENT_HIT_TYPE_BY_CT = map[string]string{
 }
 
 const (
+	GRAMMAR_INDEX = "grammar"
+
 	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
 
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS            = "lessons"

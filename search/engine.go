@@ -249,6 +249,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			intentHit := &elastic.SearchHit{}
 			// intentHit.Explanation = &intentValue.Explanation
 			intentHit.Score = &boostedScore
+			intentHit.Index = consts.GRAMMAR_INDEX
 			intentHit.Type = intent.Type
 			source, err := json.Marshal(intentValue)
 			if err != nil {
