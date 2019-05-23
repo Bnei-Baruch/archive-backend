@@ -362,6 +362,9 @@ SEARCH_LOGS_TEMPLATE = {
                 "size": {
                     "type": "integer",
                 },
+                "suggestion": {
+                    "type": "keyword",
+                },
                 "sort_by": {
                     "type": "keyword",
                 },

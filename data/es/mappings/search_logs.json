@@ -24,6 +24,9 @@
                 "mdb_uid": {
                     "type": "keyword"
                 }, 
+                "suggestion": {
+                    "type": "keyword"
+                }, 
                 "error": {
                     "type": "object", 
                     "enabled": false, 
