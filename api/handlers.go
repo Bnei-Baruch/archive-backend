@@ -435,6 +435,17 @@ func SearchHandler(c *gin.Context) {
 		}
 	}
 
+	//  Quick workround to allow Spanish support when the interface language is Spanish (AS-99).
+	if c.Query("language") == consts.LANG_SPANISH {
+		for i, lang := range query.LanguageOrder {
+			if lang == consts.LANG_SPANISH {
+				query.LanguageOrder = append(query.LanguageOrder[:i], query.LanguageOrder[i+1:]...)
+				break
+			}
+		}
+		query.LanguageOrder = append([]string{consts.LANG_SPANISH}, query.LanguageOrder...)
+	}
+
 	res, err := se.DoSearch(
 		context.TODO(),
 		query,

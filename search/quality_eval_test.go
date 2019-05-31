@@ -160,7 +160,7 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 
 	fmt.Printf("Test sources main page \n")
 	suite.validateExpectation("https://kabbalahmedia.info/he/sources",
-		search.Expectation{search.ET_SOURCES, "", nil, "https://kabbalahmedia.info/he/sources"}, r)
+		search.Expectation{search.ET_LANDING_PAGE, "sources", nil, "https://kabbalahmedia.info/he/sources"}, r)
 
 	fmt.Printf("Test events page \n")
 	suite.validateExpectation("https://kabbalahmedia.info/he/events",
@@ -172,7 +172,7 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 
 	fmt.Printf("Test events page by event type \n")
 	suite.validateExpectation("https://kabbalahmedia.info/he/events/conventions",
-		search.Expectation{search.ET_LANDING_PAGE, "conventions", nil, "https://kabbalahmedia.info/he/events/conventions"}, r)
+		search.Expectation{search.ET_LANDING_PAGE, "events/conventions", nil, "https://kabbalahmedia.info/he/events/conventions"}, r)
 
 	fmt.Printf("Test lessons page \n")
 	suite.validateExpectation("https://kabbalahmedia.info/he/lessons",
@@ -180,7 +180,47 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 
 	fmt.Printf("Test lessons page by type \n")
 	suite.validateExpectation("https://kabbalahmedia.info/he/lessons/women",
-		search.Expectation{search.ET_LANDING_PAGE, "women", nil, "https://kabbalahmedia.info/he/lessons/women"}, r)
+		search.Expectation{search.ET_LANDING_PAGE, "lessons/women", nil, "https://kabbalahmedia.info/he/lessons/women"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/lessons/daily",
+		search.Expectation{search.ET_LANDING_PAGE, "lessons/daily", nil, "https://kabbalahmedia.info/he/lessons/daily"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/lessons/virtual",
+		search.Expectation{search.ET_LANDING_PAGE, "lessons/virtual", nil, "https://kabbalahmedia.info/he/lessons/virtual"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/lessons/lectures",
+		search.Expectation{search.ET_LANDING_PAGE, "lessons/lectures", nil, "https://kabbalahmedia.info/he/lessons/lectures"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/lessons/women",
+		search.Expectation{search.ET_LANDING_PAGE, "lessons/women", nil, "https://kabbalahmedia.info/he/lessons/women"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/lessons/rabash",
+		search.Expectation{search.ET_LANDING_PAGE, "lessons/rabash", nil, "https://kabbalahmedia.info/he/lessons/rabash"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/lessons/series",
+		search.Expectation{search.ET_LANDING_PAGE, "lessons/series", nil, "https://kabbalahmedia.info/he/lessons/series"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/programs/main",
+		search.Expectation{search.ET_LANDING_PAGE, "programs/main", nil, "https://kabbalahmedia.info/he/programs/main"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/programs/clips",
+		search.Expectation{search.ET_LANDING_PAGE, "programs/clips", nil, "https://kabbalahmedia.info/he/programs/clips"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/sources",
+		search.Expectation{search.ET_LANDING_PAGE, "sources", nil, "https://kabbalahmedia.info/he/sources"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/events/conventions",
+		search.Expectation{search.ET_LANDING_PAGE, "events/conventions", nil, "https://kabbalahmedia.info/he/events/conventions"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/events/holidays",
+		search.Expectation{search.ET_LANDING_PAGE, "events/holidays", nil, "https://kabbalahmedia.info/he/events/holidays"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/events/unity-days",
+		search.Expectation{search.ET_LANDING_PAGE, "events/unity-days", nil, "https://kabbalahmedia.info/he/events/unity-days"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/events/friends-gatherings",
+		search.Expectation{search.ET_LANDING_PAGE, "events/friends-gatherings", nil, "https://kabbalahmedia.info/he/events/friends-gatherings"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/events/meals",
+		search.Expectation{search.ET_LANDING_PAGE, "events/meals", nil, "https://kabbalahmedia.info/he/events/meals"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/topics",
+		search.Expectation{search.ET_LANDING_PAGE, "topics", nil, "https://kabbalahmedia.info/he/topics"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/publications/blog",
+		search.Expectation{search.ET_LANDING_PAGE, "publications/blog", nil, "https://kabbalahmedia.info/he/publications/blog"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/publications/twitter",
+		search.Expectation{search.ET_LANDING_PAGE, "publications/twitter", nil, "https://kabbalahmedia.info/he/publications/twitter"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/publications/articles",
+		search.Expectation{search.ET_LANDING_PAGE, "publications/articles", nil, "https://kabbalahmedia.info/he/publications/articles"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/simple-mode",
+		search.Expectation{search.ET_LANDING_PAGE, "simple-mode", nil, "https://kabbalahmedia.info/he/simple-mode"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/help",
+		search.Expectation{search.ET_LANDING_PAGE, "help", nil, "https://kabbalahmedia.info/he/help"}, r)
 
 	fmt.Printf("Test [latest] by source \n")
 	suite.validateExpectation(fmt.Sprintf("[latest]https://kabbalahmedia.info/he/lessons?source=%s", parentSource.UID),
@@ -237,10 +277,10 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 
 func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expectation, r *require.Assertions) {
 	resultExp := search.ParseExpectation(url, common.DB)
-	fmt.Printf("Url: %s\nParsed: %+v\nExpeted: %+v\n", url, resultExp, exp)
-	r.Equal(resultExp.Uid, exp.Uid)
-	r.Equal(resultExp.Type, exp.Type)
-	r.Equal(resultExp.Source, exp.Source)
+	fmt.Printf("Url: %s\nParsed:  %+v\nExpeted: %+v\n", url, resultExp, exp)
+	r.Equal(exp.Uid, resultExp.Uid)
+	r.Equal(search.EXPECTATION_TO_NAME[exp.Type], search.EXPECTATION_TO_NAME[resultExp.Type])
+	r.Equal(exp.Source, resultExp.Source)
 	if (exp.Filters != nil && resultExp.Filters == nil) || (exp.Filters == nil && resultExp.Filters != nil) {
 		r.Fail("Comparing nil value filters with non-nil value filters.")
 	}

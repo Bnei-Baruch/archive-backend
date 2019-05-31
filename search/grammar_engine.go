@@ -6,11 +6,8 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/utils"
-)
-
-const (
-	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
 )
 
 type GrammarIntent struct {
@@ -75,7 +72,7 @@ func (g *Grammar) SearchGrammar(query *Query) (*Intent, error) {
 	for _, pattern := range g.Patterns {
 		if pattern == simpleQuery {
 			log.Infof("Matched search [%s] for grammar %s, intent %s for %s. Pattern: %s", query.Original, g.HitType, g.Intent, g.Language, pattern)
-			return &Intent{Type: GRAMMAR_TYPE_LANDING_PAGE, Language: g.Language, Value: GrammarIntent{LandingPage: g.Intent}}, nil
+			return &Intent{Type: consts.GRAMMAR_TYPE_LANDING_PAGE, Language: g.Language, Value: GrammarIntent{LandingPage: g.Intent}}, nil
 		}
 	}
 	return nil, nil

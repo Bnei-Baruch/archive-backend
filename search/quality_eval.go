@@ -123,6 +123,32 @@ var EXPECTATION_HIT_TYPE = map[int]string{
 	ET_LESSONS:       consts.INTENT_HIT_TYPE_LESSONS,
 	ET_PROGRAMS:      consts.INTENT_HIT_TYPE_PROGRAMS,
 	ET_SOURCES:       consts.ES_RESULT_TYPE_SOURCES,
+	ET_LANDING_PAGE:  consts.GRAMMAR_TYPE_LANDING_PAGE,
+}
+
+var LANDING_PAGES = map[string]string{
+	"lessons":                   consts.GRAMMAR_INTENT_LANDING_PAGE_LESSONS,
+	"lessons/daily":             consts.GRAMMAR_INTENT_LANDING_PAGE_LESSONS,
+	"lessons/virtual":           consts.GRAMMAR_INTENT_LANDING_PAGE_VIRTUAL_LESSONS,
+	"lessons/lectures":          consts.GRAMMAR_INTENT_LANDING_PAGE_LECTURES,
+	"lessons/women":             consts.GRAMMAR_INTENT_LANDING_PAGE_WOMEN_LESSONS,
+	"lessons/rabash":            consts.GRAMMAR_INTENT_LANDING_PAGE_RABASH_LESSONS,
+	"lessons/series":            consts.GRAMMAR_INTENT_LANDING_PAGE_LESSON_SERIES,
+	"programs/main":             consts.GRAMMAR_INTENT_LANDING_PAGE_PRORGRAMS,
+	"programs/clips":            consts.GRAMMAR_INTENT_LANDING_PAGE_CLIPS,
+	"sources":                   consts.GRAMMAR_INTENT_LANDING_PAGE_LIBRARY,
+	"events":                    consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS,
+	"events/conventions":        consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS,
+	"events/holidays":           consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS,
+	"events/unity-days":         consts.GRAMMAR_INTENT_LANDING_PAGE_UNITY_DAYS,
+	"events/friends-gatherings": consts.GRAMMAR_INTENT_LANDING_PAGE_FRIENDS_GATHERINGS,
+	"events/meals":              consts.GRAMMAR_INTENT_LANDING_PAGE_MEALS,
+	"topics":                    consts.GRAMMAR_INTENT_LANDING_PAGE_TOPICS,
+	"publications/blog":         consts.GRAMMAR_INTENT_LANDING_PAGE_BLOG,
+	"publications/twitter":      consts.GRAMMAR_INTENT_LANDING_PAGE_TWITTER,
+	"publications/articles":     consts.GRAMMAR_INTENT_LANDING_PAGE_ARTICLES,
+	"simple-mode":               consts.GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS,
+	"help":                      consts.GRAMMAR_INTENT_LANDING_PAGE_HELP,
 }
 
 const (
@@ -261,8 +287,9 @@ func ReadEvalSet(reader io.Reader, db *sql.DB) ([]EvalQuery, error) {
 }
 
 type HitSource struct {
-	MdbUid     string `json:"mdb_uid"`
-	ResultType string `json:"result_type"`
+	MdbUid      string `json:"mdb_uid"`
+	ResultType  string `json:"result_type"`
+	LandingPage string `json:"landing_page"`
 }
 
 // Parses expectation described by result URL and converts
@@ -305,16 +332,27 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	uidOrSection := path.Base(p)
 	// One before last part .../he/programs/cu/AsNLozeK => cu
 	contentUnitOrCollection := path.Base(path.Dir(p))
-	t := ET_NOT_SET
+	landingPage := path.Join(contentUnitOrCollection, uidOrSection)
 	subSection := ""
-	switch uidOrSection {
-	case EXPECTATION_URL_PATH[ET_LESSONS]:
-		t = ET_LESSONS
-	case EXPECTATION_URL_PATH[ET_PROGRAMS]:
-		t = ET_PROGRAMS
-	case EXPECTATION_URL_PATH[ET_EVENTS]:
+	fmt.Printf("uidOrSection: %s, contentUnitOrCollection: %s landingPage: %s\n", uidOrSection, contentUnitOrCollection, landingPage)
+	t := ET_NOT_SET
+	if _, ok := LANDING_PAGES[landingPage]; q == "" && !takeLatest && ok {
+		fmt.Printf("Found landing page.\n")
 		t = ET_LANDING_PAGE
-		subSection = uidOrSection
+		uidOrSection = landingPage
+	} else if _, ok := LANDING_PAGES[uidOrSection]; q == "" && !takeLatest && ok {
+		t = ET_LANDING_PAGE
+	} else {
+		fmt.Printf("Did not find landing page.\n")
+		switch uidOrSection {
+		case EXPECTATION_URL_PATH[ET_LESSONS]:
+			t = ET_LESSONS
+		case EXPECTATION_URL_PATH[ET_PROGRAMS]:
+			t = ET_PROGRAMS
+		case EXPECTATION_URL_PATH[ET_EVENTS]:
+			t = ET_LANDING_PAGE
+			subSection = uidOrSection
+		}
 	}
 	if t != ET_NOT_SET {
 		var filters []Filter
@@ -356,36 +394,38 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		}
 		return Expectation{t, subSection, filters, originalE}
 	}
-	switch contentUnitOrCollection {
-	case EXPECTATION_URL_PATH[ET_CONTENT_UNITS]:
-		t = ET_CONTENT_UNITS
-	case EXPECTATION_URL_PATH[ET_COLLECTIONS]:
-		t = ET_COLLECTIONS
-		if takeLatest {
-			latestUID, err := getLatestUIDByCollection(uidOrSection, db)
-			if err != nil {
-				log.Warnf("Sql Error %+v", err)
-				return Expectation{ET_FAILED_SQL, uidOrSection, nil, originalE}
+	if t != ET_LANDING_PAGE {
+		switch contentUnitOrCollection {
+		case EXPECTATION_URL_PATH[ET_CONTENT_UNITS]:
+			t = ET_CONTENT_UNITS
+		case EXPECTATION_URL_PATH[ET_COLLECTIONS]:
+			t = ET_COLLECTIONS
+			if takeLatest {
+				latestUID, err := getLatestUIDByCollection(uidOrSection, db)
+				if err != nil {
+					log.Warnf("Sql Error %+v", err)
+					return Expectation{ET_FAILED_SQL, uidOrSection, nil, originalE}
+				}
+				uriParts := strings.Split(p, "/")
+				newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+				recExpectation := ParseExpectation(newE, db)
+				recExpectation.Source = originalE
+				return recExpectation
 			}
-			uriParts := strings.Split(p, "/")
-			newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
-			recExpectation := ParseExpectation(newE, db)
-			recExpectation.Source = originalE
-			return recExpectation
-		}
-	case EXPECTATION_URL_PATH[ET_SOURCES]:
-		t = ET_SOURCES
-	case EXPECTATION_URL_PATH[ET_EVENTS]:
-		t = ET_LANDING_PAGE
-	case EXPECTATION_URL_PATH[ET_LESSONS]:
-		t = ET_LANDING_PAGE
-	default:
-		if uidOrSection == EXPECTATION_URL_PATH[ET_SOURCES] {
-			return Expectation{ET_SOURCES, "", nil, originalE}
-		} else if uidOrSection == EXPECTATION_URL_PATH[ET_LESSONS] {
-			return Expectation{ET_LANDING_PAGE, "", nil, originalE}
-		} else {
-			return Expectation{ET_BAD_STRUCTURE, "", nil, originalE}
+		case EXPECTATION_URL_PATH[ET_SOURCES]:
+			t = ET_SOURCES
+		case EXPECTATION_URL_PATH[ET_EVENTS]:
+			t = ET_LANDING_PAGE
+		case EXPECTATION_URL_PATH[ET_LESSONS]:
+			t = ET_LANDING_PAGE
+		default:
+			if uidOrSection == EXPECTATION_URL_PATH[ET_SOURCES] {
+				return Expectation{ET_SOURCES, "", nil, originalE}
+			} else if uidOrSection == EXPECTATION_URL_PATH[ET_LESSONS] {
+				return Expectation{ET_LANDING_PAGE, "", nil, originalE}
+			} else {
+				return Expectation{ET_BAD_STRUCTURE, "", nil, originalE}
+			}
 		}
 	}
 
@@ -448,6 +488,8 @@ func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expect
 		return ((filter.Name == FILTER_NAME_TOPIC && hit.Index == consts.INTENT_INDEX_TAG) ||
 			(filter.Name == FILTER_NAME_SOURCE && hit.Index == consts.INTENT_INDEX_SOURCE)) &&
 			FilterValueToUid(filter.Value) == hitSource.MdbUid
+	} else if e.Type == ET_LANDING_PAGE {
+		return LANDING_PAGES[e.Uid] == hitSource.LandingPage
 	} else {
 		return hitSource.MdbUid == e.Uid
 	}

@@ -249,6 +249,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			intentHit := &elastic.SearchHit{}
 			// intentHit.Explanation = &intentValue.Explanation
 			intentHit.Score = &boostedScore
+			intentHit.Index = consts.GRAMMAR_INDEX
 			intentHit.Type = intent.Type
 			source, err := json.Marshal(intentValue)
 			if err != nil {
@@ -426,7 +427,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do.")
 	}
-
+	shouldMergeResults := false
+	//  Right now we are testing the language results merge for Spanish UI only
+	for _, lang := range query.LanguageOrder {
+		if lang == consts.LANG_SPANISH {
+			shouldMergeResults = true
+			break
+		}
+	}
 	if len(mr.Responses) != len(query.LanguageOrder) {
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
 			len(mr.Responses), len(query.LanguageOrder)))
@@ -473,9 +481,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	results := make([]*elastic.SearchResult, 0)
 	for _, lang := range query.LanguageOrder {
 		if r, ok := resultsByLang[lang]; ok {
-			results = r
-			currentLang = lang
-			break
+			if shouldMergeResults {
+				results = append(results, resultsByLang[lang]...)
+			} else {
+				results = r
+				currentLang = lang
+				break
+			}
 		}
 	}
 
@@ -494,6 +506,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				continue
 			}
 
+			highlightsLangs := query.LanguageOrder
+			if !shouldMergeResults {
+				highlightsLangs = []string{currentLang}
+			}
+
 			// We use multiple search request because we saw that a single request
 			// filtered by id's list take more time than multiple requests.
 			mssHighlights.Add(NewResultsSearchRequest(
@@ -501,7 +518,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					resultTypes:      resultTypes,
 					docIds:           []string{h.Id},
 					index:            h.Index,
-					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: []string{currentLang}, Deb: query.Deb},
+					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
 					sortBy:           consts.SORT_BY_RELEVANCE,
 					from:             0,
 					size:             1,

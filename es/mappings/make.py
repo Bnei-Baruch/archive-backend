@@ -177,6 +177,7 @@ SETTINGS = {
             "\\u0022=>",
             "\\u201C=>",
             "\\u201D=>",
+            "\\u05F4=>",
           ],
         },
       },
@@ -361,6 +362,9 @@ SEARCH_LOGS_TEMPLATE = {
                 "size": {
                     "type": "integer",
                 },
+                "suggestion": {
+                    "type": "keyword",
+                },
                 "sort_by": {
                     "type": "keyword",
                 },
@@ -389,14 +393,13 @@ SEARCH_LOGS_TEMPLATE = {
                     "type": "integer",
                 },
 
-                # Log execition time for search components.
+                # Log execution time for search components.
                 "execution_time_log": {
                     "type": "nested",
-                    "properties":
-                    {
+                    "properties": {
                         "operation": {"type": "keyword"},
-                        "time": {"type": "integer"}
-                    }
+                        "time": {"type": "integer"},
+                    },
                 },
             },
         },
