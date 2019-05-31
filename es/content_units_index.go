@@ -294,6 +294,7 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 
 			unit := Result{
 				ResultType:   index.resultType,
+				IndexDate:    &utils.Date{Time: time.Now()},
 				MDB_UID:      cu.UID,
 				TypedUids:    typedUids,
 				FilterValues: filterValues,
