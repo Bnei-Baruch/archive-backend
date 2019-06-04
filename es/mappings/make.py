@@ -84,7 +84,7 @@ LanguageAnalyzer = {
 
   # In order to allow synonyms in other languages,
   # reimplement their analyzer by adding the necessary filters for each language
-  # and defining a new analyzer that include this filters AND a synonym_graph filter.
+  # + the synonym_graph filter and defining a new analyzer that include this filters.
   # List of definitions for each language analyzer are available here:
   # https://www.elastic.co/guide/en/elasticsearch/reference/6.7/analysis-lang-analyzer.html#spanish-analyzer
 
@@ -117,6 +117,120 @@ LanguageAnalyzer = {
   CZECH: "czech",
 }
 
+SynonymGraphFilterImp = {
+            "type" : "synonym_graph",
+            "tokenizer": "keyword",
+            "synonyms" : [],
+}
+
+LanguageAnalyzerImp = {
+  ENGLISH: {
+      "english_synonym": {
+              "tokenizer":  "standard",
+              "filter": [
+                "english_possessive_stemmer",
+                "lowercase",
+                "english_stop",
+                "english_keywords",
+                "english_stemmer",
+                "synonym_graph"
+              ]
+        }
+  },
+  HEBREW: {
+    "hebrew_synonym": {
+            "tokenizer" : "standard",
+            "filter" : ["synonym_graph", "he_IL"],
+            "char_filter": [
+              "quotes"
+            ]
+    }
+  },
+  RUSSIAN: {
+     "russian_synonym": {
+            "tokenizer":  "standard",
+            "filter": [
+              "lowercase",
+              "russian_stop",
+              "russian_keywords",
+              "russian_stemmer",
+              "synonym_graph"
+            ]
+    }
+  },
+  SPANISH: {
+    "spanish_synonym": {
+            "tokenizer":  "standard",
+            "filter": [
+              "lowercase",
+              "spanish_stop",
+              "spanish_keywords",
+              "spanish_stemmer"
+            ]
+    },
+  }
+}
+
+LanguageFiltersImp ={
+  ENGLISH: {
+            "english_stop": {
+              "type":       "stop",
+              "stopwords":  "_english_" 
+            },
+            "english_keywords": {
+              "type":       "keyword_marker",
+              "keywords":   ["example"] 
+            },
+            "english_stemmer": {
+              "type":       "stemmer",
+              "language":   "english"
+            },
+            "english_possessive_stemmer": {
+              "type":       "stemmer",
+              "language":   "possessive_english"
+            },
+            "synonym_graph": SynonymGraphFilterImp
+  },
+  HEBREW: {
+          "he_IL": {
+            "type": "hunspell",
+            "locale": "he_IL",
+            "dedup": True,
+          },
+          "synonym_graph": SynonymGraphFilterImp
+  },
+  RUSSIAN: {
+            "russian_stop": {
+              "type":       "stop",
+              "stopwords":  "_russian_" 
+            },
+            "russian_keywords": {
+              "type":       "keyword_marker",
+              "keywords":   ["пример"] 
+            },
+            "russian_stemmer": {
+              "type":       "stemmer",
+              "language":   "russian"
+            },
+            "synonym_graph": SynonymGraphFilterImp
+  },
+  SPANISH: {
+            "spanish_stop": {
+              "type":       "stop",
+              "stopwords":  "_spanish_" 
+            },
+            "spanish_keywords": {
+              "type":       "keyword_marker",
+              "keywords":   ["ejemplo"] 
+            },
+            "spanish_stemmer": {
+              "type":       "stemmer",
+              "language":   "light_spanish"
+            },
+            "synonym_graph": SynonymGraphFilterImp
+  },
+}
+
 # Phonetic analyzer
 BEIDER_MORSE_LANGUAGESET = {
   CYRILLIC: 'cyrillic',
@@ -144,62 +258,37 @@ def BeiderMorseLanguageset(lang):
 def IsCyrillic(lang, something):
   return something if lang in LANG_GROUPS[CYRILLIC] else None
 
+def GetAnalyzerImp(lang):
+  if lang in LanguageAnalyzerImp:
+    return LanguageAnalyzerImp[lang]
+  else:
+    return None
+
+def GetFiltersImp(lang):
+  if lang in LanguageFiltersImp:
+    return LanguageFiltersImp[lang]
+  else:
+    return None
 
 SETTINGS = {
   "index": {
     "number_of_shards": 1,
     "number_of_replicas": 0,
     "analysis": {
-      "analyzer": {
-        #  Tested, but didnt bring quality enough results:
-        # "phonetic_analyzer": {
-        #   "tokenizer": "standard",
-        #   "char_filter": ["quotes"],
-        #   "filter": [
-        #     "standard",
-        #     "lowercase",
-        #     lambda lang: IsCyrillic(lang, 'icu_transliterate'),
-        #     "custom_phonetic",
-        #   ],
-        # },
-        "english_synonym" : {
-          "tokenizer":  "standard",
-          "filter": [
-            "english_possessive_stemmer",
-            "lowercase",
-            "english_stop",
-            "english_keywords",
-            "english_stemmer",
-            "synonym_graph"
-          ]
-        },
-        "russian_synonym": {
-          "tokenizer":  "standard",
-          "filter": [
-            "lowercase",
-            "russian_stop",
-            "russian_keywords",
-            "russian_stemmer",
-            "synonym_graph"
-          ]
-        },
-        "spanish_synonym": {
-          "tokenizer":  "standard",
-          "filter": [
-            "lowercase",
-            "spanish_stop",
-            "spanish_keywords",
-            "spanish_stemmer"
-          ]
-        },
-        "hebrew_synonym": {
-          "tokenizer" : "standard",
-          "filter" : ["synonym_graph", "he_IL"],
-          "char_filter": [
-            "quotes"
-          ]
-        }
-      },
+      "analyzer": lambda lang: GetAnalyzerImp(lang),
+      # "analyzer": {
+      #      Tested, but didnt bring quality enough results:
+      #     "phonetic_analyzer": {
+      #       "tokenizer": "standard",
+      #       "char_filter": ["quotes"],
+      #       "filter": [
+      #         "standard",
+      #         "lowercase",
+      #         lambda lang: IsCyrillic(lang, 'icu_transliterate'),
+      #         "custom_phonetic",
+      #       ],
+      #     },        
+      # },
       "char_filter": {
         "quotes": {
           "type": "mapping",
@@ -215,68 +304,19 @@ SETTINGS = {
           ],
         },
       },
-      "filter": {
-        "english_stop": {
-          "type":       "stop",
-          "stopwords":  "_english_" 
-        },
-        "english_keywords": {
-          "type":       "keyword_marker",
-          "keywords":   ["example"] 
-        },
-        "english_stemmer": {
-          "type":       "stemmer",
-          "language":   "english"
-        },
-        "english_possessive_stemmer": {
-          "type":       "stemmer",
-          "language":   "possessive_english"
-        },
-        "russian_stop": {
-          "type":       "stop",
-          "stopwords":  "_russian_" 
-        },
-        "russian_keywords": {
-          "type":       "keyword_marker",
-          "keywords":   ["пример"] 
-        },
-        "russian_stemmer": {
-          "type":       "stemmer",
-          "language":   "russian"
-        },
-        "spanish_stop": {
-          "type":       "stop",
-          "stopwords":  "_spanish_" 
-        },
-        "spanish_keywords": {
-          "type":       "keyword_marker",
-          "keywords":   ["ejemplo"] 
-        },
-        "spanish_stemmer": {
-          "type":       "stemmer",
-          "language":   "light_spanish"
-        },
-        "he_IL": {
-          "type": "hunspell",
-          "locale": "he_IL",
-          "dedup": True,
-        },
-        # "icu_transliterate": lambda lang: IsCyrillic(lang, {
-        #   "type": "icu_transform",
-        #   "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
-        # }),
-        # "custom_phonetic": {
-        #   "type": "phonetic",
-        #   "encoder": "beider_morse",
-        #   "replace": True,
-        #   "languageset": BeiderMorseLanguageset,
-        # },
-        "synonym_graph" : {
-            "type" : "synonym_graph",
-            "tokenizer": "keyword",
-            "synonyms" : [],
-        },
-      },
+      "filter": lambda lang: GetFiltersImp(lang),
+      # "filter": {      
+      #     "icu_transliterate": lambda lang: IsCyrillic(lang, {
+      #       "type": "icu_transform",
+      #       "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
+      #     }),
+      #     "custom_phonetic": {
+      #       "type": "phonetic",
+      #       "encoder": "beider_morse",
+      #       "replace": True,
+      #       "languageset": BeiderMorseLanguageset,
+      #     },
+      # },
     },
   },
 }
