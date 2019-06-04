@@ -274,10 +274,11 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 			line := scanner.Text()
 
 			//  Blank lines and lines starting with pound are comments (like Solr format).
-			if line != "" {
-				trimmed := strings.TrimSpace(line)
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
 				if !strings.HasPrefix(trimmed, "#") {
-					fline := fmt.Sprintf("\"%s\"", trimmed)
+					commaSeperated := strings.Replace(trimmed, "\t", ",", -1)
+					fline := fmt.Sprintf("\"%s\"", commaSeperated)
 					keywords = append(keywords, fline)
 				}
 			}
