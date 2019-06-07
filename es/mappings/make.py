@@ -165,7 +165,8 @@ LanguageAnalyzerImp = {
               "lowercase",
               "spanish_stop",
               "spanish_keywords",
-              "spanish_stemmer"
+              "spanish_stemmer",
+              "synonym_graph"
             ]
     },
   }
@@ -179,7 +180,6 @@ LanguageFiltersImp ={
             },
             "english_keywords": {
               "type":       "keyword_marker",
-              "keywords":   ["example"] 
             },
             "english_stemmer": {
               "type":       "stemmer",
@@ -206,7 +206,6 @@ LanguageFiltersImp ={
             },
             "russian_keywords": {
               "type":       "keyword_marker",
-              "keywords":   ["пример"] 
             },
             "russian_stemmer": {
               "type":       "stemmer",
@@ -221,7 +220,6 @@ LanguageFiltersImp ={
             },
             "spanish_keywords": {
               "type":       "keyword_marker",
-              "keywords":   ["ejemplo"] 
             },
             "spanish_stemmer": {
               "type":       "stemmer",

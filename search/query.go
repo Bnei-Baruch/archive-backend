@@ -147,8 +147,6 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		Size(options.size).
 		Explain(options.query.Deb)
 
-	//
-
 	if options.useHighlight {
 
 		//  We use special HighlightQuery with SimpleQueryStringQuery to
