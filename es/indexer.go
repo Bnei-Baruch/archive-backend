@@ -9,6 +9,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -50,6 +51,14 @@ func MakeIndexer(namespace string, date string, names []string, mdb *sql.DB, esc
 		}
 	}
 	return indexer, nil
+}
+
+func ProdIndexDateForEvents(esc *elastic.Client) (error, string) {
+	indexDate := viper.GetString("elasticsearch.index-date")
+	if indexDate == "" {
+		return aliasedIndexDate(esc, "prod", consts.ES_RESULTS_INDEX)
+	}
+	return nil, indexDate
 }
 
 func ProdAliasedIndexDate(esc *elastic.Client) (error, string) {

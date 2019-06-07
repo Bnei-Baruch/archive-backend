@@ -12,13 +12,13 @@
                         }
                     ], 
                     "type": "completion", 
-                    "analyzer": "he"
+                    "analyzer": "hebrew_synonym"
                 }, 
                 "description": {
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "he"
+                            "analyzer": "hebrew_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -28,7 +28,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "he"
+                            "analyzer": "hebrew_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -41,7 +41,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "he"
+                            "analyzer": "hebrew_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -72,6 +72,11 @@
                         "locale": "he_IL", 
                         "type": "hunspell", 
                         "dedup": true
+                    }, 
+                    "synonym_graph": {
+                        "synonyms": [], 
+                        "type": "synonym_graph", 
+                        "tokenizer": "keyword"
                     }
                 }, 
                 "char_filter": {
@@ -91,8 +96,9 @@
                     }
                 }, 
                 "analyzer": {
-                    "he": {
+                    "hebrew_synonym": {
                         "filter": [
+                            "synonym_graph", 
                             "he_IL"
                         ], 
                         "char_filter": [

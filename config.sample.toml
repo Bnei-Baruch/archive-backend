@@ -26,6 +26,8 @@ sources-folder="/tmp/sources-folder"
 unzip-url=""
 prepare-docs-batch-size=20
 prepare-docs-parallelism=2
+synonyms-folder="/tmp/synonyms-folder"  # At repo, see: ./es/synonyms
+#index-date = "2018-11-28t13:08:31-05:00" # optional, NOT FOR PRODUCTION, comment out to use alias.
 
 [nats]
 url="nats://localhost:4222"

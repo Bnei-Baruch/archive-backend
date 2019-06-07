@@ -67,13 +67,6 @@
         "index": {
             "number_of_replicas": 0, 
             "analysis": {
-                "filter": {
-                    "he_IL": {
-                        "locale": "he_IL", 
-                        "type": "hunspell", 
-                        "dedup": true
-                    }
-                }, 
                 "char_filter": {
                     "quotes": {
                         "type": "mapping", 
@@ -88,17 +81,6 @@
                             "\\u201D=>", 
                             "\\u05F4=>"
                         ]
-                    }
-                }, 
-                "analyzer": {
-                    "he": {
-                        "filter": [
-                            "he_IL"
-                        ], 
-                        "char_filter": [
-                            "quotes"
-                        ], 
-                        "tokenizer": "standard"
                     }
                 }
             }, 

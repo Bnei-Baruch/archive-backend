@@ -12,13 +12,13 @@
                         }
                     ], 
                     "type": "completion", 
-                    "analyzer": "english"
+                    "analyzer": "english_synonym"
                 }, 
                 "description": {
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "english"
+                            "analyzer": "english_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -28,7 +28,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "english"
+                            "analyzer": "english_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -41,7 +41,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "english"
+                            "analyzer": "english_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -68,10 +68,22 @@
             "number_of_replicas": 0, 
             "analysis": {
                 "filter": {
-                    "he_IL": {
-                        "locale": "he_IL", 
-                        "type": "hunspell", 
-                        "dedup": true
+                    "english_stop": {
+                        "stopwords": "_english_", 
+                        "type": "stop"
+                    }, 
+                    "synonym_graph": {
+                        "synonyms": [], 
+                        "type": "synonym_graph", 
+                        "tokenizer": "keyword"
+                    }, 
+                    "english_stemmer": {
+                        "type": "stemmer", 
+                        "language": "english"
+                    }, 
+                    "english_possessive_stemmer": {
+                        "type": "stemmer", 
+                        "language": "possessive_english"
                     }
                 }, 
                 "char_filter": {
@@ -91,12 +103,13 @@
                     }
                 }, 
                 "analyzer": {
-                    "he": {
+                    "english_synonym": {
                         "filter": [
-                            "he_IL"
-                        ], 
-                        "char_filter": [
-                            "quotes"
+                            "english_possessive_stemmer", 
+                            "lowercase", 
+                            "english_stop", 
+                            "english_stemmer", 
+                            "synonym_graph"
                         ], 
                         "tokenizer": "standard"
                     }

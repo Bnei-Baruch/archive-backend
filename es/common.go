@@ -30,6 +30,10 @@ var (
 	prepareDocsParallelism int
 )
 
+func SynonymsFolder() (string, error) {
+	return InitConfigFolder("elasticsearch.synonyms-folder", &sourcesFolder)
+}
+
 func SourcesFolder() (string, error) {
 	return InitConfigFolder("elasticsearch.sources-folder", &sourcesFolder)
 }

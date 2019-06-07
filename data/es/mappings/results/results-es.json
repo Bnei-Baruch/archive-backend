@@ -12,13 +12,13 @@
                         }
                     ], 
                     "type": "completion", 
-                    "analyzer": "spanish"
+                    "analyzer": "spanish_synonym"
                 }, 
                 "description": {
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "spanish"
+                            "analyzer": "spanish_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -28,7 +28,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "spanish"
+                            "analyzer": "spanish_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -41,7 +41,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "spanish"
+                            "analyzer": "spanish_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -68,10 +68,18 @@
             "number_of_replicas": 0, 
             "analysis": {
                 "filter": {
-                    "he_IL": {
-                        "locale": "he_IL", 
-                        "type": "hunspell", 
-                        "dedup": true
+                    "spanish_stemmer": {
+                        "type": "stemmer", 
+                        "language": "light_spanish"
+                    }, 
+                    "spanish_stop": {
+                        "stopwords": "_spanish_", 
+                        "type": "stop"
+                    }, 
+                    "synonym_graph": {
+                        "synonyms": [], 
+                        "type": "synonym_graph", 
+                        "tokenizer": "keyword"
                     }
                 }, 
                 "char_filter": {
@@ -91,12 +99,12 @@
                     }
                 }, 
                 "analyzer": {
-                    "he": {
+                    "spanish_synonym": {
                         "filter": [
-                            "he_IL"
-                        ], 
-                        "char_filter": [
-                            "quotes"
+                            "lowercase", 
+                            "spanish_stop", 
+                            "spanish_stemmer", 
+                            "synonym_graph"
                         ], 
                         "tokenizer": "standard"
                     }
