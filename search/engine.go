@@ -395,7 +395,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
-	// Seach tweets in parallel to native search.
+	// Search tweets in parallel to native search.
 	go func() {
 		mssTweets := e.esc.MultiSearch()
 		mssTweets.Add(NewResultsSearchRequests(
@@ -419,8 +419,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 
 		mr.Responses = mr.Responses
-		// TBD
-		
+		// TBD create single tweet result for each language
+		// Set score as the highest score of tweet
+
 	}()
 
 	var resultTypes []string
