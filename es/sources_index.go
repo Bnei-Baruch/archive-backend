@@ -20,6 +20,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 func MakeSourcesIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *SourcesIndex {
@@ -40,28 +41,32 @@ type SourcesIndex struct {
 
 func (index *SourcesIndex) ReindexAll() error {
 	log.Info("SourcesIndex.Reindex All.")
-	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_SOURCES)); err != nil {
+	_, indexErrors := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(index.resultType))
+	if err := indexErrors.CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "SourcesIndex"); err != nil {
 		return err
 	}
-	return index.addToIndexSql("1=1") // SQL to always match any source
+	// SQL to always match any source
+	return indexErrors.Join(index.addToIndexSql("1=1"), "").CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "SourcesIndex")
 }
 
-func (index *SourcesIndex) Update(scope Scope) error {
+func (index *SourcesIndex) RemoveFromIndex(scope Scope) (map[string][]string, error) {
 	log.Debugf("SourcesIndex.Update - Scope: %+v.", scope)
-	removed, err := index.removeFromIndex(scope)
-	if err != nil {
-		return err
-	}
-	return index.addToIndex(scope, removed)
+	removed, indexErrors := index.removeFromIndex(scope)
+	return removed, indexErrors.CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "SourcesIndex")
 }
 
-func (index *SourcesIndex) addToIndex(scope Scope, removedUIDs []string) error {
+func (index *SourcesIndex) AddToIndex(scope Scope, removedUIDs []string) error {
+	log.Debugf("SourcesIndex.AddToIndex - Scope: %+v, removedUIDs: %+v.", scope, removedUIDs)
+	return index.addToIndex(scope, removedUIDs).CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "SourcesIndex")
+}
+
+func (index *SourcesIndex) addToIndex(scope Scope, removedUIDs []string) *IndexErrors {
 	uids := removedUIDs
 	if scope.SourceUID != "" {
 		uids = append(uids, scope.SourceUID)
 	}
 	if len(uids) == 0 {
-		return nil
+		return MakeIndexErrors()
 	}
 	quoted := make([]string, len(uids))
 	for i, uid := range uids {
@@ -71,36 +76,36 @@ func (index *SourcesIndex) addToIndex(scope Scope, removedUIDs []string) error {
 	return index.addToIndexSql(sqlScope)
 }
 
-func (index *SourcesIndex) removeFromIndex(scope Scope) ([]string, error) {
+func (index *SourcesIndex) removeFromIndex(scope Scope) (map[string][]string, *IndexErrors) {
 	if scope.SourceUID != "" {
-		elasticScope := index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_SOURCES).
+		elasticScope := index.FilterByResultTypeQuery(index.resultType).
 			Filter(elastic.NewTermsQuery("mdb_uid", scope.SourceUID))
 		return index.RemoveFromIndexQuery(elasticScope)
 	}
 
 	// Nothing to remove.
-	return []string{}, nil
+	return make(map[string][]string), MakeIndexErrors()
 }
 
 func (index *SourcesIndex) bulkIndexSources(
 	bulk OffsetLimitJob, sqlScope string,
 	codesMap map[string][]string,
 	idsMap map[string][]int64,
-	authorsByLanguageMap map[string]map[string][]string) error {
+	authorsByLanguageMap map[string]map[string][]string) *IndexErrors {
 	var sources []*mdbmodels.Source
-	err := mdbmodels.NewQuery(index.db,
+	if err := mdbmodels.NewQuery(index.db,
 		qm.From("sources as source"),
 		qm.Load("SourceI18ns"),
 		qm.Load("Authors"),
 		qm.Where(sqlScope),
 		qm.Offset(bulk.Offset),
-		qm.Limit(bulk.Limit)).Bind(&sources)
-	if err != nil {
-		return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources from mdb")
+		qm.Limit(bulk.Limit)).Bind(&sources); err != nil {
+		return MakeIndexErrors().SetError(err).Wrap("SourcesIndex.addToIndexSql - Fetch sources from mdb.")
 	}
 
 	log.Infof("SourcesIndex.addToIndexSql - Adding %d sources (offset: %d total: %d).", len(sources), bulk.Offset, bulk.Total)
 
+	indexErrors := MakeIndexErrors()
 	for _, source := range sources {
 		if parents, ok := codesMap[source.UID]; !ok {
 			log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in codesMap: %+v", source.UID, codesMap)
@@ -108,22 +113,23 @@ func (index *SourcesIndex) bulkIndexSources(
 			log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in idsMap: %+v", source.UID, idsMap)
 		} else if authors, ok := authorsByLanguageMap[source.UID]; !ok {
 			log.Warnf("SourcesIndex.addToIndexSql - Source %s not found in authorsByLanguageMap: %+v", source.UID, idsMap)
-		} else if err := index.indexSource(source, parents, parentIds, authors); err != nil {
-			log.Warnf("SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s). Error is: %v.", source.Name, source.UID, err)
+		} else {
+			sourceIndexErrors := index.indexSource(source, parents, parentIds, authors)
+			indexErrors.Join(sourceIndexErrors, fmt.Sprintf("SourcesIndex.addToIndexSql - Unable to index source '%s' (uid: %s).", source.Name, source.UID))
 		}
 	}
-	return nil
+	indexErrors.PrintIndexCounts(fmt.Sprintf("SourcedIndex %d - %d", bulk.Offset, bulk.Offset+bulk.Limit))
+	return indexErrors
 }
 
 // Note: scope usage is limited to source.uid only (e.g. source.uid='L2jMWyce')
-func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
+func (index *SourcesIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	var count int
-	err := mdbmodels.NewQuery(index.db,
+	if err := mdbmodels.NewQuery(index.db,
 		qm.Select("COUNT(1)"),
 		qm.From("sources as source"),
-		qm.Where(sqlScope)).QueryRow().Scan(&count)
-	if err != nil {
-		return err
+		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
+		return MakeIndexErrors().SetError(err).Wrap("SourcesIndex, addToIndexSql")
 	}
 
 	log.Debugf("SourcesIndex.addToIndexSql - Sources Index - Adding %d sources. Scope: %s", count, sqlScope)
@@ -134,17 +140,17 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 	// authorsByLanguageMap from uid => lang => authors
 	codesMap, idsMap, authorsByLanguageMap, err := index.loadSources(index.db, sqlScope)
 	if err != nil {
-		return errors.Wrap(err, "SourcesIndex.addToIndexSql - Fetch sources parents from mdb.")
+		return MakeIndexErrors().SetError(err).Wrap("SourcesIndex.addToIndexSql - Fetch sources parents from mdb.")
 	}
 
 	tasks := make(chan OffsetLimitJob, 300)
-	errors := make(chan error, 300)
+	errors := make(chan *IndexErrors, 300)
 	doneAdding := make(chan bool)
 
 	tasksCount := 0
 	go func() {
 		offset := 0
-		limit := 100
+		limit := utils.MaxInt(10, utils.MinInt(100, (int)(count/10)))
 		for offset < int(count) {
 			tasks <- OffsetLimitJob{offset, limit, count}
 			tasksCount += 1
@@ -155,7 +161,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 	}()
 
 	for w := 1; w <= 10; w++ {
-		go func(tasks <-chan OffsetLimitJob, errors chan<- error) {
+		go func(tasks <-chan OffsetLimitJob, errors chan<- *IndexErrors) {
 			for task := range tasks {
 				errors <- index.bulkIndexSources(task, sqlScope, codesMap, idsMap, authorsByLanguageMap)
 			}
@@ -163,14 +169,11 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) error {
 	}
 
 	<-doneAdding
+	indexErrors := MakeIndexErrors()
 	for a := 1; a <= tasksCount; a++ {
-		e := <-errors
-		if e != nil {
-			return e
-		}
+		indexErrors.Join(<-errors, "")
 	}
-
-	return nil
+	return indexErrors
 }
 
 func (index *SourcesIndex) loadSources(db *sql.DB, sqlScope string) (map[string][]string, map[string][]int64, map[string]map[string][]string, error) {
@@ -300,43 +303,45 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 	return "", errors.New("SourcesIndex.getDocxPath - Docx not found in index.json.")
 }
 
-func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []string, parentIds []int64, authorsByLanguage map[string][]string) error {
+func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []string, parentIds []int64, authorsByLanguage map[string][]string) *IndexErrors {
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
 	allLanguages := []string{}
+	indexErrors := MakeIndexErrors()
 	for _, i18n := range mdbSource.R.SourceI18ns {
 		if i18n.Name.Valid && i18n.Name.String != "" {
+			indexErrors.ShouldIndex(i18n.Language)
 			pathNames := []string{}
 			source := Result{
-				ResultType:   consts.ES_RESULT_TYPE_SOURCES,
+				ResultType:   index.resultType,
 				MDB_UID:      mdbSource.UID,
-				FilterValues: KeyValues("source", parents),
-				TypedUids:    []string{keyValue("source", mdbSource.UID)},
+				FilterValues: KeyValues(consts.ES_UID_TYPE_SOURCE, parents),
+				TypedUids:    []string{keyValue(consts.ES_UID_TYPE_SOURCE, mdbSource.UID)},
 			}
 			if i18n.Description.Valid && i18n.Description.String != "" {
 				source.Description = i18n.Description.String
 			}
-			fPath, err := index.getDocxPath(mdbSource.UID, i18n.Language)
-			if err != nil {
-				// WarnHide(fmt.Sprintf("SourcesIndex.indexSource - Unable to retrieving docx path for source %s with language %s. Skipping indexing.",
-				//     mdbSource.UID, i18n.Language), mdbSource.UID)
-			} else {
+			fPath, missingSourceFileErr := index.getDocxPath(mdbSource.UID, i18n.Language)
+			// Ignore err here as if missing source for a language in very common and is ok.
+			if missingSourceFileErr == nil {
 				// Found docx.
-				content, err := ParseDocx(fPath)
-				if err == nil {
+				content, parseErr := ParseDocx(fPath)
+				indexErrors.DocumentError(i18n.Language, parseErr, fmt.Sprintf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language))
+				if parseErr == nil {
 					source.Content = content
 					allLanguages = append(allLanguages, i18n.Language)
-				} else {
-					log.Warnf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language)
 				}
 			}
+			// Find parents...
+			findParentsErr := (error)(nil)
 			for _, i := range parentIds {
-				ni18n, err := mdbmodels.FindSourceI18n(index.db, i, i18n.Language)
-				if err != nil {
-					if err == sql.ErrNoRows {
+				ni18n, e := mdbmodels.FindSourceI18n(index.db, i, i18n.Language)
+				if e != nil {
+					if e == sql.ErrNoRows {
 						continue
 					}
-					return err
+					findParentsErr = e
+					break
 				}
 				if ni18n.Name.Valid && ni18n.Name.String != "" {
 					pathNames = append(pathNames, ni18n.Name.String)
@@ -346,6 +351,11 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 					pathNames = append(pathNames, ni18n.Description.String)
 				}*/
 			}
+			indexErrors.DocumentError(i18n.Language, findParentsErr, "SourcesIndex.indexSource - Error finding parent")
+			if findParentsErr != nil {
+				indexErrors.DocumentError(i18n.Language, findParentsErr, "SourcesIndex.indexSource - Error finding parent")
+				continue
+			}
 			authors := authorsByLanguage[i18n.Language]
 			s := append(authors, pathNames...)
 			source.Title = strings.Join(s, " > ")
@@ -354,28 +364,27 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 		}
 	}
 
-	if len(allLanguages) == 0 {
-		log.Warnf("SourcesIndex.indexSource - No docx files found for source %s", mdbSource.UID)
-	}
-
 	// Index each document in its language index
 	for k, v := range i18nMap {
-
 		v.FilterValues = append(v.FilterValues, KeyValues(consts.FILTER_LANGUAGE, allLanguages)...)
-
-		name := index.indexName(k)
+		name := index.IndexName(k)
 		log.Debugf("Sources Index - Add source %s to index %s", mdbSource.UID, name)
 		resp, err := index.esc.Index().
 			Index(name).
 			Type("result").
 			BodyJson(v).
 			Do(context.TODO())
+		indexErrors.DocumentError(k, err, fmt.Sprintf("Sources Index - Source %s %s", name, mdbSource.UID))
 		if err != nil {
-			return errors.Wrapf(err, "Sources Index - Source %s %s", name, mdbSource.UID)
+			continue
 		}
+		errNotCreated := (error)(nil)
 		if resp.Result != "created" {
-			return errors.Errorf("Sources Index - Not created: source %s %s", name, mdbSource.UID)
+			errNotCreated = errors.New(fmt.Sprintf("Not created: source %s %s", name, mdbSource.UID))
+		} else {
+			indexErrors.Indexed(k)
 		}
+		indexErrors.DocumentError(k, errNotCreated, "Sources Index")
 	}
 
 	atomic.AddUint64(&index.Progress, 1)
@@ -384,5 +393,5 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 		log.Debugf("Progress sources %d", progress)
 	}
 
-	return nil
+	return indexErrors
 }

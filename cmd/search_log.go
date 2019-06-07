@@ -6,7 +6,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -54,18 +53,9 @@ func logFn(cmd *cobra.Command, args []string) {
 
 func initLogger() *search.SearchLogger {
 	log.Infof("Setting up connection to ElasticSearch: %s", elasticUrl)
-	esc, err := elastic.NewClient(
-		elastic.SetURL(elasticUrl),
-		elastic.SetSniff(false),
-		elastic.SetHealthcheckInterval(10*time.Second),
-		elastic.SetErrorLog(log.StandardLogger()),
-		// Should be commented out in prod.
-		// elastic.SetInfoLog(log.StandardLogger()),
-		// elastic.SetTraceLog(log.StandardLogger()),
-	)
-	utils.Must(err)
+	esManager := search.MakeESManager(elasticUrl)
 
-	return search.MakeSearchLogger(esc)
+	return search.MakeSearchLogger(esManager)
 }
 
 func printCsv(records [][]string) {

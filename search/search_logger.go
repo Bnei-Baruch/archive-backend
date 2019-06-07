@@ -70,11 +70,11 @@ func (csc CreatedSearchClicks) Swap(i, j int) {
 }
 
 type SearchLogger struct {
-	esc *elastic.Client
+	esManager *ESManager
 }
 
-func MakeSearchLogger(esc *elastic.Client) *SearchLogger {
-	return &SearchLogger{esc: esc}
+func MakeSearchLogger(esManager *ESManager) *SearchLogger {
+	return &SearchLogger{esManager: esManager}
 }
 
 func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultType string, rank int, searchId string) error {
@@ -88,7 +88,12 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultTy
 		Rank:       uint32(rank),
 	}
 
-	sr, err := elastic.NewSearchService(searchLogger.esc).
+	esc, err := searchLogger.esManager.GetClient()
+	if err != nil {
+		return errors.Wrap(err, "Failed to connect to ElasticSearch.")
+	}
+
+	sr, err := elastic.NewSearchService(esc).
 		Index("search_logs").
 		Type("search_logs").
 		Query(elastic.NewMatchQuery("search_id", searchId)).
@@ -100,7 +105,7 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultTy
 		return errors.Errorf("Found more then one search id %s", searchId)
 	}
 
-	resp, err := searchLogger.esc.Index().
+	resp, err := esc.Index().
 		Index("search_logs").
 		Type("search_logs").
 		BodyJson(sc).
@@ -115,11 +120,11 @@ func (searchLogger *SearchLogger) LogClick(mdbUid string, index string, resultTy
 	return nil
 }
 
-func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, executionTimeLog map[string]time.Duration) error {
+func (searchLogger *SearchLogger) LogSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, executionTimeLog *TimeLogMap) error {
 	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, res, nil, executionTimeLog)
 }
 
-func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, from int, size int, searchId string, suggestion string, searchErr interface{}, executionTimeLog map[string]time.Duration) error {
+func (searchLogger *SearchLogger) LogSearchError(query Query, sortBy string, from int, size int, searchId string, suggestion string, searchErr interface{}, executionTimeLog *TimeLogMap) error {
 	return searchLogger.logSearch(query, sortBy, from, size, searchId, suggestion, nil, searchErr, executionTimeLog)
 }
 
@@ -156,11 +161,16 @@ func (searchLogger *SearchLogger) fixResults(res *QueryResult) *QueryResult {
 	return res
 }
 
-func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, searchErr interface{}, executionTimeLog map[string]time.Duration) error {
+func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int, size int, searchId string, suggestion string, res *QueryResult, searchErr interface{}, executionTimeLog *TimeLogMap) error {
+
+	esc, err := searchLogger.esManager.GetClient()
+	if err != nil {
+		return errors.Wrap(err, "Failed to connect to ElasticSearch.")
+	}
 
 	timeLogArr := []TimeLog{}
-	for k := range executionTimeLog {
-		ms := int64(executionTimeLog[k] / time.Millisecond)
+	for k, v := range executionTimeLog.ToMap() {
+		ms := int64(v / time.Millisecond)
 		timeLogArr = append(timeLogArr, TimeLog{Operation: k, Time: ms})
 	}
 
@@ -177,7 +187,7 @@ func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int
 		Suggestion:       suggestion,
 		ExecutionTimeLog: timeLogArr,
 	}
-	resp, err := searchLogger.esc.Index().
+	resp, err := esc.Index().
 		Index("search_logs").
 		Type("search_logs").
 		BodyJson(sl).
@@ -194,6 +204,12 @@ func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int
 func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]SearchLog, error) {
 	var ret []SearchLog
 	var searchResult *elastic.SearchResult
+
+	esc, err := searchLogger.esManager.GetClient()
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to connect to ElasticSearch.")
+	}
+
 	for true {
 		log.Infof("Scrolling...")
 		if searchResult != nil && searchResult.Hits != nil {
@@ -205,7 +221,7 @@ func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]Search
 			}
 		}
 		var err error
-		scrollClient := searchLogger.esc.Scroll().
+		scrollClient := esc.Scroll().
 			Index("search_logs").
 			Query(elastic.NewTermsQuery("log_type", "query")).
 			Scroll("5m").
@@ -228,6 +244,12 @@ func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]Search
 func (searchLogger *SearchLogger) GetAllClicks() ([]SearchClick, error) {
 	var ret []SearchClick
 	var searchResult *elastic.SearchResult
+
+	esc, err := searchLogger.esManager.GetClient()
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to connect to ElasticSearch.")
+	}
+
 	for true {
 		if searchResult != nil && searchResult.Hits != nil {
 			for _, h := range searchResult.Hits.Hits {
@@ -237,7 +259,7 @@ func (searchLogger *SearchLogger) GetAllClicks() ([]SearchClick, error) {
 			}
 		}
 		var err error
-		scrollClient := searchLogger.esc.Scroll().
+		scrollClient := esc.Scroll().
 			Index("search_logs").
 			Type("search_logs").
 			Query(elastic.NewTermsQuery("log_type", "click")).

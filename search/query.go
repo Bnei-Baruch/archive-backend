@@ -1,6 +1,10 @@
 package search
 
 import (
+	"fmt"
+	"strings"
+	"unicode"
+
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -24,6 +28,90 @@ const (
 
 	NUM_SUGGESTS = 500
 )
+
+type Query struct {
+	Term          string              `json:"term,omitempty"`
+	ExactTerms    []string            `json:"exact_terms,omitempty"`
+	Original      string              `json:"original,omitempty"`
+	Filters       map[string][]string `json:"filters,omitempty"`
+	LanguageOrder []string            `json:"language_order,omitempty"`
+	Deb           bool                `json:"deb,omitempty"`
+	Intents       []Intent            `json:"intents,omitempty"`
+}
+
+func isTokenStart(i int, runes []rune, lastQuote rune) bool {
+	return i == 0 && !unicode.IsSpace(runes[0]) ||
+		(i > 0 && !unicode.IsSpace(runes[i]) && unicode.IsSpace(runes[i-1]))
+}
+
+func isTokenEnd(i int, runes []rune, lastQuote rune, lastQuoteIdx int) bool {
+	return i == len(runes)-1 ||
+		(i < len(runes)-1 && unicode.IsSpace(runes[i+1]) &&
+			(lastQuote == rune(0) || runes[i] == lastQuote && lastQuoteIdx >= 0 && lastQuoteIdx < i))
+}
+
+func isRuneQuotationMark(r rune) bool {
+	return unicode.In(r, unicode.Quotation_Mark) || r == rune(1523) || r == rune(1524)
+}
+
+// Tokenizes string to work with user friendly escapings of quotes (see tests).
+func tokenize(str string) []string {
+	runes := []rune(str)
+	start := -1
+	lastQuote := rune(0)
+	lastQuoteIdx := -1
+	parts := 0
+	var tokens []string
+	for i, r := range runes {
+		if start == -1 && isTokenStart(i, runes, lastQuote) {
+			start = i
+		}
+		if i == start && lastQuote == rune(0) && isRuneQuotationMark(r) {
+			lastQuote = r
+			lastQuoteIdx = i
+		}
+		if start >= 0 && isTokenEnd(i, runes, lastQuote, lastQuoteIdx) {
+			tokens = append(tokens, string(runes[start:i+1]))
+			lastQuote = rune(0)
+			lastQuoteIdx = -1
+			start = -1
+			parts += 1
+		}
+	}
+
+	return tokens
+}
+
+// Parses query and extracts terms and filters.
+func ParseQuery(q string) Query {
+	filters := make(map[string][]string)
+	var terms []string
+	var exactTerms []string
+	for _, t := range tokenize(q) {
+		isFilter := false
+		for filter := range consts.FILTERS {
+			prefix := fmt.Sprintf("%s:", filter)
+			if isFilter = strings.HasPrefix(t, prefix); isFilter {
+				filters[consts.FILTERS[filter]] = strings.Split(strings.TrimPrefix(t, prefix), ",")
+				break
+			}
+		}
+		if !isFilter {
+			// Not clear what kind of decoding is happening here, utf-8?!
+			runes := []rune(t)
+			// For debug
+			// for _, c := range runes {
+			//     fmt.Printf("%04x %s\n", c, string(c))
+			// }
+			if len(runes) >= 2 && isRuneQuotationMark(runes[0]) && runes[0] == runes[len(runes)-1] {
+				exactTerms = append(exactTerms, string(runes[1:len(runes)-1]))
+			} else {
+				terms = append(terms, t)
+			}
+		}
+	}
+	return Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Original: q, Filters: filters}
+}
 
 func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.Query {
 	boolQuery := elastic.NewBoolQuery().Must(

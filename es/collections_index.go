@@ -46,106 +46,107 @@ func defaultCollectionsSql() string {
 
 func (index *CollectionsIndex) ReindexAll() error {
 	log.Info("Collections Index - Reindex all.")
-	if _, err := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(consts.ES_RESULT_TYPE_COLLECTIONS)); err != nil {
+	_, indexErrors := index.RemoveFromIndexQuery(index.FilterByResultTypeQuery(index.resultType))
+	if err := indexErrors.CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "CollectionsIndex"); err != nil {
 		return err
 	}
-	return index.addToIndexSql(defaultCollectionsSql())
+	return indexErrors.Join(index.addToIndexSql(defaultCollectionsSql()), "").CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "CollectionsIndex")
 }
 
-func (index *CollectionsIndex) Update(scope Scope) error {
-	log.Debugf("Collections Index - Update. Scope: %+v.", scope)
-	removed, err := index.removeFromIndex(scope)
-	if err != nil {
-		return err
-	}
-	return index.addToIndex(scope, removed)
+func (index *CollectionsIndex) RemoveFromIndex(scope Scope) (map[string][]string, error) {
+	log.Debugf("CollectionsIndex - RemoveFromIndex. Scope: %+v.", scope)
+	removed, indexErrors := index.removeFromIndex(scope)
+	return removed, indexErrors.CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "CollectionsIndex")
 }
 
-func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) error {
+func (index *CollectionsIndex) AddToIndex(scope Scope, removedUIDs []string) error {
+	log.Debugf("CollectionsIndex - AddToIndex. Scope: %+v, revedUIDs: %+v.", scope, removedUIDs)
+	return index.addToIndex(scope, removedUIDs).CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "CollectionsIndex")
+}
+
+func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) *IndexErrors {
 	sqlScope := defaultCollectionsSql()
 	uids := removedUIDs
 	if scope.CollectionUID != "" {
 		uids = append(uids, scope.CollectionUID)
 	}
+	indexErrors := MakeIndexErrors()
 	if scope.ContentUnitUID != "" {
 		moreUIDs, err := CollectionsScopeByContentUnit(index.db, scope.ContentUnitUID)
-		if err != nil {
-			return errors.Wrap(err, "collections index addToIndex collectionsScopeByContentUnit")
+		if indexErrors.SetError(err).Wrap(fmt.Sprintf("CollectionsIndex addToIndex scope.ContentUnitUID: %+v", scope.ContentUnitUID)).Error != nil {
+			uids = append(uids, moreUIDs...)
 		}
-		uids = append(uids, moreUIDs...)
 	}
 	if len(uids) == 0 {
-		return nil
+		return indexErrors
 	}
 	quoted := make([]string, len(uids))
 	for i, uid := range uids {
 		quoted[i] = fmt.Sprintf("'%s'", uid)
 	}
 	sqlScope = fmt.Sprintf("%s AND c.uid IN (%s)", sqlScope, strings.Join(quoted, ","))
-	if err := index.addToIndexSql(sqlScope); err != nil {
-		return errors.Wrap(err, "collections index addToIndex addToIndexSql")
-	}
-	return nil
+	return indexErrors.Join(index.addToIndexSql(sqlScope), "collections index addToIndex addToIndexSql")
 }
 
-func (index *CollectionsIndex) removeFromIndex(scope Scope) ([]string, error) {
+func (index *CollectionsIndex) removeFromIndex(scope Scope) (map[string][]string, *IndexErrors) {
 	typedUIDs := make([]string, 0)
 	if scope.CollectionUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("collection", scope.CollectionUID))
+		typedUIDs = append(typedUIDs, keyValue(consts.ES_UID_TYPE_COLLECTION, scope.CollectionUID))
 	}
 	if scope.FileUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("file", scope.FileUID))
+		typedUIDs = append(typedUIDs, keyValue(consts.ES_UID_TYPE_FILE, scope.FileUID))
 	}
+	indexErrors := MakeIndexErrors()
 	if scope.ContentUnitUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("content_unit", scope.ContentUnitUID))
+		typedUIDs = append(typedUIDs, keyValue(consts.ES_UID_TYPE_CONTENT_UNIT, scope.ContentUnitUID))
 		moreUIDs, err := CollectionsScopeByContentUnit(index.db, scope.ContentUnitUID)
-		if err != nil {
-			return []string{}, err
-		}
-		typedUIDs = append(typedUIDs, KeyValues("content_unit", moreUIDs)...)
+		indexErrors.SetError(err)
+		typedUIDs = append(typedUIDs, KeyValues(consts.ES_UID_TYPE_COLLECTION, moreUIDs)...)
 	}
 	if scope.TagUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("tag", scope.TagUID))
+		typedUIDs = append(typedUIDs, keyValue(consts.ES_UID_TYPE_TAG, scope.TagUID))
 	}
 	if scope.SourceUID != "" {
-		typedUIDs = append(typedUIDs, keyValue("source", scope.SourceUID))
+		typedUIDs = append(typedUIDs, keyValue(consts.ES_UID_TYPE_SOURCE, scope.SourceUID))
 	}
 	if len(typedUIDs) > 0 {
 		typedUIDsI := make([]interface{}, len(typedUIDs))
 		for i, typedUID := range typedUIDs {
 			typedUIDsI[i] = typedUID
 		}
-		elasticScope := elastic.NewTermsQuery("typed_uids", typedUIDsI...)
-		return index.RemoveFromIndexQuery(elasticScope)
+		elasticScope := index.FilterByResultTypeQuery(index.resultType).
+			Filter(elastic.NewTermsQuery("typed_uids", typedUIDsI...))
+		uids, removeIndexErrors := index.RemoveFromIndexQuery(elasticScope)
+		return uids, indexErrors.Join(removeIndexErrors, "CollectionsIndex, removeFromIndex")
 	} else {
 		// Nothing to remove.
-		return []string{}, nil
+		return make(map[string][]string), indexErrors
 	}
 }
 
-func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
+func (index *CollectionsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	var count int64
 	if err := mdbmodels.NewQuery(index.db,
 		qm.Select("count(*)"),
 		qm.From("collections as c"),
 		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
-		return err
+		return MakeIndexErrors().SetError(err)
 	}
 	log.Infof("Collections Index - Adding %d collections. Scope: %s.", count, sqlScope)
 	offset := 0
 	limit := 10
+	totalIndexErrors := MakeIndexErrors()
 	for offset < int(count) {
 		var collections []*mdbmodels.Collection
-		err := mdbmodels.NewQuery(index.db,
+		if err := mdbmodels.NewQuery(index.db,
 			qm.From("collections as c"),
 			qm.Load("CollectionI18ns"),
 			qm.Load("CollectionsContentUnits"),
 			qm.Load("CollectionsContentUnits.ContentUnit"),
 			qm.Where(sqlScope),
 			qm.Offset(offset),
-			qm.Limit(limit)).Bind(&collections)
-		if err != nil {
-			return errors.Wrap(err, "Fetch collections from mdb.")
+			qm.Limit(limit)).Bind(&collections); err != nil {
+			return totalIndexErrors.SetError(err).Wrap(fmt.Sprintf("Fetch collections from mdb. Offset: %d", offset))
 		}
 		log.Debugf("Adding %d collections (offset %d).", len(collections), offset)
 
@@ -161,14 +162,15 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) error {
 				"%s AND cu.uid in (%s)", contentUnitsSqlScope, strings.Join(cuUIDs, ","))
 		}
 
+		indexErrors := MakeIndexErrors()
 		for _, collection := range collections {
-			if err := index.indexCollection(collection); err != nil {
-				return err
-			}
+			indexErrors.Join(index.indexCollection(collection), "")
 		}
+		indexErrors.PrintIndexCounts(fmt.Sprintf("CollectionsIndex %d - %d", offset, offset+limit))
 		offset += limit
+		totalIndexErrors.Join(indexErrors, "")
 	}
-	return nil
+	return totalIndexErrors
 }
 
 func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
@@ -188,22 +190,24 @@ func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsConte
 func contentUnitsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	ret := make([]string, len(collectionsContentUnits))
 	for i, ccu := range collectionsContentUnits {
-		ret[i] = keyValue("content_unit", ccu.R.ContentUnit.UID)
+		ret[i] = keyValue(consts.ES_UID_TYPE_CONTENT_UNIT, ccu.R.ContentUnit.UID)
 	}
 	return ret
 }
 
-func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
+func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexErrors {
+	indexErrors := MakeIndexErrors()
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
 	for _, i18n := range c.R.CollectionI18ns {
 		if i18n.Name.Valid && i18n.Name.String != "" {
-			typedUIDs := append([]string{keyValue("collection", c.UID)},
+			indexErrors.ShouldIndex(i18n.Language)
+			typedUIDs := append([]string{keyValue(consts.ES_UID_TYPE_COLLECTION, c.UID)},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
 			filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
 				KeyValues("collections_content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))...)
 			collection := Result{
-				ResultType:   consts.ES_RESULT_TYPE_COLLECTIONS,
+				ResultType:   index.resultType,
 				MDB_UID:      c.UID,
 				TypedUids:    typedUIDs,
 				FilterValues: filterValues,
@@ -215,40 +219,17 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 				collection.Description = i18n.Description.String
 			}
 
-			// if c.Properties.Valid {
-			// 	var props map[string]interface{}
-			// 	err := json.Unmarshal(c.Properties.JSON, &props)
-			// 	if err != nil {
-			// 		return errors.Wrapf(err, "json.Unmarshal properties %s", c.UID)
-			// 	}
-
-			// 	if startDate, ok := props["start_date"]; ok {
-			// 		val, err := time.Parse("2006-01-02", startDate.(string))
-			// 		if err != nil {
-			// 			val, err = time.Parse("2006-01-02T15:04:05Z", startDate.(string))
-			// 			if err != nil {
-			// 				return errors.Wrapf(err, "time.Parse start_date %s", c.UID)
-			// 			}
-			// 		}
-			// 		collection.EffectiveDate = &utils.Date{Time: val}
-			// 	}
-
-			// 	// No use for OriginalLanguage
-			// 	/*if originalLanguage, ok := props["original_language"]; ok {
-			// 		collection.OriginalLanguage = originalLanguage.(string)
-			// 	}*/
-			// }
-
 			i18nMap[i18n.Language] = collection
 		}
 	}
 
 	// Index each document in its language index
 	for k, v := range i18nMap {
-		name := index.indexName(k)
+		name := index.IndexName(k)
 		vBytes, err := json.Marshal(v)
+		indexErrors.DocumentError(k, err, "CollectionsIndex, Failed marshal")
 		if err != nil {
-			return err
+			continue
 		}
 		log.Debugf("Collections Index - Add collection %s to index %s", string(vBytes), name)
 		resp, err := index.esc.Index().
@@ -256,13 +237,18 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) error {
 			Type("result").
 			BodyJson(v).
 			Do(context.TODO())
+		indexErrors.DocumentError(k, err, fmt.Sprintf("Index collection %s %s", name, c.UID))
 		if err != nil {
-			return errors.Wrapf(err, "Index collection %s %s", name, c.UID)
+			continue
 		}
+		errNotCreated := (error)(nil)
 		if resp.Result != "created" {
-			return errors.Errorf("Not created: collection %s %s", name, c.UID)
+			errNotCreated = errors.New(fmt.Sprintf("Not created: collection %s %s", name, c.UID))
+		} else {
+			indexErrors.Indexed(k)
 		}
+		indexErrors.DocumentError(k, errNotCreated, "CollectionsIndex")
 	}
 
-	return nil
+	return indexErrors
 }

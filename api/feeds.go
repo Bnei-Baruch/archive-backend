@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"regexp"
 	"time"
 
 	"gopkg.in/gin-gonic/gin.v1"
@@ -138,48 +139,6 @@ type feedConfig struct {
 	CID   int64
 	DF    string
 	DT    string
-}
-
-type translation struct {
-	LessonFrom string
-	Playlist   string
-	Download   string
-	Video      string
-	Audio      string
-}
-
-var T = map[string]translation{
-	"ENG": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"HEB": {LessonFrom: "שיעור מתאריך", Playlist: "רשימת השמעה", Download: "הורדת השיעור", Video: "וידאו", Audio: "אודיו"},
-	"RUS": {LessonFrom: "Урок от", Playlist: "Плейлист:", Download: "Скачать:", Video: "видео", Audio: "аудио"},
-	"SPA": {LessonFrom: "Clase de", Playlist: "Lista de reproducción", Download: "Descargar", Video: "Video", Audio: "Audio"},
-	"ITA": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"GER": {LessonFrom: "Unterricht von", Playlist: "Spielliste:", Download: "Downloaden:", Video: "Video", Audio: "Audio"},
-	"DUT": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"FRE": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"POR": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"TRK": {LessonFrom: "Dersler", Playlist: "Çalma listesi:", Download: "Yükle:", Video: "Video", Audio: "ses"},
-	"POL": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"ARB": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"HUN": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"FIN": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"LIT": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"JPN": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"BUL": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"GEO": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"NOR": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"SWE": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"HRV": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"CHN": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"FAR": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"RON": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"HIN": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"UKR": {LessonFrom: "Урок від", Playlist: "Плейлист:", Download: "Завантажити:", Video: "відео", Audio: "аудіо"},
-	"MKD": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"SLV": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"LAV": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"SLK": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
-	"CZE": {LessonFrom: "Lesson from", Playlist: "Playlist:", Download: "Download:", Video: "Video", Audio: "Audio"},
 }
 
 // wsxml.xml?CID=4016&DLANG=HEB&DF=2013-04-30&DT=2013-03-31
@@ -328,48 +287,92 @@ func FeedWSXML(c *gin.Context) {
 }
 
 // Lesson Downloader
+// DLANG=ENG&DF=[A]/V&DAYS=[0]|1
 func FeedMorningLesson(c *gin.Context) {
 	var config feedConfig
 	(&config).getConfig(c)
-	t := T[config.DLANG] // translation
-
-	feed := &feeds.Feed{
-		Title:       "Kabbalah Media Morning Lesson",
-		Link:        getHref("/feeds/morning_lesson.rss?DLANG="+config.DLANG, c),
-		Description: "The last lesson from Kabbalamedia Archive",
-		Updated:     time.Now(),
-		Copyright:   copyright,
+	var date string
+	if config.DAYS == 1 {
+		date = time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	} else {
+		date = time.Now().Format("2006-01-02")
 	}
-
-	db := c.MustGet("MDB_DB").(*sql.DB)
-	items, herr := handleLatestLesson(db, BaseRequest{Language: config.Lang}, true, true)
-	if herr != nil {
-		herr.Abort(c)
-	}
-
-	listen := "<h4>" + t.Playlist + "</h4>"
-	download := "<h4>" + t.Download + "</h4>"
-
-	for idx := range items.ContentUnits {
-		cu := items.ContentUnits[idx]
-		video := showAsset(config.Lang, []string{consts.MEDIA_MP4}, cu.Files, cu.Duration, t.Video, "mp4")
-		audio := showAsset(config.Lang, []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}, cu.Files, cu.Duration, t.Audio, "mp3")
-
-		listen += "<div class='title'>" + cu.Name + "</div>" + video + audio
-		download += "<div class='title'>" + cu.Name + "</div>" + video + audio
-	}
-	link := "https://kabbalahmedia.info/ru/lessons/daily/c/" + items.ID
-	feed.Items = []*feeds.Item{
-		{
-			Title:       t.LessonFrom + " " + items.FilmDate.Format("02.01.2006"),
-			Guid:        link,
-			Link:        link,
-			Description: &feeds.Description{Text: listen + download},
-			Created:     items.FilmDate.Time,
+	cur := ContentUnitsRequest{
+		ListRequest: ListRequest{
+			BaseRequest: BaseRequest{
+				Language: config.Lang,
+			},
+			StartIndex: 1,
+			StopIndex:  20,
+			OrderBy:    "created_at asc",
+		},
+		ContentTypesFilter: ContentTypesFilter{
+			ContentTypes: []string{consts.CT_LESSON_PART},
+		},
+		DateRangeFilter: DateRangeFilter{
+			StartDate: date,
 		},
 	}
 
-	createFeed(feed, config.Lang, c)
+	var mediaTypes []string
+	if config.DF == "V" {
+		mediaTypes = []string{consts.MEDIA_MP4}
+	} else {
+		mediaTypes = []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
+	}
+
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	item, err := handleContentUnitsFull(db, cur, mediaTypes, []string{})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusOK, []string{})
+		} else {
+			NewInternalError(err).Abort(c)
+		}
+		return
+	}
+
+	type FileFeed struct {
+		Name      string
+		Url       string
+		Size      int64
+		VideoSize string
+		Created   time.Time
+	}
+	type Item struct {
+		Title    string
+		Files    []FileFeed
+		Duration string
+	}
+	var items []Item
+	var nameToIgnore = regexp.MustCompile("kitei-makor|lelo-mikud")
+
+	for _, cu := range item.ContentUnits {
+		if nameToIgnore.MatchString(cu.Name) {
+			continue
+		}
+		item := Item{
+			Title:    cu.Name,
+			Duration: convertDuration(cu.Duration),
+		}
+		var files []FileFeed
+		for _, file := range cu.Files {
+			if file.Language != config.Lang {
+				continue
+			}
+			files = append(files,
+				FileFeed{
+					Name:      file.Name,
+					Url:       fmt.Sprintf("%s%s", consts.CDN, file.ID),
+					Size:      file.Size,
+					VideoSize: file.VideoSize,
+					Created:   file.CreatedAt,
+				})
+		}
+		item.Files = files
+		items = append(items, item)
+	}
+	c.JSON(http.StatusOK, items)
 }
 
 func rssPhpDescription(lang string) string {
@@ -608,6 +611,10 @@ func (config *feedConfig) getConfig(c *gin.Context) {
 	if c.Bind(config) != nil {
 		return
 	}
+	lang := c.Param("DLANG")
+	if config.DLANG == "" && lang != "" {
+		config.DLANG = lang
+	}
 	if config.DLANG == "" {
 		config.DLANG = "ENG"
 		config.Lang = consts.LANG_ENGLISH
@@ -617,5 +624,9 @@ func (config *feedConfig) getConfig(c *gin.Context) {
 			config.DLANG = "ENG"
 			config.Lang = consts.LANG_ENGLISH
 		}
+	}
+	df := c.Param("DF")
+	if config.DF == "" && df != "" {
+		config.DF = df
 	}
 }

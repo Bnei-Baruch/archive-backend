@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/Bnei-Baruch/sqlboiler/boil"
 	"github.com/Bnei-Baruch/sqlboiler/queries"
@@ -20,7 +19,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"gopkg.in/gin-gonic/gin.v1"
-	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -343,84 +341,10 @@ func PublishersHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
-func IsTokenStart(i int, runes []rune, lastQuote rune) bool {
-	return i == 0 && !unicode.IsSpace(runes[0]) ||
-		(i > 0 && !unicode.IsSpace(runes[i]) && unicode.IsSpace(runes[i-1]))
-}
-
-func IsTokenEnd(i int, runes []rune, lastQuote rune, lastQuoteIdx int) bool {
-	return i == len(runes)-1 ||
-		(i < len(runes)-1 && unicode.IsSpace(runes[i+1]) &&
-			(lastQuote == rune(0) || runes[i] == lastQuote && lastQuoteIdx >= 0 && lastQuoteIdx < i))
-}
-
-func IsRuneQuotationMark(r rune) bool {
-	return unicode.In(r, unicode.Quotation_Mark) || r == rune(1523) || r == rune(1524)
-}
-
-// Tokenizes string to work with user friendly escapings of quotes (see tests).
-func Tokenize(str string) []string {
-	runes := []rune(str)
-	start := -1
-	lastQuote := rune(0)
-	lastQuoteIdx := -1
-	parts := 0
-	var tokens []string
-	for i, r := range runes {
-		if start == -1 && IsTokenStart(i, runes, lastQuote) {
-			start = i
-		}
-		if i == start && lastQuote == rune(0) && IsRuneQuotationMark(r) {
-			lastQuote = r
-			lastQuoteIdx = i
-		}
-		if start >= 0 && IsTokenEnd(i, runes, lastQuote, lastQuoteIdx) {
-			tokens = append(tokens, string(runes[start:i+1]))
-			lastQuote = rune(0)
-			lastQuoteIdx = -1
-			start = -1
-			parts += 1
-		}
-	}
-
-	return tokens
-}
-
-// Parses query and extracts terms and filters.
-func ParseQuery(q string) search.Query {
-	filters := make(map[string][]string)
-	var terms []string
-	var exactTerms []string
-	for _, t := range Tokenize(q) {
-		isFilter := false
-		for filter := range consts.FILTERS {
-			prefix := fmt.Sprintf("%s:", filter)
-			if isFilter = strings.HasPrefix(t, prefix); isFilter {
-				filters[consts.FILTERS[filter]] = strings.Split(strings.TrimPrefix(t, prefix), ",")
-				break
-			}
-		}
-		if !isFilter {
-			// Not clear what kind of decoding is happening here, utf-8?!
-			runes := []rune(t)
-			// For debug
-			// for _, c := range runes {
-			//     fmt.Printf("%04x %s\n", c, string(c))
-			// }
-			if len(runes) >= 2 && IsRuneQuotationMark(runes[0]) && runes[0] == runes[len(runes)-1] {
-				exactTerms = append(exactTerms, string(runes[1:len(runes)-1]))
-			} else {
-				terms = append(terms, t)
-			}
-		}
-	}
-	return search.Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Filters: filters}
-}
-
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
-	query := ParseQuery(c.Query("q"))
+	query := search.ParseQuery(c.Query("q"))
 	query.Deb = false
 	if c.Query("deb") == "true" {
 		query.Deb = true
@@ -473,11 +397,20 @@ func SearchHandler(c *gin.Context) {
 	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
 	preference := fmt.Sprintf("%x", md5.Sum([]byte(c.ClientIP())))
 
-	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
+	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
+
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
-	se := search.NewESEngine(esc, db, cacheM)
+	grammars := c.MustGet("GRAMMARS").(search.Grammars)
+
+	esc, err := esManager.GetClient()
+	if err != nil {
+		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
+		return
+	}
+
+	se := search.NewESEngine(esc, db, cacheM, grammars)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -500,6 +433,17 @@ func SearchHandler(c *gin.Context) {
 			}
 			break
 		}
+	}
+
+	//  Quick workround to allow Spanish support when the interface language is Spanish (AS-99).
+	if c.Query("language") == consts.LANG_SPANISH {
+		for i, lang := range query.LanguageOrder {
+			if lang == consts.LANG_SPANISH {
+				query.LanguageOrder = append(query.LanguageOrder[:i], query.LanguageOrder[i+1:]...)
+				break
+			}
+		}
+		query.LanguageOrder = append([]string{consts.LANG_SPANISH}, query.LanguageOrder...)
 	}
 
 	res, err := se.DoSearch(
@@ -552,10 +496,18 @@ func AutocompleteHandler(c *gin.Context) {
 		return
 	}
 
-	esc := c.MustGet("ES_CLIENT").(*elastic.Client)
+	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
-	se := search.NewESEngine(esc, db, cacheM)
+	grammars := c.MustGet("GRAMMARS").(search.Grammars)
+
+	esc, err := esManager.GetClient()
+	if err != nil {
+		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
+		return
+	}
+
+	se := search.NewESEngine(esc, db, cacheM, grammars)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
@@ -1569,6 +1521,9 @@ func handleTweets(db *sql.DB, r TweetsRequest) (*TweetsResponse, *HttpError) {
 	if err := appendDateRangeFilterModsTwitter(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
+	if err := appendIDsFilterTwitterMods(&mods, r.IDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 	if err := appendUsernameFilterMods(db, &mods, r.UsernameFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
@@ -1723,7 +1678,7 @@ func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *Ht
 			lpCUs[cu.ID] = cu
 		case consts.CT_KITEI_MAKOR, consts.CT_LELO_MIKUD:
 			derivedCUs[cu.ID] = cu
-		case consts.CT_PUBLICATION:
+		case consts.CT_PUBLICATION, consts.CT_RESEARCH_MATERIAL:
 			// skip these for now (they should be properly attached as derived units)
 			break
 		default:
@@ -1849,6 +1804,16 @@ func appendIDsFilterMods(mods *[]qm.QueryMod, f IDsFilter) error {
 	}
 
 	*mods = append(*mods, qm.WhereIn("uid IN ?", utils.ConvertArgsString(f.IDs)...))
+
+	return nil
+}
+
+func appendIDsFilterTwitterMods(mods *[]qm.QueryMod, f IDsFilter) error {
+	if utils.IsEmpty(f.IDs) {
+		return nil
+	}
+
+	*mods = append(*mods, qm.WhereIn("twitter_id IN ?", utils.ConvertArgsString(f.IDs)...))
 
 	return nil
 }
@@ -2454,18 +2419,6 @@ func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error)
 		ids[idx] = xu.ID
 	}
 	return
-}
-
-func EvalIndexHandler(c *gin.Context) {
-	r := CollectionsRequest{
-		WithUnits: true,
-	}
-	if c.Bind(&r) != nil {
-		return
-	}
-
-	resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), r)
-	concludeRequest(c, resp, err)
 }
 
 func EvalQueryHandler(c *gin.Context) {

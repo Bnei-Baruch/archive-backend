@@ -58,6 +58,7 @@ SLOVENIAN = "sl"
 LATVIAN = "lv"
 SLOVAK = "sk"
 CZECH = "cs"
+AMHARIC = "am"
 
 # Lang groups
 ALL = 'ALL_LANGS'
@@ -69,7 +70,7 @@ LANG_GROUPS = {
     PORTUGUESE, TURKISH, POLISH, ARABIC, HUNGARIAN, FINNISH, LITHUANIAN,
     JAPANESE, BULGARIAN, GEORGIAN, NORWEGIAN, SWEDISH, CROATIAN, CHINESE,
     PERSIAN, ROMANIAN, HINDI, MACEDONIAN, SLOVENIAN, LATVIAN, SLOVAK,
-    CZECH, UKRAINIAN,
+    CZECH, UKRAINIAN, AMHARIC,
   ],
   CYRILLIC: [RUSSIAN, BULGARIAN, MACEDONIAN, UKRAINIAN],
   CJK: [CHINESE, JAPANESE],
@@ -115,6 +116,7 @@ LanguageAnalyzer = {
   LATVIAN: "latvian",
   SLOVAK: "standard",
   CZECH: "czech",
+  AMHARIC: "standard",
 }
 
 SynonymGraphFilterImp = {
@@ -299,6 +301,7 @@ SETTINGS = {
             "\\u0022=>",
             "\\u201C=>",
             "\\u201D=>",
+            "\\u05F4=>",
           ],
         },
       },
@@ -443,6 +446,8 @@ SEARCH_LOGS_TEMPLATE = {
                 # Query log type fields.
                 "query": {
                     "type": "object",
+                    "enabled": True,
+                    "dynamic": "strict",
                     "properties": {
                         "term": {
                             "type": "keyword",
@@ -450,9 +455,13 @@ SEARCH_LOGS_TEMPLATE = {
                         "exact_terms": {
                             "type": "keyword",
                         },
+                        "original": {
+                            "type": "keyword",
+                        },
                         "filters": {
-                            "dynamic": True,
                             "type": "object",
+                            "enabled": True,
+                            "dynamic": True,
                         },
                         "language_order": {
                             "type": "keyword",
@@ -463,6 +472,7 @@ SEARCH_LOGS_TEMPLATE = {
                         "intents": {
                             "type": "object",
                             "enabled": False,
+                            "dynamic": "strict",
                         },
                     },
                 },
@@ -472,16 +482,21 @@ SEARCH_LOGS_TEMPLATE = {
                 "size": {
                     "type": "integer",
                 },
+                "suggestion": {
+                    "type": "keyword",
+                },
                 "sort_by": {
                     "type": "keyword",
                 },
                 "query_result": {
                     "type": "object",
                     "enabled": False,
+                    "dynamic": "strict",
                 },
                 "error": {
                     "type": "object",
                     "enabled": False,
+                    "dynamic": "strict",
                 },
 
                 # Click log type fields.
@@ -498,14 +513,13 @@ SEARCH_LOGS_TEMPLATE = {
                     "type": "integer",
                 },
 
-                # Log execition time for search components.
+                # Log execution time for search components.
                 "execution_time_log": {
                     "type": "nested",
-                    "properties":
-                    {
+                    "properties": {
                         "operation": {"type": "keyword"},
-                        "time": {"type": "integer"}
-                    }
+                        "time": {"type": "integer"},
+                    },
                 },
             },
         },
