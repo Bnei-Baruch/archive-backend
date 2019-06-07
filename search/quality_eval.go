@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,6 +39,7 @@ const (
 const (
 	SQ_SERVER_ERROR   = iota
 	SQ_NO_EXPECTATION = iota
+	SQ_BAD_STRUCTURE  = iota
 	SQ_UNKNOWN        = iota
 	SQ_REGULAR        = iota
 	SQ_GOOD           = iota
@@ -47,6 +49,7 @@ var SEARCH_QUALITY_NAME = map[int]string{
 	SQ_GOOD:           "Good",
 	SQ_REGULAR:        "Regular",
 	SQ_UNKNOWN:        "Unknown",
+	SQ_BAD_STRUCTURE:  "BadStructure",
 	SQ_NO_EXPECTATION: "NoExpectation",
 	SQ_SERVER_ERROR:   "ServerError",
 }
@@ -157,6 +160,10 @@ const (
 	FILTER_NAME_CONTENT_TYPE = "contentType"
 	PREFIX_LATEST            = "[latest]"
 )
+
+var FLAT_REPORT_HEADERS = []string{
+	"Language", "Query", "Weight", "Bucket", "Comment",
+	"Expectation", "Parsed", "SearchQuality", "Rank"}
 
 type Filter struct {
 	Name  string `json:"name"`
@@ -334,16 +341,13 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	contentUnitOrCollection := path.Base(path.Dir(p))
 	landingPage := path.Join(contentUnitOrCollection, uidOrSection)
 	subSection := ""
-	fmt.Printf("uidOrSection: %s, contentUnitOrCollection: %s landingPage: %s\n", uidOrSection, contentUnitOrCollection, landingPage)
 	t := ET_NOT_SET
 	if _, ok := LANDING_PAGES[landingPage]; q == "" && !takeLatest && ok {
-		fmt.Printf("Found landing page.\n")
 		t = ET_LANDING_PAGE
 		uidOrSection = landingPage
 	} else if _, ok := LANDING_PAGES[uidOrSection]; q == "" && !takeLatest && ok {
 		t = ET_LANDING_PAGE
 	} else {
-		fmt.Printf("Did not find landing page.\n")
 		switch uidOrSection {
 		case EXPECTATION_URL_PATH[ET_LESSONS]:
 			t = ET_LESSONS
@@ -558,6 +562,9 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	for i := range q.Expectations {
 		if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
 			sq := SQ_UNKNOWN
+			if q.Expectations[i].Type == ET_BAD_STRUCTURE {
+				sq = SQ_BAD_STRUCTURE
+			}
 			rank := -1
 			for j, hit := range queryResult.SearchResult.Hits.Hits {
 				hitSource := HitSource{}
@@ -677,8 +684,7 @@ func ExpectationToString(e Expectation) string {
 }
 
 func ResultsByExpectation(queries []EvalQuery, results EvalResults) [][]string {
-	records := [][]string{{"Language", "Query", "Weight", "Bucket", "Comment",
-		"Expectation", "Parsed", "SearchQuality", "Rank"}}
+	records := [][]string{FLAT_REPORT_HEADERS}
 	for i, q := range queries {
 		goodExpectationsLen := GoodExpectations(q.Expectations)
 		for j, sq := range results.Results[i].SearchQuality {
@@ -693,8 +699,142 @@ func ResultsByExpectation(queries []EvalQuery, results EvalResults) [][]string {
 	return records
 }
 
-func WriteResultsByExpectation(path string, queries []EvalQuery, results EvalResults) error {
-	return WriteToCsv(path, ResultsByExpectation(queries, results))
+func WriteResultsByExpectation(path string, queries []EvalQuery, results EvalResults) ([][]string, error) {
+	records := ResultsByExpectation(queries, results)
+	return records, WriteToCsv(path, records)
+}
+
+func updateVsGoldenDataFromRecords(data map[string]map[string][]float64, records [][]string, isGolden bool) error {
+	// Records: "Language", "Query", "Weight", "Bucket", "Comment", "Expectation", "Parsed", "SearchQuality", "Rank"
+	// Assuming records are already without headers.
+	for _, record := range records {
+		lang := record[0]
+		quality := record[7]
+		qualityMap, ok := data[lang]
+		if !ok {
+			data[lang] = make(map[string][]float64)
+			qualityMap = data[lang]
+		}
+		counters, ok := qualityMap[quality]
+		if !ok {
+			qualityMap[quality] = []float64{0.0, 0.0, 0.0, 0.0}
+			counters = qualityMap[quality]
+		}
+		queryWeight, err := strconv.ParseFloat(record[2], 64)
+		if err != nil {
+			return err
+		}
+		if isGolden {
+			counters[2]++
+			counters[3] += queryWeight
+		} else {
+			counters[0]++
+			counters[1] += queryWeight
+		}
+	}
+	return nil
+}
+
+func diffToHtml(diff float64, round bool, percentage bool) string {
+	if diff == float64(0.0) {
+		return ""
+	}
+	percentageStr := ""
+	if percentage {
+		percentageStr = "%"
+	}
+	diffStr := fmt.Sprintf("%.2f%s", math.Abs(diff), percentageStr)
+	if round {
+		diffStr = fmt.Sprintf("%d%s", (int)(math.Abs(diff)), percentageStr)
+	}
+	if diff > 0 {
+		return fmt.Sprintf("<span style='color: green'> (%s)</span>", diffStr)
+	}
+	return fmt.Sprintf("<span style='color: red'> (%s)</span>", diffStr)
+}
+
+func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords [][]string) error {
+	// Map from language => quality => (Unique, Weighted, Unique Golden, Weighted Golden)
+	data := make(map[string]map[string][]float64)
+	if err := updateVsGoldenDataFromRecords(data, records, false /*isGolden*/); err != nil {
+		return err
+	}
+	if err := updateVsGoldenDataFromRecords(data, goldenRecords, true /*isGolden*/); err != nil {
+		return err
+	}
+
+	style := `table {
+		  border-collapse: collapse;
+		}
+		 th {
+		  background: #ccc;
+		}
+
+		th, td {
+		  border: 1px solid #ccc;
+		  padding: 8px;
+		}
+
+		tr:nth-child(even) {
+		  background: #efefef;
+		}
+
+		tr:hover {
+		  background: #d1d1d1;
+		}`
+	htmlParts := []string{fmt.Sprintf("<html><style>%s</style><body><table>", style)}
+	htmlParts = append(htmlParts, `
+		<tr>
+			<th>Language</th>
+			<th>Quality</th>
+			<th>Weighted%</th>
+			<th>Unique%</th>
+			<th>Unique</th>
+		</tr>`)
+	for _, language := range utils.StringMapOrderedKeys(data) {
+		qualityMap := data[language]
+		totalCounters := []float64{0.0, 0.0, 0.0, 0.0}
+		for _, counters := range qualityMap {
+			for i := 0; i < 4; i++ {
+				totalCounters[i] += counters[i]
+			}
+		}
+		firstColumn := true
+		for _, quality := range utils.StringMapOrderedKeys(qualityMap) {
+			counters := qualityMap[quality]
+			if firstColumn {
+				htmlParts = append(htmlParts, fmt.Sprintf(
+					"<tr><td style='text-align: center; font-size: xx-large; font-weight: bold;' rowspan='%d'>%s</td>",
+					len(qualityMap), language))
+				firstColumn = false
+			} else {
+				htmlParts = append(htmlParts, "<tr>")
+			}
+			goodStyle := ""
+			if quality == "Good" {
+				goodStyle = "style='font-size: x-large; font-weight: bold;'"
+			}
+			htmlParts = append(htmlParts, fmt.Sprintf(
+				`   <td %s>%s</td>
+					<td %s><div style="display: flex; justify-content: space-evenly"><span>%.2f%%</span>%s</div></td>
+					<td><div style="display: flex; justify-content: space-evenly"><span>%.2f%%</span>%s</div></td>
+					<td><div style="display: flex; justify-content: space-evenly"><span>%d</span>%s</div></td>
+				</tr>`,
+				goodStyle, quality,
+				goodStyle,
+				100*counters[1]/totalCounters[1], // Weighted percentage.
+				diffToHtml(100*counters[1]/totalCounters[1]-100*counters[3]/totalCounters[3], false /*round*/, true /*%*/), // Weighted percentage diff.
+				100*counters[0]/totalCounters[0], // Unique Percentage.
+				diffToHtml(100*counters[0]/totalCounters[0]-100*counters[2]/totalCounters[2], false /*round*/, true /*%*/), // Unique percentage diff.
+				(int)(counters[0]), // Unique.
+				diffToHtml(counters[0]-counters[2], true /*round*/, false /*%*/), // Unique diff.
+			))
+		}
+	}
+
+	htmlParts = append(htmlParts, "</table></body></html>")
+	html := strings.Join(htmlParts, "\n")
+	return ioutil.WriteFile(vsGoldenHtml, []byte(html), 0644)
 }
 
 func WriteResults(path string, queries []EvalQuery, results EvalResults) error {
