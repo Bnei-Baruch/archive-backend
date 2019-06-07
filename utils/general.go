@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -187,4 +188,20 @@ func IntersectSortedStringSlices(first []string, second []string) []string {
 		}
 	}
 	return ret
+}
+
+func StringMapOrderedKeys(m interface{}) []string {
+	mValue := reflect.ValueOf(m)
+	if mValue.Kind() != reflect.Map {
+		panic("m is not map")
+	}
+	if mValue.Type().Key().Kind() != reflect.String {
+		panic("m key is not string")
+	}
+	keys := make([]string, 0, len(mValue.MapKeys()))
+	for _, k := range mValue.MapKeys() {
+		keys = append(keys, k.Interface().(string))
+	}
+	sort.Strings(keys)
+	return keys
 }
