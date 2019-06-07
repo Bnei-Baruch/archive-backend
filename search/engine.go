@@ -395,6 +395,34 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
+	// Seach tweets in parallel to native search.
+	go func() {
+		mssTweets := e.esc.MultiSearch()
+		mssTweets.Add(NewResultsSearchRequests(
+			SearchRequestOptions{
+				resultTypes:      []string{consts.ES_RESULT_TYPE_TWEETS},
+				index:            "",
+				query:            query,
+				sortBy:           sortBy,
+				from:             0,
+				size:             from + consts.TWEETS_SEARCH_COUNT,
+				preference:       preference,
+				useHighlight:     false,
+				partialHighlight: false})...)
+
+		beforeTweetsSearch := time.Now()
+		mr, err := mssTweets.Do(context.TODO())
+		e.timeTrack(beforeTweetsSearch, "DoSearch.MultisearcTweetsDo")
+		if err != nil {
+			log.Errorf("ESEngine.DoSearch - Error searching tweets: %+v", err)
+			//TBD
+		}
+
+		mr.Responses = mr.Responses
+		// TBD
+		
+	}()
+
 	var resultTypes []string
 	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
 		resultTypes = make([]string, 0)
