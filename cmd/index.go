@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +14,6 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	elastic "gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/common"
@@ -303,14 +301,14 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		}
 
 		defer openIndex(indexName)
-		encodedIndexName := url.QueryEscape(indexName)
-		_, err = common.ESC.PerformRequest(context.TODO(), elastic.PerformRequestOptions{
-			Method: "PUT",
-			Path:   fmt.Sprintf("/%s/_settings", encodedIndexName),
-			Body:   synonymsBody,
-		})
+
+		settingsRes, err := common.ESC.IndexPutSettings(indexName).BodyString(synonymsBody).Do(context.TODO())
 		if err != nil {
-			log.Error(errors.Wrapf(err, "Error on updating synonym to elastic index: %s", indexName))
+			log.Error(errors.Wrapf(err, "IndexPutSettings: %s", indexName))
+			return
+		}
+		if !settingsRes.Acknowledged {
+			log.Errorf("IndexPutSettings not Acknowledged: %s", indexName)
 			return
 		}
 	}
