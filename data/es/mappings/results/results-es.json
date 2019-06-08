@@ -82,9 +82,6 @@
                         "tokenizer": "keyword"
                     }, 
                     "spanish_keywords": {
-                        "keywords": [
-                            "ejemplo"
-                        ], 
                         "type": "keyword_marker"
                     }
                 }, 
@@ -110,7 +107,8 @@
                             "lowercase", 
                             "spanish_stop", 
                             "spanish_keywords", 
-                            "spanish_stemmer"
+                            "spanish_stemmer", 
+                            "synonym_graph"
                         ], 
                         "tokenizer": "standard"
                     }

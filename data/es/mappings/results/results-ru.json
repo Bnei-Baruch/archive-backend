@@ -78,9 +78,6 @@
                         "tokenizer": "keyword"
                     }, 
                     "russian_keywords": {
-                        "keywords": [
-                            "\u043f\u0440\u0438\u043c\u0435\u0440"
-                        ], 
                         "type": "keyword_marker"
                     }, 
                     "russian_stop": {

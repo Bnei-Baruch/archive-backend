@@ -86,9 +86,6 @@
                         "language": "english"
                     }, 
                     "english_keywords": {
-                        "keywords": [
-                            "example"
-                        ], 
                         "type": "keyword_marker"
                     }
                 }, 
