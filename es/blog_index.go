@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
@@ -177,6 +178,7 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) *IndexErrors {
 
 	post := Result{
 		ResultType:    index.resultType,
+		IndexDate:     &utils.Date{Time: time.Now()},
 		MDB_UID:       idStr,
 		TypedUids:     []string{keyValue(consts.ES_UID_TYPE_BLOG_POST, idStr)},
 		FilterValues:  []string{keyValue("content_type", consts.SCT_BLOG_POST), keyValue(consts.FILTER_LANGUAGE, postLang)},

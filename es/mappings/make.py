@@ -327,6 +327,11 @@ RESULTS_TEMPLATE = {
         "result_type": {
           "type": "keyword",
         },
+        # Document index date.
+        "index_date": {
+          "type": "date",
+          "format": "strict_date",
+        },
         "mdb_uid": {
           "type": "keyword",
         },
