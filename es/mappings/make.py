@@ -222,6 +222,7 @@ RESULTS_TEMPLATE = {
         # Document index date.
         "index_date": {
           "type": "date",
+          "format": "epoch_millis",
         },
         "mdb_uid": {
           "type": "keyword",
