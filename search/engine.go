@@ -395,6 +395,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
+	tweetsByLang := make(map[string][]*elastic.SearchResult)
 	// Search tweets in parallel to native search.
 	go func() {
 		mssTweets := e.esc.MultiSearch()
@@ -415,10 +416,32 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		e.timeTrack(beforeTweetsSearch, "DoSearch.MultisearcTweetsDo")
 		if err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching tweets: %+v", err)
-			//TBD
+			//TBD?
+			return
 		}
 
-		mr.Responses = mr.Responses
+		if len(mr.Responses) != len(query.LanguageOrder) {
+			log.Errorf(fmt.Sprintf("Unexpected number of tweet results %d, expected %d",
+				len(mr.Responses), len(query.LanguageOrder)))
+			//TBD?
+			return
+		}
+
+		for i, currentResults := range mr.Responses {
+			if currentResults.Error != nil {
+				log.Errorf(fmt.Sprintf("Failed tweets multi get: %+v", currentResults.Error))
+				//TBD?
+				return
+			}
+			if haveHits(currentResults) {
+				lang := query.LanguageOrder[i]
+				if _, ok := tweetsByLang[lang]; !ok {
+					tweetsByLang[lang] = make([]*elastic.SearchResult, 0)
+				}
+				tweetsByLang[lang] = append(tweetsByLang[lang], currentResults)
+			}
+		}
+
 		// TBD create single tweet result for each language
 		// Set score as the highest score of tweet
 
