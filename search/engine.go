@@ -395,9 +395,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
-	tweetsByLang := make(map[string][]*elastic.SearchResult)
+	tweetsByLangChannel := make(chan map[string][]*elastic.SearchResult)
 	// Search tweets in parallel to native search.
 	go func() {
+		tweetsByLang := make(map[string][]*elastic.SearchResult)
 		mssTweets := e.esc.MultiSearch()
 		mssTweets.Add(NewResultsSearchRequests(
 			SearchRequestOptions{
