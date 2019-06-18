@@ -443,8 +443,15 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 		}
 
-		// TBD create single tweet result for each language
-		// Set score as the highest score of tweet
+		//  Create single tweet result for each language.
+		//  Set the score as the highest score of all tweets per language.
+
+		/*for _, tweets := range tweetsByLang {
+			hit := elastic.SearchHit{}
+			for _, tweet := range tweets {
+				result.Hits.Hits
+			}
+		}*/
 
 	}()
 
