@@ -14,7 +14,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	elastic "gopkg.in/olivere/elastic.v6"
+	elastic "gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/common"
@@ -85,7 +85,7 @@ func indexFn(cmd *cobra.Command, args []string) {
 	defer common.Shutdown()
 
 	t := time.Now()
-	date := strings.ToLower(t.Format(time.RFC3339))
+	date := strings.Replace(strings.ToLower(t.Format(time.RFC3339)), ":", "-", -1)
 
 	esc, err := common.ESC.GetClient()
 	if err != nil {

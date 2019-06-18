@@ -14,7 +14,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -202,7 +202,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.SearchResult) {
 	srMap := make(map[string]*elastic.SearchResult)
 	for _, lang := range query.LanguageOrder {
-		sh := &elastic.SearchHits{TotalHits: 0}
+		sh := &elastic.SearchHits{TotalHits: &elastic.TotalHits{Value: 0, Relation: "eq"}}
 		sr := &elastic.SearchResult{Hits: sh}
 		srMap[lang] = sr
 	}
@@ -213,7 +213,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			boostedScore := float64(0.0)
 			if intentValue.Exist {
 				sh := srMap[intent.Language].Hits
-				sh.TotalHits++
+				sh.TotalHits.Value++
 				// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
 				boostedScore = *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
 				if sh.MaxScore != nil {
@@ -231,14 +231,14 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				if err != nil {
 					return err, nil
 				}
-				intentHit.Source = (*json.RawMessage)(&source)
+				intentHit.Source = (json.RawMessage)(source)
 				sh.Hits = append(sh.Hits, intentHit)
 			}
 			// log.Infof("Added intent %s %s %s boost score:%f exist:%t", intentValue.Title, intent.Type, intent.Language, boostedScore, intentValue.Exist)
 		}
 		if intentValue, ok := intent.Value.(GrammarIntent); ok {
 			sh := srMap[intent.Language].Hits
-			sh.TotalHits++
+			sh.TotalHits.Value++
 			boostedScore := float64(1000.0)
 			if sh.MaxScore != nil {
 				maxScore := math.Max(*sh.MaxScore, boostedScore)
@@ -255,7 +255,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			if err != nil {
 				return err, nil
 			}
-			intentHit.Source = (*json.RawMessage)(&source)
+			intentHit.Source = (json.RawMessage)(source)
 			sh.Hits = append(sh.Hits, intentHit)
 		}
 	}
@@ -279,20 +279,20 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 		return score(h1.Score) > score(h2.Score), nil
 	} else if sortBy == consts.SORT_BY_SOURCE_FIRST {
 		var rt1, rt2 es.ResultType
-		if err := json.Unmarshal(*h1.Source, &rt1); err != nil {
+		if err := json.Unmarshal(h1.Source, &rt1); err != nil {
 			return false, err
 		}
-		if err := json.Unmarshal(*h2.Source, &rt2); err != nil {
+		if err := json.Unmarshal(h2.Source, &rt2); err != nil {
 			return false, err
 		}
 		// Order by sources first, then be score.
 		return rt1.ResultType == consts.ES_RESULT_TYPE_SOURCES && rt2.ResultType != consts.ES_RESULT_TYPE_SOURCES || score(h1.Score) > score(h2.Score), nil
 	} else {
 		var ed1, ed2 es.EffectiveDate
-		if err := json.Unmarshal(*h1.Source, &ed1); err != nil {
+		if err := json.Unmarshal(h1.Source, &ed1); err != nil {
 			return false, err
 		}
-		if err := json.Unmarshal(*h2.Source, &ed2); err != nil {
+		if err := json.Unmarshal(h2.Source, &ed2); err != nil {
 			return false, err
 		}
 		if ed1.EffectiveDate == nil {
@@ -351,7 +351,7 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 		maxScore = 0
 	}
 	for _, result := range results {
-		totalHits += result.Hits.TotalHits
+		totalHits += result.Hits.TotalHits.Value
 		if sortBy == consts.SORT_BY_RELEVANCE {
 			if result.Hits.MaxScore != nil {
 				maxScore = math.Max(maxScore, *result.Hits.MaxScore)
@@ -360,7 +360,7 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	}
 
 	result.Hits.Hits = concatenated
-	result.Hits.TotalHits = totalHits
+	result.Hits.TotalHits.Value = totalHits
 	result.Hits.MaxScore = &maxScore
 
 	return result, nil

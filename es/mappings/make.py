@@ -320,88 +320,86 @@ RESULTS_TEMPLATE = {
   # },
   "settings": SETTINGS,
   "mappings": {
-    "result": {
-      "dynamic": "strict",
-      "properties": {
-        # Document type, unit, collection, source, tag.
-        "result_type": {
-          "type": "keyword",
-        },
-        # Document index date.
-        "index_date": {
-          "type": "date",
-          "format": "strict_date",
-        },
-        "mdb_uid": {
-          "type": "keyword",
-        },
-        # Typed uids, are list of entities (uid and entity type) in MDB that
-        # this document depends on. For example: "content_unit:lHDLZWxq",
-        # "file:0uzDZVqV". We use this list to reindex the document if one
-        # the items in this list changes.
-        "typed_uids": {
-          "type": "keyword",
-        },
-        # List of keywords in format filter:value are required for correct
-        # filtering of this document by all different filters. Time is handled
-        # by effective_date.
-        # For example: content_type:DAILY_LESSON or tag:0db5BBS3
-        "filter_values": {
-          "type": "keyword",
-        },
-        # Title, Description and Content are the typical result fields which
-        # should have the same tf/idf across all different retult types such
-        # as units, collections, sources, topics and others to follow.
-        "title": {
-          "type": "text",
-          "analyzer": "standard",
-          "fields": {
-            "language": {
-              "type": "text",
-              "analyzer": lambda lang: LanguageAnalyzer[lang],
-            }
+    "dynamic": "strict",
+    "properties": {
+      # Document type, unit, collection, source, tag.
+      "result_type": {
+        "type": "keyword",
+      },
+      # Document index date.
+      "index_date": {
+        "type": "date",
+        "format": "strict_date",
+      },
+      "mdb_uid": {
+        "type": "keyword",
+      },
+      # Typed uids, are list of entities (uid and entity type) in MDB that
+      # this document depends on. For example: "content_unit:lHDLZWxq",
+      # "file:0uzDZVqV". We use this list to reindex the document if one
+      # the items in this list changes.
+      "typed_uids": {
+        "type": "keyword",
+      },
+      # List of keywords in format filter:value are required for correct
+      # filtering of this document by all different filters. Time is handled
+      # by effective_date.
+      # For example: content_type:DAILY_LESSON or tag:0db5BBS3
+      "filter_values": {
+        "type": "keyword",
+      },
+      # Title, Description and Content are the typical result fields which
+      # should have the same tf/idf across all different retult types such
+      # as units, collections, sources, topics and others to follow.
+      "title": {
+        "type": "text",
+        "analyzer": "standard",
+        "fields": {
+          "language": {
+            "type": "text",
+            "analyzer": lambda lang: LanguageAnalyzer[lang],
           }
-        },
-        "description": {
-          "type": "text",
-          "analyzer": "standard",
-          "fields": {
-            "language": {
-              "type": "text",
-              "analyzer": lambda lang: LanguageAnalyzer[lang],
-            },
+        }
+      },
+      "description": {
+        "type": "text",
+        "analyzer": "standard",
+        "fields": {
+          "language": {
+            "type": "text",
+            "analyzer": lambda lang: LanguageAnalyzer[lang],
           },
         },
-        "content": {
-          "type": "text",
-          "analyzer": "standard",
-          "fields": {
-            "language": {
-              "type": "text",
-              "analyzer": lambda lang: LanguageAnalyzer[lang],
-            },
+      },
+      "content": {
+        "type": "text",
+        "analyzer": "standard",
+        "fields": {
+          "language": {
+            "type": "text",
+            "analyzer": lambda lang: LanguageAnalyzer[lang],
           },
         },
+      },
 
-        # Suggest field for autocomplete.
-        "title_suggest": {
-          "type": "completion",
-          "analyzer": lambda lang: LanguageAnalyzer[lang],
-          "contexts": [
-            {
-              "name": "result_type",
-              "type": "category",
-              "path": "result_type",
-            },
-          ],
-        },
+      # Suggest field for autocomplete.
+      "title_suggest": {
+        "type": "completion",
+        "analyzer": lambda lang: LanguageAnalyzer[lang],
+        "contexts": [
+          {
+            "name": "result_type",
+            "type": "category",
+            "path": "result_type",
+          },
+        ],
+      },
 
-        # Content unit specific fields.
-        "effective_date": {
-          "type": "date",
-          "format": "strict_date",
-        },
-      }
+      # Content unit specific fields.
+      "effective_date": {
+        "type": "date",
+        "format": "strict_date",
+      },
     }
   }
 }
@@ -409,110 +407,108 @@ RESULTS_TEMPLATE = {
 
 SEARCH_LOGS_TEMPLATE = {
     "mappings": {
-        "search_logs": {
-            # We use dynamic mappinng only for search logs.
-            "dynamic_templates": [
-                {
-                    "strings_as_keywords": {
-                        "match_mapping_type": "string",
-                        "mapping": {
-                            "type": "keyword",
-                        },
+        # We use dynamic mappinng only for search logs.
+        "dynamic_templates": [
+            {
+                "strings_as_keywords": {
+                    "match_mapping_type": "string",
+                    "mapping": {
+                        "type": "keyword",
                     },
                 },
-            ],
-            "dynamic": "strict",
-            "properties": {
-                # Search log key, search_id and timestamp.
-                "search_id": {
-                    "type": "keyword",
-                },
-                "created": {
-                    "type": "date",
-                },
+            },
+        ],
+        "dynamic": "strict",
+        "properties": {
+            # Search log key, search_id and timestamp.
+            "search_id": {
+                "type": "keyword",
+            },
+            "created": {
+                "type": "date",
+            },
 
-                # Search log type, i.e., "query" or "click".
-                "log_type": {
-                    "type": "keyword",
-                },
+            # Search log type, i.e., "query" or "click".
+            "log_type": {
+                "type": "keyword",
+            },
 
-                # Query log type fields.
-                "query": {
-                    "type": "object",
-                    "enabled": True,
-                    "dynamic": "strict",
-                    "properties": {
-                        "term": {
-                            "type": "keyword",
-                        },
-                        "exact_terms": {
-                            "type": "keyword",
-                        },
-                        "original": {
-                            "type": "keyword",
-                        },
-                        "filters": {
-                            "type": "object",
-                            "enabled": True,
-                            "dynamic": True,
-                        },
-                        "language_order": {
-                            "type": "keyword",
-                        },
-                        "deb": {
-                            "type": "boolean",
-                        },
-                        "intents": {
-                            "type": "object",
-                            "enabled": False,
-                            "dynamic": "strict",
-                        },
+            # Query log type fields.
+            "query": {
+                "type": "object",
+                "enabled": True,
+                "dynamic": "strict",
+                "properties": {
+                    "term": {
+                        "type": "keyword",
+                    },
+                    "exact_terms": {
+                        "type": "keyword",
+                    },
+                    "original": {
+                        "type": "keyword",
+                    },
+                    "filters": {
+                        "type": "object",
+                        "enabled": True,
+                        "dynamic": True,
+                    },
+                    "language_order": {
+                        "type": "keyword",
+                    },
+                    "deb": {
+                        "type": "boolean",
+                    },
+                    "intents": {
+                        "type": "object",
+                        "enabled": False,
+                        "dynamic": "strict",
                     },
                 },
-                "from": {
-                    "type": "integer",
-                },
-                "size": {
-                    "type": "integer",
-                },
-                "suggestion": {
-                    "type": "keyword",
-                },
-                "sort_by": {
-                    "type": "keyword",
-                },
-                "query_result": {
-                    "type": "object",
-                    "enabled": False,
-                    "dynamic": "strict",
-                },
-                "error": {
-                    "type": "object",
-                    "enabled": False,
-                    "dynamic": "strict",
-                },
+            },
+            "from": {
+                "type": "integer",
+            },
+            "size": {
+                "type": "integer",
+            },
+            "suggestion": {
+                "type": "keyword",
+            },
+            "sort_by": {
+                "type": "keyword",
+            },
+            "query_result": {
+                "type": "object",
+                "enabled": False,
+                "dynamic": "strict",
+            },
+            "error": {
+                "type": "object",
+                "enabled": False,
+                "dynamic": "strict",
+            },
 
-                # Click log type fields.
-                "mdb_uid": {
-                    "type": "keyword",
-                },
-                "index": {
-                    "type": "keyword",
-                },
-                "result_type": {
-                    "type": "keyword",
-                },
-                "rank": {
-                    "type": "integer",
-                },
+            # Click log type fields.
+            "mdb_uid": {
+                "type": "keyword",
+            },
+            "index": {
+                "type": "keyword",
+            },
+            "result_type": {
+                "type": "keyword",
+            },
+            "rank": {
+                "type": "integer",
+            },
 
-                # Log execution time for search components.
-                "execution_time_log": {
-                    "type": "nested",
-                    "properties": {
-                        "operation": {"type": "keyword"},
-                        "time": {"type": "integer"},
-                    },
+            # Log execution time for search components.
+            "execution_time_log": {
+                "type": "nested",
+                "properties": {
+                    "operation": {"type": "keyword"},
+                    "time": {"type": "integer"},
                 },
             },
         },

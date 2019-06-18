@@ -10,7 +10,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"

@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/common"

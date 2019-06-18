@@ -1,69 +1,67 @@
 {
     "mappings": {
-        "result": {
-            "dynamic": "strict", 
-            "properties": {
-                "title_suggest": {
-                    "contexts": [
-                        {
-                            "path": "result_type", 
-                            "type": "category", 
-                            "name": "result_type"
-                        }
-                    ], 
-                    "type": "completion", 
-                    "analyzer": "hungarian"
+        "dynamic": "strict", 
+        "properties": {
+            "title_suggest": {
+                "contexts": [
+                    {
+                        "path": "result_type", 
+                        "type": "category", 
+                        "name": "result_type"
+                    }
+                ], 
+                "type": "completion", 
+                "analyzer": "hungarian"
+            }, 
+            "description": {
+                "fields": {
+                    "language": {
+                        "type": "text", 
+                        "analyzer": "hungarian"
+                    }
                 }, 
-                "description": {
-                    "fields": {
-                        "language": {
-                            "type": "text", 
-                            "analyzer": "hungarian"
-                        }
-                    }, 
-                    "type": "text", 
-                    "analyzer": "standard"
+                "type": "text", 
+                "analyzer": "standard"
+            }, 
+            "title": {
+                "fields": {
+                    "language": {
+                        "type": "text", 
+                        "analyzer": "hungarian"
+                    }
                 }, 
-                "title": {
-                    "fields": {
-                        "language": {
-                            "type": "text", 
-                            "analyzer": "hungarian"
-                        }
-                    }, 
-                    "type": "text", 
-                    "analyzer": "standard"
+                "type": "text", 
+                "analyzer": "standard"
+            }, 
+            "index_date": {
+                "type": "date", 
+                "format": "strict_date"
+            }, 
+            "mdb_uid": {
+                "type": "keyword"
+            }, 
+            "content": {
+                "fields": {
+                    "language": {
+                        "type": "text", 
+                        "analyzer": "hungarian"
+                    }
                 }, 
-                "index_date": {
-                    "type": "date", 
-                    "format": "strict_date"
-                }, 
-                "mdb_uid": {
-                    "type": "keyword"
-                }, 
-                "content": {
-                    "fields": {
-                        "language": {
-                            "type": "text", 
-                            "analyzer": "hungarian"
-                        }
-                    }, 
-                    "type": "text", 
-                    "analyzer": "standard"
-                }, 
-                "effective_date": {
-                    "type": "date", 
-                    "format": "strict_date"
-                }, 
-                "filter_values": {
-                    "type": "keyword"
-                }, 
-                "typed_uids": {
-                    "type": "keyword"
-                }, 
-                "result_type": {
-                    "type": "keyword"
-                }
+                "type": "text", 
+                "analyzer": "standard"
+            }, 
+            "effective_date": {
+                "type": "date", 
+                "format": "strict_date"
+            }, 
+            "filter_values": {
+                "type": "keyword"
+            }, 
+            "typed_uids": {
+                "type": "keyword"
+            }, 
+            "result_type": {
+                "type": "keyword"
             }
         }
     }, 

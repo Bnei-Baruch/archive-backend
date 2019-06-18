@@ -1,105 +1,103 @@
 {
     "mappings": {
-        "search_logs": {
-            "dynamic": "strict", 
-            "properties": {
-                "index": {
-                    "type": "keyword"
-                }, 
-                "search_id": {
-                    "type": "keyword"
-                }, 
-                "from": {
-                    "type": "integer"
-                }, 
-                "created": {
-                    "type": "date"
-                }, 
-                "rank": {
-                    "type": "integer"
-                }, 
-                "result_type": {
-                    "type": "keyword"
-                }, 
-                "mdb_uid": {
-                    "type": "keyword"
-                }, 
-                "suggestion": {
-                    "type": "keyword"
-                }, 
-                "error": {
-                    "type": "object", 
-                    "enabled": false, 
-                    "dynamic": "strict"
-                }, 
-                "query": {
-                    "type": "object", 
-                    "enabled": true, 
-                    "properties": {
-                        "term": {
-                            "type": "keyword"
-                        }, 
-                        "intents": {
-                            "type": "object", 
-                            "enabled": false, 
-                            "dynamic": "strict"
-                        }, 
-                        "language_order": {
-                            "type": "keyword"
-                        }, 
-                        "filters": {
-                            "type": "object", 
-                            "enabled": true, 
-                            "dynamic": true
-                        }, 
-                        "deb": {
-                            "type": "boolean"
-                        }, 
-                        "original": {
-                            "type": "keyword"
-                        }, 
-                        "exact_terms": {
-                            "type": "keyword"
-                        }
+        "dynamic": "strict", 
+        "properties": {
+            "index": {
+                "type": "keyword"
+            }, 
+            "search_id": {
+                "type": "keyword"
+            }, 
+            "from": {
+                "type": "integer"
+            }, 
+            "created": {
+                "type": "date"
+            }, 
+            "rank": {
+                "type": "integer"
+            }, 
+            "result_type": {
+                "type": "keyword"
+            }, 
+            "mdb_uid": {
+                "type": "keyword"
+            }, 
+            "suggestion": {
+                "type": "keyword"
+            }, 
+            "error": {
+                "type": "object", 
+                "enabled": false, 
+                "dynamic": "strict"
+            }, 
+            "query": {
+                "type": "object", 
+                "enabled": true, 
+                "properties": {
+                    "term": {
+                        "type": "keyword"
                     }, 
-                    "dynamic": "strict"
-                }, 
-                "execution_time_log": {
-                    "type": "nested", 
-                    "properties": {
-                        "operation": {
-                            "type": "keyword"
-                        }, 
-                        "time": {
-                            "type": "integer"
-                        }
+                    "intents": {
+                        "type": "object", 
+                        "enabled": false, 
+                        "dynamic": "strict"
+                    }, 
+                    "language_order": {
+                        "type": "keyword"
+                    }, 
+                    "filters": {
+                        "type": "object", 
+                        "enabled": true, 
+                        "dynamic": true
+                    }, 
+                    "deb": {
+                        "type": "boolean"
+                    }, 
+                    "original": {
+                        "type": "keyword"
+                    }, 
+                    "exact_terms": {
+                        "type": "keyword"
                     }
                 }, 
-                "sort_by": {
-                    "type": "keyword"
-                }, 
-                "query_result": {
-                    "type": "object", 
-                    "enabled": false, 
-                    "dynamic": "strict"
-                }, 
-                "log_type": {
-                    "type": "keyword"
-                }, 
-                "size": {
-                    "type": "integer"
+                "dynamic": "strict"
+            }, 
+            "execution_time_log": {
+                "type": "nested", 
+                "properties": {
+                    "operation": {
+                        "type": "keyword"
+                    }, 
+                    "time": {
+                        "type": "integer"
+                    }
                 }
             }, 
-            "dynamic_templates": [
-                {
-                    "strings_as_keywords": {
-                        "match_mapping_type": "string", 
-                        "mapping": {
-                            "type": "keyword"
-                        }
+            "sort_by": {
+                "type": "keyword"
+            }, 
+            "query_result": {
+                "type": "object", 
+                "enabled": false, 
+                "dynamic": "strict"
+            }, 
+            "log_type": {
+                "type": "keyword"
+            }, 
+            "size": {
+                "type": "integer"
+            }
+        }, 
+        "dynamic_templates": [
+            {
+                "strings_as_keywords": {
+                    "match_mapping_type": "string", 
+                    "mapping": {
+                        "type": "keyword"
                     }
                 }
-            ]
-        }
+            }
+        ]
     }
 }

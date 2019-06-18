@@ -12,7 +12,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -315,7 +315,7 @@ func DumpIndexes(esc *elastic.Client, title string, resultType string) error {
 	}
 	for i, hit := range res.Hits.Hits {
 		var result Result
-		json.Unmarshal(*hit.Source, &result)
+		json.Unmarshal(hit.Source, &result)
 		fmt.Printf("%d: %+v\n", i, result)
 	}
 	fmt.Printf("\n\n ------------------- END OF %s DUMP INDEXES ------------------- \n\n", title)

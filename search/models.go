@@ -3,7 +3,7 @@ package search
 import (
 	"context"
 
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 )
 
 type Intent struct {

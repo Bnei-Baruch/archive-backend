@@ -17,7 +17,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -373,7 +373,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 		log.Debugf("Sources Index - Add source %s to index %s", mdbSource.UID, name)
 		resp, err := index.esc.Index().
 			Index(name).
-			Type("result").
+			//Type("result").
 			BodyJson(v).
 			Do(context.TODO())
 		indexErrors.DocumentError(k, err, fmt.Sprintf("Sources Index - Source %s %s", name, mdbSource.UID))

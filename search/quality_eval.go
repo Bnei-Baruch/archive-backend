@@ -21,7 +21,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -561,7 +561,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 			rank := -1
 			for j, hit := range queryResult.SearchResult.Hits.Hits {
 				hitSource := HitSource{}
-				if err := json.Unmarshal(*hit.Source, &hitSource); err != nil {
+				if err := json.Unmarshal(hit.Source, &hitSource); err != nil {
 					log.Warnf("Error unmarshling source %+v", err)
 					sq = SQ_SERVER_ERROR
 					rank = -1

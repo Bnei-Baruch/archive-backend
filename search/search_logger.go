@@ -9,7 +9,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 )
 
 type SearchLog struct {
@@ -216,7 +216,7 @@ func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]Search
 			log.Infof("Git %d hits...", len(searchResult.Hits.Hits))
 			for _, h := range searchResult.Hits.Hits {
 				sl := SearchLog{}
-				json.Unmarshal(*h.Source, &sl)
+				json.Unmarshal(h.Source, &sl)
 				ret = append(ret, sl)
 			}
 		}
@@ -254,7 +254,7 @@ func (searchLogger *SearchLogger) GetAllClicks() ([]SearchClick, error) {
 		if searchResult != nil && searchResult.Hits != nil {
 			for _, h := range searchResult.Hits.Hits {
 				sl := SearchClick{}
-				json.Unmarshal(*h.Source, &sl)
+				json.Unmarshal(h.Source, &sl)
 				ret = append(ret, sl)
 			}
 		}

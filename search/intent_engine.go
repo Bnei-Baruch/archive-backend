@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -16,7 +16,7 @@ import (
 
 func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, query Query) (error, *Intent, *Query) {
 	var classificationIntent ClassificationIntent
-	if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
+	if err := json.Unmarshal(h.Source, &classificationIntent); err != nil {
 		return err, nil, nil
 	}
 	if query.Deb {
@@ -178,7 +178,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 			found := false
 			for _, h := range res.Hits.Hits {
 				var classificationIntent ClassificationIntent
-				if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
+				if err := json.Unmarshal(h.Source, &classificationIntent); err != nil {
 					return intents, errors.Wrap(err, "ESEngine.AddIntents - Unmarshal classification intent filed.")
 				}
 				if query.Deb {

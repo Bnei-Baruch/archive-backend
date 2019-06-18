@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"context"
 
@@ -76,7 +76,7 @@ func parse(date string) utils.Date {
 func SearchResult(hits []SRR) *elastic.SearchResult {
 	res := new(elastic.SearchResult)
 	res.Hits = new(elastic.SearchHits)
-	res.Hits.TotalHits = int64(len(hits))
+	res.Hits.TotalHits = &elastic.TotalHits{Value: int64(len(hits)), Relation: "eq"}
 	for _, srr := range hits {
 		if res.Hits.MaxScore == nil || srr.Score > *res.Hits.MaxScore {
 			res.Hits.MaxScore = &srr.Score
@@ -87,7 +87,7 @@ func SearchResult(hits []SRR) *elastic.SearchResult {
 		sh.Uid = srr.Uid
 		ed := es.EffectiveDate{&srr.EffectiveDate}
 		msg, err := json.Marshal(ed)
-		sh.Source = (*json.RawMessage)(&msg)
+		sh.Source = (json.RawMessage)(msg)
 		if err != nil {
 			panic(err)
 		}

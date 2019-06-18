@@ -11,7 +11,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -237,7 +237,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 		log.Debugf("Collections Index - Add collection %s to index %s", string(vBytes), name)
 		resp, err := index.esc.Index().
 			Index(name).
-			Type("result").
+			//Type("result").
 			BodyJson(v).
 			Do(context.TODO())
 		indexErrors.DocumentError(k, err, fmt.Sprintf("Index collection %s %s", name, c.UID))

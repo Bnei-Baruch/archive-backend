@@ -12,7 +12,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -193,7 +193,7 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) *IndexEr
 	log.Debugf("Tweets Index - Add tweet %s to index %s", string(vBytes), indexName)
 	resp, err := index.esc.Index().
 		Index(indexName).
-		Type("result").
+		//Type("result").
 		BodyJson(tweet).
 		Do(context.TODO())
 	indexErrors.DocumentError(tweetLang, err, fmt.Sprintf("Index tweet %s %d", indexName, mdbTweet.ID))

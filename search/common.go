@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )

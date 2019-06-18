@@ -23,7 +23,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
@@ -1223,7 +1223,7 @@ func (suite *IndexerSuite) validateCollectionsContentUnits(indexName string, ind
 	cus := make(map[string][]string)
 	for _, hit := range res.Hits.Hits {
 		var c Collection
-		json.Unmarshal(*hit.Source, &c)
+		json.Unmarshal(hit.Source, &c)
 		uids, err := es.KeyValuesToValues("content_unit", c.TypedUIDs)
 		r.Nil(err)
 		if val, ok := cus[c.MDB_UID]; ok {
@@ -1248,7 +1248,7 @@ func (suite *IndexerSuite) validateContentUnitTags(indexName string, indexer *es
 	tags := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
 		var cu es.Result
-		json.Unmarshal(*hit.Source, &cu)
+		json.Unmarshal(hit.Source, &cu)
 		hitTags, err := es.KeyValuesToValues("tag", cu.FilterValues)
 		r.Nil(err)
 		tags = append(tags, hitTags...)
@@ -1269,7 +1269,7 @@ func (suite *IndexerSuite) validateContentUnitSources(indexName string, indexer 
 	sources := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
 		var cu es.Result
-		json.Unmarshal(*hit.Source, &cu)
+		json.Unmarshal(hit.Source, &cu)
 		hitSources, err := es.KeyValuesToValues("source", cu.FilterValues)
 		r.Nil(err)
 		sources = append(sources, hitSources...)
@@ -1292,7 +1292,7 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *e
 	// 	langs := make([]string, 0)
 	// 	for _, hit := range res.Hits.Hits {
 	// 		var cu es.Result
-	// 		json.Unmarshal(*hit.Source, &cu)
+	// 		json.Unmarshal(hit.Source, &cu)
 	// 		for _, t := range cu.Translations {
 	// 			langs = append(langs, t)
 	// 		}
@@ -1306,7 +1306,7 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *e
 	transcriptLengths := make([]int, 0)
 	for _, hit := range res.Hits.Hits {
 		var cu es.Result
-		json.Unmarshal(*hit.Source, &cu)
+		json.Unmarshal(hit.Source, &cu)
 		if cu.Content != "" {
 			transcriptLengths = append(transcriptLengths, len(cu.Content))
 		}
@@ -1346,7 +1346,7 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 	cus := make(map[string]es.Result)
 	for _, hit := range res.Hits.Hits {
 		var cu es.Result
-		json.Unmarshal(*hit.Source, &cu)
+		json.Unmarshal(hit.Source, &cu)
 		if val, ok := cus[cu.MDB_UID]; ok {
 			r.Nil(errors.New(fmt.Sprintf(
 				"Two identical UID: %s\tFirst : %+v\tSecond: %+v",
@@ -1414,7 +1414,7 @@ func (suite *IndexerSuite) validateFullPath(indexName string, indexer *es.Indexe
 	sources := make([][]string, 0)
 	for _, hit := range res.Hits.Hits {
 		var src es.Result
-		json.Unmarshal(*hit.Source, &src)
+		json.Unmarshal(hit.Source, &src)
 		source := []string{}
 		for _, s := range src.FilterValues {
 			source = append(source, s)
@@ -1438,7 +1438,7 @@ func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Inde
 	contentsByNames := make(map[string]string)
 	for _, hit := range res.Hits.Hits {
 		var src es.Result
-		json.Unmarshal(*hit.Source, &src)
+		json.Unmarshal(hit.Source, &src)
 		contentsByNames[src.MDB_UID] = src.Content
 	}
 
@@ -1457,9 +1457,9 @@ func (suite *IndexerSuite) validateNames(indexName string, indexer *es.Indexer, 
 	names := make([]string, len(res.Hits.Hits))
 	for i, hit := range res.Hits.Hits {
 		var res es.Result
-		json.Unmarshal(*hit.Source, &res)
+		json.Unmarshal(hit.Source, &res)
 		names[i] = res.Title
 	}
-	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
+	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits.Value)
 	r.ElementsMatch(names, expectedNames, fmt.Sprintf("Expected names: %+v to be the same as expected names: %+v", names, expectedNames))
 }

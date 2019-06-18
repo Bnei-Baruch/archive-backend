@@ -11,7 +11,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -194,7 +194,9 @@ func (index *ContentUnitsIndex) bulkIndexUnits(bulk OffsetLimitJob, sqlScope str
 		bulkService := elastic.NewBulkService(index.esc).Index(indexName)
 		for _, result := range results {
 			indexErrors.ShouldIndex(lang)
-			bulkService.Add(elastic.NewBulkIndexRequest().Index(indexName).Type("result").Doc(result))
+			bulkService.Add(elastic.NewBulkIndexRequest().Index(indexName).
+				//Type("result").
+				Doc(result))
 		}
 		bulkRes, e := bulkService.Do(context.TODO())
 		if e != nil {

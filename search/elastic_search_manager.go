@@ -6,7 +6,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/viper"
-	elastic "gopkg.in/olivere/elastic.v6"
+	elastic "gopkg.in/olivere/elastic.v7"
 )
 
 type ESManager struct {

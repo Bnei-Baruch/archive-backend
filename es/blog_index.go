@@ -12,7 +12,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 	"jaytaylor.com/html2text"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -197,7 +197,7 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) *IndexErrors {
 	log.Debugf("Blog Posts Index - Add blog post %s to index %s", string(vBytes), indexName)
 	resp, err := index.esc.Index().
 		Index(indexName).
-		Type("result").
+		//Type("result").
 		BodyJson(post).
 		Do(context.TODO())
 	indexErrors.DocumentError(postLang, err, fmt.Sprintf("BlogIndex, indexPost, Index blog post %s %s", indexName, idStr))

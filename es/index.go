@@ -11,7 +11,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/olivere/elastic.v7"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -420,7 +420,7 @@ func (index *BaseIndex) Scroll(indexName string, elasticScope elastic.Query) ([]
 		if searchResult != nil && searchResult.Hits != nil {
 			for _, h := range searchResult.Hits.Hits {
 				result := Result{}
-				json.Unmarshal(*h.Source, &result)
+				json.Unmarshal(h.Source, &result)
 				ret = append(ret, ScrollResult{MdbUid: result.MDB_UID, Id: h.Id, ResultType: result.ResultType})
 			}
 		}
@@ -434,6 +434,10 @@ func (index *BaseIndex) Scroll(indexName string, elasticScope elastic.Query) ([]
 			if err == io.EOF {
 				break
 			}
+			ss, ee := elasticScope.Source()
+			sss, eee := json.Marshal(ss)
+			log.Infof("Query: %+v ||| Error: %+v Error: %+v", sss, ee, eee)
+			log.Infof("Scroll results: %+v Error: %+v", searchResult, err)
 			return nil, err
 		}
 	}
@@ -464,7 +468,7 @@ func (index *BaseIndex) RemoveFromIndexQuery(elasticScope elastic.Query) (map[st
 		bulkService := elastic.NewBulkService(index.esc).Index(indexName)
 		shouldRemoveCount := 0
 		for _, scrollResult := range scrollResults {
-			bulkService.Add(elastic.NewBulkDeleteRequest().Id(scrollResult.Id)).Type("result")
+			bulkService.Add(elastic.NewBulkDeleteRequest().Id(scrollResult.Id)) //.Type("result")
 			shouldRemoveCount++
 			if _, ok := removed[scrollResult.ResultType]; !ok {
 				removed[scrollResult.ResultType] = make(map[string]bool)
