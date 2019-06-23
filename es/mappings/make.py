@@ -1,4 +1,5 @@
 #!/usr/bin/python2
+# -*- coding: utf-8 -*-
 
 # TODO: Rewrite this into go.
 # This file creates all mapping for Elastic. It is required because some
@@ -77,10 +78,17 @@ LANG_GROUPS = {
 
 # Units indexing
 LanguageAnalyzer = {
-  ENGLISH: "english",
-  HEBREW: "he",
-  RUSSIAN: "russian",
-  SPANISH: "spanish",
+  ENGLISH: "english_synonym",
+  HEBREW: "hebrew_synonym",
+  RUSSIAN: "russian_synonym",
+  SPANISH: "spanish_synonym",
+
+  # In order to allow synonyms in other languages,
+  # reimplement their analyzer by adding the necessary filters for each language
+  # + the synonym_graph filter and defining a new analyzer that include this filters.
+  # List of definitions for each language analyzer are available here:
+  # https://www.elastic.co/guide/en/elasticsearch/reference/6.7/analysis-lang-analyzer.html#spanish-analyzer
+
   ITALIAN: "italian",
   GERMAN: "german",
   DUTCH: "dutch",
@@ -111,6 +119,106 @@ LanguageAnalyzer = {
   AMHARIC: "standard",
 }
 
+SynonymGraphFilterImp = {
+            "type" : "synonym_graph",
+            "tokenizer": "keyword",
+            "synonyms" : [],
+}
+
+LanguageAnalyzerImp = {
+  ENGLISH: {
+      "english_synonym": {
+              "tokenizer":  "standard",
+              "filter": [
+                "english_possessive_stemmer",
+                "lowercase",
+                "english_stop",
+                "english_stemmer",
+                "synonym_graph"
+              ]
+        }
+  },
+  HEBREW: {
+    "hebrew_synonym": {
+            "tokenizer" : "standard",
+            "filter" : ["synonym_graph", "he_IL"],
+            "char_filter": [
+              "quotes"
+            ]
+    }
+  },
+  RUSSIAN: {
+     "russian_synonym": {
+            "tokenizer":  "standard",
+            "filter": [
+              "lowercase",
+              "russian_stop",
+              "russian_stemmer",
+              "synonym_graph"
+            ]
+    }
+  },
+  SPANISH: {
+    "spanish_synonym": {
+            "tokenizer":  "standard",
+            "filter": [
+              "lowercase",
+              "spanish_stop",
+              "spanish_stemmer",
+              "synonym_graph"
+            ]
+    },
+  }
+}
+
+LanguageFiltersImp ={
+  ENGLISH: {
+            "english_stop": {
+              "type":      "stop",
+              "stopwords": "_english_" 
+            },
+            "english_stemmer": {
+              "type":     "stemmer",
+              "language": "english"
+            },
+            "english_possessive_stemmer": {
+              "type":     "stemmer",
+              "language": "possessive_english"
+            },
+            "synonym_graph": SynonymGraphFilterImp
+  },
+  HEBREW: {
+          "he_IL": {
+            "type": "hunspell",
+            "locale": "he_IL",
+            "dedup": True,
+          },
+          "synonym_graph": SynonymGraphFilterImp
+  },
+  RUSSIAN: {
+            "russian_stop": {
+              "type":       "stop",
+              "stopwords":  "_russian_" 
+            },
+            "russian_stemmer": {
+              "type":       "stemmer",
+              "language":   "russian"
+            },
+            "synonym_graph": SynonymGraphFilterImp
+  },
+  SPANISH: {
+            "spanish_stop": {
+              "type":       "stop",
+              "stopwords":  "_spanish_" 
+            },
+            "spanish_stemmer": {
+              "type":       "stemmer",
+              "language":   "light_spanish"
+            },
+            "synonym_graph": SynonymGraphFilterImp
+  },
+}
+
 # Phonetic analyzer
 BEIDER_MORSE_LANGUAGESET = {
   CYRILLIC: 'cyrillic',
@@ -138,33 +246,37 @@ def BeiderMorseLanguageset(lang):
 def IsCyrillic(lang, something):
   return something if lang in LANG_GROUPS[CYRILLIC] else None
 
+def GetAnalyzerImp(lang):
+  if lang in LanguageAnalyzerImp:
+    return LanguageAnalyzerImp[lang]
+  else:
+    return None
+
+def GetFiltersImp(lang):
+  if lang in LanguageFiltersImp:
+    return LanguageFiltersImp[lang]
+  else:
+    return None
 
 SETTINGS = {
   "index": {
     "number_of_shards": 1,
     "number_of_replicas": 0,
     "analysis": {
-      "analyzer": {
-        "he": {
-          "tokenizer": "standard",
-          "filter": [
-            "he_IL"
-          ],
-          "char_filter": [
-            "quotes"
-          ]
-        },
-        # "phonetic_analyzer": {
-        #   "tokenizer": "standard",
-        #   "char_filter": ["quotes"],
-        #   "filter": [
-        #     "standard",
-        #     "lowercase",
-        #     lambda lang: IsCyrillic(lang, 'icu_transliterate'),
-        #     "custom_phonetic",
-        #   ],
-        # },
-      },
+      "analyzer": lambda lang: GetAnalyzerImp(lang),
+      # "analyzer": {
+      #      Tested, but didnt bring quality enough results:
+      #     "phonetic_analyzer": {
+      #       "tokenizer": "standard",
+      #       "char_filter": ["quotes"],
+      #       "filter": [
+      #         "standard",
+      #         "lowercase",
+      #         lambda lang: IsCyrillic(lang, 'icu_transliterate'),
+      #         "custom_phonetic",
+      #       ],
+      #     },        
+      # },
       "char_filter": {
         "quotes": {
           "type": "mapping",
@@ -177,26 +289,23 @@ SETTINGS = {
             "\\u0022=>",
             "\\u201C=>",
             "\\u201D=>",
+            "\\u05F4=>",
           ],
         },
       },
-      "filter": {
-        "he_IL": {
-          "type": "hunspell",
-          "locale": "he_IL",
-          "dedup": True,
-        },
-        # "icu_transliterate": lambda lang: IsCyrillic(lang, {
-        #   "type": "icu_transform",
-        #   "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
-        # }),
-        # "custom_phonetic": {
-        #   "type": "phonetic",
-        #   "encoder": "beider_morse",
-        #   "replace": True,
-        #   "languageset": BeiderMorseLanguageset,
-        # },
-      },
+      "filter": lambda lang: GetFiltersImp(lang),
+      # "filter": {      
+      #     "icu_transliterate": lambda lang: IsCyrillic(lang, {
+      #       "type": "icu_transform",
+      #       "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
+      #     }),
+      #     "custom_phonetic": {
+      #       "type": "phonetic",
+      #       "encoder": "beider_morse",
+      #       "replace": True,
+      #       "languageset": BeiderMorseLanguageset,
+      #     },
+      # },
     },
   },
 }
@@ -217,6 +326,11 @@ RESULTS_TEMPLATE = {
         # Document type, unit, collection, source, tag.
         "result_type": {
           "type": "keyword",
+        },
+        # Document index date.
+        "index_date": {
+          "type": "date",
+          "format": "strict_date",
         },
         "mdb_uid": {
           "type": "keyword",
@@ -334,6 +448,9 @@ SEARCH_LOGS_TEMPLATE = {
                         "exact_terms": {
                             "type": "keyword",
                         },
+                        "original": {
+                            "type": "keyword",
+                        },
                         "filters": {
                             "type": "object",
                             "enabled": True,
@@ -357,6 +474,9 @@ SEARCH_LOGS_TEMPLATE = {
                 },
                 "size": {
                     "type": "integer",
+                },
+                "suggestion": {
+                    "type": "keyword",
                 },
                 "sort_by": {
                     "type": "keyword",
@@ -386,14 +506,13 @@ SEARCH_LOGS_TEMPLATE = {
                     "type": "integer",
                 },
 
-                # Log execition time for search components.
+                # Log execution time for search components.
                 "execution_time_log": {
                     "type": "nested",
-                    "properties":
-                    {
+                    "properties": {
                         "operation": {"type": "keyword"},
-                        "time": {"type": "integer"}
-                    }
+                        "time": {"type": "integer"},
+                    },
                 },
             },
         },

@@ -24,6 +24,9 @@
                 "mdb_uid": {
                     "type": "keyword"
                 }, 
+                "suggestion": {
+                    "type": "keyword"
+                }, 
                 "error": {
                     "type": "object", 
                     "enabled": false, 
@@ -33,13 +36,13 @@
                     "type": "object", 
                     "enabled": true, 
                     "properties": {
+                        "term": {
+                            "type": "keyword"
+                        }, 
                         "intents": {
                             "type": "object", 
                             "enabled": false, 
                             "dynamic": "strict"
-                        }, 
-                        "term": {
-                            "type": "keyword"
                         }, 
                         "language_order": {
                             "type": "keyword"
@@ -51,6 +54,9 @@
                         }, 
                         "deb": {
                             "type": "boolean"
+                        }, 
+                        "original": {
+                            "type": "keyword"
                         }, 
                         "exact_terms": {
                             "type": "keyword"

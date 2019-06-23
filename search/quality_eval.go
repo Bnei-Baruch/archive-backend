@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +40,7 @@ const (
 const (
 	SQ_SERVER_ERROR   = iota
 	SQ_NO_EXPECTATION = iota
+	SQ_BAD_STRUCTURE  = iota
 	SQ_UNKNOWN        = iota
 	SQ_REGULAR        = iota
 	SQ_GOOD           = iota
@@ -47,8 +50,18 @@ var SEARCH_QUALITY_NAME = map[int]string{
 	SQ_GOOD:           "Good",
 	SQ_REGULAR:        "Regular",
 	SQ_UNKNOWN:        "Unknown",
+	SQ_BAD_STRUCTURE:  "BadStructure",
 	SQ_NO_EXPECTATION: "NoExpectation",
 	SQ_SERVER_ERROR:   "ServerError",
+}
+
+var SEARCH_QUALITY_BY_NAME = map[string]int{
+	"Good":          SQ_GOOD,
+	"Regular":       SQ_REGULAR,
+	"Unknown":       SQ_UNKNOWN,
+	"BadStructure":  SQ_BAD_STRUCTURE,
+	"NoExpectation": SQ_NO_EXPECTATION,
+	"ServerError":   SQ_SERVER_ERROR,
 }
 
 // Compare results classification.
@@ -123,6 +136,32 @@ var EXPECTATION_HIT_TYPE = map[int]string{
 	ET_LESSONS:       consts.INTENT_HIT_TYPE_LESSONS,
 	ET_PROGRAMS:      consts.INTENT_HIT_TYPE_PROGRAMS,
 	ET_SOURCES:       consts.ES_RESULT_TYPE_SOURCES,
+	ET_LANDING_PAGE:  consts.GRAMMAR_TYPE_LANDING_PAGE,
+}
+
+var LANDING_PAGES = map[string]string{
+	"lessons":                   consts.GRAMMAR_INTENT_LANDING_PAGE_LESSONS,
+	"lessons/daily":             consts.GRAMMAR_INTENT_LANDING_PAGE_LESSONS,
+	"lessons/virtual":           consts.GRAMMAR_INTENT_LANDING_PAGE_VIRTUAL_LESSONS,
+	"lessons/lectures":          consts.GRAMMAR_INTENT_LANDING_PAGE_LECTURES,
+	"lessons/women":             consts.GRAMMAR_INTENT_LANDING_PAGE_WOMEN_LESSONS,
+	"lessons/rabash":            consts.GRAMMAR_INTENT_LANDING_PAGE_RABASH_LESSONS,
+	"lessons/series":            consts.GRAMMAR_INTENT_LANDING_PAGE_LESSON_SERIES,
+	"programs/main":             consts.GRAMMAR_INTENT_LANDING_PAGE_PRORGRAMS,
+	"programs/clips":            consts.GRAMMAR_INTENT_LANDING_PAGE_CLIPS,
+	"sources":                   consts.GRAMMAR_INTENT_LANDING_PAGE_LIBRARY,
+	"events":                    consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS,
+	"events/conventions":        consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS,
+	"events/holidays":           consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS,
+	"events/unity-days":         consts.GRAMMAR_INTENT_LANDING_PAGE_UNITY_DAYS,
+	"events/friends-gatherings": consts.GRAMMAR_INTENT_LANDING_PAGE_FRIENDS_GATHERINGS,
+	"events/meals":              consts.GRAMMAR_INTENT_LANDING_PAGE_MEALS,
+	"topics":                    consts.GRAMMAR_INTENT_LANDING_PAGE_TOPICS,
+	"publications/blog":         consts.GRAMMAR_INTENT_LANDING_PAGE_BLOG,
+	"publications/twitter":      consts.GRAMMAR_INTENT_LANDING_PAGE_TWITTER,
+	"publications/articles":     consts.GRAMMAR_INTENT_LANDING_PAGE_ARTICLES,
+	"simple-mode":               consts.GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS,
+	"help":                      consts.GRAMMAR_INTENT_LANDING_PAGE_HELP,
 }
 
 const (
@@ -131,6 +170,10 @@ const (
 	FILTER_NAME_CONTENT_TYPE = "contentType"
 	PREFIX_LATEST            = "[latest]"
 )
+
+var FLAT_REPORT_HEADERS = []string{
+	"Language", "Query", "Weight", "Bucket", "Comment",
+	"Expectation", "Parsed", "SearchQuality", "Rank"}
 
 type Filter struct {
 	Name  string `json:"name"`
@@ -261,8 +304,9 @@ func ReadEvalSet(reader io.Reader, db *sql.DB) ([]EvalQuery, error) {
 }
 
 type HitSource struct {
-	MdbUid     string `json:"mdb_uid"`
-	ResultType string `json:"result_type"`
+	MdbUid      string `json:"mdb_uid"`
+	ResultType  string `json:"result_type"`
+	LandingPage string `json:"landing_page"`
 }
 
 // Parses expectation described by result URL and converts
@@ -284,7 +328,7 @@ type HitSource struct {
 func ParseExpectation(e string, db *sql.DB) Expectation {
 	originalE := e
 	if strings.Trim(e, " ") == "" {
-		return Expectation{ET_EMPTY, "", nil, e}
+		return Expectation{ET_EMPTY, "", nil, originalE}
 	}
 	takeLatest := strings.HasPrefix(strings.ToLower(e), PREFIX_LATEST)
 	if takeLatest {
@@ -292,7 +336,7 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	}
 	u, err := url.Parse(e)
 	if err != nil {
-		return Expectation{ET_FAILED_PARSE, "", nil, e}
+		return Expectation{ET_FAILED_PARSE, "", nil, originalE}
 	}
 	p := u.RequestURI()
 	idx := strings.Index(p, "?")
@@ -305,16 +349,24 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	uidOrSection := path.Base(p)
 	// One before last part .../he/programs/cu/AsNLozeK => cu
 	contentUnitOrCollection := path.Base(path.Dir(p))
-	t := ET_NOT_SET
+	landingPage := path.Join(contentUnitOrCollection, uidOrSection)
 	subSection := ""
-	switch uidOrSection {
-	case EXPECTATION_URL_PATH[ET_LESSONS]:
-		t = ET_LESSONS
-	case EXPECTATION_URL_PATH[ET_PROGRAMS]:
-		t = ET_PROGRAMS
-	case EXPECTATION_URL_PATH[ET_EVENTS]:
+	t := ET_NOT_SET
+	if _, ok := LANDING_PAGES[landingPage]; q == "" && !takeLatest && ok {
 		t = ET_LANDING_PAGE
-		subSection = uidOrSection
+		uidOrSection = landingPage
+	} else if _, ok := LANDING_PAGES[uidOrSection]; q == "" && !takeLatest && ok {
+		t = ET_LANDING_PAGE
+	} else {
+		switch uidOrSection {
+		case EXPECTATION_URL_PATH[ET_LESSONS]:
+			t = ET_LESSONS
+		case EXPECTATION_URL_PATH[ET_PROGRAMS]:
+			t = ET_PROGRAMS
+		case EXPECTATION_URL_PATH[ET_EVENTS]:
+			t = ET_LANDING_PAGE
+			subSection = uidOrSection
+		}
 	}
 	if t != ET_NOT_SET {
 		var filters []Filter
@@ -350,38 +402,44 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 				return Expectation{ET_FAILED_SQL, "", filters, originalE}
 			}
 			newE := fmt.Sprintf("%s://%s%s/%s/%s", u.Scheme, u.Host, p, entityType, latestUID)
-			return ParseExpectation(newE, db)
+			recExpectation := ParseExpectation(newE, db)
+			recExpectation.Source = originalE
+			return recExpectation
 		}
-		return Expectation{t, subSection, filters, e}
+		return Expectation{t, subSection, filters, originalE}
 	}
-	switch contentUnitOrCollection {
-	case EXPECTATION_URL_PATH[ET_CONTENT_UNITS]:
-		t = ET_CONTENT_UNITS
-	case EXPECTATION_URL_PATH[ET_COLLECTIONS]:
-		t = ET_COLLECTIONS
-		if takeLatest {
-			latestUID, err := getLatestUIDByCollection(uidOrSection, db)
-			if err != nil {
-				log.Warnf("Sql Error %+v", err)
-				return Expectation{ET_FAILED_SQL, uidOrSection, nil, originalE}
+	if t != ET_LANDING_PAGE {
+		switch contentUnitOrCollection {
+		case EXPECTATION_URL_PATH[ET_CONTENT_UNITS]:
+			t = ET_CONTENT_UNITS
+		case EXPECTATION_URL_PATH[ET_COLLECTIONS]:
+			t = ET_COLLECTIONS
+			if takeLatest {
+				latestUID, err := getLatestUIDByCollection(uidOrSection, db)
+				if err != nil {
+					log.Warnf("Sql Error %+v", err)
+					return Expectation{ET_FAILED_SQL, uidOrSection, nil, originalE}
+				}
+				uriParts := strings.Split(p, "/")
+				newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
+				recExpectation := ParseExpectation(newE, db)
+				recExpectation.Source = originalE
+				return recExpectation
 			}
-			uriParts := strings.Split(p, "/")
-			newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
-			return ParseExpectation(newE, db)
-		}
-	case EXPECTATION_URL_PATH[ET_SOURCES]:
-		t = ET_SOURCES
-	case EXPECTATION_URL_PATH[ET_EVENTS]:
-		t = ET_LANDING_PAGE
-	case EXPECTATION_URL_PATH[ET_LESSONS]:
-		t = ET_LANDING_PAGE
-	default:
-		if uidOrSection == EXPECTATION_URL_PATH[ET_SOURCES] {
-			return Expectation{ET_SOURCES, "", nil, e}
-		} else if uidOrSection == EXPECTATION_URL_PATH[ET_LESSONS] {
-			return Expectation{ET_LANDING_PAGE, "", nil, e}
-		} else {
-			return Expectation{ET_BAD_STRUCTURE, "", nil, e}
+		case EXPECTATION_URL_PATH[ET_SOURCES]:
+			t = ET_SOURCES
+		case EXPECTATION_URL_PATH[ET_EVENTS]:
+			t = ET_LANDING_PAGE
+		case EXPECTATION_URL_PATH[ET_LESSONS]:
+			t = ET_LANDING_PAGE
+		default:
+			if uidOrSection == EXPECTATION_URL_PATH[ET_SOURCES] {
+				return Expectation{ET_SOURCES, "", nil, originalE}
+			} else if uidOrSection == EXPECTATION_URL_PATH[ET_LESSONS] {
+				return Expectation{ET_LANDING_PAGE, "", nil, originalE}
+			} else {
+				return Expectation{ET_BAD_STRUCTURE, "", nil, originalE}
+			}
 		}
 	}
 
@@ -406,13 +464,15 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 		}
 		uriParts := strings.Split(p, "/")
 		newE := fmt.Sprintf("%s://%s/%s/%s/%s/%s", u.Scheme, u.Host, uriParts[1], uriParts[2], EXPECTATION_URL_PATH[ET_CONTENT_UNITS], latestUID)
-		return ParseExpectation(newE, db)
+		recExpectation := ParseExpectation(newE, db)
+		recExpectation.Source = originalE
+		return recExpectation
 	}
 
 	if t == ET_NOT_SET {
 		panic(errors.New("Expectation not set."))
 	}
-	return Expectation{t, uidOrSection, nil, e}
+	return Expectation{t, uidOrSection, nil, originalE}
 }
 
 func FilterValueToUid(value string) string {
@@ -442,6 +502,8 @@ func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expect
 		return ((filter.Name == FILTER_NAME_TOPIC && hit.Index == consts.INTENT_INDEX_TAG) ||
 			(filter.Name == FILTER_NAME_SOURCE && hit.Index == consts.INTENT_INDEX_SOURCE)) &&
 			FilterValueToUid(filter.Value) == hitSource.MdbUid
+	} else if e.Type == ET_LANDING_PAGE {
+		return LANDING_PAGES[e.Uid] == hitSource.LandingPage
 	} else {
 		return hitSource.MdbUid == e.Uid
 	}
@@ -510,6 +572,9 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	for i := range q.Expectations {
 		if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
 			sq := SQ_UNKNOWN
+			if q.Expectations[i].Type == ET_BAD_STRUCTURE {
+				sq = SQ_BAD_STRUCTURE
+			}
 			rank := -1
 			for j, hit := range queryResult.SearchResult.Hits.Hits {
 				hitSource := HitSource{}
@@ -629,8 +694,7 @@ func ExpectationToString(e Expectation) string {
 }
 
 func ResultsByExpectation(queries []EvalQuery, results EvalResults) [][]string {
-	records := [][]string{{"Language", "Query", "Weight", "Bucket", "Comment",
-		"Expectation", "Parsed", "SearchQuality", "Rank"}}
+	records := [][]string{FLAT_REPORT_HEADERS}
 	for i, q := range queries {
 		goodExpectationsLen := GoodExpectations(q.Expectations)
 		for j, sq := range results.Results[i].SearchQuality {
@@ -645,8 +709,343 @@ func ResultsByExpectation(queries []EvalQuery, results EvalResults) [][]string {
 	return records
 }
 
-func WriteResultsByExpectation(path string, queries []EvalQuery, results EvalResults) error {
-	return WriteToCsv(path, ResultsByExpectation(queries, results))
+func WriteResultsByExpectation(path string, queries []EvalQuery, results EvalResults) ([][]string, error) {
+	records := ResultsByExpectation(queries, results)
+	return records, WriteToCsv(path, records)
+}
+
+func updateVsGoldenDataFromRecords(data map[string]map[string][]float64, records [][]string, isGolden bool) error {
+	// Records: "Language", "Query", "Weight", "Bucket", "Comment", "Expectation", "Parsed", "SearchQuality", "Rank"
+	// Assuming records are already without headers.
+	for _, record := range records {
+		lang := record[0]
+		quality := record[7]
+		qualityMap, ok := data[lang]
+		if !ok {
+			data[lang] = make(map[string][]float64)
+			qualityMap = data[lang]
+		}
+		counters, ok := qualityMap[quality]
+		if !ok {
+			qualityMap[quality] = []float64{0.0, 0.0, 0.0, 0.0}
+			counters = qualityMap[quality]
+		}
+		queryWeight, err := strconv.ParseFloat(record[2], 64)
+		if err != nil {
+			return err
+		}
+		if isGolden {
+			counters[2]++
+			counters[3] += queryWeight
+		} else {
+			counters[0]++
+			counters[1] += queryWeight
+		}
+	}
+	return nil
+}
+
+func diffToHtml(diff float64, round bool, percentage bool) string {
+	if diff == float64(0.0) {
+		return ""
+	}
+	percentageStr := ""
+	if percentage {
+		percentageStr = "%"
+	}
+	diffStr := fmt.Sprintf("%.2f%s", math.Abs(diff), percentageStr)
+	if round {
+		diffStr = fmt.Sprintf("%d%s", (int)(math.Abs(diff)), percentageStr)
+	}
+	if diff > 0 {
+		return fmt.Sprintf("<span style='color: green'> (%s)</span>", diffStr)
+	}
+	return fmt.Sprintf("<span style='color: red'> (%s)</span>", diffStr)
+}
+
+func rankValue(rank string) int {
+	val, err := strconv.Atoi(rank)
+	if err != nil {
+		val = 0
+	}
+	if val == -1 {
+		val = 11
+	}
+	return val
+}
+
+func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords [][]string) error {
+	// Map from language => quality => (Unique, Weighted, Unique Golden, Weighted Golden)
+	data := make(map[string]map[string][]float64)
+	if err := updateVsGoldenDataFromRecords(data, records, false /*isGolden*/); err != nil {
+		return err
+	}
+	if err := updateVsGoldenDataFromRecords(data, goldenRecords, true /*isGolden*/); err != nil {
+		return err
+	}
+
+	style := `table {
+		  border-collapse: collapse;
+		  margin: 20px;
+		}
+		 th {
+		  background: #ccc;
+		}
+
+		th, td {
+		  border: 1px solid #ccc;
+		  padding: 8px;
+		}
+
+		tr:nth-child(even) {
+		  background: #efefef;
+		}
+
+		tr:hover {
+		  background: #d1d1d1;
+		}`
+	htmlParts := []string{fmt.Sprintf("<html><style>%s</style><body><table>", style)}
+	htmlParts = append(htmlParts, `
+		<tr>
+			<th>Language</th>
+			<th>Quality</th>
+			<th>Weighted%</th>
+			<th>Unique%</th>
+			<th>Unique</th>
+		</tr>`)
+	for _, language := range utils.StringMapOrderedKeys(data) {
+		qualityMap := data[language]
+		totalCounters := []float64{0.0, 0.0, 0.0, 0.0}
+		for _, counters := range qualityMap {
+			for i := 0; i < 4; i++ {
+				totalCounters[i] += counters[i]
+			}
+		}
+		firstColumn := true
+
+		qualityKeys := []string{}
+		for key := range qualityMap {
+			qualityKeys = append(qualityKeys, key)
+		}
+		sort.SliceStable(qualityKeys, func(i, j int) bool {
+			return SEARCH_QUALITY_BY_NAME[qualityKeys[i]] > SEARCH_QUALITY_BY_NAME[qualityKeys[j]]
+		})
+
+		for _, quality := range qualityKeys {
+			counters := qualityMap[quality]
+			if firstColumn {
+				htmlParts = append(htmlParts, fmt.Sprintf(
+					"<tr><td style='text-align: center; font-size: xx-large; font-weight: bold;' rowspan='%d'>%s</td>",
+					len(qualityMap), language))
+			} else {
+				htmlParts = append(htmlParts, "<tr>")
+			}
+			goodStyle := ""
+			if quality == "Good" {
+				goodStyle = "font-size: x-large; font-weight: bold;"
+			}
+			tdStyle := ""
+			if firstColumn {
+				tdStyle = "border-top: solid black 3px;border-bottom: solid black 3px;"
+				firstColumn = false
+			}
+			htmlParts = append(htmlParts, fmt.Sprintf(
+				`   <td style='%s;%s'>%s</td>
+					<td style='%s;%s'><div style="display: flex; justify-content: space-evenly"><span>%.2f%%</span>%s</div></td>
+					<td style='%s'><div style="display: flex; justify-content: space-evenly"><span>%.2f%%</span>%s</div></td>
+					<td style='%s'><div style="display: flex; justify-content: space-evenly"><span>%d</span>%s</div></td>
+				</tr>`,
+				goodStyle, tdStyle, quality,
+				goodStyle, tdStyle,
+				100*counters[1]/totalCounters[1], // Weighted percentage.
+				diffToHtml(100*counters[1]/totalCounters[1]-100*counters[3]/totalCounters[3], false /*round*/, true /*%*/), // Weighted percentage diff.
+				tdStyle,
+				100*counters[0]/totalCounters[0], // Unique Percentage.
+				diffToHtml(100*counters[0]/totalCounters[0]-100*counters[2]/totalCounters[2], false /*round*/, true /*%*/), // Unique percentage diff.
+				tdStyle,
+				(int)(counters[0]), // Unique.
+				diffToHtml(counters[0]-counters[2], true /*round*/, false /*%*/), // Unique diff.
+			))
+		}
+	}
+	htmlParts = append(htmlParts, "</table>")
+
+	// Records: "Language", "Query", "Weight", "Bucket", "Comment", "Expectation", "Parsed", "SearchQuality", "Rank"
+	// Stores diffs between records and goldenRecords. Map from language to query to expectation to row.
+	recordsDiff := make(map[string]map[string]map[string][][]string)
+	for _, goldenRecord := range goldenRecords {
+		lang := goldenRecord[0]
+		query := goldenRecord[1]
+		expectation := goldenRecord[5]
+		if _, ok := recordsDiff[lang]; !ok {
+			recordsDiff[lang] = make(map[string]map[string][][]string)
+		}
+		byQueryDiff := recordsDiff[lang]
+		if _, ok := byQueryDiff[query]; !ok {
+			byQueryDiff[query] = make(map[string][][]string)
+		}
+		byExpectationDiff := byQueryDiff[query]
+		if _, ok := byExpectationDiff[expectation]; !ok {
+			byExpectationDiff[expectation] = [][]string{}
+		}
+		byExpectationDiff[expectation] = append(byExpectationDiff[expectation], goldenRecord)
+	}
+	for _, record := range records {
+		lang := record[0]
+		query := record[1]
+		expectation := record[5]
+		if _, ok := recordsDiff[lang]; !ok {
+			recordsDiff[lang] = make(map[string]map[string][][]string)
+		}
+		byQueryDiff := recordsDiff[lang]
+		if _, ok := byQueryDiff[query]; !ok {
+			byQueryDiff[query] = make(map[string][][]string)
+		}
+		byExpectationDiff := byQueryDiff[query]
+		if _, ok := byExpectationDiff[expectation]; !ok {
+			byExpectationDiff[expectation] = [][]string{}
+		}
+		if len(byExpectationDiff[expectation]) == 0 {
+			byExpectationDiff[expectation] = append(byExpectationDiff[expectation], nil)
+		}
+		byExpectationDiff[expectation] = append(byExpectationDiff[expectation], record)
+	}
+
+	for _, lang := range utils.StringMapOrderedKeys(recordsDiff) {
+		byQueryDiff := recordsDiff[lang]
+
+		recordsToSort := [][][]string{}
+		for _, byExpectationDiff := range byQueryDiff {
+			for _, records := range byExpectationDiff {
+				recordsToSort = append(recordsToSort, records)
+			}
+		}
+
+		// Calculatets score for diff to order them.
+		calcScore := func(p [][]string) float64 {
+			if p[0] != nil && p[1] == nil {
+				// 100K - weight for golden only (removed).
+				weight, err := strconv.ParseFloat(p[0][2], 64)
+				if err != nil {
+					weight = float64(0)
+				}
+				return float64(30000000) - weight
+			}
+			if p[0] == nil && p[1] != nil {
+				// 200K - Weight for new only (removed).
+				weight, err := strconv.ParseFloat(p[1][2], 64)
+				if err != nil {
+					weight = float64(0)
+				}
+				return float64(40000000) - weight
+			}
+			if p[0] != nil && p[1] != nil {
+				newQuality := float64(1000000) * float64(SQ_GOOD-SEARCH_QUALITY_BY_NAME[p[1][7]]+1)
+				goldenQuality := float64(1000000) * float64(SQ_GOOD-SEARCH_QUALITY_BY_NAME[p[0][7]]+1)
+				weight, err := strconv.ParseFloat(p[1][2], 64)
+				if err != nil {
+					weight = float64(0)
+				}
+				if newQuality == goldenQuality {
+					return 200000000 - weight
+				} else if newQuality < goldenQuality {
+					return newQuality - weight
+				} else {
+					return 100000000 + goldenQuality - weight
+				}
+			}
+			return 0
+		}
+
+		sort.SliceStable(recordsToSort, func(i, j int) bool {
+			return calcScore(recordsToSort[i]) < calcScore(recordsToSort[j])
+		})
+
+		htmlParts = append(htmlParts, "<table>")
+		htmlParts = append(htmlParts, "<tr><th>Language</th><th>Query</th><th>Weight</th><th>Expectation</th><th>Quality</th><th>Rank</th></tr>")
+		firstForLanguage := true
+		for _, records := range recordsToSort {
+			goldenRecord := records[0]
+			var newRecord []string
+			newRecord = nil
+			if len(records) > 1 {
+				newRecord = records[1]
+			}
+			onlyNew := goldenRecord == nil
+			onlyGolden := newRecord == nil
+			if newRecord == nil {
+				newRecord = goldenRecord
+			}
+
+			same := true
+			if !onlyNew {
+				if len(goldenRecord) != len(newRecord) {
+					return errors.New(fmt.Sprintf("Golden size %d is not new record size %d.", len(goldenRecord), len(newRecord)))
+				}
+				for i, newCell := range newRecord {
+					if newCell != goldenRecord[i] {
+						same = false
+						break
+					}
+				}
+			}
+
+			if !same || onlyNew || onlyGolden {
+				//log.Infof("Not same: %+v and %+v", newRecord, goldenRecord)
+				htmlParts = append(htmlParts, "<tr>")
+				for i, cell := range newRecord {
+					style := "text-overflow: ellipsis; max-width: 200; overflow: hidden;"
+					if onlyGolden {
+						style = fmt.Sprintf("%s; %s", style, "color: green")
+					} else if onlyNew {
+						style = fmt.Sprintf("%s; %s", style, "color: red")
+					}
+					if !onlyNew {
+						goldenCell := goldenRecord[i]
+						if cell != goldenCell {
+							style = fmt.Sprintf("%s; %s", style, "color: blue")
+							if i == 7 {
+								if SEARCH_QUALITY_BY_NAME[cell] > SEARCH_QUALITY_BY_NAME[goldenCell] {
+									style = fmt.Sprintf("%s; %s", style, "color: green")
+									if SEARCH_QUALITY_BY_NAME[cell] == SQ_GOOD {
+										style = fmt.Sprintf("%s; %s", style, "font-weight: bold")
+									}
+								} else if SEARCH_QUALITY_BY_NAME[cell] < SEARCH_QUALITY_BY_NAME[goldenCell] {
+									style = fmt.Sprintf("%s; %s", style, "color: red")
+									if SEARCH_QUALITY_BY_NAME[goldenCell] == SQ_GOOD {
+										style = fmt.Sprintf("%s; %s", style, "font-weight: bold")
+									}
+								}
+							}
+							if i == 8 {
+								if rankValue(cell) < rankValue(goldenCell) {
+									style = fmt.Sprintf("%s; %s", style, "color: green")
+								} else if rankValue(cell) > rankValue(goldenCell) {
+									style = fmt.Sprintf("%s; %s", style, "color: red")
+								}
+							}
+							cell = fmt.Sprintf("%s => %s", goldenCell, cell)
+						}
+					}
+					rowspan := ""
+					if i == 0 && firstForLanguage {
+						style = fmt.Sprintf("%s; %s", style, "text-align: center; font-size: xx-large; font-weight: bold;")
+						rowspan = "rowspan='0'"
+					}
+					if (i != 3 && i != 4 && i != 5) && (i > 0 || firstForLanguage) {
+						htmlParts = append(htmlParts, fmt.Sprintf("<td %s style='%s'>%s</td>", rowspan, style, cell))
+					}
+				}
+				htmlParts = append(htmlParts, "</tr>")
+				firstForLanguage = false
+			}
+		}
+		htmlParts = append(htmlParts, "</table>")
+	}
+
+	htmlParts = append(htmlParts, "</body></html>")
+	html := strings.Join(htmlParts, "\n")
+	return ioutil.WriteFile(vsGoldenHtml, []byte(html), 0644)
 }
 
 func WriteResults(path string, queries []EvalQuery, results EvalResults) error {
@@ -711,7 +1110,6 @@ func WriteToCsv(path string, records [][]string) error {
 }
 
 func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) {
-
 	var latestUID string
 
 	queryMask := `select cu.uid from content_units cu
@@ -744,25 +1142,6 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 }
 
 func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
-
-	sourcesTempTableMask := `CREATE TEMP TABLE temp_rec_sources ON COMMIT DROP AS
-	(WITH RECURSIVE rec_sources AS (
-		SELECT id, parent_id FROM sources s
-			WHERE uid in (%s)
-		UNION SELECT
-			s.id, s.parent_id
-		FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id)
-	SELECT id FROM rec_sources);`
-
-	tagsTempTableMask := `CREATE TEMP TABLE temp_rec_tags ON COMMIT DROP AS
-	(WITH RECURSIVE rec_tags AS (
-		SELECT id, parent_id FROM tags t
-			WHERE uid in (%s)
-		UNION SELECT
-			t.id, t.parent_id
-		FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id)
-	SELECT id FROM rec_tags);`
-
 	queryMask := `
 		select cu.uid from content_units cu
 		left join content_units_tags cut on cut.content_unit_id = cu.id
@@ -800,14 +1179,26 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 	}
 
 	if len(sourceUids) > 0 {
-		filterByUidQuery += "and s.id in (select id from temp_rec_sources) "
-		sourcesTempTableQuery := fmt.Sprintf(sourcesTempTableMask, strings.Join(sourceUids, ","))
-		query += sourcesTempTableQuery
+		filterByUidQuery += fmt.Sprintf(`and s.id in (select AA.id from (
+            WITH RECURSIVE rec_sources AS (
+                SELECT id, parent_id FROM sources s
+                    WHERE uid in (%s)
+                UNION SELECT
+                    s.id, s.parent_id
+                FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
+            )
+            SELECT id FROM rec_sources) AS AA) `, strings.Join(sourceUids, ","))
 	}
 	if len(tagsUids) > 0 {
-		filterByUidQuery += "and t.id in (select id from temp_rec_tags) "
-		tagsTempTableQuery := fmt.Sprintf(tagsTempTableMask, strings.Join(tagsUids, ","))
-		query += tagsTempTableQuery
+		filterByUidQuery += fmt.Sprintf(`and t.id in (select AA.id from (
+            WITH RECURSIVE rec_tags AS (
+                SELECT id, parent_id FROM tags t
+                    WHERE uid in (%s)
+                UNION SELECT
+                    t.id, t.parent_id
+                FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
+            )
+            SELECT id FROM rec_tags) AS AA) `, strings.Join(tagsUids, ","))
 	}
 	if contentType != "" {
 		filterByUidQuery += fmt.Sprintf("and cu.type_id = %d ", mdb.CONTENT_TYPE_REGISTRY.ByName[contentType].ID)

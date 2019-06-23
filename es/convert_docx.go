@@ -50,9 +50,9 @@ func Prepare(uids []string) (error, bool, map[string]int) {
 		successMap[uid] = -1
 	}
 	// Prepare docs batch.
-	log.Infof("Preparing %s docs to docx.", strings.Join(uids, ","))
+	log.Debugf("Preparing %s docs to docx.", strings.Join(uids, ","))
 	resp, err := httpClient.Get(fmt.Sprintf("%s/prepare/%s", unzipUrl, strings.Join(uids, ",")))
-	log.Info("Finished Trying Get.")
+	log.Debug("Finished Trying Get.")
 	if err != nil {
 		log.Warnf("Error preparing docs, Error: %+v.", err)
 		return err, false, successMap
@@ -62,7 +62,7 @@ func Prepare(uids []string) (error, bool, map[string]int) {
 		return err, false, successMap
 	}
 	body, err := ioutil.ReadAll(resp.Body)
-	log.Info("Finished reading body.")
+	log.Debug("Finished reading body.")
 	if err != nil {
 		log.Error("Could not read response body.")
 		return err, false, successMap
@@ -77,7 +77,7 @@ func Prepare(uids []string) (error, bool, map[string]int) {
 
 	backoff := false
 	var errors []string
-	log.Infof("Ranging over data: %v", data)
+	log.Debugf("Ranging over data: %v", data)
 	for i, internalResponse := range data {
 		successMap[uids[i]] = internalResponse.Code
 		if internalResponse.Code == http.StatusServiceUnavailable {
@@ -92,10 +92,10 @@ func Prepare(uids []string) (error, bool, map[string]int) {
 		log.Warn(strings.Join(errors, ","))
 	}
 	if backoff {
-		log.Info("Successfully done, backoff: true.")
+		log.Debug("Successfully done, backoff: true.")
 		return nil, true, successMap
 	} else {
-		log.Info("Successfully done, backoff: false.")
+		log.Debug("Successfully done, backoff: false.")
 		return nil, false, successMap
 	}
 }
@@ -146,7 +146,7 @@ func ConvertDocx(db *sql.DB) error {
 		return errors.Wrap(err, "Fetch docs from mdb")
 	}
 	total := len(docs)
-	log.Infof("%d docs in MDB", total)
+	log.Debugf("%d docs in MDB", total)
 
 	var notEmptyDocs []string
 	for _, doc := range docs {
@@ -191,18 +191,18 @@ func ConvertDocx(db *sql.DB) error {
 				tryRetry := true
 				retries := 5
 				for ; retries > 0 && tryRetry; retries-- {
-					log.Infof("Retry[%d]: %d, tryRetry: %t", j, retries, tryRetry)
+					log.Debugf("Retry[%d]: %d, tryRetry: %t", j, retries, tryRetry)
 					if sleep > 0 {
-						log.Infof("Bakoff[%d], sleep %.2f, retry: %d", j, sleep.Seconds(), 5-retries)
+						log.Debugf("Bakoff[%d], sleep %.2f, retry: %d", j, sleep.Seconds(), 5-retries)
 						time.Sleep(sleep)
 					}
 					var batchSuccessMap map[string]int
 					// ERR SHOULD BE LAST
 					err, tryRetry, batchSuccessMap = Prepare(batch)
 					if tryRetry {
-						log.Infof("Try retry[%d]: true", j)
+						log.Debugf("Try retry[%d]: true", j)
 					} else {
-						log.Infof("Try retry[%d]: false", j)
+						log.Debugf("Try retry[%d]: false", j)
 					}
 					shouldBreak := false
 					nextBatch := []string{}
@@ -237,7 +237,7 @@ func ConvertDocx(db *sql.DB) error {
 						break
 					}
 					if err != nil {
-						log.Infof("Error while Prepare %d / %d. Error: %s", currentBatchDone, len(notEmptyDocs)/batchSize, err)
+						log.Warnf("Error while Prepare %d / %d. Error: %s", currentBatchDone, len(notEmptyDocs)/batchSize, err)
 						prepareMutex.Lock()
 						if prepareErr != nil {
 							prepareErr = err
@@ -246,21 +246,21 @@ func ConvertDocx(db *sql.DB) error {
 						break
 					}
 					if tryRetry {
-						log.Infof("Trying to retry [%d].", j)
+						log.Debugf("Trying to retry [%d].", j)
 						if sleep == 0 {
 							sleep = 10 * time.Second
 						} else {
 							sleep += 10 * time.Second
 						}
 					} else {
-						log.Infof("Trying not to retry [%d]. Retries: %d.", j, retries)
+						log.Debugf("Trying not to retry [%d]. Retries: %d.", j, retries)
 					}
 					// At next retry, we want to try only failed uids.
 					batch = nextBatch
 				}
 				shouldBreak := false
 				reason := ""
-				log.Infof("[%d] Locking...", j)
+				log.Debugf("[%d] Locking...", j)
 				prepareMutex.Lock()
 				if prepareErr != nil {
 					reason = prepareErr.Error()
@@ -271,7 +271,7 @@ func ConvertDocx(db *sql.DB) error {
 					shouldBreak = true
 				}
 				prepareMutex.Unlock()
-				log.Infof("[%d] Unlocking...", j)
+				log.Debugf("[%d] Unlocking...", j)
 				if shouldBreak {
 					log.Errorf("Breaking... Due to: %s.", reason)
 					break

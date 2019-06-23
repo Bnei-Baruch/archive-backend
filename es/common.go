@@ -30,6 +30,10 @@ var (
 	prepareDocsParallelism int
 )
 
+func SynonymsFolder() (string, error) {
+	return InitConfigFolder("elasticsearch.synonyms-folder", &sourcesFolder)
+}
+
 func SourcesFolder() (string, error) {
 	return InitConfigFolder("elasticsearch.sources-folder", &sourcesFolder)
 }
@@ -310,9 +314,9 @@ func DumpIndexes(esc *elastic.Client, title string, resultType string) error {
 		return err
 	}
 	for i, hit := range res.Hits.Hits {
-		var cu ContentUnit
-		json.Unmarshal(*hit.Source, &cu)
-		fmt.Printf("%d: %+v\n", i, cu)
+		var result Result
+		json.Unmarshal(*hit.Source, &result)
+		fmt.Printf("%d: %+v\n", i, result)
 	}
 	fmt.Printf("\n\n ------------------- END OF %s DUMP INDEXES ------------------- \n\n", title)
 	return err

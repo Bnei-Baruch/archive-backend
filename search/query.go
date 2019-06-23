@@ -1,6 +1,10 @@
 package search
 
 import (
+	"fmt"
+	"strings"
+	"unicode"
+
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -24,6 +28,90 @@ const (
 
 	NUM_SUGGESTS = 500
 )
+
+type Query struct {
+	Term          string              `json:"term,omitempty"`
+	ExactTerms    []string            `json:"exact_terms,omitempty"`
+	Original      string              `json:"original,omitempty"`
+	Filters       map[string][]string `json:"filters,omitempty"`
+	LanguageOrder []string            `json:"language_order,omitempty"`
+	Deb           bool                `json:"deb,omitempty"`
+	Intents       []Intent            `json:"intents,omitempty"`
+}
+
+func isTokenStart(i int, runes []rune, lastQuote rune) bool {
+	return i == 0 && !unicode.IsSpace(runes[0]) ||
+		(i > 0 && !unicode.IsSpace(runes[i]) && unicode.IsSpace(runes[i-1]))
+}
+
+func isTokenEnd(i int, runes []rune, lastQuote rune, lastQuoteIdx int) bool {
+	return i == len(runes)-1 ||
+		(i < len(runes)-1 && unicode.IsSpace(runes[i+1]) &&
+			(lastQuote == rune(0) || runes[i] == lastQuote && lastQuoteIdx >= 0 && lastQuoteIdx < i))
+}
+
+func isRuneQuotationMark(r rune) bool {
+	return unicode.In(r, unicode.Quotation_Mark) || r == rune(1523) || r == rune(1524)
+}
+
+// Tokenizes string to work with user friendly escapings of quotes (see tests).
+func tokenize(str string) []string {
+	runes := []rune(str)
+	start := -1
+	lastQuote := rune(0)
+	lastQuoteIdx := -1
+	parts := 0
+	var tokens []string
+	for i, r := range runes {
+		if start == -1 && isTokenStart(i, runes, lastQuote) {
+			start = i
+		}
+		if i == start && lastQuote == rune(0) && isRuneQuotationMark(r) {
+			lastQuote = r
+			lastQuoteIdx = i
+		}
+		if start >= 0 && isTokenEnd(i, runes, lastQuote, lastQuoteIdx) {
+			tokens = append(tokens, string(runes[start:i+1]))
+			lastQuote = rune(0)
+			lastQuoteIdx = -1
+			start = -1
+			parts += 1
+		}
+	}
+
+	return tokens
+}
+
+// Parses query and extracts terms and filters.
+func ParseQuery(q string) Query {
+	filters := make(map[string][]string)
+	var terms []string
+	var exactTerms []string
+	for _, t := range tokenize(q) {
+		isFilter := false
+		for filter := range consts.FILTERS {
+			prefix := fmt.Sprintf("%s:", filter)
+			if isFilter = strings.HasPrefix(t, prefix); isFilter {
+				filters[consts.FILTERS[filter]] = strings.Split(strings.TrimPrefix(t, prefix), ",")
+				break
+			}
+		}
+		if !isFilter {
+			// Not clear what kind of decoding is happening here, utf-8?!
+			runes := []rune(t)
+			// For debug
+			// for _, c := range runes {
+			//     fmt.Printf("%04x %s\n", c, string(c))
+			// }
+			if len(runes) >= 2 && isRuneQuotationMark(runes[0]) && runes[0] == runes[len(runes)-1] {
+				exactTerms = append(exactTerms, string(runes[1:len(runes)-1]))
+			} else {
+				terms = append(terms, t)
+			}
+		}
+	}
+	return Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Original: q, Filters: filters}
+}
 
 func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.Query {
 	boolQuery := elastic.NewBoolQuery().Must(
@@ -148,16 +236,20 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		Explain(options.query.Deb)
 
 	if options.useHighlight {
+
+		//  We use special HighlightQuery with SimpleQueryStringQuery to
+		//	 solve elastic issue with synonyms and highlights.
+
 		highlightQuery := elastic.NewHighlight().Fields(
-			elastic.NewHighlighterField("title").NumOfFragments(0),
-			elastic.NewHighlighterField("description"),
-			elastic.NewHighlighterField("content"),
-			elastic.NewHighlighterField("description.language"),
-			elastic.NewHighlighterField("content.language"))
+			elastic.NewHighlighterField("title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
+			elastic.NewHighlighterField("description").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
+			elastic.NewHighlighterField("content").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
+			elastic.NewHighlighterField("description.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
+			elastic.NewHighlighterField("content.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)))
 		if !options.partialHighlight {
 			// Following field not used in intents to solve elastic bug with highlight.
 			highlightQuery.Fields(
-				elastic.NewHighlighterField("title.language").NumOfFragments(0))
+				elastic.NewHighlighterField("title.language").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)))
 		}
 		source = source.Highlight(highlightQuery)
 	}
@@ -178,7 +270,7 @@ func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchReq
 	requests := make([]*elastic.SearchRequest, 0)
 	indices := make([]string, len(options.query.LanguageOrder))
 	for i := range options.query.LanguageOrder {
-		indices[i] = es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, options.query.LanguageOrder[i])
+		indices[i] = es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, options.query.LanguageOrder[i])
 	}
 	for _, index := range indices {
 		options.index = index
@@ -210,7 +302,7 @@ func NewResultsSuggestRequests(resultTypes []string, query Query, preference str
 	requests := make([]*elastic.SearchRequest, 0)
 	indices := make([]string, len(query.LanguageOrder))
 	for i := range query.LanguageOrder {
-		indices[i] = es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, query.LanguageOrder[i])
+		indices[i] = es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, query.LanguageOrder[i])
 	}
 	for _, index := range indices {
 		request := NewResultsSuggestRequest(resultTypes, index, query, preference)

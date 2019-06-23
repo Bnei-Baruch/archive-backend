@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"bufio"
+	"encoding/csv"
 	"fmt"
+	"os"
 	"sort"
+	"strings"
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
@@ -18,11 +22,20 @@ var evalCmd = &cobra.Command{
 	Run:   evalFn,
 }
 
+var vsGoldenHtmlCmd = &cobra.Command{
+	Use:   "vs_golden_html",
+	Short: "Compares full reports and generates comparison HTML.",
+	Run:   vsGoldenHtmlFn,
+}
+
 var evalSetPath string
 var serverUrl string
 var baseServerUrl string
 var reportPath string
 var flatReportPath string
+var flatReportsPaths string
+var goldenFlatReportPaths string
+var vsGoldenHtml string
 
 func init() {
 	evalCmd.PersistentFlags().StringVar(&evalSetPath, "eval_set", "", "Path to csv eval set.")
@@ -36,6 +49,14 @@ func init() {
 	evalCmd.PersistentFlags().StringVar(&baseServerUrl, "base_server", "", "URL of base archive backend to evaluate.")
 	evalCmd.MarkFlagRequired("base_server")
 	RootCmd.AddCommand(evalCmd)
+
+	vsGoldenHtmlCmd.PersistentFlags().StringVar(&flatReportsPaths, "flat_reports", "", "Paths to csv report file per expectation, separated by comma.")
+	vsGoldenHtmlCmd.MarkPersistentFlagRequired("flat_reports")
+	vsGoldenHtmlCmd.PersistentFlags().StringVar(&goldenFlatReportPaths, "golden_flat_reports", "", "Paths to csv golden report file per expectation, separated by comma.")
+	vsGoldenHtmlCmd.MarkPersistentFlagRequired("golden_flat_reports")
+	vsGoldenHtmlCmd.PersistentFlags().StringVar(&vsGoldenHtml, "vs_golden_html", "", "Path to html output of comparison vs golden.")
+	vsGoldenHtmlCmd.MarkPersistentFlagRequired("vs_golden_html")
+	RootCmd.AddCommand(vsGoldenHtmlCmd)
 }
 
 func roundD(val float64) int {
@@ -189,8 +210,33 @@ func evalFn(cmd *cobra.Command, args []string) {
 		printResults(results)
 		printLosses(results, losses)
 		search.WriteResults(reportPath, evalSet, results)
-		search.WriteResultsByExpectation(flatReportPath, evalSet, results)
+		_, err = search.WriteResultsByExpectation(flatReportPath, evalSet, results)
+		utils.Must(err)
 	}
 	utils.Must(err)
 	log.Infof("Done evaluating queries.")
+}
+
+func vsGoldenHtmlFn(cmd *cobra.Command, args []string) {
+	allRecords := [][]string{}
+	for _, path := range strings.Split(flatReportsPaths, ",") {
+		log.Infof("Opening: %s", path)
+		reader, err := os.Open(path)
+		r := csv.NewReader(bufio.NewReader(reader))
+		records, err := r.ReadAll()
+		utils.Must(err)
+		allRecords = append(allRecords, records[1:]...)
+	}
+	allGoldenRecords := [][]string{}
+	for _, path := range strings.Split(goldenFlatReportPaths, ",") {
+		log.Infof("Opening: %s", path)
+		reader, err := os.Open(path)
+		r := csv.NewReader(bufio.NewReader(reader))
+		recordsGolden, err := r.ReadAll()
+		utils.Must(err)
+		allGoldenRecords = append(allGoldenRecords, recordsGolden[1:]...)
+	}
+	if err := search.WriteVsGoldenHTML(vsGoldenHtml, allRecords, allGoldenRecords); err != nil {
+		log.Error(err)
+	}
 }

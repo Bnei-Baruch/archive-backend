@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -47,12 +48,23 @@ func JoinErrors(one error, two error) error {
 		return nil
 	}
 	if one != nil && two != nil {
-		return errors.Wrapf(one, ", %s", two.Error())
+		return errors.Wrapf(two, "%s\nPrev Error", one.Error())
 	}
 	if one != nil {
 		return one
 	}
 	return two
+}
+
+func JoinErrorsWrap(one error, two error, twoErrorMessage string) error {
+	if two != nil {
+		if twoErrorMessage == "" {
+			return JoinErrors(one, two)
+		} else {
+			return JoinErrors(one, errors.Wrap(two, twoErrorMessage))
+		}
+	}
+	return one
 }
 
 // Like math.Min for int
@@ -158,4 +170,38 @@ func PrintMap(m interface{}) (string, error) {
 		}
 	}
 	return strings.Join(values, ","), nil
+}
+
+func IntersectSortedStringSlices(first []string, second []string) []string {
+	ret := []string{}
+	i := 0
+	j := 0
+	for i < len(first) && j < len(second) {
+		cmp := strings.Compare(first[i], second[j])
+		if cmp == 0 {
+			ret = append(ret, first[i])
+			i++
+		} else if cmp < 0 {
+			i++
+		} else {
+			j++
+		}
+	}
+	return ret
+}
+
+func StringMapOrderedKeys(m interface{}) []string {
+	mValue := reflect.ValueOf(m)
+	if mValue.Kind() != reflect.Map {
+		panic("m is not map")
+	}
+	if mValue.Type().Key().Kind() != reflect.String {
+		panic("m key is not string")
+	}
+	keys := make([]string, 0, len(mValue.MapKeys()))
+	for _, k := range mValue.MapKeys() {
+		keys = append(keys, k.Interface().(string))
+	}
+	sort.Strings(keys)
+	return keys
 }

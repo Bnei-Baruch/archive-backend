@@ -12,16 +12,16 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/go-playground/validator.v8"
-	"gopkg.in/olivere/elastic.v6"
 )
 
 // Set MDB, ES & LOGGER clients in context
-func DataStoresMiddleware(mbdDB *sql.DB, esc *elastic.Client, logger, cm interface{}) gin.HandlerFunc {
+func DataStoresMiddleware(mbdDB *sql.DB, esManager, logger, cm interface{}, grammars interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set("MDB_DB", mbdDB)
-		c.Set("ES_CLIENT", esc)
+		c.Set("ES_MANAGER", esManager)
 		c.Set("LOGGER", logger)
 		c.Set("CACHE", cm)
+		c.Set("GRAMMARS", grammars)
 		c.Next()
 	}
 }

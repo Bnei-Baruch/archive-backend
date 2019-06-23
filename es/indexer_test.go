@@ -43,6 +43,71 @@ type IndexerSuite struct {
 	serverResponses map[string]string
 }
 
+type Collection struct {
+	MDB_UID                  string      `json:"mdb_uid"`
+	TypedUIDs                []string    `json:"typed_uids"`
+	Name                     string      `json:"name"`
+	Description              string      `json:"description"`
+	ContentType              string      `json:"content_type"`
+	ContentUnitsContentTypes []string    `json:"content_units_content_types,omitempty"`
+	EffectiveDate            *utils.Date `json:"effective_date"`
+	OriginalLanguage         string      `json:"original_language,omitempty"`
+}
+
+type ContentUnit struct {
+	MDB_UID                 string      `json:"mdb_uid"`
+	TypedUIDs               []string    `json:"typed_uids"`
+	Name                    string      `json:"name,omitempty"`
+	Description             string      `json:"description,omitempty"`
+	ContentType             string      `json:"content_type"`
+	CollectionsContentTypes []string    `json:"collections_content_types,omitempty"`
+	EffectiveDate           *utils.Date `json:"effective_date,omitempty"`
+	Duration                uint64      `json:"duration,omitempty"`
+	OriginalLanguage        string      `json:"original_language,omitempty"`
+	Translations            []string    `json:"translations,omitempty"`
+	Tags                    []string    `json:"tags,omitempty"`
+	Sources                 []string    `json:"sources,omitempty"`
+	Authors                 []string    `json:"authors,omitempty"`
+	Persons                 []string    `json:"persons,omitempty"`
+	Transcript              string      `json:"transcript,omitempty"`
+}
+
+type File struct {
+	MDB_UID  string      `json:"mdb_uid"`
+	Name     string      `json:"name"`
+	Size     uint64      `json:"size"`
+	URL      string      `json:"url"`
+	Secure   int         `json:"secure"`
+	FilmDate *utils.Date `json:"film_date"`
+	Duration float64     `json:"duration,omitempty"`
+	Language string      `json:"language,omitempty"`
+	MimeType string      `json:"mimetype,omitempty"`
+	Type     string      `json:"type,omitempty"`
+	SubType  string      `json:"subtype,omitempty"`
+}
+
+type Classification struct {
+	MDB_UID            string `json:"mdb_uid"`
+	Name               string `json:"name,omitempty"`
+	NameSuggest        string `json:"name_suggest,omitempty"`
+	Description        string `json:"description,omitempty"`
+	DescriptionSuggest string `json:"description_suggest,omitempty"`
+	Type               string `json:"classification_type"`
+}
+
+type Source struct {
+	MDB_UID string `json:"mdb_uid"`
+	Name    string `json:"name"`
+
+	// Deprecated fields (since we use 'Result Template' in order to index the sources):
+	Description string   `json:"description"`
+	Content     string   `json:"content"`
+	Sources     []string `json:"sources"`
+	Authors     []string `json:"authors"`
+	PathNames   []string `json:"path_names"`
+	FullName    []string `json:"full_name"`
+}
+
 func (suite *IndexerSuite) SetupSuite() {
 	utils.InitConfig("", "../")
 	err := suite.InitTestDB()
@@ -84,7 +149,11 @@ func (suite *IndexerSuite) SetupSuite() {
 	// Set package db and esc variables.
 	common.InitWithDefault(suite.DB)
 	boil.DebugMode = viper.GetString("boiler-mode") == "debug"
-	suite.esc = common.ESC
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		panic(err)
+	}
+	suite.esc = esc
 }
 
 func (suite *IndexerSuite) TearDownSuite() {
@@ -111,20 +180,22 @@ func (suite *IndexerSuite) SetupTest() {
 	r := require.New(suite.T())
 	units, err := mdbmodels.ContentUnits(common.DB).All()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var uids []string
 	for _, unit := range units {
 		uids = append(uids, unit.UID)
 	}
 	r.Nil(deleteContentUnits(uids))
 	// Remove test indexes.
-	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, common.ESC)
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, esc)
 	r.Nil(err)
 	r.Nil(indexer.DeleteIndexes())
 	// Delete test directory
 	utils.Must(os.MkdirAll(viper.GetString("test.test-sources-folder"), 0777))
 }
 
-func updateCollection(c es.Collection, cuUID string, removeContentUnitUID string) (string, error) {
+func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (string, error) {
 	var mdbCollection mdbmodels.Collection
 	if c.MDB_UID != "" {
 		cp, err := mdbmodels.Collections(common.DB, qm.Where("uid = ?", c.MDB_UID)).One()
@@ -208,14 +279,14 @@ func updateCollection(c es.Collection, cuUID string, removeContentUnitUID string
 	return mdbCollection.UID, nil
 }
 
-func (suite *IndexerSuite) uc(c es.Collection, cuUID string, removeContentUnitUID string) string {
+func (suite *IndexerSuite) uc(c Collection, cuUID string, removeContentUnitUID string) string {
 	r := require.New(suite.T())
 	uid, err := updateCollection(c, cuUID, removeContentUnitUID)
 	r.Nil(err)
 	return uid
 }
 
-func removeContentUnitTag(cu es.ContentUnit, lang string, tag mdbmodels.Tag) (string, error) {
+func removeContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
 		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
@@ -240,7 +311,7 @@ func removeContentUnitTag(cu es.ContentUnit, lang string, tag mdbmodels.Tag) (st
 	return mdbContentUnit.UID, nil
 }
 
-func addContentUnitTag(cu es.ContentUnit, lang string, tag mdbmodels.Tag) (string, error) {
+func addContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
 		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
@@ -297,7 +368,7 @@ func addContentUnitTag(cu es.ContentUnit, lang string, tag mdbmodels.Tag) (strin
 	return mdbContentUnit.UID, nil
 }
 
-func addContentUnitSource(cu es.ContentUnit, lang string, src mdbmodels.Source, author mdbmodels.Author, insertAuthor bool) (string, error) {
+func addContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source, author mdbmodels.Author, insertAuthor bool) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
 		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
@@ -339,7 +410,7 @@ func addContentUnitSource(cu es.ContentUnit, lang string, src mdbmodels.Source, 
 	return mdbContentUnit.UID, nil
 }
 
-func removeContentUnitSource(cu es.ContentUnit, lang string, src mdbmodels.Source) (string, error) {
+func removeContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
 		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
@@ -364,7 +435,7 @@ func removeContentUnitSource(cu es.ContentUnit, lang string, src mdbmodels.Sourc
 	return mdbContentUnit.UID, nil
 }
 
-func addContentUnitFile(cu es.ContentUnit, lang string, file mdbmodels.File) (string, error) {
+func addContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
 		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
@@ -402,7 +473,7 @@ func addContentUnitFile(cu es.ContentUnit, lang string, file mdbmodels.File) (st
 	return file.UID, nil
 }
 
-func removeContentUnitFile(cu es.ContentUnit, lang string, file mdbmodels.File) (string, error) {
+func removeContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
 		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
@@ -427,7 +498,7 @@ func removeContentUnitFile(cu es.ContentUnit, lang string, file mdbmodels.File) 
 	return file.UID, nil
 }
 
-func setContentUnitType(cu es.ContentUnit, typeID int64) (string, error) {
+func setContentUnitType(cu ContentUnit, typeID int64) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
 		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
@@ -446,7 +517,7 @@ func setContentUnitType(cu es.ContentUnit, typeID int64) (string, error) {
 	return mdbContentUnit.UID, nil
 }
 
-func updateContentUnit(cu es.ContentUnit, lang string, published bool, secure bool) (string, error) {
+func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
 		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
@@ -504,7 +575,7 @@ func updateContentUnit(cu es.ContentUnit, lang string, published bool, secure bo
 	return mdbContentUnit.UID, nil
 }
 
-func updateFile(f es.File, cuUID string) (string, error) {
+func updateFile(f File, cuUID string) (string, error) {
 	cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cuUID)).One()
 	if err != nil {
 		return "", err
@@ -754,7 +825,7 @@ func removeTag(id int64) error {
 	return mdbmodels.Tags(common.DB, qm.WhereIn("id = ?", id)).DeleteAll()
 }
 
-func updateSource(source es.Source, lang string) (string, error) {
+func updateSource(source Source, lang string) (string, error) {
 	var mdbSource mdbmodels.Source
 	if source.MDB_UID != "" {
 		s, err := mdbmodels.Sources(common.DB, qm.Where("uid = ?", source.MDB_UID)).One()
@@ -800,7 +871,7 @@ func updateSource(source es.Source, lang string) (string, error) {
 		return "", err
 	}
 
-	//add folder for source files
+	// Add folder for source files
 	folder, err := es.SourcesFolder()
 	if err != nil {
 		return "", err
@@ -864,7 +935,7 @@ func updateSourceFileContent(uid string, lang string) error {
 	return nil
 }
 
-func addAuthorToSource(source es.Source, lang string, mdbAuthor mdbmodels.Author, insertAuthor bool, insertI18n bool) error {
+func addAuthorToSource(source Source, lang string, mdbAuthor mdbmodels.Author, insertAuthor bool, insertI18n bool) error {
 	var mdbSource mdbmodels.Source
 	if source.MDB_UID != "" {
 		src, err := mdbmodels.Sources(common.DB, qm.Where("uid = ?", source.MDB_UID)).One()
@@ -917,7 +988,7 @@ func addAuthorToSource(source es.Source, lang string, mdbAuthor mdbmodels.Author
 	return nil
 }
 
-func removeAuthorFromSource(source es.Source, mdbAuthor mdbmodels.Author) error {
+func removeAuthorFromSource(source Source, mdbAuthor mdbmodels.Author) error {
 	var mdbSource mdbmodels.Source
 	if source.MDB_UID != "" {
 		src, err := mdbmodels.Sources(common.DB, qm.Where("uid = ?", source.MDB_UID)).One()
@@ -1008,28 +1079,28 @@ func insertTweet(id int64, tid string, userId int64, title string) error {
 	return nil
 }
 
-func (suite *IndexerSuite) ucu(cu es.ContentUnit, lang string, published bool, secure bool) string {
+func (suite *IndexerSuite) ucu(cu ContentUnit, lang string, published bool, secure bool) string {
 	r := require.New(suite.T())
 	uid, err := updateContentUnit(cu, lang, published, secure)
 	r.Nil(err)
 	return uid
 }
 
-func (suite *IndexerSuite) setCUType(cu es.ContentUnit, typeId int64) string {
+func (suite *IndexerSuite) setCUType(cu ContentUnit, typeId int64) string {
 	r := require.New(suite.T())
 	uid, err := setContentUnitType(cu, typeId)
 	r.Nil(err)
 	return uid
 }
 
-func (suite *IndexerSuite) uf(f es.File, cuUID string) string {
+func (suite *IndexerSuite) uf(f File, cuUID string) string {
 	r := require.New(suite.T())
 	uid, err := updateFile(f, cuUID)
 	r.Nil(err)
 	return uid
 }
 
-func (suite *IndexerSuite) ucut(cu es.ContentUnit, lang string, tag mdbmodels.Tag, add bool) string {
+func (suite *IndexerSuite) ucut(cu ContentUnit, lang string, tag mdbmodels.Tag, add bool) string {
 	r := require.New(suite.T())
 
 	var err error
@@ -1044,7 +1115,7 @@ func (suite *IndexerSuite) ucut(cu es.ContentUnit, lang string, tag mdbmodels.Ta
 	return uid
 }
 
-func (suite *IndexerSuite) acus(cu es.ContentUnit, lang string, src mdbmodels.Source, author mdbmodels.Author, insertAuthor bool) string {
+func (suite *IndexerSuite) acus(cu ContentUnit, lang string, src mdbmodels.Source, author mdbmodels.Author, insertAuthor bool) string {
 	r := require.New(suite.T())
 
 	var err error
@@ -1055,7 +1126,7 @@ func (suite *IndexerSuite) acus(cu es.ContentUnit, lang string, src mdbmodels.So
 	return uid
 }
 
-func (suite *IndexerSuite) rcus(cu es.ContentUnit, lang string, src mdbmodels.Source) string {
+func (suite *IndexerSuite) rcus(cu ContentUnit, lang string, src mdbmodels.Source) string {
 	r := require.New(suite.T())
 
 	var err error
@@ -1067,7 +1138,7 @@ func (suite *IndexerSuite) rcus(cu es.ContentUnit, lang string, src mdbmodels.So
 	return uid
 }
 
-func (suite *IndexerSuite) ucuf(cu es.ContentUnit, lang string, file mdbmodels.File, add bool) string {
+func (suite *IndexerSuite) ucuf(cu ContentUnit, lang string, file mdbmodels.File, add bool) string {
 	r := require.New(suite.T())
 
 	var err error
@@ -1096,7 +1167,7 @@ func (suite *IndexerSuite) rt(id int64) {
 }
 
 //update source
-func (suite *IndexerSuite) us(source es.Source, lang string) string {
+func (suite *IndexerSuite) us(source Source, lang string) string {
 	r := require.New(suite.T())
 	uid, err := updateSource(source, lang)
 	r.Nil(err)
@@ -1111,14 +1182,14 @@ func (suite *IndexerSuite) usfc(uid string, lang string) {
 }
 
 //add source author
-func (suite *IndexerSuite) asa(source es.Source, lang string, mdbAuthor mdbmodels.Author, insertAuthor bool, insertI18n bool) {
+func (suite *IndexerSuite) asa(source Source, lang string, mdbAuthor mdbmodels.Author, insertAuthor bool, insertI18n bool) {
 	r := require.New(suite.T())
 	err := addAuthorToSource(source, lang, mdbAuthor, insertAuthor, insertI18n)
 	r.Nil(err)
 }
 
 //remove source author
-func (suite *IndexerSuite) rsa(source es.Source, mdbAuthor mdbmodels.Author) {
+func (suite *IndexerSuite) rsa(source Source, mdbAuthor mdbmodels.Author) {
 	r := require.New(suite.T())
 	err := removeAuthorFromSource(source, mdbAuthor)
 	r.Nil(err)
@@ -1144,12 +1215,14 @@ func (suite *IndexerSuite) validateCollectionsContentUnits(indexName string, ind
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	cus := make(map[string][]string)
 	for _, hit := range res.Hits.Hits {
-		var c es.Collection
+		var c Collection
 		json.Unmarshal(*hit.Source, &c)
 		uids, err := es.KeyValuesToValues("content_unit", c.TypedUIDs)
 		r.Nil(err)
@@ -1167,8 +1240,10 @@ func (suite *IndexerSuite) validateContentUnitTags(indexName string, indexer *es
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	tags := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
@@ -1186,8 +1261,10 @@ func (suite *IndexerSuite) validateContentUnitSources(indexName string, indexer 
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	sources := make([]string, 0)
 	for _, hit := range res.Hits.Hits {
@@ -1205,8 +1282,10 @@ func (suite *IndexerSuite) validateContentUnitFiles(indexName string, indexer *e
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 
 	// if len(expectedLangs) > 0 {
@@ -1259,8 +1338,10 @@ func (suite *IndexerSuite) validateContentUnitTypes(indexName string, indexer *e
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	cus := make(map[string]es.Result)
 	for _, hit := range res.Hits.Hits {
@@ -1325,8 +1406,10 @@ func (suite *IndexerSuite) validateFullPath(indexName string, indexer *es.Indexe
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	sources := make([][]string, 0)
 	for _, hit := range res.Hits.Hits {
@@ -1347,8 +1430,10 @@ func (suite *IndexerSuite) validateSourceFile(indexName string, indexer *es.Inde
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	contentsByNames := make(map[string]string)
 	for _, hit := range res.Hits.Hits {
@@ -1364,8 +1449,10 @@ func (suite *IndexerSuite) validateNames(indexName string, indexer *es.Indexer, 
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()
 	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
 	var res *elastic.SearchResult
-	res, err = common.ESC.Search().Index(indexName).Do(suite.ctx)
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
 	r.Nil(err)
 	names := make([]string, len(res.Hits.Hits))
 	for i, hit := range res.Hits.Hits {

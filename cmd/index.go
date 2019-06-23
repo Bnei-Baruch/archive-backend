@@ -1,15 +1,20 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	elastic "gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/common"
@@ -47,6 +52,12 @@ var switchAliasCmd = &cobra.Command{
 	Run:   switchAliasFn,
 }
 
+var updateSynonymsCmd = &cobra.Command{
+	Use:   "update_synonyms",
+	Short: "Update synonym keywords list.",
+	Run:   updateSynonymsFn,
+}
+
 var simulateUpdateCmd = &cobra.Command{
 	Use:   "simulate_update",
 	Short: "Simulate index update.",
@@ -63,6 +74,7 @@ func init() {
 	RootCmd.AddCommand(deleteIndexCmd)
 	RootCmd.AddCommand(restartSearchLogsCmd)
 	RootCmd.AddCommand(switchAliasCmd)
+	RootCmd.AddCommand(updateSynonymsCmd)
 	switchAliasCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to switch to.")
 	switchAliasCmd.MarkFlagRequired("index_date")
 	RootCmd.AddCommand(simulateUpdateCmd)
@@ -75,7 +87,13 @@ func indexFn(cmd *cobra.Command, args []string) {
 	t := time.Now()
 	date := strings.ToLower(t.Format(time.RFC3339))
 
-	err, prevDate := es.ProdAliasedIndexDate(common.ESC)
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+		return
+	}
+
+	err, prevDate := es.ProdAliasedIndexDate(esc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -86,7 +104,7 @@ func indexFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	indexer, err := es.MakeProdIndexer(date, common.DB, common.ESC)
+	indexer, err := es.MakeProdIndexer(date, common.DB, esc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -103,7 +121,7 @@ func indexFn(cmd *cobra.Command, args []string) {
 		log.Error(err)
 		return
 	}
-	err = es.SwitchProdAliasToCurrentIndex(date, common.ESC)
+	err = es.SwitchProdAliasToCurrentIndex(date, esc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -131,7 +149,13 @@ func switchAliasFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
-	err := es.SwitchProdAliasToCurrentIndex(strings.ToLower(indexDate), common.ESC)
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+		return
+	}
+
+	err = es.SwitchProdAliasToCurrentIndex(strings.ToLower(indexDate), esc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -144,15 +168,21 @@ func deleteIndexFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+		return
+	}
+
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		name := es.IndexName("prod", consts.ES_RESULTS_INDEX, lang, strings.ToLower(indexDate))
-		exists, err := common.ESC.IndexExists(name).Do(context.TODO())
+		exists, err := esc.IndexExists(name).Do(context.TODO())
 		if err != nil {
 			log.Error(err)
 			return
 		}
 		if exists {
-			res, err := common.ESC.DeleteIndex(name).Do(context.TODO())
+			res, err := esc.DeleteIndex(name).Do(context.TODO())
 			if err != nil {
 				log.Error(errors.Wrap(err, "Delete index"))
 				return
@@ -171,14 +201,20 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+		return
+	}
+
 	name := "search_logs"
-	exists, err := common.ESC.IndexExists(name).Do(context.TODO())
+	exists, err := esc.IndexExists(name).Do(context.TODO())
 	if err != nil {
 		log.Error(err)
 		return
 	}
 	if exists {
-		res, err := common.ESC.DeleteIndex(name).Do(context.TODO())
+		res, err := esc.DeleteIndex(name).Do(context.TODO())
 		if err != nil {
 			log.Error(errors.Wrap(err, "Delete index"))
 			return
@@ -202,7 +238,7 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 		return
 	}
 	// Create index.
-	res, err := common.ESC.CreateIndex(name).BodyJson(bodyJson).Do(context.TODO())
+	res, err := esc.CreateIndex(name).BodyJson(bodyJson).Do(context.TODO())
 	if err != nil {
 		log.Error(errors.Wrap(err, "Create index"))
 		return
@@ -215,23 +251,148 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
 
+func updateSynonymsFn(cmd *cobra.Command, args []string) {
+
+	clock := common.Init()
+	defer common.Shutdown()
+
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+		return
+	}
+
+	folder, err := es.SynonymsFolder()
+	if err != nil {
+		log.Error(errors.Wrap(err, "SynonymsFolder not available."))
+		return
+	}
+	files, err := ioutil.ReadDir(folder)
+	if err != nil {
+		log.Error(errors.Wrap(err, "Cannot read synonym files list."))
+		return
+	}
+
+	bodyMask := `{
+		"index" : {
+			"analysis" : {
+				"filter" : {
+					"synonym_graph" : {
+						"type": "synonym_graph",
+						"tokenizer": "keyword",
+						"synonyms" : [
+							%s
+						]
+					}
+				}
+			}
+		}
+	}`
+
+	for _, fileInfo := range files {
+		keywords := make([]string, 0)
+
+		//  Convention: file name without extension is the language code.
+		var ext = filepath.Ext(fileInfo.Name())
+		var lang = fileInfo.Name()[0 : len(fileInfo.Name())-len(ext)]
+
+		indexName := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, lang)
+
+		filePath := filepath.Join(folder, fileInfo.Name())
+		file, err := os.Open(filePath)
+		if err != nil {
+			log.Error(errors.Wrapf(err, "Unable to open synonyms file: %s.", filePath))
+			return
+		}
+		defer file.Close()
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			//  Blank lines and lines starting with pound are comments (like Solr format).
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
+				if !strings.HasPrefix(trimmed, "#") {
+					commaSeperated := strings.Replace(trimmed, "\t", ",", -1)
+					fline := fmt.Sprintf("\"%s\"", commaSeperated)
+					keywords = append(keywords, fline)
+				}
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			log.Error(errors.Wrapf(err, "Error at scanning synonym config file: %s.", filePath))
+			return
+		}
+
+		synonymsBody := fmt.Sprintf(bodyMask, strings.Join(keywords, ","))
+
+		// Close the index in order to update the synonyms
+		closeRes, err := esc.CloseIndex(indexName).Do(context.TODO())
+		if err != nil {
+			log.Error(errors.Wrapf(err, "CloseIndex: %s", indexName))
+			return
+		}
+		if !closeRes.Acknowledged {
+			log.Errorf("CloseIndex not Acknowledged: %s", indexName)
+			return
+		}
+
+		defer openIndex(indexName, esc)
+
+		settingsRes, err := esc.IndexPutSettings(indexName).BodyString(synonymsBody).Do(context.TODO())
+		if err != nil {
+			log.Error(errors.Wrapf(err, "IndexPutSettings: %s", indexName))
+			return
+		}
+		if !settingsRes.Acknowledged {
+			log.Errorf("IndexPutSettings not Acknowledged: %s", indexName)
+			return
+		}
+	}
+
+	log.Info("Success")
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+}
+
+func openIndex(indexName string, esc *elastic.Client) {
+	openRes, err := esc.OpenIndex(indexName).Do(context.TODO())
+	if err != nil {
+		log.Error(errors.Wrapf(err, "OpenIndex: %s", indexName))
+		return
+	}
+	if !openRes.Acknowledged {
+		log.Errorf("OpenIndex not Acknowledged: %s", indexName)
+		return
+	}
+}
+
 func simulateUpdateFn(cmd *cobra.Command, args []string) {
 	clock := common.Init()
 	defer common.Shutdown()
 
-	err, date := es.ProdAliasedIndexDate(common.ESC)
+	client, err := common.ESC.GetClient()
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	indexer, err := es.MakeProdIndexer(date, common.DB, common.ESC)
+	err, date := es.ProdAliasedIndexDate(client)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	indexer, err := es.MakeProdIndexer(date, common.DB, client)
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
 	err = indexer.Update(es.Scope{CollectionUID: "zf4lLwyI"})
+	//err = indexer.Update(es.Scope{ContentUnitUID: "S5cSiwqb"})
+	//err = indexer.Update(es.Scope{FileUID: "QSMWk1lj"})
+	//err = indexer.Update(es.Scope{ContentUnitUID: "eA0g9XRf"})
 	if err != nil {
 		log.Error(err)
 		return
