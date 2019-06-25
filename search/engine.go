@@ -395,91 +395,15 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
-	// TBD move to other file?
-	// TBD effective_date
-	tweetsByLangChannel := make(chan map[string][]*elastic.SearchResult)
 	// Search tweets in parallel to native search.
+	tweetsByLangChannel := make(chan map[string][]*elastic.SearchResult)
 	go func() {
-		tweetsByLang := make(map[string][]*elastic.SearchResult)
-		mssTweets := e.esc.MultiSearch()
-		mssTweets.Add(NewResultsSearchRequests(
-			SearchRequestOptions{
-				resultTypes:      []string{consts.ES_RESULT_TYPE_TWEETS},
-				index:            "",
-				query:            query,
-				sortBy:           sortBy,
-				from:             0,
-				size:             from + consts.TWEETS_SEARCH_COUNT,
-				preference:       preference,
-				useHighlight:     false,
-				partialHighlight: false})...)
-
-		beforeTweetsSearch := time.Now()
-		mr, err := mssTweets.Do(context.TODO())
-		e.timeTrack(beforeTweetsSearch, "DoSearch.MultisearcTweetsDo")
-		if err != nil {
+		if tweetsByLang, err := e.SearchTweets(query, sortBy, from, size, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching tweets: %+v", err)
-			//TBD?
-			return
+			tweetsByLangChannel <- map[string][]*elastic.SearchResult{}
+		} else {
+			tweetsByLangChannel <- tweetsByLang
 		}
-
-		if len(mr.Responses) != len(query.LanguageOrder) {
-			log.Errorf(fmt.Sprintf("Unexpected number of tweet results %d, expected %d",
-				len(mr.Responses), len(query.LanguageOrder)))
-			//TBD?
-			return
-		}
-
-		for i, currentResults := range mr.Responses {
-			if currentResults.Error != nil {
-				log.Errorf(fmt.Sprintf("Failed tweets multi get: %+v", currentResults.Error))
-				//TBD?
-				return
-			}
-			if haveHits(currentResults) {
-				lang := query.LanguageOrder[i]
-				if _, ok := tweetsByLang[lang]; !ok {
-					tweetsByLang[lang] = make([]*elastic.SearchResult, 0)
-				}
-				tweetsByLang[lang] = append(tweetsByLang[lang], currentResults)
-			}
-		}
-
-		//  Create single tweet result for each language.
-		//  Set the score as the highest score of all tweets per language.
-
-		for _, tweetResults := range tweetsByLang {
-
-			for _, result := range tweetResults {
-
-				var maxScore float64
-				for _, hit := range result.Hits.Hits {
-					if *hit.Score > maxScore {
-						maxScore = *hit.Score
-					}
-				}
-
-				source, err := json.Marshal(result.Hits.Hits)
-				if err != nil {
-					//TBD?
-					return
-				}
-
-				hit := &elastic.SearchHit{
-					Type:   consts.ES_RESULT_TYPE_TWEETS,
-					Source: (*json.RawMessage)(&source),
-					Score:  &maxScore,
-				}
-
-				result.Hits.Hits = []*elastic.SearchHit{hit}
-				result.Hits.TotalHits = 1
-				result.Hits.MaxScore = &maxScore
-			}
-
-		}
-
-		tweetsByLangChannel <- tweetsByLang
-
 	}()
 
 	var resultTypes []string
