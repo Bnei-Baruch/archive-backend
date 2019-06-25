@@ -395,6 +395,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
+	// TBD move to other file?
 	tweetsByLangChannel := make(chan map[string][]*elastic.SearchResult)
 	// Search tweets in parallel to native search.
 	go func() {
@@ -560,6 +561,15 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 			resultsByLang[lang] = append(resultsByLang[lang], intentResults)
 		}
+	}
+
+	// TBD naming?
+	tweetsResultMap := <-tweetsByLangChannel
+	for lang, tweetResults := range tweetsResultMap {
+		if _, ok := resultsByLang[lang]; !ok {
+			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+		}
+		resultsByLang[lang] = append(resultsByLang[lang], tweetResults...)
 	}
 
 	var currentLang string
