@@ -229,7 +229,21 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 }
 
 func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type")
+
+	titleAdded := false
+	contentAdded := false
+	for _, rt := range options.resultTypes {
+		if !contentAdded && rt == consts.ES_RESULT_TYPE_TWEETS {
+			fetchSourceContext.Include("content")
+		} else if !titleAdded {
+			fetchSourceContext.Include("title")
+		}
+		if contentAdded && titleAdded {
+			break
+		}
+	}
+
 	source := elastic.NewSearchSource().
 		Query(createResultsQuery(options.resultTypes, options.query, options.docIds)).
 		FetchSourceContext(fetchSourceContext).
