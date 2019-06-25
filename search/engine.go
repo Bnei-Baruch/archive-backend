@@ -396,6 +396,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}()
 
 	// TBD move to other file?
+	// TBD effective_date
 	tweetsByLangChannel := make(chan map[string][]*elastic.SearchResult)
 	// Search tweets in parallel to native search.
 	go func() {

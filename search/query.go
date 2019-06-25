@@ -216,6 +216,8 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 			weight = 1.5 // We use tags for intents only, score should be same as for sources.
 		} else if resultType == consts.ES_RESULT_TYPE_SOURCES {
 			weight = 1.5
+		} else if resultType == consts.ES_RESULT_TYPE_TWEETS {
+			weight = 1.5
 		} else if resultType == consts.ES_RESULT_TYPE_COLLECTIONS {
 			weight = 2.0
 		}
