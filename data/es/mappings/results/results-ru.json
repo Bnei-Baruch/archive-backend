@@ -12,13 +12,13 @@
                         }
                     ], 
                     "type": "completion", 
-                    "analyzer": "russian"
+                    "analyzer": "russian_synonym"
                 }, 
                 "description": {
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "russian"
+                            "analyzer": "russian_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -28,11 +28,15 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "russian"
+                            "analyzer": "russian_synonym"
                         }
                     }, 
                     "type": "text", 
                     "analyzer": "standard"
+                }, 
+                "index_date": {
+                    "type": "date", 
+                    "format": "strict_date"
                 }, 
                 "mdb_uid": {
                     "type": "keyword"
@@ -41,7 +45,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "russian"
+                            "analyzer": "russian_synonym"
                         }
                     }, 
                     "type": "text", 
@@ -68,10 +72,18 @@
             "number_of_replicas": 0, 
             "analysis": {
                 "filter": {
-                    "he_IL": {
-                        "locale": "he_IL", 
-                        "type": "hunspell", 
-                        "dedup": true
+                    "russian_stemmer": {
+                        "type": "stemmer", 
+                        "language": "russian"
+                    }, 
+                    "synonym_graph": {
+                        "synonyms": [], 
+                        "type": "synonym_graph", 
+                        "tokenizer": "keyword"
+                    }, 
+                    "russian_stop": {
+                        "stopwords": "_russian_", 
+                        "type": "stop"
                     }
                 }, 
                 "char_filter": {
@@ -91,12 +103,12 @@
                     }
                 }, 
                 "analyzer": {
-                    "he": {
+                    "russian_synonym": {
                         "filter": [
-                            "he_IL"
-                        ], 
-                        "char_filter": [
-                            "quotes"
+                            "lowercase", 
+                            "russian_stop", 
+                            "russian_stemmer", 
+                            "synonym_graph"
                         ], 
                         "tokenizer": "standard"
                     }

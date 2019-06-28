@@ -17,6 +17,8 @@ type Result struct {
 	// Document type.
 	ResultType string `json:"result_type"`
 
+	IndexDate *utils.Date `json:"index_date,omitempty"`
+
 	MDB_UID      string   `json:"mdb_uid"`
 	TypedUids    []string `json:"typed_uids"`
 	FilterValues []string `json:"filter_values"`

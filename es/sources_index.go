@@ -10,6 +10,7 @@ import (
 	"path"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -314,6 +315,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			pathNames := []string{}
 			source := Result{
 				ResultType:   index.resultType,
+				IndexDate:    &utils.Date{Time: time.Now()},
 				MDB_UID:      mdbSource.UID,
 				FilterValues: KeyValues(consts.ES_UID_TYPE_SOURCE, parents),
 				TypedUids:    []string{keyValue(consts.ES_UID_TYPE_SOURCE, mdbSource.UID)},

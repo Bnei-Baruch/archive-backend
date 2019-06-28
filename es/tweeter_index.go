@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
@@ -173,6 +174,7 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) *IndexEr
 
 	tweet := Result{
 		ResultType:    index.resultType,
+		IndexDate:     &utils.Date{Time: time.Now()},
 		MDB_UID:       mdbTweet.TwitterID, // TwitterID is taken instead of UID
 		TypedUids:     []string{keyValue(consts.ES_UID_TYPE_TWEET, mdbTweet.TwitterID)},
 		FilterValues:  []string{keyValue("content_type", consts.SCT_TWEET), keyValue(consts.FILTER_LANGUAGE, tweetLang)},

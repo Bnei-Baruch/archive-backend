@@ -17,9 +17,7 @@ type GrammarIntent struct {
 func (e *ESEngine) SearchGrammars(query *Query) ([]Intent, error) {
 	intents := []Intent{}
 	for _, language := range query.LanguageOrder {
-		log.Infof("LanguageOrder: %s Grammars: %+v", language, e.grammars)
 		if grammarByIntent, ok := e.grammars[language]; ok {
-			log.Infof("grammarByIntent: %+v", grammarByIntent)
 			for _, grammar := range grammarByIntent {
 				intent, err := grammar.SearchGrammar(query)
 				if err != nil {
@@ -31,8 +29,6 @@ func (e *ESEngine) SearchGrammars(query *Query) ([]Intent, error) {
 			}
 		}
 	}
-
-	log.Infof("Mached grammars: %+v", intents)
 
 	return intents, nil
 }
@@ -71,7 +67,8 @@ func (g *Grammar) SearchGrammar(query *Query) (*Intent, error) {
 	}
 	for _, pattern := range g.Patterns {
 		if pattern == simpleQuery {
-			log.Infof("Matched search [%s] for grammar %s, intent %s for %s. Pattern: %s", query.Original, g.HitType, g.Intent, g.Language, pattern)
+			// Uncomment for debug:
+			// log.Infof("Matched search [%s] for grammar %s, intent %s for %s. Pattern: %s", query.Original, g.HitType, g.Intent, g.Language, pattern)
 			return &Intent{Type: consts.GRAMMAR_TYPE_LANDING_PAGE, Language: g.Language, Value: GrammarIntent{LandingPage: g.Intent}}, nil
 		}
 	}

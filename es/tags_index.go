@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 func MakeTagsIndex(namespace string, indexDate string, db *sql.DB, esc *elastic.Client) *TagsIndex {
@@ -140,6 +142,7 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) *IndexErrors {
 
 			r := Result{
 				ResultType:   index.resultType,
+				IndexDate:    &utils.Date{Time: time.Now()},
 				MDB_UID:      t.UID,
 				FilterValues: KeyValues(consts.ES_UID_TYPE_TAG, parentUids),
 				TypedUids:    []string{keyValue(consts.ES_UID_TYPE_TAG, t.UID)},

@@ -1,15 +1,20 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	elastic "gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/common"
@@ -47,6 +52,12 @@ var switchAliasCmd = &cobra.Command{
 	Run:   switchAliasFn,
 }
 
+var updateSynonymsCmd = &cobra.Command{
+	Use:   "update_synonyms",
+	Short: "Update synonym keywords list.",
+	Run:   updateSynonymsFn,
+}
+
 var simulateUpdateCmd = &cobra.Command{
 	Use:   "simulate_update",
 	Short: "Simulate index update.",
@@ -63,6 +74,7 @@ func init() {
 	RootCmd.AddCommand(deleteIndexCmd)
 	RootCmd.AddCommand(restartSearchLogsCmd)
 	RootCmd.AddCommand(switchAliasCmd)
+	RootCmd.AddCommand(updateSynonymsCmd)
 	switchAliasCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to switch to.")
 	switchAliasCmd.MarkFlagRequired("index_date")
 	RootCmd.AddCommand(simulateUpdateCmd)
@@ -237,6 +249,122 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 	}
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+}
+
+func updateSynonymsFn(cmd *cobra.Command, args []string) {
+
+	clock := common.Init()
+	defer common.Shutdown()
+
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+		return
+	}
+
+	folder, err := es.SynonymsFolder()
+	if err != nil {
+		log.Error(errors.Wrap(err, "SynonymsFolder not available."))
+		return
+	}
+	files, err := ioutil.ReadDir(folder)
+	if err != nil {
+		log.Error(errors.Wrap(err, "Cannot read synonym files list."))
+		return
+	}
+
+	bodyMask := `{
+		"index" : {
+			"analysis" : {
+				"filter" : {
+					"synonym_graph" : {
+						"type": "synonym_graph",
+						"tokenizer": "keyword",
+						"synonyms" : [
+							%s
+						]
+					}
+				}
+			}
+		}
+	}`
+
+	for _, fileInfo := range files {
+		keywords := make([]string, 0)
+
+		//  Convention: file name without extension is the language code.
+		var ext = filepath.Ext(fileInfo.Name())
+		var lang = fileInfo.Name()[0 : len(fileInfo.Name())-len(ext)]
+
+		indexName := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, lang)
+
+		filePath := filepath.Join(folder, fileInfo.Name())
+		file, err := os.Open(filePath)
+		if err != nil {
+			log.Error(errors.Wrapf(err, "Unable to open synonyms file: %s.", filePath))
+			return
+		}
+		defer file.Close()
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			//  Blank lines and lines starting with pound are comments (like Solr format).
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
+				if !strings.HasPrefix(trimmed, "#") {
+					commaSeperated := strings.Replace(trimmed, "\t", ",", -1)
+					fline := fmt.Sprintf("\"%s\"", commaSeperated)
+					keywords = append(keywords, fline)
+				}
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			log.Error(errors.Wrapf(err, "Error at scanning synonym config file: %s.", filePath))
+			return
+		}
+
+		synonymsBody := fmt.Sprintf(bodyMask, strings.Join(keywords, ","))
+
+		// Close the index in order to update the synonyms
+		closeRes, err := esc.CloseIndex(indexName).Do(context.TODO())
+		if err != nil {
+			log.Error(errors.Wrapf(err, "CloseIndex: %s", indexName))
+			return
+		}
+		if !closeRes.Acknowledged {
+			log.Errorf("CloseIndex not Acknowledged: %s", indexName)
+			return
+		}
+
+		defer openIndex(indexName, esc)
+
+		settingsRes, err := esc.IndexPutSettings(indexName).BodyString(synonymsBody).Do(context.TODO())
+		if err != nil {
+			log.Error(errors.Wrapf(err, "IndexPutSettings: %s", indexName))
+			return
+		}
+		if !settingsRes.Acknowledged {
+			log.Errorf("IndexPutSettings not Acknowledged: %s", indexName)
+			return
+		}
+	}
+
+	log.Info("Success")
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+}
+
+func openIndex(indexName string, esc *elastic.Client) {
+	openRes, err := esc.OpenIndex(indexName).Do(context.TODO())
+	if err != nil {
+		log.Error(errors.Wrapf(err, "OpenIndex: %s", indexName))
+		return
+	}
+	if !openRes.Acknowledged {
+		log.Errorf("OpenIndex not Acknowledged: %s", indexName)
+		return
+	}
 }
 
 func simulateUpdateFn(cmd *cobra.Command, args []string) {
