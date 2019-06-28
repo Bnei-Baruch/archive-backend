@@ -74,7 +74,7 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 			}
 
 			hit := &elastic.SearchHit{
-				Type:   consts.ES_RESULT_TYPE_TWEETS,
+				Type:   consts.SEARCH_RESULT_TWEETS_MANY,
 				Source: (*json.RawMessage)(&source),
 				Score:  &maxScore,
 			}

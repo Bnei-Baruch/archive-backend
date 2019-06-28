@@ -520,7 +520,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 		for _, h := range ret.Hits.Hits {
 
-			if h.Id == "" || h.Type == "tweets" || strings.HasPrefix(h.Index, "intent-") {
+			if h.Id == "" || h.Type == consts.SEARCH_RESULT_TWEETS_MANY || strings.HasPrefix(h.Index, "intent-") {
 				// Bypass intent and tweets
 				continue
 			}
