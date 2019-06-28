@@ -13,9 +13,6 @@ import (
 )
 
 func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, preference string) (map[string][]*elastic.SearchResult, error) {
-
-	// TBD effective_date
-
 	tweetsByLang := make(map[string][]*elastic.SearchResult)
 	mssTweets := e.esc.MultiSearch()
 	mssTweets.Add(NewResultsSearchRequests(

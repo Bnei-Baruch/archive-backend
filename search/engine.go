@@ -488,13 +488,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
-	// TBD naming?
-	tweetsResultMap := <-tweetsByLangChannel
-	for lang, tweetResults := range tweetsResultMap {
+	tweetsByLang := <-tweetsByLangChannel
+	for lang, tweets := range tweetsByLang {
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
-		resultsByLang[lang] = append(resultsByLang[lang], tweetResults...)
+		resultsByLang[lang] = append(resultsByLang[lang], tweets...)
 	}
 
 	var currentLang string
@@ -521,8 +520,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 		for _, h := range ret.Hits.Hits {
 
-			if h.Id == "" || strings.HasPrefix(h.Index, "intent-") {
-				// Bypass intent
+			if h.Id == "" || h.Type == "tweets" || strings.HasPrefix(h.Index, "intent-") {
+				// Bypass intent and tweets
 				continue
 			}
 
