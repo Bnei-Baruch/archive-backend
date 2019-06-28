@@ -328,7 +328,7 @@ const ES_UID_TYPE_SOURCE = "source"
 const ES_UID_TYPE_TWEET = "tweet"
 const ES_UID_TYPE_BLOG_POST = "blog_post"
 
-//  ES_RESULT_TYPE_TWEETS is not part of the array since is searched in parallel to other results search
+//  ES_RESULT_TYPE_TWEETS is not part of the array since it's searched in parallel to other results search
 var ES_SEARCH_RESULT_TYPES = []string{
 	ES_RESULT_TYPE_UNITS,
 	ES_RESULT_TYPE_SOURCES,
