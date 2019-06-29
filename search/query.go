@@ -26,7 +26,7 @@ const (
 	// Boost for exact phrase match, without slop.
 	EXACT_BOOST = 1.5
 
-	NUM_SUGGESTS = 500
+	NUM_SUGGESTS = 100
 )
 
 type Query struct {
@@ -289,8 +289,15 @@ func NewResultsSuggestRequest(resultTypes []string, index string, query Query, p
 				Field("title_suggest").
 				Text(query.Term).
 				ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
-				Size(NUM_SUGGESTS),
-		)
+				Size(NUM_SUGGESTS).
+				SkipDuplicates(true)).
+		Suggester(
+			elastic.NewCompletionSuggester("title_suggest.language").
+				Field("title_suggest.language").
+				Text(query.Term).
+				ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
+				Size(NUM_SUGGESTS).
+				SkipDuplicates(true))
 
 	return elastic.NewSearchRequest().
 		SearchSource(searchSource).

@@ -160,7 +160,14 @@ func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference string) (interface{}, error) {
 	e.timeTrack(time.Now(), "GetSuggestions")
 	multiSearchService := e.esc.MultiSearch()
-	requests := NewResultsSuggestRequests([]string{consts.ES_RESULT_TYPE_TAGS, consts.ES_RESULT_TYPE_SOURCES}, query, preference)
+	requests := NewResultsSuggestRequests([]string{
+		//consts.ES_RESULT_TYPE_UNITS,
+		consts.ES_RESULT_TYPE_COLLECTIONS,
+		consts.ES_RESULT_TYPE_TAGS,
+		consts.ES_RESULT_TYPE_SOURCES,
+		consts.ES_RESULT_TYPE_BLOG_POSTS,
+		//consts.ES_RESULT_TYPE_TWEETS,
+	}, query, preference)
 	multiSearchService.Add(requests...)
 
 	// Actual call to elastic

@@ -386,7 +386,7 @@ RESULTS_TEMPLATE = {
         # Suggest field for autocomplete.
         "title_suggest": {
           "type": "completion",
-          "analyzer": lambda lang: LanguageAnalyzer[lang],
+          "analyzer": "standard",
           "contexts": [
             {
               "name": "result_type",
@@ -394,6 +394,19 @@ RESULTS_TEMPLATE = {
               "path": "result_type",
             },
           ],
+          "fields": {
+              "language": {
+                  "type": "completion",
+                  "analyzer": lambda lang: LanguageAnalyzer[lang],
+                  "contexts": [
+                    {
+                      "name": "result_type",
+                      "type": "category",
+                      "path": "result_type",
+                    },
+                  ],
+              }
+          }
         },
 
         # Content unit specific fields.
