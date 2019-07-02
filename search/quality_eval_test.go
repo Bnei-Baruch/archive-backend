@@ -273,6 +273,10 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 	fmt.Printf("Test [latest] congress event \n")
 	suite.validateExpectation("[latest]https://kabbalahmedia.info/he/events",
 		search.Expectation{search.ET_COLLECTIONS, latsCollectionUID, nil, "[latest]https://kabbalahmedia.info/he/events"}, r)
+
+	fmt.Printf("Test result of any blog post or tweet \n")
+	suite.validateExpectation(search.BLOG_OR_TWEET_MARK,
+		search.Expectation{search.ET_BLOG_OR_TWEET, "", nil, search.BLOG_OR_TWEET_MARK}, r)
 }
 
 func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expectation, r *require.Assertions) {
