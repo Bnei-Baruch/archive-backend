@@ -145,6 +145,18 @@ func Suffixes(escapedTitle string) []string {
 	return ret
 }
 
+func Unique(s []string) []string {
+	keys := make(map[string]bool)
+	ret := []string{}
+	for _, entry := range s {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			ret = append(ret, entry)
+		}
+	}
+	return ret
+}
+
 // Scopes - for detection of changes
 
 func contentUnitsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {

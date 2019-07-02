@@ -403,8 +403,9 @@ func SearchHandler(c *gin.Context) {
 
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
-	grammars := c.MustGet("GRAMMARS").(search.Grammars)
+	//grammars := c.MustGet("GRAMMARS").(search.Grammars)
 	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
+	variables := c.MustGet("VARIABLES").(search.VariablesV2)
 
 	esc, err := esManager.GetClient()
 	if err != nil {
@@ -412,7 +413,7 @@ func SearchHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM, grammars, tc)
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -518,8 +519,9 @@ func AutocompleteHandler(c *gin.Context) {
 	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
-	grammars := c.MustGet("GRAMMARS").(search.Grammars)
+	//grammars := c.MustGet("GRAMMARS").(search.Grammars)
 	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
+	variables := c.MustGet("VARIABLES").(search.VariablesV2)
 
 	esc, err := esManager.GetClient()
 	if err != nil {
@@ -527,7 +529,7 @@ func AutocompleteHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM, grammars, tc)
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))

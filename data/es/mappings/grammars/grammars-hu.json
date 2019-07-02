@@ -1,0 +1,65 @@
+{
+    "mappings": {
+        "grammars": {
+            "dynamic": "strict", 
+            "properties": {
+                "hit_type": {
+                    "type": "keyword"
+                }, 
+                "rules": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "hungarian"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "standard"
+                }, 
+                "variables": {
+                    "type": "keyword"
+                }, 
+                "intent": {
+                    "type": "keyword"
+                }, 
+                "values": {
+                    "type": "keyword"
+                }, 
+                "rules_suggest": {
+                    "fields": {
+                        "language": {
+                            "type": "completion", 
+                            "analyzer": "hungarian"
+                        }
+                    }, 
+                    "type": "completion", 
+                    "analyzer": "standard"
+                }
+            }
+        }
+    }, 
+    "settings": {
+        "index": {
+            "number_of_replicas": 0, 
+            "analysis": {
+                "char_filter": {
+                    "quotes": {
+                        "type": "mapping", 
+                        "mappings": [
+                            "\\u0091=>\\u0027", 
+                            "\\u0092=>\\u0027", 
+                            "\\u2018=>\\u0027", 
+                            "\\u2019=>\\u0027", 
+                            "\\u201B=>\\u0027", 
+                            "\\u0022=>", 
+                            "\\u201C=>", 
+                            "\\u201D=>", 
+                            "\\u05F4=>"
+                        ]
+                    }
+                }
+            }, 
+            "number_of_shards": 1
+        }
+    }
+}
