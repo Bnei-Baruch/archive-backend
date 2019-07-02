@@ -134,14 +134,17 @@ LanguageAnalyzerImp = {
                 "lowercase",
                 "english_stop",
                 "english_stemmer",
-                "synonym_graph"
+                "synonym_graph",
               ]
         }
   },
   HEBREW: {
     "hebrew_synonym": {
             "tokenizer" : "standard",
-            "filter" : ["synonym_graph", "he_IL"],
+            "filter" : [
+                "he_IL",
+                "synonym_graph",
+            ],
             "char_filter": [
               "quotes"
             ]

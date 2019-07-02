@@ -70,7 +70,7 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 
 	es.InitVars()
 
-	GRAMMARS, err = search.MakeGrammars(viper.GetString("elasticsearch.grammars"))
+	GRAMMARS, err = search.MakeGrammars(viper.GetString("elasticsearch.grammars"), esc)
 	utils.Must(err)
 
 	viper.SetDefault("cache.refresh-search-stats", 5*time.Minute)
