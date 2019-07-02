@@ -209,9 +209,18 @@ func evalFn(cmd *cobra.Command, args []string) {
 		utils.Must(err)
 		printResults(results)
 		printLosses(results, losses)
-		search.WriteResults(reportPath, evalSet, results)
-		_, err = search.WriteResultsByExpectation(flatReportPath, evalSet, results)
-		utils.Must(err)
+		if _, ferr := os.Stat(reportPath); os.IsNotExist(ferr) {
+			log.Warnf("Cannot write results: reportPath ('%s') is not found!", reportPath)
+		} else {
+			err = search.WriteResults(reportPath, evalSet, results)
+			utils.Must(err)
+		}
+		if _, ferr := os.Stat(flatReportPath); os.IsNotExist(ferr) {
+			log.Warnf("Cannot write result by expectation: flatReportPath ('%s') is not found!", flatReportPath)
+		} else {
+			_, err = search.WriteResultsByExpectation(flatReportPath, evalSet, results)
+			utils.Must(err)
+		}
 	}
 	utils.Must(err)
 	log.Infof("Done evaluating queries.")
