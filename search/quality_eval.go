@@ -169,6 +169,7 @@ const (
 	FILTER_NAME_TOPIC        = "topic"
 	FILTER_NAME_CONTENT_TYPE = "contentType"
 	PREFIX_LATEST            = "[latest]"
+	BLOG_OR_TWEET_MARK       = "blog" //  TBD consider to change the value
 )
 
 var FLAT_REPORT_HEADERS = []string{
