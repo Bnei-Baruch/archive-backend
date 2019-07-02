@@ -115,8 +115,8 @@
                 "analyzer": {
                     "hebrew_synonym": {
                         "filter": [
-                            "synonym_graph", 
-                            "he_IL"
+                            "he_IL", 
+                            "synonym_graph"
                         ], 
                         "char_filter": [
                             "quotes"
