@@ -89,6 +89,7 @@ const (
 	ET_SOURCES       = iota
 	ET_EVENTS        = iota
 	ET_LANDING_PAGE  = iota
+	ET_BLOG_OR_TWEET = iota
 	ET_EMPTY         = iota
 	ET_FAILED_PARSE  = iota
 	ET_BAD_STRUCTURE = iota
@@ -102,6 +103,7 @@ var EXPECTATIONS_FOR_EVALUATION = map[int]bool{
 	ET_PROGRAMS:      true,
 	ET_SOURCES:       true,
 	ET_LANDING_PAGE:  true,
+	ET_BLOG_OR_TWEET: true,
 	ET_EMPTY:         false,
 	ET_FAILED_PARSE:  false,
 	ET_BAD_STRUCTURE: true,
@@ -114,6 +116,7 @@ var EXPECTATION_TO_NAME = map[int]string{
 	ET_LESSONS:       "et_lessons",
 	ET_PROGRAMS:      "et_programs",
 	ET_SOURCES:       "et_sources",
+	ET_BLOG_OR_TWEET: "et_blog_or_tweet",
 	ET_LANDING_PAGE:  "et_landing_page",
 	ET_EMPTY:         "et_empty",
 	ET_FAILED_PARSE:  "et_failed_parse",
@@ -331,6 +334,9 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	if strings.Trim(e, " ") == "" {
 		return Expectation{ET_EMPTY, "", nil, originalE}
 	}
+	if e == BLOG_OR_TWEET_MARK {
+		return Expectation{ET_BLOG_OR_TWEET, "", nil, originalE}
+	}
 	takeLatest := strings.HasPrefix(strings.ToLower(e), PREFIX_LATEST)
 	if takeLatest {
 		e = e[len(PREFIX_LATEST):]
@@ -488,6 +494,12 @@ func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expect
 	hitType := hit.Type
 	if hitType == "result" {
 		hitType = hitSource.ResultType
+	}
+	if e.Type == ET_BLOG_OR_TWEET {
+		result := hitType == consts.ES_RESULT_TYPE_BLOG_POSTS ||
+			hitType == consts.ES_RESULT_TYPE_TWEETS ||
+			hitType == consts.SEARCH_RESULT_TWEETS_MANY
+		return result
 	}
 	if hitType != EXPECTATION_HIT_TYPE[e.Type] {
 		return false
@@ -858,13 +870,13 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 				</tr>`,
 				goodStyle, tdStyle, quality,
 				goodStyle, tdStyle,
-				100*counters[1]/totalCounters[1], // Weighted percentage.
+				100*counters[1]/totalCounters[1],                                                                           // Weighted percentage.
 				diffToHtml(100*counters[1]/totalCounters[1]-100*counters[3]/totalCounters[3], false /*round*/, true /*%*/), // Weighted percentage diff.
 				tdStyle,
-				100*counters[0]/totalCounters[0], // Unique Percentage.
+				100*counters[0]/totalCounters[0],                                                                           // Unique Percentage.
 				diffToHtml(100*counters[0]/totalCounters[0]-100*counters[2]/totalCounters[2], false /*round*/, true /*%*/), // Unique percentage diff.
 				tdStyle,
-				(int)(counters[0]), // Unique.
+				(int)(counters[0]),                                               // Unique.
 				diffToHtml(counters[0]-counters[2], true /*round*/, false /*%*/), // Unique diff.
 			))
 		}
