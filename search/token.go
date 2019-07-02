@@ -98,6 +98,22 @@ func (otn *OriginalTokenNode) OriginalFullPhraseToString() string {
 	)
 }
 
+func (otn *OriginalTokenNode) OriginalVariableToString() string {
+	prefix := []rune(otn.SkippedPrefixToString())
+	if len(prefix) > 0 {
+		return fmt.Sprintf("%s%s", string(prefix[len(prefix)-1:]), otn.OriginalPhrase)
+	}
+	return otn.OriginalPhrase
+}
+
+func (otn *OriginalTokenNode) OriginalVariablePrefixToString() string {
+	prefix := []rune(otn.SkippedPrefixToString())
+	if len(prefix) > 0 {
+		return fmt.Sprintf("%s", string(prefix[:len(prefix)-1]))
+	}
+	return ""
+}
+
 type TokensCache struct {
 	entries map[string]map[string]*list.Element
 	order   *list.List
@@ -172,7 +188,7 @@ func (tc *TokensCache) Set(phrase string, lang string, tokens []*TokenNode) {
 }
 
 func MakeTokensFromPhrase(phrase string, lang string, esc *elastic.Client, tc *TokensCache) ([]*TokenNode, error) {
-	if tc.Has(phrase, lang) {
+	if tc != nil && tc.Has(phrase, lang) {
 		return tc.Get(phrase, lang), nil
 	}
 	index := es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, lang)
@@ -180,7 +196,9 @@ func MakeTokensFromPhrase(phrase string, lang string, esc *elastic.Client, tc *T
 	if err != nil {
 		return nil, err
 	}
-	tc.Set(phrase, lang, tokens)
+	if tc != nil {
+		tc.Set(phrase, lang, tokens)
+	}
 	return tokens, nil
 }
 
@@ -213,8 +231,8 @@ func MakeTokensFromPhraseIndex(phrase string, lang string, esc *elastic.Client, 
 	return tokenNodes, nil
 }
 
-func TokenNodesToString(root []*TokenNode) string {
-	printPhrases := TokenNodesToPhrases(root)
+func TokenNodesToString(root []*TokenNode, variables map[string]*Variable) string {
+	printPhrases := TokenNodesToPhrases(root, variables)
 	parts := []string{}
 	for i := range printPhrases {
 		parts = append(parts, fmt.Sprintf("[%d]: %s", i, printPhrases[i].ToString()))
@@ -428,70 +446,251 @@ func fillOriginalTokens(children []*TokenNode, parent *TokenNode, phrase *string
 }
 
 type PhrasesWithOrigin struct {
-	OriginalPhrases []string
-	Phrases         []string
+	VariableValues []VariableValue
 }
 
-func (p *PhrasesWithOrigin) Join(s string) string {
-	return strings.Join(p.Phrases, s)
-}
-
-func (p *PhrasesWithOrigin) OriginalJoin() string {
-	return strings.Join(p.OriginalPhrases, "")
-}
-
-func (p *PhrasesWithOrigin) ToString() string {
-	return fmt.Sprintf("[P:%s|O:%s]", p.Join(" "), p.OriginalJoin())
-}
-
-func TokenNodesToPhrases(root []*TokenNode) []PhrasesWithOrigin {
-	otns := []*OriginalTokenNode{}
-	for i := range root {
-		otns = append(otns, root[i].OriginalTokenNodes...)
-	}
-	return OriginalTokenNodesToPhrases(otns)
-}
-
-func OriginalTokenNodesToPhrases(otns []*OriginalTokenNode) []PhrasesWithOrigin {
-	ret := []PhrasesWithOrigin{}
-	for i := range otns {
-		p := PhrasesWithOrigin{
-			[]string{otns[i].OriginalFullPhraseToString()},
-			[]string{otns[i].TokenNode.Token.Token},
-		}
-		phrases := OriginalTokenNodesToPhrases(otns[i].Children)
-		for j := range phrases {
-			phrases[j].OriginalPhrases = append(p.OriginalPhrases, phrases[j].OriginalPhrases...)
-			phrases[j].Phrases = append(p.Phrases, phrases[j].Phrases...)
-			ret = append(ret, phrases[j])
-		}
-		if otns[i].TokenNode.IsEnd || len(phrases) == 0 {
-			ret = append(ret, p)
+func (pwo *PhrasesWithOrigin) VariablesMap() map[string][]string {
+	ret := make(map[string][]string)
+	for i := range pwo.VariableValues {
+		if pwo.VariableValues[i].Name != "$Text" {
+			ret[pwo.VariableValues[i].Name] = append(ret[pwo.VariableValues[i].Name], pwo.VariableValues[i].Value)
 		}
 	}
 	return ret
 }
 
-func TokensMatch(a []*TokenNode, b [][]*TokenNode) bool {
-	for i := range b {
-		if TokensSingleMatch(a, b[i]) {
-			return true
-		}
+func VariablesMapToString(variablesMap map[string][]string) string {
+	parts := []string(nil)
+	for k, v := range variablesMap {
+		parts = append(parts, fmt.Sprintf("%s=[%s]", k, strings.Join(v, ",")))
 	}
-	return false
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
 }
 
-func TokensSingleMatch(a []*TokenNode, b []*TokenNode) bool {
-	if len(a) == 0 && len(b) == 0 {
-		return true
+func MakePhrasesWithOrigin(prefix, phrase, suffix, token string) PhrasesWithOrigin {
+	return PhrasesWithOrigin{[]VariableValue{MakeTextVariableValue(prefix, phrase, suffix, token)}}
+}
+
+func MakeTextVariableValue(prefix, phrase, suffix, token string) VariableValue {
+	return MakeVariableValue("$Text", prefix, phrase, suffix, token, fmt.Sprintf("%s%s%s", prefix, phrase, suffix))
+}
+
+func MakeVariableValue(variable, prefix, phrase, suffix, token, value string) VariableValue {
+	return VariableValue{
+		Name:       variable,                                      // Variable name.
+		Value:      value,                                         // Variable value.
+		Tokenized:  []string{token},                               // Tokenized phrase.
+		Origin:     phrase,                                        // Original phrase.
+		OriginFull: fmt.Sprintf("%s%s%s", prefix, phrase, suffix), // Original phrase with prefix and suffix.
 	}
+}
+
+func (p *PhrasesWithOrigin) Reduce(variableName, variableValue, prefix, suffix string) {
+	tokenized := []string(nil)
+	for i := range p.VariableValues {
+		tokenized = append(tokenized, p.VariableValues[i].Tokenized...)
+	}
+
+	p.VariableValues = []VariableValue{VariableValue{
+		Name:       variableName,
+		Value:      variableValue,
+		Tokenized:  tokenized,
+		Origin:     p.OriginalJoin(),
+		OriginFull: fmt.Sprintf("%s%s%s", prefix, p.OriginalJoin(), suffix),
+	}}
+}
+
+func (p *PhrasesWithOrigin) Join(s string) string {
+	parts := []string{}
+	for i := range p.VariableValues {
+		parts = append(parts, strings.Join(p.VariableValues[i].Tokenized, s))
+	}
+	return strings.Join(parts, s)
+}
+
+func (p *PhrasesWithOrigin) OriginalJoin() string {
+	parts := []string{}
+	for i := range p.VariableValues {
+		parts = append(parts, p.VariableValues[i].OriginFull)
+	}
+	return strings.Join(parts, "")
+}
+
+func (p *PhrasesWithOrigin) VariableValuesJoin() string {
+	parts := []string{}
+	for i := range p.VariableValues {
+		parts = append(parts, fmt.Sprintf("%s:%s", p.VariableValues[i].Name, p.VariableValues[i].Value))
+	}
+	return strings.Join(parts, " ")
+}
+
+func (p *PhrasesWithOrigin) ToString() string {
+	return fmt.Sprintf("[P:%s|O:%s|V:%s]", p.Join(" "), p.OriginalJoin(), p.VariableValuesJoin())
+}
+
+func TokenNodesToPhrases(root []*TokenNode, variables map[string]*Variable) []PhrasesWithOrigin {
+	otns := []*OriginalTokenNode{}
+	for i := range root {
+		otns = append(otns, root[i].OriginalTokenNodes...)
+	}
+	return OriginalTokenNodesToPhrases(otns, variables)
+}
+
+func OriginalTokenNodesToPhrases(otns []*OriginalTokenNode, variables map[string]*Variable) []PhrasesWithOrigin {
+	ret := []PhrasesWithOrigin{}
+	for i := range otns {
+		currentPhrases := []PhrasesWithOrigin(nil)
+		if variable, ok := variables[otns[i].OriginalVariableToString()]; ok {
+			currentPhrases = (*variable).VariableToPhrases(otns[i].OriginalVariablePrefixToString(), otns[i].SkippedSuffixToString(), variables)
+		} else {
+			currentPhrases = append(currentPhrases, MakePhrasesWithOrigin(otns[i].SkippedPrefixToString(), otns[i].OriginalPhrase, otns[i].SkippedSuffixToString(), otns[i].TokenNode.Token.Token))
+		}
+		phrases := OriginalTokenNodesToPhrases(otns[i].Children, variables)
+		for j := range phrases {
+			for k := range currentPhrases {
+				phrasesCopy := phrases[j]
+				phrasesCopy.VariableValues = append(currentPhrases[k].VariableValues, phrasesCopy.VariableValues...)
+				ret = append(ret, phrasesCopy)
+			}
+		}
+		if otns[i].TokenNode.IsEnd || len(phrases) == 0 {
+			ret = append(ret, currentPhrases...)
+		}
+	}
+	return ret
+}
+
+func ManyTokensMatch(tokens [][]*TokenNode, patterns [][]*TokenNode, matchPrefixes bool, variables map[string]*Variable) (bool, []VariableValue, []*TokenNode, error) {
+	for i := range tokens {
+		if match, values, tokensContinue, err := TokensMatch(tokens[i], patterns, matchPrefixes, variables); err != nil {
+			return false, nil, nil, err
+		} else if match {
+			return true, values, tokensContinue, nil
+		}
+	}
+	return false, nil, nil, nil
+}
+
+func TokensMatch(tokens []*TokenNode, patterns [][]*TokenNode, matchPrefixes bool, variables map[string]*Variable) (bool, []VariableValue, []*TokenNode, error) {
+	for i := range patterns {
+		if match, values, tokensContinue, err := TokensSingleMatch(tokens, patterns[i], matchPrefixes, variables); err != nil {
+			return false, nil, nil, err
+		} else if match {
+			return true, values, tokensContinue, nil
+		}
+	}
+	return false, nil, nil, nil
+}
+
+func SplitPatterns(patterns []*TokenNode, variables map[string]*Variable) ([]*TokenNode, []*TokenNode) {
+	tokens := []*TokenNode{}
+	variableTokens := []*TokenNode{}
+	for i := range patterns {
+		if _, ok := variables[patterns[i].OriginalTokenNodes[0].OriginalVariableToString()]; ok {
+			variableTokens = append(variableTokens, patterns[i])
+		} else {
+			tokens = append(tokens, patterns[i])
+		}
+	}
+	return tokens, variableTokens
+}
+
+func PrintOriginalPhrase(t []*TokenNode, variables map[string]*Variable) {
+	parts := []string{}
+	for i := range t {
+		parts = append(parts, t[i].OriginalTokenNodes[0].OriginalVariableToString())
+		if len(t[i].OriginalTokenNodes) > 1 {
+			panic(fmt.Sprintf("Error unexpected variable token with many original phrases: [%s]",
+				TokenNodesToString([]*TokenNode{t[i]}, variables)))
+		}
+	}
+	fmt.Printf("[%s]\n", strings.Join(parts, ","))
+}
+
+func PrintToken(token *TokenNode, variables map[string]*Variable) {
+	phrases := TokenNodesToPhrases([]*TokenNode{token}, variables)
+	for i := range phrases {
+		fmt.Printf("%s|%s\n", phrases[i].OriginalJoin(), phrases[i].Join("_"))
+	}
+}
+
+func PrintTokens(tokens []*TokenNode, prefix string, variables map[string]*Variable) {
+	fmt.Printf("%s - %d Tokens:\n", prefix, len(tokens))
+	for i := range tokens {
+		PrintToken(tokens[i], variables)
+	}
+}
+
+func PrintManyTokens(tokens [][]*TokenNode, prefix string, variables map[string]*Variable) {
+	fmt.Printf("Many Tokens - %d Tokens:\n", len(tokens))
+	for i := range tokens {
+		PrintTokens(tokens[i], prefix, variables)
+	}
+}
+
+func TokensSingleMatch(tokens []*TokenNode, patterns []*TokenNode, matchPrefixes bool, variables map[string]*Variable) (bool, []VariableValue, []*TokenNode, error) {
+	// Uncomment for debug:
+	// PrintTokens(tokens, "tokens", variables)
+	// PrintTokens(patterns, "patterns", variables)
+	if len(tokens) == 0 && (len(patterns) == 0 || matchPrefixes) {
+		if len(patterns) > 0 {
+			return true, nil, patterns, nil
+		}
+		return true, nil, nil, nil
+	}
+	patterns, variableTokens := SplitPatterns(patterns, variables)
+	// First try match variables.
+	for i := range tokens {
+		token := tokens[i].OriginalTokenNodes[0].OriginalVariableToString()
+		if _, ok := variables[token]; ok {
+			return false, nil, nil, errors.New(fmt.Sprintf("Variable found in tokens: %s.", token))
+		}
+		for j := range variableTokens {
+			originalToken := variableTokens[j].OriginalTokenNodes[0].OriginalVariableToString()
+			if variable, ok := variables[originalToken]; !ok {
+				return false, nil, nil, errors.New(fmt.Sprintf("Variable not found: %s.", originalToken))
+			} else if match, values, tokensContinue, err := (*variable).Match(tokens[i], variableTokens[j], matchPrefixes, variables); err != nil {
+				return false, nil, nil, errors.New(fmt.Sprintf("Error matching %s variable with token %s.", originalToken, token))
+			} else if match {
+				if len(variableTokens[j].OriginalTokenNodes) > 1 {
+					// TODO: Need to validate it is actually true
+					// Otherwise need to rewrite.
+					return false, nil, nil, errors.New(fmt.Sprintf("Not expecting more than one original phrase for %s",
+						*(variableTokens[j].OriginalTokenNodes[len(variableTokens[j].OriginalTokenNodes)-1].OriginalWholePhrase)))
+				}
+				return match, values, tokensContinue, nil
+			}
+		}
+	}
+
+	// Try matching non-variable tokens.
 	i := 0
 	j := 0
-	for i < len(a) && j < len(b) {
-		cmp := strings.Compare(a[i].Token.Token, b[j].Token.Token)
+	for i < len(tokens) && j < len(patterns) {
+		cmp := strings.Compare(tokens[i].Token.Token, patterns[j].Token.Token)
 		if cmp == 0 {
-			if (a[i].IsEnd && b[j].IsEnd) || TokensSingleMatch(a[i].Children, b[j].Children) {
-				return true
+			if tokens[i].IsEnd && patterns[j].IsEnd {
+				if len(tokens[i].OriginalTokenNodes) == 0 {
+					return false, nil, nil, errors.New(fmt.Sprintf("Expected at least one original token for [%s].", tokens[i].Token.Token))
+				}
+				return true, []VariableValue{MakeTextVariableValue(
+					tokens[i].OriginalTokenNodes[0].SkippedPrefixToString(),
+					tokens[i].OriginalTokenNodes[0].OriginalPhrase,
+					tokens[i].OriginalTokenNodes[0].SkippedSuffixToString(),
+					tokens[i].Token.Token)}, nil, nil
+			} else if match, values, tokensContinue, err := TokensSingleMatch(tokens[i].Children, patterns[j].Children, matchPrefixes, variables); err != nil {
+				return false, nil, nil, err
+			} else if match {
+				if len(tokens[i].OriginalTokenNodes) == 0 {
+					return false, nil, nil, errors.New(fmt.Sprintf("Expected at least one original token for [%s].", tokens[i].Token.Token))
+				}
+				values = append([]VariableValue{MakeTextVariableValue(
+					tokens[i].OriginalTokenNodes[0].SkippedPrefixToString(),
+					tokens[i].OriginalTokenNodes[0].OriginalPhrase,
+					tokens[i].OriginalTokenNodes[0].SkippedSuffixToString(),
+					tokens[i].Token.Token)}, values...)
+				return true, values, tokensContinue, nil
 			}
 			i++
 			j++
@@ -501,39 +700,57 @@ func TokensSingleMatch(a []*TokenNode, b []*TokenNode) bool {
 			j++
 		}
 	}
-	return false
+	return false, nil, nil, nil
 }
 
 // Searches tokens |a| inside tokens |b|, returns the matching part.
 // Can be optimized? Current complexity is O(|a|^2 * |b|^2), where |a| is nubmer of tokens in the whole graph of |a|.
-func TokensSearch(a []*TokenNode, b [][]*TokenNode) (string, error) {
+func TokensSearch(a []*TokenNode, b [][]*TokenNode, variables map[string]*Variable) (VariablesByPhrase, error) {
+	variablesExist := make(map[string]bool)
+	ret := make(VariablesByPhrase)
 	for i := range b {
-		match, err := TokensSingleSearch(a, b[i])
-		if err != nil || match != "" {
-			return match, err
-		}
-	}
-	return "", nil
-}
-
-func TokensSingleSearch(a []*TokenNode, b []*TokenNode) (string, error) {
-	phrasesARegExp := []*regexp.Regexp{}
-	aPhrases := TokenNodesToPhrases(a)
-	for _, partsA := range aPhrases {
-		re, err := regexp.Compile(partsA.Join(".*"))
+		matches, err := TokensSingleSearch(a, b[i], variables)
 		if err != nil {
-			return "", err
+			return VariablesByPhrase(nil), err
 		}
-		phrasesARegExp = append(phrasesARegExp, re)
-	}
-	for i := range phrasesARegExp {
-		for _, partsB := range TokenNodesToPhrases(b) {
-			candidate := partsB.Join(" ")
-			searchMatch := phrasesARegExp[i].Find([]byte(candidate))
-			if searchMatch != nil {
-				return partsB.OriginalJoin(), nil
+		if len(matches) > 0 {
+			for phrase, vMap := range matches {
+				asString := VariablesMapToString(vMap)
+				if _, ok := variablesExist[asString]; !ok {
+					variablesExist[asString] = true
+					ret[phrase] = vMap
+				}
 			}
 		}
 	}
-	return "", nil
+	return ret, nil
+}
+
+func TokensSingleSearch(a []*TokenNode, b []*TokenNode, variables map[string]*Variable) (VariablesByPhrase, error) {
+	phrasesARegExp := []*regexp.Regexp{}
+	aPhrases := TokenNodesToPhrases(a, variables)
+	for _, partsA := range aPhrases {
+		re, err := regexp.Compile(partsA.Join(".*"))
+		if err != nil {
+			return nil, err
+		}
+		phrasesARegExp = append(phrasesARegExp, re)
+	}
+	variablesExist := make(map[string]bool)
+	ret := make(VariablesByPhrase)
+	for i := range phrasesARegExp {
+		for _, partsB := range TokenNodesToPhrases(b, variables) {
+			vMap := partsB.VariablesMap()
+			asString := VariablesMapToString(vMap)
+			if _, ok := variablesExist[asString]; !ok {
+				candidate := partsB.Join(" ")
+				searchMatch := phrasesARegExp[i].Find([]byte(candidate))
+				if searchMatch != nil {
+					variablesExist[asString] = true
+					ret[partsB.OriginalJoin()] = vMap
+				}
+			}
+		}
+	}
+	return ret, nil
 }

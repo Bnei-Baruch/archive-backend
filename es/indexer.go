@@ -212,6 +212,10 @@ func UpdateSynonyms(esc *elastic.Client, namespace string, indexDate string) err
 		//  Convention: file name without extension is the language code.
 		var ext = filepath.Ext(fileInfo.Name())
 		var lang = fileInfo.Name()[0 : len(fileInfo.Name())-len(ext)]
+		if !utils.Contains(utils.Is(consts.ALL_KNOWN_LANGS), lang) {
+			log.Warningf("Strange synonyms file: %s, skipping.", fileInfo.Name())
+			continue
+		}
 
 		indexName := ""
 		if indexDate != "" {

@@ -553,6 +553,13 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
 }
 
+// Variable name to frontend filter name mapping.
+var VARIABLE_TO_FILTER = map[string]string{
+	"$Year":               "year",
+	"$ConventionLocation": "location",
+	"$Text":               "text",
+}
+
 // Latency log
 const (
 	LAT_DOSEARCH                          = "DoSearch"
@@ -562,7 +569,7 @@ const (
 	LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO  = "DoSearch.AddIntents.FirstRoundDo"
 	LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO = "DoSearch.AddIntents.SecondRoundDo"
 	LAT_DOSEARCH_MULTISEARCHTWEETSDO      = "DoSearch.MultisearchTweetsDo"
-	LAT_DOSEARCH_TYPOSUGGESTDO           = "DoSearch.TypoSuggestDo"
+	LAT_DOSEARCH_TYPOSUGGESTDO            = "DoSearch.TypoSuggestDo"
 	LAT_GETSUGGESTIONS                    = "GetSuggestions"
 	LAT_GETSUGGESTIONS_MULTISEARCHDO      = "GetSuggestions.MultisearchDo"
 )

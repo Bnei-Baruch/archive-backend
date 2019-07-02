@@ -24,6 +24,7 @@ var (
 	LOGGER       *search.SearchLogger
 	CACHE        cache.CacheManager
 	GRAMMARS     search.Grammars
+	VARIABLES    search.VariablesByLang
 	TOKENS_CACHE *search.TokensCache
 	CMS          *api.CMSParams
 )
@@ -73,7 +74,10 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	es.InitVars()
 
 	TOKENS_CACHE = search.MakeTokensCache(consts.TOKEN_CACHE_SIZE)
-	GRAMMARS, err = search.MakeGrammars(viper.GetString("elasticsearch.grammars"), esc, TOKENS_CACHE)
+
+	VARIABLES, err = search.MakeVariables(viper.GetString("elasticsearch.variables"), esc, TOKENS_CACHE)
+	utils.Must(err)
+	GRAMMARS, err = search.MakeGrammars(viper.GetString("elasticsearch.grammars"), esc, TOKENS_CACHE, VARIABLES)
 	utils.Must(err)
 
 	viper.SetDefault("cache.refresh-search-stats", 5*time.Minute)

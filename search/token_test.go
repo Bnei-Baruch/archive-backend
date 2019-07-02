@@ -1,244 +1,54 @@
 package search_test
 
 import (
-	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/Bnei-Baruch/sqlboiler/boil"
 	log "github.com/Sirupsen/logrus"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/olivere/elastic.v6"
 
-	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/search"
-	"github.com/Bnei-Baruch/archive-backend/utils"
+	"github.com/Bnei-Baruch/archive-backend/search/searchtest"
 	"github.com/stretchr/testify/suite"
 )
 
 type TokenSuite struct {
-	suite.Suite
-	utils.TestDBManager
-	esc       *elastic.Client
-	ctx       context.Context
-	indexName string
+	searchtest.SearchSuite
 }
 
 func TestToken(t *testing.T) {
 	suite.Run(t, new(TokenSuite))
 }
 
-func (suite *TokenSuite) SetupSuite() {
-	suite.indexName = "test_token"
-	utils.InitConfig("", "../")
-	err := suite.InitTestDB()
-	if err != nil {
-		panic(err)
-	}
-	suite.ctx = context.Background()
-
-	// Set package db and esc variables.
-	common.InitWithDefault(suite.DB)
-	boil.DebugMode = viper.GetString("boiler-mode") == "debug"
-	esc, err := common.ESC.GetClient()
-	if err != nil {
-		panic(err)
-	}
-	suite.esc = esc
-
-	bodyString := `{
-		"settings" : {
-			"number_of_shards": 1,
-			"number_of_replicas": 0
-		}
-	}`
-	createRes, err := suite.esc.CreateIndex(suite.indexName).BodyString(bodyString).Do(suite.ctx)
-	if err != nil {
-		panic(err)
-	}
-	if !createRes.Acknowledged {
-		panic("Creation of index was not Acknowledged.")
-	}
-	log.Info("Index Created!")
-	err = suite.esc.WaitForYellowStatus("10s")
-	if err != nil {
-		panic(err)
-	}
-}
-
-func (suite *TokenSuite) TearDownSuite() {
-	// Remove test index.
-	res, err := suite.esc.DeleteIndex().Index([]string{suite.indexName}).Do(suite.ctx)
-	if err != nil {
-		panic(err)
-	}
-	if !res.Acknowledged {
-		panic("Creation of index was not Acknowledged.")
-	}
-	log.Info("Index Deleted!")
-	// Close connections.
-	common.Shutdown()
-	// Drop test database.
-	suite.Require().Nil(suite.DestroyTestDB())
-}
-
-func (suite *TokenSuite) SetupTest() {
-	//r := require.New(suite.T())
-	// Remove test index.
-	//res, err := suite.esc.DeleteIndex().Index([]string{suite.indexName}).Do(suite.ctx)
-	//r.Nil(err)
-	//r.True(res.Acknowledged)
-	// create test index.
-}
-
-func (suite *TokenSuite) TearDownTest() {
-	//r := require.New(suite.T())
-}
-
-func (suite *TokenSuite) openIndex() {
-	openRes, err := suite.esc.OpenIndex(suite.indexName).Do(suite.ctx)
-	if err != nil {
-		log.Error(errors.Wrapf(err, "OpenIndex: %s", suite.indexName))
-		return
-	}
-	if !openRes.Acknowledged {
-		log.Errorf("OpenIndex not Acknowledged: %s", suite.indexName)
-		return
-	}
-}
-
-// Each string is a set of words comma separated:
-// []string{"a,b,c", "1,2,3"}
-func (suite *TokenSuite) updateSynonyms(synonyms []string) error {
-	bodyMask := `{
-		"index" : {
-			"analysis" : {
-				"filter" : {
-					"english_stop": {
-						"stopwords": "_english_", 
-						"type": "stop"
-					}, 
-					"english_stemmer": {
-						"type": "stemmer", 
-						"language": "english"
-					}, 
-					"english_possessive_stemmer": {
-						"type": "stemmer", 
-						"language": "possessive_english"
-					},
-					"synonym_graph" : {
-						"type": "synonym_graph",
-						"tokenizer": "keyword",
-						"synonyms" : [
-							%s
-						]
-					},
-					"he_IL": {
-						"locale": "he_IL",
-						"type": "hunspell",
-						"dedup": "true"
-					}
-				},
-				"char_filter": {
-					"quotes": {
-						"type": "mapping", 
-						"mappings": [
-							"\\u0091=>\\u0027", 
-							"\\u0092=>\\u0027", 
-							"\\u2018=>\\u0027", 
-							"\\u2019=>\\u0027", 
-							"\\u201B=>\\u0027", 
-							"\\u0022=>", 
-							"\\u201C=>", 
-							"\\u201D=>", 
-							"\\u05F4=>"
-						]
-					}
-				}, 
-				"analyzer": {
-					"hebrew_synonym": {
-						"filter": [
-							"synonym_graph",
-							"he_IL"
-						], 
-						"char_filter": [
-							"quotes"
-						], 
-						"tokenizer": "standard"
-					},
-					"english_synonym": {
-						"filter": [
-							"english_possessive_stemmer", 
-							"lowercase", 
-							"english_stop", 
-							"english_stemmer", 
-							"synonym_graph"
-						], 
-						"tokenizer": "standard"
-					}
-				}
-			}
-		}
-	}`
-	keywords := []string{}
-	for _, synonymGroup := range synonyms {
-		quoted := fmt.Sprintf("\"%s\"", synonymGroup)
-		keywords = append(keywords, quoted)
-	}
-	synonymsBody := fmt.Sprintf(bodyMask, strings.Join(keywords, ","))
-
-	// Close the index in order to update the synonyms
-	closeRes, err := suite.esc.CloseIndex(suite.indexName).Do(suite.ctx)
-	if err != nil {
-		log.Error(errors.Wrapf(err, "CloseIndex: %s", suite.indexName))
-		return err
-	}
-	if !closeRes.Acknowledged {
-		log.Errorf("CloseIndex not Acknowledged: %s", suite.indexName)
-		return err
-	}
-
-	defer func() {
-		suite.openIndex()
-		err = suite.esc.WaitForYellowStatus("10s")
-		if err != nil {
-			panic(err)
-		}
-	}()
-
-	//log.Infof("Update settings: %+v", synonymsBody)
-	settingsRes, err := suite.esc.IndexPutSettings(suite.indexName).BodyString(synonymsBody).Do(suite.ctx)
-	if err != nil {
-		log.Error(errors.Wrapf(err, "IndexPutSettings: %s", suite.indexName))
-		return err
-	}
-	if !settingsRes.Acknowledged {
-		log.Errorf("IndexPutSettings not Acknowledged: %s", suite.indexName)
-		return errors.New(fmt.Sprintf("IndexPutSettings not Acknowledged: %s", suite.indexName))
-	}
-
-	return nil
-}
-
-func (suite *TokenSuite) Tokens(phrase string, lang string) []*search.TokenNode {
+func (suite *TokenSuite) True(match bool, values []search.VariableValue, tokensContinue []*search.TokenNode, err error) {
 	r := require.New(suite.T())
-	tokens, err := search.MakeTokensFromPhraseIndex(phrase, lang, suite.esc, suite.indexName, suite.ctx)
-	if err != nil {
-		log.Infof("Err: %+v", err)
-	}
 	r.Nil(err)
-	log.Infof("%s:\n%s", phrase, search.TokenNodesToString(tokens))
-	return tokens
+	r.Nil(tokensContinue)
+	r.True(match)
+}
+
+func (suite *TokenSuite) TrueWithPrefix(match bool, values []search.VariableValue, tokensContinue []*search.TokenNode, err error, expectedOrigPhrases []string) {
+	r := require.New(suite.T())
+	r.Nil(err)
+	r.True(match)
+	continuePhrases := search.TokenNodesToPhrases(tokensContinue, make(search.VariablesByName))
+	fmt.Printf("continuePhrases: %+v\n", continuePhrases)
+
+	continuePhrasesStrings := []string{}
+	for _, phrase := range continuePhrases {
+		continuePhrasesStrings = append(continuePhrasesStrings, phrase.OriginalJoin())
+	}
+	r.Equal(strings.Join(expectedOrigPhrases, "|"), strings.Join(continuePhrasesStrings, "|"))
+	r.Equal(len(expectedOrigPhrases), len(continuePhrases))
 }
 
 func (suite *TokenSuite) TestTokenNodesToPhrases1() {
 	r := require.New(suite.T())
-	r.Nil(suite.updateSynonyms([]string{"one,two words"}))
+	r.Nil(suite.UpdateSynonyms([]string{"one,two words"}))
 	a := suite.Tokens("this is one thing for me.", "en")
-	phrases := search.TokenNodesToPhrases(a)
+	phrases := search.TokenNodesToPhrases(a, make(search.VariablesByName))
 	r.Equal(2, len(phrases))
 	r.Equal("this is one thing for me.", phrases[0].OriginalJoin())
 	// Note we don't know how to bring synonym original phrase, just the already reduces.
@@ -246,28 +56,110 @@ func (suite *TokenSuite) TestTokenNodesToPhrases1() {
 	// Should be : "this is two words thing for me."
 	r.Equal("this is two word thing for me.", phrases[1].OriginalJoin())
 
-	r.Nil(suite.updateSynonyms([]string{
+	r.Nil(suite.UpdateSynonyms([]string{
 		"רבש,רב ברוך שלום הלוי אשלג,רב ברוך שלום,הרב ברוך שלום הלוי אשלג,הרב ברוך שלום",
 	}))
 	a = suite.Tokens("שיעורי הרב\"ש.", "he")
-	for _, phrase := range search.TokenNodesToPhrases(a) {
+	for _, phrase := range search.TokenNodesToPhrases(a, make(search.VariablesByName)) {
 		r.Equal("שיעורי הרב\"ש.", phrase.OriginalJoin())
 	}
 }
 
+func UnorderedEqual(a, b []string) bool {
+	m := make(map[string]int)
+	notMatched := []string{}
+	for i := range a {
+		m[a[i]]++
+	}
+	for i := range b {
+		if _, ok := m[b[i]]; !ok {
+			notMatched = append(notMatched, fmt.Sprintf("Could not find [%s] in |a|", b[i]))
+		} else {
+			m[b[i]]--
+		}
+	}
+	for a_i, count := range m {
+		if count > 0 {
+			notMatched = append(notMatched, fmt.Sprintf("%d missing [%s] in |a|", count, a_i))
+		} else if count < 0 {
+			notMatched = append(notMatched, fmt.Sprintf("%d missing [%s] in |b|", -count, a_i))
+		}
+	}
+	if len(notMatched) > 0 {
+		fmt.Printf("|a|: %s\n|b|: %s\n%s\n", strings.Join(a, ","), strings.Join(b, ","), strings.Join(notMatched, "\n"))
+	}
+	return len(notMatched) == 0
+}
+
+func (suite *TokenSuite) TestTokenNodesToPhrasesVariables() {
+	r := require.New(suite.T())
+	r.Nil(suite.UpdateSynonyms([]string{"one,two words"}))
+	translations := suite.MakeTranslations("$Var", "en", map[string][]string{
+		"one": []string{"one", "only one"},
+		"two": []string{"only two", "too you", "two of you"},
+	})
+	varVariable := search.MakeFileVariable("$Var", "en", translations)
+	variables := make(search.VariablesByName)
+	variables["$Var"] = &varVariable
+	phrase := suite.TokensWithVariables("this is one $Var thing for me.", "en", variables)
+	phrases := search.TokenNodesToPhrases(phrase, variables)
+	actualOriginal := []string(nil)
+	actualPhrases := []string(nil)
+	for i := range phrases {
+		actualOriginal = append(actualOriginal, phrases[i].OriginalJoin())
+		actualPhrases = append(actualPhrases, phrases[i].Join(" "))
+	}
+
+	expectedOriginal := []string{
+		"this is one one thing for me.",
+		"this is one only one thing for me.",
+		"this is one only two thing for me.",
+		"this is one only two word thing for me.",
+		"this is one too you thing for me.",
+		"this is one two of you thing for me.",
+		"this is one two word thing for me.",
+		"this is two word one thing for me.",
+		"this is two word only one thing for me.",
+		"this is two word only two thing for me.",
+		"this is two word only two word thing for me.",
+		"this is two word too you thing for me.",
+		"this is two word two of you thing for me.",
+		"this is two word two word thing for me.",
+	}
+	r.True(UnorderedEqual(actualOriginal, expectedOriginal))
+
+	expectedPhrases := []string{
+		"on on thing me",
+		"on onli on thing me",
+		"on onli two thing me",
+		"on onli two word thing me",
+		"on too you thing me",
+		"on two word thing me",
+		"on two you thing me",
+		"two word on thing me",
+		"two word onli on thing me",
+		"two word onli two thing me",
+		"two word onli two word thing me",
+		"two word too you thing me",
+		"two word two word thing me",
+		"two word two you thing me",
+	}
+	r.True(UnorderedEqual(actualPhrases, expectedPhrases))
+}
+
 func (suite *TokenSuite) TestMatchTokensEn() {
 	r := require.New(suite.T())
-	r.Nil(suite.updateSynonyms([]string{"one,two words"}))
+	r.Nil(suite.UpdateSynonyms([]string{"one,two words"}))
 	a := suite.Tokens("this is one thing for me.", "en")
 	b := suite.Tokens("this is two words thing for me.", "en")
-	r.True(search.TokensSingleMatch(a, b))
+	suite.True(search.TokensSingleMatch(a, b, false, make(search.VariablesByName)))
 }
 
 func (suite *TokenSuite) TestTokensNodesToPhrasesWithSynonyms() {
 	r := require.New(suite.T())
-	r.Nil(suite.updateSynonyms([]string{"חיים קהילתיים,חיי קהילה,קהילה"}))
+	r.Nil(suite.UpdateSynonyms([]string{"חיים קהילתיים,חיי קהילה,קהילה"}))
 	a := suite.Tokens("קהילה יהודית מונטריי", "he")
-	phrases := search.TokenNodesToPhrases(a)
+	phrases := search.TokenNodesToPhrases(a, make(search.VariablesByName))
 	r.Equal(3, len(phrases))
 	r.Equal("חיי קהילה יהודית מונטריי", phrases[0].OriginalJoin())
 	r.Equal("חיים קהילתיים יהודית מונטריי", phrases[1].OriginalJoin())
@@ -278,7 +170,7 @@ func (suite *TokenSuite) TestTokensNodesToPhrasesWithSynonyms() {
 // Commenting out until this is fixed in elastic.
 //func (suite *TokenSuite) TestMatchTokensHe1() {
 //	r := require.New(suite.T())
-//	r.Nil(suite.updateSynonyms([]string{"זוהר לעם,זוהר,ספר הזוהר,הזוהר"}))
+//	r.Nil(suite.UpdateSynonyms([]string{"זוהר לעם,זוהר,ספר הזוהר,הזוהר"}))
 //	a := suite.Tokens("מבוא לספר הזוהר", "he")
 //	b := suite.Tokens("מבוא לזוהר", "he")
 //	r.True(search.TokensSingleMatch(a, b))
@@ -286,15 +178,16 @@ func (suite *TokenSuite) TestTokensNodesToPhrasesWithSynonyms() {
 
 func (suite *TokenSuite) TestMatchTokensHe2() {
 	r := require.New(suite.T())
-	r.Nil(suite.updateSynonyms([]string{"ניסיון,ניב טוב", "ספר הזוהר,זוהר,לספר הזוהר,לספר זוהר,לזוהר"}))
+	r.Nil(suite.UpdateSynonyms([]string{"ניסיון,ניב טוב", "ספר הזוהר,זוהר,לספר הזוהר,לספר זוהר,לזוהר"}))
 	a := suite.Tokens("ניסיון מבוא לספר הזוהר", "he")
 	b := suite.Tokens("ניב טוב מבוא לזוהר", "he")
-	r.True(search.TokensSingleMatch(a, b))
+	suite.True(search.TokensSingleMatch(a, b, false, make(search.VariablesByName)))
 }
 
 func (suite *TokenSuite) TestTokenCache() {
+	variables := make(search.VariablesByName)
 	r := require.New(suite.T())
-	r.Nil(suite.updateSynonyms([]string{}))
+	r.Nil(suite.UpdateSynonyms([]string{}))
 	tc := search.MakeTokensCache(2)
 	// Cache empty.
 	r.False(tc.Has("phrase one", "en"))
@@ -306,9 +199,9 @@ func (suite *TokenSuite) TestTokenCache() {
 	tc.Set("phrase two", "en", b)
 	// Check both exist.
 	r.True(tc.Has("phrase one", "en"))
-	r.True(search.TokensSingleMatch(tc.Get("phrase one", "en"), a))
+	suite.True(search.TokensSingleMatch(tc.Get("phrase one", "en"), a, false, variables))
 	r.True(tc.Has("phrase two", "en"))
-	r.True(search.TokensSingleMatch(tc.Get("phrase two", "en"), b))
+	suite.True(search.TokensSingleMatch(tc.Get("phrase two", "en"), b, false, variables))
 	// Add third phrase.
 	c := suite.Tokens("phrase three", "en")
 	tc.Set("phrase three", "en", c)
@@ -316,9 +209,9 @@ func (suite *TokenSuite) TestTokenCache() {
 	r.False(tc.Has("phrase one", "en"))
 	r.Nil(tc.Get("phrase one", "en"))
 	r.True(tc.Has("phrase three", "en"))
-	r.True(search.TokensSingleMatch(tc.Get("phrase three", "en"), c))
+	suite.True(search.TokensSingleMatch(tc.Get("phrase three", "en"), c, false, variables))
 	r.True(tc.Has("phrase two", "en"))
-	r.True(search.TokensSingleMatch(tc.Get("phrase two", "en"), b))
+	suite.True(search.TokensSingleMatch(tc.Get("phrase two", "en"), b, false, variables))
 	// Now two is fresher then three. Add fourth phrase.
 	d := suite.Tokens("phrase four", "en")
 	tc.Set("phrase four", "en", d)
@@ -326,9 +219,9 @@ func (suite *TokenSuite) TestTokenCache() {
 	r.False(tc.Has("phrase three", "en"))
 	r.Nil(tc.Get("phrase three", "en"))
 	r.True(tc.Has("phrase two", "en"))
-	r.True(search.TokensSingleMatch(tc.Get("phrase two", "en"), b))
+	suite.True(search.TokensSingleMatch(tc.Get("phrase two", "en"), b, false, variables))
 	r.True(tc.Has("phrase four", "en"))
-	r.True(search.TokensSingleMatch(tc.Get("phrase four", "en"), d))
+	suite.True(search.TokensSingleMatch(tc.Get("phrase four", "en"), d, false, variables))
 }
 
 //func (suite *TokenSuite) TestTokensMerge() {
@@ -347,7 +240,7 @@ func (suite *TokenSuite) TestTokenCache() {
 //	r.Nil(err)
 //	r.Equal("me is the worst", s)
 //
-//	r.Nil(suite.updateSynonyms([]string{"רבש,רב ברוך שלום הלוי אשלג,רב ברוך שלום,הרב ברוך שלום הלוי אשלג,הרב ברוך שלום"}))
+//	r.Nil(suite.UpdateSynonyms([]string{"רבש,רב ברוך שלום הלוי אשלג,רב ברוך שלום,הרב ברוך שלום הלוי אשלג,הרב ברוך שלום"}))
 //
 //	a = suite.Tokens("שיעורי הרב\"ש", "he")
 //	b = suite.Tokens("שיעורי רב\"ש", "he")
@@ -361,7 +254,7 @@ func (suite *TokenSuite) TestTokenCache() {
 //	r.Nil(err)
 //	r.Equal("שיעורי הרב\"ש", s)
 //
-//	r.Nil(suite.updateSynonyms([]string{
+//	r.Nil(suite.UpdateSynonyms([]string{
 //		"רבש,רב ברוך שלום הלוי אשלג,רב ברוך שלום,הרב ברוך שלום הלוי אשלג,הרב ברוך שלום",
 //		"בעל הסולם,בעהס,רב יהודה אשלג,רב יהודה הלוי אשלג,רב יהודה ליב אשלג,רב יהודה ליב הלוי אשלג,רב אשלג,יהודה אשלג",
 //	}))
@@ -389,47 +282,125 @@ func (suite *TokenSuite) TestTokenCache() {
 //	r.Equal("רב ברוך שלום הלוי אשלג", s)
 //}
 
+func CompareVariableMaps(expected, actual map[string][]string) bool {
+	same := true
+	for variable, values := range expected {
+		if actualValues, ok := actual[variable]; ok {
+			valuesEqual := reflect.DeepEqual(values, actualValues)
+			if !valuesEqual {
+				fmt.Printf("Variable %s differ on values. Expected: %+v, Actual: %+v\n", variable, values, actualValues)
+			}
+			same = same && valuesEqual
+		} else {
+			same = false
+			fmt.Printf("Variable %s don't exist in actual.\n", variable)
+		}
+	}
+	for variable, _ := range actual {
+		if _, ok := expected[variable]; !ok {
+			fmt.Printf("Variable %s don't exist in expected.\n", variable)
+			same = false
+		}
+	}
+	return same
+}
+
+func CompareVariablesByPhrase(expected, actual search.VariablesByPhrase) bool {
+	same := true
+	for phrase, vMap := range expected {
+		if actualVMap, ok := actual[phrase]; !ok {
+			same = false
+			fmt.Printf("Phrase %s does not exist in actual\n", phrase)
+		} else {
+			same = same && CompareVariableMaps(vMap, actualVMap)
+		}
+	}
+	for phrase, _ := range actual {
+		if _, ok := expected[phrase]; !ok {
+			fmt.Printf("Phrase %s does not exist in expected\n", phrase)
+			same = false
+		}
+	}
+	return same
+}
+
+func MakeVariablesByPhrase(phrases ...[]string) search.VariablesByPhrase {
+	ret := make(search.VariablesByPhrase)
+	for j := range phrases {
+		phrase := phrases[j][0]
+		parts := phrases[j][1:]
+		vMap := make(map[string][]string)
+		key := ""
+		for i := range parts {
+			part := parts[i]
+			if strings.HasPrefix(part, "$") {
+				key = part
+			} else {
+				vMap[key] = append(vMap[key], part)
+			}
+		}
+		ret[phrase] = vMap
+	}
+	return ret
+}
+
 func (suite *TokenSuite) TestTokensSingleSearch() {
 	r := require.New(suite.T())
+	r.Nil(suite.UpdateSynonyms([]string{}))
 	a := suite.Tokens("me is th rest", "en")
 	b := suite.Tokens("some thing interesting", "en")
-	s, err := search.TokensSingleSearch(a, b)
+	s, err := search.TokensSingleSearch(a, b, make(search.VariablesByName))
 	r.Nil(err)
-	r.Equal("some thing interesting", s)
+	r.True(CompareVariablesByPhrase(MakeVariablesByPhrase([]string{"some thing interesting"}), s))
 
 	a = suite.Tokens("רות נ", "he")
 	b = suite.Tokens("סדרות לימוד נבחרות", "he")
-	s, err = search.TokensSingleSearch(a, b)
+	s, err = search.TokensSingleSearch(a, b, make(search.VariablesByName))
 	r.Nil(err)
-	r.Equal("סדרות לימוד נבחרות", s)
+	r.True(CompareVariablesByPhrase(MakeVariablesByPhrase([]string{"סדרות לימוד נבחרות"}), s))
 
 	a = suite.Tokens("רות נב", "he")
 	b = suite.Tokens("סדרות לימוד נבחרות", "he")
-	s, err = search.TokensSingleSearch(a, b)
+	s, err = search.TokensSingleSearch(a, b, make(search.VariablesByName))
 	r.Nil(err)
-	r.Equal(s, "סדרות לימוד נבחרות")
+	r.True(CompareVariablesByPhrase(MakeVariablesByPhrase([]string{"סדרות לימוד נבחרות"}), s))
+
 	a = suite.Tokens("רות נ", "he")
 	b = suite.Tokens("סדרות לימוד נבחרות", "he")
-	s, err = search.TokensSingleSearch(a, b)
+	s, err = search.TokensSingleSearch(a, b, make(search.VariablesByName))
 	r.Nil(err)
-	r.Equal("סדרות לימוד נבחרות", s)
+	r.True(CompareVariablesByPhrase(MakeVariablesByPhrase([]string{"סדרות לימוד נבחרות"}), s))
+
+	r.Nil(suite.UpdateSynonyms([]string{}))
+	a = suite.Tokens("ברוך", "he")
+	b = suite.Tokens("ברוך", "he")
+	s, err = search.TokensSingleSearch(a, b, make(search.VariablesByName))
+	r.Nil(err)
+	r.True(CompareVariablesByPhrase(MakeVariablesByPhrase([]string{"ברוך"}), s))
+
+	r.Nil(suite.UpdateSynonyms([]string{"רבש,רב ברוך שלום הלוי אשלג,רב ברוך שלום,הרב ברוך שלום הלוי אשלג,הרב ברוך שלום"}))
+	a = suite.Tokens("שיעורי", "he")
+	b = suite.Tokens("שיעורי רב\"ש", "he")
+	s, err = search.TokensSingleSearch(a, b, make(search.VariablesByName))
+	r.Nil(err)
+	r.True(CompareVariablesByPhrase(MakeVariablesByPhrase([]string{"שיעורי רב ברוך שלום הלוי אשלג"}), s))
 }
 
 func (suite *TokenSuite) TestMatchTokensWithSynonymsHe() {
 	log.Info("TestMatchTokensWithSynonymsHe")
 	r := require.New(suite.T())
-	r.Nil(suite.updateSynonyms([]string{"רב לייטמן,רב דר מיכאל לייטמן,רב מיכאל לייטמן"}))
+	r.Nil(suite.UpdateSynonyms([]string{"רב לייטמן,רב דר מיכאל לייטמן,רב מיכאל לייטמן"}))
 	a := suite.Tokens("רב לייטמן", "he")
 	b := suite.Tokens("רב דר מיכאל לייטמן", "he")
-	r.True(search.TokensSingleMatch(a, b))
+	suite.True(search.TokensSingleMatch(a, b, false, make(search.VariablesByName)))
 }
 
 func (suite *TokenSuite) TestSortWorks() {
 	log.Info("TestSortWorks")
 	r := require.New(suite.T())
-	r.Nil(suite.updateSynonyms([]string{"aaaa,bbbb,cccc,dddd"}))
+	r.Nil(suite.UpdateSynonyms([]string{"aaaa,bbbb,cccc,dddd"}))
 	a := suite.Tokens("dddd cccc aaaa bbbb", "he")
-	phrases := search.TokenNodesToPhrases(a)
+	phrases := search.TokenNodesToPhrases(a, make(search.VariablesByName))
 	r.Equal(256, len(phrases))
 	r.Equal("aaaa aaaa aaaa aaaa", phrases[0].Join(" "))
 	r.Equal("aaaa aaaa aaaa bbbb", phrases[1].Join(" "))
@@ -440,7 +411,7 @@ func (suite *TokenSuite) TestSortWorks() {
 //func (suite *TokenSuite) TestHaklatot() {
 //	log.Info("TestHaklatot")
 //	r := require.New(suite.T())
-//	r.Nil(suite.updateSynonyms([]string{}))
+//	r.Nil(suite.UpdateSynonyms([]string{}))
 //
 //	toMerge := []string{
 //		"הקלטות רב\"ש",
@@ -456,3 +427,13 @@ func (suite *TokenSuite) TestSortWorks() {
 //	log.Infof("a:\n%s", search.TokenNodesToString(a))
 //	r.True(false)
 //}
+
+func (suite *TokenSuite) TestPrefixMatch() {
+	log.Info("TestPrefixMatch")
+	r := require.New(suite.T())
+	r.Nil(suite.UpdateSynonyms([]string{"one,two,three"}))
+	tokens := suite.Tokens("let's try to match two prefixes of a long.", "en")
+	patterns := suite.Tokens("lets try to match three prefixes of a long query.", "en")
+	match, values, tokensContinue, err := search.TokensSingleMatch(tokens, patterns, true, make(search.VariablesByName))
+	suite.TrueWithPrefix(match, values, tokensContinue, err, []string{" query."})
+}

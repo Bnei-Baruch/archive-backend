@@ -171,12 +171,12 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	e.timeTrack(time.Now(), consts.LAT_GETSUGGESTIONS)
 
 	// Run grammar suggestions in parallel.
-	grammarSuggestionsChannel := make(chan map[string][]string)
+	grammarSuggestionsChannel := make(chan map[string][]VariablesByPhrase)
 	go func() {
 		grammarSuggestions, err := e.SuggestGrammars(&query)
 		if err != nil {
 			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
-			grammarSuggestionsChannel <- make(map[string][]string)
+			grammarSuggestionsChannel <- make(map[string][]VariablesByPhrase)
 		} else {
 			grammarSuggestionsChannel <- grammarSuggestions
 		}
@@ -214,8 +214,18 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	}
 
 	// Merge with grammar suggestions.
-	var grammarSuggestions map[string][]string
+	var grammarSuggestions map[string][]VariablesByPhrase
 	grammarSuggestions = <-grammarSuggestionsChannel
+
+	for k, v := range grammarSuggestions {
+		log.Infof("Grammar Suggest Lang [%s]:", k)
+		for i := range v {
+			for phrase, vMap := range v[i] {
+				log.Infof("%s vars: %s", phrase, VariablesMapToString(vMap))
+			}
+		}
+	}
+
 	for i, lang := range query.LanguageOrder {
 		if langSuggestions, ok := grammarSuggestions[lang]; ok && len(langSuggestions) > 0 && mr != nil && len(mr.Responses) > i {
 			r := mr.Responses[i]
@@ -227,20 +237,23 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 			}
 			for key := range r.Suggest {
 				for j := range r.Suggest[key] {
-					for _, suggestion := range langSuggestions {
-						source := struct {
-							Title string `json:"title"`
-						}{Title: suggestion}
-						sourceRawMessage, err := json.Marshal(source)
-						if err != nil {
-							return nil, err
+					for _, variablesByPhrase := range langSuggestions {
+						for suggestion, _ := range variablesByPhrase {
+							source := struct {
+								Title      string `json:"title"`
+								ResultType string `json:"result_type"`
+							}{Title: suggestion, ResultType: consts.GRAMMAR_TYPE_LANDING_PAGE}
+							sourceRawMessage, err := json.Marshal(source)
+							if err != nil {
+								return nil, err
+							}
+							raw := json.RawMessage(sourceRawMessage)
+							option := elastic.SearchSuggestionOption{
+								Text:   suggestion,
+								Source: &raw,
+							}
+							r.Suggest[key][j].Options = append([]elastic.SearchSuggestionOption{option}, r.Suggest[key][j].Options...)
 						}
-						raw := json.RawMessage(sourceRawMessage)
-						option := elastic.SearchSuggestionOption{
-							Text:   suggestion,
-							Source: &raw,
-						}
-						r.Suggest[key][j].Options = append(r.Suggest[key][j].Options, option)
 					}
 				}
 			}
