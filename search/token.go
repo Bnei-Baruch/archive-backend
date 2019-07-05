@@ -27,6 +27,7 @@ type Token struct {
 
 type TokenNode struct {
 	Token    Token
+	IsEnd    bool
 	Children []*TokenNode
 }
 
@@ -62,16 +63,16 @@ func MakeTokensFromPhraseIndex(phrase string, lang string, esc *elastic.Client, 
 	}
 	tokenNodes := MakeTokenForest(tokens.Tokens)
 	// For debug should be deleted.
-	tokensStr := []string{}
-	for i, t := range tokens.Tokens {
-		tokensStr = append(tokensStr, fmt.Sprintf("[%d]:%+v", i, t))
-	}
-	log.Infof("Tokens for: [%s] Lang: %s, Analyzer: %s:\n%s", phrase, lang, consts.ANALYZERS[lang], strings.Join(tokensStr, "\n"))
+	//tokensStr := []string{}
+	//for i, t := range tokens.Tokens {
+	//	tokensStr = append(tokensStr, fmt.Sprintf("[%d]:%+v", i, t))
+	//}
+	//log.Infof("Tokens for: [%s] Lang: %s, Analyzer: %s:\n%s", phrase, lang, consts.ANALYZERS[lang], strings.Join(tokensStr, "\n"))
 	// For debug, should be deleted.
-	printPhrases := TokenNodesToPhrases(tokenNodes)
-	for i := range printPhrases {
-		log.Infof("Phrase[%d]: %s", i, strings.Join(printPhrases[i], " "))
-	}
+	//printPhrases := TokenNodesToPhrases(tokenNodes)
+	//for i := range printPhrases {
+	//	log.Infof("Phrase[%d]: %s", i, strings.Join(printPhrases[i], " "))
+	//}
 	return tokenNodes, nil
 }
 
@@ -129,6 +130,11 @@ func MakeTokenForest(tokens []Token) []*TokenNode {
 			i++
 		}
 	}
+	// Set end tokens.
+	for i := range tokenEnd[len(tokenEnd)-1] {
+		tokenEnd[len(tokenEnd)-1][i].IsEnd = true
+	}
+	// Sort
 	SortTokenForest(tokenRoot)
 	return tokenRoot
 }
@@ -169,6 +175,7 @@ func MergeTokenForests(a []*TokenNode, b []*TokenNode) []*TokenNode {
 		cmp := strings.Compare(a[i].Token.Token, b[j].Token.Token)
 		if cmp == 0 { // Merge
 			a[i].Children = MergeTokenForests(a[i].Children, b[j].Children)
+			a[i].IsEnd = a[i].IsEnd || b[j].IsEnd
 			ret = append(ret, a[i])
 			i++
 			j++
@@ -189,7 +196,11 @@ func TokenNodesToPhrases(root []*TokenNode) [][]string {
 		phrases := TokenNodesToPhrases(root[i].Children)
 		if len(phrases) > 0 {
 			for j := range phrases {
-				phrases[j] = append([]string{root[i].Token.Token}, phrases[j]...)
+				t := root[i].Token.Token
+				if root[i].IsEnd {
+					t = fmt.Sprintf("%s|", root[i].Token.Token)
+				}
+				phrases[j] = append([]string{t}, phrases[j]...)
 				ret = append(ret, phrases[j])
 			}
 		} else {
@@ -203,13 +214,13 @@ func TokensMatch(a []*TokenNode, b []*TokenNode) bool {
 	if len(a) == 0 && len(b) == 0 {
 		return true
 	}
-	log.Infof("Cmp a:\n%+v\nwith b:\n%+v\n", TokenNodesToString(a), TokenNodesToString(b))
+	log.Debugf("Cmp a:\n%+v\nwith b:\n%+v\n", TokenNodesToString(a), TokenNodesToString(b))
 	i := 0
 	j := 0
 	for i < len(a) && j < len(b) {
 		cmp := strings.Compare(a[i].Token.Token, b[j].Token.Token)
 		if cmp == 0 {
-			if TokensMatch(a[i].Children, b[j].Children) {
+			if (a[i].IsEnd && b[j].IsEnd) || TokensMatch(a[i].Children, b[j].Children) {
 				return true
 			}
 			i++

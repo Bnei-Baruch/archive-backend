@@ -273,21 +273,35 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	bodyMask := `{
-		"index" : {
-			"analysis" : {
-				"filter" : {
-					"synonym_graph" : {
-						"type": "synonym_graph",
-						"tokenizer": "keyword",
-						"synonyms" : [
-							%s
-						]
-					}
-				}
-			}
-		}
-	}`
+	type SynonymGraphSU struct {
+		Type      string   `json:"type"`
+		Tokenizer string   `json:"tokenizer"`
+		Synonyms  []string `json:"synonyms"`
+	}
+	type FilterSU struct {
+		SynonymGraph SynonymGraphSU `json:"synonym_graph"`
+	}
+	type AnalysisSU struct {
+		Filter FilterSU `json:"filter"`
+	}
+	type IndexSU struct {
+		Analysis AnalysisSU `json:"analysis"`
+	}
+	type SU struct {
+		Index IndexSU `json:"index"`
+	}
+	body := SU{
+		IndexSU{
+			AnalysisSU{
+				FilterSU{
+					SynonymGraphSU{
+						Type:      "synonym_graph",
+						Tokenizer: "keyword",
+					},
+				},
+			},
+		},
+	}
 
 	for _, fileInfo := range files {
 		keywords := make([]string, 0)
@@ -314,18 +328,16 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 			if trimmed != "" {
 				if !strings.HasPrefix(trimmed, "#") {
 					commaSeperated := strings.Replace(trimmed, "\t", ",", -1)
-					fline := fmt.Sprintf("\"%s\"", commaSeperated)
-					keywords = append(keywords, fline)
+					keywords = append(keywords, commaSeperated)
 				}
 			}
 		}
-
 		if err := scanner.Err(); err != nil {
 			log.Error(errors.Wrapf(err, "Error at scanning synonym config file: %s.", filePath))
 			return
 		}
-
-		synonymsBody := fmt.Sprintf(bodyMask, strings.Join(keywords, ","))
+		// Set keywords to update synonyms
+		body.Index.Analysis.Filter.SynonymGraph.Synonyms = keywords
 
 		// Close the index in order to update the synonyms
 		closeRes, err := esc.CloseIndex(indexName).Do(context.TODO())
@@ -340,9 +352,9 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 
 		defer openIndex(indexName, esc)
 
-		settingsRes, err := esc.IndexPutSettings(indexName).BodyString(synonymsBody).Do(context.TODO())
+		settingsRes, err := esc.IndexPutSettings(indexName).BodyJson(body).Do(context.TODO())
 		if err != nil {
-			log.Error(errors.Wrapf(err, "IndexPutSettings: %s", indexName))
+			log.Error(errors.Wrapf(err, "IndexPutSettings: %s with keywords: \n%s\n", indexName, strings.Join(keywords, "\n")))
 			return
 		}
 		if !settingsRes.Acknowledged {
