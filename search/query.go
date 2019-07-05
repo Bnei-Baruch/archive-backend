@@ -211,7 +211,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 	for _, resultType := range resultTypes {
 		weight := 1.0
 		if resultType == consts.ES_RESULT_TYPE_UNITS {
-			weight = 1.0
+			weight = 1.1
 		} else if resultType == consts.ES_RESULT_TYPE_TAGS {
 			weight = 1.5 // We use tags for intents only, score should be same as for sources.
 		} else if resultType == consts.ES_RESULT_TYPE_SOURCES {

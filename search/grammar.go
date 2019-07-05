@@ -92,6 +92,11 @@ func ReadGrammarFile(grammarFile string, esc *elastic.Client) (Grammars, error) 
 			return nil, errors.Wrapf(err, "Error generating tokens from pattern: [%s] in %s.", pattern, lang)
 		}
 		grammars[lang][intent].Patterns = MergeTokenForests(grammars[lang][intent].Patterns, tokens)
+		//printPhrases := TokenNodesToPhrases(grammars[lang][intent].Patterns)
+		//log.Debugf("Merged %s, grammar phrases %s %s", pattern, lang, intent)
+		//for i := range printPhrases {
+		//	log.Debugf("Phrase[%d]: %s", i, strings.Join(printPhrases[i], " "))
+		//}
 
 		lineNum++
 	}

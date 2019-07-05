@@ -72,7 +72,7 @@ func queriesFn(cmd *cobra.Command, args []string) {
 		"#", "SearchId", "Created", "Term", "Exact", "Filters",
 		"Languages", "From", "Size", "SortBy", "Error", "Suggestion"}})
 	totalQueries := 0
-	SLICES := 10
+	SLICES := 100
 	for i := 0; i < SLICES; i++ {
 		s := elastic.NewSliceQuery().Id(i).Max(SLICES)
 		queries, err := logger.GetAllQueries(s)
