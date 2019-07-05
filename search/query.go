@@ -232,18 +232,18 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type")
 
 	titleAdded := false
-	contentAndDateAdded := false
+	contentAdded := false
 	//	This is a generic imp. that supports searching tweets together with other results.
 	//	Currently we are not searching for tweets together with other results but in parallel.
 	for _, rt := range options.resultTypes {
-		if !contentAndDateAdded && rt == consts.ES_RESULT_TYPE_TWEETS {
-			fetchSourceContext.Include("content").Include("effective_date")
-			contentAndDateAdded = true
+		if !contentAdded && rt == consts.ES_RESULT_TYPE_TWEETS {
+			fetchSourceContext.Include("content")
+			contentAdded = true
 		} else if !titleAdded {
 			fetchSourceContext.Include("title")
 			titleAdded = true
 		}
-		if contentAndDateAdded && titleAdded {
+		if contentAdded && titleAdded {
 			break
 		}
 	}
