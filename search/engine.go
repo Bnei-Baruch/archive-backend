@@ -396,11 +396,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}()
 
 	// Search tweets in parallel to native search.
-	tweetsByLangChannel := make(chan map[string][]*elastic.SearchResult)
+	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 	go func() {
 		if tweetsByLang, err := e.SearchTweets(query, sortBy, from, size, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching tweets: %+v", err)
-			tweetsByLangChannel <- map[string][]*elastic.SearchResult{}
+			tweetsByLangChannel <- map[string]*elastic.SearchResult{}
 		} else {
 			tweetsByLangChannel <- tweetsByLang
 		}
@@ -493,7 +493,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
-		resultsByLang[lang] = append(resultsByLang[lang], tweets...)
+		resultsByLang[lang] = append(resultsByLang[lang], tweets)
 	}
 
 	var currentLang string
