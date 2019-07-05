@@ -209,14 +209,14 @@ func evalFn(cmd *cobra.Command, args []string) {
 		utils.Must(err)
 		printResults(results)
 		printLosses(results, losses)
-		if _, ferr := os.Stat(reportPath); os.IsNotExist(ferr) {
-			log.Warnf("Cannot write results: reportPath ('%s') is not found!", reportPath)
+		if len(reportPath) == 0 {
+			log.Warn("Cannot write results: reportPath is not set!", reportPath)
 		} else {
 			err = search.WriteResults(reportPath, evalSet, results)
 			utils.Must(err)
 		}
-		if _, ferr := os.Stat(flatReportPath); os.IsNotExist(ferr) {
-			log.Warnf("Cannot write result by expectation: flatReportPath ('%s') is not found!", flatReportPath)
+		if len(flatReportPath) == 0 {
+			log.Warn("Cannot write result by expectation: flatReportPath is not set!", flatReportPath)
 		} else {
 			_, err = search.WriteResultsByExpectation(flatReportPath, evalSet, results)
 			utils.Must(err)
