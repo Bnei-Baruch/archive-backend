@@ -518,16 +518,37 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		mssHighlights := e.esc.MultiSearch()
 		highlightRequestAdded := false
 
+		highlightsLangs := query.LanguageOrder
+		if !shouldMergeResults {
+			highlightsLangs = []string{currentLang}
+		}
+
 		for _, h := range ret.Hits.Hits {
 
-			if h.Id == "" || h.Type == consts.SEARCH_RESULT_TWEETS_MANY || strings.HasPrefix(h.Index, "intent-") {
-				// Bypass intent and tweets
+			if h.Type == consts.SEARCH_RESULT_TWEETS_MANY && h.InnerHits != nil {
+				if tweetHits, ok := h.InnerHits[consts.SEARCH_RESULT_TWEETS_MANY]; ok {
+					for _, th := range tweetHits.Hits.Hits {
+						mssHighlights.Add(NewResultsSearchRequest(
+							SearchRequestOptions{
+								resultTypes:      []string{consts.ES_RESULT_TYPE_TWEETS},
+								docIds:           []string{th.Id},
+								index:            th.Index,
+								query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
+								sortBy:           consts.SORT_BY_RELEVANCE,
+								from:             0,
+								size:             1,
+								preference:       preference,
+								useHighlight:     true,
+								partialHighlight: true}))
+
+						highlightRequestAdded = true
+					}
+				}
 				continue
 			}
-
-			highlightsLangs := query.LanguageOrder
-			if !shouldMergeResults {
-				highlightsLangs = []string{currentLang}
+			if h.Id == "" || strings.HasPrefix(h.Index, "intent-") {
+				// Bypass intent
+				continue
 			}
 
 			// We use multiple search request because we saw that a single request
@@ -570,6 +591,16 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							if h.Id == hr.Id {
 								//  Replacing original search result with highlighted result.
 								ret.Hits.Hits[i] = hr
+							} else if h.Type == consts.ES_RESULT_TYPE_TWEETS && h.InnerHits != nil {
+
+								if tweetHits, ok := h.InnerHits[consts.SEARCH_RESULT_TWEETS_MANY]; ok {
+									for k, th := range tweetHits.Hits.Hits {
+										if th.Id == hr.Id {
+											//  Replacing original tweet result with highlighted tweet result.
+											tweetHits.Hits.Hits[k] = hr
+										}
+									}
+								}
 							}
 						}
 					}
