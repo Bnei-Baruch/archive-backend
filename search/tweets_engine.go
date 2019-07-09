@@ -2,7 +2,6 @@ package search
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -51,12 +50,12 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 		}
 	}
 
-	resultsWithSingleHit, err := e.CombineResultsToSingleHit(tweetsByLang, consts.SEARCH_RESULT_TWEETS_MANY)
+	combinedToSingleHit, err := e.CombineResultsToSingleHit(tweetsByLang, consts.SEARCH_RESULT_TWEETS_MANY)
 	if err != nil {
 		return nil, err
 	}
 
-	return resultsWithSingleHit, nil
+	return combinedToSingleHit, nil
 }
 
 func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.SearchResult, hitType string) (map[string]*elastic.SearchResult, error) {
@@ -73,15 +72,23 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 			}
 		}
 
-		source, err := json.Marshal(result.Hits.Hits)
+		/*source, err := json.Marshal(result.Hits.Hits)
 		if err != nil {
 			return nil, err
+		}*/
+
+		hitsClone := *result.Hits
+
+		innerHitsMap := make(map[string]*elastic.SearchHitInnerHits)
+		innerHitsMap[hitType] = &elastic.SearchHitInnerHits{
+			Hits: &hitsClone,
 		}
 
 		hit := &elastic.SearchHit{
-			Type:   hitType,
-			Source: (*json.RawMessage)(&source),
-			Score:  &maxScore,
+			Type: hitType,
+			//Source:    (*json.RawMessage)(&source),
+			Score:     &maxScore,
+			InnerHits: innerHitsMap,
 		}
 
 		result.Hits.Hits = []*elastic.SearchHit{hit}
