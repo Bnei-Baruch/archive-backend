@@ -51,10 +51,20 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 		}
 	}
 
-	//  Create single tweet result for each language.
-	//  Set the score as the highest score of all tweets per language.
+	resultsWithSingleHit, err := e.CombineResultsToSingleHit(tweetsByLang, consts.SEARCH_RESULT_TWEETS_MANY)
+	if err != nil {
+		return nil, err
+	}
 
-	for _, result := range tweetsByLang {
+	return resultsWithSingleHit, nil
+}
+
+func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.SearchResult, hitType string) (map[string]*elastic.SearchResult, error) {
+
+	//  Create single hit result for each language.
+	//  Set the score as the highest score of all hits per language.
+
+	for _, result := range resultsByLang {
 
 		var maxScore float64
 		for _, hit := range result.Hits.Hits {
@@ -69,7 +79,7 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 		}
 
 		hit := &elastic.SearchHit{
-			Type:   consts.SEARCH_RESULT_TWEETS_MANY,
+			Type:   hitType,
 			Source: (*json.RawMessage)(&source),
 			Score:  &maxScore,
 		}
@@ -79,5 +89,5 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 		result.Hits.MaxScore = &maxScore
 	}
 
-	return tweetsByLang, nil
+	return resultsByLang, nil
 }
