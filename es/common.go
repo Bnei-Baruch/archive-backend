@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html"
 	"os"
 	"runtime"
 	"strings"
@@ -129,7 +130,8 @@ func (result *Result) ToDebugString() string {
 	return string(resultBytes)
 }
 
-func Suffixes(title string) []string {
+func Suffixes(escapedTitle string) []string {
+	title := html.UnescapeString(escapedTitle)
 	if title == "" {
 		return []string{}
 	}

@@ -11,8 +11,21 @@
                             "name": "result_type"
                         }
                     ], 
+                    "fields": {
+                        "language": {
+                            "contexts": [
+                                {
+                                    "path": "result_type", 
+                                    "type": "category", 
+                                    "name": "result_type"
+                                }
+                            ], 
+                            "type": "completion", 
+                            "analyzer": "bulgarian"
+                        }
+                    }, 
                     "type": "completion", 
-                    "analyzer": "bulgarian"
+                    "analyzer": "standard"
                 }, 
                 "description": {
                     "fields": {

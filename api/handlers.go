@@ -515,9 +515,9 @@ func AutocompleteHandler(c *gin.Context) {
 
 	log.Infof("Query: [%s] Language Order: [%+v]", c.Query("q"), order)
 
-	// Have a 100ms deadline on the search engine call.
+	// Have a 300ms deadline on the search engine call.
 	// It's autocomplete after all...
-	ctx, cancelFn := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancelFn := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancelFn()
 
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem

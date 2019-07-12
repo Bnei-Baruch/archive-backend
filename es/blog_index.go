@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -182,10 +183,10 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) *IndexErrors {
 		MDB_UID:       idStr,
 		TypedUids:     []string{keyValue(consts.ES_UID_TYPE_BLOG_POST, idStr)},
 		FilterValues:  []string{keyValue("content_type", consts.SCT_BLOG_POST), keyValue(consts.FILTER_LANGUAGE, postLang)},
-		Title:         mdbPost.Title,
+		Title:         html.UnescapeString(mdbPost.Title),
 		TitleSuggest:  Suffixes(mdbPost.Title),
 		EffectiveDate: &utils.Date{Time: mdbPost.PostedAt},
-		Content:       content,
+		Content:       html.UnescapeString(content),
 	}
 
 	indexName := index.IndexName(postLang)

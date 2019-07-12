@@ -160,7 +160,14 @@ func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference string) (interface{}, error) {
 	e.timeTrack(time.Now(), "GetSuggestions")
 	multiSearchService := e.esc.MultiSearch()
-	requests := NewResultsSuggestRequests([]string{consts.ES_RESULT_TYPE_TAGS, consts.ES_RESULT_TYPE_SOURCES}, query, preference)
+	requests := NewResultsSuggestRequests([]string{
+		//consts.ES_RESULT_TYPE_UNITS,
+		consts.ES_RESULT_TYPE_COLLECTIONS,
+		consts.ES_RESULT_TYPE_TAGS,
+		consts.ES_RESULT_TYPE_SOURCES,
+		consts.ES_RESULT_TYPE_BLOG_POSTS,
+		//consts.ES_RESULT_TYPE_TWEETS,
+	}, query, preference)
 	multiSearchService.Add(requests...)
 
 	// Actual call to elastic
@@ -206,6 +213,26 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 		sr := &elastic.SearchResult{Hits: sh}
 		srMap[lang] = sr
 	}
+
+	// Limit ClassificationIntents to top MAX_CLASSIFICATION_INTENTS
+	boostClassificationScore := func(intentValue *ClassificationIntent) float64 {
+		// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
+		return *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
+	}
+	scores := []float64{}
+	for i := range query.Intents {
+		// Convert intent to result with score.
+		if intentValue, ok := query.Intents[i].Value.(ClassificationIntent); ok && intentValue.Exist {
+			scores = append(scores, boostClassificationScore(&intentValue))
+		}
+	}
+	sort.Float64s(scores)
+	minClassificationScore := float64(0)
+	if len(scores) > 0 {
+		scores = scores[utils.MaxInt(0, len(scores)-consts.MAX_CLASSIFICATION_INTENTS):]
+		minClassificationScore = scores[0]
+	}
+
 	// log.Infof("IntentsToResults - %d intents.", len(query.Intents))
 	for _, intent := range query.Intents {
 		// Convert intent to result with score.
@@ -214,8 +241,10 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			if intentValue.Exist {
 				sh := srMap[intent.Language].Hits
 				sh.TotalHits++
-				// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
-				boostedScore = *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
+				boostedScore = boostClassificationScore(&intentValue)
+				if boostedScore < minClassificationScore {
+					continue // Skip classificaiton intents with score lower then first MAX_CLASSIFICATION_INTENTS
+				}
 				if sh.MaxScore != nil {
 					maxScore := math.Max(*sh.MaxScore, boostedScore)
 					sh.MaxScore = &maxScore
@@ -239,7 +268,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 		if intentValue, ok := intent.Value.(GrammarIntent); ok {
 			sh := srMap[intent.Language].Hits
 			sh.TotalHits++
-			boostedScore := float64(1000.0)
+			boostedScore := float64(2000.0)
 			if sh.MaxScore != nil {
 				maxScore := math.Max(*sh.MaxScore, boostedScore)
 				sh.MaxScore = &maxScore
@@ -306,7 +335,7 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 			return ed2.EffectiveDate.Time.After(ed1.EffectiveDate.Time) ||
 				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && score(h1.Score) > score(h2.Score), nil
 		} else {
-			log.Infof("%+v %+v %+v %+v", ed1, ed2, h1, h2)
+			//log.Infof("%+v %+v %+v %+v", ed1, ed2, h1, h2)
 			// Order by newer to older, break ties using score.
 			return ed2.EffectiveDate.Time.Before(ed1.EffectiveDate.Time) ||
 				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && score(h1.Score) > score(h2.Score), nil
@@ -472,7 +501,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	query.Intents = append(query.Intents, <-intentsChannel...)
 	query.Intents = append(query.Intents, <-intentsChannel...)
 
-	log.Infof("Intents: %+v", query.Intents)
+	log.Debugf("Intents: %+v", query.Intents)
 
 	// Convert intents and grammars to results.
 	err, intentResultsMap := e.IntentsToResults(&query)

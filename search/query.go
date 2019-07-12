@@ -26,7 +26,7 @@ const (
 	// Boost for exact phrase match, without slop.
 	EXACT_BOOST = 1.5
 
-	NUM_SUGGESTS = 500
+	NUM_SUGGESTS = 100
 )
 
 type Query struct {
@@ -211,7 +211,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 	for _, resultType := range resultTypes {
 		weight := 1.0
 		if resultType == consts.ES_RESULT_TYPE_UNITS {
-			weight = 1.0
+			weight = 1.1
 		} else if resultType == consts.ES_RESULT_TYPE_TAGS {
 			weight = 1.5 // We use tags for intents only, score should be same as for sources.
 		} else if resultType == consts.ES_RESULT_TYPE_SOURCES {
@@ -309,8 +309,15 @@ func NewResultsSuggestRequest(resultTypes []string, index string, query Query, p
 				Field("title_suggest").
 				Text(query.Term).
 				ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
-				Size(NUM_SUGGESTS),
-		)
+				Size(NUM_SUGGESTS).
+				SkipDuplicates(true)).
+		Suggester(
+			elastic.NewCompletionSuggester("title_suggest.language").
+				Field("title_suggest.language").
+				Text(query.Term).
+				ContextQuery(elastic.NewSuggesterCategoryQuery("result_type", resultTypes...)).
+				Size(NUM_SUGGESTS).
+				SkipDuplicates(true))
 
 	return elastic.NewSearchRequest().
 		SearchSource(searchSource).

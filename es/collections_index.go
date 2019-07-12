@@ -199,6 +199,29 @@ func contentUnitsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentU
 
 func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexErrors {
 	indexErrors := MakeIndexErrors()
+	// Calculate effective date by choosing the last data of any of it's content units.
+	effectiveDate := (*utils.Date)(nil)
+	for _, ccu := range c.R.CollectionsContentUnits {
+		cu := ccu.R.ContentUnit
+		if cu.Properties.Valid {
+			var props map[string]interface{}
+			err := json.Unmarshal(cu.Properties.JSON, &props)
+			indexErrors.DocumentError("", err, fmt.Sprintf("json.Unmarshal properties %s", cu.UID))
+			if err != nil {
+				continue
+			}
+			if filmDate, ok := props["film_date"]; ok {
+				val, err := time.Parse("2006-01-02", filmDate.(string))
+				indexErrors.DocumentError("", err, fmt.Sprintf("time.Parse film_date %s", cu.UID))
+				if err != nil {
+					continue
+				}
+				if effectiveDate == nil || effectiveDate.Time.Before(val) {
+					effectiveDate = &utils.Date{Time: val}
+				}
+			}
+		}
+	}
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
 	for _, i18n := range c.R.CollectionI18ns {
@@ -216,6 +239,9 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 				FilterValues: filterValues,
 				Title:        i18n.Name.String,
 				TitleSuggest: Suffixes(i18n.Name.String),
+			}
+			if effectiveDate != nil {
+				collection.EffectiveDate = effectiveDate
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {

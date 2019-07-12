@@ -11,8 +11,21 @@
                             "name": "result_type"
                         }
                     ], 
+                    "fields": {
+                        "language": {
+                            "contexts": [
+                                {
+                                    "path": "result_type", 
+                                    "type": "category", 
+                                    "name": "result_type"
+                                }
+                            ], 
+                            "type": "completion", 
+                            "analyzer": "dutch"
+                        }
+                    }, 
                     "type": "completion", 
-                    "analyzer": "dutch"
+                    "analyzer": "standard"
                 }, 
                 "description": {
                     "fields": {

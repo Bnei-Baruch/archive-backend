@@ -134,14 +134,21 @@ LanguageAnalyzerImp = {
                 "lowercase",
                 "english_stop",
                 "english_stemmer",
-                "synonym_graph"
+                "synonym_graph",
               ]
         }
   },
   HEBREW: {
     "hebrew_synonym": {
             "tokenizer" : "standard",
-            "filter" : ["synonym_graph", "he_IL"],
+            "filter" : [
+                # The order here is important. As hunspell in many cases produces alternative
+                # tokens synonym graph is not able to consume non linear (graph) tokens and fails
+                # So for now until issue (https://github.com/elastic/elasticsearch/issues/29426)
+                # solved we have to apply synonym before hunspell.
+                "synonym_graph",
+                "he_IL",
+            ],
             "char_filter": [
               "quotes"
             ]
@@ -386,7 +393,7 @@ RESULTS_TEMPLATE = {
         # Suggest field for autocomplete.
         "title_suggest": {
           "type": "completion",
-          "analyzer": lambda lang: LanguageAnalyzer[lang],
+          "analyzer": "standard",
           "contexts": [
             {
               "name": "result_type",
@@ -394,6 +401,19 @@ RESULTS_TEMPLATE = {
               "path": "result_type",
             },
           ],
+          "fields": {
+              "language": {
+                  "type": "completion",
+                  "analyzer": lambda lang: LanguageAnalyzer[lang],
+                  "contexts": [
+                    {
+                      "name": "result_type",
+                      "type": "category",
+                      "path": "result_type",
+                    },
+                  ],
+              }
+          }
         },
 
         # Content unit specific fields.
