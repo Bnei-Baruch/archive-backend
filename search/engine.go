@@ -592,7 +592,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 								//  Replacing original search result with highlighted result.
 								ret.Hits.Hits[i] = hr
 							} else if h.Type == consts.SEARCH_RESULT_TWEETS_MANY && h.InnerHits != nil {
-
 								if tweetHits, ok := h.InnerHits[consts.SEARCH_RESULT_TWEETS_MANY]; ok {
 									for k, th := range tweetHits.Hits.Hits {
 										if th.Id == hr.Id {

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
@@ -150,6 +152,13 @@ func (searchLogger *SearchLogger) fixResults(res *QueryResult) *QueryResult {
 		for i, h := range res.SearchResult.Hits.Hits {
 			hCopy := *h
 			hCopy.Highlight = *searchLogger.fixHighlight(&hCopy.Highlight)
+			if hCopy.Type == consts.SEARCH_RESULT_TWEETS_MANY && hCopy.InnerHits != nil {
+				if tweetHits, ok := hCopy.InnerHits[consts.SEARCH_RESULT_TWEETS_MANY]; ok {
+					for i := range tweetHits.Hits.Hits {
+						tweetHits.Hits.Hits[i].Highlight = *searchLogger.fixHighlight(&tweetHits.Hits.Hits[i].Highlight)
+					}
+				}
+			}
 			hitsCopy[i] = &hCopy
 		}
 		searchResultCopy := *res.SearchResult
