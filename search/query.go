@@ -217,7 +217,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		} else if resultType == consts.ES_RESULT_TYPE_SOURCES {
 			weight = 1.5
 		} else if resultType == consts.ES_RESULT_TYPE_TWEETS {
-			weight = 1.5
+			weight = 1.7
 		} else if resultType == consts.ES_RESULT_TYPE_COLLECTIONS {
 			weight = 2.0
 		}
