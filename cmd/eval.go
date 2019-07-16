@@ -209,9 +209,18 @@ func evalFn(cmd *cobra.Command, args []string) {
 		utils.Must(err)
 		printResults(results)
 		printLosses(results, losses)
-		search.WriteResults(reportPath, evalSet, results)
-		_, err = search.WriteResultsByExpectation(flatReportPath, evalSet, results)
-		utils.Must(err)
+		if len(reportPath) == 0 {
+			log.Warn("Cannot write results: reportPath is not set!", reportPath)
+		} else {
+			err = search.WriteResults(reportPath, evalSet, results)
+			utils.Must(err)
+		}
+		if len(flatReportPath) == 0 {
+			log.Warn("Cannot write result by expectation: flatReportPath is not set!", flatReportPath)
+		} else {
+			_, err = search.WriteResultsByExpectation(flatReportPath, evalSet, results)
+			utils.Must(err)
+		}
 	}
 	utils.Must(err)
 	log.Infof("Done evaluating queries.")
