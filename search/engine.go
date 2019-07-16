@@ -637,8 +637,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 		}
 
-		//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
 		for _, hit := range ret.Hits.Hits {
+			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
+				err = e.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
+			}
+			//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
 			if hit.Highlight == nil {
 				hit.Highlight = elastic.SearchHitHighlight{}
 			}

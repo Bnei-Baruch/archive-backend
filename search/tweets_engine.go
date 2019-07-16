@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -72,11 +73,6 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 			}
 		}
 
-		/*source, err := json.Marshal(result.Hits.Hits)
-		if err != nil {
-			return nil, err
-		}*/
-
 		hitsClone := *result.Hits
 
 		innerHitsMap := make(map[string]*elastic.SearchHitInnerHits)
@@ -85,8 +81,7 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 		}
 
 		hit := &elastic.SearchHit{
-			Type: hitType,
-			//Source:    (*json.RawMessage)(&source),
+			Type:      hitType,
 			Score:     &maxScore,
 			InnerHits: innerHitsMap,
 		}
@@ -97,4 +92,27 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 	}
 
 	return resultsByLang, nil
+}
+
+func (e *ESEngine) NativizeTweetsHitForClient(hit *elastic.SearchHit, innerHitsKey string) error {
+	if hit.InnerHits == nil {
+		return errors.New("NativizeHitForClient - InnerHits is nil.")
+	}
+	if _, ok := hit.InnerHits[innerHitsKey]; !ok {
+		return errors.New(fmt.Sprintf("NativizeHitForClient - %s key is not present in InnerHits.", innerHitsKey))
+	}
+	if hit.InnerHits[innerHitsKey].Hits == nil {
+		return errors.New(fmt.Sprintf("hit.InnerHits[%s].Hits is nil.", innerHitsKey))
+	}
+
+	hits := hit.InnerHits[innerHitsKey].Hits.Hits
+	source, err := json.Marshal(hits)
+	if err != nil {
+		return err
+	}
+
+	hit.Source = (*json.RawMessage)(&source)
+	hit.InnerHits = nil
+
+	return nil
 }
