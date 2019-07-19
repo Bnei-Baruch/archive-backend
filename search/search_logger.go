@@ -226,7 +226,7 @@ func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]Search
 			Query(elastic.NewTermsQuery("log_type", "query")).
 			Scroll("5m").
 			Slice(s).
-			Size(100)
+			Size(500)
 		if searchResult != nil {
 			scrollClient = scrollClient.ScrollId(searchResult.ScrollId)
 		}

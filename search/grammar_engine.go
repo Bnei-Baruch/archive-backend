@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/utils"
@@ -65,12 +66,16 @@ func (g *Grammar) SearchGrammar(query *Query) (*Intent, error) {
 	if simpleQuery == "" && len(query.ExactTerms) == 1 {
 		simpleQuery = query.ExactTerms[0]
 	}
-	for _, pattern := range g.Patterns {
-		if pattern == simpleQuery {
-			// Uncomment for debug:
-			// log.Infof("Matched search [%s] for grammar %s, intent %s for %s. Pattern: %s", query.Original, g.HitType, g.Intent, g.Language, pattern)
-			return &Intent{Type: consts.GRAMMAR_TYPE_LANDING_PAGE, Language: g.Language, Value: GrammarIntent{LandingPage: g.Intent}}, nil
-		}
+	// TODO: Tokenization is call to elastic. We can do this in parallel for all languages.
+	// Consider extracting up the generation of Tokens.
+	simpleQueryTokens, err := MakeTokensFromPhrase(simpleQuery, g.Language, g.Esc)
+	if err != nil {
+		return nil, errors.Wrapf(err, "Error tokenizing simpleQuery: [%s] in %s.", simpleQuery, g.Language)
+	}
+	if TokensMatch(g.Patterns, simpleQueryTokens) {
+		// Uncomment for debug:
+		// log.Infof("Matched search [%s] for grammar %s, intent %s for %s. Pattern: %s", query.Original, g.HitType, g.Intent, g.Language, pattern)
+		return &Intent{Type: consts.GRAMMAR_TYPE_LANDING_PAGE, Language: g.Language, Value: GrammarIntent{LandingPage: g.Intent}}, nil
 	}
 	return nil, nil
 }

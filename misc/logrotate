@@ -2,6 +2,7 @@
 /sites/archive-unzip/logs/nginx-*.log
 /sites/imaginary/logs/nginx-*.log
 /sites/archive-backend/logs/nginx-*.log {
+    su nginx archive
     size 10M
     missingok
     rotate 10
