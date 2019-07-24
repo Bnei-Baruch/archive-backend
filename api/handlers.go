@@ -403,6 +403,7 @@ func SearchHandler(c *gin.Context) {
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
 	grammars := c.MustGet("GRAMMARS").(search.Grammars)
+	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
 
 	esc, err := esManager.GetClient()
 	if err != nil {
@@ -410,7 +411,7 @@ func SearchHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM, grammars)
+	se := search.NewESEngine(esc, db, cacheM, grammars, tc)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -500,6 +501,7 @@ func AutocompleteHandler(c *gin.Context) {
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
 	grammars := c.MustGet("GRAMMARS").(search.Grammars)
+	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
 
 	esc, err := esManager.GetClient()
 	if err != nil {
@@ -507,7 +509,8 @@ func AutocompleteHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM, grammars)
+	log.Infof("?!?!?!?!? tc: %+v", tc)
+	se := search.NewESEngine(esc, db, cacheM, grammars, tc)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))

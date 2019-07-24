@@ -28,6 +28,7 @@ type ESEngine struct {
 	cache            cache.CacheManager
 	ExecutionTimeLog *TimeLogMap
 	grammars         Grammars
+	TokensCache      *TokensCache
 }
 
 type ClassificationIntent struct {
@@ -142,8 +143,15 @@ func (s bySourceFirst) Less(i, j int) bool {
 
 // TODO: All interactions with ES should be throttled to prevent downstream pressure
 
-func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager, grammars Grammars) *ESEngine {
-	return &ESEngine{esc: esc, mdb: db, cache: cache, ExecutionTimeLog: NewTimeLogMap(), grammars: grammars}
+func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager, grammars Grammars, tc *TokensCache) *ESEngine {
+	return &ESEngine{
+		esc:              esc,
+		mdb:              db,
+		cache:            cache,
+		ExecutionTimeLog: NewTimeLogMap(),
+		grammars:         grammars,
+		TokensCache:      tc,
+	}
 }
 
 func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
@@ -159,6 +167,19 @@ func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 
 func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference string) (interface{}, error) {
 	e.timeTrack(time.Now(), "GetSuggestions")
+
+	// Run grammar suggestions in parallel.
+	grammarSuggestionsChannel := make(chan map[string][]string)
+	go func() {
+		grammarSuggestions, err := e.SuggestGrammars(&query)
+		if err != nil {
+			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
+			grammarSuggestionsChannel <- make(map[string][]string)
+		} else {
+			grammarSuggestionsChannel <- grammarSuggestions
+		}
+	}()
+
 	multiSearchService := e.esc.MultiSearch()
 	requests := NewResultsSuggestRequests([]string{
 		consts.ES_RESULT_TYPE_UNITS,
@@ -188,6 +209,40 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 			}
 		}
 		return nil, errors.Wrap(err, "ESEngine.GetSuggestions")
+	}
+
+	// Merge with grammar suggestions.
+	var grammarSuggestions map[string][]string
+	grammarSuggestions = <-grammarSuggestionsChannel
+	for i, lang := range query.LanguageOrder {
+		if langSuggestions, ok := grammarSuggestions[lang]; ok && len(langSuggestions) > 0 && mr != nil && len(mr.Responses) > i {
+			r := mr.Responses[i]
+			if r.Suggest == nil {
+				r.Suggest = make(map[string][]elastic.SearchSuggestion)
+			}
+			if len(r.Suggest) == 0 {
+				r.Suggest["title_suggest"] = []elastic.SearchSuggestion{}
+			}
+			for key := range r.Suggest {
+				for j := range r.Suggest[key] {
+					for _, suggestion := range langSuggestions {
+						source := struct {
+							Title string `json:"title"`
+						}{Title: suggestion}
+						sourceRawMessage, err := json.Marshal(source)
+						if err != nil {
+							return nil, err
+						}
+						raw := json.RawMessage(sourceRawMessage)
+						option := elastic.SearchSuggestionOption{
+							Text:   suggestion,
+							Source: &raw,
+						}
+						r.Suggest[key][j].Options = append(r.Suggest[key][j].Options, option)
+					}
+				}
+			}
+		}
 	}
 
 	// Process response
