@@ -401,7 +401,8 @@ func simulateUpdateFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	err = indexer.Update(es.Scope{CollectionUID: "zf4lLwyI"})
+	//err = indexer.Update(es.Scope{CollectionUID: "zf4lLwyI"})
+	err = indexer.Update(es.Scope{SourceUID: "qMUUn22b"})
 	//err = indexer.Update(es.Scope{ContentUnitUID: "S5cSiwqb"})
 	//err = indexer.Update(es.Scope{FileUID: "QSMWk1lj"})
 	//err = indexer.Update(es.Scope{ContentUnitUID: "eA0g9XRf"})

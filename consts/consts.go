@@ -394,6 +394,9 @@ const (
 
 const CDN = "https://cdn.kabbalahmedia.info/"
 
+// TokensCache LRU cache size
+const TOKEN_CACHE_SIZE = 10000
+
 // Search filter.
 type SearchFilterType int
 
