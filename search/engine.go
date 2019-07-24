@@ -161,7 +161,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	e.timeTrack(time.Now(), "GetSuggestions")
 	multiSearchService := e.esc.MultiSearch()
 	requests := NewResultsSuggestRequests([]string{
-		//consts.ES_RESULT_TYPE_UNITS,
+		consts.ES_RESULT_TYPE_UNITS,
 		consts.ES_RESULT_TYPE_COLLECTIONS,
 		consts.ES_RESULT_TYPE_TAGS,
 		consts.ES_RESULT_TYPE_SOURCES,
