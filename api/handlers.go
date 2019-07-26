@@ -1146,6 +1146,12 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		return nil, NewInternalError(err)
 	}
 
+	// Generally, this field is not reliable in terms of DB cleanups.
+	// Implemented for special case of BLOG_POST (audio version / declamation) only.
+	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
 	err := mdbmodels.ContentUnits(db, countMods...).QueryRow().Scan(&total)
@@ -2149,6 +2155,17 @@ func appendBlogFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f BlogFilter)
 
 	return nil
 }
+
+func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f MediaLanguageFilter) error {
+	if len(f.MediaLanguage) == 0 {
+		return nil
+	}
+
+	*mods = append(*mods, qm.Where("properties->>'original_language' = ?", f.MediaLanguage))
+
+	return nil
+}
+
 
 // concludeRequest responds with JSON of given response or aborts the request with the given error.
 func concludeRequest(c *gin.Context, resp interface{}, err *HttpError) {

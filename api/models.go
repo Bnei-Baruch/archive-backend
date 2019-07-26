@@ -96,6 +96,10 @@ type BlogFilter struct {
 	Blogs []string `json:"blogs" form:"blog" binding:"omitempty"`
 }
 
+type MediaLanguageFilter struct {
+	MediaLanguage string `json:"media_language" form:"media_language" binding:"omitempty,len=2"`
+}
+
 type CollectionsRequest struct {
 	ListRequest
 	IDsFilter
@@ -120,6 +124,7 @@ type ContentUnitsRequest struct {
 	CollectionsFilter
 	PublishersFilter
 	PersonsFilter
+	MediaLanguageFilter
 	WithFiles bool `json:"with_files" form:"with_files"`
 }
 
