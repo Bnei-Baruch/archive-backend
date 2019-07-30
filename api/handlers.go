@@ -509,7 +509,6 @@ func AutocompleteHandler(c *gin.Context) {
 		return
 	}
 
-	log.Infof("?!?!?!?!? tc: %+v", tc)
 	se := search.NewESEngine(esc, db, cacheM, grammars, tc)
 
 	// Detect input language
@@ -2168,7 +2167,6 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 
 	return nil
 }
-
 
 // concludeRequest responds with JSON of given response or aborts the request with the given error.
 func concludeRequest(c *gin.Context, resp interface{}, err *HttpError) {

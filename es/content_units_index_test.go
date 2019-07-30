@@ -47,7 +47,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	r.Nil(err)
 
 	// Index existing DB data.
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 	r.Nil(indexer.RefreshAll())
 
 	fmt.Println("Validate we have 2 searchable content units.")
@@ -154,7 +154,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsIndex() {
 	fmt.Println("Delete units, reindex and validate we have 0 searchable units.")
 	r.Nil(deleteContentUnits(UIDs))
 	r.Nil(deleteSources(sourceUIDs))
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 	suite.validateNames(indexNameEn, indexer, []string{})
 
 	//fmt.Println("Restore docx-folder path to original.")
@@ -189,7 +189,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, esc)
 	r.Nil(err)
 	// Index existing DB data.
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 	r.Nil(indexer.RefreshAll())
 
 	fmt.Printf("\n\n\nValidate we have 2 searchable content units with proper content types.\n\n")
@@ -249,7 +249,7 @@ func (suite *UnitsIndexerSuite) TestContentUnitsCollectionIndex() {
 
 	fmt.Printf("\n\n\nDelete units, reindex and validate we have 0 searchable units.\n\n")
 	r.Nil(deleteContentUnits(UIDs))
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 	suite.validateNames(indexName, indexer, []string{})
 	suite.validateContentUnitTypes(indexName, indexer, map[string][]string{})
 

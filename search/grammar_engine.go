@@ -31,14 +31,11 @@ func (e *ESEngine) SuggestGrammars(query *Query) (map[string][]string, error) {
 					return nil, err
 				}
 				if grammarSuggest != "" {
-					log.Infof("Adding suggest: %+v %+v", grammarSuggest, grammar.Intent)
 					suggests[language] = append(suggests[language], grammarSuggest)
 				}
 			}
 		}
 	}
-
-	log.Infof("Suggests: %+v", suggests)
 	return suggests, nil
 }
 
