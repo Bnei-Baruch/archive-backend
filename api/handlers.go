@@ -528,7 +528,6 @@ func AutocompleteHandler(c *gin.Context) {
 
 	res, err := se.GetSuggestions(ctx, search.Query{Term: q, LanguageOrder: order}, preference)
 	if err == nil {
-		log.Infof("Autocomplete: %+v", res)
 		c.JSON(http.StatusOK, res)
 	} else {
 		NewInternalError(err).Abort(c)
