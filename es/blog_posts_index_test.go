@@ -35,7 +35,7 @@ func (suite *BlogIndexerSuite) TestBlogIndex() {
 	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_BLOG_POSTS}, common.DB, esc)
 	r.Nil(err)
 
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 
 	fmt.Printf("\nAdding English post and validate.\n\n")
 	id1 := suite.ibp(1, 2, "this is english post", false)
@@ -74,7 +74,7 @@ func (suite *BlogIndexerSuite) TestBlogIndex() {
 
 	fmt.Println("\nDelete posts from DB, reindex and validate we have 0 posts.")
 	r.Nil(deletePosts([]string{id2, id3, id4, id6}))
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 	suite.validateNames(indexNameEn, indexer, []string{})
 	suite.validateNames(indexNameEs, indexer, []string{})
 	suite.validateNames(indexNameRu, indexer, []string{})
