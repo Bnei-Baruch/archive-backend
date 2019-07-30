@@ -14,7 +14,7 @@ cd ${BASE_DIR}
 SANITY_OK="$(egrep -c "Good.*100.00%" ${LOG_FILE})"
 
 # Cleanup old logs (older then week).
-find ${BASE_DIR}/logs/es -name "eval_sanity_*.log" -type f -mtime +1 -exec rm -f {} \;
+find ${BASE_DIR}/logs/es -name "eval_sanity_*" -type f -mtime +1 -exec rm -f {} \;
 
 if [ "${SANITY_OK}" = "1" ];then
         echo "Sanity OK."

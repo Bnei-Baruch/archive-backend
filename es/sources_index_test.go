@@ -46,7 +46,7 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
 
 	// Index existing DB data.
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 	r.Nil(indexer.RefreshAll())
 
 	r.Nil(es.DumpDB(common.DB, "Before validation"))
@@ -98,7 +98,7 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.rsa(Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 6})
 	UIDs := []string{source1UID, source2UID}
 	r.Nil(deleteSources(UIDs))
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 	suite.validateNames(indexNameEn, indexer, []string{})
 	suite.validateNames(indexNameHe, indexer, []string{})
 

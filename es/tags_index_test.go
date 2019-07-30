@@ -43,7 +43,7 @@ func (suite *TagsIndexerSuite) TestTagsIndex() {
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
 
 	// Index existing DB data.
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 	r.Nil(indexer.RefreshAll())
 
 	fmt.Printf("\n\n\nValidate we have tag with 2 languages.\n\n")

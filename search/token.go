@@ -227,9 +227,7 @@ func MakeTokenForest(tokens []Token, phrase string) []*TokenNode {
 	tokenRoot := []*TokenNode{}
 	tokenEnd := [][]*TokenNode{}
 	minPos := -1
-	log.Infof("Original Whole Phrase: [%s]", phrase)
 	for i := range tokens {
-		log.Infof("Token: %+v", tokens[i])
 		// Update PositionLength, 0 basically means 1.
 		if tokens[i].PositionLength == 0 {
 			tokens[i].PositionLength = 1
@@ -287,20 +285,21 @@ func MakeTokenForest(tokens []Token, phrase string) []*TokenNode {
 		originalTokenRoot = append(originalTokenRoot, tokenRoot[i].OriginalTokenNodes...)
 	}
 	sortOriginalTokenGraph(originalTokenRoot, nil, make(map[*OriginalTokenNode]bool), 0)
-	depth := 0
-	iterator := tokenRoot
-	for iterator != nil && len(iterator) > 0 {
-		log.Infof("\n\n======= DEPTH %d ======\n", depth)
-		for i := range iterator {
-			log.Infof("%sTN: %p %p %+v", strings.Repeat("    ", depth), &iterator, &iterator[i], iterator[i])
-			//log.Infof("OTN: %+v", iterator[i].OriginalTokenNodes)
-			for j := range iterator[i].OriginalTokenNodes {
-				log.Infof("  %sOTN[%d]: %p %+v\n", strings.Repeat("  ", depth), j, iterator[i].OriginalTokenNodes[j], iterator[i].OriginalTokenNodes[j])
-			}
-		}
-		iterator = iterator[0].Children
-		depth++
-	}
+	// Uncommend for debug.
+	// depth := 0
+	// iterator := tokenRoot
+	// for iterator != nil && len(iterator) > 0 {
+	// 	log.Infof("\n\n======= DEPTH %d ======\n", depth)
+	// 	for i := range iterator {
+	// 		log.Infof("%sTN: %p %p %+v", strings.Repeat("    ", depth), &iterator, &iterator[i], iterator[i])
+	// 		//log.Infof("OTN: %+v", iterator[i].OriginalTokenNodes)
+	// 		for j := range iterator[i].OriginalTokenNodes {
+	// 			log.Infof("  %sOTN[%d]: %p %+v\n", strings.Repeat("  ", depth), j, iterator[i].OriginalTokenNodes[j], iterator[i].OriginalTokenNodes[j])
+	// 		}
+	// 	}
+	// 	iterator = iterator[0].Children
+	// 	depth++
+	// }
 	return tokenRoot
 }
 
@@ -354,17 +353,10 @@ func sortTokenGraph(children []*TokenNode, parent *TokenNode, visited map[*Token
 			visited[tn] = true
 		}
 	}
-
-	t := ""
-	if parent != nil {
-		t = parent.Token.Token
-	}
-	log.Infof("%sSorting: Parent: %p-%s Children: %p %+v", strings.Repeat("  ", depth), parent, t, children, children)
 	// Sort and merch children after all their children are sorted and merged.
 	sort.SliceStable(children, func(i, j int) bool {
 		return strings.Compare(children[i].Token.Token, children[j].Token.Token) < 0
 	})
-	log.Infof("%s  After: Parent: %p-%s Children: %p %+v", strings.Repeat("  ", depth), parent, t, children, children)
 	return children
 }
 
@@ -376,17 +368,10 @@ func sortOriginalTokenGraph(children []*OriginalTokenNode, parent *OriginalToken
 			visited[otn] = true
 		}
 	}
-
-	t := ""
-	if parent != nil {
-		t = parent.TokenNode.Token.Token
-	}
-	log.Infof("%sSorting: Parent: %p-%s Children: %p %+v", strings.Repeat("  ", depth), parent, t, children, children)
 	// Sort and merch children after all their children are sorted and merged.
 	sort.SliceStable(children, func(i, j int) bool {
 		return strings.Compare(children[i].OriginalFullPhraseToString(), children[j].OriginalFullPhraseToString()) < 0
 	})
-	log.Infof("%s  After: Parent: %p-%s Children: %p %+v", strings.Repeat("  ", depth), parent, t, children, children)
 	return children
 }
 
@@ -410,11 +395,6 @@ func makeOriginalTokenNodes(tokenNode *TokenNode, parent *TokenNode, phrase *str
 	if parent != nil {
 		parentOriginalTokenNodes = parent.OriginalTokenNodes
 	}
-	log.Infof("%sdone: %d, %s: tokenNode.Parents: %d Parent otns: %d",
-		strings.Repeat(" ", doneIndex), doneIndex, tokenNode.Token.Token, len(tokenNode.Parents), len(parentOriginalTokenNodes))
-	//if len(parentOriginalTokenNodes) > 0 {
-	//	log.Infof("[0]: %+v", parentOriginalTokenNodes[0])
-	//}
 	for i := range parentOriginalTokenNodes {
 		originalTokenNode := (*OriginalTokenNode)(nil)
 		if len(tokenNode.OriginalTokenNodes) == 1 {
@@ -468,7 +448,6 @@ func (p *PhrasesWithOrigin) ToString() string {
 func TokenNodesToPhrases(root []*TokenNode) []PhrasesWithOrigin {
 	otns := []*OriginalTokenNode{}
 	for i := range root {
-		log.Infof("Token: %s, otns: %d", root[i].Token.Token, len(root[i].OriginalTokenNodes))
 		otns = append(otns, root[i].OriginalTokenNodes...)
 	}
 	return OriginalTokenNodesToPhrases(otns)
@@ -481,7 +460,6 @@ func OriginalTokenNodesToPhrases(otns []*OriginalTokenNode) []PhrasesWithOrigin 
 			[]string{otns[i].OriginalFullPhraseToString()},
 			[]string{otns[i].TokenNode.Token.Token},
 		}
-		log.Infof("Original Phrase: %s Token: %s", otns[i].OriginalFullPhraseToString(), otns[i].TokenNode.Token.Token)
 		phrases := OriginalTokenNodesToPhrases(otns[i].Children)
 		for j := range phrases {
 			phrases[j].OriginalPhrases = append(p.OriginalPhrases, phrases[j].OriginalPhrases...)
@@ -512,7 +490,6 @@ func TokensSingleMatch(a []*TokenNode, b []*TokenNode) bool {
 	j := 0
 	for i < len(a) && j < len(b) {
 		cmp := strings.Compare(a[i].Token.Token, b[j].Token.Token)
-		log.Infof("Comparing: %s with %s => %d", a[i].Token.Token, b[j].Token.Token, cmp)
 		if cmp == 0 {
 			if (a[i].IsEnd && b[j].IsEnd) || TokensSingleMatch(a[i].Children, b[j].Children) {
 				return true
