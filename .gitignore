@@ -10,6 +10,7 @@ sqlboiler.toml
 **/rambler.json
 *.dump.sql
 _vendor-*/
+vendor/**
 
 archive-backend
 
