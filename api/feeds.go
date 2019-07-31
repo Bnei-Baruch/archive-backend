@@ -463,7 +463,7 @@ func FeedRssVideo(c *gin.Context) {
 	(&config).getConfig(c)
 	feed := &feeds.Feed{
 		Title:       "Kabbalah Media Updates",
-		Link:        getHref("/feeds/rss_video.rss?&DLANG="+config.DLANG, c),
+		Link:        getHref("/", c),
 		Description: "Video updates from Kabbalamedia Archive",
 		Language:    config.Lang,
 		Updated:     time.Now(),
