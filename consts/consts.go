@@ -109,6 +109,41 @@ var ALL_KNOWN_LANGS = [...]string{
 	LANG_UKRAINIAN, LANG_AMHARIC,
 }
 
+var ANALYZERS = map[string]string{
+	LANG_AMHARIC:    "standard",
+	LANG_ARABIC:     "arabic",
+	LANG_BULGARIAN:  "bulgarian",
+	LANG_CZECH:      "czech",
+	LANG_GERMAN:     "german",
+	LANG_ENGLISH:    "english_synonym",
+	LANG_SPANISH:    "spanish_synonym",
+	LANG_PERSIAN:    "persian",
+	LANG_FINNISH:    "finnish",
+	LANG_FRENCH:     "french",
+	LANG_HEBREW:     "hebrew_synonym",
+	LANG_HINDI:      "hindi",
+	LANG_CROATIAN:   "standard",
+	LANG_HUNGARIAN:  "hungarian",
+	LANG_ITALIAN:    "italian",
+	LANG_JAPANESE:   "cjk",
+	LANG_GEORGIAN:   "standard",
+	LANG_LITHUANIAN: "lithuanian",
+	LANG_LATVIAN:    "latvian",
+	LANG_MACEDONIAN: "standard",
+	LANG_DUTCH:      "dutch",
+	LANG_NORWEGIAN:  "norwegian",
+	LANG_POLISH:     "standard",
+	LANG_PORTUGUESE: "portuguese",
+	LANG_ROMANIAN:   "romanian",
+	LANG_RUSSIAN:    "russian_synonym",
+	LANG_SLOVAK:     "standard",
+	LANG_SLOVENIAN:  "standard",
+	LANG_SWEDISH:    "swedish",
+	LANG_TURKISH:    "turkish",
+	LANG_UKRAINIAN:  "standard",
+	LANG_CHINESE:    "cjk",
+}
+
 var I18N_LANG_ORDER = map[string][]string{
 	"":              {LANG_ENGLISH},
 	LANG_ENGLISH:    {LANG_ENGLISH},
@@ -261,9 +296,11 @@ var LANG2CODE = map[string]string{
 // api
 
 const (
-	INTENTS_SEARCH_COUNT  = 10
-	API_DEFAULT_PAGE_SIZE = 50
-	API_MAX_PAGE_SIZE     = 1000
+	INTENTS_SEARCH_COUNT       = 10
+	INTENTS_MIN_UNITS          = 3
+	MAX_CLASSIFICATION_INTENTS = 3
+	API_DEFAULT_PAGE_SIZE      = 50
+	API_MAX_PAGE_SIZE          = 1000
 )
 
 const (
@@ -318,6 +355,9 @@ const ES_RESULT_TYPE_TAGS = "tags"
 const ES_RESULT_TYPE_BLOG_POSTS = "posts"
 const ES_RESULT_TYPE_TWEETS = "tweets"
 
+// Result of many tweets in one hit
+const SEARCH_RESULT_TWEETS_MANY = "tweets_many"
+
 // Typed UIDs and Filter
 const ES_UID_TYPE_CONTENT_UNIT = "content_unit"
 const ES_UID_TYPE_FILE = "file"
@@ -353,6 +393,9 @@ const (
 )
 
 const CDN = "https://cdn.kabbalahmedia.info/"
+
+// TokensCache LRU cache size
+const TOKEN_CACHE_SIZE = 10000
 
 // Search filter.
 type SearchFilterType int

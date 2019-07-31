@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )
@@ -19,8 +19,9 @@ type Grammar struct {
 	HitType  string
 	Language string
 	Intent   string
-	Patterns []string
+	Patterns [][]*TokenNode
 	Filters  map[string][]string
+	Esc      *elastic.Client
 }
 
 type Grammars = map[string]map[string]*Grammar
@@ -40,7 +41,7 @@ func FoldGrammars(first Grammars, second Grammars) {
 	}
 }
 
-func ReadGrammarFile(grammarFile string) (Grammars, error) {
+func ReadGrammarFile(grammarFile string, esc *elastic.Client, tc *TokensCache) (Grammars, error) {
 	re := regexp.MustCompile(`^(.*).grammar$`)
 	matches := re.FindStringSubmatch(path.Base(grammarFile))
 	if len(matches) != 2 {
@@ -83,9 +84,13 @@ func ReadGrammarFile(grammarFile string) (Grammars, error) {
 			if !filterExist {
 				return nil, errors.New(fmt.Sprintf("[%s:%d] Filters not found for intent: [%s]", grammarFile, lineNum, intent))
 			}
-			grammars[lang][intent] = &Grammar{HitType: hitType, Language: lang, Intent: intent, Patterns: []string{}, Filters: filters}
+			grammars[lang][intent] = &Grammar{HitType: hitType, Language: lang, Intent: intent, Patterns: [][]*TokenNode{}, Filters: filters, Esc: esc}
 		}
-		grammars[lang][intent].Patterns = append(grammars[lang][intent].Patterns, pattern)
+		tokens, err := MakeTokensFromPhrase(pattern, lang, esc, tc)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Error generating tokens from pattern: [%s] in %s.", pattern, lang)
+		}
+		grammars[lang][intent].Patterns = append(grammars[lang][intent].Patterns, tokens)
 
 		lineNum++
 	}
@@ -97,7 +102,7 @@ func ReadGrammarFile(grammarFile string) (Grammars, error) {
 	return grammars, nil
 }
 
-func MakeGrammars(grammarsDir string) (Grammars, error) {
+func MakeGrammars(grammarsDir string, esc *elastic.Client, tc *TokensCache) (Grammars, error) {
 	matches, err := filepath.Glob(filepath.Join(grammarsDir, "*.grammar"))
 	if err != nil {
 		return nil, err
@@ -105,14 +110,11 @@ func MakeGrammars(grammarsDir string) (Grammars, error) {
 
 	grammars := make(Grammars)
 	for _, grammarFile := range matches {
-		grammarsFromFile, err := ReadGrammarFile(grammarFile)
+		grammarsFromFile, err := ReadGrammarFile(grammarFile, esc, tc)
 		if err != nil {
 			return nil, err
 		}
 		FoldGrammars(grammars, grammarsFromFile)
 	}
-
-	log.Infof("Grammars: %+v", grammars)
-
 	return grammars, nil
 }

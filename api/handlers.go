@@ -403,6 +403,7 @@ func SearchHandler(c *gin.Context) {
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
 	grammars := c.MustGet("GRAMMARS").(search.Grammars)
+	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
 
 	esc, err := esManager.GetClient()
 	if err != nil {
@@ -410,7 +411,7 @@ func SearchHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM, grammars)
+	se := search.NewESEngine(esc, db, cacheM, grammars, tc)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -500,6 +501,7 @@ func AutocompleteHandler(c *gin.Context) {
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
 	grammars := c.MustGet("GRAMMARS").(search.Grammars)
+	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
 
 	esc, err := esManager.GetClient()
 	if err != nil {
@@ -507,7 +509,7 @@ func AutocompleteHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM, grammars)
+	se := search.NewESEngine(esc, db, cacheM, grammars, tc)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
@@ -526,7 +528,6 @@ func AutocompleteHandler(c *gin.Context) {
 
 	res, err := se.GetSuggestions(ctx, search.Query{Term: q, LanguageOrder: order}, preference)
 	if err == nil {
-		log.Infof("Autocomplete: %+v", res)
 		c.JSON(http.StatusOK, res)
 	} else {
 		NewInternalError(err).Abort(c)
@@ -1143,6 +1144,12 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		return nil, NewInternalError(err)
 	}
 	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// Generally, this field is not reliable in terms of DB cleanups.
+	// Implemented for special case of BLOG_POST (audio version / declamation) only.
+	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 
@@ -2146,6 +2153,16 @@ func appendBlogFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f BlogFilter)
 	}
 
 	*mods = append(*mods, qm.WhereIn("blog_id in ?", utils.ConvertArgsInt64(ids)...))
+
+	return nil
+}
+
+func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f MediaLanguageFilter) error {
+	if len(f.MediaLanguage) == 0 {
+		return nil
+	}
+
+	*mods = append(*mods, qm.Where("properties->>'original_language' = ?", f.MediaLanguage))
 
 	return nil
 }

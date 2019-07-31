@@ -123,7 +123,9 @@ func (s ClassByTypeStats) dump() {
 type SearchStatsCache interface {
 	Provider
 	IsTagWithUnits(uid string, cts ...string) bool
+	IsTagWithEnoughUnits(uid string, count int, cts ...string) bool
 	IsSourceWithUnits(uid string, cts ...string) bool
+	IsSourceWithEnoughUnits(uid string, count int, cts ...string) bool
 }
 
 type SearchStatsCacheImpl struct {
@@ -139,14 +141,22 @@ func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
 }
 
 func (ssc *SearchStatsCacheImpl) IsTagWithUnits(uid string, cts ...string) bool {
-	return ssc.isClassWithUnits("tags", uid, cts...)
+	return ssc.IsTagWithEnoughUnits(uid, 1, cts...)
+}
+
+func (ssc *SearchStatsCacheImpl) IsTagWithEnoughUnits(uid string, count int, cts ...string) bool {
+	return ssc.isClassWithUnits("tags", uid, count, cts...)
 }
 
 func (ssc *SearchStatsCacheImpl) IsSourceWithUnits(uid string, cts ...string) bool {
-	return ssc.isClassWithUnits("sources", uid, cts...)
+	return ssc.IsSourceWithEnoughUnits(uid, 1, cts...)
 }
 
-func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, cts ...string) bool {
+func (ssc *SearchStatsCacheImpl) IsSourceWithEnoughUnits(uid string, count int, cts ...string) bool {
+	return ssc.isClassWithUnits("sources", uid, count, cts...)
+}
+
+func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, count int, cts ...string) bool {
 	var stats ClassByTypeStats
 	switch class {
 	case "tags":
@@ -159,7 +169,7 @@ func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, cts ...stri
 
 	if h, ok := stats[uid]; ok {
 		for i := range cts {
-			if c, ok := h[cts[i]]; ok && c > 0 {
+			if c, ok := h[cts[i]]; ok && c >= count {
 				return true
 			}
 		}

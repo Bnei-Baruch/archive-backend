@@ -44,6 +44,8 @@ type Index interface {
 	RefreshIndex() error
 	ResultType() string
 	IndexName(language string) string
+	IndexDate() string
+	Namespace() string
 }
 
 type BaseIndex struct {
@@ -294,6 +296,14 @@ func IndexName(namespace string, name string, lang string, date string) string {
 		panic(fmt.Sprintf("Not expecting empty parameter for IndexName, provided: (%s, %s, %s, %s)", namespace, name, lang, date))
 	}
 	return fmt.Sprintf("%s_%s", IndexAliasName(namespace, name, lang), date)
+}
+
+func (index *BaseIndex) IndexDate() string {
+	return index.indexDate
+}
+
+func (index *BaseIndex) Namespace() string {
+	return index.namespace
 }
 
 func (index *BaseIndex) ResultType() string {

@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/search"
@@ -17,11 +18,12 @@ import (
 )
 
 var (
-	DB       *sql.DB
-	ESC      *search.ESManager
-	LOGGER   *search.SearchLogger
-	CACHE    cache.CacheManager
-	GRAMMARS search.Grammars
+	DB           *sql.DB
+	ESC          *search.ESManager
+	LOGGER       *search.SearchLogger
+	CACHE        cache.CacheManager
+	GRAMMARS     search.Grammars
+	TOKENS_CACHE *search.TokensCache
 )
 
 func Init() time.Time {
@@ -63,7 +65,8 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 
 	es.InitVars()
 
-	GRAMMARS, err = search.MakeGrammars(viper.GetString("elasticsearch.grammars"))
+	TOKENS_CACHE = search.MakeTokensCache(consts.TOKEN_CACHE_SIZE)
+	GRAMMARS, err = search.MakeGrammars(viper.GetString("elasticsearch.grammars"), esc, TOKENS_CACHE)
 	utils.Must(err)
 
 	viper.SetDefault("cache.refresh-search-stats", 5*time.Minute)

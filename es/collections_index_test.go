@@ -81,7 +81,7 @@ func (suite *IndexerSuite) TestCollectionsIndex() {
 	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_COLLECTIONS}, common.DB, esc)
 	r.Nil(err)
 	// Index existing DB data.
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 	r.Nil(indexer.RefreshAll())
 	fmt.Printf("\n\n\nValidate we have 2 searchable collections with proper content units.\n\n")
 	// r.Nil(es.DumpDB(common.DB, "Before validation"))
@@ -103,7 +103,7 @@ func (suite *IndexerSuite) TestCollectionsIndex() {
 
 	fmt.Println("Delete collections, reindex and validate we have 0 searchable units.")
 	r.Nil(deleteCollections([]string{c1UID, c2UID, c3UID}))
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 	suite.validateCollectionsContentUnits(indexName, indexer, map[string][]string{})
 
 	//fmt.Println("Restore docx-folder path to original.")

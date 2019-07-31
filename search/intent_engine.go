@@ -184,7 +184,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 				if query.Deb {
 					intentValue.MaxExplanation = *h.Explanation
 				}
-				log.Infof("%s: %+v", classificationIntent.Title, *h.Score)
+				log.Debugf("%s: %+v", classificationIntent.Title, *h.Score)
 				if intentValue.MDB_UID == classificationIntent.MDB_UID {
 					found = true
 					// log.Infof("Max Score: %+v", *h.Score)
@@ -222,9 +222,9 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 				}
 				intentValueP.ContentType = contentUnitType
 				if intentP.Type == consts.INTENT_TYPE_TAG {
-					intentValueP.Exist = e.cache.SearchStats().IsTagWithUnits(intentValueP.MDB_UID, contentUnitType)
+					intentValueP.Exist = e.cache.SearchStats().IsTagWithEnoughUnits(intentValueP.MDB_UID, consts.INTENTS_MIN_UNITS, contentUnitType)
 				} else if intentP.Type == consts.INTENT_TYPE_SOURCE {
-					intentValueP.Exist = e.cache.SearchStats().IsSourceWithUnits(intentValueP.MDB_UID, contentUnitType)
+					intentValueP.Exist = e.cache.SearchStats().IsSourceWithEnoughUnits(intentValueP.MDB_UID, consts.INTENTS_MIN_UNITS, contentUnitType)
 				}
 				// Assign the changed intent value, as everything is by value in golang.
 				intentP.Value = *intentValueP
