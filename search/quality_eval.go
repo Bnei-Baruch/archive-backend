@@ -870,13 +870,13 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 				</tr>`,
 				goodStyle, tdStyle, quality,
 				goodStyle, tdStyle,
-				100*counters[1]/totalCounters[1],                                                                           // Weighted percentage.
+				100*counters[1]/totalCounters[1], // Weighted percentage.
 				diffToHtml(100*counters[1]/totalCounters[1]-100*counters[3]/totalCounters[3], false /*round*/, true /*%*/), // Weighted percentage diff.
 				tdStyle,
-				100*counters[0]/totalCounters[0],                                                                           // Unique Percentage.
+				100*counters[0]/totalCounters[0], // Unique Percentage.
 				diffToHtml(100*counters[0]/totalCounters[0]-100*counters[2]/totalCounters[2], false /*round*/, true /*%*/), // Unique percentage diff.
 				tdStyle,
-				(int)(counters[0]),                                               // Unique.
+				(int)(counters[0]), // Unique.
 				diffToHtml(counters[0]-counters[2], true /*round*/, false /*%*/), // Unique diff.
 			))
 		}
@@ -935,8 +935,9 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 		}
 
 		// Calculatets score for diff to order them.
+
 		calcScore := func(p [][]string) float64 {
-			if p[0] != nil && p[1] == nil {
+			if p[0] != nil && (len(p) == 1 || p[1] == nil) {
 				// 100K - weight for golden only (removed).
 				weight, err := strconv.ParseFloat(p[0][2], 64)
 				if err != nil {
@@ -1009,9 +1010,9 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 				for i, cell := range newRecord {
 					style := "text-overflow: ellipsis; max-width: 200; overflow: hidden;"
 					if onlyGolden {
-						style = fmt.Sprintf("%s; %s", style, "color: green")
+						style = fmt.Sprintf("%s; %s", style, "color: purple;")
 					} else if onlyNew {
-						style = fmt.Sprintf("%s; %s", style, "color: red")
+						style = fmt.Sprintf("%s; %s", style, "color: cadetblue;")
 					}
 					if !onlyNew {
 						goldenCell := goldenRecord[i]
