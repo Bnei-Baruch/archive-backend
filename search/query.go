@@ -258,12 +258,17 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		//  We use special HighlightQuery with SimpleQueryStringQuery to
 		//	 solve elastic issue with synonyms and highlights.
 
+		contentNumOfFragments := 5 //  elastic default
+		if options.highlightFullContent {
+			contentNumOfFragments = 0
+		}
+
 		highlightQuery := elastic.NewHighlight().Fields(
 			elastic.NewHighlighterField("title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
 			elastic.NewHighlighterField("description").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("content").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
 			elastic.NewHighlighterField("description.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("content.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)))
+			elastic.NewHighlighterField("content").NumOfFragments(contentNumOfFragments).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
+			elastic.NewHighlighterField("content.language").NumOfFragments(contentNumOfFragments).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)))
 		if !options.partialHighlight {
 			// Following field not used in intents to solve elastic bug with highlight.
 			highlightQuery.Fields(

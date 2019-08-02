@@ -559,16 +559,17 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					for _, th := range tweetHits.Hits.Hits {
 						mssHighlights.Add(NewResultsSearchRequest(
 							SearchRequestOptions{
-								resultTypes:      []string{consts.ES_RESULT_TYPE_TWEETS},
-								docIds:           []string{th.Id},
-								index:            th.Index,
-								query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
-								sortBy:           consts.SORT_BY_RELEVANCE,
-								from:             0,
-								size:             1,
-								preference:       preference,
-								useHighlight:     true,
-								partialHighlight: true}))
+								resultTypes:          []string{consts.ES_RESULT_TYPE_TWEETS},
+								docIds:               []string{th.Id},
+								index:                th.Index,
+								query:                Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
+								sortBy:               consts.SORT_BY_RELEVANCE,
+								from:                 0,
+								size:                 1,
+								preference:           preference,
+								useHighlight:         true,
+								highlightFullContent: true,
+								partialHighlight:     true}))
 
 						highlightRequestAdded = true
 					}
