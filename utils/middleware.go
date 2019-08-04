@@ -24,6 +24,7 @@ func DataStoresMiddleware(mbdDB *sql.DB, esManager, logger, cm interface{}, gram
 		c.Set("GRAMMARS", grammars)
 		c.Set("CMS", cms)
 		c.Set("TOKENS_CACHE", tc)
+		c.Set("CMS", cms)
 		c.Next()
 	}
 }
