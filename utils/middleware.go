@@ -14,14 +14,15 @@ import (
 	"gopkg.in/go-playground/validator.v8"
 )
 
-// Set MDB, ES & LOGGER clients in context
-func DataStoresMiddleware(mbdDB *sql.DB, esManager, logger, cm interface{}, grammars interface{}) gin.HandlerFunc {
+// Set MDB, ES & LOGGER etc. clients in context
+func DataStoresMiddleware(mbdDB *sql.DB, esManager, logger, cm interface{}, grammars interface{}, cms interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set("MDB_DB", mbdDB)
 		c.Set("ES_MANAGER", esManager)
 		c.Set("LOGGER", logger)
 		c.Set("CACHE", cm)
 		c.Set("GRAMMARS", grammars)
+		c.Set("CMS", cms)
 		c.Next()
 	}
 }

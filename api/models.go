@@ -380,3 +380,8 @@ type BlogPost struct {
 	Content      string    `json:"content"`
 	CreatedAt    time.Time `json:"created_at"`
 }
+
+type CmsItemRequest struct {
+	BaseRequest
+	Id string `json:"id" form:"id" binding:"omitempty"`
+}
