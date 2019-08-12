@@ -54,7 +54,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/feeds/morning_lesson", FeedMorningLesson)
 
 	cms := router.Group("/cms")
-	cms.GET("/person", CMSPerson)
+	cms.GET("/person/:id", CMSPerson)
 	cms.GET("/banner", CMSBanner)
 	cms.GET("/topic", CMSTopic)
 	cms.GET("/assets/*path", CMSAsset)

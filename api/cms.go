@@ -15,25 +15,26 @@ type CMSParams struct {
 }
 
 func CMSPerson(c *gin.Context) {
-	var r CmsItemRequest
+	var r BaseRequest
 	if c.Bind(&r) != nil {
 		return
 	}
+	id := c.Param("id")
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
-	filePattern := fmt.Sprintf("%spersons/persons-%s-%%s-html", assets, r.Id)
+	filePattern := fmt.Sprintf("%s/active/persons/persons-%s-%%s-html", assets, id)
 	fileName, err := handleItemRequest(filePattern, r.Language)
 	concludeRequestFile(c, fileName, err)
 }
 
 func CMSBanner(c *gin.Context) {
-	var r CmsItemRequest
+	var r BaseRequest
 	if c.Bind(&r) != nil {
 		return
 	}
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
-	filePattern := fmt.Sprintf("%sbanners/banner-%%s", assets)
+	filePattern := fmt.Sprintf("%s/active/banners/banner-%%s", assets)
 	fileName, err := handleItemRequest(filePattern, r.Language)
 	concludeRequestFile(c, fileName, err)
 }
@@ -52,7 +53,7 @@ func CMSTopic(c *gin.Context) {
 func handleAssetRequest(path string, assets string) (string, *HttpError) {
 	var err error
 
-	fileName := assets + "images" + path
+	fileName := assets + "active/images" + path
 	if _, err = os.Stat(fileName); err != nil {
 		return "", NewNotFoundError()
 	}
