@@ -9,6 +9,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 
+	"github.com/Bnei-Baruch/archive-backend/api"
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -24,6 +25,7 @@ var (
 	CACHE        cache.CacheManager
 	GRAMMARS     search.Grammars
 	TOKENS_CACHE *search.TokensCache
+	CMS          *api.CMSParams
 )
 
 func Init() time.Time {
@@ -33,6 +35,11 @@ func Init() time.Time {
 func InitWithDefault(defaultDb *sql.DB) time.Time {
 	var err error
 	clock := time.Now()
+
+	CMS = &api.CMSParams{
+		Assets: viper.GetString("cms.assets"),
+		Mode:   viper.GetString("server.mode"),
+	}
 
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
 	//log.SetLevel(log.WarnLevel)

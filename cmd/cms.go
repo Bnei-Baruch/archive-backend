@@ -1,0 +1,22 @@
+package cmd
+
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/Bnei-Baruch/archive-backend/cms"
+)
+
+// TODO:
+// 1. Add support for active-passive directories
+
+var cmsCmd = &cobra.Command{
+	Use:   "cms",
+	Short: "Sync data from CMS",
+	Run: func(cmd *cobra.Command, args []string) {
+		cms.SyncCMS()
+	},
+}
+
+func init() {
+	RootCmd.AddCommand(cmsCmd)
+}

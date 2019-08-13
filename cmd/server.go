@@ -48,7 +48,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 	router := gin.New()
 	router.Use(
 		utils.LoggerMiddleware(),
-		utils.DataStoresMiddleware(common.DB, common.ESC, common.LOGGER, common.CACHE, common.GRAMMARS, common.TOKENS_CACHE),
+		utils.DataStoresMiddleware(common.DB, common.ESC, common.LOGGER, common.CACHE, common.GRAMMARS, common.TOKENS_CACHE, common.CMS),
 		utils.ErrorHandlingMiddleware(),
 		cors.New(corsConfig),
 		utils.RecoveryMiddleware())
