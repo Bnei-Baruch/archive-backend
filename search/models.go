@@ -14,8 +14,6 @@ type Intent struct {
 
 type QueryResult struct {
 	SearchResult *elastic.SearchResult `json:"search_result,omitempty"`
-	// TODO: Intents field below is deprecated and not being used.
-	Intents []Intent `json:"intents,omitempty"`
 }
 
 type Engine interface {
