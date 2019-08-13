@@ -650,13 +650,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 		}
 
-		return &QueryResult{ret, query.Intents}, err
+		return &QueryResult{ret}, err
 	}
 
 	if len(mr.Responses) > 0 {
 		// This happens when there are no responses with hits.
 		// Note, we don't filter here intents by language.
-		return &QueryResult{mr.Responses[0], query.Intents}, err
+		return &QueryResult{mr.Responses[0]}, err
 	} else {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - No responses from multi search.")
 	}
