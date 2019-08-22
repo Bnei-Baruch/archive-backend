@@ -10,14 +10,14 @@ GOLDEN_DIR="${BASE_DIR}/search/golden"
 BACKEND="https://kabbalahmedia.info/backend"
 
 # LOCAL
-BASE_DIR="."
-RECALL_SET_DIR="${BASE_DIR}/search/data"
-LOGS_DIR="/tmp/logs/es"
-GOLDEN_DIR="/tmp/search-golden"
-BACKEND="https://kabbalahmedia.info/backend"
+#BASE_DIR="."
+#RECALL_SET_DIR="${BASE_DIR}/search/data"
+#LOGS_DIR="/tmp/logs/es"
+#GOLDEN_DIR="/tmp/search-golden"
+#BACKEND="https://kabbalahmedia.info/backend"
 
 TIMESTAMP="$(date '+%Y%m%d%H%M%S')"
-TIMESTAMP="20190617000001"
+#TIMESTAMP="20190617000001"
 
 LOG_FILE_HE="${LOGS_DIR}/eval_he_${TIMESTAMP}.log"
 LOG_FILE_RU="${LOGS_DIR}/eval_ru_${TIMESTAMP}.log"
@@ -58,7 +58,5 @@ find ${LOGS_DIR} -name "eval_report_*.log" -type f -mtime +7 -exec rm -f {} \;
 
 cat ${HTML_FILE} | mail -s "Daily Eval: Done." -r "mdb@bbdomain.org" -a ${REPORT_FILE_HE} -a ${REPORT_FILE_RU} \
         -a ${REPORT_FILE_EN} -a ${LOG_FILE_HE} -a ${LOG_FILE_RU} -a ${LOG_FILE_EN} -a ${LOG_FILE_HTML} \
-        kolmanv@gmail.com
-        
-#edoshor@gmail.com eranminuchin@gmail.com yurihechter@gmail.com alex.mizrachi@gmail.com
+        kolmanv@gmail.com edoshor@gmail.com eranminuchin@gmail.com yurihechter@gmail.com alex.mizrachi@gmail.com
 exit 0
