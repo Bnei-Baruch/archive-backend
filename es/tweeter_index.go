@@ -158,19 +158,6 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) *IndexEr
 	tweetLang := langMapping[int(mdbTweet.UserID)]
 
 	indexErrors := MakeIndexErrors().ShouldIndex(tweetLang)
-	title := ""
-	if mdbTweet.Raw.Valid {
-		var raw interface{}
-		err := json.Unmarshal(mdbTweet.Raw.JSON, &raw)
-		indexErrors.DocumentError(tweetLang, err, fmt.Sprintf("Cannot unmarshal raw from tweet id %d", mdbTweet.ID))
-		if err != nil {
-			return indexErrors
-		}
-		r := raw.(map[string]interface{})
-		if val, ok := r["text"]; ok {
-			title = val.(string)
-		}
-	}
 
 	tweet := Result{
 		ResultType:    index.resultType,
@@ -178,8 +165,7 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) *IndexEr
 		MDB_UID:       mdbTweet.TwitterID, // TwitterID is taken instead of UID
 		TypedUids:     []string{keyValue(consts.ES_UID_TYPE_TWEET, mdbTweet.TwitterID)},
 		FilterValues:  []string{keyValue("content_type", consts.SCT_TWEET), keyValue(consts.FILTER_LANGUAGE, tweetLang)},
-		Title:         title,
-		TitleSuggest:  Suffixes(title),
+		Title:         "",
 		EffectiveDate: &utils.Date{Time: mdbTweet.TweetAt},
 		Content:       mdbTweet.FullText,
 	}

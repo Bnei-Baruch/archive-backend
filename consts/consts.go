@@ -297,6 +297,7 @@ var LANG2CODE = map[string]string{
 
 const (
 	INTENTS_SEARCH_COUNT       = 10
+	TWEETS_SEARCH_COUNT        = 20
 	INTENTS_MIN_UNITS          = 3
 	MAX_CLASSIFICATION_INTENTS = 3
 	API_DEFAULT_PAGE_SIZE      = 50
@@ -367,13 +368,12 @@ const ES_UID_TYPE_SOURCE = "source"
 const ES_UID_TYPE_TWEET = "tweet"
 const ES_UID_TYPE_BLOG_POST = "blog_post"
 
-//  ToDo: Add ES_RESULT_TYPE_TWEETS to ES_SEARCH_RESULT_TYPES when the tweets handling in front end will be ready.
+//  ES_RESULT_TYPE_TWEETS is not part of the array since it's searched in parallel to other results search
 var ES_SEARCH_RESULT_TYPES = []string{
 	ES_RESULT_TYPE_UNITS,
 	ES_RESULT_TYPE_SOURCES,
 	ES_RESULT_TYPE_COLLECTIONS,
 	ES_RESULT_TYPE_BLOG_POSTS,
-	// ES_RESULT_TYPE_TWEETS,
 }
 
 var ES_ALL_RESULT_TYPES = []string{
