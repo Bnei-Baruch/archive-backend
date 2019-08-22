@@ -34,7 +34,7 @@ func (suite *TweeterIndexerSuite) TestTwitterIndex() {
 	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_TWEETS}, common.DB, esc)
 	r.Nil(err)
 
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 
 	fmt.Printf("\nAdding English tweet and validate.\n\n")
 	suite.itt(1, "1", 3, "this is english tweet")
@@ -68,7 +68,7 @@ func (suite *TweeterIndexerSuite) TestTwitterIndex() {
 
 	fmt.Println("\nDelete tweets from DB, reindex and validate we have 0 tweets.")
 	r.Nil(deleteTweets([]string{"1", "2", "3", "5"}))
-	r.Nil(indexer.ReindexAll())
+	r.Nil(indexer.ReindexAll(esc))
 	suite.validateNames(indexNameEn, indexer, []string{})
 	suite.validateNames(indexNameEs, indexer, []string{})
 	suite.validateNames(indexNameRu, indexer, []string{})

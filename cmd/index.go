@@ -1,20 +1,15 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	elastic "gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/common"
@@ -109,14 +104,16 @@ func indexFn(cmd *cobra.Command, args []string) {
 		log.Error(err)
 		return
 	}
+
 	log.Info("Preparing all documents with Unzip.")
 	err = es.ConvertDocx(common.DB)
 	if err != nil {
 		log.Error(err)
 		return
 	}
+
 	log.Info("Done preparing documents.")
-	err = indexer.ReindexAll()
+	err = indexer.ReindexAll(esc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -252,7 +249,6 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 }
 
 func updateSynonymsFn(cmd *cobra.Command, args []string) {
-
 	clock := common.Init()
 	defer common.Shutdown()
 
@@ -262,121 +258,14 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	folder, err := es.SynonymsFolder()
+	err = es.UpdateSynonyms(esc, "prod", "" /*indexDate - empty means production.*/)
 	if err != nil {
-		log.Error(errors.Wrap(err, "SynonymsFolder not available."))
+		log.Error(err)
 		return
-	}
-	files, err := ioutil.ReadDir(folder)
-	if err != nil {
-		log.Error(errors.Wrap(err, "Cannot read synonym files list."))
-		return
-	}
-
-	type SynonymGraphSU struct {
-		Type      string   `json:"type"`
-		Tokenizer string   `json:"tokenizer"`
-		Synonyms  []string `json:"synonyms"`
-	}
-	type FilterSU struct {
-		SynonymGraph SynonymGraphSU `json:"synonym_graph"`
-	}
-	type AnalysisSU struct {
-		Filter FilterSU `json:"filter"`
-	}
-	type IndexSU struct {
-		Analysis AnalysisSU `json:"analysis"`
-	}
-	type SU struct {
-		Index IndexSU `json:"index"`
-	}
-	body := SU{
-		IndexSU{
-			AnalysisSU{
-				FilterSU{
-					SynonymGraphSU{
-						Type:      "synonym_graph",
-						Tokenizer: "keyword",
-					},
-				},
-			},
-		},
-	}
-
-	for _, fileInfo := range files {
-		keywords := make([]string, 0)
-
-		//  Convention: file name without extension is the language code.
-		var ext = filepath.Ext(fileInfo.Name())
-		var lang = fileInfo.Name()[0 : len(fileInfo.Name())-len(ext)]
-
-		indexName := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, lang)
-
-		filePath := filepath.Join(folder, fileInfo.Name())
-		file, err := os.Open(filePath)
-		if err != nil {
-			log.Error(errors.Wrapf(err, "Unable to open synonyms file: %s.", filePath))
-			return
-		}
-		defer file.Close()
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			line := scanner.Text()
-
-			//  Blank lines and lines starting with pound are comments (like Solr format).
-			trimmed := strings.TrimSpace(line)
-			if trimmed != "" {
-				if !strings.HasPrefix(trimmed, "#") {
-					commaSeperated := strings.Replace(trimmed, "\t", ",", -1)
-					keywords = append(keywords, commaSeperated)
-				}
-			}
-		}
-		if err := scanner.Err(); err != nil {
-			log.Error(errors.Wrapf(err, "Error at scanning synonym config file: %s.", filePath))
-			return
-		}
-		// Set keywords to update synonyms
-		body.Index.Analysis.Filter.SynonymGraph.Synonyms = keywords
-
-		// Close the index in order to update the synonyms
-		closeRes, err := esc.CloseIndex(indexName).Do(context.TODO())
-		if err != nil {
-			log.Error(errors.Wrapf(err, "CloseIndex: %s", indexName))
-			return
-		}
-		if !closeRes.Acknowledged {
-			log.Errorf("CloseIndex not Acknowledged: %s", indexName)
-			return
-		}
-
-		defer openIndex(indexName, esc)
-
-		settingsRes, err := esc.IndexPutSettings(indexName).BodyJson(body).Do(context.TODO())
-		if err != nil {
-			log.Error(errors.Wrapf(err, "IndexPutSettings: %s with keywords: \n%s\n", indexName, strings.Join(keywords, "\n")))
-			return
-		}
-		if !settingsRes.Acknowledged {
-			log.Errorf("IndexPutSettings not Acknowledged: %s", indexName)
-			return
-		}
 	}
 
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
-}
-
-func openIndex(indexName string, esc *elastic.Client) {
-	openRes, err := esc.OpenIndex(indexName).Do(context.TODO())
-	if err != nil {
-		log.Error(errors.Wrapf(err, "OpenIndex: %s", indexName))
-		return
-	}
-	if !openRes.Acknowledged {
-		log.Errorf("OpenIndex not Acknowledged: %s", indexName)
-		return
-	}
 }
 
 func simulateUpdateFn(cmd *cobra.Command, args []string) {
@@ -401,7 +290,8 @@ func simulateUpdateFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	err = indexer.Update(es.Scope{CollectionUID: "zf4lLwyI"})
+	//err = indexer.Update(es.Scope{CollectionUID: "zf4lLwyI"})
+	err = indexer.Update(es.Scope{SourceUID: "qMUUn22b"})
 	//err = indexer.Update(es.Scope{ContentUnitUID: "S5cSiwqb"})
 	//err = indexer.Update(es.Scope{FileUID: "QSMWk1lj"})
 	//err = indexer.Update(es.Scope{ContentUnitUID: "eA0g9XRf"})

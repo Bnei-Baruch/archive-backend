@@ -89,6 +89,7 @@ const (
 	ET_SOURCES       = iota
 	ET_EVENTS        = iota
 	ET_LANDING_PAGE  = iota
+	ET_BLOG_OR_TWEET = iota
 	ET_EMPTY         = iota
 	ET_FAILED_PARSE  = iota
 	ET_BAD_STRUCTURE = iota
@@ -102,6 +103,7 @@ var EXPECTATIONS_FOR_EVALUATION = map[int]bool{
 	ET_PROGRAMS:      true,
 	ET_SOURCES:       true,
 	ET_LANDING_PAGE:  true,
+	ET_BLOG_OR_TWEET: true,
 	ET_EMPTY:         false,
 	ET_FAILED_PARSE:  false,
 	ET_BAD_STRUCTURE: true,
@@ -114,6 +116,7 @@ var EXPECTATION_TO_NAME = map[int]string{
 	ET_LESSONS:       "et_lessons",
 	ET_PROGRAMS:      "et_programs",
 	ET_SOURCES:       "et_sources",
+	ET_BLOG_OR_TWEET: "et_blog_or_tweet",
 	ET_LANDING_PAGE:  "et_landing_page",
 	ET_EMPTY:         "et_empty",
 	ET_FAILED_PARSE:  "et_failed_parse",
@@ -169,6 +172,7 @@ const (
 	FILTER_NAME_TOPIC        = "topic"
 	FILTER_NAME_CONTENT_TYPE = "contentType"
 	PREFIX_LATEST            = "[latest]"
+	BLOG_OR_TWEET_MARK       = "blog_or_tweet"
 )
 
 var FLAT_REPORT_HEADERS = []string{
@@ -330,6 +334,9 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	if strings.Trim(e, " ") == "" {
 		return Expectation{ET_EMPTY, "", nil, originalE}
 	}
+	if e == BLOG_OR_TWEET_MARK {
+		return Expectation{ET_BLOG_OR_TWEET, "", nil, originalE}
+	}
 	takeLatest := strings.HasPrefix(strings.ToLower(e), PREFIX_LATEST)
 	if takeLatest {
 		e = e[len(PREFIX_LATEST):]
@@ -487,6 +494,12 @@ func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expect
 	hitType := hit.Type
 	if hitType == "result" {
 		hitType = hitSource.ResultType
+	}
+	if e.Type == ET_BLOG_OR_TWEET {
+		result := hitType == consts.ES_RESULT_TYPE_BLOG_POSTS ||
+			hitType == consts.ES_RESULT_TYPE_TWEETS ||
+			hitType == consts.SEARCH_RESULT_TWEETS_MANY
+		return result
 	}
 	if hitType != EXPECTATION_HIT_TYPE[e.Type] {
 		return false
@@ -922,8 +935,9 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 		}
 
 		// Calculatets score for diff to order them.
+
 		calcScore := func(p [][]string) float64 {
-			if p[0] != nil && p[1] == nil {
+			if p[0] != nil && (len(p) == 1 || p[1] == nil) {
 				// 100K - weight for golden only (removed).
 				weight, err := strconv.ParseFloat(p[0][2], 64)
 				if err != nil {
@@ -996,9 +1010,9 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 				for i, cell := range newRecord {
 					style := "text-overflow: ellipsis; max-width: 200; overflow: hidden;"
 					if onlyGolden {
-						style = fmt.Sprintf("%s; %s", style, "color: green")
+						style = fmt.Sprintf("%s; %s", style, "color: purple;")
 					} else if onlyNew {
-						style = fmt.Sprintf("%s; %s", style, "color: red")
+						style = fmt.Sprintf("%s; %s", style, "color: cadetblue;")
 					}
 					if !onlyNew {
 						goldenCell := goldenRecord[i]

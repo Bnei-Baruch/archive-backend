@@ -1,9 +1,13 @@
 package es
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -145,11 +149,139 @@ func SwitchAliasToCurrentIndex(namespace string, name string, date string, esc *
 	return err
 }
 
-func (indexer *Indexer) ReindexAll() error {
+func openIndex(indexName string, esc *elastic.Client) {
+	openRes, err := esc.OpenIndex(indexName).Do(context.TODO())
+	if err != nil {
+		log.Error(errors.Wrapf(err, "OpenIndex: %s", indexName))
+		return
+	}
+	if !openRes.Acknowledged {
+		log.Errorf("OpenIndex not Acknowledged: %s", indexName)
+		return
+	}
+	err = esc.WaitForYellowStatus("10s")
+	if err != nil {
+		log.Errorf("OpenIndex, failed waiting for yellow status.")
+	}
+}
+
+func UpdateSynonyms(esc *elastic.Client, namespace string, indexDate string) error {
+	folder, err := SynonymsFolder()
+	if err != nil {
+		return errors.Wrap(err, "SynonymsFolder not available.")
+	}
+
+	files, err := ioutil.ReadDir(folder)
+	if err != nil {
+		return errors.Wrap(err, "Cannot read synonym files list.")
+	}
+
+	type SynonymGraphSU struct {
+		Type      string   `json:"type"`
+		Tokenizer string   `json:"tokenizer"`
+		Synonyms  []string `json:"synonyms"`
+	}
+	type FilterSU struct {
+		SynonymGraph SynonymGraphSU `json:"synonym_graph"`
+	}
+	type AnalysisSU struct {
+		Filter FilterSU `json:"filter"`
+	}
+	type IndexSU struct {
+		Analysis AnalysisSU `json:"analysis"`
+	}
+	type SU struct {
+		Index IndexSU `json:"index"`
+	}
+	body := SU{
+		IndexSU{
+			AnalysisSU{
+				FilterSU{
+					SynonymGraphSU{
+						Type:      "synonym_graph",
+						Tokenizer: "keyword",
+					},
+				},
+			},
+		},
+	}
+
+	for _, fileInfo := range files {
+		keywords := make([]string, 0)
+
+		//  Convention: file name without extension is the language code.
+		var ext = filepath.Ext(fileInfo.Name())
+		var lang = fileInfo.Name()[0 : len(fileInfo.Name())-len(ext)]
+
+		indexName := ""
+		if indexDate != "" {
+			// Use specific date index.
+			indexName = IndexName(namespace, consts.ES_RESULTS_INDEX, lang, indexDate)
+		} else {
+			// Use prooduction (alias) index.
+			indexName = IndexNameForServing(namespace, consts.ES_RESULTS_INDEX, lang)
+		}
+
+		filePath := filepath.Join(folder, fileInfo.Name())
+		file, err := os.Open(filePath)
+		if err != nil {
+			return errors.Wrapf(err, "Unable to open synonyms file: %s.", filePath)
+		}
+		defer file.Close()
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			//  Blank lines and lines starting with pound are comments (like Solr format).
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
+				if !strings.HasPrefix(trimmed, "#") {
+					commaSeperated := strings.Replace(trimmed, "\t", ",", -1)
+					keywords = append(keywords, commaSeperated)
+				}
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			return errors.Wrapf(err, "Error at scanning synonym config file: %s.", filePath)
+		}
+		// Set keywords to update synonyms
+		body.Index.Analysis.Filter.SynonymGraph.Synonyms = keywords
+
+		// Close the index in order to update the synonyms
+		closeRes, err := esc.CloseIndex(indexName).Do(context.TODO())
+		if err != nil {
+			return errors.Wrapf(err, "CloseIndex: %s", indexName)
+		}
+		if !closeRes.Acknowledged {
+			return errors.New(fmt.Sprintf("CloseIndex not Acknowledged: %s", indexName))
+		}
+
+		defer openIndex(indexName, esc)
+
+		settingsRes, err := esc.IndexPutSettings(indexName).BodyJson(body).Do(context.TODO())
+		if err != nil {
+			return errors.Wrapf(err, "IndexPutSettings: %s with keywords: \n%s\n", indexName, strings.Join(keywords, "\n"))
+		}
+		if !settingsRes.Acknowledged {
+			return errors.New(fmt.Sprintf("IndexPutSettings not Acknowledged: %s", indexName))
+		}
+	}
+	return nil
+}
+
+func (indexer *Indexer) ReindexAll(esc *elastic.Client) error {
 	log.Info("Indexer - Re-Indexing everything")
 	if err := indexer.CreateIndexes(); err != nil {
 		return errors.Wrapf(err, "Error creating indexes.")
 	}
+	log.Info("Indexer - Updating Synonyms.")
+	if len(indexer.indices) == 0 {
+		return errors.New("Expected indices to be more than 0.")
+	}
+	if err := UpdateSynonyms(esc, indexer.indices[0].Namespace(), indexer.indices[0].IndexDate()); err != nil {
+		return errors.Wrapf(err, "Error updating synonyms.")
+	}
+	log.Info("Indexer - Synonymns updated.")
 	done := make(chan string)
 	errs := make([]error, len(indexer.indices))
 	for i := range indexer.indices {

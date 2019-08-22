@@ -355,6 +355,9 @@ const ES_RESULT_TYPE_TAGS = "tags"
 const ES_RESULT_TYPE_BLOG_POSTS = "posts"
 const ES_RESULT_TYPE_TWEETS = "tweets"
 
+// Result of many tweets in one hit
+const SEARCH_RESULT_TWEETS_MANY = "tweets_many"
+
 // Typed UIDs and Filter
 const ES_UID_TYPE_CONTENT_UNIT = "content_unit"
 const ES_UID_TYPE_FILE = "file"
@@ -390,6 +393,9 @@ const (
 )
 
 const CDN = "https://cdn.kabbalahmedia.info/"
+
+// TokensCache LRU cache size
+const TOKEN_CACHE_SIZE = 10000
 
 // Search filter.
 type SearchFilterType int
