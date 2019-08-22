@@ -479,6 +479,17 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
+	// Search tweets in parallel to native search.
+	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
+	go func() {
+		if tweetsByLang, err := e.SearchTweets(query, sortBy, from, size, preference); err != nil {
+			log.Errorf("ESEngine.DoSearch - Error searching tweets: %+v", err)
+			tweetsByLangChannel <- map[string]*elastic.SearchResult{}
+		} else {
+			tweetsByLangChannel <- tweetsByLang
+		}
+	}()
+
 	var resultTypes []string
 	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
 		resultTypes = make([]string, 0)
@@ -561,6 +572,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
+	tweetsByLang := <-tweetsByLangChannel
+	for lang, tweets := range tweetsByLang {
+		if _, ok := resultsByLang[lang]; !ok {
+			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+		}
+		resultsByLang[lang] = append(resultsByLang[lang], tweets)
+	}
+
 	var currentLang string
 	results := make([]*elastic.SearchResult, 0)
 	for _, lang := range query.LanguageOrder {
@@ -583,16 +602,38 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		mssHighlights := e.esc.MultiSearch()
 		highlightRequestAdded := false
 
+		highlightsLangs := query.LanguageOrder
+		if !shouldMergeResults {
+			highlightsLangs = []string{currentLang}
+		}
+
 		for _, h := range ret.Hits.Hits {
 
+			if h.Type == consts.SEARCH_RESULT_TWEETS_MANY && h.InnerHits != nil {
+				if tweetHits, ok := h.InnerHits[consts.SEARCH_RESULT_TWEETS_MANY]; ok {
+					for _, th := range tweetHits.Hits.Hits {
+						mssHighlights.Add(NewResultsSearchRequest(
+							SearchRequestOptions{
+								resultTypes:          []string{consts.ES_RESULT_TYPE_TWEETS},
+								docIds:               []string{th.Id},
+								index:                th.Index,
+								query:                Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
+								sortBy:               consts.SORT_BY_RELEVANCE,
+								from:                 0,
+								size:                 1,
+								preference:           preference,
+								useHighlight:         true,
+								highlightFullContent: true,
+								partialHighlight:     true}))
+
+						highlightRequestAdded = true
+					}
+				}
+				continue
+			}
 			if h.Id == "" || strings.HasPrefix(h.Index, "intent-") {
 				// Bypass intent
 				continue
-			}
-
-			highlightsLangs := query.LanguageOrder
-			if !shouldMergeResults {
-				highlightsLangs = []string{currentLang}
 			}
 
 			// We use multiple search request because we saw that a single request
@@ -635,6 +676,15 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							if h.Id == hr.Id {
 								//  Replacing original search result with highlighted result.
 								ret.Hits.Hits[i] = hr
+							} else if h.Type == consts.SEARCH_RESULT_TWEETS_MANY && h.InnerHits != nil {
+								if tweetHits, ok := h.InnerHits[consts.SEARCH_RESULT_TWEETS_MANY]; ok {
+									for k, th := range tweetHits.Hits.Hits {
+										if th.Id == hr.Id {
+											//  Replacing original tweet result with highlighted tweet result.
+											tweetHits.Hits.Hits[k] = hr
+										}
+									}
+								}
 							}
 						}
 					}
@@ -643,8 +693,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 		}
 
-		//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
 		for _, hit := range ret.Hits.Hits {
+			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
+				err = e.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
+			}
+			//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
 			if hit.Highlight == nil {
 				hit.Highlight = elastic.SearchHitHighlight{}
 			}

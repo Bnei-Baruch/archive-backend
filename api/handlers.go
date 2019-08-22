@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"gopkg.in/gin-gonic/gin.v1"
+	elastic "gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -460,6 +461,17 @@ func SearchHandler(c *gin.Context) {
 		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
 		if err != nil {
 			log.Warnf("Error logging search: %+v %+v", err, res)
+		}
+		for _, hit := range res.SearchResult.Hits.Hits {
+			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
+				//  Should be done after the logging to avoid errors with source field
+				err = se.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
+			}
+			//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
+			//	TBD check if already fixed in client
+			if hit.Highlight == nil {
+				hit.Highlight = elastic.SearchHitHighlight{}
+			}
 		}
 		c.JSON(http.StatusOK, res)
 	} else {
