@@ -19,10 +19,15 @@ func CMSPerson(c *gin.Context) {
 	if c.Bind(&r) != nil {
 		return
 	}
-	id := c.Param("id")
+	id := c.Query("id")
+	if id == "" {
+		err := fmt.Errorf("Id must be supplied")
+		concludeRequestFile(c, "", NewBadRequestError(err))
+		return
+	}
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
-	filePattern := fmt.Sprintf("%s/active/persons/persons-%s-%%s-html", assets, id)
+	filePattern := fmt.Sprintf("%s/active/persons/%s-%%s", assets, id)
 	fileName, err := handleItemRequest(filePattern, r.Language)
 	concludeRequestFile(c, fileName, err)
 }
@@ -34,7 +39,7 @@ func CMSBanner(c *gin.Context) {
 	}
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
-	filePattern := fmt.Sprintf("%s/active/banners/banner-%%s", assets)
+	filePattern := fmt.Sprintf("%s/active/banners/%%s", assets)
 	fileName, err := handleItemRequest(filePattern, r.Language)
 	concludeRequestFile(c, fileName, err)
 }

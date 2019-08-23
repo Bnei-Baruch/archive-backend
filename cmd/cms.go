@@ -6,9 +6,6 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/cms"
 )
 
-// TODO:
-// 1. Add support for active-passive directories
-
 var cmsCmd = &cobra.Command{
 	Use:   "cms",
 	Short: "Sync data from CMS",
