@@ -32,6 +32,7 @@ func SyncCMS() {
 
 	log.Info("Source URL: ", cms)
 	log.Info("Target directory: ", assets)
+
 	log.Info("Syncing Banners...")
 	syncBanners(cms, passive)
 	log.Info("Done")

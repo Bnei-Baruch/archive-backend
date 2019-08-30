@@ -14,6 +14,14 @@ var cmsCmd = &cobra.Command{
 	},
 }
 
+var loadWPCmd = &cobra.Command{
+	Use: "loadWP",
+	Short: "Load data into Wordpress",
+	Run: func(cmd *cobra.Command, args []string) {
+		cms.LoadData()
+	},
+}
 func init() {
 	RootCmd.AddCommand(cmsCmd)
+	RootCmd.AddCommand(loadWPCmd)
 }
