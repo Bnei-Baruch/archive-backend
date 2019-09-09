@@ -70,7 +70,8 @@ func queriesFn(cmd *cobra.Command, args []string) {
 	logger := initLogger()
 	printCsv([][]string{[]string{
 		"#", "SearchId", "Created", "Term", "Exact", "Filters",
-		"Languages", "From", "Size", "SortBy", "Error", "Suggestion"}})
+		"Languages", "From", "Size", "SortBy", "Error", "Suggestion",
+		"Deb"}})
 	totalQueries := 0
 	SLICES := 100
 	for i := 0; i < SLICES; i++ {
@@ -100,6 +101,7 @@ func queriesFn(cmd *cobra.Command, args []string) {
 				sl.SortBy,
 				fmt.Sprintf("%t", sl.Error != nil),
 				sl.Suggestion,
+				fmt.Sprintf("%t", sl.Query.Deb),
 			})
 		}
 		printCsv(records)
