@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/md5"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -1381,43 +1380,36 @@ ORDER BY max_film_date DESC`
 func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
 	// CU ids query
 	q := `
-		with tmp as (
-		   select
-			 cu.id,
-			 cu.type_id,
-			 row_number()
-			 over (
-			   partition by cu.type_id
-			   order by (coalesce(cu.properties ->> 'film_date', cu.created_at :: TEXT)) :: DATE DESC, cu.created_at DESC )
-			   as rownum
-		   from tags t
-			 inner join content_units_tags cut on t.id = cut.tag_id
-			 inner join content_units cu on cut.content_unit_id = cu.id and cu.secure = 0 and cu.published is true
-		   where t.id in (WITH RECURSIVE rec_tags AS (
-			 SELECT t.id
-			 FROM tags t
-			 WHERE t.uid = $1
-			 UNION
-			 SELECT t.id
-			 FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
-		   )
-		   SELECT distinct id
-		   FROM rec_tags)
-		),
-		tmp_count1 as (
-			select content_types.name, count(1) as count
-			from tmp
-			inner join content_types on content_types.id = type_id
-			group by content_types.name
-		),
-		tmp_count as (
-			select array_to_json(array_agg(row_to_json(tmp_count1))) as count
-			from tmp_count1
+WITH idsPerTag AS (
+		SELECT DISTINCT cu.id
+		FROM tags t
+		INNER JOIN content_units_tags cut ON t.id = cut.tag_id
+		INNER JOIN content_units cu ON cut.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
+		WHERE t.id IN (
+			WITH RECURSIVE rec_tags AS (
+				SELECT t.id
+				FROM tags t
+				WHERE t.uid = $1
+				UNION
+				SELECT t.id
+				FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
+			)
+			SELECT DISTINCT id
+			FROM rec_tags
 		)
-
-		select tmp.id, tmp_count.count
-		from tmp, tmp_count
-		where rownum <= $2
+), idsGroupedByType AS (
+	SELECT cu.type_id,
+			ARRAY_AGG(cu.id ORDER BY  
+				(coalesce(cu.properties ->> 'film_date', cu.created_at :: TEXT)) :: DATE DESC
+			) AS ids
+	FROM content_units cu
+	WHERE id IN (SELECT id FROM idsPerTag)
+	GROUP BY cu.type_id
+)
+SELECT type_id,
+       ids[0:$2] AS ids,
+       array_length(ids, 1) AS count
+FROM idsGroupedByType
 ;`
 
 	rows, err := queries.Raw(db, q, r.UID, r.N).Query()
@@ -1426,26 +1418,21 @@ func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardRespon
 	}
 	defer rows.Close()
 
-	cuIDs := make([]int64, 0)
-	var countJson map[string]int = nil
+	cuIDs := []int64{}
+	counts := map[string]int{}
 	for rows.Next() {
-		var myId int64
-		var myCount string
-		err := rows.Scan(&myId, &myCount)
+		var typeId int64
+		var count int64
+		ids := []int64{}
+		err = rows.Scan(&typeId, pq.Array(&ids), &count)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
-		cuIDs = append(cuIDs, myId)
-		if countJson == nil {
-			countJson = make(map[string]int)
-			var v []map[string]interface{}
-			err = json.Unmarshal([]byte(myCount), &v)
-			for _, c := range v {
-				countJson[c["name"].(string)] = int(c["count"].(float64))
-			}
-		}
+		counts[mdb.CONTENT_TYPE_REGISTRY.ByID[typeId].Name] = int(count)
+
+		cuIDs = append(cuIDs, ids...)
 	}
-	if err := rows.Err(); err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, NewInternalError(err)
 	}
 
@@ -1471,7 +1458,7 @@ func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardRespon
 
 	return &TagsDashboardResponse{
 		LatestContentUnits: cus,
-		Counts:             countJson,
+		Counts:             counts,
 	}, nil
 }
 
