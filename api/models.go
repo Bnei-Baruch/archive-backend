@@ -32,6 +32,11 @@ type ItemRequest struct {
 	UID string
 }
 
+type TagDashboardRequest struct {
+	ItemRequest
+	N int `json:"n" form:"n"`
+}
+
 type IDsFilter struct {
 	IDs []string `json:"ids" form:"id" binding:"omitempty"`
 }
@@ -164,6 +169,7 @@ type HomeResponse struct {
 type TagsDashboardResponse struct {
 	PromotedContentUnits []*ContentUnit `json:"promoted_units"`
 	LatestContentUnits   []*ContentUnit `json:"latest_units"`
+	Counts               map[string]int `json:"counts"`
 }
 
 type StatsCUClassResponse struct {
