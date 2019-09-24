@@ -29,7 +29,7 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 
 	beforeTweetsSearch := time.Now()
 	mr, err := mssTweets.Do(context.TODO())
-	e.timeTrack(beforeTweetsSearch, "DoSearch.MultisearcTweetsDo")
+	e.timeTrack(beforeTweetsSearch, consts.LAT_DOSEARCH_MULTISEARCHTWEETSDO)
 	if err != nil {
 		return nil, err
 	}
