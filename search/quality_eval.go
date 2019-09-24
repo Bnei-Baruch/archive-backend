@@ -591,12 +591,14 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 			rank := -1
 			for j, hit := range queryResult.SearchResult.Hits.Hits {
 				hitSource := HitSource{}
-				if err := json.Unmarshal(*hit.Source, &hitSource); err != nil {
-					log.Warnf("Error unmarshling source %+v", err)
-					sq = SQ_SERVER_ERROR
-					rank = -1
-					r.err = err
-					break
+				if hit.Type != consts.SEARCH_RESULT_TWEETS_MANY {
+					if err := json.Unmarshal(*hit.Source, &hitSource); err != nil {
+						log.Warnf("Error unmarshling source %+v", err)
+						sq = SQ_SERVER_ERROR
+						rank = -1
+						r.err = err
+						break
+					}
 				}
 				if HitMatchesExpectation(hit, hitSource, q.Expectations[i]) {
 					rank = j + 1

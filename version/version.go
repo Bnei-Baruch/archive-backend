@@ -6,7 +6,7 @@ import "fmt"
 var (
 	Major      = 1
 	Minor      = 5
-	Patch      = 6
+	Patch      = 8
 	PreRelease = "dev"
 )
 
