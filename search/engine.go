@@ -166,7 +166,7 @@ func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 }
 
 func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference string) (interface{}, error) {
-	e.timeTrack(time.Now(), "GetSuggestions")
+	e.timeTrack(time.Now(), consts.LAT_GETSUGGESTIONS)
 
 	// Run grammar suggestions in parallel.
 	grammarSuggestionsChannel := make(chan map[string][]string)
@@ -194,7 +194,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	// Actual call to elastic
 	beforeMssDo := time.Now()
 	mr, err := multiSearchService.Do(ctx)
-	e.timeTrack(beforeMssDo, "GetSuggestions.MultisearchDo")
+	e.timeTrack(beforeMssDo, consts.LAT_GETSUGGESTIONS_MULTISEARCHDO)
 	if err != nil {
 		// don't kill entire request if ctx was cancelled
 		if ue, ok := err.(*url.Error); ok {
@@ -456,7 +456,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 }
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
-	defer e.timeTrack(time.Now(), "DoSearch")
+	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
 	// Seach intents and grammars in parallel to native search.
 	intentsChannel := make(chan []Intent)
@@ -518,7 +518,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// Do search.
 	beforeDoSearch := time.Now()
 	mr, err := multiSearchService.Do(context.TODO())
-	e.timeTrack(beforeDoSearch, "DoSearch.MultisearchDo")
+	e.timeTrack(beforeDoSearch, consts.LAT_DOSEARCH_MULTISEARCHDO)
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do.")
 	}
@@ -660,7 +660,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 			beforeHighlightsDoSearch := time.Now()
 			mr, err := mssHighlights.Do(context.TODO())
-			e.timeTrack(beforeHighlightsDoSearch, "DoSearch.MultisearcHighlightsDo")
+			e.timeTrack(beforeHighlightsDoSearch, consts.LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO)
 			if err != nil {
 				return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
 			}

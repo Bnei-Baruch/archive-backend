@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/Bnei-Baruch/archive-backend/consts"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -34,6 +37,12 @@ var clicksCmd = &cobra.Command{
 	Run:   clicksFn,
 }
 
+var latencyCmd = &cobra.Command{
+	Use:   "latency",
+	Short: "Get queries latency performance from ElasticSearch",
+	Run:   latencyFn,
+}
+
 var elasticUrl string
 
 func init() {
@@ -45,6 +54,7 @@ func init() {
 
 	logCmd.AddCommand(queriesCmd)
 	logCmd.AddCommand(clicksCmd)
+	logCmd.AddCommand(latencyCmd)
 }
 
 func logFn(cmd *cobra.Command, args []string) {
@@ -136,4 +146,54 @@ func clicksFn(cmd *cobra.Command, args []string) {
 		})
 	}
 	printCsv(records)
+}
+
+func latencyFn(cmd *cobra.Command, args []string) {
+	logger := initLogger()
+	headers := []string{
+		"#", "SearchId", "Term", "DoSearch",
+	}
+	headers = append(headers, consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH...)
+	printCsv([][]string{headers}) //  TBD write to file, not to screen
+	totalQueries := 0
+	SLICES := 100
+	for i := 0; i < SLICES; i++ {
+		s := elastic.NewSliceQuery().Id(i).Max(SLICES)
+		queries, err := logger.GetAllQueries(s) //  TBD take fixed amount of queries, not all
+		utils.Must(err)
+		totalQueries += len(queries)
+		sortedQueries := make(search.CreatedSearchLogs, 0, len(queries))
+		for _, q := range queries {
+			sortedQueries = append(sortedQueries, q)
+		}
+		sort.Sort(sortedQueries)
+		records := [][]string{}
+		for i, sl := range sortedQueries {
+			utils.Must(err)
+			var latencies []string
+			for _, op := range consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH {
+				hasOp := false
+				for _, tl := range sl.ExecutionTimeLog {
+					if tl.Operation == op {
+						latancy := strconv.FormatInt(tl.Time, 10)
+						latencies = append(latencies, latancy)
+						hasOp = true
+						break
+					}
+				}
+				if !hasOp {
+					latencies = append(latencies, "0")
+				}
+			}
+			record := []string{
+				fmt.Sprintf("%d", i+1),
+				sl.SearchId,
+				sl.Query.Term,
+			}
+			record = append(record, latencies...)
+			records = append(records, record)
+		}
+		printCsv(records)
+	}
+	log.Infof("Found %d queries.", totalQueries) //  TBD Change
 }
