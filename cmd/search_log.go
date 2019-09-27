@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/csv"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -44,6 +45,7 @@ var latencyCmd = &cobra.Command{
 }
 
 var elasticUrl string
+var outputFile string
 
 func init() {
 	RootCmd.AddCommand(logCmd)
@@ -51,6 +53,8 @@ func init() {
 	logCmd.PersistentFlags().StringVar(&elasticUrl, "elastic", "", "URL of Elastic.")
 	logCmd.MarkFlagRequired("elastic")
 	viper.BindPFlag("elasticsearch.url", logCmd.PersistentFlags().Lookup("elastic"))
+
+	latencyCmd.PersistentFlags().StringVar(&outputFile, "output_file", "", "CSV path to write.")
 
 	logCmd.AddCommand(queriesCmd)
 	logCmd.AddCommand(clicksCmd)
@@ -68,11 +72,28 @@ func initLogger() *search.SearchLogger {
 	return search.MakeSearchLogger(esManager)
 }
 
+func appendCsvToFile(path string, records [][]string) {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND, 0660)
+	if err != nil {
+		log.Fatalln("cannot open file: ", err)
+	}
+	defer file.Close()
+
+	writeCsv(file, records)
+}
+
 func printCsv(records [][]string) {
-	w := csv.NewWriter(os.Stdout)
-	w.WriteAll(records)
-	if err := w.Error(); err != nil {
-		log.Fatalln("error writing csv:", err)
+	writeCsv(os.Stdout, records)
+}
+
+func writeCsv(dist io.Writer, records [][]string) {
+	w := csv.NewWriter(dist)
+	defer w.Flush()
+	for _, record := range records {
+		if err := w.Write(record); err != nil {
+			log.Fatalln("error writing csv: ", err)
+			return
+		}
 	}
 }
 
@@ -154,7 +175,11 @@ func latencyFn(cmd *cobra.Command, args []string) {
 		"#", "SearchId", "Term", "DoSearch",
 	}
 	headers = append(headers, consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH...)
-	printCsv([][]string{headers}) //  TBD write to file, not to screen
+	if outputFile != "" {
+		appendCsvToFile(outputFile, [][]string{headers})
+	} else {
+		printCsv([][]string{headers})
+	}
 	totalQueries := 0
 	SLICES := 100
 	for i := 0; i < SLICES; i++ {
@@ -193,7 +218,11 @@ func latencyFn(cmd *cobra.Command, args []string) {
 			record = append(record, latencies...)
 			records = append(records, record)
 		}
-		printCsv(records)
+		if outputFile != "" {
+			appendCsvToFile(outputFile, records)
+		} else {
+			printCsv(records)
+		}
 	}
 	log.Infof("Found %d queries.", totalQueries) //  TBD Change
 }
