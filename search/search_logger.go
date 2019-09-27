@@ -222,7 +222,7 @@ func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]Search
 	for true {
 		log.Infof("Scrolling...")
 		if searchResult != nil && searchResult.Hits != nil {
-			log.Infof("Git %d hits...", len(searchResult.Hits.Hits))
+			log.Infof("Get %d hits...", len(searchResult.Hits.Hits))
 			for _, h := range searchResult.Hits.Hits {
 				sl := SearchLog{}
 				json.Unmarshal(*h.Source, &sl)
