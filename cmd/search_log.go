@@ -174,7 +174,7 @@ func clicksFn(cmd *cobra.Command, args []string) {
 func latencyFn(cmd *cobra.Command, args []string) {
 	logger := initLogger()
 	headers := []string{
-		"#", "SearchId", "Term", "DoSearch",
+		"#", "SearchId", "Term",
 	}
 	headers = append(headers, consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH...)
 	if outputFile != "" {
