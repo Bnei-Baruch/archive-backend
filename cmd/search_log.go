@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"gopkg.in/volatiletech/null.v6"
+
 	"github.com/Bnei-Baruch/archive-backend/consts"
 
 	log "github.com/Sirupsen/logrus"
@@ -184,7 +186,7 @@ func latencyFn(cmd *cobra.Command, args []string) {
 	SLICES := 100
 	for i := 0; i < SLICES; i++ {
 		s := elastic.NewSliceQuery().Id(i).Max(SLICES)
-		queries, err := logger.GetAllQueries(s) //  TBD take fixed amount of queries, not all
+		queries, err := logger.GetLattestQueries(s, null.StringFrom("now-7d/d"), null.BoolFrom(false))
 		utils.Must(err)
 		totalQueries += len(queries)
 		sortedQueries := make(search.CreatedSearchLogs, 0, len(queries))
@@ -224,5 +226,5 @@ func latencyFn(cmd *cobra.Command, args []string) {
 			printCsv(records)
 		}
 	}
-	log.Infof("Found %d queries.", totalQueries) //  TBD Change
+	log.Infof("Found %d queries.", totalQueries)
 }

@@ -12,6 +12,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/volatiletech/null.v6"
 )
 
 type SearchLog struct {
@@ -211,6 +212,10 @@ func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int
 }
 
 func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]SearchLog, error) {
+	return searchLogger.GetLattestQueries(s, null.NewString("", false), null.NewBool(false, false))
+}
+
+func (searchLogger *SearchLogger) GetLattestQueries(s *elastic.SliceQuery, gte null.String, ascending null.Bool) ([]SearchLog, error) {
 	var ret []SearchLog
 	var searchResult *elastic.SearchResult
 
@@ -230,12 +235,23 @@ func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]Search
 			}
 		}
 		var err error
+
+		query := elastic.NewBoolQuery().Must(elastic.NewTermsQuery("log_type", "query"))
+		if gte.Valid {
+			query.Filter(elastic.NewRangeQuery("created").Gte(gte.String))
+		}
+
 		scrollClient := esc.Scroll().
 			Index("search_logs").
-			Query(elastic.NewTermsQuery("log_type", "query")).
+			Query(query).
 			Scroll("5m").
 			Slice(s).
 			Size(500)
+
+		if ascending.Valid {
+			scrollClient.Sort("created", ascending.Bool)
+		}
+
 		if searchResult != nil {
 			scrollClient = scrollClient.ScrollId(searchResult.ScrollId)
 		}
