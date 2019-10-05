@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -227,4 +228,68 @@ func latencyFn(cmd *cobra.Command, args []string) {
 		}
 	}
 	log.Infof("Found %d queries.", totalQueries)
+}
+
+func latencyAggregateFn(cmd *cobra.Command, args []string) {
+
+	const metaColumnsCnt = 3 //  "#","SearchId","Term"
+
+	f, err := os.Open("csvPath") // TBD
+	utils.Must(err)
+	defer f.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	utils.Must(scanner.Err())
+
+	opLatenciesMap := make(map[string][]int, len(consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH))
+	for _, op := range consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH {
+		opLatenciesMap[op] = make([]int, len(lines)-1)
+	}
+
+	for i := 1; i < len(lines); i++ { //  skip first line (headers)
+		s := strings.Split(lines[i], ",")
+
+		for j := metaColumnsCnt; j < len(s); j++ {
+			lat, err := strconv.Atoi(strings.TrimSpace(s[j]))
+			utils.Must(err)
+			for opIndex, op := range consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH {
+				if opIndex == j-metaColumnsCnt {
+					opLatenciesMap[op][opIndex] = lat
+				}
+			}
+		}
+	}
+
+	for opName, latencies := range opLatenciesMap {
+		sort.Slice(latencies, func(i, j int) bool {
+			return latencies[i] < latencies[j]
+		})
+		sum, max := getSumAndMax(latencies)
+		sum95Precent := float32(sum) * 0.95
+		percentile95 := 0
+		for i := 0; i < len(latencies) && float32(percentile95) < sum95Precent; i++ {
+			percentile95 += latencies[i]
+		}
+		avg := sum / len(latencies)
+		log.Infof("%s Stage\n\nAverage: %d\nWorst: %d\n95 percentile: %d.",
+			opName, avg, max, percentile95)
+	}
+
+	//  TBD 5 worst queries
+}
+
+func getSumAndMax(values []int) (int, int) {
+	sum := 0
+	max := 0
+	for _, val := range values {
+		if val > max {
+			max = val
+		}
+		sum += val
+	}
+	return sum, max
 }
