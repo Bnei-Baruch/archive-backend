@@ -50,5 +50,3 @@ func NewWPApi(options WPOptions) (api *WPApi, err error) {
 	}
 	return
 }
-
-func

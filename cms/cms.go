@@ -2,7 +2,6 @@ package cms
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -22,6 +21,8 @@ var client = http.Client{
 }
 
 func SyncCMS() {
+	var err error
+
 	cms := viper.GetString("cms.url")
 	assets := viper.GetString("cms.assets")
 
@@ -41,12 +42,11 @@ func SyncCMS() {
 	syncPersons(cms, passive)
 	log.Info("Done")
 
-	newActive, err := switchDirectories(assets)
-	if err != nil {
+	log.Info("Switching Directories...")
+	if err = switchDirectories(assets); err != nil {
 		log.Fatal(err)
 	}
-	log.Infof("Link was set to %s\n", newActive)
-
+	log.Info("Done")
 }
 
 type item struct {
@@ -123,90 +123,45 @@ func mkdir(permissions os.FileMode, dirs ...string) (err error) {
 	return
 }
 
-/* Create/clear directories. Return a passive one (i.e. symlink does not point to it) */
+/* Create/clear passive directory */
 func prepareDirectories(assets string) (inactive string, err error) {
-	active := filepath.Join(assets, "active")
-	if _, err := os.Lstat(active); err == nil {
-		link, err := os.Readlink(active)
-		if err != nil {
-			return "", errors.Wrapf(err, "Unable to read link: %s", link)
+	inactive = filepath.Join(assets, "passive")
+	_, err = os.Stat(inactive)
+	if os.IsExist(err) {
+		if err = os.RemoveAll(inactive); err != nil {
+			return "", errors.Wrapf(err, "Unable to remove directory: passive")
 		}
-		lastLetter := link[len(link)-1:]
-		newLetter := "a"
-		if lastLetter == "a" {
-			newLetter = "b"
-			if err = os.RemoveAll(filepath.Join(assets, newLetter)); err != nil {
-				return "", errors.Wrapf(err, "Unable to remove directory: %s", newLetter)
-			}
-			if err = mkdir(0755, assets, newLetter, "banners"); err != nil {
-				return "", errors.Wrapf(err, "Unable to create directory for banners: %s", newLetter)
-			}
-			if err = mkdir(0755, assets, newLetter, "persons"); err != nil {
-				return "", errors.Wrapf(err, "Unable to create directory for persons: %s", newLetter)
-			}
-		} else {
-			if err = os.RemoveAll(filepath.Join(assets, newLetter)); err != nil {
-				return "", errors.Wrapf(err, "Unable to remove directory: %s", newLetter)
-			}
-			if err = mkdir(0755, assets, newLetter, "banners"); err != nil {
-				return "", errors.Wrapf(err, "Unable to create directory for banners: %s", newLetter)
-			}
-			if err = mkdir(0755, assets, newLetter, "persons"); err != nil {
-				return "", errors.Wrapf(err, "Unable to create directory for persons: %s", newLetter)
-			}
-		}
-		inactive = filepath.Join(assets, newLetter)
-	} else {
-		if err = mkdir(0755, assets, "a", "banners"); err != nil {
-			return "", errors.Wrapf(err, "Unable to create directory for banners: a")
-		}
-		if err = mkdir(0755, assets, "a", "persons"); err != nil {
-			return "", errors.Wrapf(err, "Unable to create directory for persons: a")
-		}
-		if err = mkdir(0755, assets, "b", "banners"); err != nil {
-			return "", errors.Wrapf(err, "Unable to create directory for banners: a")
-		}
-		if err = mkdir(0755, assets, "b", "persons"); err != nil {
-			return "", errors.Wrapf(err, "Unable to create directory for persons: a")
-		}
-
-		inactive = filepath.Join(assets, "a")
+	}
+	if err = mkdir(0755, assets, "passive", "banners"); err != nil {
+		return "", errors.Wrapf(err, "Unable to create directory for banners: passive/banners")
+	}
+	if err = mkdir(0755, assets, "passive", "persons"); err != nil {
+		return "", errors.Wrapf(err, "Unable to create directory for persons: passive/persons")
 	}
 	return inactive, nil
 }
 
-func switchDirectories(assets string) (active string, err error) {
-	activeLink := filepath.Join(assets, "active")
-	_, err = os.Stat(activeLink)
+func switchDirectories(assets string) (err error) {
+	var active = filepath.Join(assets, "active")
+	var inactive = filepath.Join(assets, "passive")
+	_, err = os.Stat(active)
 	if os.IsNotExist(err) {
-		// create link to "a" and return it
-		err = os.Symlink(filepath.Join(assets, "a"), activeLink)
-		if err != nil {
-			return "", errors.Wrapf(err, "Unable to create link: %s", activeLink)
+		if err = os.Rename(inactive, active); err != nil {
+			return errors.Wrapf(err, "Unable to rename %s to %s", inactive, active)
 		}
-		return filepath.Join(assets, "a"), nil
+	} else {
+		temp := filepath.Join(assets, "temp")
+		if err = os.Rename(active, temp); err != nil {
+			return errors.Wrapf(err, "Unable to rename %s to %s", inactive, temp)
+		}
+		if err = os.Rename(inactive, active); err != nil {
+			return errors.Wrapf(err, "Unable to rename %s to %s", inactive, active)
+		}
+		if err = os.RemoveAll(temp); err != nil {
+			return errors.Wrapf(err, "Unable to remove directory: %s", temp)
+		}
 	}
-
-	link, err := os.Readlink(activeLink)
-	if err != nil {
-		return "", errors.Wrapf(err, "Unable to read link: %s", link)
-	}
-	// determine the last letter
-	// and change it
-	if err := os.Remove(activeLink); err != nil {
-		return "", fmt.Errorf("failed to unlink: %+v", err)
-	}
-	lastLetter := link[len(link)-1:]
-	newLetter := "a"
-	if lastLetter == "a" {
-		newLetter = "b"
-	}
-	inactive := filepath.Join(assets, newLetter)
-	err = os.Symlink(inactive, activeLink)
-	if err != nil {
-		return "", errors.Wrapf(err, "Unable to create link: %s", activeLink)
-	}
-	return inactive, nil
+	return nil
 }
 
 func checkSlug4Language(slug string, pattern *regexp.Regexp) (err error) {

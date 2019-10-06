@@ -19,7 +19,7 @@ func CMSPerson(c *gin.Context) {
 	if c.Bind(&r) != nil {
 		return
 	}
-	id := c.Query("id")
+	id := c.Param("id")
 	if id == "" {
 		err := fmt.Errorf("Id must be supplied")
 		concludeRequestFile(c, "", NewBadRequestError(err))
