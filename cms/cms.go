@@ -42,6 +42,10 @@ func SyncCMS() {
 	syncPersons(cms, passive)
 	log.Info("Done")
 
+	log.Info("Syncing Sources...")
+	// syncSources(cms, passive)
+	log.Info("Done")
+
 	log.Info("Switching Directories...")
 	if err = switchDirectories(assets); err != nil {
 		log.Fatal(err)
