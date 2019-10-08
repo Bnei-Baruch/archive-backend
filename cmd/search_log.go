@@ -240,7 +240,9 @@ func latencyFn(cmd *cobra.Command, args []string) {
 
 func latencyAggregateFn(cmd *cobra.Command, args []string) {
 
-	const metaColumnsCnt = 3 //  "#","SearchId","Term"
+	const metaColumnsCnt = 3                  //  "#","SearchId","Term"
+	const wholeSearchLatencyOperatinIndex = 3 //  index of "DoSearch" column
+	const worstQueriesPrintCnt = 5
 
 	reader, err := os.Open(csvFile)
 	r := csv.NewReader(bufio.NewReader(reader))
@@ -288,5 +290,17 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 			opName, avg, max, percentile95)
 	}
 
-	//  TBD 5 worst queries
+	//  print the worst queries
+	sort.Slice(records, func(i, j int) bool {
+		return records[i][wholeSearchLatencyOperatinIndex] > records[i][wholeSearchLatencyOperatinIndex]
+	})
+	log.Infof("%d worst queries:\n\n", worstQueriesPrintCnt)
+	headers := []string{
+		"#", "SearchId", "Term",
+	}
+	headers = append(headers, consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH...)
+	printCsv([][]string{headers})
+	for i := 0; i < worstQueriesPrintCnt; i++ {
+		printCsv([][]string{records[0]})
+	}
 }
