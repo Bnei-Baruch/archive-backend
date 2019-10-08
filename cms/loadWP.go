@@ -11,7 +11,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -32,12 +31,15 @@ var httpClient = &http.Client{
 type wpSource struct {
 	Id       int    `json:"id"`
 	Slug     string `json:"slug"`
+	XSlug    string `json:"xslug"`
 	Title    string `json:"title"`
-	Unit     string `json:"unit"`
+	Uid      string `json:"uid"`
 	Language string `json:"language"`
 	Md5      string `json:"md5"`
 	Content  string `json:"content"`
 }
+
+var wpSources = make(map[string]wpSource)
 
 var getPostUrl string
 var username string
@@ -45,38 +47,43 @@ var password string
 var ConvertedTar string
 
 func LoadData() {
-	var err error
-
 	ConvertedTar = viper.GetString("cms.converted-tar")
 	getPostUrl = viper.GetString("cms.get-post-url")
 	username = viper.GetString("cms.get-post-user")
 	password = viper.GetString("cms.get-post-pass")
 
-	if err = processFile(ConvertedTar); err != nil {
+	if err := loadSources(); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := processTar(ConvertedTar); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func processFile(urlFile string) (err error) {
+func processTar(urlFile string) error {
 	resp, err := httpClient.Get(urlFile)
 	if err != nil {
-		log.Errorf("Error downloading <%s>, Error: %+v", urlFile, err)
-		return err
+		return errors.Wrapf(err, "Error downloading <%s>, Error: %+v", urlFile, err)
 	}
 
 	defer func() {
 		x := resp.Body.Close()
 		if x != nil {
-			err = errors.Wrapf(x, "processFile: Close body error %+v", err)
+			err = errors.Wrapf(x, "processTar: Close body error %+v", err)
 			log.Fatal(err)
 		}
 	}()
 
-	bzf := bzip2.NewReader(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrapf(err, "wpSave: ReadAll error %+v", err)
+	}
+	bzf := bzip2.NewReader(bytes.NewReader(body))
 	tarReader := tar.NewReader(bzf)
 
 	var directory = ""
-	var files []FileStruct
+	var files = make(map[string]FileStruct)
 
 	for {
 		header, err := tarReader.Next()
@@ -84,136 +91,110 @@ func processFile(urlFile string) (err error) {
 			break
 		}
 		if err != nil {
-			log.Errorf("Error unzipping/untarring <%s>, Error: %+v", urlFile, err)
-			return err
+			return errors.Wrapf(err, "Error un-zipping/un-tarring <%s>, Error: %+v", urlFile, err)
 		}
 
 		name := header.Name
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if directory != "" {
-				err = handleDir(directory, files)
-				if err != nil {
-					log.Errorf("Error handling <%s>, Error: %+v", directory, err)
-					return err
+				if err = handleDir(directory, files); err != nil {
+					fmt.Println(errors.Wrapf(err, "Error handling <%s>, Error: %+v", directory, err))
 				}
 			}
 			directory = name
-			files = []FileStruct{}
+			files = make(map[string]FileStruct)
 			continue
 		case tar.TypeReg:
 			data := make([]byte, header.Size)
 			n, err := tarReader.Read(data)
 			if n == 0 && err != nil {
-				log.Errorf("Error reading file <%s>, Error: %+v", urlFile, err)
-				return err
+				return errors.Wrapf(err, "Error reading file <%s>, Error: %+v", urlFile, err)
 			}
 
-			files = append(files, FileStruct{
+			files[name] = FileStruct{
 				Name:    name,
 				Content: data,
-			})
+			}
 		default:
-			log.Errorf("Ups! Unable to figure out type: %c in file %s\n", header.Typeflag, name)
+			return errors.Wrapf(err, "Ups! Unable to figure out type: %c in file %s\n", header.Typeflag, name)
 		}
 	}
 
 	if directory != "" {
-		err = handleDir(directory, files)
-		if err != nil {
-			log.Errorf("Error handling <%s>, Error: %+v", directory, err)
-			return err
+		if err := handleDir(directory, files); err != nil {
+			fmt.Println(errors.Wrapf(err, "Error handling <%s>, Error: %+v", directory, err))
 		}
 	}
 
-	return
+	return nil
 }
 
-func findFile(name string, files []FileStruct) (result *FileStruct) {
-	for idx, file := range files {
-		if file.Name == name {
-			result = &files[idx]
-			break
-		}
-	}
-
-	return
-}
-
-func handleDir(directory string, files []FileStruct) (err error) {
+func handleDir(directory string, files map[string]FileStruct) error {
 	// Find index.json
 	name := fmt.Sprintf("%sindex.json", directory)
-	index := findFile(name, files)
-	if index == nil {
-		log.Errorf("handleDir: Unable to find index.json in directory <%s>", directory)
-		return
+	uid := directory[:len(directory)-1]
+	index, ok := files[name]
+	if ok == false {
+		return errors.Wrapf(nil, "handleDir: Unable to find index.json in directory <%s>", directory)
 	}
 
 	// for each language add new Source to WP
 	var indexJson map[string]map[string]string
-	err = json.Unmarshal(index.Content, &indexJson)
-	if err != nil {
-		log.Errorf("handleDir: Unmarshal error (directory <%s>): %+v", directory, err)
-		return nil
+	if err := json.Unmarshal(index.Content, &indexJson); err != nil {
+		return errors.Wrapf(err, "handleDir: Unmarshal error (directory <%s>): %+v", directory, err)
+	}
+	if err := updateWP(uid, "xx", &index); err != nil {
+		return errors.Wrapf(err, "handleDir: updateWP error (uid %s-%s): %+v", uid, "xx", err)
 	}
 
-	unit := directory[:len(directory)-1]
 	for language, x := range indexJson {
-		htmlFileName := fmt.Sprintf("%s%s", directory, x["html"])
-		file := findFile(htmlFileName, files)
-		if file == nil {
-			continue
-		}
-		err = updateWP(unit, language, file)
-		if err != nil {
-			log.Errorf("handleDir: updateWP error (unit %s-%s): %+v", unit, language, err)
-			return nil
+		for contentType := range x {
+			fileName := fmt.Sprintf("%s%s", directory, x[contentType])
+			file, ok := files[fileName]
+			if ok == false {
+				continue
+			}
+			if err := updateWP(uid, language, &file); err != nil {
+				return errors.Wrapf(err, "handleDir: updateWP error (uid %s-%s): %+v", uid, language, err)
+			}
 		}
 	}
 
-	return
+	return nil
 }
 
-func updateWP(unit, language string, file *FileStruct) (err error) {
-	slug := strings.ToLower(file.Name)
-	slug = strings.ReplaceAll(slug, "/", "-")
-	slug = strings.ReplaceAll(slug, " .", "-")
-	slug = strings.ReplaceAll(slug, ".", "-")
-
+func updateWP(uid, language string, file *FileStruct) error {
+	slug := uid + "-" + language + "-" + file.Name
 	md5val := getMD5Hash(file.Content)
-	err, source := findSource(unit, slug, language)
-	if err != nil {
-		return
-	}
-	if source.Id != 0 {
+	source, ok := wpSources[slug]
+	if ok {
 		if md5val != source.Md5 {
 			// If this doc already present in WP then compare md5. If different -- update
-			fmt.Println("Update: ", file.Name, " - ", language, " - ", unit, " - ", md5val)
+			fmt.Print("u")
 			source.Content = string(file.Content)
 			source.Md5 = md5val
 		} else {
-			fmt.Println("Skip: ", file.Name, " - ", language, " - ", unit, " - ", md5val)
-			return
+			fmt.Print("s")
+			return nil
 		}
 	} else {
+		fmt.Print("a")
 		// If this doc doesn't present yet -- add it
-		fmt.Println("Add: ", file.Name, " - ", language, " - ", unit, " - ", md5val)
-		// create new
 		source = wpSource{
 			Slug:     slug,
-			Title:    slug,
-			Unit:     unit,
+			XSlug:    slug,
+			Title:    file.Name,
+			Uid:      uid,
 			Language: language,
 			Md5:      md5val,
 			Content:  string(file.Content),
 		}
 	}
-	err = wpSave(&source)
-
-	return
+	return wpSave(&source)
 }
 
-func wpSave(source *wpSource) (err error) {
+func wpSave(source *wpSource) error {
 	content, err := json.Marshal(source)
 	if err != nil {
 		return errors.Wrapf(err, "wpSave: Marshal error %+v", err)
@@ -254,44 +235,45 @@ func wpSave(source *wpSource) (err error) {
 	if response.Code != "success" {
 		return errors.Wrapf(err, "wpSave: Response error: %s", response.Message)
 	}
-	return
+	return nil
 }
 
-func findSource(unit, slug, language string) (err error, source wpSource) {
-	req, err := http.NewRequest(http.MethodGet, getPostUrl+"get-source/"+slug+"?skip_content=true", nil)
-	if err != nil {
-		return errors.Wrapf(err, "findSource: NewRequest prepare error %+v", err), source
-	}
-	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
-	res, err := client.Do(req)
-	if err != nil {
-		return errors.Wrapf(err, "findSource: Do GET error %+v", err), source
-	}
-	defer func() {
+func loadSources() error {
+	url := getPostUrl + "get-sources/" + "?skip_content=true&page=%d"
+	page := 1
+	for {
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf(url, page), nil)
+		if err != nil {
+			return errors.Wrapf(err, "loadSources: NewRequest prepare error %+v", err)
+		}
+		req.Header.Set("Content-Type", "application/json; charset=UTF-8")
+		res, err := client.Do(req)
+		if err != nil {
+			return errors.Wrapf(err, "loadSources: Do GET error %+v", err)
+		}
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			return errors.Wrapf(err, "loadSources: ReadAll read body error %+v", err)
+		}
 		x := res.Body.Close()
 		if x != nil {
-			err = errors.Wrapf(x, "findSource: Close body error %+v", err)
+			err = errors.Wrapf(x, "loadSources: Close body error %+v", err)
 			log.Fatal(err)
 		}
-	}()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return errors.Wrapf(err, "findSource: ReadAll read body error %+v", err), source
+		var sources []wpSource
+		err = json.Unmarshal(body, &sources)
+		if err != nil {
+			return errors.Wrapf(err, "loadSources: Unmarshal error %+v", err)
+		}
+		if len(sources) == 0 {
+			break
+		}
+		for _, source := range sources {
+			wpSources[source.XSlug] = source
+		}
+		page++
 	}
-	var sources []wpSource
-	err = json.Unmarshal(body, &sources)
-	if err != nil {
-		return errors.Wrapf(err, "findSource: Unmarshal error %+v", err), source
-	}
-	if len(sources) == 0 {
-		return
-	}
-	source = sources[0]
-	if source.Language != language || source.Unit != unit {
-		return errors.Wrapf(err, "findSource: result has wrong lang/unit %+v", err), source
-	}
-	return
+	return nil
 }
 
 func getMD5Hash(text []byte) string {
