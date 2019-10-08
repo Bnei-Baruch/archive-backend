@@ -310,6 +310,19 @@
   revision = "3eb4713e2655cd1be805795be31b3f85b74b05fd"
 
 [[projects]]
+  digest = "1:2643d81498e38e44bdcf480be199cac55f29e97403b0342d962824bfe9960722"
+  name = "github.com/ulikunitz/xz"
+  packages = [
+    ".",
+    "internal/hash",
+    "internal/xlog",
+    "lzma",
+  ]
+  pruneopts = "UT"
+  revision = "6f934d456d51e742b4eeab20d925a827ef22320a"
+  version = "v0.5.6"
+
+[[projects]]
   branch = "master"
   digest = "1:dd70bca92c5f88f5d6a098eaa570f604d52a460d82b81e1418c9559f6a742612"
   name = "github.com/volatiletech/inflect"
@@ -429,6 +442,7 @@
     "github.com/stretchr/testify/require",
     "github.com/stretchr/testify/suite",
     "github.com/stvp/rollbar",
+    "github.com/ulikunitz/xz",
     "golang.org/x/net/context",
     "golang.org/x/text/language",
     "golang.org/x/text/language/display",

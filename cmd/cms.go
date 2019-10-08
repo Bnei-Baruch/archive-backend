@@ -6,9 +6,6 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/cms"
 )
 
-// TODO:
-// 1. Add support for active-passive directories
-
 var cmsCmd = &cobra.Command{
 	Use:   "cms",
 	Short: "Sync data from CMS",
@@ -17,6 +14,14 @@ var cmsCmd = &cobra.Command{
 	},
 }
 
+var loadWPCmd = &cobra.Command{
+	Use: "loadWP",
+	Short: "Load data into Wordpress",
+	Run: func(cmd *cobra.Command, args []string) {
+		cms.LoadData()
+	},
+}
 func init() {
 	RootCmd.AddCommand(cmsCmd)
+	RootCmd.AddCommand(loadWPCmd)
 }
