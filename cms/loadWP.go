@@ -20,8 +20,6 @@ import (
 	_ "github.com/spf13/viper"
 )
 
-const CONVERTED_TAR = "https://kabbalahmedia.info/assets/converted.tar.xz"
-
 type FileStruct struct {
 	Name    string
 	Content []byte
@@ -44,15 +42,17 @@ type wpSource struct {
 var getPostUrl string
 var username string
 var password string
+var ConvertedTar string
 
 func LoadData() {
 	var err error
 
+	ConvertedTar = viper.GetString("cms.converted-tar")
 	getPostUrl = viper.GetString("cms.get-post-url")
 	username = viper.GetString("cms.get-post-user")
 	password = viper.GetString("cms.get-post-pass")
 
-	if err = processFile(CONVERTED_TAR); err != nil {
+	if err = processFile(ConvertedTar); err != nil {
 		log.Fatal(err)
 	}
 }
