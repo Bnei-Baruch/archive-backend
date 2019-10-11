@@ -281,26 +281,27 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 		for i := 0; i < len(latencies); i++ {
 			calcSum += float32(latencies[i])
 			if calcSum >= sum95Precent {
-				percentile95 = latencies[i] //  TBD check if correct
+				percentile95 = latencies[i]
 				break
 			}
 		}
 		avg := sum / len(latencies)
-		log.Infof("%s Stage\n\nAverage: %d\nWorst: %d\n95 percentile: %d.\n\n",
+		log.Printf("%s Stage\n\nAverage: %d\nWorst: %d\n95 percentile: %d.\n\n",
 			opName, avg, max, percentile95)
 	}
 
 	//  print the worst queries
-	sort.Slice(records, func(i, j int) bool {
-		return records[i][wholeSearchLatencyOperatinIndex] > records[i][wholeSearchLatencyOperatinIndex]
+	sortedRecords := records[1:]
+	sort.Slice(sortedRecords, func(i, j int) bool {
+		left, err := strconv.Atoi(strings.TrimSpace(sortedRecords[i][wholeSearchLatencyOperatinIndex]))
+		utils.Must(err)
+		right, err := strconv.Atoi(strings.TrimSpace(sortedRecords[j][wholeSearchLatencyOperatinIndex]))
+		utils.Must(err)
+		return left > right
 	})
-	log.Infof("%d worst queries:\n\n", worstQueriesPrintCnt)
-	headers := []string{
-		"#", "SearchId", "Term",
-	}
-	headers = append(headers, consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH...)
-	printCsv([][]string{headers})
+	log.Printf("%d worst queries:\n", worstQueriesPrintCnt)
+	printCsv([][]string{records[0]}) //  print headers
 	for i := 0; i < worstQueriesPrintCnt; i++ {
-		printCsv([][]string{records[0]})
+		printCsv([][]string{sortedRecords[i]})
 	}
 }
