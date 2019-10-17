@@ -1,8 +1,12 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
+	"strings"
 
 	"gopkg.in/gin-gonic/gin.v1"
 
@@ -33,15 +37,66 @@ func CMSPerson(c *gin.Context) {
 }
 
 func CMSBanner(c *gin.Context) {
-	var r BaseRequest
+	id := c.Param("id")
+	if id == "" {
+		err := fmt.Errorf("Id must be supplied")
+		concludeRequestFile(c, "", NewBadRequestError(err))
+		return
+	}
+	assets := c.MustGet("CMS").(*CMSParams).Assets
+	filePattern := fmt.Sprintf("%s/active/banners/%%s", assets)
+	fileName, err := handleItemRequest(filePattern, id)
+	concludeRequestFile(c, fileName, err)
+}
+
+func CMSSource(c *gin.Context) {
+	type SourceRequest struct {
+		BaseRequest
+		Uid string `json:"uid" form:"uid"`
+		//Uid string `json:"uid" form:"uid" binding:"len=8"`
+	}
+	var r SourceRequest
 	if c.Bind(&r) != nil {
+		return
+	}
+	id := c.Param("id")
+	if id == "" {
+		err := fmt.Errorf("Id must be supplied")
+		concludeRequestFile(c, "", NewBadRequestError(err))
 		return
 	}
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
-	filePattern := fmt.Sprintf("%s/active/banners/%%s", assets)
+	filePattern := fmt.Sprintf("%sactive/sources/%s-%%s-%s/%s", assets, r.Uid, r.Uid, id)
 	fileName, err := handleItemRequest(filePattern, r.Language)
 	concludeRequestFile(c, fileName, err)
+}
+
+func CMSSourceIndex(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		err := fmt.Errorf("Id must be supplied")
+		concludeRequestFile(c, "", NewBadRequestError(err))
+		return
+	}
+
+	assets := c.MustGet("CMS").(*CMSParams).Assets
+	fileName := fmt.Sprintf("%sactive/sources/%s-en-%s/index.json", assets, id, id)
+	j, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	var m map[string]map[string]string
+	//j = j[1:len(j)-1]
+	j = []byte(strings.Replace(string(j), "\\n", "", -1))
+	j = []byte(strings.Replace(string(j), "\\", "", -1))
+	err = json.Unmarshal(j[1:len(j)-1], &m)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	c.JSON(http.StatusOK, m)
 }
 
 func CMSAsset(c *gin.Context) {

@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -26,8 +27,12 @@ func SyncCMS() {
 
 	cms := viper.GetString("cms.url")
 	assets := viper.GetString("cms.assets")
+	imageURL := viper.GetString("cms.image-url")
+	assetsImages := viper.GetString("cms.assets-images")
 	log.Info("Source URL: ", cms)
 	log.Info("Assets directory: ", assets)
+	log.Info("Images URL: ", imageURL)
+	log.Info("Assets Images directory: ", assetsImages)
 
 	workDir, err := prepareDirectories(assets)
 	if err != nil {
@@ -35,19 +40,21 @@ func SyncCMS() {
 	}
 	log.Info("Work directory: ", workDir)
 
+	log.Info("Syncing Media Library (images) ...")
+	syncImages(cms, workDir, imageURL)
+
 	log.Info("Syncing Banners...")
-	syncBanners(cms, workDir)
+	syncBanners(cms, workDir, imageURL, assetsImages)
 
 	log.Info("Syncing Persons...")
-	syncPersons(cms, workDir)
+	syncPersons(cms, workDir, imageURL, assetsImages)
 
-	// log.Info("Syncing Sources...")
-	// syncSources(cms, workDir)
-	// log.Info("Done")
+	log.Info("Syncing Sources...")
+	syncSources(cms, workDir, imageURL, assetsImages)
 
 	log.Info("Switching Directories...")
 	if err = switchDirectories(assets, workDir); err != nil {
-		log.Fatal("switch directories", err)
+		log.Fatal("switch directories ", err)
 	}
 
 	log.Info("Done")
@@ -64,7 +71,28 @@ type item struct {
 var personsLanguage = regexp.MustCompile("^.+?-([a-z]{2})$")
 var bannersLanguage = regexp.MustCompile("^en|he|ru|tr|it|ua|es|de$")
 
-func syncPersons(cms string, assets string) {
+func syncImages(cms string, workDir string, imageURL string) {
+	var images []string
+	var err error
+
+	if err = getItem("images", cms+"get-images", &images); err != nil {
+		log.Fatal("get images ", err)
+	}
+
+	for _, image := range images {
+		log.Info(image)
+		image = strings.Replace(image, imageURL, "", -1)
+		// create directories for images
+		if err = mkdir(0755, workDir, "images", path.Dir(image)); err != nil {
+			log.Fatal("make images dir", err)
+		}
+		if err = saveImage(image, imageURL, workDir); err != nil {
+			log.Fatal("save image", err)
+		}
+	}
+}
+
+func syncPersons(cms string, workDir string, imageURL string, assetsImages string) {
 	var persons []item
 	var err error
 
@@ -77,38 +105,73 @@ func syncPersons(cms string, assets string) {
 		if err = checkSlug4Language(person.Slug, personsLanguage); err != nil {
 			log.Fatal(err)
 		}
-		if err = saveItem(filepath.Join(assets, "persons", person.Slug), person); err != nil {
+		content := person.Content
+		content = strings.Replace(person.Content, imageURL, assetsImages, -1)
+
+		person.Content = content
+		if err = saveItem(filepath.Join(workDir, "persons", person.Slug), person); err != nil {
 			log.Fatal("save person", err)
 		}
 	}
 }
 
-func syncBanners(cms string, workDir string) {
+func syncSources(cms string, workDir string, imageURL string, assetsImages string) {
+	for page := 1; ; page++ {
+		log.Info("Sources page ", page)
+
+		type sourceT struct {
+			Content string `json:"content"`
+			Slug    string `json:"xslug"`
+		}
+		var sources []sourceT
+		var err error
+
+		url := fmt.Sprintf("%sget-sources?page=%d", cms, page)
+		if err = getItem("sources", url, &sources); err != nil {
+			log.Fatal("get sources", err)
+		}
+
+		if len(sources) == 0 {
+			break
+		}
+
+		for _, source := range sources {
+			log.Info(source.Slug)
+			if err = checkSlug4Language(source.Slug, personsLanguage); err != nil {
+				log.Fatal(err)
+			}
+			matched, _ := regexp.MatchString(".*html$", source.Slug)
+			if matched {
+				source.Content = strings.Replace(source.Content, imageURL, assetsImages, -1)
+			}
+			if err = mkdir(0755, workDir, "sources", path.Dir(source.Slug)); err != nil {
+				log.Fatal("make images dir", err)
+			}
+			if err = saveItem(filepath.Join(workDir, "sources", source.Slug), source.Content); err != nil {
+				log.Fatal("save source", err)
+			}
+		}
+	}
+}
+
+func syncBanners(cms string, workDir string, imageURL string, assetsImages string) {
 	var banners []item
 	var err error
 
 	if err = getItem("banners", cms+"get-banners/all", &banners); err != nil {
-		log.Fatal("get banners", err)
+		log.Fatal("get banners ", err)
 	}
 
-	imageURL := viper.GetString("cms.image-url")
 	for _, banner := range banners {
 		log.Info(banner.Slug)
 		if err = checkSlug4Language(banner.Slug, bannersLanguage); err != nil {
 			log.Fatal(err)
 		}
 
+		banner.Meta["image"] = strings.Replace(banner.Meta["image"], imageURL, assetsImages, -1)
+
 		if err = saveItem(filepath.Join(workDir, "banners", banner.Slug), banner); err != nil {
 			log.Fatal("save banner", err)
-		}
-
-		// create directories for images
-		image := banner.Meta["image"]
-		if err = mkdir(0755, workDir, "images", path.Dir(image)); err != nil {
-			log.Fatal("make images dir", err)
-		}
-		if err = saveImage(image, imageURL, workDir); err != nil {
-			log.Fatal("save image", err)
 		}
 	}
 }
@@ -121,7 +184,7 @@ func mkdir(permissions os.FileMode, dirs ...string) (err error) {
 			return errors.Wrapf(err, "os.MkdirAll: %s", dirname)
 		}
 	} else {
-		err = errors.Wrapf(err,"os.Stat: %s", dirname)
+		err = errors.Wrapf(err, "os.Stat: %s", dirname)
 	}
 	return
 }
@@ -138,13 +201,17 @@ func prepareDirectories(assets string) (workDir string, err error) {
 		return "", errors.Wrapf(err, "mkdir persons: %s/persons", workDir)
 	}
 
+	if err = mkdir(0755, workDir, "sources"); err != nil {
+		return "", errors.Wrapf(err, "mkdir sources: %s/sources", workDir)
+	}
+
 	return workDir, nil
 }
 
 func switchDirectories(assets, workDir string) (err error) {
 	var active = filepath.Join(assets, "active")
-	_, err = os.Stat(active)
-	if os.IsExist(err) {
+	_, err = os.Lstat(active)
+	if err == nil {
 		if err = os.Remove(active); err != nil {
 			return errors.Wrapf(err, " os.Remove: %s", active)
 		}
