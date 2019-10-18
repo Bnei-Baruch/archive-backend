@@ -10,7 +10,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -22,38 +21,51 @@ var client = http.Client{
 	Timeout: time.Second * 5, // Maximum of 5 secs
 }
 
+type Config struct {
+	url          string
+	assets       string
+	imageUrl     string
+	assetsImages string
+	workDir      string
+}
+
+var config Config
+
+func loadConfig() {
+	config.url = viper.GetString("cms.url")
+	config.assets = viper.GetString("cms.assets")
+	config.imageUrl = viper.GetString("cms.image-url")
+	config.assetsImages = viper.GetString("cms.assets-images")
+}
+
 func SyncCMS() {
 	var err error
 
-	cms := viper.GetString("cms.url")
-	assets := viper.GetString("cms.assets")
-	imageURL := viper.GetString("cms.image-url")
-	assetsImages := viper.GetString("cms.assets-images")
-	log.Info("Source URL: ", cms)
-	log.Info("Assets directory: ", assets)
-	log.Info("Images URL: ", imageURL)
-	log.Info("Assets Images directory: ", assetsImages)
+	loadConfig()
+	log.Infof("Config: %+v", config)
 
-	workDir, err := prepareDirectories(assets)
+	mediaLibraryRE = regexp.MustCompile(fmt.Sprintf("https?://%s", config.imageUrl))
+
+	config.workDir, err = prepareDirectories()
 	if err != nil {
 		log.Fatal("prepare directories", err)
 	}
-	log.Info("Work directory: ", workDir)
+	log.Info("Work directory: ", config.workDir)
 
 	log.Info("Syncing Media Library (images) ...")
-	syncImages(cms, workDir, imageURL)
+	syncImages()
 
 	log.Info("Syncing Banners...")
-	syncBanners(cms, workDir, imageURL, assetsImages)
+	syncBanners()
 
 	log.Info("Syncing Persons...")
-	syncPersons(cms, workDir, imageURL, assetsImages)
+	syncPersons()
 
-	log.Info("Syncing Sources...")
-	syncSources(cms, workDir, imageURL, assetsImages)
+	//log.Info("Syncing Sources...")
+	//syncSources()
 
 	log.Info("Switching Directories...")
-	if err = switchDirectories(assets, workDir); err != nil {
+	if err = switchDirectories(); err != nil {
 		log.Fatal("switch directories ", err)
 	}
 
@@ -70,33 +82,30 @@ type item struct {
 
 var personsLanguage = regexp.MustCompile("^.+?-([a-z]{2})$")
 var bannersLanguage = regexp.MustCompile("^en|he|ru|tr|it|ua|es|de$")
+var mediaLibraryRE *regexp.Regexp
 
-func syncImages(cms string, workDir string, imageURL string) {
+func syncImages() {
 	var images []string
 	var err error
 
-	if err = getItem("images", cms+"get-images", &images); err != nil {
+	if err = getItem("images", config.url+"get-images", &images); err != nil {
 		log.Fatal("get images ", err)
 	}
 
 	for _, image := range images {
 		log.Info(image)
-		image = strings.Replace(image, imageURL, "", -1)
-		// create directories for images
-		if err = mkdir(0755, workDir, "images", path.Dir(image)); err != nil {
-			log.Fatal("make images dir", err)
-		}
-		if err = saveImage(image, imageURL, workDir); err != nil {
+		image = mediaLibraryRE.ReplaceAllString(image, "")
+		if err = saveImage(image); err != nil {
 			log.Fatal("save image", err)
 		}
 	}
 }
 
-func syncPersons(cms string, workDir string, imageURL string, assetsImages string) {
+func syncPersons() {
 	var persons []item
 	var err error
 
-	if err = getItem("persons", cms+"get-persons/all", &persons); err != nil {
+	if err = getItem("persons", config.url+"get-persons/all", &persons); err != nil {
 		log.Fatal("get persons", err)
 	}
 
@@ -105,17 +114,14 @@ func syncPersons(cms string, workDir string, imageURL string, assetsImages strin
 		if err = checkSlug4Language(person.Slug, personsLanguage); err != nil {
 			log.Fatal(err)
 		}
-		content := person.Content
-		content = strings.Replace(person.Content, imageURL, assetsImages, -1)
-
-		person.Content = content
-		if err = saveItem(filepath.Join(workDir, "persons", person.Slug), person); err != nil {
+		person.Content = mediaLibraryRE.ReplaceAllString(person.Content, config.assetsImages)
+		if err = saveItem(filepath.Join(config.workDir, "persons", person.Slug), person); err != nil {
 			log.Fatal("save person", err)
 		}
 	}
 }
 
-func syncSources(cms string, workDir string, imageURL string, assetsImages string) {
+func syncSources() {
 	for page := 1; ; page++ {
 		log.Info("Sources page ", page)
 
@@ -126,7 +132,7 @@ func syncSources(cms string, workDir string, imageURL string, assetsImages strin
 		var sources []sourceT
 		var err error
 
-		url := fmt.Sprintf("%sget-sources?page=%d", cms, page)
+		url := fmt.Sprintf("%sget-sources?page=%d", config.url, page)
 		if err = getItem("sources", url, &sources); err != nil {
 			log.Fatal("get sources", err)
 		}
@@ -142,23 +148,23 @@ func syncSources(cms string, workDir string, imageURL string, assetsImages strin
 			}
 			matched, _ := regexp.MatchString(".*html$", source.Slug)
 			if matched {
-				source.Content = strings.Replace(source.Content, imageURL, assetsImages, -1)
+				source.Content = mediaLibraryRE.ReplaceAllString(source.Content, config.assetsImages)
 			}
-			if err = mkdir(0755, workDir, "sources", path.Dir(source.Slug)); err != nil {
+			if err = mkdir(0755, config.workDir, "sources", path.Dir(source.Slug)); err != nil {
 				log.Fatal("make images dir", err)
 			}
-			if err = saveItem(filepath.Join(workDir, "sources", source.Slug), source.Content); err != nil {
+			if err = saveItem(filepath.Join(config.workDir, "sources", source.Slug), source.Content); err != nil {
 				log.Fatal("save source", err)
 			}
 		}
 	}
 }
 
-func syncBanners(cms string, workDir string, imageURL string, assetsImages string) {
+func syncBanners() {
 	var banners []item
 	var err error
 
-	if err = getItem("banners", cms+"get-banners/all", &banners); err != nil {
+	if err = getItem("banners", config.url+"get-banners/all", &banners); err != nil {
 		log.Fatal("get banners ", err)
 	}
 
@@ -168,9 +174,9 @@ func syncBanners(cms string, workDir string, imageURL string, assetsImages strin
 			log.Fatal(err)
 		}
 
-		banner.Meta["image"] = strings.Replace(banner.Meta["image"], imageURL, assetsImages, -1)
+		banner.Meta["image"] = mediaLibraryRE.ReplaceAllString(banner.Meta["image"], config.assetsImages)
 
-		if err = saveItem(filepath.Join(workDir, "banners", banner.Slug), banner); err != nil {
+		if err = saveItem(filepath.Join(config.workDir, "banners", banner.Slug), banner); err != nil {
 			log.Fatal("save banner", err)
 		}
 	}
@@ -190,8 +196,8 @@ func mkdir(permissions os.FileMode, dirs ...string) (err error) {
 }
 
 /* Create passive directory */
-func prepareDirectories(assets string) (workDir string, err error) {
-	workDir = filepath.Join(assets, fmt.Sprint(time.Now().Unix()))
+func prepareDirectories() (workDir string, err error) {
+	workDir = filepath.Join(config.assets, fmt.Sprint(time.Now().Unix()))
 
 	if err = mkdir(0755, workDir, "banners"); err != nil {
 		return "", errors.Wrapf(err, "mkdir banners: %s/banners", workDir)
@@ -208,17 +214,17 @@ func prepareDirectories(assets string) (workDir string, err error) {
 	return workDir, nil
 }
 
-func switchDirectories(assets, workDir string) (err error) {
-	var active = filepath.Join(assets, "active")
+func switchDirectories() (err error) {
+	var active = filepath.Join(config.assets, "active")
 	_, err = os.Lstat(active)
 	if err == nil {
 		if err = os.Remove(active); err != nil {
 			return errors.Wrapf(err, " os.Remove: %s", active)
 		}
 	}
-	absWorkDir, err := filepath.Abs(workDir)
+	absWorkDir, err := filepath.Abs(config.workDir)
 	if err != nil {
-		return errors.Wrapf(err, "filepath.Abs: %s", workDir)
+		return errors.Wrapf(err, "filepath.Abs: %s", config.workDir)
 	}
 	if err = os.Symlink(absWorkDir, active); err != nil {
 		return errors.Wrapf(err, "os.Symlink: %s to %s", active, absWorkDir)
@@ -275,13 +281,18 @@ func getItem(name string, url string, v interface{}) (err error) {
 	return
 }
 
-func saveImage(image string, imageURL string, workDir string) (err error) {
+func saveImage(image string) (err error) {
+	// create directories for images
+	if err = mkdir(0755, config.workDir, "images", path.Dir(image)); err != nil {
+		return errors.Wrapf(err,"mkdir %s", image)
+	}
+
 	// copy images
-	res, err := http.Get(imageURL + image)
+	res, err := http.Get(fmt.Sprintf("https://%s%s",config.imageUrl, image))
 	if err != nil {
 		return errors.Wrapf(err, "http.Get %s", image)
 	}
-	out, err := os.Create(filepath.Join(workDir, "images", image))
+	out, err := os.Create(filepath.Join(config.workDir, "images", image))
 	if err != nil {
 		return errors.Wrapf(err, "os.Create %s", image)
 	}
