@@ -144,8 +144,8 @@ func handleDir(directory string, files map[string]FileStruct) error {
 	if err := json.Unmarshal(index.Content, &indexJson); err != nil {
 		return errors.Wrapf(err, "handleDir: Unmarshal error (directory <%s>): %+v", directory, err)
 	}
-	if err := updateWP(uid, "xx", &index); err != nil {
-		return errors.Wrapf(err, "handleDir: updateWP error (uid %s-%s): %+v", uid, "xx", err)
+	if err := updateWP(uid, "en", &index); err != nil {
+		return errors.Wrapf(err, "handleDir: updateWP error (uid %s-%s): %+v", uid, "en", err)
 	}
 
 	for language, x := range indexJson {
@@ -251,6 +251,7 @@ func loadSources() error {
 		if err != nil {
 			return errors.Wrapf(err, "loadSources: Do GET error %+v", err)
 		}
+		fmt.Println("Page:", page)
 		body, err := ioutil.ReadAll(res.Body)
 		if err != nil {
 			return errors.Wrapf(err, "loadSources: ReadAll read body error %+v", err)
