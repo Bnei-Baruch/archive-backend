@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -37,6 +38,7 @@ type wpSource struct {
 	Language string `json:"language"`
 	Md5      string `json:"md5"`
 	Content  string `json:"content"`
+	XContent []byte `json:"xcontent"`
 }
 
 var wpSources = make(map[string]wpSource)
@@ -74,7 +76,7 @@ func processTar(urlFile string) error {
 			log.Fatal(err)
 		}
 	}()
-
+	fmt.Println("Reading tar file...")
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return errors.Wrapf(err, "wpSave: ReadAll error %+v", err)
@@ -172,10 +174,9 @@ func updateWP(uid, language string, file *FileStruct) error {
 		if md5val != source.Md5 {
 			// If this doc already present in WP then compare md5. If different -- update
 			fmt.Print("u")
-			source.Content = string(file.Content)
 			source.Md5 = md5val
 		} else {
-			fmt.Print("s")
+			fmt.Print(".")
 			return nil
 		}
 	} else {
@@ -188,8 +189,12 @@ func updateWP(uid, language string, file *FileStruct) error {
 			Uid:      uid,
 			Language: language,
 			Md5:      md5val,
-			Content:  string(file.Content),
 		}
+	}
+	if filepath.Ext(file.Name) == ".html" {
+		source.Content = string(file.Content)
+	} else {
+		source.XContent = file.Content
 	}
 	return wpSave(&source)
 }
@@ -240,6 +245,7 @@ func wpSave(source *wpSource) error {
 
 func loadSources() error {
 	url := getPostUrl + "get-sources/" + "?skip_content=true&page=%d"
+	fmt.Print("Loading sources")
 	page := 1
 	for {
 		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf(url, page), nil)
@@ -251,7 +257,7 @@ func loadSources() error {
 		if err != nil {
 			return errors.Wrapf(err, "loadSources: Do GET error %+v", err)
 		}
-		fmt.Println("Page:", page)
+		fmt.Print(".")
 		body, err := ioutil.ReadAll(res.Body)
 		if err != nil {
 			return errors.Wrapf(err, "loadSources: ReadAll read body error %+v", err)
@@ -274,6 +280,7 @@ func loadSources() error {
 		}
 		page++
 	}
+	fmt.Println("")
 	return nil
 }
 

@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"strings"
 
 	"gopkg.in/gin-gonic/gin.v1"
 
@@ -82,16 +81,13 @@ func CMSSourceIndex(c *gin.Context) {
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
 	fileName := fmt.Sprintf("%sactive/sources/%s-en-%s/index.json", assets, id, id)
-	j, err := ioutil.ReadFile(fileName)
+	content, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
 	var m map[string]map[string]string
-	//j = j[1:len(j)-1]
-	j = []byte(strings.Replace(string(j), "\\n", "", -1))
-	j = []byte(strings.Replace(string(j), "\\", "", -1))
-	err = json.Unmarshal(j[1:len(j)-1], &m)
+	err = json.Unmarshal(content, &m)
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
