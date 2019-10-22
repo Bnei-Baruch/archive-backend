@@ -298,7 +298,7 @@ func getItem(name string, url string, v interface{}) (err error) {
 func saveImage(image string) (err error) {
 	// create directories for images
 	if err = mkdir(0755, config.workDir, "images", path.Dir(image)); err != nil {
-		return errors.Wrapf(err, "mkdir %s", image)
+		return errors.Wrapf(err,"mkdir %s", image)
 	}
 
 	// copy images
