@@ -207,8 +207,8 @@ func StringMapOrderedKeys(m interface{}) []string {
 }
 
 func SumAndMax(values []int) (int, int) {
-	sum := 0
-	max := 0
+	var sum int = 0
+	var max int = 0
 	for _, val := range values {
 		if val > max {
 			max = val
