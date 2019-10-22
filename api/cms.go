@@ -25,13 +25,13 @@ func CMSPerson(c *gin.Context) {
 	}
 	id := c.Param("id")
 	if id == "" {
-		err := fmt.Errorf("Id must be supplied")
+		err := fmt.Errorf("id must be supplied")
 		concludeRequestFile(c, "", NewBadRequestError(err))
 		return
 	}
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
-	filePattern := fmt.Sprintf("%s/active/persons/%s-%%s", assets, id)
+	filePattern := fmt.Sprintf("%sactive/persons/%s-%%s", assets, id)
 	fileName, err := handleItemRequest(filePattern, r.Language)
 	concludeRequestFile(c, fileName, err)
 }
@@ -39,12 +39,13 @@ func CMSPerson(c *gin.Context) {
 func CMSBanner(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		err := fmt.Errorf("Id must be supplied")
+		err := fmt.Errorf("id must be supplied")
 		concludeRequestFile(c, "", NewBadRequestError(err))
 		return
 	}
+
 	assets := c.MustGet("CMS").(*CMSParams).Assets
-	filePattern := fmt.Sprintf("%s/active/banners/%%s", assets)
+	filePattern := fmt.Sprintf("%sactive/banners/%%s", assets)
 	fileName, err := handleItemRequest(filePattern, id)
 	concludeRequestFile(c, fileName, err)
 }
@@ -61,7 +62,7 @@ func CMSSource(c *gin.Context) {
 	}
 	id := c.Param("id")
 	if id == "" {
-		err := fmt.Errorf("Id must be supplied")
+		err := fmt.Errorf("id must be supplied")
 		concludeRequestFile(c, "", NewBadRequestError(err))
 		return
 	}
@@ -75,7 +76,7 @@ func CMSSource(c *gin.Context) {
 func CMSSourceIndex(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		err := fmt.Errorf("Id must be supplied")
+		err := fmt.Errorf("id must be supplied")
 		concludeRequestFile(c, "", NewBadRequestError(err))
 		return
 	}
@@ -99,21 +100,21 @@ func CMSSourceIndex(c *gin.Context) {
 	c.JSON(http.StatusOK, m)
 }
 
-func CMSAsset(c *gin.Context) {
+func CMSImage(c *gin.Context) {
 	path := c.Param("path")
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
-	fileName, err := handleAssetRequest(path, assets)
+	fileName, err := handleImageRequest(path, assets)
 	concludeRequestFile(c, fileName, err)
 }
 
-func CMSTopic(c *gin.Context) {
+func CMSTopics(c *gin.Context) {
 }
 
-func handleAssetRequest(path string, assets string) (string, *HttpError) {
+func handleImageRequest(path string, assets string) (string, *HttpError) {
 	var err error
 
-	fileName := assets + "active/images" + path
+	fileName := fmt.Sprintf("%sactive/images%s", assets, path)
 	if _, err = os.Stat(fileName); err != nil {
 		return "", NewNotFoundError()
 	}
