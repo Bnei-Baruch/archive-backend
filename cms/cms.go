@@ -123,6 +123,7 @@ func syncPersons() {
 
 func syncSources() {
 	var sources []struct {
+		Uid      string `json:"uid"`
 		Content  string `json:"content"`
 		XContent []byte `json:"xcontent"`
 		Slug     string `json:"xslug"`
@@ -130,7 +131,7 @@ func syncSources() {
 	var err error
 
 	for page := 1; ; page++ {
-		log.Info("Sources page ", page)
+		log.Info("Sources -- page ", page)
 
 		url := fmt.Sprintf("%sget-sources?page=%d", config.url, page)
 		if err = getItem("sources", url, &sources); err != nil {
@@ -150,7 +151,7 @@ func syncSources() {
 			if matched {
 				source.Content = mediaLibraryRE.ReplaceAllString(source.Content, config.assetsImages)
 			}
-			if err = mkdir(0755, config.workDir, "sources", path.Dir(source.Slug)); err != nil {
+			if err = mkdir(0755, config.workDir, "sources", source.Uid); err != nil {
 				log.Fatal("make images dir", err)
 			}
 			var content []byte
@@ -159,7 +160,7 @@ func syncSources() {
 			} else {
 				content = source.XContent
 			}
-			if err = saveItemAsIs(filepath.Join(config.workDir, "sources", source.Slug), content); err != nil {
+			if err = saveSourceItem(filepath.Join(config.workDir, "sources", source.Uid, source.Slug), content); err != nil {
 				log.Fatal("save source", err)
 			}
 		}
@@ -259,7 +260,7 @@ func saveItem(path string, v interface{}) (err error) {
 	return
 }
 
-func saveItemAsIs(path string, v []byte) (err error) {
+func saveSourceItem(path string, v []byte) (err error) {
 	err = ioutil.WriteFile(path, v, 0644)
 	if err != nil {
 		return errors.Wrapf(err, "ioutil.WriteFile: %s", path)
@@ -298,7 +299,7 @@ func getItem(name string, url string, v interface{}) (err error) {
 func saveImage(image string) (err error) {
 	// create directories for images
 	if err = mkdir(0755, config.workDir, "images", path.Dir(image)); err != nil {
-		return errors.Wrapf(err,"mkdir %s", image)
+		return errors.Wrapf(err, "mkdir %s", image)
 	}
 
 	// copy images
