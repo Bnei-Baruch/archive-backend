@@ -222,7 +222,7 @@ func latencyFn(cmd *cobra.Command, args []string) {
 					}
 				}
 				if !hasOp {
-					latencies = append(latencies, "0")
+					latencies = append(latencies, "-")
 				}
 			}
 			record := []string{
@@ -254,7 +254,7 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 
 	opLatenciesMap := make(map[string][]int, len(consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH))
 	for _, op := range consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH {
-		opLatenciesMap[op] = make([]int, len(records)-1)
+		opLatenciesMap[op] = make([]int, 0)
 	}
 
 	for i := 1; i < len(records); i++ { //  skip first line (headers)
@@ -262,12 +262,15 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 		record := records[i]
 
 		for j := len(latencyMetaHeaders); j < len(record); j++ {
-			lat, err := strconv.Atoi(strings.TrimSpace(record[j]))
-			utils.Must(err)
-			for opIndex, op := range consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH {
-				if opIndex == j-len(latencyMetaHeaders) {
-					(opLatenciesMap[op])[i-1] = lat
-					continue
+			val := strings.TrimSpace(record[j])
+			if val != "-" {
+				lat, err := strconv.Atoi(strings.TrimSpace(record[j]))
+				utils.Must(err)
+				for opIndex, op := range consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH {
+					if opIndex == j-len(latencyMetaHeaders) {
+						opLatenciesMap[op] = append(opLatenciesMap[op], lat)
+						continue
+					}
 				}
 			}
 		}
@@ -288,9 +291,17 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 				break
 			}
 		}
-		avg := sum / len(latencies)
-		log.Printf("%s Stage\n\nAverage: %d\nWorst: %d\n95 percentile: %d.\n\n",
-			opName, avg, max, percentile95)
+		var avg int
+		var activePercent float32
+		if sum > 0 {
+			avg = sum / len(latencies)
+		}
+		if len(records) > 1 {
+			activePercent = float32(len(latencies)) / float32(len(records)-1) * 100
+		}
+		activeStr := fmt.Sprintf("%d from %d (%.2f%%)", len(latencies), len(records)-1, activePercent)
+		log.Printf("%s Stage\n\nAverage: %d\nWorst: %d\n95 percentile: %d.\nActive: %s\n",
+			opName, avg, max, percentile95, activeStr)
 	}
 
 	//  print the worst queries
