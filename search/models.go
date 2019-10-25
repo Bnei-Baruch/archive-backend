@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"gopkg.in/olivere/elastic.v6"
+	null "gopkg.in/volatiletech/null.v6"
 )
 
 type Intent struct {
@@ -14,6 +15,7 @@ type Intent struct {
 
 type QueryResult struct {
 	SearchResult *elastic.SearchResult `json:"search_result,omitempty"`
+	Suggest      null.String           `json:"suggest"`
 }
 
 type Engine interface {
