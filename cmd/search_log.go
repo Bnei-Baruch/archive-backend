@@ -57,6 +57,10 @@ var elasticUrl string
 var csvFile string
 var lastDays int
 
+var latencyMetaHeaders = []string{
+	"#", "SearchId", "Term",
+}
+
 func init() {
 	RootCmd.AddCommand(logCmd)
 
@@ -184,10 +188,7 @@ func clicksFn(cmd *cobra.Command, args []string) {
 
 func latencyFn(cmd *cobra.Command, args []string) {
 	logger := initLogger()
-	headers := []string{
-		"#", "SearchId", "Term",
-	}
-	headers = append(headers, consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH...)
+	headers := append(latencyMetaHeaders, consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH...)
 	if csvFile != "" {
 		appendCsvToFile(csvFile, [][]string{headers})
 	} else {
@@ -243,7 +244,6 @@ func latencyFn(cmd *cobra.Command, args []string) {
 
 func latencyAggregateFn(cmd *cobra.Command, args []string) {
 
-	const metaColumnsCnt = 3                  //  "#","SearchId","Term"
 	const wholeSearchLatencyOperatinIndex = 3 //  index of "DoSearch" column
 	const worstQueriesPrintCnt = 5
 
@@ -261,11 +261,11 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 
 		record := records[i]
 
-		for j := metaColumnsCnt; j < len(record); j++ {
+		for j := len(latencyMetaHeaders); j < len(record); j++ {
 			lat, err := strconv.Atoi(strings.TrimSpace(record[j]))
 			utils.Must(err)
 			for opIndex, op := range consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH {
-				if opIndex == j-metaColumnsCnt {
+				if opIndex == j-len(latencyMetaHeaders) {
 					(opLatenciesMap[op])[i-1] = lat
 					continue
 				}
