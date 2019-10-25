@@ -88,7 +88,7 @@ func initLogger() *search.SearchLogger {
 func appendCsvToFile(path string, records [][]string) {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND, 0660)
 	if err != nil {
-		log.Fatalln("cannot open file: ", err)
+		panic(fmt.Sprintf("Cannot open file. Error: %s.", err))
 	}
 	defer file.Close()
 
