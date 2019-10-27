@@ -93,23 +93,23 @@ func (index *CollectionsIndex) addToIndex(scope Scope, removedUIDs []string) *In
 func (index *CollectionsIndex) removeFromIndex(scope Scope) (map[string][]string, *IndexErrors) {
 	typedUIDs := make([]string, 0)
 	if scope.CollectionUID != "" {
-		typedUIDs = append(typedUIDs, keyValue(consts.ES_UID_TYPE_COLLECTION, scope.CollectionUID))
+		typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_COLLECTION, scope.CollectionUID))
 	}
 	if scope.FileUID != "" {
-		typedUIDs = append(typedUIDs, keyValue(consts.ES_UID_TYPE_FILE, scope.FileUID))
+		typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_FILE, scope.FileUID))
 	}
 	indexErrors := MakeIndexErrors()
 	if scope.ContentUnitUID != "" {
-		typedUIDs = append(typedUIDs, keyValue(consts.ES_UID_TYPE_CONTENT_UNIT, scope.ContentUnitUID))
+		typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_CONTENT_UNIT, scope.ContentUnitUID))
 		moreUIDs, err := CollectionsScopeByContentUnit(index.db, scope.ContentUnitUID)
 		indexErrors.SetError(err)
 		typedUIDs = append(typedUIDs, KeyValues(consts.ES_UID_TYPE_COLLECTION, moreUIDs)...)
 	}
 	if scope.TagUID != "" {
-		typedUIDs = append(typedUIDs, keyValue(consts.ES_UID_TYPE_TAG, scope.TagUID))
+		typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_TAG, scope.TagUID))
 	}
 	if scope.SourceUID != "" {
-		typedUIDs = append(typedUIDs, keyValue(consts.ES_UID_TYPE_SOURCE, scope.SourceUID))
+		typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_SOURCE, scope.SourceUID))
 	}
 	if len(typedUIDs) > 0 {
 		typedUIDsI := make([]interface{}, len(typedUIDs))
@@ -192,7 +192,7 @@ func contentUnitsContentTypes(collectionsContentUnits mdbmodels.CollectionsConte
 func contentUnitsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentUnitSlice) []string {
 	ret := make([]string, len(collectionsContentUnits))
 	for i, ccu := range collectionsContentUnits {
-		ret[i] = keyValue(consts.ES_UID_TYPE_CONTENT_UNIT, ccu.R.ContentUnit.UID)
+		ret[i] = KeyValue(consts.ES_UID_TYPE_CONTENT_UNIT, ccu.R.ContentUnit.UID)
 	}
 	return ret
 }
@@ -227,9 +227,9 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 	for _, i18n := range c.R.CollectionI18ns {
 		if i18n.Name.Valid && i18n.Name.String != "" {
 			indexErrors.ShouldIndex(i18n.Language)
-			typedUIDs := append([]string{keyValue(consts.ES_UID_TYPE_COLLECTION, c.UID)},
+			typedUIDs := append([]string{KeyValue(consts.ES_UID_TYPE_COLLECTION, c.UID)},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
-			filterValues := append([]string{keyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
+			filterValues := append([]string{KeyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
 				KeyValues("collections_content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))...)
 			collection := Result{
 				ResultType:   index.resultType,

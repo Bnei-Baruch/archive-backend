@@ -71,7 +71,7 @@ func (index *TagsIndex) removeFromIndex(scope Scope) (map[string][]string, *Inde
 	log.Debugf("Tags Index - removeFromIndex. Scope: %+v.", scope)
 	if scope.TagUID != "" {
 		elasticScope := index.FilterByResultTypeQuery(index.resultType).
-			Filter(elastic.NewTermsQuery("typed_uids", keyValue(consts.ES_UID_TYPE_TAG, scope.TagUID)))
+			Filter(elastic.NewTermsQuery("typed_uids", KeyValue(consts.ES_UID_TYPE_TAG, scope.TagUID)))
 		return index.RemoveFromIndexQuery(elasticScope)
 	}
 	// Nothing to remove.
@@ -145,7 +145,7 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) *IndexErrors {
 				IndexDate:    &utils.Date{Time: time.Now()},
 				MDB_UID:      t.UID,
 				FilterValues: KeyValues(consts.ES_UID_TYPE_TAG, parentUids),
-				TypedUids:    []string{keyValue(consts.ES_UID_TYPE_TAG, t.UID)},
+				TypedUids:    []string{KeyValue(consts.ES_UID_TYPE_TAG, t.UID)},
 				Title:        strings.Join(pathNames, " - "),
 				TitleSuggest: Suffixes(strings.Join(pathNames, " ")),
 			}

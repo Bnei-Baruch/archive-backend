@@ -207,7 +207,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		// No potential score from string matching.
 		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
 	}
-	scoreQuery := elastic.NewFunctionScoreQuery().ScoreMode("first")
+	scoreQuery := elastic.NewFunctionScoreQuery().ScoreMode("multiply")
 	for _, resultType := range resultTypes {
 		weight := 1.0
 		if resultType == consts.ES_RESULT_TYPE_UNITS {
@@ -221,6 +221,8 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		}
 		scoreQuery.Add(elastic.NewTermsQuery("result_type", resultType), elastic.NewWeightFactorFunction(weight))
 	}
+	// Reduce score for clips.
+	scoreQuery.Add(elastic.NewTermsQuery("filter_values", es.KeyValue("content_type", consts.CT_CLIP)), elastic.NewWeightFactorFunction(0.7))
 	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query)).ScoreMode("sum").MaxBoost(100.0).
 		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))

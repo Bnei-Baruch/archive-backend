@@ -163,8 +163,8 @@ func (index *TweeterIndex) indexTweet(mdbTweet *mdbmodels.TwitterTweet) *IndexEr
 		ResultType:    index.resultType,
 		IndexDate:     &utils.Date{Time: time.Now()},
 		MDB_UID:       mdbTweet.TwitterID, // TwitterID is taken instead of UID
-		TypedUids:     []string{keyValue(consts.ES_UID_TYPE_TWEET, mdbTweet.TwitterID)},
-		FilterValues:  []string{keyValue("content_type", consts.SCT_TWEET), keyValue(consts.FILTER_LANGUAGE, tweetLang)},
+		TypedUids:     []string{KeyValue(consts.ES_UID_TYPE_TWEET, mdbTweet.TwitterID)},
+		FilterValues:  []string{KeyValue("content_type", consts.SCT_TWEET), KeyValue(consts.FILTER_LANGUAGE, tweetLang)},
 		Title:         "",
 		EffectiveDate: &utils.Date{Time: mdbTweet.TweetAt},
 		Content:       mdbTweet.FullText,
