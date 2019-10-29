@@ -296,12 +296,13 @@ var LANG2CODE = map[string]string{
 // api
 
 const (
-	INTENTS_SEARCH_COUNT       = 10
-	TWEETS_SEARCH_COUNT        = 20
-	INTENTS_MIN_UNITS          = 3
-	MAX_CLASSIFICATION_INTENTS = 3
-	API_DEFAULT_PAGE_SIZE      = 50
-	API_MAX_PAGE_SIZE          = 1000
+	INTENTS_SEARCH_COUNT                      = 10
+	TWEETS_SEARCH_COUNT                       = 20
+	INTENTS_MIN_UNITS                         = 3
+	MAX_CLASSIFICATION_INTENTS                = 3
+	API_DEFAULT_PAGE_SIZE                     = 50
+	API_MAX_PAGE_SIZE                         = 1000
+	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
 )
 
 const (
@@ -562,7 +563,7 @@ const (
 	LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO  = "DoSearch.AddIntents.FirstRoundDo"
 	LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO = "DoSearch.AddIntents.SecondRoundDo"
 	LAT_DOSEARCH_MULTISEARCHTWEETSDO      = "DoSearch.MultisearchTweetsDo"
-	LAT_DOSEARCH_TYPOSUGGESTDO           = "DoSearch.TypoSuggestDo"
+	LAT_DOSEARCH_TYPOSUGGESTDO            = "DoSearch.TypoSuggestDo"
 	LAT_GETSUGGESTIONS                    = "GetSuggestions"
 	LAT_GETSUGGESTIONS_MULTISEARCHDO      = "GetSuggestions.MultisearchDo"
 )

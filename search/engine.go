@@ -720,7 +720,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 		}
 
-		if checkTypo {
+		if checkTypo && (ret.Hits.MaxScore == nil || *ret.Hits.MaxScore < consts.MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST) {
 			suggestText = <-suggestChannel
 		}
 		return &QueryResult{ret, suggestText}, err
