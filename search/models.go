@@ -15,7 +15,7 @@ type Intent struct {
 
 type QueryResult struct {
 	SearchResult *elastic.SearchResult `json:"search_result,omitempty"`
-	Suggest      null.String           `json:"suggest"`
+	TypoSuggest  null.String           `json:"typo_suggest"`
 }
 
 type Engine interface {
