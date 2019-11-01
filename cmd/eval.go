@@ -13,6 +13,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
@@ -35,6 +36,12 @@ var vsGoldenHtmlCmd = &cobra.Command{
 	Run:   vsGoldenHtmlFn,
 }
 
+var testTypoSuggestCmd = &cobra.Command{
+	Use:   "test_typo_suggest",
+	Short: "Test typo suggest for a list of search queries.",
+	Run:   testTypoSuggestFn,
+}
+
 var evalSetPath string
 var serverUrl string
 var baseServerUrl string
@@ -46,6 +53,8 @@ var vsGoldenHtml string
 var EvalScrape string
 var evalDiffHtml string
 var top int
+var typosPath string
+var language string
 
 func init() {
 	evalCmd.PersistentFlags().StringVar(&evalSetPath, "eval_set", "", "Path to csv eval set.")
@@ -78,6 +87,14 @@ func init() {
 	vsGoldenHtmlCmd.PersistentFlags().StringVar(&vsGoldenHtml, "vs_golden_html", "", "Path to html output of comparison vs golden.")
 	vsGoldenHtmlCmd.MarkPersistentFlagRequired("vs_golden_html")
 	RootCmd.AddCommand(vsGoldenHtmlCmd)
+
+	testTypoSuggestCmd.PersistentFlags().StringVar(&evalSetPath, "eval_set", "", "Path to csv eval set.")
+	testTypoSuggestCmd.MarkFlagRequired("eval_set")
+	testTypoSuggestCmd.PersistentFlags().StringVar(&typosPath, "typos_path", "", "Path to typos list file.")
+	testTypoSuggestCmd.MarkFlagRequired("typos_path")
+	testTypoSuggestCmd.PersistentFlags().StringVar(&language, "lang", "", "Index language.")
+	testTypoSuggestCmd.MarkFlagRequired("lang")
+	RootCmd.AddCommand(testTypoSuggestCmd)
 }
 
 func roundD(val float64) int {
@@ -292,4 +309,61 @@ func vsGoldenHtmlFn(cmd *cobra.Command, args []string) {
 	if err := search.WriteVsGoldenHTML(vsGoldenHtml, allRecords, allGoldenRecords); err != nil {
 		log.Error(err)
 	}
+}
+
+func testTypoSuggestFn(cmd *cobra.Command, args []string) {
+	esManager := search.MakeESManager(elasticUrl)
+	esc, err := esManager.GetClient()
+	utils.Must(err)
+	engine := search.NewESEngine(esc, nil, nil, nil, nil)
+
+	evalSet, err := search.InitAndReadEvalSet(evalSetPath)
+	utils.Must(err)
+
+	file, err := os.Open(typosPath)
+	utils.Must(err)
+	defer file.Close()
+
+	typos := make([]string, 0)
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		typos = append(typos, scanner.Text())
+	}
+	utils.Must(scanner.Err())
+
+	falsePositiveCnt := 0
+	noSuggestForTypoCnt := 0
+
+	log.Info("*** CHECKING KNOWN TYPOS ***")
+
+	for _, t := range typos {
+		query := search.Query{Term: t, LanguageOrder: consts.SEARCH_LANG_ORDER[language]}
+		res, err := engine.GetTypoSuggest(query)
+		utils.Must(err)
+		if res.Valid {
+			log.Infof("Suggest for '%s' is: '%s'.", t, res.String)
+		} else {
+			noSuggestForTypoCnt++
+			log.Infof("No suggest for '%s'!", t)
+		}
+	}
+
+	log.Info("\n*** CHECKING FALSE POSITIVE FROM RECALL SET***")
+
+	for _, e := range evalSet {
+
+		query := search.Query{Term: e.Query, LanguageOrder: consts.SEARCH_LANG_ORDER[language]}
+
+		res, err := engine.GetTypoSuggest(query)
+		utils.Must(err)
+		if res.Valid {
+			log.Infof("Suggest for '%s' is: '%s'. Check if this is false positive.", e.Query, res.String)
+			falsePositiveCnt++
+		} else {
+			log.Infof("No suggest for '%s'.", e.Query)
+		}
+	}
+
+	log.Infof("\n\nNot found suggests for known typos: %d from %d.\nProbable False Positive: %d from %d.", noSuggestForTypoCnt, len(typos), falsePositiveCnt, len(evalSet))
 }

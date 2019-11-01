@@ -318,7 +318,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				IndexDate:    &utils.Date{Time: time.Now()},
 				MDB_UID:      mdbSource.UID,
 				FilterValues: KeyValues(consts.ES_UID_TYPE_SOURCE, parents),
-				TypedUids:    []string{keyValue(consts.ES_UID_TYPE_SOURCE, mdbSource.UID)},
+				TypedUids:    []string{KeyValue(consts.ES_UID_TYPE_SOURCE, mdbSource.UID)},
 			}
 			if i18n.Description.Valid && i18n.Description.String != "" {
 				source.Description = i18n.Description.String

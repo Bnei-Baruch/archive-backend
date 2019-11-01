@@ -24,7 +24,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
@@ -448,6 +448,10 @@ func SearchHandler(c *gin.Context) {
 		query.LanguageOrder = append([]string{consts.LANG_SPANISH}, query.LanguageOrder...)
 	}
 
+	checkTypo := viper.GetBool("elasticsearch.check-typo") &&
+		//  temp. disable typo suggestion for other interface languages than english, russian and hebrew
+		(c.Query("language") == consts.LANG_ENGLISH || c.Query("language") == consts.LANG_RUSSIAN || c.Query("language") == consts.LANG_HEBREW)
+
 	res, err := se.DoSearch(
 		context.TODO(),
 		query,
@@ -455,6 +459,7 @@ func SearchHandler(c *gin.Context) {
 		from,
 		size,
 		preference,
+		checkTypo,
 	)
 	if err == nil {
 		// TODO: How does this slows the search query? Consider logging in parallel.

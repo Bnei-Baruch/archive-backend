@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"gopkg.in/volatiletech/null.v6"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
@@ -455,8 +457,10 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	e.ExecutionTimeLog.Store(operation, elapsed)
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (*QueryResult, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
+
+	suggestChannel := make(chan null.String)
 
 	// Seach intents and grammars in parallel to native search.
 	intentsChannel := make(chan []Intent)
@@ -489,6 +493,17 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			tweetsByLangChannel <- tweetsByLang
 		}
 	}()
+
+	if checkTypo {
+		go func() {
+			if suggestText, err := e.GetTypoSuggest(query); err != nil {
+				log.Errorf("ESEngine.GetTypoSuggest - Error getting typo suggest: %+v", err)
+				suggestChannel <- null.String{"", false}
+			} else {
+				suggestChannel <- suggestText
+			}
+		}()
+	}
 
 	var resultTypes []string
 	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
@@ -595,6 +610,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	ret, err := joinResponses(sortBy, from, size, results...)
+
+	suggestText := null.String{"", false}
 
 	if ret != nil && ret.Hits != nil && ret.Hits.Hits != nil {
 
@@ -703,14 +720,20 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 		}
 
-		return &QueryResult{ret}, err
+		if checkTypo {
+			suggestText = <-suggestChannel
+		}
+		return &QueryResult{ret, suggestText}, err
+	}
+
+	if checkTypo {
+		suggestText = <-suggestChannel
 	}
 
 	if len(mr.Responses) > 0 {
 		// This happens when there are no responses with hits.
 		// Note, we don't filter here intents by language.
-		return &QueryResult{mr.Responses[0]}, err
-	} else {
-		return nil, errors.Wrap(err, "ESEngine.DoSearch - No responses from multi search.")
+		return &QueryResult{mr.Responses[0], suggestText}, err
 	}
+	return nil, errors.Wrap(err, "ESEngine.DoSearch - No responses from multi search.")
 }
