@@ -86,14 +86,14 @@ func InitVars() {
 	prepareDocsParallelism = utils.MaxInt(1, viper.GetInt("elasticsearch.prepare-docs-parallelism"))
 }
 
-func keyValue(t string, uid string) string {
+func KeyValue(t string, uid string) string {
 	return fmt.Sprintf("%s:%s", t, uid)
 }
 
 func KeyValues(t string, uids []string) []string {
 	ret := make([]string, len(uids))
 	for i, uid := range uids {
-		ret[i] = keyValue(t, uid)
+		ret[i] = KeyValue(t, uid)
 	}
 	return ret
 }
@@ -101,7 +101,7 @@ func KeyValues(t string, uids []string) []string {
 func KeyIValues(t string, uids []string) []interface{} {
 	ret := make([]interface{}, len(uids))
 	for i, uid := range uids {
-		ret[i] = keyValue(t, uid)
+		ret[i] = KeyValue(t, uid)
 	}
 	return ret
 }

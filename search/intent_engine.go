@@ -59,7 +59,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 		}
 	}
 
-	defer e.timeTrack(time.Now(), "DoSearch.AddIntents")
+	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH_ADDINTENTS)
 
 	checkContentUnitsTypes := []string{}
 	if values, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
@@ -120,7 +120,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 	}
 	beforeFirstRoundDo := time.Now()
 	mr, err := mssFirstRound.Do(context.TODO())
-	e.timeTrack(beforeFirstRoundDo, "DoSearch.AddIntents.FirstRoundDo")
+	e.timeTrack(beforeFirstRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO)
 	if err != nil {
 		return intents, errors.Wrap(err, "ESEngine.AddIntents - Error multisearch Do.")
 	}
@@ -161,7 +161,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 
 	beforeSecondRoundDo := time.Now()
 	mr, err = mssSecondRound.Do(context.TODO())
-	e.timeTrack(beforeSecondRoundDo, "DoSearch.AddIntents.SecondRoundDo")
+	e.timeTrack(beforeSecondRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO)
 	for i := 0; i < len(finalIntents); i++ {
 		res := mr.Responses[i]
 		if res.Error != nil {

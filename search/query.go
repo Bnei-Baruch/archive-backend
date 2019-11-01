@@ -207,7 +207,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		// No potential score from string matching.
 		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
 	}
-	scoreQuery := elastic.NewFunctionScoreQuery().ScoreMode("first")
+	scoreQuery := elastic.NewFunctionScoreQuery().ScoreMode("multiply")
 	for _, resultType := range resultTypes {
 		weight := 1.0
 		if resultType == consts.ES_RESULT_TYPE_UNITS {
@@ -221,13 +221,33 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		}
 		scoreQuery.Add(elastic.NewTermsQuery("result_type", resultType), elastic.NewWeightFactorFunction(weight))
 	}
+	// Reduce score for clips.
+	scoreQuery.Add(elastic.NewTermsQuery("filter_values", es.KeyValue("content_type", consts.CT_CLIP)), elastic.NewWeightFactorFunction(0.7))
 	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query)).ScoreMode("sum").MaxBoost(100.0).
 		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))
 }
 
 func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type")
+
+	titleAdded := false
+	contentAdded := false
+	//	This is a generic imp. that supports searching tweets together with other results.
+	//	Currently we are not searching for tweets together with other results but in parallel.
+	for _, rt := range options.resultTypes {
+		if !contentAdded && rt == consts.ES_RESULT_TYPE_TWEETS {
+			fetchSourceContext.Include("content")
+			contentAdded = true
+		} else if !titleAdded {
+			fetchSourceContext.Include("title")
+			titleAdded = true
+		}
+		if contentAdded && titleAdded {
+			break
+		}
+	}
+
 	source := elastic.NewSearchSource().
 		Query(createResultsQuery(options.resultTypes, options.query, options.docIds)).
 		FetchSourceContext(fetchSourceContext).
@@ -240,12 +260,17 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		//  We use special HighlightQuery with SimpleQueryStringQuery to
 		//	 solve elastic issue with synonyms and highlights.
 
+		contentNumOfFragments := 5 //  elastic default
+		if options.highlightFullContent {
+			contentNumOfFragments = 0
+		}
+
 		highlightQuery := elastic.NewHighlight().Fields(
 			elastic.NewHighlighterField("title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
 			elastic.NewHighlighterField("description").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("content").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
 			elastic.NewHighlighterField("description.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("content.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)))
+			elastic.NewHighlighterField("content").NumOfFragments(contentNumOfFragments).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
+			elastic.NewHighlighterField("content.language").NumOfFragments(contentNumOfFragments).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)))
 		if !options.partialHighlight {
 			// Following field not used in intents to solve elastic bug with highlight.
 			highlightQuery.Fields(

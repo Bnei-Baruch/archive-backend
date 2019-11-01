@@ -19,11 +19,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"gopkg.in/gin-gonic/gin.v1"
+	elastic "gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
@@ -447,6 +448,10 @@ func SearchHandler(c *gin.Context) {
 		query.LanguageOrder = append([]string{consts.LANG_SPANISH}, query.LanguageOrder...)
 	}
 
+	checkTypo := viper.GetBool("elasticsearch.check-typo") &&
+		//  temp. disable typo suggestion for other interface languages than english, russian and hebrew
+		(c.Query("language") == consts.LANG_ENGLISH || c.Query("language") == consts.LANG_RUSSIAN || c.Query("language") == consts.LANG_HEBREW)
+
 	res, err := se.DoSearch(
 		context.TODO(),
 		query,
@@ -454,12 +459,25 @@ func SearchHandler(c *gin.Context) {
 		from,
 		size,
 		preference,
+		checkTypo,
 	)
 	if err == nil {
 		// TODO: How does this slows the search query? Consider logging in parallel.
 		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
 		if err != nil {
 			log.Warnf("Error logging search: %+v %+v", err, res)
+		}
+		for _, hit := range res.SearchResult.Hits.Hits {
+			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
+				// Move Tweets from innerHits to Source, to make client more consistent (work with source only).
+				// Should be done after the logging to avoid errors with source field
+				err = se.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
+			}
+			//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
+			//	TBD check if already fixed in client
+			if hit.Highlight == nil {
+				hit.Highlight = elastic.SearchHitHighlight{}
+			}
 		}
 		c.JSON(http.StatusOK, res)
 	} else {
@@ -2471,7 +2489,7 @@ func EvalQueryHandler(c *gin.Context) {
 		r.EvalQuery.Expectations = append(r.EvalQuery.Expectations, parsed)
 	}
 
-	resp := EvalQueryResponse{EvalResult: search.EvaluateQuery(r.EvalQuery, r.serverUrl)}
+	resp := EvalQueryResponse{EvalResult: search.EvaluateQuery(r.EvalQuery, r.serverUrl, false /*skipExpectations*/)}
 	concludeRequest(c, resp, nil)
 }
 
@@ -2506,4 +2524,30 @@ func EvalSetHandler(c *gin.Context) {
 			}
 		}
 	}
+}
+
+func EvalSxSHandler(c *gin.Context) {
+	r := EvalSxSRequest{}
+	if err := c.Bind(&r); err != nil {
+		return
+	}
+
+	log.Infof("Request: %+v.", r)
+
+	if r.ExpServerUrl == "" {
+		concludeRequest(c, nil, NewBadRequestError(errors.New("exp-server-url should not be empty.")))
+		return
+	}
+
+	if r.BaseServerUrl == "" {
+		concludeRequest(c, nil, NewBadRequestError(errors.New("base-server-url should not be empty.")))
+		return
+	}
+
+	querySetsResultsDiffs, err := search.EvalSearchDataQuerySetsDiff(r.BaseServerUrl, r.ExpServerUrl, r.DiffsLimit)
+	if err != nil {
+		concludeRequest(c, nil, NewInternalError(err))
+		return
+	}
+	concludeRequest(c, querySetsResultsDiffs, nil)
 }

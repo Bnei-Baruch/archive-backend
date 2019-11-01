@@ -7,9 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
+	"gopkg.in/volatiletech/null.v6"
 )
 
 type SearchLog struct {
@@ -150,6 +153,13 @@ func (searchLogger *SearchLogger) fixResults(res *QueryResult) *QueryResult {
 		for i, h := range res.SearchResult.Hits.Hits {
 			hCopy := *h
 			hCopy.Highlight = *searchLogger.fixHighlight(&hCopy.Highlight)
+			if hCopy.Type == consts.SEARCH_RESULT_TWEETS_MANY && hCopy.InnerHits != nil {
+				if tweetHits, ok := hCopy.InnerHits[consts.SEARCH_RESULT_TWEETS_MANY]; ok {
+					for i := range tweetHits.Hits.Hits {
+						tweetHits.Hits.Hits[i].Highlight = *searchLogger.fixHighlight(&tweetHits.Hits.Hits[i].Highlight)
+					}
+				}
+			}
 			hitsCopy[i] = &hCopy
 		}
 		searchResultCopy := *res.SearchResult
@@ -202,6 +212,10 @@ func (searchLogger *SearchLogger) logSearch(query Query, sortBy string, from int
 }
 
 func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]SearchLog, error) {
+	return searchLogger.GetLattestQueries(s, null.NewString("", false), null.NewBool(false, false))
+}
+
+func (searchLogger *SearchLogger) GetLattestQueries(s *elastic.SliceQuery, gte null.String, ascending null.Bool) ([]SearchLog, error) {
 	var ret []SearchLog
 	var searchResult *elastic.SearchResult
 
@@ -213,7 +227,7 @@ func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]Search
 	for true {
 		log.Infof("Scrolling...")
 		if searchResult != nil && searchResult.Hits != nil {
-			log.Infof("Git %d hits...", len(searchResult.Hits.Hits))
+			log.Infof("Get %d hits...", len(searchResult.Hits.Hits))
 			for _, h := range searchResult.Hits.Hits {
 				sl := SearchLog{}
 				json.Unmarshal(*h.Source, &sl)
@@ -221,12 +235,23 @@ func (searchLogger *SearchLogger) GetAllQueries(s *elastic.SliceQuery) ([]Search
 			}
 		}
 		var err error
+
+		query := elastic.NewBoolQuery().Must(elastic.NewTermsQuery("log_type", "query"))
+		if gte.Valid {
+			query.Filter(elastic.NewRangeQuery("created").Gte(gte.String))
+		}
+
 		scrollClient := esc.Scroll().
 			Index("search_logs").
-			Query(elastic.NewTermsQuery("log_type", "query")).
+			Query(query).
 			Scroll("5m").
 			Slice(s).
 			Size(500)
+
+		if ascending.Valid {
+			scrollClient.Sort("created", ascending.Bool)
+		}
+
 		if searchResult != nil {
 			scrollClient = scrollClient.ScrollId(searchResult.ScrollId)
 		}

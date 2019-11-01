@@ -297,6 +297,7 @@ var LANG2CODE = map[string]string{
 
 const (
 	INTENTS_SEARCH_COUNT       = 10
+	TWEETS_SEARCH_COUNT        = 20
 	INTENTS_MIN_UNITS          = 3
 	MAX_CLASSIFICATION_INTENTS = 3
 	API_DEFAULT_PAGE_SIZE      = 50
@@ -367,13 +368,12 @@ const ES_UID_TYPE_SOURCE = "source"
 const ES_UID_TYPE_TWEET = "tweet"
 const ES_UID_TYPE_BLOG_POST = "blog_post"
 
-//  ToDo: Add ES_RESULT_TYPE_TWEETS to ES_SEARCH_RESULT_TYPES when the tweets handling in front end will be ready.
+//  ES_RESULT_TYPE_TWEETS is not part of the array since it's searched in parallel to other results search
 var ES_SEARCH_RESULT_TYPES = []string{
 	ES_RESULT_TYPE_UNITS,
 	ES_RESULT_TYPE_SOURCES,
 	ES_RESULT_TYPE_COLLECTIONS,
 	ES_RESULT_TYPE_BLOG_POSTS,
-	// ES_RESULT_TYPE_TWEETS,
 }
 
 var ES_ALL_RESULT_TYPES = []string{
@@ -551,4 +551,29 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	},
 	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS: nil,
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
+}
+
+// Latency log
+const (
+	LAT_DOSEARCH                          = "DoSearch"
+	LAT_DOSEARCH_MULTISEARCHDO            = "DoSearch.MultisearchDo"
+	LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO  = "DoSearch.MultisearcHighlightsDo"
+	LAT_DOSEARCH_ADDINTENTS               = "DoSearch.AddIntents"
+	LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO  = "DoSearch.AddIntents.FirstRoundDo"
+	LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO = "DoSearch.AddIntents.SecondRoundDo"
+	LAT_DOSEARCH_MULTISEARCHTWEETSDO      = "DoSearch.MultisearchTweetsDo"
+	LAT_DOSEARCH_TYPOSUGGESTDO           = "DoSearch.TypoSuggestDo"
+	LAT_GETSUGGESTIONS                    = "GetSuggestions"
+	LAT_GETSUGGESTIONS_MULTISEARCHDO      = "GetSuggestions.MultisearchDo"
+)
+
+var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{
+	LAT_DOSEARCH,
+	LAT_DOSEARCH_MULTISEARCHDO,
+	LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO,
+	LAT_DOSEARCH_ADDINTENTS,
+	LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO,
+	LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO,
+	LAT_DOSEARCH_MULTISEARCHTWEETSDO,
+	LAT_DOSEARCH_TYPOSUGGESTDO,
 }

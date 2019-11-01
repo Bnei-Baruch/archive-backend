@@ -39,6 +39,7 @@ func SetupRoutes(router *gin.Engine) {
 		router.StaticFile("/eval.html", "./search/eval.html")
 		router.POST("/eval/query", EvalQueryHandler)
 		router.POST("/eval/set", EvalSetHandler)
+		router.POST("/eval/sxs", EvalSxSHandler)
 	}
 
 	router.GET("/feeds/rus_zohar", FeedRusZohar)

@@ -205,3 +205,15 @@ func StringMapOrderedKeys(m interface{}) []string {
 	sort.Strings(keys)
 	return keys
 }
+
+func SumAndMax(values []int) (int, int) {
+	var sum int = 0
+	var max int = 0
+	for _, val := range values {
+		if val > max {
+			max = val
+		}
+		sum += val
+	}
+	return sum, max
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"gopkg.in/olivere/elastic.v6"
+	null "gopkg.in/volatiletech/null.v6"
 )
 
 type Intent struct {
@@ -14,8 +15,7 @@ type Intent struct {
 
 type QueryResult struct {
 	SearchResult *elastic.SearchResult `json:"search_result,omitempty"`
-	// TODO: Intents field below is deprecated and not being used.
-	Intents []Intent `json:"intents,omitempty"`
+	Suggest      null.String           `json:"suggest"`
 }
 
 type Engine interface {
@@ -24,15 +24,16 @@ type Engine interface {
 }
 
 type SearchRequestOptions struct {
-	resultTypes  []string
-	docIds       []string
-	index        string
-	query        Query
-	sortBy       string
-	from         int
-	size         int
-	preference   string
-	useHighlight bool
+	resultTypes          []string
+	docIds               []string
+	index                string
+	query                Query
+	sortBy               string
+	from                 int
+	size                 int
+	preference           string
+	useHighlight         bool
+	highlightFullContent bool
 	// Following field comes to solve elastic bug with highlight.
 	// Just removed the analyzed fields and uses only standard fields
 	// for highlighting. Only happens with intents.
