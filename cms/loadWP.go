@@ -187,7 +187,7 @@ func prepareTarFile() (err error) {
 	if err != nil {
 		return errors.Wrapf(err, "Unable to copy <%s>, Error: %+v", urlFile, err)
 	}
-	cmd := exec.Command("tar", "xvjf", tarName, "--one-top-level="+workDir)
+	cmd := exec.Command("tar", "xvzf", tarName, "--one-top-level="+workDir)
 	err = cmd.Run()
 
 	return errors.Wrapf(err, "Unable to extract files from <%s>, Error: %+v", urlFile, err)
