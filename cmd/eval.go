@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/csv"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"sort"
 	"strings"
@@ -22,6 +23,12 @@ var evalCmd = &cobra.Command{
 	Run:   evalFn,
 }
 
+var evalDiffCmd = &cobra.Command{
+	Use:   "eval_diff",
+	Short: "Evaluate diff.",
+	Run:   evalDiffFn,
+}
+
 var vsGoldenHtmlCmd = &cobra.Command{
 	Use:   "vs_golden_html",
 	Short: "Compares full reports and generates comparison HTML.",
@@ -36,6 +43,9 @@ var flatReportPath string
 var flatReportsPaths string
 var goldenFlatReportPaths string
 var vsGoldenHtml string
+var EvalScrape string
+var evalDiffHtml string
+var top int
 
 func init() {
 	evalCmd.PersistentFlags().StringVar(&evalSetPath, "eval_set", "", "Path to csv eval set.")
@@ -49,6 +59,17 @@ func init() {
 	evalCmd.PersistentFlags().StringVar(&baseServerUrl, "base_server", "", "URL of base archive backend to evaluate.")
 	evalCmd.MarkFlagRequired("base_server")
 	RootCmd.AddCommand(evalCmd)
+
+	evalDiffCmd.PersistentFlags().StringVar(&evalSetPath, "eval_set", "", "Path to csv eval set.")
+	evalDiffCmd.MarkFlagRequired("eval_set")
+	evalDiffCmd.PersistentFlags().StringVar(&evalDiffHtml, "eval_diff_html", "", "Path to html with eval diff results.")
+	evalDiffCmd.MarkFlagRequired("eval_diff_html")
+	evalDiffCmd.PersistentFlags().StringVar(&serverUrl, "server", "", "URL of experimental archive backend to evaluate.")
+	evalDiffCmd.MarkFlagRequired("server")
+	evalDiffCmd.PersistentFlags().StringVar(&baseServerUrl, "base_server", "", "URL of base archive backend to evaluate.")
+	evalDiffCmd.MarkFlagRequired("base_server")
+	evalDiffCmd.PersistentFlags().IntVar(&top, "top", 0, "Limit query set size.")
+	RootCmd.AddCommand(evalDiffCmd)
 
 	vsGoldenHtmlCmd.PersistentFlags().StringVar(&flatReportsPaths, "flat_reports", "", "Paths to csv report file per expectation, separated by comma.")
 	vsGoldenHtmlCmd.MarkPersistentFlagRequired("flat_reports")
@@ -70,7 +91,7 @@ func float64ToPercent(val float64) string {
 	return fmt.Sprintf("%.2f%%", float64(roundD(val*10000))/float64(100))
 }
 
-func runSxS(evalSet []search.EvalQuery, baseUrl string, expUrl string) (
+func runExpVsBase(evalSet []search.EvalQuery, baseUrl string, expUrl string) (
 	search.EvalResults, map[int][]search.Loss, search.EvalResults, map[int][]search.Loss, error) {
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -145,12 +166,35 @@ func Round(f float64) float64 {
 	return float64(int64(f*10+0.5)) / 10
 }
 
+func evalDiffFn(cmd *cobra.Command, args []string) {
+	log.Infof("Evaluating diff set at %s.", evalSetPath)
+	evalSet, err := search.ReadEvalDiffSet(evalSetPath)
+	utils.Must(err)
+	if top > 0 {
+		sort.SliceStable(evalSet, func(i, j int) bool {
+			return evalSet[i].Weight > evalSet[j].Weight
+		})
+		evalSet = evalSet[:utils.MinInt(top, len(evalSet))]
+	}
+
+	if evalDiffHtml == "" {
+		panic("eval_diff_html must be set.")
+	}
+
+	diffs, err := search.EvalQuerySetDiff(evalSet, baseServerUrl, serverUrl, -1 /*diffsLimit*/)
+	utils.Must(err)
+	// Generate eval diff html report.
+	html, err := search.EvalResultsDiffsHtml(diffs)
+	utils.Must(err)
+	utils.Must(ioutil.WriteFile(evalDiffHtml, []byte(html), 0644))
+}
+
 func evalFn(cmd *cobra.Command, args []string) {
 	log.Infof("Evaluating eval set at %s.", evalSetPath)
 	evalSet, err := search.InitAndReadEvalSet(evalSetPath)
 	utils.Must(err)
 	if baseServerUrl != "" {
-		baseResults, baseLosses, expResults, expLosses, err := runSxS(evalSet, baseServerUrl, serverUrl)
+		baseResults, baseLosses, expResults, expLosses, err := runExpVsBase(evalSet, baseServerUrl, serverUrl)
 		utils.Must(err)
 		log.Infof("Base:")
 		printResults(baseResults)

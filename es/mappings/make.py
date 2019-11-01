@@ -269,6 +269,7 @@ SETTINGS = {
   "index": {
     "number_of_shards": 1,
     "number_of_replicas": 0,
+    "max_clause_count" : 10000,
     "analysis": {
       "analyzer": lambda lang: GetAnalyzerImp(lang),
       # "analyzer": {

@@ -5,8 +5,8 @@ import "fmt"
 // See http://semver.org/ for more information on Semantic Versioning
 var (
 	Major      = 1
-	Minor      = 5
-	Patch      = 9
+	Minor      = 6
+	Patch      = 2
 	PreRelease = "dev"
 )
 

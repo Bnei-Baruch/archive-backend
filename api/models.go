@@ -233,6 +233,12 @@ type EvalSetResponse struct {
 	FlatReport string                `json:"flat_report"`
 }
 
+type EvalSxSRequest struct {
+	DiffsLimit    int32  `json:"diffs_limit"`
+	BaseServerUrl string `json:"base_server_url"`
+	ExpServerUrl  string `json:"exp_server_url"`
+}
+
 func NewCollectionsResponse() *CollectionsResponse {
 	return &CollectionsResponse{Collections: make([]*Collection, 0)}
 }

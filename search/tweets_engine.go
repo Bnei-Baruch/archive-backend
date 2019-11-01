@@ -94,6 +94,7 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 	return resultsByLang, nil
 }
 
+// Moving data from InnerHits to Source (as marshaled json) (this is for client).
 func (e *ESEngine) NativizeTweetsHitForClient(hit *elastic.SearchHit, innerHitsKey string) error {
 	if hit.InnerHits == nil {
 		return errors.New("NativizeHitForClient - InnerHits is nil.")

@@ -464,7 +464,8 @@ func SearchHandler(c *gin.Context) {
 		}
 		for _, hit := range res.SearchResult.Hits.Hits {
 			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
-				//  Should be done after the logging to avoid errors with source field
+				// Move Tweets from innerHits to Source, to make client more consistent (work with source only).
+				// Should be done after the logging to avoid errors with source field
 				err = se.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
 			}
 			//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
@@ -2483,7 +2484,7 @@ func EvalQueryHandler(c *gin.Context) {
 		r.EvalQuery.Expectations = append(r.EvalQuery.Expectations, parsed)
 	}
 
-	resp := EvalQueryResponse{EvalResult: search.EvaluateQuery(r.EvalQuery, r.serverUrl)}
+	resp := EvalQueryResponse{EvalResult: search.EvaluateQuery(r.EvalQuery, r.serverUrl, false /*skipExpectations*/)}
 	concludeRequest(c, resp, nil)
 }
 
@@ -2518,4 +2519,30 @@ func EvalSetHandler(c *gin.Context) {
 			}
 		}
 	}
+}
+
+func EvalSxSHandler(c *gin.Context) {
+	r := EvalSxSRequest{}
+	if err := c.Bind(&r); err != nil {
+		return
+	}
+
+	log.Infof("Request: %+v.", r)
+
+	if r.ExpServerUrl == "" {
+		concludeRequest(c, nil, NewBadRequestError(errors.New("exp-server-url should not be empty.")))
+		return
+	}
+
+	if r.BaseServerUrl == "" {
+		concludeRequest(c, nil, NewBadRequestError(errors.New("base-server-url should not be empty.")))
+		return
+	}
+
+	querySetsResultsDiffs, err := search.EvalSearchDataQuerySetsDiff(r.BaseServerUrl, r.ExpServerUrl, r.DiffsLimit)
+	if err != nil {
+		concludeRequest(c, nil, NewInternalError(err))
+		return
+	}
+	concludeRequest(c, querySetsResultsDiffs, nil)
 }

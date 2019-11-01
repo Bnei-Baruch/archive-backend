@@ -9,14 +9,17 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/viper"
@@ -217,9 +220,11 @@ type EvalResults struct {
 }
 
 type EvalResult struct {
-	SearchQuality []int `json:"search_quality"`
-	Rank          []int `json:"rank"`
-	err           error `json:"error"`
+	SearchQuality []int       `json:"search_quality"`
+	Rank          []int       `json:"rank"`
+	err           error       `json:"error"`
+	QueryResult   QueryResult `json:"query_result"`
+	Order         int         `json:"order,omitempty"`
 }
 
 // Returns compare results classification constant.
@@ -247,6 +252,36 @@ func GoodExpectations(expectations []Expectation) int {
 	return ret
 }
 
+func ReadEvalDiffSet(evalSetPath string) ([]EvalQuery, error) {
+	f, err := os.Open(evalSetPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r := csv.NewReader(f)
+	lines, err := r.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	var ret []EvalQuery
+	for _, line := range lines {
+		w, err := strconv.ParseFloat(strings.TrimSpace(line[2]), 64)
+		if err != nil {
+			log.Warnf("Failed parsing query [%s] weight [%s].", line[1], line[2])
+			continue
+		}
+		ret = append(ret, EvalQuery{
+			Language: strings.TrimSpace(line[1]),
+			Query:    strings.TrimSpace(line[0]),
+			Weight:   w,
+		})
+	}
+
+	return ret, nil
+}
+
 func InitAndReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 	db, err := sql.Open("postgres", viper.GetString("mdb.url"))
 	if err != nil {
@@ -264,7 +299,6 @@ func InitAndReadEvalSet(evalSetPath string) ([]EvalQuery, error) {
 }
 
 func ReadEvalSet(reader io.Reader, db *sql.DB) ([]EvalQuery, error) {
-	// Read File into a Variable
 	r := csv.NewReader(reader)
 	lines, err := r.ReadAll()
 	if err != nil {
@@ -308,9 +342,49 @@ func ReadEvalSet(reader io.Reader, db *sql.DB) ([]EvalQuery, error) {
 }
 
 type HitSource struct {
-	MdbUid      string `json:"mdb_uid"`
-	ResultType  string `json:"result_type"`
-	LandingPage string `json:"landing_page"`
+	MdbUid              string      `json:"mdb_uid"`
+	ResultType          string      `json:"result_type"`
+	LandingPage         string      `json:"landing_page"`
+	Title               string      `json:"title,omitempty"`
+	Content             string      `json:"content,omitempty"`
+	CarrouselHitSources []HitSource `json:"carrousel,omitempty"`
+	ContentType         string      `json:"content_type,omitempty"`
+}
+
+func HitSourcesEqual(a, b HitSource) bool {
+	if a.MdbUid != b.MdbUid ||
+		a.ResultType != b.ResultType ||
+		a.LandingPage != b.LandingPage ||
+		len(a.CarrouselHitSources) != len(b.CarrouselHitSources) {
+		return false
+	}
+	for i := range a.CarrouselHitSources {
+		if !HitSourcesEqual(a.CarrouselHitSources[i], b.CarrouselHitSources[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+type HitDiff struct {
+	Rank          int       `json:"rank"`
+	ExpHitSource  HitSource `json:"exp_hit_source"`
+	BaseHitSource HitSource `json:"base_hit_source"`
+}
+
+type ResultDiff struct {
+	ErrorStr  string    `json:"error_str"`
+	Query     string    `json:"query"`
+	HitsDiffs []HitDiff `json:"hits_diffs"`
+}
+
+type ResultsDiffs struct {
+	ErrorStr     string       `json:"error_str"`
+	ResultsDiffs []ResultDiff `json:"results_diffs"`
+	Diffs        int          `json:"diffs"`
+	Scraped      int          `json:"scraped"`
+	DiffsWeight  float64      `json:"diffs_weight"`
+	TotalWeight  float64      `json:"total_weight"`
 }
 
 // Parses expectation described by result URL and converts
@@ -522,24 +596,27 @@ func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expect
 	}
 }
 
-func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
+func EvaluateQuery(q EvalQuery, serverUrl string, skipExpectations bool) EvalResult {
 	r := EvalResult{
 		SearchQuality: make([]int, len(q.Expectations)),
 		Rank:          make([]int, len(q.Expectations)),
 		err:           nil,
+		QueryResult:   QueryResult{},
 	}
 
-	hasGoodExpectation := false
-	for i := range q.Expectations {
-		r.SearchQuality[i] = SQ_NO_EXPECTATION
-		r.Rank[i] = -1
-		if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
-			hasGoodExpectation = true
+	if !skipExpectations {
+		hasGoodExpectation := false
+		for i := range q.Expectations {
+			r.SearchQuality[i] = SQ_NO_EXPECTATION
+			r.Rank[i] = -1
+			if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
+				hasGoodExpectation = true
+			}
 		}
-	}
-	// Optimization, don't fetch query if no good expectations.
-	if !hasGoodExpectation {
-		return r
+		// Optimization, don't fetch query if no good expectations.
+		if !hasGoodExpectation {
+			return r
+		}
 	}
 
 	urlTemplate := "%s/search?q=%s&language=%s&page_no=1&page_size=10&sort_by=relevance&deb=true"
@@ -547,9 +624,11 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	resp, err := http.Get(url)
 	if err != nil {
 		log.Warnf("Error %+v", err)
-		for i := range q.Expectations {
-			if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
-				r.SearchQuality[i] = SQ_SERVER_ERROR
+		if !skipExpectations {
+			for i := range q.Expectations {
+				if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
+					r.SearchQuality[i] = SQ_SERVER_ERROR
+				}
 			}
 		}
 		r.err = err
@@ -562,9 +641,11 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 		}
 		errMsg := fmt.Sprintf("Status not ok (%d), body: %s, url: %s.", resp.StatusCode, string(bodyBytes), url)
 		log.Warn(errMsg)
-		for i := range q.Expectations {
-			if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
-				r.SearchQuality[i] = SQ_SERVER_ERROR
+		if !skipExpectations {
+			for i := range q.Expectations {
+				if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
+					r.SearchQuality[i] = SQ_SERVER_ERROR
+				}
 			}
 		}
 		r.err = errors.New(errMsg)
@@ -574,79 +655,154 @@ func EvaluateQuery(q EvalQuery, serverUrl string) EvalResult {
 	defer resp.Body.Close()
 	if err := json.NewDecoder(resp.Body).Decode(&queryResult); err != nil {
 		log.Warnf("Error decoding %+v", err)
-		for i := range q.Expectations {
-			if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
-				r.SearchQuality[i] = SQ_SERVER_ERROR
+		if !skipExpectations {
+			for i := range q.Expectations {
+				if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
+					r.SearchQuality[i] = SQ_SERVER_ERROR
+				}
 			}
 		}
 		r.err = err
 		return r
 	}
-	for i := range q.Expectations {
-		if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
-			sq := SQ_UNKNOWN
-			if q.Expectations[i].Type == ET_BAD_STRUCTURE {
-				sq = SQ_BAD_STRUCTURE
-			}
-			rank := -1
-			for j, hit := range queryResult.SearchResult.Hits.Hits {
-				hitSource := HitSource{}
-				if hit.Type != consts.SEARCH_RESULT_TWEETS_MANY {
-					if err := json.Unmarshal(*hit.Source, &hitSource); err != nil {
-						log.Warnf("Error unmarshling source %+v", err)
-						sq = SQ_SERVER_ERROR
-						rank = -1
-						r.err = err
+
+	if !skipExpectations {
+		for i := range q.Expectations {
+			if EXPECTATIONS_FOR_EVALUATION[q.Expectations[i].Type] {
+				sq := SQ_UNKNOWN
+				if q.Expectations[i].Type == ET_BAD_STRUCTURE {
+					sq = SQ_BAD_STRUCTURE
+				}
+				rank := -1
+				for j, hit := range queryResult.SearchResult.Hits.Hits {
+					hitSource := HitSource{}
+					if hit.Type != consts.SEARCH_RESULT_TWEETS_MANY {
+						if err := json.Unmarshal(*hit.Source, &hitSource); err != nil {
+							log.Warnf("Error unmarshling source %+v", err)
+							sq = SQ_SERVER_ERROR
+							rank = -1
+							r.err = err
+							break
+						}
+					}
+					if HitMatchesExpectation(hit, hitSource, q.Expectations[i]) {
+						rank = j + 1
+						if j <= 2 {
+							sq = SQ_GOOD
+						} else {
+							sq = SQ_REGULAR
+						}
 						break
 					}
 				}
-				if HitMatchesExpectation(hit, hitSource, q.Expectations[i]) {
-					rank = j + 1
-					if j <= 2 {
-						sq = SQ_GOOD
-					} else {
-						sq = SQ_REGULAR
-					}
-					break
-				}
+				r.SearchQuality[i] = sq
+				r.Rank[i] = rank
 			}
-			r.SearchQuality[i] = sq
-			r.Rank[i] = rank
 		}
+	}
+
+	if skipExpectations {
+		r.QueryResult = queryResult
 	}
 
 	return r
 }
 
-func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, error) {
+func EvalScrape(queries []EvalQuery, serverUrl string, skipExpectations bool) ([]EvalResult, error) {
 	log.Infof("Evaluating %d queries on %s.", len(queries), serverUrl)
-	ret := EvalResults{}
-	ret.UniqueMap = make(map[int]float64)
-	ret.WeightedMap = make(map[int]float64)
+	evalResults := []EvalResult(nil)
 
-	evalResults := make([]EvalResult, len(queries))
+	in := make(chan EvalQuery)
+	go func() {
+		for i := range queries {
+			in <- queries[i]
+		}
+		close(in)
+	}()
+	out := make(chan EvalResult)
 
+	var err error
+	go func() {
+		err = EvalScrapeStreaming(in, out, serverUrl, skipExpectations)
+	}()
+
+	for {
+		evalResult, ok := <-out
+		if !ok {
+			break
+		} else {
+			evalResults = append(evalResults, evalResult)
+		}
+	}
+
+	sort.SliceStable(evalResults, func(i, j int) bool {
+		return evalResults[i].Order < evalResults[j].Order
+	})
+
+	log.Infof("Finished evaluating. Returning %d results.", len(evalResults))
+	return evalResults, err
+}
+
+// In case of error, this function will close the |out| channel.
+// In case of |in| closed, |out| will be closed after everything scraped.
+func EvalScrapeStreaming(in chan EvalQuery, out chan EvalResult, serverUrl string, skipExpectations bool) error {
 	var doneWG sync.WaitGroup
-	paralellism := 5
+
+	// Max inflight queries.
+	paralellism := 10
 	c := make(chan bool, paralellism)
 	for i := 0; i < paralellism; i++ {
 		c <- true
 	}
-	log.Infof("C: %d", len(c))
-	rate := time.Second / 10
+
+	// |RATE| queries per second.
+	RATE := 10
+	rate := time.Second / time.Duration(RATE)
 	throttle := time.Tick(rate)
-	for i, q := range queries {
-		<-throttle // rate limit our Service.Method RPCs
-		<-c
+
+	log.Infof("Scrape streaming parralellism: %d. Rate: %d per second.", len(c), RATE)
+
+	sent := 0
+	read := 0
+	for {
+		q, ok := <-in
+		if !ok {
+			log.Debugf("In is closed now (sent %d, read %d). Breaking.", sent, read)
+			break
+		} else {
+			read++
+		}
+
+		<-throttle // Rate limit our Service.Method RPCs
+		<-c        // Limit max inflight queries.
 		doneWG.Add(1)
-		go func(i int, q EvalQuery) {
+
+		go func(q EvalQuery, order int) {
 			defer doneWG.Done()
 			defer func() { c <- true }()
-			evalResults[i] = EvaluateQuery(q, serverUrl)
-			log.Infof("Done %d / %d", i, len(queries))
-		}(i, q)
+			evalResult := EvaluateQuery(q, serverUrl, skipExpectations)
+			evalResult.Order = order
+			out <- evalResult
+			sent++
+			log.Debugf("Done sent %d read %d (%s).", sent, read, serverUrl)
+		}(q, read)
 	}
+
 	doneWG.Wait()
+	log.Infof("Closing out (sent %d, read %d)", sent, read)
+	close(out)
+	return nil
+}
+
+func Eval(queries []EvalQuery, serverUrl string) (EvalResults, map[int][]Loss, error) {
+	ret := EvalResults{}
+	ret.UniqueMap = make(map[int]float64)
+	ret.WeightedMap = make(map[int]float64)
+
+	evalResults, err := EvalScrape(queries, serverUrl, false /*skipExpectations*/)
+	if err != nil {
+		return ret, nil, err
+	}
 
 	for i, r := range evalResults {
 		q := queries[i]
@@ -872,13 +1028,13 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 				</tr>`,
 				goodStyle, tdStyle, quality,
 				goodStyle, tdStyle,
-				100*counters[1]/totalCounters[1], // Weighted percentage.
+				100*counters[1]/totalCounters[1],                                                                           // Weighted percentage.
 				diffToHtml(100*counters[1]/totalCounters[1]-100*counters[3]/totalCounters[3], false /*round*/, true /*%*/), // Weighted percentage diff.
 				tdStyle,
-				100*counters[0]/totalCounters[0], // Unique Percentage.
+				100*counters[0]/totalCounters[0],                                                                           // Unique Percentage.
 				diffToHtml(100*counters[0]/totalCounters[0]-100*counters[2]/totalCounters[2], false /*round*/, true /*%*/), // Unique percentage diff.
 				tdStyle,
-				(int)(counters[0]), // Unique.
+				(int)(counters[0]),                                               // Unique.
 				diffToHtml(counters[0]-counters[2], true /*round*/, false /*%*/), // Unique diff.
 			))
 		}
@@ -1268,4 +1424,293 @@ func getLatestUIDOfCollection(contentType string, db *sql.DB) (string, error) {
 
 	return uid, nil
 
+}
+
+func evalResultToHitSources(result EvalResult) ([]HitSource, error) {
+	sources := []HitSource(nil)
+	if result.QueryResult.SearchResult != nil &&
+		result.QueryResult.SearchResult.Hits != nil &&
+		result.QueryResult.SearchResult.Hits.Hits != nil {
+		for _, hit := range result.QueryResult.SearchResult.Hits.Hits {
+			hitSource := HitSource{}
+			if err := json.Unmarshal(*hit.Source, &hitSource); err != nil {
+				// Check if hit source is carrousel (tweets for example)
+				carrousel := []*elastic.SearchHit{}
+				if err = json.Unmarshal(*hit.Source, &carrousel); err != nil {
+					return nil, err
+				}
+				for _, searchHit := range carrousel {
+					carrouselHitSource := HitSource{}
+					if err = json.Unmarshal(*searchHit.Source, &carrouselHitSource); err != nil {
+						return nil, err
+					}
+					hitSource.CarrouselHitSources = append(hitSource.CarrouselHitSources, carrouselHitSource)
+				}
+			}
+			sources = append(sources, hitSource)
+		}
+	}
+	return sources, nil
+}
+
+func EvalResultDiff(evalQuery EvalQuery, expResult EvalResult, baseResult EvalResult) (ResultDiff, error) {
+	ret := ResultDiff{}
+	expSources, err := evalResultToHitSources(expResult)
+	if err != nil {
+		ret.ErrorStr = err.Error()
+		return ret, err
+	}
+	baseSources, err := evalResultToHitSources(baseResult)
+	if err != nil {
+		ret.ErrorStr = err.Error()
+		return ret, err
+	}
+	ret.Query = evalQuery.Query
+	i := 0
+	for i < utils.MaxInt(len(expSources), len(baseSources)) {
+		if i < utils.MinInt(len(expSources), len(baseSources)) {
+			if !HitSourcesEqual(expSources[i], baseSources[i]) {
+				ret.HitsDiffs = append(ret.HitsDiffs, HitDiff{
+					Rank:          i + 1,
+					ExpHitSource:  expSources[i],
+					BaseHitSource: baseSources[i],
+				})
+			}
+		} else if i < len(expSources) {
+			ret.HitsDiffs = append(ret.HitsDiffs, HitDiff{
+				Rank:         i + 1,
+				ExpHitSource: expSources[i],
+			})
+		} else { // i < len(baseSources)
+			ret.HitsDiffs = append(ret.HitsDiffs, HitDiff{
+				Rank:          i + 1,
+				BaseHitSource: baseSources[i],
+			})
+		}
+		i++
+	}
+	if len(expSources) != len(baseSources) {
+		ret.ErrorStr = fmt.Sprintf("Different number of hits, exp: %d, base: %d", len(expSources), len(baseSources))
+	}
+	return ret, nil
+}
+
+func EvalResultDiffHtml(resultDiff ResultDiff) (string, error) {
+	if len(resultDiff.HitsDiffs) == 0 && resultDiff.ErrorStr == "" {
+		return "", nil
+	}
+	parts := []string{fmt.Sprintf("[%s]", resultDiff.Query)}
+	for i := range resultDiff.HitsDiffs {
+		parts = append(parts, fmt.Sprintf(
+			"\t%d: %s <> %s",
+			resultDiff.HitsDiffs[i].Rank,
+			resultDiff.HitsDiffs[i].ExpHitSource,
+			resultDiff.HitsDiffs[i].BaseHitSource,
+		))
+	}
+	if resultDiff.ErrorStr != "" {
+		parts = append(parts, resultDiff.ErrorStr)
+	}
+	return strings.Join(parts, "\n"), nil
+}
+
+func EvalResultsDiffsHtml(resultsDiffs ResultsDiffs) (string, error) {
+	html := []string{}
+	for i := range resultsDiffs.ResultsDiffs {
+		if part, err := EvalResultDiffHtml(resultsDiffs.ResultsDiffs[i]); err != nil {
+			return "", err
+		} else {
+			html = append(html, part)
+		}
+	}
+	return strings.Join(html, "\n"), nil
+}
+
+func EvalResultsDiffs(evalSet []EvalQuery, expResults []EvalResult, baseResults []EvalResult) (ResultsDiffs, error) {
+	ret := ResultsDiffs{}
+	minLen := utils.MinInt(len(evalSet), utils.MinInt(len(expResults), len(baseResults)))
+	if minLen != len(evalSet) || minLen != len(expResults) || minLen != len(baseResults) {
+		ret.ErrorStr = fmt.Sprintf(
+			"Expected all inputs to be of length %d, got eval set: %d, exp results: %d, base results: %d.",
+			minLen, len(evalSet), len(expResults), len(baseResults))
+	}
+	i := 0
+	for i < minLen {
+		if diff, err := EvalResultDiff(evalSet[i], expResults[i], baseResults[i]); err != nil {
+			ret.ErrorStr = err.Error()
+			return ret, err
+		} else if len(diff.HitsDiffs) != 0 || diff.ErrorStr != "" {
+			ret.ResultsDiffs = append(ret.ResultsDiffs, diff)
+			ret.Diffs++
+			ret.DiffsWeight += evalSet[i].Weight
+		}
+		ret.Scraped++
+		ret.TotalWeight += evalSet[i].Weight
+		i++
+	}
+	return ret, nil
+}
+
+// Assuming |expResults| and |baseResults| are ordered by |Order| field.
+func EvalResultsDiffsCount(evalSet []EvalQuery, expResults []EvalResult, baseResults []EvalResult) (int, error) {
+	diffCount := 0
+
+	expIdx := 0
+	baseIdx := 0
+	for expIdx < len(expResults) && baseIdx < len(baseResults) {
+		baseOrder := baseResults[baseIdx].Order
+		expOrder := expResults[expIdx].Order
+		if baseOrder > expOrder {
+			expIdx++
+		} else if expOrder > baseOrder {
+			baseIdx++
+		} else {
+			if diff, err := EvalResultDiff(evalSet[baseOrder], expResults[expIdx], baseResults[baseIdx]); err != nil {
+				return 0, err
+			} else if len(diff.HitsDiffs) != 0 || diff.ErrorStr != "" {
+				diffCount++
+			}
+			expIdx++
+			baseIdx++
+		}
+	}
+	return diffCount, nil
+}
+
+func randomSelect(evalSet []EvalQuery, index int, sum float64) {
+	r := rand.Float64() * sum
+	swapIndex := index
+	for r-evalSet[swapIndex].Weight > 0 && swapIndex < len(evalSet) {
+		r -= evalSet[swapIndex].Weight
+		swapIndex++
+	}
+	log.Debugf("Next final (%d) index: %d", index, swapIndex)
+	evalSet[swapIndex], evalSet[index] = evalSet[index], evalSet[swapIndex]
+}
+
+// If |diffsLimit| > 0 will limit the diff to constant number of queries.
+func EvalQuerySetDiff(evalSet []EvalQuery, baseServerUrl, expServerUrl string, diffsLimit int32) (ResultsDiffs, error) {
+	if baseServerUrl == "" || expServerUrl == "" {
+		errStr := "Both baseServerUrl and expServerUrl must not be empty."
+		return ResultsDiffs{ErrorStr: errStr}, errors.New(errStr)
+	}
+
+	baseIn := make(chan EvalQuery)
+	expIn := make(chan EvalQuery)
+	diffCount := int32(0)
+	evalSetQueriesUsed := 0
+
+	totalWeight := float64(0)
+	for i := range evalSet {
+		totalWeight += evalSet[i].Weight
+	}
+
+	go func() {
+		for ; evalSetQueriesUsed <= len(evalSet); evalSetQueriesUsed++ {
+			diff := atomic.LoadInt32(&diffCount)
+			if (diffsLimit > 0 && diff >= diffsLimit) || evalSetQueriesUsed == len(evalSet) {
+				log.Infof("Closing input stream: (diffs) %d >= %d || (len) %d == %d ", diff, diffsLimit, evalSetQueriesUsed, len(evalSet))
+				close(baseIn)
+				close(expIn)
+				break
+			}
+			randomSelect(evalSet, evalSetQueriesUsed, totalWeight)
+			totalWeight -= evalSet[evalSetQueriesUsed].Weight
+			// Following will sync exp and base stack to scrape in one query at a time.
+			expIn <- evalSet[evalSetQueriesUsed]
+			baseIn <- evalSet[evalSetQueriesUsed]
+		}
+	}()
+
+	baseOut := make(chan EvalResult)
+	expOut := make(chan EvalResult)
+
+	var baseErr error
+	var expErr error
+
+	go func() {
+		baseErr = EvalScrapeStreaming(baseIn, baseOut, baseServerUrl, true /*skipExpectations*/)
+	}()
+	go func() {
+		expErr = EvalScrapeStreaming(expIn, expOut, expServerUrl, true /*skipExpectations*/)
+	}()
+
+	baseEvalResults := []EvalResult(nil)
+	expEvalResults := []EvalResult(nil)
+
+	for {
+		baseEvalResult, baseOk := <-baseOut
+		expEvalResult, expOk := <-expOut
+		if !baseOk || !expOk {
+			break
+		} else {
+			baseEvalResults = append(baseEvalResults, baseEvalResult)
+			expEvalResults = append(expEvalResults, expEvalResult)
+
+			// Sort results and check number of diffs.
+			sort.SliceStable(baseEvalResults, func(i, j int) bool {
+				return baseEvalResults[i].Order < baseEvalResults[j].Order
+			})
+			sort.SliceStable(expEvalResults, func(i, j int) bool {
+				return expEvalResults[i].Order < expEvalResults[j].Order
+			})
+
+			// |diffCount| is shared with the goroutine adding scrapes.
+			if diff, err := EvalResultsDiffsCount(evalSet, expEvalResults, baseEvalResults); err != nil {
+				return ResultsDiffs{ErrorStr: err.Error()}, err
+			} else {
+				log.Infof("Update diff count to: %d %d %d", diff, len(expEvalResults), len(baseEvalResults))
+				atomic.StoreInt32(&diffCount, int32(diff))
+			}
+		}
+	}
+
+	if baseErr != nil {
+		return ResultsDiffs{ErrorStr: baseErr.Error()}, baseErr
+	}
+	if expErr != nil {
+		return ResultsDiffs{ErrorStr: expErr.Error()}, expErr
+	}
+
+	// Generate eval diff.
+	return EvalResultsDiffs(evalSet[:evalSetQueriesUsed], expEvalResults, baseEvalResults)
+}
+
+// Return map from filename to query set.
+func ReadEvalSets(glob string) (map[string][]EvalQuery, error) {
+	matches, err := filepath.Glob(glob)
+	if err != nil {
+		return nil, err
+	}
+	ret := make(map[string][]EvalQuery)
+	for i := range matches {
+		if evalSet, err := ReadEvalDiffSet(matches[i]); err != nil {
+			return nil, err
+		} else {
+			ret[matches[i]] = evalSet
+		}
+	}
+	return ret, nil
+}
+
+func EvalSearchDataQuerySetsDiff(baseServerUrl, expServerUrl string, diffsLimit int32) ([]ResultsDiffs, error) {
+	searchDataFolder := viper.GetString("test.search-data")
+	if diffsLimit <= 0 {
+		diffsLimit = 200
+	}
+	if evalSets, err := ReadEvalSets(path.Join(searchDataFolder, "*.*.weighted_queries.csv")); err != nil {
+		return nil, err
+	} else {
+		ret := []ResultsDiffs(nil)
+		for i := range evalSets {
+			// TODO: Make |diffsLimit| a config variable or flag.
+			if diffs, err := EvalQuerySetDiff(evalSets[i], baseServerUrl, expServerUrl, diffsLimit); err != nil {
+				return nil, err
+			} else {
+				ret = append(ret, diffs)
+			}
+		}
+
+		return ret, nil
+	}
 }

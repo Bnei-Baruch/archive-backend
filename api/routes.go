@@ -39,6 +39,7 @@ func SetupRoutes(router *gin.Engine) {
 		router.StaticFile("/eval.html", "./search/eval.html")
 		router.POST("/eval/query", EvalQueryHandler)
 		router.POST("/eval/set", EvalSetHandler)
+		router.POST("/eval/sxs", EvalSxSHandler)
 	}
 
 	router.GET("/feeds/rus_zohar", FeedRusZohar)
@@ -54,10 +55,12 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/feeds/morning_lesson", FeedMorningLesson)
 
 	cms := router.Group("/cms")
-	cms.GET("/person/:id", CMSPerson)
-	cms.GET("/banner", CMSBanner)
-	cms.GET("/topic", CMSTopic)
-	cms.GET("/assets/*path", CMSAsset)
+	cms.GET("/persons/:id", CMSPerson)
+	cms.GET("/banners/:id", CMSBanner)
+	cms.GET("/sources/:id", CMSSource)
+	cms.GET("/sourceIndex/:id", CMSSourceIndex)
+	cms.GET("/topics", CMSTopics)
+	cms.GET("/images/*path", CMSImage)
 
 	//router.GET("/_recover", func(c *gin.Context) {
 	//	panic("test recover")

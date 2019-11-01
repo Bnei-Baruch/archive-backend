@@ -15,6 +15,133 @@
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
             }
+
+            input {
+                width: 200px;
+            }
+
+            .sxs-table table {
+                border-collapse: collapse;
+                border-spacing: 0;
+            }
+
+            /*
+            .sxs-table table td {
+                border: solid;
+            }
+            */
+
+            .sxs-table {
+                border-collapse: collapse;
+                border-spacing: 0;
+            }
+
+            /*
+			.sxs-table > tr > td {
+                border-bottom: solid;
+                border-top: solid;
+            }
+			*/
+
+            .sxs-table table td:first-child {
+                max-width: 30px;
+                min-width: 30px;
+            }
+
+            .sxs-table td > div {
+                display: inline-block;
+                text-overflow: ellipsis;
+                max-width: 100px;
+                min-width: 100px;
+                overflow: hidden;
+                white-space: nowrap;
+            }
+
+            .sxs-table td > div:first-child {
+                max-width: 300px;
+                min-width: 300px;
+            }
+
+            .sxs-table table td {
+                border-right: solid;
+                border-left: solid;
+            }
+
+			/* Tooltip */
+			[data-tooltip] {
+			  position: relative;
+			  z-index: 10;
+			}
+
+			/* Positioning and visibility settings of the tooltip */
+			[data-tooltip]:before,
+			[data-tooltip]:after {
+			  position: absolute;
+			  visibility: hidden;
+			  opacity: 0;
+			  left: 50%;
+			  bottom: calc(100% + 5px);
+			  pointer-events: none;
+			  transition: 0.2s;
+			  will-change: transform;
+			}
+
+			/* The actual tooltip with a dynamic width */
+			[data-tooltip]:before {
+			  content: attr(data-tooltip);
+			  padding: 10px 18px;
+			  min-width: 50px;
+			  max-width: 300px;
+			  width: max-content;
+			  width: -moz-max-content;
+			  border-radius: 6px;
+			  font-size: 14px;
+			  background-color: rgba(59, 72, 80, 0.9);
+			  background-image: linear-gradient(30deg,
+				rgba(59, 72, 80, 0.44),
+				rgba(59, 68, 75, 0.44),
+				rgba(60, 82, 88, 0.44));
+			  box-shadow: 0px 0px 24px rgba(0, 0, 0, 0.2);
+			  color: #fff;
+			  text-align: center;
+			  white-space: pre-wrap;
+			  transform: translate(-50%, -5px) scale(0.5);
+			}
+
+			/* Tooltip arrow */
+			[data-tooltip]:after {
+			  content: '';
+			  border-style: solid;
+			  border-width: 5px 5px 0px 5px;
+			  border-color: rgba(55, 64, 70, 0.9) transparent transparent transparent;
+			  transition-duration: 0s; /* If the mouse leaves the element, 
+										  the transition effects for the 
+										  tooltip arrow are "turned off" */
+			  transform-origin: top;   /* Orientation setting for the
+										  slide-down effect */
+			  transform: translateX(-50%) scaleY(0);
+			}
+
+			/* Tooltip becomes visible at hover */
+			[data-tooltip]:hover:before,
+			[data-tooltip]:hover:after {
+			  visibility: visible;
+			  opacity: 1;
+			}
+			/* Scales from 0.5 to 1 -> grow effect */
+			[data-tooltip]:hover:before {
+			  transition-delay: 0.3s;
+			  transform: translate(-50%, -5px) scale(1);
+			}
+			/* Slide down effect only on mouseenter (NOT on mouseleave) */
+			[data-tooltip]:hover:after {
+			  transition-delay: 0.5s; /* Starting after the grow effect */
+			  transition-duration: 0.2s;
+			  transform: translateX(-50%) scaleY(1);
+			}
+
+
+
         </style>
         <script>
             const sq = (s) => document.querySelector(s);
@@ -25,11 +152,182 @@
                 const table = sq(s);
                 const tr = document.createElement('tr');
                 table.appendChild(tr);
-                row.forEach(cellText => {
-                    const cell = document.createElement('td');
-                    cell.innerHTML = cellText;
-                    tr.appendChild(cell);
+                row.forEach(cell => {
+					if (typeof cell === 'string') {
+						cell = {html: cell};
+					}
+                    const cellTd = document.createElement('td');
+                    cellTd.innerHTML = cell.html;
+					['rowspan', 'style'].forEach((attr) => {
+						if (attr in cell) {
+							cellTd.setAttribute(attr, cell[attr]);
+						}
+					});
+                    tr.appendChild(cellTd);
                 });
+            };
+            const urlParam = (name) => {
+                const url = new URL(window.location.href);
+                return url.searchParams.get(name);
+            }
+            window.onload = () => {
+                const serverUrl = sq('#server-url');
+                serverUrl.value = urlParam('server-url') || window.location.origin;
+                const expServerUrl = sq('#exp-server-url');
+                expServerUrl.value = urlParam('exp-server-url') || window.location.origin;
+                const baseServerUrl = sq('#base-server-url');
+                baseServerUrl.value = urlParam('base-server-url') || 'https://kabbalahmedia.info/backend';
+                const expServerFrontendUrl = sq('#exp-server-frontend-url');
+                expServerFrontendUrl.value = urlParam('exp-server-frontend-url') || '';
+                const baseServerFrontendUrl = sq('#base-server-frontend-url');
+                baseServerFrontendUrl.value = urlParam('base-server-frontend-url') || 'https://kabbalahmedia.info';
+                const diffsLimit = sq('#diffs-limit');
+                diffsLimit.value = urlParam('diffs-limit') || 200;
+            };
+
+            const RunSxS  = () => {
+                console.log('Running SxS');
+
+                const expServerFrontendUrl = sq('#exp-server-frontend-url');
+                const baseServerFrontendUrl = sq('#base-server-frontend-url');
+				if (!expServerFrontendUrl.value || !baseServerFrontendUrl.value) {
+					alert('Please set exp and base server frontend url.');
+					return;
+				}
+
+                hide('#sxs-results');
+                show('#sxs-loader');
+
+                const expServerUrl = sq('#exp-server-url');
+                const baseServerUrl = sq('#base-server-url');
+                const diffsLimit = sq('#diffs-limit');
+                const request  = {
+                    diffs_limit: parseInt(diffsLimit.value, 10),
+                    base_server_url: baseServerUrl.value,
+                    exp_server_url: expServerUrl.value,
+                };
+                fetch('eval/sxs', {
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    method: "POST",
+                    body: JSON.stringify(request),
+                }).then(response => {
+                    response.json().then(data => {
+                        console.log(data);
+                        show('#sxs-results');
+
+                        const tables = sq('#sxs-tables');
+						while (tables.firstChild) {
+							tables.removeChild(tables.firstChild);
+						}
+                        data.forEach((diff, idx) => {
+                            if (diff.error_str) {
+                                const errorDiv = document.createElement('div');
+                                tables.appendChild(errorDiv);
+                                errorDiv.innerHTML = diff.error_str;
+                            }
+                            // Add stat info.
+                            const stat = document.createElement('div');
+                            tables.appendChild(stat);
+                            const percent = (number) => `${Math.floor(number*10000)/100}%`
+                            stat.innerHTML = [
+                                `Diffs: ${diff.diffs} `,
+                                `Scraped: ${diff.scraped} `,
+                                `Impact: ${percent(diff.diffs/diff.scraped)}. `,
+                                `DiffsWeight: ${diff.diffs_weight} `,
+                                `Scraped Weight: ${diff.total_weight} `,
+                                `Weighted Impact: ${percent(diff.diffs_weight/diff.total_weight)}.`,
+                            ].join('');
+
+                            const table = document.createElement('table');
+                            const tableId = 'sxs-table-' + idx;
+                            table.setAttribute('id', tableId);
+                            table.setAttribute('class', 'sxs-table');
+                            tables.appendChild(table);
+                            diff.results_diffs.forEach((result_diff) => {
+								const queryLink = (query, isExp) => {
+									let host = isExp ? sq('#exp-server-frontend-url').value : sq('#base-server-frontend-url').value;
+									return `${host}/search?q=${query}`;
+								};
+								console.log(result_diff);
+								rowSpan = result_diff.hits_diffs && result_diff.hits_diffs.length || 1;
+                                const cells = [{
+									html: result_diff.query,
+									rowspan: rowSpan,
+									style: 'border-top: solid',
+								},{
+									html: `<a href="${queryLink(result_diff.query, true)}" target="_blank">Exp</a>`,
+									rowspan: rowSpan,
+									style: 'border-top: solid',
+								},{
+									html: `<a href="${queryLink(result_diff.query, false)}" target="_blank">Base</a>`,
+									rowspan: rowSpan,
+									style: 'border-top: solid',
+								}];
+                                // Error column.
+                                cells.push({
+                                    html: result_diff.error_str ? 'Error: ' + result_diff.error_str : '',
+                                    rowspan: rowSpan,
+                                    style: 'border-top: solid',
+                                });
+                                const hitSourceToHtml = (hs) => {
+                                    if ('landing_page' in hs && hs.landing_page) {
+                                        return `<div>Landing Page: ${hs.landing_page}</div>`;
+                                    } else if ('carrousel' in hs) {
+                                        return ['<div style="position: relative; max-width: 430px; min-width: 430px; border: solid darkgray;">',
+                                                    '<div style="position: absolute; right: 6px; top: 2px;">carrousel</div>',
+                                                    '<div style="height: 100px; overflow: scroll; max-width: 430px; min-width: 430px;">',
+                                                        hs.carrousel.map((oneHs) => hitSourceToHtml(oneHs)).join(''),
+                                                    '</div>',
+                                                '</div>'].join('');
+                                    } else {
+                                        const titleOrContent = (hs) => hs.title || hs.content || '';
+                                        return [
+                                            `<div style="max-width: 300px; min-width: 300px; overflow: hidden; text-overflow: ellipsis;"
+                                                  data-tooltip="${titleOrContent(hs).replace(/"/g, '&quot;')}" style="overflow: visible;"><div>${titleOrContent(hs)}</div></div>`,
+                                            `<div>${hs.mdb_uid}</div>`,
+                                            `<div>${hs.result_type}</div>`,
+                                            `<div>${hs.landing_page}</div>`,
+                                        ].join('');
+                                    }
+                                };
+                                if (!result_diff.hits_diffs) {
+                                    result_diff.hits_diffs = [];
+                                }
+                                const queryDiffTable = result_diff.hits_diffs.map((hd) => [
+                                    {
+                                        html: hd.rank,
+                                        style: '',
+                                    },
+                                    {
+                                        html: hitSourceToHtml(hd.exp_hit_source),
+                                        style: 'border-left: solid;',
+                                    },
+                                    {
+                                        html: hitSourceToHtml(hd.base_hit_source),
+                                        style: 'border-left: solid;',
+                                    },
+                                ]);
+                                queryDiffTable.forEach((row, rowIdx) => {
+                                    row.forEach((cell) => {
+                                        if (rowIdx === 0) {
+                                            cell.style += 'border-top: solid;';
+                                        }
+                                        cells.push(cell);
+                                    });
+                                    tableAddRow('#' + tableId, cells);
+                                    cells.length = 0;
+                                });
+                            });
+                        });
+
+                        const debugDiv = sq('#sxs-debug');
+                        //debugDiv.innerHTML = JSON.stringify(data);
+                        hide('#sxs-loader');
+                    });
+                })
             };
 
             const Evaluate = () => {
@@ -145,9 +443,6 @@
                 </td>
                 <td>
                     <input id="server-url" type="text">
-                </td>
-                <td>
-                    <span>Leave empty for this server. Example: http://rt-dev.kbb1.com:8080/</span>
                 </td>
             </tr>
         </table>
@@ -268,6 +563,25 @@ SQ_GOOD           = 4
             <div id="results"></div>
             <h3>Losses</h3>
             <div id="losses"></div>
+        </div>
+        <div>
+            <hr />
+            <h2>Run SxS</h2>
+            <div>
+                Diffs limit: <input id="diffs-limit" type="text">
+            </div>
+            <div>
+                Exp server url: &nbsp;<input id="exp-server-url" type="text">&nbsp;<input id="exp-server-frontend-url" type="text">
+            </div>
+            <div>
+                Base server url: <input id="base-server-url" type="text">&nbsp;<input id="base-server-frontend-url" type="text">
+            </div>
+            <button onclick="RunSxS()">SxS</button>
+        </div>
+        <div id="sxs-loader" class="loader" style="display: none;"></div>
+        <div id="sxs-results" style="display: none;">
+            <div id="sxs-tables"></div>
+            <div id="sxs-debug"></div>
         </div>
     </body>
 </html>
