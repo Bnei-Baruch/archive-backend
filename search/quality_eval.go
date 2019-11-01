@@ -945,7 +945,7 @@ func rankValue(rank string) int {
 	return val
 }
 
-func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords [][]string) error {
+func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords [][]string, bottomPart string) error {
 	// Map from language => quality => (Unique, Weighted, Unique Golden, Weighted Golden)
 	data := make(map[string]map[string][]float64)
 	if err := updateVsGoldenDataFromRecords(data, records, false /*isGolden*/); err != nil {
@@ -1215,7 +1215,7 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 		htmlParts = append(htmlParts, "</table>")
 	}
 
-	htmlParts = append(htmlParts, "</body></html>")
+	htmlParts = append(htmlParts, bottomPart, "</body></html>")
 	html := strings.Join(htmlParts, "\n")
 	return ioutil.WriteFile(vsGoldenHtml, []byte(html), 0644)
 }

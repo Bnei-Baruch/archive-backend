@@ -306,7 +306,7 @@ func vsGoldenHtmlFn(cmd *cobra.Command, args []string) {
 		utils.Must(err)
 		allGoldenRecords = append(allGoldenRecords, recordsGolden[1:]...)
 	}
-	if err := search.WriteVsGoldenHTML(vsGoldenHtml, allRecords, allGoldenRecords); err != nil {
+	if err := search.WriteVsGoldenHTML(vsGoldenHtml, allRecords, allGoldenRecords, "TBD!"); err != nil {
 		log.Error(err)
 	}
 }
