@@ -61,8 +61,8 @@ func SyncCMS() {
 	log.Info("Syncing Persons...")
 	syncPersons()
 
-	//log.Info("Syncing Sources...")
-	//syncSources()
+	log.Info("Syncing Sources...")
+	syncSources()
 
 	log.Info("Switching Directories...")
 	if err = switchDirectories(); err != nil {
@@ -122,15 +122,16 @@ func syncPersons() {
 }
 
 func syncSources() {
-	for page := 1; ; page++ {
-		log.Info("Sources page ", page)
+	var sources []struct {
+		Uid      string `json:"uid"`
+		Content  string `json:"content"`
+		XContent []byte `json:"xcontent"`
+		Slug     string `json:"xslug"`
+	}
+	var err error
 
-		type sourceT struct {
-			Content string `json:"content"`
-			Slug    string `json:"xslug"`
-		}
-		var sources []sourceT
-		var err error
+	for page := 1; ; page++ {
+		log.Info("Sources -- page ", page)
 
 		url := fmt.Sprintf("%sget-sources?page=%d", config.url, page)
 		if err = getItem("sources", url, &sources); err != nil {
@@ -150,10 +151,16 @@ func syncSources() {
 			if matched {
 				source.Content = mediaLibraryRE.ReplaceAllString(source.Content, config.assetsImages)
 			}
-			if err = mkdir(0755, config.workDir, "sources", path.Dir(source.Slug)); err != nil {
+			if err = mkdir(0755, config.workDir, "sources", source.Uid); err != nil {
 				log.Fatal("make images dir", err)
 			}
-			if err = saveItem(filepath.Join(config.workDir, "sources", source.Slug), source.Content); err != nil {
+			var content []byte
+			if filepath.Ext(source.Slug) == ".html" {
+				content = []byte(source.Content)
+			} else {
+				content = source.XContent
+			}
+			if err = saveSourceItem(filepath.Join(config.workDir, "sources", source.Uid, source.Slug), content); err != nil {
 				log.Fatal("save source", err)
 			}
 		}
@@ -195,7 +202,7 @@ func mkdir(permissions os.FileMode, dirs ...string) (err error) {
 	return
 }
 
-/* Create passive directory */
+/* Create work directory */
 func prepareDirectories() (workDir string, err error) {
 	workDir = filepath.Join(config.assets, fmt.Sprint(time.Now().Unix()))
 
@@ -253,6 +260,14 @@ func saveItem(path string, v interface{}) (err error) {
 	return
 }
 
+func saveSourceItem(path string, v []byte) (err error) {
+	err = ioutil.WriteFile(path, v, 0644)
+	if err != nil {
+		return errors.Wrapf(err, "ioutil.WriteFile: %s", path)
+	}
+	return
+}
+
 func getItem(name string, url string, v interface{}) (err error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -284,13 +299,16 @@ func getItem(name string, url string, v interface{}) (err error) {
 func saveImage(image string) (err error) {
 	// create directories for images
 	if err = mkdir(0755, config.workDir, "images", path.Dir(image)); err != nil {
-		return errors.Wrapf(err,"mkdir %s", image)
+		return errors.Wrapf(err, "mkdir %s", image)
 	}
 
 	// copy images
-	res, err := http.Get(fmt.Sprintf("https://%s%s",config.imageUrl, image))
+	res, err := http.Get(fmt.Sprintf("https://%s%s", config.imageUrl, image))
 	if err != nil {
-		return errors.Wrapf(err, "http.Get %s", image)
+		res, err = http.Get(fmt.Sprintf("http://%s%s", config.imageUrl, image)) // For localhost
+		if err != nil {
+			return errors.Wrapf(err, "http.Get %s", image)
+		}
 	}
 	out, err := os.Create(filepath.Join(config.workDir, "images", image))
 	if err != nil {
