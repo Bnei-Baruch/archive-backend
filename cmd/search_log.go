@@ -120,12 +120,18 @@ func writeCsv(dist io.Writer, records [][]string) {
 	}
 }
 
-func printHtmlTr(records []string) string {
-	var ths string
-	for _, record := range records {
-		ths = fmt.Sprintf("%s<th>%s</th>", ths, record)
+func printHtmlTr(records []string, isHeaders bool, style string) string {
+	var rows string
+	var tag string
+	if isHeaders {
+		tag = "th"
+	} else {
+		tag = "td"
 	}
-	return fmt.Sprintf("<tr>%s</tr>", ths)
+	for _, record := range records {
+		rows = fmt.Sprintf("%s<%s style='%s'>%s</%s>", rows, tag, style, record, tag)
+	}
+	return fmt.Sprintf("<tr>%s</tr>", rows)
 }
 
 func queriesFn(cmd *cobra.Command, args []string) {
@@ -293,7 +299,7 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	trs := printHtmlTr([]string{"Stage", "Average", "Worst", "95 percentile", "Active"})
+	trs := printHtmlTr([]string{"Stage", "Average", "Worst", "95 percentile", "Active"}, true, "")
 	for opName, latencies := range opLatenciesMap {
 		sort.Slice(latencies, func(i, j int) bool {
 			return latencies[i] < latencies[j]
@@ -320,9 +326,9 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 		activeStr := fmt.Sprintf("%d from %d (%.2f%%)", len(latencies), len(records)-1, activePercent)
 		log.Printf("%s Stage\n\nAverage: %d\nWorst: %d\n95 percentile: %d.\nActive: %s\n",
 			opName, avg, max, percentile95, activeStr)
-		trs = fmt.Sprintf("%s%s", trs, printHtmlTr([]string{opName, strconv.Itoa(avg), strconv.Itoa(max), strconv.Itoa(percentile95), activeStr}))
+		trs = fmt.Sprintf("%s%s", trs, printHtmlTr([]string{opName, strconv.Itoa(avg), strconv.Itoa(max), strconv.Itoa(percentile95), activeStr}, false, ""))
 	}
-	operationsHtmlPart = fmt.Sprintf("<strong>Latencies</strong><br><br><table style=\"width:100%%\">%s</table>", trs)
+	operationsHtmlPart = fmt.Sprintf("<h3>Latencies</h3><table>%s</table>", trs)
 
 	//  print the worst queries
 	sortedRecords := records[1:]
@@ -334,15 +340,21 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 		return left > right
 	})
 	log.Printf("%d worst queries:\n", worstQueriesPrintCnt)
-	printCsv([][]string{records[0]}) //  print headers
-	worstQueriesTrs := printHtmlTr(records[0])
+	formatedHeaders := make([]string, 0)
+	for _, r := range records[0] {
+		fr := strings.Replace(r, ".", " ", -1)
+		formatedHeaders = append(formatedHeaders, fr)
+	}
+	printCsv([][]string{formatedHeaders}) //  print headers
+	worstQueriesTrs := printHtmlTr(formatedHeaders, true, "word-break: break-word; min-width: 170px;")
 	for i := 0; i < worstQueriesPrintCnt; i++ {
 		printCsv([][]string{sortedRecords[i]})
-		worstQueriesTrs = fmt.Sprintf("%s%s", worstQueriesTrs, printHtmlTr(sortedRecords[i]))
+		worstQueriesTrs = fmt.Sprintf("%s%s", worstQueriesTrs, printHtmlTr(sortedRecords[i], false, ""))
 	}
-	worstQueriesHtmlPart = fmt.Sprintf("<br><strong>%d worst queries<br><br></strong><table style=\"width:100%%\">%s</table>", worstQueriesPrintCnt, worstQueriesTrs)
+	worstQueriesHtmlPart = fmt.Sprintf("<h3>%d worst queries</h3><table>%s</table>", worstQueriesPrintCnt, worstQueriesTrs)
 	finalHtml := fmt.Sprintf("%s%s", operationsHtmlPart, worstQueriesHtmlPart)
 
 	err = ioutil.WriteFile(latencyOutputHtml, []byte(finalHtml), 0644)
 	utils.Must(err)
+	log.Info("HTML printed.")
 }
