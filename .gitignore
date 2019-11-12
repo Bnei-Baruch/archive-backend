@@ -12,5 +12,5 @@ sqlboiler.toml
 _vendor-*/
 
 archive-backend
-
+assets/
 bindata/bindata.go

@@ -3,7 +3,7 @@ IMPORT_PATH   = $(shell pwd | sed "s|^$(GOPATH)/src/||g")
 GIT_HASH      = $(shell git rev-parse HEAD)
 LDFLAGS       = -w -X $(IMPORT_PATH)/version.PreRelease=$(PRE_RELEASE)
 
-build: clean bindata test
+build: clean bindata
 	@go build -ldflags '$(LDFLAGS)'
 
 clean:
