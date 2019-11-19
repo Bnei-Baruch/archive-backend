@@ -217,3 +217,23 @@ func SumAndMax(values []int) (int, int) {
 	}
 	return sum, max
 }
+
+func EscapeSpecialChars(str string) string {
+	specialChars := []rune{'+', '-', '=', '&', '|', '>', '<', '!', '(', ')', '{', '}', '[', ']', '^', '"', '~', '*', '?', ':', '\\', '/'}
+	var result []rune
+	for _, char := range str {
+		charIsSpecial := false
+		for _, sc := range specialChars {
+			if sc == char {
+				charIsSpecial = true
+				break
+			}
+		}
+		if charIsSpecial {
+			result = append(result, '\\', char)
+		} else {
+			result = append(result, char)
+		}
+	}
+	return string(result)
+}
