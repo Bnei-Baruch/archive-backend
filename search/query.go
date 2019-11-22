@@ -141,33 +141,24 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("description.language", DESCRIPTION_BOOST).PhraseSlop(SLOP),
 				elastic.NewQueryStringQuery(escapedTerm).Field("content.language").PhraseSlop(SLOP),
 
-				/*// Language analyzed, exact (no slop)
+				// Language analyzed, exact (no slop)
 				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("title.language", EXACT_BOOST*TITLE_BOOST),
 				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("description.language", EXACT_BOOST*DESCRIPTION_BOOST),
-				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("content.language", EXACT_BOOST).PhraseSlop(SLOP),*/
-
-				elastic.NewMatchPhraseQuery("title.language", q.Term).Boost(EXACT_BOOST*TITLE_BOOST),
-				elastic.NewMatchPhraseQuery("description.language", q.Term).Boost(EXACT_BOOST*DESCRIPTION_BOOST),
-				elastic.NewMatchPhraseQuery("content.language", q.Term).Boost(EXACT_BOOST),
+				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("content.language", EXACT_BOOST).PhraseSlop(SLOP),
 
 				// Standard analyzed
 				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("title", STANDARD_BOOST*TITLE_BOOST).PhraseSlop(SLOP),
 				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("description", STANDARD_BOOST*DESCRIPTION_BOOST).PhraseSlop(SLOP),
 				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("content", STANDARD_BOOST).PhraseSlop(SLOP),
 
-				/*// Standard analyzed, exact (no slop).
+				// Standard analyzed, exact (no slop).
 				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("title", EXACT_BOOST*STANDARD_BOOST*TITLE_BOOST),
 				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("description", EXACT_BOOST*STANDARD_BOOST*DESCRIPTION_BOOST),
-				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("content", EXACT_BOOST*STANDARD_BOOST),*/
-
-				elastic.NewMatchPhraseQuery("title", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST),
-				elastic.NewMatchPhraseQuery("description", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
-				elastic.NewMatchPhraseQuery("content", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST),
+				elastic.NewQueryStringQuery(escapedTerm).FieldWithBoost("content", EXACT_BOOST*STANDARD_BOOST),
 			),
 		)
 	}
 	for _, exactTerm := range q.ExactTerms {
-		//escapedExact := utils.EscapeSpecialChars(exactTerm)
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
@@ -187,16 +178,6 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 				elastic.NewMatchPhraseQuery("title", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST),
-
-				/*// Language analyzed, exact (no slop)
-				elastic.NewQueryStringQuery(escapedExact).FieldWithBoost("title.language", EXACT_BOOST*TITLE_BOOST),
-				elastic.NewQueryStringQuery(escapedExact).FieldWithBoost("description.language", EXACT_BOOST*DESCRIPTION_BOOST),
-				elastic.NewQueryStringQuery(escapedExact).FieldWithBoost("content.language", EXACT_BOOST).PhraseSlop(SLOP),
-
-				// Standard analyzed, exact (no slop).
-				elastic.NewQueryStringQuery(escapedExact).FieldWithBoost("title", EXACT_BOOST*STANDARD_BOOST*TITLE_BOOST),
-				elastic.NewQueryStringQuery(escapedExact).FieldWithBoost("description", EXACT_BOOST*STANDARD_BOOST*DESCRIPTION_BOOST),
-				elastic.NewQueryStringQuery(escapedExact).FieldWithBoost("content", EXACT_BOOST*STANDARD_BOOST),*/
 			),
 		)
 	}
