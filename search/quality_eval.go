@@ -945,7 +945,7 @@ func rankValue(rank string) int {
 	return val
 }
 
-func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords [][]string) error {
+func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords [][]string, bottomPart string) error {
 	// Map from language => quality => (Unique, Weighted, Unique Golden, Weighted Golden)
 	data := make(map[string]map[string][]float64)
 	if err := updateVsGoldenDataFromRecords(data, records, false /*isGolden*/); err != nil {
@@ -1028,13 +1028,13 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 				</tr>`,
 				goodStyle, tdStyle, quality,
 				goodStyle, tdStyle,
-				100*counters[1]/totalCounters[1], // Weighted percentage.
+				100*counters[1]/totalCounters[1],                                                                           // Weighted percentage.
 				diffToHtml(100*counters[1]/totalCounters[1]-100*counters[3]/totalCounters[3], false /*round*/, true /*%*/), // Weighted percentage diff.
 				tdStyle,
-				100*counters[0]/totalCounters[0], // Unique Percentage.
+				100*counters[0]/totalCounters[0],                                                                           // Unique Percentage.
 				diffToHtml(100*counters[0]/totalCounters[0]-100*counters[2]/totalCounters[2], false /*round*/, true /*%*/), // Unique percentage diff.
 				tdStyle,
-				(int)(counters[0]), // Unique.
+				(int)(counters[0]),                                               // Unique.
 				diffToHtml(counters[0]-counters[2], true /*round*/, false /*%*/), // Unique diff.
 			))
 		}
@@ -1215,7 +1215,7 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 		htmlParts = append(htmlParts, "</table>")
 	}
 
-	htmlParts = append(htmlParts, "</body></html>")
+	htmlParts = append(htmlParts, bottomPart, "</body></html>")
 	html := strings.Join(htmlParts, "\n")
 	return ioutil.WriteFile(vsGoldenHtml, []byte(html), 0644)
 }
