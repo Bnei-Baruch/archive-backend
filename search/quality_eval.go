@@ -1565,6 +1565,8 @@ func EvalResultsDiffsCount(evalSet []EvalQuery, expResults []EvalResult, baseRes
 		} else if expOrder > baseOrder {
 			baseIdx++
 		} else {
+			//log.Infof("len(evalSet) is %d, baseOrder is %d; len(expResults) is %d, expIdx is %d; len(baseResults) is %d, baseIdx is %d;",
+			//	len(evalSet), baseOrder, len(expResults), expIdx, len(baseResults), baseIdx)
 			if diff, err := EvalResultDiff(evalSet[baseOrder], expResults[expIdx], baseResults[baseIdx]); err != nil {
 				return 0, err
 			} else if len(diff.HitsDiffs) != 0 || diff.ErrorStr != "" {
