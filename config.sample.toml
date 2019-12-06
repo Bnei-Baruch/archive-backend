@@ -15,9 +15,11 @@ test-source-content-docx="$GOPATH/src/github.com/Bnei-Baruch/archive-backend/es/
 test-sources-folder="/tmp/test-sources-folder"
 mdb-url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 url-template="postgres://localhost/%s?sslmode=disable&user=postgres"
+search-data="$GOPATH/src/github.com/Bnei-Baruch/archive-backend/search/data"
 #for windows:
 #test-source-content-docx="C://Users//[USERNAME]//go//src//github.com//Bnei-Baruch//archive-backend//es//TEST-CONTENT.docx"
 #test-sources-folder="C://test-sources-folder"
+#search-data="C://Users//[USERNAME]//go//src//github.com//Bnei-Baruch//archive-backend//search//data"
 
 [elasticsearch]
 url="http://127.0.0.1:9200"
