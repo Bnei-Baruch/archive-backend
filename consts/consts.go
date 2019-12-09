@@ -433,6 +433,7 @@ var ES_INTENT_SUPPORTED_CONTENT_TYPES = map[string]bool{
 	CT_WOMEN_LESSON:          true,
 	CT_VIDEO_PROGRAM_CHAPTER: true,
 	CT_FULL_LESSON:           true,
+	CT_CLIP:                  true,
 }
 
 // Fake index for intents.
