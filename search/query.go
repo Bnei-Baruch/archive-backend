@@ -16,6 +16,7 @@ const (
 	// Content boost.
 	TITLE_BOOST       = 2.0
 	DESCRIPTION_BOOST = 1.2
+	FULL_TITLE_BOOST  = 1.0
 
 	// Max slop.
 	SLOP = 100
@@ -129,6 +130,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchQuery("title.language", q.Term),
+					elastic.NewMatchQuery("full_title.language", q.Term),
 					elastic.NewMatchQuery("description.language", q.Term),
 					elastic.NewMatchQuery("content.language", q.Term),
 				).MinimumNumberShouldMatch(1),
@@ -137,18 +139,22 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 			elastic.NewDisMaxQuery().Query(
 				// Language analyzed
 				elastic.NewMatchPhraseQuery("title.language", q.Term).Slop(SLOP).Boost(TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title.language", q.Term).Slop(SLOP).Boost(FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description.language", q.Term).Slop(SLOP).Boost(DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content.language", q.Term).Slop(SLOP),
 				// Language analyzed, exact (no slop)
 				elastic.NewMatchPhraseQuery("title.language", q.Term).Boost(EXACT_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title.language", q.Term).Boost(EXACT_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description.language", q.Term).Boost(EXACT_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content.language", q.Term).Boost(EXACT_BOOST),
 				// Standard analyzed
 				elastic.NewMatchPhraseQuery("title", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content", q.Term).Slop(SLOP).Boost(STANDARD_BOOST),
 				// Standard analyzed, exact (no slop).
 				elastic.NewMatchPhraseQuery("title", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST),
 			),
