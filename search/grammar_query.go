@@ -7,18 +7,20 @@ import (
 )
 
 const (
-	GRAMMAR_BOOST = 50.0
+	GRAMMAR_BOOST = 100.0
 
-	SUGGEST_SIZE = 30
+	GRAMMAR_SUGGEST_SIZE = 30
+
+	GRAMMAR_SEARCH_SIZE = 2000
 )
 
 func createGrammarQuery(q *Query) elastic.Query {
 	boolQuery := elastic.NewBoolQuery()
-	if q.Term != "" {
+	if simpleQuery(q) != "" {
 		boolQuery = boolQuery.Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("rules.language", q.Term).Slop(SLOP).Boost(GRAMMAR_BOOST),
-				elastic.NewMatchPhraseQuery("rules", q.Term).Slop(SLOP).Boost(GRAMMAR_BOOST),
+				elastic.NewMatchPhraseQuery("rules.language", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
+				elastic.NewMatchPhraseQuery("rules", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
 			),
 		)
 	}
@@ -30,7 +32,8 @@ func NewSuggestGammarV2Request(query *Query, language string, preference string)
 	source := elastic.NewSearchSource().
 		Query(createGrammarQuery(query)).
 		FetchSourceContext(fetchSourceContext).
-		Size(SUGGEST_SIZE)
+		Size(GRAMMAR_SEARCH_SIZE).
+		Explain(query.Deb)
 	return elastic.NewSearchRequest().
 		SearchSource(source).
 		Index(GrammarIndexName(language)).
@@ -44,15 +47,16 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 		Suggester(
 			elastic.NewCompletionSuggester("rules_suggest").
 				Field("rules_suggest").
-				Text(query.Term).
-				Size(SUGGEST_SIZE).
+				Text(simpleQuery(query)).
+				Size(GRAMMAR_SUGGEST_SIZE).
 				SkipDuplicates(true)).
 		Suggester(
 			elastic.NewCompletionSuggester("rules_suggest.language").
 				Field("rules_suggest.language").
-				Text(query.Term).
-				Size(SUGGEST_SIZE).
-				SkipDuplicates(true))
+				Text(simpleQuery(query)).
+				Size(GRAMMAR_SUGGEST_SIZE).
+				SkipDuplicates(true)).
+		Explain(query.Deb)
 
 	return elastic.NewSearchRequest().
 		SearchSource(source).
@@ -66,6 +70,13 @@ func wordToHist(word string) map[rune]int {
 		ret[r]++
 	}
 	return ret
+}
+
+func simpleQuery(q *Query) string {
+	if q.Term == "" && len(q.ExactTerms) == 1 {
+		return q.ExactTerms[0]
+	}
+	return q.Term
 }
 
 func cmpWordHist(a, b map[rune]int) float64 {
@@ -92,7 +103,7 @@ func chooseRule(query *Query, rules []string) string {
 	if len(rules) == 0 {
 		return ""
 	}
-	queryHist := wordToHist(query.Term)
+	queryHist := wordToHist(simpleQuery(query))
 	max := float64(0)
 	maxIndex := 0
 	for i := range rules {

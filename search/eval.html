@@ -166,6 +166,17 @@
                     tr.appendChild(cellTd);
                 });
             };
+            const setUrlParam = (name, value) => {
+                const url = new URL(window.location.href);
+                url.searchParams.set(name, value);
+                window.history.pushState({ path: url.href }, '', url.href);
+            }
+            const listenToInputUpdateUrl = (elementSelector, urlParam) => {
+                const e = sq(elementSelector);
+                e.addEventListener('keyup', (event) => {
+                    setUrlParam(urlParam, event.target.value);
+                });
+            };
             const urlParam = (name) => {
                 const url = new URL(window.location.href);
                 return url.searchParams.get(name);
@@ -173,16 +184,27 @@
             window.onload = () => {
                 const serverUrl = sq('#server-url');
                 serverUrl.value = urlParam('server-url') || window.location.origin;
+                listenToInputUpdateUrl('#server-url', 'server-url');
+
                 const expServerUrl = sq('#exp-server-url');
                 expServerUrl.value = urlParam('exp-server-url') || window.location.origin;
+                listenToInputUpdateUrl('#exp-server-url', 'exp-server-url');
+
                 const baseServerUrl = sq('#base-server-url');
                 baseServerUrl.value = urlParam('base-server-url') || 'https://kabbalahmedia.info/backend';
+                listenToInputUpdateUrl('#base-server-url', 'base-server-url');
+
                 const expServerFrontendUrl = sq('#exp-server-frontend-url');
                 expServerFrontendUrl.value = urlParam('exp-server-frontend-url') || '';
+                listenToInputUpdateUrl('#exp-server-frontend-url', 'exp-server-frontend-url');
+
                 const baseServerFrontendUrl = sq('#base-server-frontend-url');
                 baseServerFrontendUrl.value = urlParam('base-server-frontend-url') || 'https://kabbalahmedia.info';
+                listenToInputUpdateUrl('#base-server-frontend-url', 'base-server-frontend-url');
+
                 const diffsLimit = sq('#diffs-limit');
                 diffsLimit.value = urlParam('diffs-limit') || 200;
+                listenToInputUpdateUrl('#diffs-limit', 'diffs-limit');
             };
 
             const RunSxS  = () => {

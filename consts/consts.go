@@ -303,6 +303,8 @@ const (
 	API_DEFAULT_PAGE_SIZE                     = 50
 	API_MAX_PAGE_SIZE                         = 1000
 	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
+	// Consider makeing a carusele and not limiting.
+	MAX_MATCHES_PER_GRAMMAR_INTENT = 3
 )
 
 const (

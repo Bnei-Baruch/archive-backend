@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 func (e *ESEngine) SuggestGrammarsV2(query *Query, preference string) (map[string][]VariablesByPhrase, error) {
@@ -210,9 +212,19 @@ func (e *ESEngine) VariableMapToFilterValues(vMap map[string][]string, language 
 	return ret
 }
 
+func updateIntentCount(intentsCount map[string][]Intent, intent Intent) {
+	intents := intentsCount[intent.Value.(GrammarIntent).LandingPage]
+	intents = append(intents, intent)
+	sort.SliceStable(intents, func(i, j int) bool {
+		return intents[i].Value.(GrammarIntent).Score > intents[j].Value.(GrammarIntent).Score
+	})
+	intents = intents[:utils.MinInt(consts.MAX_MATCHES_PER_GRAMMAR_INTENT, len(intents))]
+	intentsCount[intent.Value.(GrammarIntent).LandingPage] = intents
+}
+
 func (e *ESEngine) searchResultsToIntents(query *Query, language string, result *elastic.SearchResult) ([]Intent, error) {
 	// log.Infof("Total Hits: %d, Max Score: %.2f", result.Hits.TotalHits, *result.Hits.MaxScore)
-	intents := []Intent(nil)
+	intentsCount := make(map[string][]Intent)
 	for _, hit := range result.Hits.Hits {
 		var rule GrammarRule
 		if err := json.Unmarshal(*hit.Source, &rule); err != nil {
@@ -222,21 +234,71 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 		if len(rule.Values) != len(rule.Variables) {
 			return nil, errors.New(fmt.Sprintf("Expected Variables to be of size %d, but it is %d", len(rule.Values), len(rule.Variables)))
 		}
+
+		// Check filters match, i.e., existing query filter match at least one supported grammar intent filter.
+		if len(query.Filters) > 0 {
+			filters, filterExist := consts.GRAMMAR_INTENTS_TO_FILTER_VALUES[rule.Intent]
+			if !filterExist {
+				return nil, errors.New(fmt.Sprintf("Filters not found for intent: [%s]", rule.Intent))
+			}
+			common := false
+			for filterName, values := range query.Filters {
+				sort.Strings(values)
+				if grammarValues, ok := filters[filterName]; ok {
+					sort.Strings(grammarValues)
+					if len(utils.IntersectSortedStringSlices(values, grammarValues)) > 0 {
+						common = true
+						break
+					}
+				}
+			}
+			if !common {
+				// No matching filter found, should not trigger intent.
+				log.Infof("No common filters for intent [%s]: %+v vs %+v", rule.Intent, query.Filters, filters)
+				continue
+			}
+		}
+
 		vMap := make(map[string][]string)
 		for i := range rule.Variables {
 			vMap[rule.Variables[i]] = []string{rule.Values[i]}
 		}
 		if GrammarVariablesMatch(rule.Intent, vMap, e.cache) {
-			intents = append(intents, Intent{
+			score := *hit.Score * (float64(4) / float64(4+len(vMap))) * YearScorePenalty(vMap)
+			// Issue with tf/idf. For query [congress] the score if very low. For [arava] ok.
+			// Fix this by moving the grammar index into the common index. So tha similar tf/idf will be used.
+			// For now solve by normalizing very small scores.
+			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
+			updateIntentCount(intentsCount, Intent{
 				Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
 				Language: language,
 				Value: GrammarIntent{
 					LandingPage:  rule.Intent,
 					FilterValues: e.VariableMapToFilterValues(vMap, language),
-					Score:        *hit.Score,
+					Score:        score,
+					Explanation:  hit.Explanation,
 				},
 			})
 		}
 	}
-	return intents, nil
+	intents := []Intent(nil)
+	for _, intentsByLandingPage := range intentsCount {
+		intents = append(intents, intentsByLandingPage...)
+	}
+	// Normalize score to be from 2000 and below.
+	maxScore := 0.0
+	for i := range intents {
+		if intents[i].Value.(GrammarIntent).Score > maxScore {
+			maxScore = intents[i].Value.(GrammarIntent).Score
+		}
+	}
+	normalizedIntents := []Intent(nil)
+	for _, intent := range intents {
+		grammarIntent := intent.Value.(GrammarIntent)
+		grammarIntent.Score = 3000 * (grammarIntent.Score / maxScore)
+		intent.Value = grammarIntent
+		normalizedIntents = append(normalizedIntents, intent)
+	}
+	// log.Infof("Intents: %+v", intents)
+	return normalizedIntents, nil
 }

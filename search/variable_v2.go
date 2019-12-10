@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,9 +23,13 @@ type TranslationsV2 = map[string]map[string][]string
 // Map from variable => language => value => phrases
 type VariablesV2 = map[string]TranslationsV2
 
+const (
+	START_YEAR = 1996
+)
+
 func MakeYearVariablesV2() map[string][]string {
 	ret := make(map[string][]string)
-	year := 1996
+	year := START_YEAR
 	nowYear := time.Now().Year()
 	for year <= nowYear {
 		yearStr := fmt.Sprintf("%d", year)
@@ -32,6 +37,25 @@ func MakeYearVariablesV2() map[string][]string {
 		year++
 	}
 	return ret
+}
+
+func YearScorePenalty(vMap map[string][]string) float64 {
+	if yearStrs, ok := vMap["$Year"]; ok {
+		maxRet := 0.0
+		for _, yearStr := range yearStrs {
+			nowYear := time.Now().Year()
+			if year, err := strconv.Atoi(yearStr); err != nil || year >= nowYear {
+				return 1.0
+			} else {
+				ret := 0.3*(1-float64(nowYear-year)/float64(nowYear-START_YEAR)) + 0.7
+				if ret > maxRet {
+					maxRet = ret
+				}
+			}
+		}
+		return maxRet
+	}
+	return 1.0
 }
 
 func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
