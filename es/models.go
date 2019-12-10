@@ -25,6 +25,7 @@ type Result struct {
 
 	// Result content fields.
 	Title       string `json:"title"`
+	FullTitle   string `json:"full_title"`
 	Description string `json:"description,omitempty"`
 	Content     string `json:"content,omitempty"`
 
