@@ -47,6 +47,9 @@ func InitConfigFolder(configKey string, value *string) (string, error) {
 	}
 
 	path := viper.GetString(configKey)
+	if path == "" {
+		path = "/tmp/"
+	}
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			err := os.MkdirAll(path, 0777)
