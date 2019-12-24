@@ -31,6 +31,7 @@ type ESEngine struct {
 	ExecutionTimeLog *TimeLogMap
 	grammars         Grammars
 	TokensCache      *TokensCache
+	variables        VariablesV2
 }
 
 type ClassificationIntent struct {
@@ -70,6 +71,7 @@ func (c *TimeLogMap) Store(key string, value time.Duration) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.m[key] = value
+	fmt.Printf("%s - %s\n", key, value.String())
 }
 
 func (c *TimeLogMap) ToMap() map[string]time.Duration {
@@ -145,14 +147,15 @@ func (s bySourceFirst) Less(i, j int) bool {
 
 // TODO: All interactions with ES should be throttled to prevent downstream pressure
 
-func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager, grammars Grammars, tc *TokensCache) *ESEngine {
+func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager /*, grammars Grammars*/, tc *TokensCache, variables VariablesV2) *ESEngine {
 	return &ESEngine{
 		esc:              esc,
 		mdb:              db,
 		cache:            cache,
 		ExecutionTimeLog: NewTimeLogMap(),
-		grammars:         grammars,
-		TokensCache:      tc,
+		//grammars:         grammars,
+		TokensCache: tc,
+		variables:   variables,
 	}
 }
 
@@ -168,18 +171,21 @@ func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
 }
 
 func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference string) (interface{}, error) {
-	e.timeTrack(time.Now(), consts.LAT_GETSUGGESTIONS)
+	beforeGetSuggest := time.Now()
+	defer func() { e.timeTrack(beforeGetSuggest, consts.LAT_GETSUGGESTIONS) }()
 
 	// Run grammar suggestions in parallel.
-	grammarSuggestionsChannel := make(chan map[string][]string)
+	grammarSuggestionsChannel := make(chan map[string][]VariablesByPhrase)
 	go func() {
-		grammarSuggestions, err := e.SuggestGrammars(&query)
+		beforeSuggestSuggest := time.Now()
+		grammarSuggestions, err := e.SuggestGrammarsV2(&query, preference)
 		if err != nil {
 			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
-			grammarSuggestionsChannel <- make(map[string][]string)
+			grammarSuggestionsChannel <- make(map[string][]VariablesByPhrase)
 		} else {
 			grammarSuggestionsChannel <- grammarSuggestions
 		}
+		e.timeTrack(beforeSuggestSuggest, consts.LAT_SUGGEST_SUGGESTIONS)
 	}()
 
 	multiSearchService := e.esc.MultiSearch()
@@ -214,8 +220,9 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	}
 
 	// Merge with grammar suggestions.
-	var grammarSuggestions map[string][]string
+	var grammarSuggestions map[string][]VariablesByPhrase
 	grammarSuggestions = <-grammarSuggestionsChannel
+
 	for i, lang := range query.LanguageOrder {
 		if langSuggestions, ok := grammarSuggestions[lang]; ok && len(langSuggestions) > 0 && mr != nil && len(mr.Responses) > i {
 			r := mr.Responses[i]
@@ -227,25 +234,30 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 			}
 			for key := range r.Suggest {
 				for j := range r.Suggest[key] {
-					for _, suggestion := range langSuggestions {
-						source := struct {
-							Title string `json:"title"`
-						}{Title: suggestion}
-						sourceRawMessage, err := json.Marshal(source)
-						if err != nil {
-							return nil, err
+					for _, variablesByPhrase := range langSuggestions {
+						for suggestion, _ := range variablesByPhrase {
+							source := struct {
+								Title      string `json:"title"`
+								ResultType string `json:"result_type"`
+							}{Title: suggestion, ResultType: consts.GRAMMAR_TYPE_LANDING_PAGE}
+							sourceRawMessage, err := json.Marshal(source)
+							if err != nil {
+								return nil, err
+							}
+							raw := json.RawMessage(sourceRawMessage)
+							option := elastic.SearchSuggestionOption{
+								Text:   suggestion,
+								Source: &raw,
+							}
+							r.Suggest[key][j].Options = append([]elastic.SearchSuggestionOption{option}, r.Suggest[key][j].Options...)
 						}
-						raw := json.RawMessage(sourceRawMessage)
-						option := elastic.SearchSuggestionOption{
-							Text:   suggestion,
-							Source: &raw,
-						}
-						r.Suggest[key][j].Options = append(r.Suggest[key][j].Options, option)
 					}
 				}
 			}
 		}
 	}
+
+	// Debug. Tokens stats: fmt.Printf("--------------Count: %d, First: %d\n", countVM, countVMFirst)
 
 	// Process response
 	sRes := (*elastic.SearchResult)(nil)
@@ -326,6 +338,9 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			sh := srMap[intent.Language].Hits
 			sh.TotalHits++
 			boostedScore := float64(2000.0)
+			if intentValue.Score > 0 {
+				boostedScore = intentValue.Score
+			}
 			if sh.MaxScore != nil {
 				maxScore := math.Max(*sh.MaxScore, boostedScore)
 				sh.MaxScore = &maxScore
@@ -333,7 +348,9 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				sh.MaxScore = &boostedScore
 			}
 			intentHit := &elastic.SearchHit{}
-			// intentHit.Explanation = &intentValue.Explanation
+			if intentValue.Explanation != nil {
+				intentHit.Explanation = intentValue.Explanation
+			}
 			intentHit.Score = &boostedScore
 			intentHit.Index = consts.GRAMMAR_INDEX
 			intentHit.Type = intent.Type
@@ -475,7 +492,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}()
 
 	go func() {
-		if intents, err := e.SearchGrammars(&query); err != nil {
+		if intents, err := e.SearchGrammarsV2(&query, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
 			intentsChannel <- []Intent{}
 		} else {

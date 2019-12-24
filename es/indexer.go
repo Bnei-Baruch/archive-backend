@@ -165,7 +165,21 @@ func openIndex(indexName string, esc *elastic.Client) {
 	}
 }
 
-func UpdateSynonyms(esc *elastic.Client, namespace string, indexDate string) error {
+type IndexNameByLang func(lang string) string
+
+func IndexNameFuncByNamespaceAndDate(namespace string, indexDate string) IndexNameByLang {
+	return func(lang string) string {
+		if indexDate != "" {
+			// Use specific date index.
+			return IndexName(namespace, consts.ES_RESULTS_INDEX, lang, indexDate)
+		} else {
+			// Use prooduction (alias) index.
+			return IndexNameForServing(namespace, consts.ES_RESULTS_INDEX, lang)
+		}
+	}
+}
+
+func UpdateSynonyms(esc *elastic.Client, indexNameByLang IndexNameByLang) error {
 	folder, err := SynonymsFolder()
 	if err != nil {
 		return errors.Wrap(err, "SynonymsFolder not available.")
@@ -212,14 +226,9 @@ func UpdateSynonyms(esc *elastic.Client, namespace string, indexDate string) err
 		//  Convention: file name without extension is the language code.
 		var ext = filepath.Ext(fileInfo.Name())
 		var lang = fileInfo.Name()[0 : len(fileInfo.Name())-len(ext)]
-
-		indexName := ""
-		if indexDate != "" {
-			// Use specific date index.
-			indexName = IndexName(namespace, consts.ES_RESULTS_INDEX, lang, indexDate)
-		} else {
-			// Use prooduction (alias) index.
-			indexName = IndexNameForServing(namespace, consts.ES_RESULTS_INDEX, lang)
+		if !utils.Contains(utils.Is(consts.ALL_KNOWN_LANGS), lang) {
+			log.Warningf("Strange synonyms file: %s, skipping.", fileInfo.Name())
+			continue
 		}
 
 		filePath := filepath.Join(folder, fileInfo.Name())
@@ -248,6 +257,7 @@ func UpdateSynonyms(esc *elastic.Client, namespace string, indexDate string) err
 		body.Index.Analysis.Filter.SynonymGraph.Synonyms = keywords
 
 		// Close the index in order to update the synonyms
+		indexName := indexNameByLang(lang)
 		closeRes, err := esc.CloseIndex(indexName).Do(context.TODO())
 		if err != nil {
 			return errors.Wrapf(err, "CloseIndex: %s", indexName)
@@ -278,7 +288,7 @@ func (indexer *Indexer) ReindexAll(esc *elastic.Client) error {
 	if len(indexer.indices) == 0 {
 		return errors.New("Expected indices to be more than 0.")
 	}
-	if err := UpdateSynonyms(esc, indexer.indices[0].Namespace(), indexer.indices[0].IndexDate()); err != nil {
+	if err := UpdateSynonyms(esc, IndexNameFuncByNamespaceAndDate(indexer.indices[0].Namespace(), indexer.indices[0].IndexDate())); err != nil {
 		return errors.Wrapf(err, "Error updating synonyms.")
 	}
 	log.Info("Indexer - Synonymns updated.")
