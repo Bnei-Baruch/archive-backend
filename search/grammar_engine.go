@@ -171,7 +171,7 @@ func (g *Grammar) SearchGrammar(query *Query, tc *TokensCache, cm cache.CacheMan
 			// Uncomment for debug:
 			// log.Infof("Matched search [%s] for grammar %s, intent %s for %s. Pattern: %s", query.Original, g.HitType, g.Intent, g.Language, pattern)
 			return &Intent{
-				Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
+				Type:     consts.GRAMMAR_HIT_TYPE_LANDING_PAGE,
 				Language: g.Language,
 				Value: GrammarIntent{
 					LandingPage:  g.Intent,

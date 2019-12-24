@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode"
 
+	log "github.com/Sirupsen/logrus"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -223,6 +224,14 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 	}
 	// Reduce score for clips.
 	scoreQuery.Add(elastic.NewTermsQuery("filter_values", es.KeyValue("content_type", consts.CT_CLIP)), elastic.NewWeightFactorFunction(0.7))
+	// Increase score for Kitei-Makor!
+	for i := range q.Intents {
+		if _, ok := q.Intents[i].Value.(KiteiMakorIntent); ok {
+			log.Infof("KITEI MAKOR!")
+			scoreQuery.Add(elastic.NewTermsQuery("filter_values", consts.FILTER_KITEI_MAKOR), elastic.NewWeightFactorFunction(10))
+			break
+		}
+	}
 	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query)).ScoreMode("sum").MaxBoost(100.0).
 		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))

@@ -559,6 +559,13 @@ GRAMMARS_TEMPLATE = {
         "intent": {
           "type": "keyword",
         },
+        # List of keywords in format filter:value are required for correct
+        # filtering of this document by all different filters. Time is handled
+        # by effective_date.
+        # For example: content_type:DAILY_LESSON or tag:0db5BBS3
+        "filter_values": {
+          "type": "keyword",
+        },
         # Set of variables for a grammar rule, e.g., [congress $Year $ConventionLocation]
         # will lead to two keywords: ['$Year', '$ConventionLocation']
         "variables": {
@@ -583,10 +590,24 @@ GRAMMARS_TEMPLATE = {
         "rules_suggest": {
           "type": "completion",
           "analyzer": "standard",
+          "contexts": [
+            {
+              "name": "filter_values",
+              "type": "category",
+              "path": "filter_values",
+            },
+          ],
           "fields": {
             "language": {
               "type": "completion",
               "analyzer": lambda lang: LanguageAnalyzer[lang],
+              "contexts": [
+                {
+                  "name": "filter_values",
+                  "type": "category",
+                  "path": "filter_values",
+                },
+              ],
             }
           }
         },

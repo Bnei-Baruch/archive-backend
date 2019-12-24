@@ -19,6 +19,9 @@
                 "variables": {
                     "type": "keyword"
                 }, 
+                "filter_values": {
+                    "type": "keyword"
+                }, 
                 "intent": {
                     "type": "keyword"
                 }, 
@@ -26,8 +29,22 @@
                     "type": "keyword"
                 }, 
                 "rules_suggest": {
+                    "contexts": [
+                        {
+                            "path": "filter_values", 
+                            "type": "category", 
+                            "name": "filter_values"
+                        }
+                    ], 
                     "fields": {
                         "language": {
+                            "contexts": [
+                                {
+                                    "path": "filter_values", 
+                                    "type": "category", 
+                                    "name": "filter_values"
+                                }
+                            ], 
                             "type": "completion", 
                             "analyzer": "norwegian"
                         }

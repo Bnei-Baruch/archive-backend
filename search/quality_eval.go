@@ -142,7 +142,7 @@ var EXPECTATION_HIT_TYPE = map[int]string{
 	ET_LESSONS:       consts.INTENT_HIT_TYPE_LESSONS,
 	ET_PROGRAMS:      consts.INTENT_HIT_TYPE_PROGRAMS,
 	ET_SOURCES:       consts.ES_RESULT_TYPE_SOURCES,
-	ET_LANDING_PAGE:  consts.GRAMMAR_TYPE_LANDING_PAGE,
+	ET_LANDING_PAGE:  consts.GRAMMAR_HIT_TYPE_LANDING_PAGE,
 }
 
 var LANDING_PAGES = map[string]string{
@@ -1028,13 +1028,13 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 				</tr>`,
 				goodStyle, tdStyle, quality,
 				goodStyle, tdStyle,
-				100*counters[1]/totalCounters[1],                                                                           // Weighted percentage.
+				100*counters[1]/totalCounters[1], // Weighted percentage.
 				diffToHtml(100*counters[1]/totalCounters[1]-100*counters[3]/totalCounters[3], false /*round*/, true /*%*/), // Weighted percentage diff.
 				tdStyle,
-				100*counters[0]/totalCounters[0],                                                                           // Unique Percentage.
+				100*counters[0]/totalCounters[0], // Unique Percentage.
 				diffToHtml(100*counters[0]/totalCounters[0]-100*counters[2]/totalCounters[2], false /*round*/, true /*%*/), // Unique percentage diff.
 				tdStyle,
-				(int)(counters[0]),                                               // Unique.
+				(int)(counters[0]), // Unique.
 				diffToHtml(counters[0]-counters[2], true /*round*/, false /*%*/), // Unique diff.
 			))
 		}

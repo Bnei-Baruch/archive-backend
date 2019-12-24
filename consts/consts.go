@@ -331,6 +331,7 @@ const (
 	FILTER_COLLECTIONS_CONTENT_TYPES = "collections_content_types"
 	FILTER_SECTION_SOURCES           = "filter_section_sources"
 	FILTER_LANGUAGE                  = "media_language"
+	FILTER_KITEI_MAKOR               = "kitei_makor"
 )
 
 // Use to identify and map request filters
@@ -458,7 +459,7 @@ var INTENT_HIT_TYPE_BY_CT = map[string]string{
 const (
 	GRAMMAR_INDEX = "grammar"
 
-	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
+	GRAMMAR_HIT_TYPE_LANDING_PAGE = "landing-page"
 
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS            = "lessons"
 	GRAMMAR_INTENT_LANDING_PAGE_VIRTUAL_LESSONS    = "virtual_lessons"
@@ -481,6 +482,9 @@ const (
 	GRAMMAR_INTENT_LANDING_PAGE_ARTICLES           = "articles"
 	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS          = "downloads"
 	GRAMMAR_INTENT_LANDING_PAGE_HELP               = "help"
+
+	GRAMMAR_HIT_TYPE_KITEI_MAKOR = "kitei-makor"
+	GRAMMAR_INTENT_KITEI_MAKOR   = "kitei-makor"
 )
 
 // Map from intent to filters, i.e., filter name to list of values.
@@ -556,6 +560,24 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	},
 	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS: nil,
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
+	GRAMMAR_INTENT_KITEI_MAKOR:            nil,
+}
+
+//
+const (
+	GRAMMARS_INDEX_BASE_NAME = "grammars"
+
+	GRAMMAR_TYPE_PARTIAL = "grammar_type:partial"
+	GRAMMAR_TYPE_FULL    = "grammar_type:full"
+
+	GRAMMAR_TYPE_SEARCH_RESULT = "grammar_type:search_result"
+	GRAMMAR_TYPE_BOOST         = "grammar_type:boost"
+)
+
+// Grammar hit type to grammar type. When to apply the grammar.
+var HIT_TYPE_TO_GRAMMAR_TYPE = map[string]string{
+	GRAMMAR_HIT_TYPE_LANDING_PAGE: GRAMMAR_TYPE_SEARCH_RESULT,
+	GRAMMAR_HIT_TYPE_KITEI_MAKOR:  GRAMMAR_TYPE_BOOST,
 }
 
 // Variable name to frontend filter name mapping.

@@ -302,6 +302,10 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 				TitleSuggest: Suffixes(i18n.Name.String),
 			}
 
+			if indexData.KiteiMakor[cu.UID] {
+				unit.FilterValues = append(unit.FilterValues, consts.FILTER_KITEI_MAKOR)
+			}
+
 			if i18n.Description.Valid && i18n.Description.String != "" {
 				unit.Description = i18n.Description.String
 			}

@@ -67,9 +67,17 @@ func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 
 	years := MakeYearVariablesV2()
 	variables["$Year"] = make(TranslationsV2)
+
+	textVars := make(map[string][]string)
+	textVars["$Text"] = []string{"$Text"}
+	variables["$Text"] = make(TranslationsV2)
+
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		// Year
 		variables["$Year"][lang] = years
+
+		// Text
+		variables["$Text"][lang] = textVars
 
 		// Holiday
 		//holidayVariable, err := MakeHolidayVariable(lang, translations)

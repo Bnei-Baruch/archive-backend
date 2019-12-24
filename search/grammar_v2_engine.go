@@ -16,6 +16,9 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
+// For now empty. We just ignore the $Text as we will just boost the results without removing the kitei makor keywords.
+type KiteiMakorIntent struct{}
+
 func (e *ESEngine) SuggestGrammarsV2(query *Query, preference string) (map[string][]VariablesByPhrase, error) {
 	start := time.Now()
 	// Map from lang => Original Full Phrase => $Var => values
@@ -143,7 +146,7 @@ func (e *ESEngine) suggestResultsToVariablesByPhrases(query *Query, result *elas
 	return ret, nil
 }
 
-func (e *ESEngine) SearchGrammarsV2(query *Query, preferences string) ([]Intent, error) {
+func (e *ESEngine) SearchGrammarsV2(query *Query, preferences string, isBoost bool) ([]Intent, error) {
 	intents := []Intent{}
 	if query.Term != "" && len(query.ExactTerms) > 0 {
 		// Will never match any grammar for query having simple terms and exact terms.
@@ -154,7 +157,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, preferences string) ([]Intent,
 
 	multiSearchService := e.esc.MultiSearch()
 	for _, language := range query.LanguageOrder {
-		multiSearchService.Add(NewSuggestGammarV2Request(query, language, preferences))
+		multiSearchService.Add(NewSuggestGammarV2Request(query, language, preferences, isBoost))
 	}
 	mr, err := multiSearchService.Do(context.TODO())
 	if err != nil {
@@ -225,6 +228,7 @@ func updateIntentCount(intentsCount map[string][]Intent, intent Intent) {
 func (e *ESEngine) searchResultsToIntents(query *Query, language string, result *elastic.SearchResult) ([]Intent, error) {
 	// log.Infof("Total Hits: %d, Max Score: %.2f", result.Hits.TotalHits, *result.Hits.MaxScore)
 	intentsCount := make(map[string][]Intent)
+	kiteiMakorIntent := (*Intent)(nil)
 	for _, hit := range result.Hits.Hits {
 		var rule GrammarRule
 		if err := json.Unmarshal(*hit.Source, &rule); err != nil {
@@ -264,28 +268,43 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			vMap[rule.Variables[i]] = []string{rule.Values[i]}
 		}
 		if GrammarVariablesMatch(rule.Intent, vMap, e.cache) {
-			score := *hit.Score * (float64(4) / float64(4+len(vMap))) * YearScorePenalty(vMap)
-			// Issue with tf/idf. For query [congress] the score if very low. For [arava] ok.
-			// Fix this by moving the grammar index into the common index. So tha similar tf/idf will be used.
-			// For now solve by normalizing very small scores.
-			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
-			updateIntentCount(intentsCount, Intent{
-				Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
-				Language: language,
-				Value: GrammarIntent{
-					LandingPage:  rule.Intent,
-					FilterValues: e.VariableMapToFilterValues(vMap, language),
-					Score:        score,
-					Explanation:  hit.Explanation,
-				},
-			})
+			if rule.HitType == consts.GRAMMAR_HIT_TYPE_LANDING_PAGE {
+				score := *hit.Score * (float64(4) / float64(4+len(vMap))) * YearScorePenalty(vMap)
+				// Issue with tf/idf. For query [congress] the score if very low. For [arava] ok.
+				// Fix this by moving the grammar index into the common index. So tha similar tf/idf will be used.
+				// For now solve by normalizing very small scores.
+				// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
+				updateIntentCount(intentsCount, Intent{
+					Type:     rule.HitType,
+					Language: language,
+					Value: GrammarIntent{
+						LandingPage:  rule.Intent,
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score,
+						Explanation:  hit.Explanation,
+					},
+				})
+				// log.Infof("LANDING PAGE intent: %+v %+v", rule, score)
+			} else if rule.HitType == consts.GRAMMAR_HIT_TYPE_KITEI_MAKOR {
+				// Current hit rules might be: [source materials $Text], [$Text source materials], [source materials] <= without variables.
+				// We now should add all possible annotations of kitei makor to query... or the most probable....
+				// TODO: Consider adding all possible annotations of Kitei-Makor. For start one is enough.
+				if kiteiMakorIntent == nil {
+					kiteiMakorIntent = &Intent{
+						Type:     consts.GRAMMAR_HIT_TYPE_KITEI_MAKOR,
+						Language: language,
+						Value:    KiteiMakorIntent{},
+					}
+				}
+				// log.Infof("KITEI MAKOR intent: %+v", kiteiMakorIntent)
+			}
 		}
 	}
 	intents := []Intent(nil)
 	for _, intentsByLandingPage := range intentsCount {
 		intents = append(intents, intentsByLandingPage...)
 	}
-	// Normalize score to be from 2000 and below.
+	// Normalize landing pages intent score to be from 2000 and below.
 	maxScore := 0.0
 	for i := range intents {
 		if intents[i].Value.(GrammarIntent).Score > maxScore {
@@ -299,6 +318,10 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 		intent.Value = grammarIntent
 		normalizedIntents = append(normalizedIntents, intent)
 	}
-	// log.Infof("Intents: %+v", intents)
+	// Add other intents.
+	if kiteiMakorIntent != nil {
+		normalizedIntents = append(normalizedIntents, *kiteiMakorIntent)
+	}
+	log.Infof("Intents: %+v", intents)
 	return normalizedIntents, nil
 }

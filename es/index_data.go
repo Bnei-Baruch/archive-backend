@@ -20,6 +20,7 @@ type IndexData struct {
 	// Translations map[string][][]string
 	MediaLanguages map[string][]string
 	Transcripts    map[string]map[string][]string
+	KiteiMakor     map[string]bool
 }
 
 func MakeIndexData(db *sql.DB, sqlScope string) (*IndexData, error) {
@@ -57,6 +58,11 @@ func (indexData *IndexData) load(sqlScope string) error {
 	}
 
 	indexData.MediaLanguages, err = indexData.loadMediaLanguages(sqlScope)
+	if err != nil {
+		return err
+	}
+
+	indexData.KiteiMakor, err = indexData.loadKiteiMakor(sqlScope)
 	if err != nil {
 		return err
 	}
@@ -222,7 +228,6 @@ func loadTranscriptsMap(rows *sql.Rows) (map[string]map[string][]string, error) 
 }
 
 func (indexData *IndexData) loadMediaLanguages(sqlScope string) (map[string][]string, error) {
-
 	rows, err := queries.Raw(indexData.DB,
 		fmt.Sprintf(`SELECT cu.uid, array_agg(DISTINCT f.language) 
 		FROM files f
@@ -240,6 +245,40 @@ func (indexData *IndexData) loadMediaLanguages(sqlScope string) (map[string][]st
 	defer rows.Close()
 
 	return indexData.rowsToUIDToValues(rows)
+}
+
+func (indexData *IndexData) loadKiteiMakor(sqlScope string) (map[string]bool, error) {
+	rows, err := queries.Raw(indexData.DB,
+		fmt.Sprintf(` SELECT
+			cu.uid
+			FROM content_units AS cu INNER JOIN content_unit_derivations as cud
+				ON cu.id = cud.source_id
+			WHERE cud.name = 'KITEI_MAKOR' AND %s `, sqlScope)).Query()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Load media languages")
+	}
+	defer rows.Close()
+
+	return indexData.rowsToUIDs(rows)
+}
+
+func (indexData *IndexData) rowsToUIDs(rows *sql.Rows) (map[string]bool, error) {
+	m := make(map[string]bool)
+
+	for rows.Next() {
+		var cuUID string
+		err := rows.Scan(&cuUID)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		m[cuUID] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows.Err()")
+	}
+
+	return m, nil
 }
 
 func (indexData *IndexData) rowsToUIDToValues(rows *sql.Rows) (map[string][]string, error) {

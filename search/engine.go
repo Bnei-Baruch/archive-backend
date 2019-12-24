@@ -239,7 +239,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 							source := struct {
 								Title      string `json:"title"`
 								ResultType string `json:"result_type"`
-							}{Title: suggestion, ResultType: consts.GRAMMAR_TYPE_LANDING_PAGE}
+							}{Title: suggestion, ResultType: consts.GRAMMAR_HIT_TYPE_LANDING_PAGE}
 							sourceRawMessage, err := json.Marshal(source)
 							if err != nil {
 								return nil, err
@@ -325,6 +325,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				intentHit.Score = &boostedScore
 				intentHit.Index = consts.INTENT_INDEX_BY_TYPE[intent.Type]
 				intentHit.Type = consts.INTENT_HIT_TYPE_BY_CT[intentValue.ContentType]
+				log.Infof("intentValue: %+v", intentValue)
 				source, err := json.Marshal(intentValue)
 				if err != nil {
 					return err, nil
@@ -338,6 +339,9 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			sh := srMap[intent.Language].Hits
 			sh.TotalHits++
 			boostedScore := float64(2000.0)
+			if math.IsNaN(intentValue.Score) {
+				intentValue.Score = 0.0
+			}
 			if intentValue.Score > 0 {
 				boostedScore = intentValue.Score
 			}
@@ -354,6 +358,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			intentHit.Score = &boostedScore
 			intentHit.Index = consts.GRAMMAR_INDEX
 			intentHit.Type = intent.Type
+			log.Infof("intentValue: %+v", intentValue)
 			source, err := json.Marshal(intentValue)
 			if err != nil {
 				return err, nil
@@ -477,7 +482,14 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
-	suggestChannel := make(chan null.String)
+	// Annotate query.
+	// First annotation is to identify kitei-makor.
+	if intents, err := e.SearchGrammarsV2(&query, preference, true /*isBoost*/); err != nil {
+		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error annotating boost intents.")
+	} else {
+		query.Intents = append(query.Intents, intents...)
+	}
+	log.Infof("After boost: %+v", query.Intents)
 
 	// Seach intents and grammars in parallel to native search.
 	intentsChannel := make(chan []Intent)
@@ -492,7 +504,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}()
 
 	go func() {
-		if intents, err := e.SearchGrammarsV2(&query, preference); err != nil {
+		if intents, err := e.SearchGrammarsV2(&query, preference, false /*isBoost*/); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
 			intentsChannel <- []Intent{}
 		} else {
@@ -511,6 +523,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
+	// Typo suggest.
+	suggestChannel := make(chan null.String)
 	if checkTypo {
 		go func() {
 			if suggestText, err := e.GetTypoSuggest(query); err != nil {

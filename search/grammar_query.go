@@ -14,7 +14,7 @@ const (
 	GRAMMAR_SEARCH_SIZE = 2000
 )
 
-func createGrammarQuery(q *Query) elastic.Query {
+func createGrammarQuery(q *Query, isBoost bool) elastic.Query {
 	boolQuery := elastic.NewBoolQuery()
 	if simpleQuery(q) != "" {
 		boolQuery = boolQuery.Should(
@@ -22,15 +22,32 @@ func createGrammarQuery(q *Query) elastic.Query {
 				elastic.NewMatchPhraseQuery("rules.language", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
 				elastic.NewMatchPhraseQuery("rules", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
 			),
+		).Must(
+			elastic.NewConstantScoreQuery(
+				elastic.NewBoolQuery().Should(
+					elastic.NewMatchPhraseQuery("rules.language", simpleQuery(q)),
+					elastic.NewMatchPhraseQuery("rules", simpleQuery(q)),
+				).MinimumNumberShouldMatch(1),
+			).Boost(0.0),
 		)
+		if isBoost {
+			boolQuery = boolQuery.Filter(
+				elastic.NewTermsQuery("filter_values", "grammar_type:boost"),
+			)
+		} else {
+			boolQuery = boolQuery.Must(
+				elastic.NewTermsQuery("filter_values", "grammar_type:full"),
+				elastic.NewTermsQuery("filter_values", "grammar_type:search_result"),
+			)
+		}
 	}
 	return boolQuery
 }
 
-func NewSuggestGammarV2Request(query *Query, language string, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules")
+func NewSuggestGammarV2Request(query *Query, language string, preference string, isBoost bool) *elastic.SearchRequest {
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules", "hit_type")
 	source := elastic.NewSearchSource().
-		Query(createGrammarQuery(query)).
+		Query(createGrammarQuery(query, isBoost)).
 		FetchSourceContext(fetchSourceContext).
 		Size(GRAMMAR_SEARCH_SIZE).
 		Explain(query.Deb)
@@ -41,19 +58,21 @@ func NewSuggestGammarV2Request(query *Query, language string, preference string)
 }
 
 func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules", "hit_type")
 	source := elastic.NewSearchSource().
 		FetchSourceContext(fetchSourceContext).
 		Suggester(
 			elastic.NewCompletionSuggester("rules_suggest").
 				Field("rules_suggest").
 				Text(simpleQuery(query)).
+				ContextQuery(elastic.NewSuggesterCategoryQuery("filter_values", "grammar_type:full")).
 				Size(GRAMMAR_SUGGEST_SIZE).
 				SkipDuplicates(true)).
 		Suggester(
 			elastic.NewCompletionSuggester("rules_suggest.language").
 				Field("rules_suggest.language").
 				Text(simpleQuery(query)).
+				ContextQuery(elastic.NewSuggesterCategoryQuery("filter_values", "grammar_type:full")).
 				Size(GRAMMAR_SUGGEST_SIZE).
 				SkipDuplicates(true)).
 		Explain(query.Deb)

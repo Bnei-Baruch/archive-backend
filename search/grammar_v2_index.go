@@ -29,14 +29,11 @@ type GrammarRule struct {
 	Values       []string     `json:"values,omitempty"`
 	Rules        []string     `json:"rules"`
 	RulesSuggest SuggestField `json:"rules_suggest"`
+	FilterValues []string     `json:"filter_values"`
 }
 
-const (
-	GRAMMARS_INDEX_BASE_NAME = "grammars"
-)
-
 func GrammarIndexName(lang string) string {
-	return fmt.Sprintf("prod_%s_%s", GRAMMARS_INDEX_BASE_NAME, lang)
+	return fmt.Sprintf("prod_%s_%s", consts.GRAMMARS_INDEX_BASE_NAME, lang)
 }
 
 func DeleteGrammarIndex(esc *elastic.Client) error {
@@ -73,7 +70,7 @@ func CreateGrammarIndex(esc *elastic.Client) error {
 			continue
 		}
 
-		definition := fmt.Sprintf("data/es/mappings/%s/%s-%s.json", GRAMMARS_INDEX_BASE_NAME, GRAMMARS_INDEX_BASE_NAME, lang)
+		definition := fmt.Sprintf("data/es/mappings/%s/%s-%s.json", consts.GRAMMARS_INDEX_BASE_NAME, consts.GRAMMARS_INDEX_BASE_NAME, lang)
 		// Read mappings and create index
 		mappings, err := bindata.Asset(definition)
 		if err != nil {
@@ -151,6 +148,7 @@ func IndexGrammars(esc *elastic.Client, grammars GrammarsV2, variables Variables
 					for i := range rules {
 						assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(rules[i])...)
 					}
+					filterValues := []string{consts.GRAMMAR_TYPE_FULL, consts.HIT_TYPE_TO_GRAMMAR_TYPE[grammar.HitType]}
 					rule := GrammarRule{
 						HitType:      grammar.HitType,
 						Intent:       intent,
@@ -158,6 +156,7 @@ func IndexGrammars(esc *elastic.Client, grammars GrammarsV2, variables Variables
 						RulesSuggest: SuggestField{es.Unique(assignedRulesSuggest), float64(100)},
 						Variables:    []string{},
 						Values:       []string{},
+						FilterValues: filterValues,
 					}
 					bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(rule))
 				} else {
@@ -207,6 +206,12 @@ func IndexGrammars(esc *elastic.Client, grammars GrammarsV2, variables Variables
 						for i := range variablesSet {
 							vMap[variablesSet[i]] = []string{variableValues[i]}
 						}
+						filterValues := []string{consts.HIT_TYPE_TO_GRAMMAR_TYPE[grammar.HitType]}
+						if _, ok := vMap["$Text"]; ok {
+							filterValues = append(filterValues, consts.GRAMMAR_TYPE_PARTIAL)
+						} else {
+							filterValues = append(filterValues, consts.GRAMMAR_TYPE_FULL)
+						}
 						if GrammarVariablesMatch(intent, vMap, cm) {
 							rule := GrammarRule{
 								HitType:      grammar.HitType,
@@ -215,6 +220,7 @@ func IndexGrammars(esc *elastic.Client, grammars GrammarsV2, variables Variables
 								RulesSuggest: SuggestField{es.Unique(assignedRulesSuggest), float64(100)},
 								Variables:    variablesSet,
 								Values:       variableValues,
+								FilterValues: filterValues,
 							}
 							bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(rule))
 						}

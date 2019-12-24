@@ -33,8 +33,8 @@ func (esManager *ESManager) GetClient() (*elastic.Client, error) {
 			elastic.SetHealthcheckInterval(10*time.Second),
 			elastic.SetErrorLog(log.StandardLogger()),
 			// Should be commented out in prod.
-			// elastic.SetInfoLog(log.StandardLogger()),
-			// elastic.SetTraceLog(log.StandardLogger()),
+			elastic.SetInfoLog(log.StandardLogger()),
+			elastic.SetTraceLog(log.StandardLogger()),
 		)
 		if err == nil && esManager.esc == nil {
 			err = errors.New("Initializing elastic client returns nil.")
