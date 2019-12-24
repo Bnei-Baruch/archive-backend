@@ -130,7 +130,8 @@ type ContentUnitsRequest struct {
 	PublishersFilter
 	PersonsFilter
 	MediaLanguageFilter
-	WithFiles bool `json:"with_files" form:"with_files"`
+	WithFiles       bool `json:"with_files" form:"with_files"`
+	WithDerivations bool `json:"with_derivations" form:"with_derivations"`
 }
 
 type ContentUnitsResponse struct {
