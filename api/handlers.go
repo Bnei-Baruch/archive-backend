@@ -403,8 +403,9 @@ func SearchHandler(c *gin.Context) {
 
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
-	grammars := c.MustGet("GRAMMARS").(search.Grammars)
+	//grammars := c.MustGet("GRAMMARS").(search.Grammars)
 	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
+	variables := c.MustGet("VARIABLES").(search.VariablesV2)
 
 	esc, err := esManager.GetClient()
 	if err != nil {
@@ -412,7 +413,7 @@ func SearchHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM, grammars, tc)
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -518,8 +519,9 @@ func AutocompleteHandler(c *gin.Context) {
 	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
-	grammars := c.MustGet("GRAMMARS").(search.Grammars)
+	//grammars := c.MustGet("GRAMMARS").(search.Grammars)
 	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
+	variables := c.MustGet("VARIABLES").(search.VariablesV2)
 
 	esc, err := esManager.GetClient()
 	if err != nil {
@@ -527,7 +529,7 @@ func AutocompleteHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM, grammars, tc)
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
@@ -1200,9 +1202,18 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	}
 
 	// Eager loading
-	mods = append(mods, qm.Load(
+	loadTables := []string{
 		"CollectionsContentUnits",
-		"CollectionsContentUnits.Collection"))
+		"CollectionsContentUnits.Collection",
+	}
+	if r.WithDerivations {
+		loadTables = append(loadTables,
+			"SourceContentUnitDerivations",
+			"SourceContentUnitDerivations.Derived",
+			"SourceContentUnitDerivations.Derived.Publishers",
+		)
+	}
+	mods = append(mods, qm.Load(loadTables...))
 
 	// data query
 	units, err := mdbmodels.ContentUnits(db, mods...).All()
@@ -1214,6 +1225,68 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	cus, ex := prepareCUs(db, units, r.Language)
 	if ex != nil {
 		return nil, ex
+	}
+
+	if r.WithDerivations {
+		// Derived content units
+		cuidsMap := make(map[string]int64)
+
+		for i, x := range units {
+			cu := cus[i]
+			// derived units
+			cu.DerivedUnits = make(map[string]*ContentUnit)
+			for _, cud := range x.R.SourceContentUnitDerivations {
+				du := cud.R.Derived
+				if consts.SEC_PUBLIC == du.Secure && du.Published {
+					dcu, err := mdbToCU(du)
+					if err != nil {
+						return nil, NewInternalError(err)
+					}
+
+					// publishers
+					dcu.Publishers = make([]string, len(du.R.Publishers))
+					for i, x := range du.R.Publishers {
+						dcu.Publishers[i] = x.UID
+					}
+
+					// Dirty hack for unique mapping - needs to parse in client...
+					key := fmt.Sprintf("%s____%s", du.UID, cud.Name)
+					cu.DerivedUnits[key] = dcu
+					cuidsMap[key] = du.ID
+				}
+			}
+		}
+
+		cuids := []int64(nil)
+		for _, v := range cuidsMap {
+			cuids = append(cuids, v)
+		}
+		cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		fileMap, err := loadCUFiles(db, cuids, nil, nil)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+
+		for _, cu := range cus {
+			// derived content unit i18n
+			for k, v := range cu.DerivedUnits {
+				if i18ns, ok := cui18nsMap[cuidsMap[k]]; ok {
+					setCUI18n(v, r.Language, i18ns)
+				}
+			}
+
+			// derived content unit files
+			for k, v := range cu.DerivedUnits {
+				if files, ok := fileMap[cuidsMap[k]]; ok {
+					if err := setCUFiles(v, files); err != nil {
+						return nil, NewInternalError(err)
+					}
+				}
+			}
+		}
 	}
 
 	// files
@@ -1292,6 +1365,7 @@ func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]
 			key := fmt.Sprintf("%s____%s", cl.UID, ccu.Name)
 			cu.Collections[key] = cc
 		}
+
 		cus[i] = cu
 	}
 

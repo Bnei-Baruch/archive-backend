@@ -49,7 +49,7 @@ func (e *ESEngine) GetTypoSuggest(query Query) (null.String, error) {
 		candidateField2.SetValid("content")
 		addMaxEdits = true
 	} else if hasRussian {
-		suggestorField = "title"
+		suggestorField = "content"
 		candidateField1.SetValid("content.language")
 		candidateField2.SetValid("title.language")
 		addMaxEdits = false

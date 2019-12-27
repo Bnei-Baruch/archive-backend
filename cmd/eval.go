@@ -55,6 +55,7 @@ var evalDiffHtml string
 var top int
 var typosPath string
 var language string
+var htmlFileToInject string
 
 func init() {
 	evalCmd.PersistentFlags().StringVar(&evalSetPath, "eval_set", "", "Path to csv eval set.")
@@ -86,6 +87,7 @@ func init() {
 	vsGoldenHtmlCmd.MarkPersistentFlagRequired("golden_flat_reports")
 	vsGoldenHtmlCmd.PersistentFlags().StringVar(&vsGoldenHtml, "vs_golden_html", "", "Path to html output of comparison vs golden.")
 	vsGoldenHtmlCmd.MarkPersistentFlagRequired("vs_golden_html")
+	vsGoldenHtmlCmd.PersistentFlags().StringVar(&htmlFileToInject, "html_to_inject", "", "Optional HTML file to put his content at the buttom of the output HTML.")
 	RootCmd.AddCommand(vsGoldenHtmlCmd)
 
 	testTypoSuggestCmd.PersistentFlags().StringVar(&evalSetPath, "eval_set", "", "Path to csv eval set.")
@@ -306,7 +308,16 @@ func vsGoldenHtmlFn(cmd *cobra.Command, args []string) {
 		utils.Must(err)
 		allGoldenRecords = append(allGoldenRecords, recordsGolden[1:]...)
 	}
-	if err := search.WriteVsGoldenHTML(vsGoldenHtml, allRecords, allGoldenRecords); err != nil {
+	var buttomPart string
+	if htmlFileToInject != "" {
+		b, err := ioutil.ReadFile(htmlFileToInject)
+		if err != nil {
+			log.Error(err)
+		} else {
+			buttomPart = string(b)
+		}
+	}
+	if err := search.WriteVsGoldenHTML(vsGoldenHtml, allRecords, allGoldenRecords, buttomPart); err != nil {
 		log.Error(err)
 	}
 }

@@ -26,7 +26,7 @@ const (
 	// Boost for exact phrase match, without slop.
 	EXACT_BOOST = 1.5
 
-	NUM_SUGGESTS = 100
+	NUM_SUGGESTS = 30
 )
 
 type Query struct {

@@ -10,17 +10,26 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
+	"github.com/Bnei-Baruch/archive-backend/search"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 var indexCmd = &cobra.Command{
 	Use:   "index",
 	Short: "Import MDB to ElasticSearch",
 	Run:   indexFn,
+}
+
+var indexGrammarsCmd = &cobra.Command{
+	Use:   "index_grammars",
+	Short: "Import Grammars to ElasticSearch",
+	Run:   indexGrammarsFn,
 }
 
 var prepareDocsCmd = &cobra.Command{
@@ -63,6 +72,7 @@ var indexDate string
 
 func init() {
 	RootCmd.AddCommand(indexCmd)
+	RootCmd.AddCommand(indexGrammarsCmd)
 	RootCmd.AddCommand(prepareDocsCmd)
 	deleteIndexCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be deleted.")
 	deleteIndexCmd.MarkFlagRequired("index_date")
@@ -73,6 +83,34 @@ func init() {
 	switchAliasCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to switch to.")
 	switchAliasCmd.MarkFlagRequired("index_date")
 	RootCmd.AddCommand(simulateUpdateCmd)
+}
+
+func indexGrammarsFn(cmd *cobra.Command, args []string) {
+	clock := common.Init()
+	defer common.Shutdown()
+	log.Infof("Initialized.")
+
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+		return
+	}
+
+	log.Infof("Client loaded.")
+	variables, err := search.MakeVariablesV2(viper.GetString("elasticsearch.variables"))
+	utils.Must(err)
+	log.Infof("Variables loaded.")
+	grammars, err := search.MakeGrammarsV2(viper.GetString("elasticsearch.grammars"))
+	utils.Must(err)
+	log.Infof("Grammas loaded.")
+
+	err = search.IndexGrammars(esc, grammars, variables, common.CACHE)
+	if err != nil {
+		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
+	} else {
+		log.Info("Grammar indexed.")
+	}
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
 
 func indexFn(cmd *cobra.Command, args []string) {
@@ -258,7 +296,15 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	err = es.UpdateSynonyms(esc, "prod", "" /*indexDate - empty means production.*/)
+	// Update synonyms.
+	err = es.UpdateSynonyms(esc, es.IndexNameFuncByNamespaceAndDate("prod", "" /*indexDate - empty means production.*/))
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	// Update grammar synonyms.
+	err = es.UpdateSynonyms(esc, search.GrammarIndexName)
 	if err != nil {
 		log.Error(err)
 		return

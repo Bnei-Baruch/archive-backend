@@ -42,6 +42,7 @@ const (
 	CT_MEAL                  = "MEAL"
 	CT_PUBLICATION           = "PUBLICATION"
 	CT_RESEARCH_MATERIAL     = "RESEARCH_MATERIAL"
+	CT_KTAIM_NIVCHARIM       = "KTAIM_NIVCHARIM"
 	CT_SONG                  = "SONG"
 	CT_TRAINING              = "TRAINING"
 	CT_UNKNOWN               = "UNKNOWN"
@@ -296,12 +297,15 @@ var LANG2CODE = map[string]string{
 // api
 
 const (
-	INTENTS_SEARCH_COUNT       = 10
-	TWEETS_SEARCH_COUNT        = 20
-	INTENTS_MIN_UNITS          = 3
-	MAX_CLASSIFICATION_INTENTS = 3
-	API_DEFAULT_PAGE_SIZE      = 50
-	API_MAX_PAGE_SIZE          = 1000
+	INTENTS_SEARCH_COUNT                      = 10
+	TWEETS_SEARCH_COUNT                       = 20
+	INTENTS_MIN_UNITS                         = 3
+	MAX_CLASSIFICATION_INTENTS                = 3
+	API_DEFAULT_PAGE_SIZE                     = 50
+	API_MAX_PAGE_SIZE                         = 1000
+	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
+	// Consider makeing a carusele and not limiting.
+	MAX_MATCHES_PER_GRAMMAR_INTENT = 3
 )
 
 const (
@@ -432,6 +436,7 @@ var ES_INTENT_SUPPORTED_CONTENT_TYPES = map[string]bool{
 	CT_WOMEN_LESSON:          true,
 	CT_VIDEO_PROGRAM_CHAPTER: true,
 	CT_FULL_LESSON:           true,
+	CT_CLIP:                  true,
 }
 
 // Fake index for intents.
@@ -553,6 +558,13 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
 }
 
+// Variable name to frontend filter name mapping.
+var VARIABLE_TO_FILTER = map[string]string{
+	"$Year":               "year",
+	"$ConventionLocation": "location",
+	"$Text":               "text",
+}
+
 // Latency log
 const (
 	LAT_DOSEARCH                          = "DoSearch"
@@ -562,8 +574,9 @@ const (
 	LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO  = "DoSearch.AddIntents.FirstRoundDo"
 	LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO = "DoSearch.AddIntents.SecondRoundDo"
 	LAT_DOSEARCH_MULTISEARCHTWEETSDO      = "DoSearch.MultisearchTweetsDo"
-	LAT_DOSEARCH_TYPOSUGGESTDO           = "DoSearch.TypoSuggestDo"
+	LAT_DOSEARCH_TYPOSUGGESTDO            = "DoSearch.TypoSuggestDo"
 	LAT_GETSUGGESTIONS                    = "GetSuggestions"
+	LAT_SUGGEST_SUGGESTIONS               = "GetSuggestions.SuggestSuggestions"
 	LAT_GETSUGGESTIONS_MULTISEARCHDO      = "GetSuggestions.MultisearchDo"
 )
 

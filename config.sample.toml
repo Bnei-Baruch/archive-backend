@@ -22,6 +22,7 @@ url-template="postgres://localhost/%s?sslmode=disable&user=postgres"
 [elasticsearch]
 url="http://127.0.0.1:9200"
 grammars="/tmp/grammars/"
+variables="/tmp/variables/"
 sources-folder="/tmp/sources-folder"
 unzip-url=""
 prepare-docs-batch-size=20
