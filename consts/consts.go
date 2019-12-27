@@ -42,6 +42,7 @@ const (
 	CT_MEAL                  = "MEAL"
 	CT_PUBLICATION           = "PUBLICATION"
 	CT_RESEARCH_MATERIAL     = "RESEARCH_MATERIAL"
+	CT_KTAIM_NIVCHARIM       = "KTAIM_NIVCHARIM"
 	CT_SONG                  = "SONG"
 	CT_TRAINING              = "TRAINING"
 	CT_UNKNOWN               = "UNKNOWN"
