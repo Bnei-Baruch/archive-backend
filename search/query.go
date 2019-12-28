@@ -16,7 +16,7 @@ const (
 	// Content boost.
 	TITLE_BOOST       = 2.0
 	DESCRIPTION_BOOST = 1.2
-	FULL_TITLE_BOOST  = 1.0
+	FULL_TITLE_BOOST  = 1.1
 
 	// Max slop.
 	SLOP = 100
@@ -219,7 +219,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		if resultType == consts.ES_RESULT_TYPE_UNITS {
 			weight = 1.1
 		} else if resultType == consts.ES_RESULT_TYPE_TAGS {
-			weight = 1.5 // We use tags for intents only, score should be same as for sources.
+			weight = 1.75 // We use tags for intents only
 		} else if resultType == consts.ES_RESULT_TYPE_SOURCES {
 			weight = 1.5
 		} else if resultType == consts.ES_RESULT_TYPE_COLLECTIONS {
