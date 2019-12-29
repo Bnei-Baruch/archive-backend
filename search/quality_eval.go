@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -785,7 +786,7 @@ func EvalScrapeStreaming(in chan EvalQuery, out chan EvalResult, serverUrl strin
 			out <- evalResult
 			sent++
 			log.Debugf("Done sent %d read %d (%s).", sent, read, serverUrl)
-		}(q, read)
+		}(q, read-1)
 	}
 
 	doneWG.Wait()
@@ -1495,29 +1496,51 @@ func EvalResultDiff(evalQuery EvalQuery, expResult EvalResult, baseResult EvalRe
 	return ret, nil
 }
 
-func EvalResultDiffHtml(resultDiff ResultDiff) (string, error) {
+func structValuesToHtmlString(s interface{}, b int) string {
+	v := reflect.ValueOf(s)
+	valueNames := []string{}
+	for i := 0; i < v.NumField(); i++ {
+		valueNames = append(valueNames, fmt.Sprintf("<td style='border-bottom-width:%dpx'> %s</td>", b, v.Field(i).Interface()))
+	}
+	return strings.Join(valueNames, "")
+}
+
+func structFieldNamesToHtmlString(s interface{}) string {
+	v := reflect.ValueOf(s)
+	typeOfS := v.Type()
+	fields := []string{}
+	for i := 0; i < v.NumField(); i++ {
+		fields = append(fields, fmt.Sprintf("<th> %s</th>", typeOfS.Field(i).Name))
+	}
+	return strings.Join(fields, "")
+}
+
+func EvalResultDiffHtml(resultDiff ResultDiff, clientUrl string) (string, error) {
 	if len(resultDiff.HitsDiffs) == 0 && resultDiff.ErrorStr == "" {
 		return "", nil
 	}
-	parts := []string{fmt.Sprintf("[%s]", resultDiff.Query)}
+	parts := []string{fmt.Sprintf("<h2><a href='%s/search?q=%[2]s'>%[2]s</a></h2>", clientUrl, resultDiff.Query)}
+	parts = append(parts, "<table style='border-collapse: collapse; width: 100%' border='1'>")
+	parts = append(parts, fmt.Sprintf("<tr><th>Rank</th> %s</tr>", structFieldNamesToHtmlString(resultDiff.HitsDiffs[0].ExpHitSource)))
 	for i := range resultDiff.HitsDiffs {
 		parts = append(parts, fmt.Sprintf(
-			"\t%d: %s <> %s",
+			"<tr><td style='border-bottom: 0'>%d</td> %s</tr><tr><td style='border-top: 0'></td> %s</tr>",
 			resultDiff.HitsDiffs[i].Rank,
-			resultDiff.HitsDiffs[i].ExpHitSource,
-			resultDiff.HitsDiffs[i].BaseHitSource,
+			structValuesToHtmlString(resultDiff.HitsDiffs[i].ExpHitSource, 1),
+			structValuesToHtmlString(resultDiff.HitsDiffs[i].BaseHitSource, 2),
 		))
 	}
+	parts = append(parts, "</table>")
 	if resultDiff.ErrorStr != "" {
 		parts = append(parts, resultDiff.ErrorStr)
 	}
 	return strings.Join(parts, "\n"), nil
 }
 
-func EvalResultsDiffsHtml(resultsDiffs ResultsDiffs) (string, error) {
+func EvalResultsDiffsHtml(resultsDiffs ResultsDiffs, clientUrl string) (string, error) {
 	html := []string{}
 	for i := range resultsDiffs.ResultsDiffs {
-		if part, err := EvalResultDiffHtml(resultsDiffs.ResultsDiffs[i]); err != nil {
+		if part, err := EvalResultDiffHtml(resultsDiffs.ResultsDiffs[i], clientUrl); err != nil {
 			return "", err
 		} else {
 			html = append(html, part)
