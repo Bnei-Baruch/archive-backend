@@ -11,6 +11,7 @@ url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 
 [test]
 enable-online-eval=false
+search-data="./search/data/"
 test-source-content-docx="$GOPATH/src/github.com/Bnei-Baruch/archive-backend/es/TEST-CONTENT.docx"
 test-sources-folder="/tmp/test-sources-folder"
 mdb-url="postgres://localhost/mdb?sslmode=disable&user=postgres"

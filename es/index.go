@@ -280,7 +280,7 @@ func (indexErrors *IndexErrors) CheckErrors(languagesMaxFailure int, documentsMa
 	return err
 }
 
-func IndexAliasName(namespace string, name string, lang string) string {
+func indexAliasName(namespace string, name string, lang string) string {
 	if namespace == "" || name == "" || lang == "" {
 		panic(fmt.Sprintf("Not expecting empty parameter for IndexName, provided: (%s, %s, %s)", namespace, name, lang))
 	}
@@ -295,7 +295,7 @@ func IndexName(namespace string, name string, lang string, date string) string {
 	if date == "" {
 		panic(fmt.Sprintf("Not expecting empty parameter for IndexName, provided: (%s, %s, %s, %s)", namespace, name, lang, date))
 	}
-	return fmt.Sprintf("%s_%s", IndexAliasName(namespace, name, lang), date)
+	return fmt.Sprintf("%s_%s", indexAliasName(namespace, name, lang), date)
 }
 
 func (index *BaseIndex) IndexDate() string {
@@ -320,7 +320,7 @@ func (index *BaseIndex) IndexName(lang string) string {
 func indexNameByDefinedDateOrAlias(namespace string, name string, lang string) string {
 	indexDate := viper.GetString("elasticsearch.index-date")
 	if indexDate == "" {
-		return IndexAliasName(namespace, name, lang)
+		return indexAliasName(namespace, name, lang)
 	}
 	log.Warnf("Using specific non prod index: %s", indexDate)
 	return IndexName(namespace, name, lang, indexDate)
@@ -330,7 +330,7 @@ func (index *BaseIndex) indexAliasName(lang string) string {
 	if index.namespace == "" || index.baseName == "" {
 		panic("Index namespace and baseName should be set.")
 	}
-	return IndexAliasName(index.namespace, index.baseName, lang)
+	return indexAliasName(index.namespace, index.baseName, lang)
 }
 
 func (index *BaseIndex) CreateIndex() error {
