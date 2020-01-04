@@ -257,7 +257,9 @@ def update_reload(name):
                 return 'stderr: %s, stdout: %s' % (stderr, stdout)
             m = re.search(r'# On branch (.*)', stdout)
             if not m:
-                return 'Failed extracting git current branch.'
+                m = re.search(r'# HEAD detached at (.*)', stdout)
+                if not m:
+                    return 'Failed extracting git current branch.'
             original_branch = m.groups(1)[0]
             (returncode, stdout, stderr) = run_command(['git', 'fetch'])
             if returncode != 0:
@@ -325,6 +327,9 @@ def set_up_backend(name):
         (returncode, stdout, stderr) = run_command(['mkdir', '%s/search' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
+        (returncode, stdout, stderr) = run_command(['mkdir', '%s/es' % backend_dir(name)])
+        if returncode != 0:
+            return 'stderr: %s, stdout: %s' % (stderr, stdout)
         (returncode, stdout, stderr) = run_command(['cp', './search/eval.html', '%s/search' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
@@ -335,16 +340,16 @@ def set_up_backend(name):
             '%s/config.toml' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        (returncode, stdout, stderr) = run_command(['cp', '-r', './search/variables', '%s/search/' % backend_dir(name)])
+        (returncode, stdout, stderr) = run_command(['cp', '-rf', './search/variables', '%s/search/' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        (returncode, stdout, stderr) = run_command(['cp', '-r', './search/grammars', '%s/search/' % backend_dir(name)])
+        (returncode, stdout, stderr) = run_command(['cp', '-rf', './search/grammars', '%s/search/' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        (returncode, stdout, stderr) = run_command(['cp', '-r', './search/data', '%s/search/' % backend_dir(name)])
+        (returncode, stdout, stderr) = run_command(['cp', '-rf', './search/data', '%s/search/' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        (returncode, stdout, stderr) = run_command(['cp', '-r', './es/synonyms', '%s/es/' % backend_dir(name)])
+        (returncode, stdout, stderr) = run_command(['cp', '-rf', './es/synonyms', '%s/es/' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
         if demos[name]['elastic'] == 'reindex':
