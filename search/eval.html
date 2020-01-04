@@ -177,6 +177,12 @@
                     setUrlParam(urlParam, event.target.value);
                 });
             };
+            const listenToSelectUpdateUrl = (elementSelector, urlParam) => {
+                const e = sq(elementSelector);
+                e.addEventListener('change', (event) => {
+                    setUrlParam(urlParam, event.target.value);
+                });
+            };
             const urlParam = (name) => {
                 const url = new URL(window.location.href);
                 return url.searchParams.get(name);
@@ -205,6 +211,10 @@
                 const diffsLimit = sq('#diffs-limit');
                 diffsLimit.value = urlParam('diffs-limit') || 200;
                 listenToInputUpdateUrl('#diffs-limit', 'diffs-limit');
+
+                const language = sq('#language-sxs');
+                language.value = urlParam('language') || 'he';
+                listenToSelectUpdateUrl('#language-sxs', 'language');
             };
 
             const RunSxS  = () => {
@@ -223,10 +233,12 @@
                 const expServerUrl = sq('#exp-server-url');
                 const baseServerUrl = sq('#base-server-url');
                 const diffsLimit = sq('#diffs-limit');
+                const language = sq('#language-sxs');
                 const request  = {
                     diffs_limit: parseInt(diffsLimit.value, 10),
                     base_server_url: baseServerUrl.value,
                     exp_server_url: expServerUrl.value,
+					language: language.value,
                 };
                 fetch('eval/sxs', {
                     headers: {
@@ -591,6 +603,14 @@ SQ_GOOD           = 4
             <h2>Run SxS</h2>
             <div>
                 Diffs limit: <input id="diffs-limit" type="text">
+            </div>
+            <div>
+                Language:
+				<select id="language-sxs">
+					<option value="he">Hebrew</option>
+					<option value="ru">Russian</option>
+					<option value="en">English</option>
+				</select>
             </div>
             <div>
                 Exp server url: &nbsp;<input id="exp-server-url" type="text">&nbsp;<input id="exp-server-frontend-url" type="text">
