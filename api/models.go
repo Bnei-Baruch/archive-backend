@@ -238,6 +238,7 @@ type EvalSxSRequest struct {
 	DiffsLimit    int32  `json:"diffs_limit"`
 	BaseServerUrl string `json:"base_server_url"`
 	ExpServerUrl  string `json:"exp_server_url"`
+	Language      string `json:"language"`
 }
 
 func NewCollectionsResponse() *CollectionsResponse {

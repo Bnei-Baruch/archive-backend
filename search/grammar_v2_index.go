@@ -8,6 +8,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/bindata"
@@ -35,13 +36,29 @@ const (
 	GRAMMARS_INDEX_BASE_NAME = "grammars"
 )
 
-func GrammarIndexName(lang string) string {
-	return fmt.Sprintf("prod_%s_%s", GRAMMARS_INDEX_BASE_NAME, lang)
+func GrammarIndexNameFunc(indexDate string) es.IndexNameByLang {
+	return func(lang string) string {
+		return GrammarIndexName(lang, indexDate)
+	}
 }
 
-func DeleteGrammarIndex(esc *elastic.Client) error {
+func GrammarIndexName(lang string, indexDate string) string {
+	if indexDate == "" {
+		return fmt.Sprintf("prod_%s_%s", GRAMMARS_INDEX_BASE_NAME, lang)
+	} else {
+		return fmt.Sprintf("prod_%s_%s_%s", GRAMMARS_INDEX_BASE_NAME, lang, indexDate)
+	}
+}
+
+func GrammarIndexNameForServing(lang string) string {
+	grammarIndexDate := viper.GetString("elasticsearch.grammar-index-date")
+	// When grammarIndexDate empty will use alias, otherwise config flag.
+	return GrammarIndexName(lang, grammarIndexDate)
+}
+
+func DeleteGrammarIndex(esc *elastic.Client, indexDate string) error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
-		name := GrammarIndexName(lang)
+		name := GrammarIndexName(lang, indexDate)
 		exists, err := esc.IndexExists(name).Do(context.TODO())
 		if err != nil {
 			return err
@@ -59,9 +76,9 @@ func DeleteGrammarIndex(esc *elastic.Client) error {
 	return nil
 }
 
-func CreateGrammarIndex(esc *elastic.Client) error {
+func CreateGrammarIndex(esc *elastic.Client, indexDate string) error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
-		name := GrammarIndexName(lang)
+		name := GrammarIndexName(lang, indexDate)
 		// Do nothing if index already exists.
 		exists, err := esc.IndexExists(name).Do(context.TODO())
 		log.Debugf("Create index, exists: %t.", exists)
@@ -130,17 +147,17 @@ func (ci *CrossIter) Values() []string {
 	return ret
 }
 
-func IndexGrammars(esc *elastic.Client, grammars GrammarsV2, variables VariablesV2, cm cache.CacheManager) error {
-	if err := DeleteGrammarIndex(esc); err != nil {
+func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, variables VariablesV2, cm cache.CacheManager) error {
+	if err := DeleteGrammarIndex(esc, indexDate); err != nil {
 		return err
 	}
-	if err := CreateGrammarIndex(esc); err != nil {
+	if err := CreateGrammarIndex(esc, indexDate); err != nil {
 		return err
 	}
 
 	log.Infof("Indexing %d grammars.", len(grammars))
 	for lang, grammarsByIntent := range grammars {
-		name := GrammarIndexName(lang)
+		name := GrammarIndexName(lang, indexDate)
 		bulkService := elastic.NewBulkService(esc).Index(name)
 		log.Infof("Indexing %d intents for %s.", len(grammarsByIntent), lang)
 		for intent, grammar := range grammarsByIntent {
