@@ -1528,7 +1528,7 @@ func EvalResultDiffHtml(resultDiff ResultDiff, clientUrl, clientBaseUrl string) 
 		expLink = fmt.Sprintf("<a href='%s/search?q=%s'>experimental</a>", clientBaseUrl, resultDiff.Query)
 	}
 
-	parts := []string{fmt.Sprintf("<h2>%s ( Search on: %s, %s )</h2>", clientUrl, baseLink, expLink)}
+	parts := []string{fmt.Sprintf("<h2>%s ( Search on: %s %s )</h2>", resultDiff.Query, baseLink, expLink)}
 	parts = append(parts, "<table style='border-collapse: collapse; width: 100%' border='1'>")
 	parts = append(parts, fmt.Sprintf("<tr><th>Rank</th> %s</tr>", structFieldNamesToHtmlString(resultDiff.HitsDiffs[0].ExpHitSource)))
 	for i := range resultDiff.HitsDiffs {
