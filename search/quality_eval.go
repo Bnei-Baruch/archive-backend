@@ -1029,13 +1029,13 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 				</tr>`,
 				goodStyle, tdStyle, quality,
 				goodStyle, tdStyle,
-				100*counters[1]/totalCounters[1],                                                                           // Weighted percentage.
+				100*counters[1]/totalCounters[1], // Weighted percentage.
 				diffToHtml(100*counters[1]/totalCounters[1]-100*counters[3]/totalCounters[3], false /*round*/, true /*%*/), // Weighted percentage diff.
 				tdStyle,
-				100*counters[0]/totalCounters[0],                                                                           // Unique Percentage.
+				100*counters[0]/totalCounters[0], // Unique Percentage.
 				diffToHtml(100*counters[0]/totalCounters[0]-100*counters[2]/totalCounters[2], false /*round*/, true /*%*/), // Unique percentage diff.
 				tdStyle,
-				(int)(counters[0]),                                               // Unique.
+				(int)(counters[0]), // Unique.
 				diffToHtml(counters[0]-counters[2], true /*round*/, false /*%*/), // Unique diff.
 			))
 		}
@@ -1515,11 +1515,20 @@ func structFieldNamesToHtmlString(s interface{}) string {
 	return strings.Join(fields, "")
 }
 
-func EvalResultDiffHtml(resultDiff ResultDiff, clientUrl string) (string, error) {
+func EvalResultDiffHtml(resultDiff ResultDiff, clientUrl, clientBaseUrl string) (string, error) {
 	if len(resultDiff.HitsDiffs) == 0 && resultDiff.ErrorStr == "" {
 		return "", nil
 	}
-	parts := []string{fmt.Sprintf("<h2><a href='%s/search?q=%[2]s'>%[2]s</a></h2>", clientUrl, resultDiff.Query)}
+	baseLink := ""
+	expLink := ""
+	if clientUrl != "" {
+		baseLink = fmt.Sprintf("<a href='%s/search?q=%s'>base</a>", clientUrl, resultDiff.Query)
+	}
+	if clientBaseUrl != "" {
+		expLink = fmt.Sprintf("<a href='%s/search?q=%s'>experimental</a>", clientBaseUrl, resultDiff.Query)
+	}
+
+	parts := []string{fmt.Sprintf("<h2>%s ( Search on: %s, %s )</h2>", clientUrl, baseLink, expLink)}
 	parts = append(parts, "<table style='border-collapse: collapse; width: 100%' border='1'>")
 	parts = append(parts, fmt.Sprintf("<tr><th>Rank</th> %s</tr>", structFieldNamesToHtmlString(resultDiff.HitsDiffs[0].ExpHitSource)))
 	for i := range resultDiff.HitsDiffs {
@@ -1537,10 +1546,10 @@ func EvalResultDiffHtml(resultDiff ResultDiff, clientUrl string) (string, error)
 	return strings.Join(parts, "\n"), nil
 }
 
-func EvalResultsDiffsHtml(resultsDiffs ResultsDiffs, clientUrl string) (string, error) {
+func EvalResultsDiffsHtml(resultsDiffs ResultsDiffs, clientUrl, clientBaseUrl string) (string, error) {
 	html := []string{}
 	for i := range resultsDiffs.ResultsDiffs {
-		if part, err := EvalResultDiffHtml(resultsDiffs.ResultsDiffs[i], clientUrl); err != nil {
+		if part, err := EvalResultDiffHtml(resultsDiffs.ResultsDiffs[i], clientUrl, clientBaseUrl); err != nil {
 			return "", err
 		} else {
 			html = append(html, part)
