@@ -341,7 +341,7 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 		return left > right
 	})
 	formatedHeaders := make([]string, 0)
-	if len(records)==0 {
+	if len(records) == 0 {
 		worstQueriesHtmlPart = fmt.Sprintf("")//<h3>%d worst queries</h3><table>%s</table>", worstQueriesPrintCnt, "")
 
 	} else {
@@ -357,6 +357,7 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 			printCsv([][]string{sortedRecords[i]})
 			worstQueriesTrs = fmt.Sprintf("%s%s", worstQueriesTrs, printHtmlTr(sortedRecords[i], false, ""))
 		}
+		worstQueriesHtmlPart = fmt.Sprintf("<h3>%d worst queries</h3><table>%s</table>", worstQueriesPrintCnt, worstQueriesTrs)		
 	}
 	finalHtml := fmt.Sprintf("%s%s", operationsHtmlPart, worstQueriesHtmlPart)
 	err = ioutil.WriteFile(latencyOutputHtml, []byte(finalHtml), 0644)
