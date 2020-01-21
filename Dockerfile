@@ -25,6 +25,7 @@ RUN go get github.com/jteeuwen/go-bindata/... && \
 FROM alpine:3.10
 ARG work_dir
 WORKDIR /app
+COPY misc/wait-for /wait-for
 COPY --from=build ${work_dir}/archive-backend .
 
 EXPOSE 8080

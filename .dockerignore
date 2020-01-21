@@ -1,8 +1,8 @@
 # Common
 README.md
 CHANGELOG.md
-docker-compose.yml
-Dockerfile
+LICENSE
+*.log
 
 # git
 .git
@@ -11,6 +11,12 @@ Dockerfile
 
 # JetBrains
 .idea
+projectFilesBackup
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
 
 # App
 assets
