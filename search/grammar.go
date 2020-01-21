@@ -16,12 +16,13 @@ import (
 )
 
 type Grammar struct {
-	HitType  string
-	Language string
-	Intent   string
-	Patterns [][]*TokenNode
-	Filters  map[string][]string
-	Esc      *elastic.Client
+	HitType   string
+	Language  string
+	Intent    string
+	Patterns  [][]*TokenNode
+	Filters   map[string][]string
+	Esc       *elastic.Client
+	Variables VariablesByName
 }
 
 type Grammars = map[string]map[string]*Grammar
@@ -41,7 +42,7 @@ func FoldGrammars(first Grammars, second Grammars) {
 	}
 }
 
-func ReadGrammarFile(grammarFile string, esc *elastic.Client, tc *TokensCache) (Grammars, error) {
+func ReadGrammarFile(grammarFile string, esc *elastic.Client, tc *TokensCache, variables VariablesByLang) (Grammars, error) {
 	re := regexp.MustCompile(`^(.*).grammar$`)
 	matches := re.FindStringSubmatch(path.Base(grammarFile))
 	if len(matches) != 2 {
@@ -84,7 +85,15 @@ func ReadGrammarFile(grammarFile string, esc *elastic.Client, tc *TokensCache) (
 			if !filterExist {
 				return nil, errors.New(fmt.Sprintf("[%s:%d] Filters not found for intent: [%s]", grammarFile, lineNum, intent))
 			}
-			grammars[lang][intent] = &Grammar{HitType: hitType, Language: lang, Intent: intent, Patterns: [][]*TokenNode{}, Filters: filters, Esc: esc}
+			grammars[lang][intent] = &Grammar{
+				HitType:   hitType,
+				Language:  lang,
+				Intent:    intent,
+				Patterns:  [][]*TokenNode{},
+				Filters:   filters,
+				Esc:       esc,
+				Variables: variables[lang],
+			}
 		}
 		tokens, err := MakeTokensFromPhrase(pattern, lang, esc, tc)
 		if err != nil {
@@ -102,7 +111,7 @@ func ReadGrammarFile(grammarFile string, esc *elastic.Client, tc *TokensCache) (
 	return grammars, nil
 }
 
-func MakeGrammars(grammarsDir string, esc *elastic.Client, tc *TokensCache) (Grammars, error) {
+func MakeGrammars(grammarsDir string, esc *elastic.Client, tc *TokensCache, variables VariablesByLang) (Grammars, error) {
 	matches, err := filepath.Glob(filepath.Join(grammarsDir, "*.grammar"))
 	if err != nil {
 		return nil, err
@@ -110,7 +119,7 @@ func MakeGrammars(grammarsDir string, esc *elastic.Client, tc *TokensCache) (Gra
 
 	grammars := make(Grammars)
 	for _, grammarFile := range matches {
-		grammarsFromFile, err := ReadGrammarFile(grammarFile, esc, tc)
+		grammarsFromFile, err := ReadGrammarFile(grammarFile, esc, tc, variables)
 		if err != nil {
 			return nil, err
 		}

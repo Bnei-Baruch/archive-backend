@@ -20,6 +20,6 @@ if [ "${SANITY_OK}" = "1" ];then
         echo "Sanity OK."
         exit 0
 else
-        echo "Sanity failed." | mail -s "ERROR: Search sanity." -r "mdb@bbdomain.org" -a ${LOG_FILE} -a ${FLAT_REPORT_FILE} edoshor@gmail.com kolmanv@gmail.com
+        echo "Sanity failed." | mail -s "ERROR: Search sanity." -r "mdb@bbdomain.org" -a ${LOG_FILE} -a ${FLAT_REPORT_FILE} edoshor@gmail.com kolmanv@gmail.com yurihechter@gmail.com
     exit 1
 fi

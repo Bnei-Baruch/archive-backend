@@ -47,6 +47,9 @@ func InitConfigFolder(configKey string, value *string) (string, error) {
 	}
 
 	path := viper.GetString(configKey)
+	if path == "" {
+		path = "/tmp/"
+	}
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			err := os.MkdirAll(path, 0777)
@@ -141,6 +144,18 @@ func Suffixes(escapedTitle string) []string {
 	ret := []string{}
 	for i, _ := range parts {
 		ret = append(ret, strings.Join(parts[i:], " "))
+	}
+	return ret
+}
+
+func Unique(s []string) []string {
+	keys := make(map[string]bool)
+	ret := []string{}
+	for _, entry := range s {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			ret = append(ret, entry)
+		}
 	}
 	return ret
 }

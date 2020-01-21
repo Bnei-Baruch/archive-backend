@@ -2,13 +2,17 @@ package cache
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
 	"gopkg.in/volatiletech/null.v6"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
 type Histogram map[string]int
@@ -126,18 +130,27 @@ type SearchStatsCache interface {
 	IsTagWithEnoughUnits(uid string, count int, cts ...string) bool
 	IsSourceWithUnits(uid string, cts ...string) bool
 	IsSourceWithEnoughUnits(uid string, count int, cts ...string) bool
+
+	// |location| can be of: "Moscow" or "Russia|Moscow" or "Russia" or "" (empty for year constrain only)
+	// |year| is 4 digit year string, e.g., "1998", "2010" or "" (empty for location constrain only)
+	DoesConventionExist(location string, year string) bool
 }
 
 type SearchStatsCacheImpl struct {
-	mdb     *sql.DB
-	tags    ClassByTypeStats
-	sources ClassByTypeStats
+	mdb         *sql.DB
+	tags        ClassByTypeStats
+	sources     ClassByTypeStats
+	conventions map[string]map[string]int
 }
 
 func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
 	ssc := new(SearchStatsCacheImpl)
 	ssc.mdb = mdb
 	return ssc
+}
+
+func (ssc *SearchStatsCacheImpl) DoesConventionExist(location string, year string) bool {
+	return ssc.conventions[year][location] > 0
 }
 
 func (ssc *SearchStatsCacheImpl) IsTagWithUnits(uid string, cts ...string) bool {
@@ -186,10 +199,55 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	var err error
 	ssc.tags, ssc.sources, err = ssc.load()
 	if err != nil {
-		return errors.Wrap(err, "Load stats")
+		return errors.Wrap(err, "Load tags and sources stats.")
+	}
+	ssc.conventions, err = ssc.refreshConventions()
+	if err != nil {
+		return errors.Wrap(err, "Load conventions stats.")
 	}
 
 	return nil
+}
+
+func (ssc *SearchStatsCacheImpl) refreshConventions() (map[string]map[string]int, error) {
+	ret := make(map[string]map[string]int)
+	var collections []*mdbmodels.Collection
+	if err := mdbmodels.NewQuery(ssc.mdb,
+		qm.From("collections as c"),
+		qm.Where(fmt.Sprintf("c.type_id = %d", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID))).
+		Bind(&collections); err != nil {
+		return nil, err
+	}
+	for _, c := range collections {
+		// Accumulate convention by year and by location
+		var props map[string]interface{}
+		err := json.Unmarshal(c.Properties.JSON, &props)
+		if err != nil {
+			errors.Wrap(err, "Error reading collection convention properties.")
+			continue
+		}
+		city := props["city"].(string)
+		country := props["country"].(string)
+		years := []string{""}
+		if start_date := props["start_date"]; len(start_date.(string)) >= 4 {
+			years = append(years, start_date.(string)[0:4])
+		}
+		if end_date := props["end_date"]; len(end_date.(string)) >= 4 && (len(years) == 0 || years[0] != end_date.(string)[0:4]) {
+			years = append(years, end_date.(string)[0:4])
+		}
+		for _, year := range years {
+			if _, ok := ret[year]; !ok {
+				ret[year] = make(map[string]int)
+			}
+			ret[year][""]++ // Without location, just [congresses 2005]
+			ret[year][city]++
+			ret[year][country]++
+			if city != "" && country != "" {
+				ret[year][fmt.Sprintf("%s|%s", country, city)]++
+			}
+		}
+	}
+	return ret, nil
 }
 
 func (ssc *SearchStatsCacheImpl) load() (ClassByTypeStats, ClassByTypeStats, error) {

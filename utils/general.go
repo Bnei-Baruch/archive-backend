@@ -91,6 +91,13 @@ func MinInt(x, y int) int {
 	return y
 }
 
+func MinMax(x, y int) (int, int) {
+	if x < y {
+		return x, y
+	}
+	return y, x
+}
+
 // true if every string in given slice is empty
 func IsEmpty(s []string) bool {
 	for _, x := range s {
@@ -126,10 +133,10 @@ func Int64InSlice(i int64, s []int64) bool {
 	return false
 }
 
-func is(slice interface{}) []interface{} {
+func Is(slice interface{}) []interface{} {
 	s := reflect.ValueOf(slice)
-	if s.Kind() != reflect.Slice {
-		panic("InterfaceSlice() given a non-slice type")
+	if s.Kind() != reflect.Slice && s.Kind() != reflect.Array {
+		panic(fmt.Sprintf("InterfaceSlice() given a non-slice type: %s", s.Kind()))
 	}
 	ret := make([]interface{}, s.Len())
 	for i := 0; i < s.Len(); i++ {
@@ -140,7 +147,7 @@ func is(slice interface{}) []interface{} {
 
 func Pprint(l interface{}) string {
 	var s []string
-	for _, i := range is(l) {
+	for _, i := range Is(l) {
 		s = append(s, fmt.Sprintf("%+v", i))
 	}
 	return strings.Join(s, "\n\t")
@@ -164,7 +171,7 @@ func PrintMap(m interface{}) (string, error) {
 		v := mValue.MapIndex(k)
 		vValue := reflect.ValueOf(v)
 		if vValue.Kind() == reflect.Slice {
-			values = append(values, fmt.Sprintf("%+v:[%s]", k, Join(is(v), ",")))
+			values = append(values, fmt.Sprintf("%+v:[%s]", k, Join(Is(v), ",")))
 		} else {
 			values = append(values, fmt.Sprintf("%+v:%+v", k, v))
 		}
@@ -236,4 +243,13 @@ func EscapeSpecialChars(str string) string {
 		}
 	}
 	return string(result)
+}
+
+func Contains(list []interface{}, elem interface{}) bool {
+	for _, t := range list {
+		if t == elem {
+			return true
+		}
+	}
+	return false
 }

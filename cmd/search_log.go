@@ -96,7 +96,7 @@ func initLogger() *search.SearchLogger {
 }
 
 func appendCsvToFile(path string, records [][]string) {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND, 0660)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0660)
 	if err != nil {
 		panic(fmt.Sprintf("Cannot open file. Error: %s.", err))
 	}
@@ -330,7 +330,7 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 	}
 	operationsHtmlPart = fmt.Sprintf("<h3>Latencies</h3><table>%s</table>", trs)
 
-	//  print the worst queries
+	// print the worst queries
 	sortedRecords := records[1:]
 	sort.Slice(sortedRecords, func(i, j int) bool {
 		left, err := strconv.Atoi(strings.TrimSpace(sortedRecords[i][wholeSearchLatencyOperatinIndex]))

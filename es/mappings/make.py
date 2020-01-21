@@ -269,7 +269,6 @@ SETTINGS = {
   "index": {
     "number_of_shards": 1,
     "number_of_replicas": 0,
-    "max_clause_count" : 10000,
     "analysis": {
       "analyzer": lambda lang: GetAnalyzerImp(lang),
       # "analyzer": {
@@ -540,6 +539,62 @@ SEARCH_LOGS_TEMPLATE = {
     },
 }
 
+GRAMMARS_TEMPLATE = {
+  # "settings": {
+  #   "index": {
+  #     "number_of_shards": 1,
+  #     "number_of_replicas": 0,
+  #   },
+  # },
+  "settings": SETTINGS,
+  "mappings": {
+    "grammars": {
+      "dynamic": "strict",
+      "properties": {
+        # Hit type, e.g., "landing-page" or other grammars later on..
+        "hit_type": {
+          "type": "keyword",
+        },
+        # Intent, e.g., which landing page, "conventions" or "lessons".
+        "intent": {
+          "type": "keyword",
+        },
+        # Set of variables for a grammar rule, e.g., [congress $Year $ConventionLocation]
+        # will lead to two keywords: ['$Year', '$ConventionLocation']
+        "variables": {
+          "type": "keyword",
+        },
+        # One value for each variable, e.g., "2019" for $Year or "Bulgaria" for $ConventionLocation.
+        "values": {
+          "type": "keyword",
+        },
+        # Grammar rule: [congress $Year $ConventionLocation] or [$Year $ConventionLocation congress]
+        "rules": {
+          "type": "text",
+          "analyzer": "standard",
+          "fields": {
+            "language": {
+              "type": "text",
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
+            }
+          }
+        },
+        # Suggest field for autocomplete.
+        "rules_suggest": {
+          "type": "completion",
+          "analyzer": "standard",
+          "fields": {
+            "language": {
+              "type": "completion",
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
+            }
+          }
+        },
+      }
+    }
+  }
+}
+
 def Resolve(lang, value):
   if isinstance(value, dict):
     l = [(k, Resolve(lang, v)) for (k, v) in value.iteritems()]
@@ -555,6 +610,8 @@ def Resolve(lang, value):
 for lang in LANG_GROUPS[ALL]:
   with open(os.path.join('.', 'data', 'es', 'mappings', 'results', 'results-%s.json' % lang), 'w') as f:
     json.dump(Resolve(lang, RESULTS_TEMPLATE), f, indent=4)
+  with open(os.path.join('.', 'data', 'es', 'mappings', 'grammars', 'grammars-%s.json' % lang), 'w') as f:
+    json.dump(Resolve(lang, GRAMMARS_TEMPLATE), f, indent=4)
 # Without languages
 with open(os.path.join('.', 'data', 'es', 'mappings', 'search_logs.json'), 'w') as f:
   json.dump(Resolve('xx', SEARCH_LOGS_TEMPLATE), f, indent=4)
