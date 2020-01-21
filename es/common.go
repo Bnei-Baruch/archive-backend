@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"html"
 	"os"
-	"runtime"
 	"strings"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
@@ -65,21 +64,7 @@ func InitConfigFolder(configKey string, value *string) (string, error) {
 	return *value, nil
 }
 
-func IsWindows() bool {
-	return runtime.GOOS == "windows"
-}
-
 func InitVars() {
-	if IsWindows() {
-		pythonPath = viper.GetString("elasticsearch.python-path")
-		if pythonPath == "" {
-			panic("python path should be set in config.")
-		}
-	}
-	parseDocsBin = viper.GetString("elasticsearch.parse-docs-bin")
-	if parseDocsBin == "" {
-		panic("parse_docs.py binary should be set in config.")
-	}
 	unzipUrl = viper.GetString("elasticsearch.unzip-url")
 	if unzipUrl == "" {
 		panic("unzip url should be set in config.")
