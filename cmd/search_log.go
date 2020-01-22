@@ -328,23 +328,20 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 	}
 	operationsHtmlPart = fmt.Sprintf("<h3>Latencies</h3><table>%s</table>", trs)
 
-	sortedRecords:=records[0:]
-	if len(records)!=0 {
-		sortedRecords=records[1:]
-	}
-	/// print the worst queries
-	sort.Slice(sortedRecords, func(i, j int) bool {
-		left, err := strconv.Atoi(strings.TrimSpace(sortedRecords[i][wholeSearchLatencyOperatinIndex]))
-		utils.Must(err)
-		right, err := strconv.Atoi(strings.TrimSpace(sortedRecords[j][wholeSearchLatencyOperatinIndex]))
-		utils.Must(err)
-		return left > right
-	})
-	formatedHeaders := make([]string, 0)
 	if len(records) == 0 {
-		worstQueriesHtmlPart = fmt.Sprintf("")//<h3>%d worst queries</h3><table>%s</table>", worstQueriesPrintCnt, "")
+		worstQueriesHtmlPart = fmt.Sprintf("")
 
 	} else {
+		sortedRecords:=records[1:]
+		formatedHeaders := make([]string, 0)		
+		/// print the worst queries
+		sort.Slice(sortedRecords, func(i, j int) bool {
+			left, err := strconv.Atoi(strings.TrimSpace(sortedRecords[i][wholeSearchLatencyOperatinIndex]))
+			utils.Must(err)
+			right, err := strconv.Atoi(strings.TrimSpace(sortedRecords[j][wholeSearchLatencyOperatinIndex]))
+			utils.Must(err)
+			return left > right
+		})
 		log.Printf("%d worst queries:\n", worstQueriesPrintCnt)
 
 		for _, r := range records[0] {
