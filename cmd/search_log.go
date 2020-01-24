@@ -329,7 +329,7 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 	operationsHtmlPart = fmt.Sprintf("<h3>Latencies</h3><table>%s</table>", trs)
 
 	if len(records) == 0 {
-		worstQueriesHtmlPart = fmt.Sprintf("")
+		worstQueriesHtmlPart = ""
 
 	} else {
 		sortedRecords:=records[1:]
