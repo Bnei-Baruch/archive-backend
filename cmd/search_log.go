@@ -269,17 +269,16 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 
 	var operationsHtmlPart string
 	var worstQueriesHtmlPart string
-
-	reader, err := os.Open(csvFile)
+ 	reader, err := os.Open(csvFile)
 	r := csv.NewReader(bufio.NewReader(reader))
 	records, err := r.ReadAll()
 	utils.Must(err)
-
+	
 	opLatenciesMap := make(map[string][]int, len(consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH))
 	for _, op := range consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH {
 		opLatenciesMap[op] = make([]int, 0)
 	}
-
+	
 	for i := 1; i < len(records); i++ { //  skip first line (headers)
 
 		record := records[i]
@@ -298,7 +297,6 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 			}
 		}
 	}
-
 	trs := printHtmlTr([]string{"Stage", "Average", "Worst", "95 percentile", "Active"}, true, "")
 	for opName, latencies := range opLatenciesMap {
 		sort.Slice(latencies, func(i, j int) bool {
@@ -330,30 +328,35 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 	}
 	operationsHtmlPart = fmt.Sprintf("<h3>Latencies</h3><table>%s</table>", trs)
 
-	// print the worst queries
-	sortedRecords := records[1:]
-	sort.Slice(sortedRecords, func(i, j int) bool {
-		left, err := strconv.Atoi(strings.TrimSpace(sortedRecords[i][wholeSearchLatencyOperatinIndex]))
-		utils.Must(err)
-		right, err := strconv.Atoi(strings.TrimSpace(sortedRecords[j][wholeSearchLatencyOperatinIndex]))
-		utils.Must(err)
-		return left > right
-	})
-	log.Printf("%d worst queries:\n", worstQueriesPrintCnt)
-	formatedHeaders := make([]string, 0)
-	for _, r := range records[0] {
-		fr := strings.Replace(r, ".", " ", -1)
-		formatedHeaders = append(formatedHeaders, fr)
-	}
-	printCsv([][]string{formatedHeaders}) //  print headers
-	worstQueriesTrs := printHtmlTr(formatedHeaders, true, "word-break: break-word; min-width: 170px;")
-	for i := 0; i < worstQueriesPrintCnt; i++ {
-		printCsv([][]string{sortedRecords[i]})
-		worstQueriesTrs = fmt.Sprintf("%s%s", worstQueriesTrs, printHtmlTr(sortedRecords[i], false, ""))
-	}
-	worstQueriesHtmlPart = fmt.Sprintf("<h3>%d worst queries</h3><table>%s</table>", worstQueriesPrintCnt, worstQueriesTrs)
-	finalHtml := fmt.Sprintf("%s%s", operationsHtmlPart, worstQueriesHtmlPart)
+	if len(records) == 0 {
+		worstQueriesHtmlPart = ""
 
+	} else {
+		sortedRecords:=records[1:]
+		formatedHeaders := make([]string, 0)		
+		/// print the worst queries
+		sort.Slice(sortedRecords, func(i, j int) bool {
+			left, err := strconv.Atoi(strings.TrimSpace(sortedRecords[i][wholeSearchLatencyOperatinIndex]))
+			utils.Must(err)
+			right, err := strconv.Atoi(strings.TrimSpace(sortedRecords[j][wholeSearchLatencyOperatinIndex]))
+			utils.Must(err)
+			return left > right
+		})
+		log.Printf("%d worst queries:\n", worstQueriesPrintCnt)
+
+		for _, r := range records[0] {
+			fr := strings.Replace(r, ".", " ", -1)
+			formatedHeaders = append(formatedHeaders, fr)
+		}
+		printCsv([][]string{formatedHeaders}) //  print headers
+		worstQueriesTrs := printHtmlTr(formatedHeaders, true, "word-break: break-word; min-width: 170px;")
+		for i := 0; i < worstQueriesPrintCnt; i++ {
+			printCsv([][]string{sortedRecords[i]})
+			worstQueriesTrs = fmt.Sprintf("%s%s", worstQueriesTrs, printHtmlTr(sortedRecords[i], false, ""))
+		}
+		worstQueriesHtmlPart = fmt.Sprintf("<h3>%d worst queries</h3><table>%s</table>", worstQueriesPrintCnt, worstQueriesTrs)		
+	}
+	finalHtml := fmt.Sprintf("%s%s", operationsHtmlPart, worstQueriesHtmlPart)
 	err = ioutil.WriteFile(latencyOutputHtml, []byte(finalHtml), 0644)
 	utils.Must(err)
 	log.Info("HTML printed.")
