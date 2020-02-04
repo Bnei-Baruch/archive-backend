@@ -45,6 +45,12 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 			err := errors.New(fmt.Sprintf("Failed tweets multi get: %+v", currentResults.Error))
 			return nil, err
 		}
+		for _, h := range currentResults.Hits.Hits {
+			if h.Score == nil {
+				s := float64(1)
+				h.Score = &s
+			}
+		}
 		if haveHits(currentResults) {
 			lang := query.LanguageOrder[i]
 			tweetsByLang[lang] = currentResults
@@ -68,11 +74,6 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 
 		var maxScore float64
 		for _, hit := range result.Hits.Hits {
-
-			if hit.Score == nil {
-				return nil, errors.Errorf("hit score is nil for hit: %s", hit.Uid)
-			}
-
 			if *hit.Score > maxScore {
 				maxScore = *hit.Score
 			}
