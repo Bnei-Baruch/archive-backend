@@ -322,6 +322,7 @@ func indexNameByDefinedDateOrAlias(namespace string, name string, lang string) s
 	if indexDate == "" {
 		return IndexAliasName(namespace, name, lang)
 	}
+	log.Warnf("Using specific non prod index: %s", indexDate)
 	return IndexName(namespace, name, lang, indexDate)
 }
 
