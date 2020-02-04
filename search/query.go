@@ -238,6 +238,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type")
 
 	titleAdded := false
+	fullTitleAdded := false
 	contentAdded := false
 	//	This is a generic imp. that supports searching tweets together with other results.
 	//	Currently we are not searching for tweets together with other results but in parallel.
@@ -245,11 +246,14 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		if !contentAdded && rt == consts.ES_RESULT_TYPE_TWEETS {
 			fetchSourceContext.Include("content")
 			contentAdded = true
+		} else if !fullTitleAdded && rt == consts.ES_RESULT_TYPE_SOURCES {
+			fetchSourceContext.Include("full_title")
+			fullTitleAdded = true
 		} else if !titleAdded {
 			fetchSourceContext.Include("title")
 			titleAdded = true
 		}
-		if contentAdded && titleAdded {
+		if contentAdded && titleAdded && fullTitleAdded {
 			break
 		}
 	}
@@ -273,6 +277,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 
 		highlightQuery := elastic.NewHighlight().Fields(
 			elastic.NewHighlighterField("title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
+			elastic.NewHighlighterField("full_title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
 			elastic.NewHighlighterField("description").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
 			elastic.NewHighlighterField("description.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
 			elastic.NewHighlighterField("content").NumOfFragments(contentNumOfFragments).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
