@@ -2618,7 +2618,11 @@ func EvalSxSHandler(c *gin.Context) {
 		return
 	}
 
-	querySetsResultsDiffs, err := search.EvalSearchDataQuerySetsDiff(r.BaseServerUrl, r.ExpServerUrl, r.DiffsLimit)
+	if r.Language == "" {
+		concludeRequest(c, nil, NewBadRequestError(errors.New("language should not be empty.")))
+	}
+
+	querySetsResultsDiffs, err := search.EvalSearchDataQuerySetsDiff(r.Language, r.BaseServerUrl, r.ExpServerUrl, r.DiffsLimit)
 	if err != nil {
 		concludeRequest(c, nil, NewInternalError(err))
 		return

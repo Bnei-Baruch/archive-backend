@@ -1028,13 +1028,13 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 				</tr>`,
 				goodStyle, tdStyle, quality,
 				goodStyle, tdStyle,
-				100*counters[1]/totalCounters[1],                                                                           // Weighted percentage.
+				100*counters[1]/totalCounters[1], // Weighted percentage.
 				diffToHtml(100*counters[1]/totalCounters[1]-100*counters[3]/totalCounters[3], false /*round*/, true /*%*/), // Weighted percentage diff.
 				tdStyle,
-				100*counters[0]/totalCounters[0],                                                                           // Unique Percentage.
+				100*counters[0]/totalCounters[0], // Unique Percentage.
 				diffToHtml(100*counters[0]/totalCounters[0]-100*counters[2]/totalCounters[2], false /*round*/, true /*%*/), // Unique percentage diff.
 				tdStyle,
-				(int)(counters[0]),                                               // Unique.
+				(int)(counters[0]), // Unique.
 				diffToHtml(counters[0]-counters[2], true /*round*/, false /*%*/), // Unique diff.
 			))
 		}
@@ -1693,12 +1693,12 @@ func ReadEvalSets(glob string) (map[string][]EvalQuery, error) {
 	return ret, nil
 }
 
-func EvalSearchDataQuerySetsDiff(baseServerUrl, expServerUrl string, diffsLimit int32) ([]ResultsDiffs, error) {
+func EvalSearchDataQuerySetsDiff(language, baseServerUrl, expServerUrl string, diffsLimit int32) ([]ResultsDiffs, error) {
 	searchDataFolder := viper.GetString("test.search-data")
 	if diffsLimit <= 0 {
 		diffsLimit = 200
 	}
-	if evalSets, err := ReadEvalSets(path.Join(searchDataFolder, "*.*.weighted_queries.csv")); err != nil {
+	if evalSets, err := ReadEvalSets(path.Join(searchDataFolder, fmt.Sprintf("%s*.weighted_queries.csv", language))); err != nil {
 		return nil, err
 	} else {
 		ret := []ResultsDiffs(nil)

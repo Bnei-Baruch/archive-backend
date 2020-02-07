@@ -36,7 +36,7 @@ func NewSuggestGammarV2Request(query *Query, language string, preference string)
 		Explain(query.Deb)
 	return elastic.NewSearchRequest().
 		SearchSource(source).
-		Index(GrammarIndexName(language)).
+		Index(GrammarIndexNameForServing(language)).
 		Preference(preference)
 }
 
@@ -60,7 +60,7 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 
 	return elastic.NewSearchRequest().
 		SearchSource(source).
-		Index(GrammarIndexName(language)).
+		Index(GrammarIndexNameForServing(language)).
 		Preference(preference)
 }
 
