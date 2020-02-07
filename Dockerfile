@@ -16,16 +16,21 @@ RUN apk update && \
 
 WORKDIR ${work_dir}
 COPY . .
-RUN go get github.com/jteeuwen/go-bindata/... && \
-    go-bindata data/... && sed -i 's/package main/package bindata/' bindata.go && \
-    mv bindata.go ./bindata && \
-    go build -ldflags '-w -X ${work_dir}/version.PreRelease=${BUILD_NUMBER}'
+RUN go build -ldflags '-w -X ${work_dir}/version.PreRelease=${BUILD_NUMBER}'
 
 
 FROM alpine:3.10
+
+RUN apk update && \
+    apk add --no-cache \
+    mailx \
+    postfix
+
 ARG work_dir
 WORKDIR /app
+ADD data data
 COPY misc/wait-for /wait-for
+COPY misc/*.sh ./
 COPY --from=build ${work_dir}/archive-backend .
 
 EXPOSE 8080

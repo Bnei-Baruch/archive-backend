@@ -180,16 +180,6 @@ func IndexNameFuncByNamespaceAndDate(namespace string, indexDate string) IndexNa
 }
 
 func UpdateSynonyms(esc *elastic.Client, indexNameByLang IndexNameByLang) error {
-	folder, err := SynonymsFolder()
-	if err != nil {
-		return errors.Wrap(err, "SynonymsFolder not available.")
-	}
-
-	files, err := ioutil.ReadDir(folder)
-	if err != nil {
-		return errors.Wrap(err, "Cannot read synonym files list.")
-	}
-
 	type SynonymGraphSU struct {
 		Type      string   `json:"type"`
 		Tokenizer string   `json:"tokenizer"`
@@ -218,6 +208,12 @@ func UpdateSynonyms(esc *elastic.Client, indexNameByLang IndexNameByLang) error 
 				},
 			},
 		},
+	}
+
+	folder := DataFolder("es", "synonyms")
+	files, err := ioutil.ReadDir(folder)
+	if err != nil {
+		return errors.Wrap(err, "Cannot read synonym files list.")
 	}
 
 	for _, fileInfo := range files {

@@ -10,9 +10,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
-	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -97,12 +95,12 @@ func indexGrammarsFn(cmd *cobra.Command, args []string) {
 	}
 
 	log.Infof("Client loaded.")
-	variables, err := search.MakeVariablesV2(viper.GetString("elasticsearch.variables"))
+	variables, err := search.MakeVariablesV2(es.DataFolder("search", "variables"))
 	utils.Must(err)
 	log.Infof("Variables loaded.")
-	grammars, err := search.MakeGrammarsV2(viper.GetString("elasticsearch.grammars"))
+	grammars, err := search.MakeGrammarsV2(es.DataFolder("search", "grammars"))
 	utils.Must(err)
-	log.Infof("Grammas loaded.")
+	log.Infof("Grammars loaded.")
 
 	err = search.IndexGrammars(esc, grammars, variables, common.CACHE)
 	if err != nil {
@@ -260,11 +258,10 @@ func restartSearchLogsFn(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	definition := fmt.Sprintf("data/es/mappings/%s.json", name)
-	// Read mappings and create index
-	mappings, err := bindata.Asset(definition)
+	// Read mappings
+	mappings, err := es.ReadDataFile(fmt.Sprintf("%s.json", name), "es", "mappings")
 	if err != nil {
-		log.Error(errors.Wrapf(err, "Failed loading mapping %s", definition))
+		log.Error("Error reading mapping file", err)
 		return
 	}
 	var bodyJson map[string]interface{}

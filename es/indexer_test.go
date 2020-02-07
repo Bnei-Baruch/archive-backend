@@ -872,11 +872,7 @@ func updateSource(source Source, lang string) (string, error) {
 	}
 
 	// Add folder for source files
-	folder, err := es.SourcesFolder()
-	if err != nil {
-		return "", err
-	}
-	uidPath := path.Join(folder, mdbSource.UID)
+	uidPath := path.Join(es.SourcesFolder(), mdbSource.UID)
 	if _, err := os.Stat(uidPath); os.IsNotExist(err) {
 		err = os.MkdirAll(uidPath, os.FileMode(0775))
 		if err != nil {
@@ -888,11 +884,7 @@ func updateSource(source Source, lang string) (string, error) {
 }
 
 func updateSourceFileContent(uid string, lang string) error {
-	folder, err := es.SourcesFolder()
-	if err != nil {
-		return err
-	}
-	uidPath := path.Join(folder, uid)
+	uidPath := path.Join(es.SourcesFolder(), uid)
 	jsonPath := path.Join(uidPath, "index.json")
 	contentFileName := fmt.Sprintf("sample-content-%s.docx", lang)
 	contentPath := path.Join(uidPath, contentFileName)

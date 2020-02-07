@@ -29,6 +29,7 @@ import (
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/Bnei-Baruch/sqlboiler/queries"
@@ -1694,10 +1695,10 @@ func ReadEvalSets(glob string) (map[string][]EvalQuery, error) {
 }
 
 func EvalSearchDataQuerySetsDiff(baseServerUrl, expServerUrl string, diffsLimit int32) ([]ResultsDiffs, error) {
-	searchDataFolder := viper.GetString("test.search-data")
 	if diffsLimit <= 0 {
 		diffsLimit = 200
 	}
+	searchDataFolder := es.DataFolder("search")
 	if evalSets, err := ReadEvalSets(path.Join(searchDataFolder, "*.*.weighted_queries.csv")); err != nil {
 		return nil, err
 	} else {

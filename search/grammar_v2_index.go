@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 
-	"github.com/Bnei-Baruch/archive-backend/bindata"
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -62,6 +61,7 @@ func DeleteGrammarIndex(esc *elastic.Client) error {
 func CreateGrammarIndex(esc *elastic.Client) error {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		name := GrammarIndexName(lang)
+
 		// Do nothing if index already exists.
 		exists, err := esc.IndexExists(name).Do(context.TODO())
 		log.Debugf("Create index, exists: %t.", exists)
@@ -73,11 +73,11 @@ func CreateGrammarIndex(esc *elastic.Client) error {
 			continue
 		}
 
-		definition := fmt.Sprintf("data/es/mappings/%s/%s-%s.json", GRAMMARS_INDEX_BASE_NAME, GRAMMARS_INDEX_BASE_NAME, lang)
-		// Read mappings and create index
-		mappings, err := bindata.Asset(definition)
+		// Read mappings
+		mappings, err := es.ReadDataFile(fmt.Sprintf("%s-%s.json", GRAMMARS_INDEX_BASE_NAME, lang),
+			"es", "mappings", GRAMMARS_INDEX_BASE_NAME)
 		if err != nil {
-			return errors.Wrapf(err, "Failed loading mapping %s", definition)
+			return errors.Wrapf(err, "Read mapping file")
 		}
 		var bodyJson map[string]interface{}
 		if err = json.Unmarshal(mappings, &bodyJson); err != nil {
