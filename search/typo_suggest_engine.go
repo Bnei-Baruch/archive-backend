@@ -12,13 +12,13 @@ import (
 	null "gopkg.in/volatiletech/null.v6"
 )
 
-func (e *ESEngine) GetTypoSuggest(query Query) (null.String, error) {
+func (e *ESEngine) GetTypoSuggest(query Query) (TypoSuggestResponse, error) {
 	srv := e.esc.Search()
-	suggestText := null.String{"", false}
+	result := TypoSuggestResponse{null.String{"", false}, 1}
 
 	if _, err := strconv.Atoi(query.Term); err == nil {
 		//  ignore numbers
-		return suggestText, nil
+		return result, nil
 	}
 
 	var hasHebrew bool
@@ -94,14 +94,15 @@ func (e *ESEngine) GetTypoSuggest(query Query) (null.String, error) {
 	r, err := srv.Do(context.TODO())
 	e.timeTrack(beforeDoSearch, "DoSearch.TypoSuggestDo")
 	if err != nil {
-		return suggestText, errors.Wrap(err, "ESEngine.DoSearch - Error TypoSuggestDo Do.")
+		return result, errors.Wrap(err, "ESEngine.DoSearch - Error TypoSuggestDo Do.")
 	}
 
 	if sp, ok := r.Suggest["pharse-suggest"]; ok {
 		if len(sp) > 0 && sp[0].Options != nil && len(sp[0].Options) > 0 {
-			suggestText = null.String{sp[0].Options[0].Text, true}
+			result.Text = null.String{sp[0].Options[0].Text, true}
+			result.Score = sp[0].Options[0].Score
 		}
 	}
 
-	return suggestText, nil
+	return result, nil
 }

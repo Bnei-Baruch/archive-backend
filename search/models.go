@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"gopkg.in/olivere/elastic.v6"
-	null "gopkg.in/volatiletech/null.v6"
 )
 
 type Intent struct {
@@ -13,9 +12,15 @@ type Intent struct {
 	Value    interface{} `json:"value,omitempty"`
 }
 
+type TypoSuggestResult struct {
+	IsFPR      bool   `json:"is_fpr"`
+	SourceTerm string `json:"source_term"`
+	Term       string `json:"term"`
+}
+
 type QueryResult struct {
-	SearchResult *elastic.SearchResult `json:"search_result,omitempty"`
-	TypoSuggest  null.String           `json:"typo_suggest"`
+	SearchResult  *elastic.SearchResult `json:"search_result,omitempty"`
+	SuggestResult TypoSuggestResult     `json:"suggest_result,omitempty"`
 }
 
 type Engine interface {
