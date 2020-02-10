@@ -352,8 +352,8 @@ func testTypoSuggestFn(cmd *cobra.Command, args []string) {
 		query := search.Query{Term: t, LanguageOrder: consts.SEARCH_LANG_ORDER[language]}
 		res, err := engine.GetTypoSuggest(query)
 		utils.Must(err)
-		if res.Valid {
-			log.Infof("Suggest for '%s' is: '%s'.", t, res.String)
+		if res.Text.Valid {
+			log.Infof("Suggest for '%s' is: '%s'.", t, res.Text.String)
 		} else {
 			noSuggestForTypoCnt++
 			log.Infof("No suggest for '%s'!", t)
@@ -368,8 +368,8 @@ func testTypoSuggestFn(cmd *cobra.Command, args []string) {
 
 		res, err := engine.GetTypoSuggest(query)
 		utils.Must(err)
-		if res.Valid {
-			log.Infof("Suggest for '%s' is: '%s'. Check if this is false positive.", e.Query, res.String)
+		if res.Text.Valid {
+			log.Infof("Suggest for '%s' is: '%s'. Check if this is false positive.", e.Query, res.Text.String)
 			falsePositiveCnt++
 		} else {
 			log.Infof("No suggest for '%s'.", e.Query)
