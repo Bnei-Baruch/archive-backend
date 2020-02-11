@@ -162,8 +162,8 @@
 
 			const elasticProduction = sq('#elastic_production');
 			const elasticReindex = sq('#elastic_reindex');
-			elasticReindex.checked = urlParam('elastic') === elasticReindex.value;
-			elasticProduction.checked = urlParam('elastic') === elasticProduction.value || !elasticReindex.checked;
+			elasticProduction.checked = urlParam('elastic') === elasticProduction.value;
+			elasticReindex.checked = urlParam('elastic') === elasticReindex.value || !elasticProduction.checked;
 			listenToRadioUpdateUrl(['#elastic_production', '#elastic_reindex'], 'elastic');
 
             const frontendBranch = sq('#frontend_branch');

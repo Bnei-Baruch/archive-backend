@@ -118,7 +118,7 @@ func MakeTokensFromPhrase(phrase string, lang string, esc *elastic.Client, tc *T
 	if tc != nil && tc.Has(phrase, lang) {
 		return tc.Get(phrase, lang), nil
 	}
-	index := es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, lang)
+	index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, lang)
 	tokens, err := MakeTokensFromPhraseIndex(phrase, lang, esc, index, context.TODO())
 	if err != nil {
 		return nil, err

@@ -92,7 +92,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 	potentialIntents := make([]Intent, 0)
 	for _, language := range query.LanguageOrder {
 		// Order here provides the priority in results, i.e., tags are more importnt then sources.
-		index := es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, language)
+		index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, language)
 		mssFirstRound.Add(NewResultsSearchRequest(
 			SearchRequestOptions{
 				resultTypes:      []string{consts.ES_RESULT_TYPE_TAGS},
@@ -145,7 +145,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 					mssSecondRound.Add(NewResultsSearchRequest(
 						SearchRequestOptions{
 							resultTypes:      []string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
-							index:            es.IndexAliasName("prod", consts.ES_RESULTS_INDEX, intent.Language),
+							index:            es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, intent.Language),
 							query:            *secondRoundQuery,
 							sortBy:           consts.SORT_BY_RELEVANCE,
 							from:             0,
