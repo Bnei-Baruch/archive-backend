@@ -61,7 +61,7 @@ func MakeIndexer(namespace string, date string, names []string, mdb *sql.DB, esc
 	return indexer, nil
 }
 
-func ProdIndexDateForEvents(esc *elastic.Client) (error, string) {
+func ProdIndexDate(esc *elastic.Client) (error, string) {
 	indexDate := viper.GetString("elasticsearch.index-date")
 	if indexDate == "" {
 		return aliasedIndexDate(esc, "prod", consts.ES_RESULTS_INDEX)
@@ -69,13 +69,14 @@ func ProdIndexDateForEvents(esc *elastic.Client) (error, string) {
 	return nil, indexDate
 }
 
-func ProdAliasedIndexDate(esc *elastic.Client) (error, string) {
-	return aliasedIndexDate(esc, "prod", consts.ES_RESULTS_INDEX)
-}
+// Deprecated, use ProdIndexDateForEvents, we should alway
+//func ProdAliasedIndexDate(esc *elastic.Client) (error, string) {
+//	return aliasedIndexDate(esc, "prod", consts.ES_RESULTS_INDEX)
+//}
 
 func aliasedIndexDate(esc *elastic.Client, namespace string, name string) (error, string) {
 	aliasRegexp := IndexName(namespace, name, ".*", ".*")
-	alias := IndexAliasName(namespace, name, "%s")
+	alias := indexAliasName(namespace, name, "%s")
 	return AliasedIndex(esc, alias, aliasRegexp)
 }
 
@@ -136,8 +137,8 @@ func SwitchProdAliasToCurrentIndex(date string, esc *elastic.Client) error {
 }
 
 func SwitchAliasToCurrentIndex(namespace string, name string, date string, esc *elastic.Client) error {
-	alias := IndexAliasName(namespace, name, "%s")
-	indexName := IndexName(namespace, name, "%s", date)
+	alias := indexAliasName(namespace, name, "%s")
+	iName := IndexName(namespace, name, "%s", date)
 	err, prevDate := aliasedIndexDate(esc, namespace, name)
 	if err != nil {
 		return errors.Wrapf(err, "Error getting prev date, namespace: %s, name: %s, date: %s.", namespace, name, date)
@@ -146,7 +147,7 @@ func SwitchAliasToCurrentIndex(namespace string, name string, date string, esc *
 	if prevDate != "" {
 		prevIndex = IndexName(namespace, name, "%s", prevDate)
 	}
-	return SwitchAlias(alias, prevIndex, indexName, esc)
+	return SwitchAlias(alias, prevIndex, iName, esc)
 }
 
 func SwitchAlias(alias string, prev string, next string, esc *elastic.Client) error {

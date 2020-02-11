@@ -167,13 +167,15 @@ func indexFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	err, prevDate := es.ProdAliasedIndexDate(esc)
+	err, prevDate := es.ProdIndexDate(esc)
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	if date == prevDate {
+    // Check that we did not set specifi index, otherwise we will always have "same date".
+	indexDate := viper.GetString("elasticsearch.index-date")
+	if indexDate == "" && date == prevDate {
 		log.Info(fmt.Sprintf("New index date is the same as previous index date %s. Wait a minute and rerun.", prevDate))
 		return
 	}
@@ -378,7 +380,7 @@ func simulateUpdateFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	err, date := es.ProdAliasedIndexDate(client)
+	err, date := es.ProdIndexDate(client)
 	if err != nil {
 		log.Error(err)
 		return

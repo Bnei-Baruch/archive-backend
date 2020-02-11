@@ -136,13 +136,13 @@ def delete_indexes(name):
     (returncode, stdout, stderr) = run_command('./archive-backend delete_index --index_date=%s' % name, backend_dir(name), True)
     if returncode != 0:
         print 'Failed deleting index stderr: %s, stdout: %s returncode: %d' % (stderr, stdout, returncode)
-        return (stderr, stdout, returncode)
+        return (returncode, stderr, stdout)
     else:
         print 'Deleted index %s' % name
     (returncode, stdout, stderr) = run_command('./archive-backend delete_grammar_index --index_date=%s' % name, backend_dir(name), True)
     if returncode != 0:
         print 'Failed deleting grammar index stderr: %s, stdout: %s returncode: %d' % (stderr, stdout, returncode)
-        return (stderr, stdout, returncode)
+        return (returncode, stderr, stdout)
     else:
         print 'Deleted grammar index %s' % name
     return (0, "", "")
@@ -197,6 +197,7 @@ def stop_and_clean(name):
         free_frontend_port(demo['ssr_frontend_port'])
         del demo['ssr_frontend_port']
     if 'backend_port' in demo:
+        kill_backend(name)
         free_backend_port(demo['backend_port'])
         del demo['backend_port']
     (returncode, stdout, stderr) = run_command(['rm', '-rf', backend_dir(name)])
@@ -248,39 +249,46 @@ def set_up_frontend(name, branch):
 
 backend_lock = threading.Lock()
 def update_reload(name):
-    with backend_lock:
-        branch = demos[name]['backend_branch'] 
-        (returncode, stdout, stderr) = run_command(['git', 'status'])
-        if returncode != 0:
-            return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        m = re.search(r'# On branch (.*)', stdout)
-        if not m:
-            return 'Failed extracting git current branch.'
-        original_branch = m.groups(1)[0]
-        (returncode, stdout, stderr) = run_command(['git', 'fetch'])
-        if returncode != 0:
-            return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        (returncode, stdout, stderr) = run_command(['git', 'checkout', branch])
-        if returncode != 0:
-            return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        (returncode, stdout, stderr) = run_command(['cp', '-rf', './search/variables', '%s/search/' % backend_dir(name)])
-        if returncode != 0:
-            return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        (returncode, stdout, stderr) = run_command(['cp', '-rf', './search/grammars', '%s/search/' % backend_dir(name)])
-        if returncode != 0:
-            return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        (returncode, stdout, stderr) = run_command(['cp', '-rf', './es/synonyms', '%s/es/' % backend_dir(name)])
-        if returncode != 0:
-            return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        kill_backend(name)
-        start_backend(name)
-        if original_branch != branch:
-            (returncode, stdout, stderr) = run_command(['git', 'checkout', original_branch])
+    if demos[name]['elastic'] == 'reindex':
+        with backend_lock:
+            branch = 'origin/%s' % demos[name]['backend_branch'] 
+            (returncode, stdout, stderr) = run_command(['git', 'status'])
             if returncode != 0:
                 return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        demos[name]['status'].append('Updated variables, grammars and synonyms. Reloaded backend.')
+            m = re.search(r'# On branch (.*)', stdout)
+            if not m:
+                return 'Failed extracting git current branch.'
+            original_branch = m.groups(1)[0]
+            (returncode, stdout, stderr) = run_command(['git', 'fetch'])
+            if returncode != 0:
+                return 'stderr: %s, stdout: %s' % (stderr, stdout)
+            (returncode, stdout, stderr) = run_command(['git', 'checkout', branch])
+            if returncode != 0:
+                return 'stderr: %s, stdout: %s' % (stderr, stdout)
+            (returncode, stdout, stderr) = run_command(['cp', '-rf', './search/variables', '%s/search/' % backend_dir(name)])
+            if returncode != 0:
+                return 'stderr: %s, stdout: %s' % (stderr, stdout)
+            (returncode, stdout, stderr) = run_command(['cp', '-rf', './search/grammars', '%s/search/' % backend_dir(name)])
+            if returncode != 0:
+                return 'stderr: %s, stdout: %s' % (stderr, stdout)
+            (returncode, stdout, stderr) = run_command(['cp', '-rf', './search/data', '%s/search/' % backend_dir(name)])
+            if returncode != 0:
+                return 'stderr: %s, stdout: %s' % (stderr, stdout)
+            (returncode, stdout, stderr) = run_command(['cp', '-rf', './es/synonyms', '%s/es/' % backend_dir(name)])
+            if returncode != 0:
+                return 'stderr: %s, stdout: %s' % (stderr, stdout)
+            kill_backend(name)
+            start_backend(name)
+            error = start_update_synonyms(name)
+            if error:
+                demos[name]['status'].append(error)
+            if original_branch != branch:
+                (returncode, stdout, stderr) = run_command(['git', 'checkout', original_branch])
+                if returncode != 0:
+                    return 'stderr: %s, stdout: %s' % (stderr, stdout)
+            demos[name]['status'].append('Updated variables, grammars and synonyms. Reloaded backend.')
 
-def set_up_backend(name, branch):
+def set_up_backend(name):
     with backend_lock:
         (returncode, stdout, stderr) = run_command(['ls', backend_dir(name)])
         if returncode == 0:
@@ -292,6 +300,10 @@ def set_up_backend(name, branch):
         if not m:
             return 'Failed extracting git current branch.'
         original_branch = m.groups(1)[0]
+        (returncode, stdout, stderr) = run_command(['git', 'fetch'])
+        if returncode != 0:
+            return 'stderr: %s, stdout: %s' % (stderr, stdout)
+        branch = 'origin/%s' % demos[name]['backend_branch']
         if original_branch != branch:
             (returncode, stdout, stderr) = run_command(['git', 'checkout', branch])
             if returncode != 0:
@@ -329,6 +341,9 @@ def set_up_backend(name, branch):
         (returncode, stdout, stderr) = run_command(['cp', '-r', './search/grammars', '%s/search/' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
+        (returncode, stdout, stderr) = run_command(['cp', '-r', './search/data', '%s/search/' % backend_dir(name)])
+        if returncode != 0:
+            return 'stderr: %s, stdout: %s' % (stderr, stdout)
         (returncode, stdout, stderr) = run_command(['cp', '-r', './es/synonyms', '%s/es/' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
@@ -358,7 +373,7 @@ def set_up_demo(name):
     # Start backend
     print 'Setting up demo: %s.' % demos[name]
     demos[name]['status'].append('Setting up backend')
-    error = set_up_backend(name, demos[name]['backend_branch'])
+    error = set_up_backend(name)
     if error:
         demos[name]['status'].append(error)
         return
