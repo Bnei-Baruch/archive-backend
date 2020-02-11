@@ -102,7 +102,6 @@ type BlogFilter struct {
 }
 
 type MediaLanguageFilter struct {
-	ContentTypesFilter
 	MediaLanguage string `json:"media_language" form:"media_language" binding:"omitempty,len=2"`
 }
 

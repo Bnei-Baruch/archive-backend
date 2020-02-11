@@ -2268,23 +2268,12 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 		return nil
 	}
 
-	if len(f.ContentTypes) != 0 && strings.ToUpper(f.ContentTypes[0]) == consts.CT_BLOG_POST {
-		*mods = append(*mods, qm.Where("properties->>'original_language' = ?", f.MediaLanguage))
-	} else {
-		*mods = append(*mods,
-			qm.WhereIn("(id in ( SELECT DISTINCT cu.id FROM content_units cu "+
-				"INNER JOIN files f "+
-				"ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE "+
-				"AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))", f.MediaLanguage),
-		)
-	}
-	/*	where := fmt.Sprintf("(type_id = %[1]d AND properties->>'original_language' = '%[2]s') OR "+
-		"(id in ( SELECT DISTINCT cu.id FROM content_units cu "+
-		"INNER JOIN files f "+
-		"ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE "+
-		"AND f.secure = 0 AND f.published IS TRUE AND f.language = '%[2]s'))",
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID, f.MediaLanguage)
-	*mods = append(*mods, qm.Where(where), )*/
+	*mods = append(*mods,
+		qm.WhereIn("(id in ( SELECT DISTINCT cu.id FROM content_units cu "+
+			"INNER JOIN files f "+
+			"ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE "+
+			"AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))", f.MediaLanguage),
+	)
 	return nil
 }
 
