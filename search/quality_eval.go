@@ -349,6 +349,7 @@ type HitSource struct {
 	Content             string      `json:"content,omitempty"`
 	CarrouselHitSources []HitSource `json:"carrousel,omitempty"`
 	ContentType         string      `json:"content_type,omitempty"`
+	Score               float64     `json:"score,omitempty"`
 }
 
 func HitSourcesEqual(a, b HitSource) bool {
@@ -619,8 +620,14 @@ func EvaluateQuery(q EvalQuery, serverUrl string, skipExpectations bool) EvalRes
 		}
 	}
 
-	urlTemplate := "%s/search?q=%s&language=%s&page_no=1&page_size=10&sort_by=relevance&deb=true"
-	url := fmt.Sprintf(urlTemplate, serverUrl, url.QueryEscape(q.Query), q.Language)
+	limit := 10
+	if skipExpectations {
+		// We prepare this query for SxS and want to detect case where we have results with the same score
+		// and thus their order changes. We want to detect this and count this as non-diff.
+		limit = 20
+	}
+	urlTemplate := "%s/search?q=%s&language=%s&page_no=1&page_size=%d&sort_by=relevance&deb=true"
+	url := fmt.Sprintf(urlTemplate, serverUrl, url.QueryEscape(q.Query), q.Language, limit)
 	resp, err := http.Get(url)
 	if err != nil {
 		log.Warnf("Error %+v", err)
@@ -1439,16 +1446,37 @@ func evalResultToHitSources(result EvalResult) ([]HitSource, error) {
 				if err = json.Unmarshal(*hit.Source, &carrousel); err != nil {
 					return nil, err
 				}
-				for _, searchHit := range carrousel {
+				for i, searchHit := range carrousel {
 					carrouselHitSource := HitSource{}
 					if err = json.Unmarshal(*searchHit.Source, &carrouselHitSource); err != nil {
 						return nil, err
 					}
+					if searchHit.Score != nil {
+						carrouselHitSource.Score = *searchHit.Score
+					}
+					// Update carrousel parent required params, max score and mdb_uid.
+					if i == 0 {
+						hitSource.Score = carrouselHitSource.Score
+						hitSource.MdbUid = carrouselHitSource.MdbUid
+					}
 					hitSource.CarrouselHitSources = append(hitSource.CarrouselHitSources, carrouselHitSource)
+				}
+			} else {
+				if hit.Score != nil {
+					hitSource.Score = *hit.Score
 				}
 			}
 			sources = append(sources, hitSource)
 		}
+		// We expect here to get list of sources with scrores. We want to break same score order by UID.
+		sort.SliceStable(sources, func(i, j int) bool {
+			if sources[i].Score == sources[j].Score {
+				return sources[i].MdbUid < sources[j].MdbUid
+			}
+			return sources[i].Score > sources[j].Score
+		})
+		// Cut back to size of 10.
+		sources = sources[:utils.Min(len(sources), 10)]
 	}
 	return sources, nil
 }
@@ -1502,7 +1530,7 @@ func EvalResultDiffHtml(resultDiff ResultDiff) (string, error) {
 	parts := []string{fmt.Sprintf("[%s]", resultDiff.Query)}
 	for i := range resultDiff.HitsDiffs {
 		parts = append(parts, fmt.Sprintf(
-			"\t%d: %s <> %s",
+			"\t%d: %+v <> %+v",
 			resultDiff.HitsDiffs[i].Rank,
 			resultDiff.HitsDiffs[i].ExpHitSource,
 			resultDiff.HitsDiffs[i].BaseHitSource,
