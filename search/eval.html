@@ -51,15 +51,15 @@
             .sxs-table td > div {
                 display: inline-block;
                 text-overflow: ellipsis;
-                max-width: 100px;
-                min-width: 100px;
+                max-width: 80px;
+                min-width: 80px;
                 overflow: hidden;
                 white-space: nowrap;
             }
 
             .sxs-table td > div:first-child {
-                max-width: 300px;
-                min-width: 300px;
+                max-width: 200px;
+                min-width: 200px;
             }
 
             .sxs-table table td {
@@ -283,7 +283,7 @@
                             diff.results_diffs.forEach((result_diff) => {
 								const queryLink = (query, isExp) => {
 									let host = isExp ? sq('#exp-server-frontend-url').value : sq('#base-server-frontend-url').value;
-									return `${host}/search?q=${query}`;
+									return `${host}/search?q=${encodeURI(query)}&deb`;
 								};
 								console.log(result_diff);
 								rowSpan = result_diff.hits_diffs && result_diff.hits_diffs.length || 1;
@@ -319,11 +319,12 @@
                                     } else {
                                         const titleOrContent = (hs) => hs.title || hs.content || '';
                                         return [
-                                            `<div style="max-width: 300px; min-width: 300px; overflow: hidden; text-overflow: ellipsis;"
-                                                  data-tooltip="${titleOrContent(hs).replace(/"/g, '&quot;')}" style="overflow: visible;"><div>${titleOrContent(hs)}</div></div>`,
+                                            `<div style="max-width: 200px; min-width: 200px; overflow: hidden; text-overflow: ellipsis;"
+                                                  data-tooltip="${titleOrContent(hs).replace(/"/g, '&quot;')}" style="overflow: visible;">${titleOrContent(hs)}</div>`,
                                             `<div>${hs.mdb_uid}</div>`,
                                             `<div>${hs.result_type}</div>`,
                                             `<div>${hs.landing_page}</div>`,
+                                            `<div>${hs.score}</div>`,
                                         ].join('');
                                     }
                                 };
