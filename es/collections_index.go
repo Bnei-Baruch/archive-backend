@@ -229,8 +229,10 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 			indexErrors.ShouldIndex(i18n.Language)
 			typedUIDs := append([]string{KeyValue(consts.ES_UID_TYPE_COLLECTION, c.UID)},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
-			filterValues := append([]string{KeyValue("content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
-				KeyValues("collections_content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))...)
+			filterValues := append(
+				[]string{KeyValue("collections_content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
+				KeyValues("content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))...,
+			)
 			collection := Result{
 				ResultType:   index.resultType,
 				IndexDate:    &utils.Date{Time: time.Now()},
