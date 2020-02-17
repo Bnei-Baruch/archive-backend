@@ -44,8 +44,8 @@ def demos_to_json():
                 d[k] = 'Backend Running' if v.poll() is None else 'Return code: %d (any value means backend is down!)' % v.poll()
             elif k == 'frontend_process':
                 d[k] = 'Frontend Running' if v.poll() is None else 'Return code: %d (any value means frontend is down!)' % v.poll()
-            elif k == 'ssr_frontend_process':
-                d[k] = 'Frontend Running' if v.poll() is None else 'Return code: %d (any value means frontend is down!)' % v.poll()
+            #elif k == 'ssr_frontend_process':
+            #    d[k] = 'Frontend Running' if v.poll() is None else 'Return code: %d (any value means frontend is down!)' % v.poll()
             else:
                 d[k] = v
         ret[name] = d
@@ -88,6 +88,11 @@ def run_command(command, cwd=None, shell=False):
     print 'running command: [%s]' % command_str
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, shell=shell)
     stdout, stderr = process.communicate()
+    if shell:
+        print 'before wait!'
+        returncode = process.wait()
+        print 'after wait!'
+        return (returncode, stdout, stderr)
     return (process.returncode, stdout, stderr)
 
 def backend_dir(name):
@@ -149,17 +154,18 @@ def delete_indexes(name):
 
 def start_frontend(name):
     demos[name]['frontend_process'] = subprocess.Popen(
-        'CRA_CLIENT_PORT=%d SERVER_PORT=%d yarn start-server >& ./frontend.log' % (demos[name]['ssr_frontend_port'], demos[name]['frontend_port']),
+        'SERVER_PORT=%d NODE_ENV=production node server/index.js >& ./frontend.log' % demos[name]['frontend_port'],
+        #'CRA_CLIENT_PORT=%d SERVER_PORT=%d yarn start-server >& ./frontend.log' % (demos[name]['ssr_frontend_port'], demos[name]['frontend_port']),
         cwd=frontend_dir(name),
         shell=True,
         preexec_fn=os.setsid)
     print 'Started frontend_process, pid: %d' % demos[name]['frontend_process'].pid
-    demos[name]['ssr_frontend_process'] = subprocess.Popen(
-        'PORT=%d yarn start-js >& ./ssr_frontend.log' % (demos[name]['ssr_frontend_port']),
-        cwd=frontend_dir(name),
-        shell=True,
-        preexec_fn=os.setsid)
-    print 'Started ssr_frontend_process, pid: %d' % demos[name]['ssr_frontend_process'].pid
+    #demos[name]['ssr_frontend_process'] = subprocess.Popen(
+    #    'PORT=%d yarn start-js >& ./ssr_frontend.log' % (demos[name]['ssr_frontend_port']),
+    #    cwd=frontend_dir(name),
+    #    shell=True,
+    #    preexec_fn=os.setsid)
+    #print 'Started ssr_frontend_process, pid: %d' % demos[name]['ssr_frontend_process'].pid
 
 def kill_process(name, process):
     try:
@@ -172,7 +178,7 @@ def kill_process(name, process):
     
 def kill_frontend(name):
     kill_process(name, 'frontend_process')
-    kill_process(name, 'ssr_frontend_process')
+    #kill_process(name, 'ssr_frontend_process')
 
 # Cleanup:
 #    1) All background processes stopped automatically. Backend, reindex, grammar reindex, frontend.
@@ -193,9 +199,9 @@ def stop_and_clean(name):
         kill_frontend(name)
         free_frontend_port(demo['frontend_port'])
         del demo['frontend_port']
-    if 'ssr_frontend_port' in demo:
-        free_frontend_port(demo['ssr_frontend_port'])
-        del demo['ssr_frontend_port']
+    #if 'ssr_frontend_port' in demo:
+    #    free_frontend_port(demo['ssr_frontend_port'])
+    #    del demo['ssr_frontend_port']
     if 'backend_port' in demo:
         kill_backend(name)
         free_backend_port(demo['backend_port'])
@@ -222,27 +228,33 @@ def set_up_frontend(name, branch):
     (returncode, stdout, stderr) = run_command(['git', 'checkout', branch], cwd=frontend_dir(name))
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
-    (returncode, stdout, stderr) = run_command(['cp', '../kmedia-mdb/.env', frontend_dir(name)])
+    (returncode, stdout, stderr) = run_command(['cp', '../kmedia-mdb/.env', '%s/.env.demo' % frontend_dir(name)])
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     demos[name]['frontend_port'] = get_frontend_port()
-    demos[name]['ssr_frontend_port'] = get_frontend_port()
+    #demos[name]['ssr_frontend_port'] = get_frontend_port()
     (returncode, stdout, stderr) = run_command([
         'sed', '-i', '-E',
-        's/REACT_APP_BASE_URL=.*/REACT_APP_BASE_URL=http:\/\/bbdev6.kbb1.com:%d\//g' % demos[name]['ssr_frontend_port'],
-        '%s/.env' % frontend_dir(name)])
+        's/REACT_APP_BASE_URL=.*/REACT_APP_BASE_URL=http:\/\/bbdev6.kbb1.com:%d\//g' % demos[name]['frontend_port'],
+        '%s/.env.demo' % frontend_dir(name)])
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     (returncode, stdout, stderr) = run_command([
         'sed', '-i', '-E',
         's/REACT_APP_API_BACKEND=.*/REACT_APP_API_BACKEND=http:\/\/bbdev6.kbb1.com:%d\//g' % demos[name]['backend_port'],
-        '%s/.env' % frontend_dir(name)])
+        '%s/.env.demo' % frontend_dir(name)])
+    if returncode != 0:
+        return 'stderr: %s, stdout: %s' % (stderr, stdout)
+    (returncode, stdout, stderr) = run_command([
+        'sed', '-i',
+        's/\'default-src\': \[/\'default-src\': [ \'bbdev6.kbb1.com:%d\',/g' % demos[name]['backend_port'],
+        '%s/server/app-prod.js' % frontend_dir(name)])
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     (returncode, stdout, stderr) = run_command(['yarn', 'install'], cwd=frontend_dir(name))
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
-    (returncode, stdout, stderr) = run_command(['yarn', 'build:local'], cwd=frontend_dir(name))
+    (returncode, stdout, stderr) = run_command(['REACT_APP_ENV=demo yarn build >& ./build.log'], cwd=frontend_dir(name), shell=True)
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     start_frontend(name)
@@ -452,7 +464,7 @@ class DemoHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         if m:
             filename = m.groups(1)[1]
             dirname = backend_dir(m.groups(1)[0])
-            if filename == 'frontend.log' or filename == 'ssr_frontend.log':
+            if filename == 'frontend.log': #or filename == 'ssr_frontend.log':
                 dirname = frontend_dir(m.groups(1)[0])
             path = '%s/%s' % (dirname, filename)
             text = 'Unable to read file'
