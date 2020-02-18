@@ -353,6 +353,10 @@ type HitSource struct {
 }
 
 func HitSourcesEqual(a, b HitSource) bool {
+    if a.Score == float64(0) && a.Score == b.Score {
+        // All zero score are the same.
+        return true
+    }
 	if a.MdbUid != b.MdbUid ||
 		a.ResultType != b.ResultType ||
 		a.LandingPage != b.LandingPage ||
