@@ -166,6 +166,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchPhraseQuery("title", exactTerm),
+					elastic.NewMatchPhraseQuery("full_title", exactTerm),
 					elastic.NewMatchPhraseQuery("description", exactTerm),
 					elastic.NewMatchPhraseQuery("content", exactTerm),
 				).MinimumNumberShouldMatch(1),
@@ -174,10 +175,12 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 			elastic.NewDisMaxQuery().Query(
 				// Language analyzed, exact (no slop)
 				elastic.NewMatchPhraseQuery("title.language", exactTerm).Boost(EXACT_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title.language", exactTerm).Boost(EXACT_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description.language", exactTerm).Boost(EXACT_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content.language", exactTerm).Boost(EXACT_BOOST),
 				// Standard analyzed, exact (no slop).
 				elastic.NewMatchPhraseQuery("title", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST),
 			),
