@@ -24,12 +24,20 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	}
 	// log.Infof("Hit: %+v %+v", *h.Score, classificationIntent)
 	if h.Score != nil && *h.Score > 0 {
+
+		var titleToAdd string
+		if classificationIntent.FullTitle != "" {
+			titleToAdd = classificationIntent.FullTitle
+		} else {
+			titleToAdd = classificationIntent.Title
+		}
+
 		classificationIntent.Score = h.Score
 		// Search for specific classification by full name to evaluate max score.
 		query.Term = ""
-		query.ExactTerms = []string{classificationIntent.Title}
+		query.ExactTerms = []string{titleToAdd}
 		intent.Value = classificationIntent
-		// log.Infof("Potential intent: %s", classificationIntent.Title)
+		// log.Infof("Potential intent: %s", titleToAdd)
 		return nil, &intent, &query
 	}
 	return nil, nil, nil

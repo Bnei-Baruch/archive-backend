@@ -39,6 +39,7 @@ type ClassificationIntent struct {
 	ResultType string `json:"result_type"`
 	MDB_UID    string `json:"mdb_uid"`
 	Title      string `json:"title"`
+	FullTitle  string `json:"full_title"`
 
 	// Intent fields.
 	ContentType    string                    `json:"content_type"`
