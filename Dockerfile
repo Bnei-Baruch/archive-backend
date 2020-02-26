@@ -1,4 +1,5 @@
 ARG work_dir=/go/src/github.com/Bnei-Baruch/archive-backend
+ARG build_number=dev
 
 FROM golang:1.14-alpine3.11 as build
 
@@ -16,7 +17,7 @@ RUN apk update && \
 
 WORKDIR ${work_dir}
 COPY . .
-RUN go build -ldflags '-w -X github.com/Bnei-Baruch/archive-backend/version.PreRelease=${build_number}'
+RUN go build -ldflags "-w -X github.com/Bnei-Baruch/archive-backend/version.PreRelease=${build_number}"
 
 
 FROM alpine:3.11
