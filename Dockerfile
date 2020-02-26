@@ -1,6 +1,6 @@
 ARG work_dir=/go/src/github.com/Bnei-Baruch/archive-backend
 
-FROM golang:alpine as build
+FROM golang:1.14-alpine3.11 as build
 
 LABEL maintainer="edoshor@gmail.com"
 
@@ -16,10 +16,10 @@ RUN apk update && \
 
 WORKDIR ${work_dir}
 COPY . .
-RUN go build -ldflags '-w -X ${work_dir}/version.PreRelease=${build_number}'
+RUN go build -ldflags '-w -X github.com/Bnei-Baruch/archive-backend/version.PreRelease=${build_number}'
 
 
-FROM alpine:3.10
+FROM alpine:3.11
 
 RUN apk update && \
     apk add --no-cache \
