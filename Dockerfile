@@ -5,9 +5,9 @@ FROM golang:alpine as build
 LABEL maintainer="edoshor@gmail.com"
 
 ARG work_dir
+ARG build_number
 
-ENV BUILD_NUMBER='' \
-	GOOS=linux \
+ENV GOOS=linux \
 	CGO_ENABLED=0
 
 RUN apk update && \
@@ -16,7 +16,7 @@ RUN apk update && \
 
 WORKDIR ${work_dir}
 COPY . .
-RUN go build -ldflags '-w -X ${work_dir}/version.PreRelease=${BUILD_NUMBER}'
+RUN go build -ldflags '-w -X ${work_dir}/version.PreRelease=${build_number}'
 
 
 FROM alpine:3.10
