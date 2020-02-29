@@ -13,6 +13,7 @@ import signal
 import subprocess
 import threading
 import urlparse
+import sys
 
 
 PORT = 8000
@@ -442,6 +443,31 @@ for i in range(NUM_WORKER_THREADS):
      t.daemon = True
      t.start()
 
+# Monitor calls
+nextCallId = 0
+calls = {}
+class MonitorCalls:
+    def __init__(self, message):
+        global nextCallId
+        global calls
+        self.callId = nextCallId
+        nextCallId += 1
+        calls[self.callId] = message
+    def __enter__(self):
+        self.printCalls('Before')
+        return self.callId
+    def __exit__(self, type, value, traceback):
+        global calls
+        del calls[self.callId]
+        self.printCalls('After')
+    def printCalls(self, prefix):
+        global calls
+        print '\n%s - %d Calls:' % (prefix, len(calls))
+        for (k, v) in calls.iteritems():
+            print '%s - %s' % (k, v)
+        print
+        sys.stdout.flush()
+
 class DemoHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
     def return_response(self, code, message):
         # print 'returning [%d]: [%s]' % (code, message)
@@ -450,76 +476,81 @@ class DemoHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         self.wfile.write(message)
 
     def do_GET(self):
-        parts = urlparse.urlparse(self.path)
-        # print 'get %s' % (parts,)
-        if parts.path == '/':
-            self.path = './misc/demo.html'
-            return SimpleHTTPServer.SimpleHTTPRequestHandler.do_GET(self)
-        if parts.path == '/status':
-            self.return_response(200, json.dumps(demos_to_json()))
-            return
+        with MonitorCalls(self.path):
+            parts = urlparse.urlparse(self.path)
+            # print 'get %s' % (parts,)
+            if parts.path == '/':
+                self.path = './misc/demo.html'
+                return SimpleHTTPServer.SimpleHTTPRequestHandler.do_GET(self)
+            if parts.path == '/status':
+                self.return_response(200, json.dumps(demos_to_json()))
+                return
 
-        # Serve log files.
-        m = re.match(r'^/logs/(%s)/(%s)$' % (NAME_RE, LOG_RE), parts.path)
-        if m:
-            filename = m.groups(1)[1]
-            dirname = backend_dir(m.groups(1)[0])
-            if filename == 'frontend.log': #or filename == 'ssr_frontend.log':
-                dirname = frontend_dir(m.groups(1)[0])
-            path = '%s/%s' % (dirname, filename)
-            text = 'Unable to read file'
-            with open(path, 'r') as f:
-                text = f.read()
-            self.return_response(200, text)
-            return
+            # Serve log files.
+            m = re.match(r'^/logs/(%s)/(%s)$' % (NAME_RE, LOG_RE), parts.path)
+            if m:
+                filename = m.groups(1)[1]
+                dirname = backend_dir(m.groups(1)[0])
+                if filename == 'frontend.log': #or filename == 'ssr_frontend.log':
+                    dirname = frontend_dir(m.groups(1)[0])
+                path = '%s/%s' % (dirname, filename)
+                text = 'Unable to read file'
+                with open(path, 'r') as f:
+                    text = f.read()
+                self.return_response(200, text)
+                return
 
-        m = re.match(r'^/stop_and_clean/(%s)$' % NAME_RE, parts.path)
-        if m:
-            stop_and_clean(m.groups(1)[0])
+            m = re.match(r'^/stop_and_clean/(%s)$' % NAME_RE, parts.path)
+            if m:
+                stop_and_clean(m.groups(1)[0])
 
-        m = re.match(r'^/update_reload/(%s)$' % NAME_RE, parts.path)
-        if m:
-            update_reload(m.groups(1)[0])
+            m = re.match(r'^/update_reload/(%s)$' % NAME_RE, parts.path)
+            if m:
+                update_reload(m.groups(1)[0])
 
-        # Cannot server config.toml as it has passwords insdie...
-        # m = re.match(r'^/logs/(%s)/config.toml$' % NAME_RE, parts.path)
-        # if m:
-        #     path = '%s/config.toml' % backend_dir(m.groups(1)[0])
-        #     logs = 'Unable to read config file'
-        #     with open(path, 'r') as log_file:
-        #         logs = log_file.read()
-        #     self.return_response(200, logs)
-        #     return
+            # Cannot server config.toml as it has passwords insdie...
+            # m = re.match(r'^/logs/(%s)/config.toml$' % NAME_RE, parts.path)
+            # if m:
+            #     path = '%s/config.toml' % backend_dir(m.groups(1)[0])
+            #     logs = 'Unable to read config file'
+            #     with open(path, 'r') as log_file:
+            #         logs = log_file.read()
+            #     self.return_response(200, logs)
+            #     return
 
     def do_POST(self):
-        if self.path == '/start':
-            content_length = int(self.headers['Content-Length'])
-            body = self.rfile.read(content_length)
-            request = json.loads(body)
-            print request
-            print type(request)
-            fields = ['name', 'comment', 'backend_branch', 'frontend_branch', 'elastic']
-            missing_fields = [f for f in fields if not request[f]]
-            if len(missing_fields):
-                self.return_response(400, 'Please set field values: %s.' % ', '.join(missing_fields))
-                return
+        with MonitorCalls(self.path):
+            if self.path == '/start':
+                content_length = int(self.headers['Content-Length'])
+                body = self.rfile.read(content_length)
+                request = json.loads(body)
+                print request
+                print type(request)
+                fields = ['name', 'comment', 'backend_branch', 'frontend_branch', 'elastic']
+                missing_fields = [f for f in fields if not request[f]]
+                if len(missing_fields):
+                    self.return_response(400, 'Please set field values: %s.' % ', '.join(missing_fields))
+                    return
 
-            if not re.match(r'^%s$' % NAME_RE, request['name']):
-                self.return_response(400, '"name" should be simple letters, digits or underscore without spaces.')
-                return
+                if not re.match(r'^%s$' % NAME_RE, request['name']):
+                    self.return_response(400, '"name" should be simple letters, digits or underscore without spaces.')
+                    return
 
-            if request['name'] in demos:
-                self.return_response(400, 'Demo with name: [%s] already exist.' % request['name'])
-                return
+                if request['name'] in demos:
+                    self.return_response(400, 'Demo with name: [%s] already exist.' % request['name'])
+                    return
 
-            request['status'] = []
-            demos[request['name']] = request
-            start_queue.put(request['name'])
+                request['status'] = []
+                demos[request['name']] = request
+                start_queue.put(request['name'])
 
-            self.send_response(200)
+                self.send_response(200)
+
+class ThreadingTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
+    pass
 
 SocketServer.TCPServer.allow_reuse_address = True
-httpd = SocketServer.TCPServer(("", PORT), DemoHandler)
+httpd = ThreadingTCPServer(("", PORT), DemoHandler)
 
 print "serving at port", PORT
 httpd.serve_forever()
