@@ -126,6 +126,9 @@ func indexGrammarsFn(cmd *cobra.Command, args []string) {
 		log.Info(fmt.Sprintf("New index date is the same as previous index date %s. Wait a minute and rerun.", prev))
 		return
 	}
+    if prev != "" {
+        prev = search.GrammarIndexName("%s", prev)
+    }
 
 	log.Infof("Client loaded.")
 	variables, err := search.MakeVariablesV2(viper.GetString("elasticsearch.variables"))
@@ -143,7 +146,7 @@ func indexGrammarsFn(cmd *cobra.Command, args []string) {
 	}
 
 	if updateAlias {
-		utils.Must(es.SwitchAlias(alias, search.GrammarIndexName("%s", prev), search.GrammarIndexName("%s", date), esc))
+		utils.Must(es.SwitchAlias(alias, prev, search.GrammarIndexName("%s", date), esc))
 	} else {
 		log.Info("Not switching alias.")
 	}
