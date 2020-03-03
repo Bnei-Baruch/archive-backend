@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Bnei-Baruch/archive-backend/es"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 	"time"
 
 	"gopkg.in/olivere/elastic.v6"
@@ -75,9 +77,20 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 	for _, result := range resultsByLang {
 
 		var maxScore float64
+		maxEd := es.EffectiveDate{EffectiveDate: &utils.Date{time.Now()}}
+		source, _ := json.Marshal(maxEd)
 		for _, hit := range result.Hits.Hits {
 			if *hit.Score > maxScore {
 				maxScore = *hit.Score
+			}
+			var ed es.EffectiveDate
+			if err := json.Unmarshal(*hit.Source, &ed); err != nil {
+				return nil, err
+			}
+
+			if ed.EffectiveDate == nil || ed.EffectiveDate.After(maxEd.EffectiveDate.Time) {
+				maxEd = ed
+				source = *hit.Source
 			}
 		}
 
@@ -89,6 +102,7 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 		}
 
 		hit := &elastic.SearchHit{
+			Source:    (*json.RawMessage)(&source),
 			Type:      hitType,
 			Score:     &maxScore,
 			InnerHits: innerHitsMap,
