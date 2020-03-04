@@ -744,7 +744,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 		if checkTypo && (ret.Hits.MaxScore == nil || *ret.Hits.MaxScore < consts.MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST) {
 			suggestResponse = <-suggestChannel
-			if suggestResponse.Score < consts.MIN_RESULTS_SCORE_HARD_UES_TYPO_SUGGEST {
+			if suggestResponse.Score < consts.MIN_RESULTS_SCORE_HARD_USE_TYPO_SUGGEST {
 				newQuery := query
 				newQuery.Term = suggestResponse.Text.String
 				r, err := e.DoSearch(ctx, newQuery, sortBy, from, size, preference, false)
@@ -759,7 +759,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	if checkTypo {
 		suggestResponse = <-suggestChannel
-		if suggestResponse.Score < consts.MIN_RESULTS_SCORE_HARD_UES_TYPO_SUGGEST {
+		if suggestResponse.Score < consts.MIN_RESULTS_SCORE_HARD_USE_TYPO_SUGGEST {
 			newQuery := query
 			newQuery.Term = suggestResponse.Text.String
 			r, err := e.DoSearch(ctx, newQuery, sortBy, from, size, preference, false)
