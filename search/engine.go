@@ -39,6 +39,7 @@ type ClassificationIntent struct {
 	ResultType string `json:"result_type"`
 	MDB_UID    string `json:"mdb_uid"`
 	Title      string `json:"title"`
+	FullTitle  string `json:"full_title"`
 
 	// Intent fields.
 	ContentType    string                    `json:"content_type"`
@@ -730,7 +731,36 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		for _, hit := range ret.Hits.Hits {
 			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
 				err = e.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
+			} else {
+				var src es.Result
+				err = json.Unmarshal(*hit.Source, &src)
+				if err != nil {
+					log.Errorf("ESEngine.DoSearch - cannot unmarshal source.")
+					continue
+				}
+				if src.ResultType == consts.ES_RESULT_TYPE_SOURCES {
+					//  Replace full_title to title
+					if src.FullTitle != "" {
+						src.Title = src.FullTitle
+						src.FullTitle = ""
+						nsrc, err := json.Marshal(src)
+						if err != nil {
+							log.Errorf("ESEngine.DoSearch - cannot marshal source with title correction.")
+							continue
+						}
+						hit.Source = (*json.RawMessage)(&nsrc)
+					}
+					if hit.Highlight != nil {
+						if ft, ok := hit.Highlight["full_title"]; ok {
+							if len(ft) > 0 && ft[0] != "" {
+								hit.Highlight["title"] = ft
+								hit.Highlight["full_title"] = nil
+							}
+						}
+					}
+				}
 			}
+
 			//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
 			if hit.Highlight == nil {
 				hit.Highlight = elastic.SearchHitHighlight{}

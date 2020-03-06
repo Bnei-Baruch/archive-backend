@@ -360,7 +360,8 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			}
 			authors := authorsByLanguage[i18n.Language]
 			s := append(authors, pathNames...)
-			source.Title = strings.Join(s, " > ")
+			source.Title = s[len(s)-1]
+			source.FullTitle = strings.Join(s, " > ")
 			source.TitleSuggest = Suffixes(strings.Join(s, " "))
 			i18nMap[i18n.Language] = source
 		}

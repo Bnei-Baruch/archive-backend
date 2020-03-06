@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -93,7 +92,7 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 	log.Infof("Globed %d variable translation files.", len(matches))
 	variables := make(VariablesV2)
 	for _, variableFile := range matches {
-		basename := path.Base(variableFile)
+		basename := filepath.Base(variableFile)
 		variable := fmt.Sprintf("$%s", snakeCaseToCamelCase(basename[:len(basename)-len(suffix)-1]))
 		variableTranslations, err := LoadVariableTranslationsV2(variableFile, variable)
 		if err != nil {

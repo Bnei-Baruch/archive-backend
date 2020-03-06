@@ -1464,6 +1464,25 @@ func (suite *IndexerSuite) validateNames(indexName string, indexer *es.Indexer, 
 	r.ElementsMatch(names, expectedNames, fmt.Sprintf("Expected names: %+v to be the same as expected names: %+v", names, expectedNames))
 }
 
+func (suite *IndexerSuite) validateFullNames(indexName string, indexer *es.Indexer, expectedNames []string) {
+	r := require.New(suite.T())
+	err := indexer.RefreshAll()
+	r.Nil(err)
+	esc, err := common.ESC.GetClient()
+	r.Nil(err)
+	var res *elastic.SearchResult
+	res, err = esc.Search().Index(indexName).Do(suite.ctx)
+	r.Nil(err)
+	names := make([]string, len(res.Hits.Hits))
+	for i, hit := range res.Hits.Hits {
+		var res es.Result
+		json.Unmarshal(*hit.Source, &res)
+		names[i] = res.FullTitle
+	}
+	r.Equal(int64(len(expectedNames)), res.Hits.TotalHits)
+	r.ElementsMatch(names, expectedNames, fmt.Sprintf("Expected names: %+v to be the same as expected names: %+v", names, expectedNames))
+}
+
 func (suite *IndexerSuite) validateContents(indexName string, indexer *es.Indexer, expectedContents []string) {
 	r := require.New(suite.T())
 	err := indexer.RefreshAll()

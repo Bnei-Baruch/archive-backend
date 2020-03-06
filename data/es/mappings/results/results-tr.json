@@ -71,6 +71,16 @@
                 "filter_values": {
                     "type": "keyword"
                 }, 
+                "full_title": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "turkish"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "standard"
+                }, 
                 "typed_uids": {
                     "type": "keyword"
                 }, 
