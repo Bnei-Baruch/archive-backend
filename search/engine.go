@@ -739,7 +739,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					continue
 				}
 				if src.ResultType == consts.ES_RESULT_TYPE_SOURCES {
-					//  Replace full_title to title
+					//  Replace title with full title
 					if src.FullTitle != "" {
 						src.Title = src.FullTitle
 						src.FullTitle = ""

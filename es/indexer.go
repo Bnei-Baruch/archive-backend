@@ -292,6 +292,8 @@ func UpdateSynonyms(esc *elastic.Client, indexNameByLang IndexNameByLang) error 
 		if err != nil {
 			return errors.New(fmt.Sprintf("Failed marshding %+v.", body))
 		}
+		//  Using standard HTTP put call instead of esc.IndexPutSettings(indexName).BodyJson(body).Do(context.TODO())
+		//	 due to the fact that this version of elastic hides error when synonyms are not updated properly.
 		url := fmt.Sprintf("%s/%s/_settings", viper.GetString("elasticsearch.url"), indexName)
 		log.Infof("Sending to %s: %s", url, string(bodyStr))
 		contents, err := putRequest(url, bytes.NewBuffer(bodyStr))
