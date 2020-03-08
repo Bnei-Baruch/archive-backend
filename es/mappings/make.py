@@ -369,6 +369,16 @@ RESULTS_TEMPLATE = {
             }
           }
         },
+        "full_title": {
+          "type": "text",
+          "analyzer": "standard",
+          "fields": {
+            "language": {
+              "type": "text",
+              "analyzer": lambda lang: LanguageAnalyzer[lang],
+            }
+          }
+        },
         "description": {
           "type": "text",
           "analyzer": "standard",

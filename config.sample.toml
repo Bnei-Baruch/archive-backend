@@ -11,6 +11,7 @@ url="postgres://localhost/mdb?sslmode=disable&user=postgres"
 
 [test]
 enable-online-eval=false
+search-data="./search/data/"
 test-source-content-docx="$GOPATH/src/github.com/Bnei-Baruch/archive-backend/es/TEST-CONTENT.docx"
 test-sources-folder="/tmp/test-sources-folder"
 mdb-url="postgres://localhost/mdb?sslmode=disable&user=postgres"
@@ -29,6 +30,7 @@ prepare-docs-batch-size=20
 prepare-docs-parallelism=2
 synonyms-folder="/tmp/synonyms-folder"  # At repo, see: ./es/synonyms
 #index-date = "2018-11-28t13:08:31-05:00" # optional, NOT FOR PRODUCTION, comment out to use alias.
+#grammar-index-date = "2018-11-28t13:08:31-05:00" # optional, NOT FOR PRODUCTION, comment out to use alias.
 check-typo=true
 
 [nats]

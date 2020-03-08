@@ -2,10 +2,14 @@ package es
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -57,7 +61,7 @@ func MakeIndexer(namespace string, date string, names []string, mdb *sql.DB, esc
 	return indexer, nil
 }
 
-func ProdIndexDateForEvents(esc *elastic.Client) (error, string) {
+func ProdIndexDate(esc *elastic.Client) (error, string) {
 	indexDate := viper.GetString("elasticsearch.index-date")
 	if indexDate == "" {
 		return aliasedIndexDate(esc, "prod", consts.ES_RESULTS_INDEX)
@@ -65,21 +69,28 @@ func ProdIndexDateForEvents(esc *elastic.Client) (error, string) {
 	return nil, indexDate
 }
 
-func ProdAliasedIndexDate(esc *elastic.Client) (error, string) {
-	return aliasedIndexDate(esc, "prod", consts.ES_RESULTS_INDEX)
-}
+// Deprecated, use ProdIndexDateForEvents, we should alway
+//func ProdAliasedIndexDate(esc *elastic.Client) (error, string) {
+//	return aliasedIndexDate(esc, "prod", consts.ES_RESULTS_INDEX)
+//}
 
 func aliasedIndexDate(esc *elastic.Client, namespace string, name string) (error, string) {
+	aliasRegexp := IndexName(namespace, name, ".*", ".*")
+	alias := indexAliasName(namespace, name, "%s")
+	return AliasedIndex(esc, alias, aliasRegexp)
+}
+
+func AliasedIndex(esc *elastic.Client, alias string, aliasRegexp string) (error, string) {
 	aliasesService := elastic.NewAliasesService(esc)
 	prevIndicesByAlias := make(map[string]string)
 	aliasesRes, err := aliasesService.Do(context.TODO())
 	if err != nil {
-		return errors.Wrapf(err, "Error fetching asiases, namespace: %s, name: %s", namespace, name), ""
+		return errors.Wrapf(err, "Error fetching asiases, alias: %s regexp: %s", alias, aliasRegexp), ""
 	}
 	for indexName, indexResult := range aliasesRes.Indices {
-		matched, err := regexp.MatchString(IndexName(namespace, name, ".*", ".*"), indexName)
+		matched, err := regexp.MatchString(aliasRegexp, indexName)
 		if err != nil {
-			return errors.Wrapf(err, "Error matching regex, namespace: %s, name: %s, indexName: %s", namespace, name, indexName), ""
+			return errors.Wrapf(err, "Error matching regex, alias: %s, regexp: %s, indexName: %s", alias, aliasRegexp, indexName), ""
 		}
 		if matched {
 			if len(indexResult.Aliases) > 1 {
@@ -94,8 +105,7 @@ func aliasedIndexDate(esc *elastic.Client, namespace string, name string) (error
 	date := ""
 	indicesExist := false
 	for _, lang := range consts.ALL_KNOWN_LANGS {
-		alias := IndexAliasName(namespace, name, lang)
-		prevIndex, ok := prevIndicesByAlias[alias]
+		prevIndex, ok := prevIndicesByAlias[fmt.Sprintf(alias, lang)]
 		if ok {
 			indicesExist = true
 			parts := strings.Split(prevIndex, "_")
@@ -127,26 +137,35 @@ func SwitchProdAliasToCurrentIndex(date string, esc *elastic.Client) error {
 }
 
 func SwitchAliasToCurrentIndex(namespace string, name string, date string, esc *elastic.Client) error {
+	alias := indexAliasName(namespace, name, "%s")
+	iName := IndexName(namespace, name, "%s", date)
 	err, prevDate := aliasedIndexDate(esc, namespace, name)
 	if err != nil {
 		return errors.Wrapf(err, "Error getting prev date, namespace: %s, name: %s, date: %s.", namespace, name, date)
 	}
+	prevIndex := ""
+	if prevDate != "" {
+		prevIndex = IndexName(namespace, name, "%s", prevDate)
+	}
+	return SwitchAlias(alias, prevIndex, iName, esc)
+}
+
+func SwitchAlias(alias string, prev string, next string, esc *elastic.Client) error {
+	finalErr := error(nil)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		aliasService := elastic.NewAliasService(esc)
-		indexName := IndexName(namespace, name, lang, date)
-		alias := IndexAliasName(namespace, name, lang)
-		if prevDate != "" {
-			prevIndex := IndexName(namespace, name, lang, prevDate)
-			aliasService = aliasService.Remove(prevIndex, alias)
+		if prev != "" {
+			aliasService = aliasService.Remove(fmt.Sprintf(prev, lang), fmt.Sprintf(alias, lang))
 		}
-		aliasService.Add(indexName, alias)
+		aliasService.Add(fmt.Sprintf(next, lang), fmt.Sprintf(alias, lang))
 		res, err := aliasService.Do(context.TODO())
 		if err != nil || !res.Acknowledged {
-			err = utils.JoinErrors(err, errors.Wrapf(err, "Failed due to error or Acknowledged is false. indexName: %s, alias: %s.", indexName, alias))
+			finalErr = utils.JoinErrors(err, errors.Wrapf(err, "Failed due to error or Acknowledged is false. prev: %s, next: %s, alias: %s.",
+				fmt.Sprintf(prev, lang), fmt.Sprintf(next, lang), fmt.Sprintf(alias, lang)))
 			continue
 		}
 	}
-	return err
+	return finalErr
 }
 
 func openIndex(indexName string, esc *elastic.Client) {
@@ -257,6 +276,7 @@ func UpdateSynonyms(esc *elastic.Client, indexNameByLang IndexNameByLang) error 
 		body.Index.Analysis.Filter.SynonymGraph.Synonyms = keywords
 
 		// Close the index in order to update the synonyms
+		log.Infof("Synonyms language: %s.", lang)
 		indexName := indexNameByLang(lang)
 		closeRes, err := esc.CloseIndex(indexName).Do(context.TODO())
 		if err != nil {
@@ -268,15 +288,49 @@ func UpdateSynonyms(esc *elastic.Client, indexNameByLang IndexNameByLang) error 
 
 		defer openIndex(indexName, esc)
 
-		settingsRes, err := esc.IndexPutSettings(indexName).BodyJson(body).Do(context.TODO())
+		bodyStr, err := json.Marshal(body)
+		if err != nil {
+			return errors.New(fmt.Sprintf("Failed marshding %+v.", body))
+		}
+		//  Using standard HTTP put call instead of esc.IndexPutSettings(indexName).BodyJson(body).Do(context.TODO())
+		//	 due to the fact that this version of elastic hides error when synonyms are not updated properly.
+		url := fmt.Sprintf("%s/%s/_settings", viper.GetString("elasticsearch.url"), indexName)
+		log.Infof("Sending to %s: %s", url, string(bodyStr))
+		contents, err := putRequest(url, bytes.NewBuffer(bodyStr))
 		if err != nil {
 			return errors.Wrapf(err, "IndexPutSettings: %s with keywords: \n%s\n", indexName, strings.Join(keywords, "\n"))
+		}
+		settingsRes := new(elastic.IndicesPutSettingsResponse)
+		if err := json.Unmarshal(contents, settingsRes); err != nil {
+			return errors.New(fmt.Sprintf("Error decoding ret"))
 		}
 		if !settingsRes.Acknowledged {
 			return errors.New(fmt.Sprintf("IndexPutSettings not Acknowledged: %s", indexName))
 		}
 	}
 	return nil
+}
+
+func putRequest(url string, data io.Reader) ([]byte, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest(http.MethodPut, url, data)
+	req.Header.Set("Content-Type", "application/json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	response, err := client.Do(req)
+	if err != nil {
+		return nil, errors.Wrapf(err, "While calling PUT request %s", url)
+	}
+	defer response.Body.Close()
+	contents, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return nil, errors.Wrapf(err, "While reading PUT response for %s", url)
+	}
+	if response.StatusCode != 200 {
+		return nil, errors.New(fmt.Sprintf("Error, received: %s", string(contents)))
+	}
+	return contents, nil
 }
 
 func (indexer *Indexer) ReindexAll(esc *elastic.Client) error {

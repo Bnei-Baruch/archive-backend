@@ -44,6 +44,12 @@ var deleteIndexCmd = &cobra.Command{
 	Run:   deleteIndexFn,
 }
 
+var deleteGrammarIndexCmd = &cobra.Command{
+	Use:   "delete_grammar_index",
+	Short: "Delete grammar index.",
+	Run:   deleteGrammarIndexFn,
+}
+
 var restartSearchLogsCmd = &cobra.Command{
 	Use:   "restart_search_logs",
 	Short: "Restarts search logs.",
@@ -69,17 +75,27 @@ var simulateUpdateCmd = &cobra.Command{
 }
 
 var indexDate string
+var updateAlias bool
 
 func init() {
 	RootCmd.AddCommand(indexCmd)
+	indexCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be used for new index.")
+	indexCmd.PersistentFlags().BoolVar(&updateAlias, "update_alias", true, "If set to false will not update alias.")
 	RootCmd.AddCommand(indexGrammarsCmd)
+	indexGrammarsCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be used for new index.")
+	indexGrammarsCmd.PersistentFlags().BoolVar(&updateAlias, "update_alias", true, "If set to false will not update alias.")
 	RootCmd.AddCommand(prepareDocsCmd)
 	deleteIndexCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be deleted.")
 	deleteIndexCmd.MarkFlagRequired("index_date")
+	deleteGrammarIndexCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be deleted.")
+	deleteGrammarIndexCmd.MarkFlagRequired("index_date")
 	RootCmd.AddCommand(deleteIndexCmd)
+	RootCmd.AddCommand(deleteGrammarIndexCmd)
 	RootCmd.AddCommand(restartSearchLogsCmd)
-	RootCmd.AddCommand(switchAliasCmd)
 	RootCmd.AddCommand(updateSynonymsCmd)
+	updateSynonymsCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be deleted.")
+	updateSynonymsCmd.MarkFlagRequired("index_date")
+	RootCmd.AddCommand(switchAliasCmd)
 	switchAliasCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to switch to.")
 	switchAliasCmd.MarkFlagRequired("index_date")
 	RootCmd.AddCommand(simulateUpdateCmd)
@@ -96,6 +112,24 @@ func indexGrammarsFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
+	t := time.Now()
+	date := strings.ToLower(t.Format(time.RFC3339))
+	if indexDate != "" {
+		date = indexDate
+	}
+
+	alias := search.GrammarIndexName("%s", "")
+	aliasRegexp := search.GrammarIndexName(".*", ".*")
+	err, prev := es.AliasedIndex(esc, alias, aliasRegexp)
+	utils.Must(err)
+	if date == prev {
+		log.Info(fmt.Sprintf("New index date is the same as previous index date %s. Wait a minute and rerun.", prev))
+		return
+	}
+    if prev != "" {
+        prev = search.GrammarIndexName("%s", prev)
+    }
+
 	log.Infof("Client loaded.")
 	variables, err := search.MakeVariablesV2(viper.GetString("elasticsearch.variables"))
 	utils.Must(err)
@@ -104,12 +138,19 @@ func indexGrammarsFn(cmd *cobra.Command, args []string) {
 	utils.Must(err)
 	log.Infof("Grammas loaded.")
 
-	err = search.IndexGrammars(esc, grammars, variables, common.CACHE)
+	err = search.IndexGrammars(esc, date, grammars, variables, common.CACHE)
 	if err != nil {
 		log.Error(errors.Wrap(err, "Failed to connect to ElasticSearch."))
 	} else {
 		log.Info("Grammar indexed.")
 	}
+
+	if updateAlias {
+		utils.Must(es.SwitchAlias(alias, prev, search.GrammarIndexName("%s", date), esc))
+	} else {
+		log.Info("Not switching alias.")
+	}
+
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
 }
 
@@ -119,6 +160,9 @@ func indexFn(cmd *cobra.Command, args []string) {
 
 	t := time.Now()
 	date := strings.ToLower(t.Format(time.RFC3339))
+	if indexDate != "" {
+		date = indexDate
+	}
 
 	esc, err := common.ESC.GetClient()
 	if err != nil {
@@ -126,13 +170,15 @@ func indexFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	err, prevDate := es.ProdAliasedIndexDate(esc)
+	err, prevDate := es.ProdIndexDate(esc)
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	if date == prevDate {
+    // Check that we did not set specifi index, otherwise we will always have "same date".
+	indexDate := viper.GetString("elasticsearch.index-date")
+	if indexDate == "" && date == prevDate {
 		log.Info(fmt.Sprintf("New index date is the same as previous index date %s. Wait a minute and rerun.", prevDate))
 		return
 	}
@@ -156,10 +202,15 @@ func indexFn(cmd *cobra.Command, args []string) {
 		log.Error(err)
 		return
 	}
-	err = es.SwitchProdAliasToCurrentIndex(date, esc)
-	if err != nil {
-		log.Error(err)
-		return
+
+	if updateAlias {
+		err = es.SwitchProdAliasToCurrentIndex(date, esc)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+	} else {
+		log.Info("Not switching alias.")
 	}
 	log.Info("Success")
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
@@ -200,6 +251,14 @@ func switchAliasFn(cmd *cobra.Command, args []string) {
 }
 
 func deleteIndexFn(cmd *cobra.Command, args []string) {
+	deleteIndex(cmd, args, es.IndexNameFuncByNamespaceAndDate("prod", strings.ToLower(indexDate)))
+}
+
+func deleteGrammarIndexFn(cmd *cobra.Command, args []string) {
+	deleteIndex(cmd, args, search.GrammarIndexNameFunc(strings.ToLower(indexDate)))
+}
+
+func deleteIndex(cmd *cobra.Command, args []string, indexByLang es.IndexNameByLang) {
 	clock := common.Init()
 	defer common.Shutdown()
 
@@ -210,7 +269,7 @@ func deleteIndexFn(cmd *cobra.Command, args []string) {
 	}
 
 	for _, lang := range consts.ALL_KNOWN_LANGS {
-		name := es.IndexName("prod", consts.ES_RESULTS_INDEX, lang, strings.ToLower(indexDate))
+		name := indexByLang(lang)
 		exists, err := esc.IndexExists(name).Do(context.TODO())
 		if err != nil {
 			log.Error(err)
@@ -297,14 +356,14 @@ func updateSynonymsFn(cmd *cobra.Command, args []string) {
 	}
 
 	// Update synonyms.
-	err = es.UpdateSynonyms(esc, es.IndexNameFuncByNamespaceAndDate("prod", "" /*indexDate - empty means production.*/))
+	err = es.UpdateSynonyms(esc, es.IndexNameFuncByNamespaceAndDate("prod", indexDate))
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
 	// Update grammar synonyms.
-	err = es.UpdateSynonyms(esc, search.GrammarIndexName)
+	err = es.UpdateSynonyms(esc, search.GrammarIndexNameFunc(indexDate))
 	if err != nil {
 		log.Error(err)
 		return
@@ -324,7 +383,7 @@ func simulateUpdateFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	err, date := es.ProdAliasedIndexDate(client)
+	err, date := es.ProdIndexDate(client)
 	if err != nil {
 		log.Error(err)
 		return
