@@ -285,7 +285,7 @@ SETTINGS = {
             #         lambda lang: is_cyrillic(lang, 'icu_transliterate'),
             #         "custom_phonetic",
             #       ],
-            #     },        
+            #     },
             # },
             "char_filter": {
                 "quotes": {
@@ -304,7 +304,7 @@ SETTINGS = {
                 },
             },
             "filter": get_filters_imp,
-            # "filter": {      
+            # "filter": {
             #     "icu_transliterate": lambda lang: is_cyrillic(lang, {
             #       "type": "icu_transform",
             #       "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
@@ -367,7 +367,17 @@ RESULTS_TEMPLATE = {
                     "fields": {
                         "language": {
                             "type": "text",
-                            "analyzer": lambda x: LANGUAGE_ANALYZER[x],
+                            "analyzer": lambda lang: LANGUAGE_ANALYZER[lang],
+                        }
+                    }
+                },
+                "full_title": {
+                    "type": "text",
+                    "analyzer": "standard",
+                    "fields": {
+                        "language": {
+                            "type": "text",
+                            "analyzer": lambda lang: LANGUAGE_ANALYZER[lang],
                         }
                     }
                 },
@@ -377,7 +387,7 @@ RESULTS_TEMPLATE = {
                     "fields": {
                         "language": {
                             "type": "text",
-                            "analyzer": lambda x: LANGUAGE_ANALYZER[x],
+                            "analyzer": lambda lang: LANGUAGE_ANALYZER[lang],
                         },
                     },
                 },
@@ -387,7 +397,7 @@ RESULTS_TEMPLATE = {
                     "fields": {
                         "language": {
                             "type": "text",
-                            "analyzer": lambda x: LANGUAGE_ANALYZER[x],
+                            "analyzer": lambda lang: LANGUAGE_ANALYZER[lang],
                         },
                     },
                 },

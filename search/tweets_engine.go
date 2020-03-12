@@ -68,6 +68,11 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 
 		var maxScore float64
 		for _, hit := range result.Hits.Hits {
+
+			if hit.Score == nil {
+				return nil, errors.Errorf("hit score is nil for hit: %s", hit.Uid)
+			}
+
 			if *hit.Score > maxScore {
 				maxScore = *hit.Score
 			}

@@ -10,7 +10,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
 type SourcesIndexerSuite struct {
@@ -53,8 +53,10 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	r.Nil(es.DumpIndexes(esc, "Before validation", consts.ES_RESULT_TYPE_SOURCES))
 
 	fmt.Printf("\n\n\nValidate we have source with 2 languages.\n\n")
-	suite.validateNames(indexNameEn, indexer, []string{"Test Name > test-name-1"})
-	suite.validateNames(indexNameHe, indexer, []string{"שם לבדיקה > שם-בדיקה-1"})
+	suite.validateNames(indexNameEn, indexer, []string{"test-name-1"})
+	suite.validateNames(indexNameHe, indexer, []string{"שם-בדיקה-1"})
+	suite.validateFullNames(indexNameEn, indexer, []string{"Test Name > test-name-1"})
+	suite.validateFullNames(indexNameHe, indexer, []string{"שם לבדיקה > שם-בדיקה-1"})
 
 	fmt.Println("Validate source files.")
 	suite.validateSourceFile(indexNameEn, indexer, map[string]string{
@@ -71,19 +73,22 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	source2UID := suite.us(Source{Name: "test-name-2"}, consts.LANG_ENGLISH)
 	suite.us(Source{MDB_UID: source2UID, Name: "שם-בדיקה-2"}, consts.LANG_HEBREW)
 	r.Nil(indexer.SourceUpdate(source2UID))
-	suite.validateNames(indexNameEn, indexer, []string{"Test Name > test-name-1"})
+	suite.validateNames(indexNameEn, indexer, []string{"test-name-1"})
+	suite.validateFullNames(indexNameEn, indexer, []string{"Test Name > test-name-1"})
 
 	fmt.Println("Validate adding source with file but without author - should not index.")
 	suite.usfc(source2UID, consts.LANG_ENGLISH)
 	suite.usfc(source2UID, consts.LANG_HEBREW)
 	r.Nil(indexer.SourceUpdate(source2UID))
-	suite.validateNames(indexNameEn, indexer, []string{"Test Name > test-name-1"})
+	suite.validateNames(indexNameEn, indexer, []string{"test-name-1"})
+	suite.validateFullNames(indexNameEn, indexer, []string{"Test Name > test-name-1"})
 
 	fmt.Println("Validate adding source with file and author and validate.")
 	suite.asa(Source{MDB_UID: source2UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 5, Code: "t3"}, true, true)
 	suite.asa(Source{MDB_UID: source2UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם נוסף לבדיקה", ID: 6, Code: "t4"}, true, true)
 	r.Nil(indexer.SourceUpdate(source2UID))
-	suite.validateNames(indexNameEn, indexer, []string{"Test Name > test-name-1", "Test Name 2 > test-name-2"})
+	suite.validateNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2"})
+	suite.validateFullNames(indexNameEn, indexer, []string{"Test Name > test-name-1", "Test Name 2 > test-name-2"})
 
 	suite.validateSourceFile(indexNameEn, indexer, map[string]string{
 		source1UID: "TEST CONTENT",
@@ -99,8 +104,8 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	UIDs := []string{source1UID, source2UID}
 	r.Nil(deleteSources(UIDs))
 	r.Nil(indexer.ReindexAll(esc))
-	suite.validateNames(indexNameEn, indexer, []string{})
-	suite.validateNames(indexNameHe, indexer, []string{})
+	suite.validateFullNames(indexNameEn, indexer, []string{})
+	suite.validateFullNames(indexNameHe, indexer, []string{})
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())

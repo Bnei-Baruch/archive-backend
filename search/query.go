@@ -16,6 +16,7 @@ const (
 	// Content boost.
 	TITLE_BOOST       = 2.0
 	DESCRIPTION_BOOST = 1.2
+	FULL_TITLE_BOOST  = 1.1
 
 	// Max slop.
 	SLOP = 100
@@ -129,6 +130,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchQuery("title.language", q.Term),
+					elastic.NewMatchQuery("full_title.language", q.Term),
 					elastic.NewMatchQuery("description.language", q.Term),
 					elastic.NewMatchQuery("content.language", q.Term),
 				).MinimumNumberShouldMatch(1),
@@ -137,18 +139,22 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 			elastic.NewDisMaxQuery().Query(
 				// Language analyzed
 				elastic.NewMatchPhraseQuery("title.language", q.Term).Slop(SLOP).Boost(TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title.language", q.Term).Slop(SLOP).Boost(FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description.language", q.Term).Slop(SLOP).Boost(DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content.language", q.Term).Slop(SLOP),
 				// Language analyzed, exact (no slop)
 				elastic.NewMatchPhraseQuery("title.language", q.Term).Boost(EXACT_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title.language", q.Term).Boost(EXACT_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description.language", q.Term).Boost(EXACT_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content.language", q.Term).Boost(EXACT_BOOST),
 				// Standard analyzed
 				elastic.NewMatchPhraseQuery("title", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content", q.Term).Slop(SLOP).Boost(STANDARD_BOOST),
 				// Standard analyzed, exact (no slop).
 				elastic.NewMatchPhraseQuery("title", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST),
 			),
@@ -160,6 +166,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 			elastic.NewConstantScoreQuery(
 				elastic.NewBoolQuery().Should(
 					elastic.NewMatchPhraseQuery("title", exactTerm),
+					elastic.NewMatchPhraseQuery("full_title", exactTerm),
 					elastic.NewMatchPhraseQuery("description", exactTerm),
 					elastic.NewMatchPhraseQuery("content", exactTerm),
 				).MinimumNumberShouldMatch(1),
@@ -168,10 +175,12 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 			elastic.NewDisMaxQuery().Query(
 				// Language analyzed, exact (no slop)
 				elastic.NewMatchPhraseQuery("title.language", exactTerm).Boost(EXACT_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title.language", exactTerm).Boost(EXACT_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description.language", exactTerm).Boost(EXACT_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content.language", exactTerm).Boost(EXACT_BOOST),
 				// Standard analyzed, exact (no slop).
 				elastic.NewMatchPhraseQuery("title", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST),
+				elastic.NewMatchPhraseQuery("full_title", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST),
 			),
@@ -213,7 +222,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		if resultType == consts.ES_RESULT_TYPE_UNITS {
 			weight = 1.1
 		} else if resultType == consts.ES_RESULT_TYPE_TAGS {
-			weight = 1.5 // We use tags for intents only, score should be same as for sources.
+			weight = 1.75 // We use tags for intents only
 		} else if resultType == consts.ES_RESULT_TYPE_SOURCES {
 			weight = 1.5
 		} else if resultType == consts.ES_RESULT_TYPE_COLLECTIONS {
@@ -232,6 +241,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type")
 
 	titleAdded := false
+	fullTitleAdded := false
 	contentAdded := false
 	//	This is a generic imp. that supports searching tweets together with other results.
 	//	Currently we are not searching for tweets together with other results but in parallel.
@@ -239,11 +249,14 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		if !contentAdded && rt == consts.ES_RESULT_TYPE_TWEETS {
 			fetchSourceContext.Include("content")
 			contentAdded = true
+		} else if !fullTitleAdded && rt == consts.ES_RESULT_TYPE_SOURCES {
+			fetchSourceContext.Include("full_title")
+			fullTitleAdded = true
 		} else if !titleAdded {
 			fetchSourceContext.Include("title")
 			titleAdded = true
 		}
-		if contentAdded && titleAdded {
+		if contentAdded && titleAdded && fullTitleAdded {
 			break
 		}
 	}
@@ -267,6 +280,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 
 		highlightQuery := elastic.NewHighlight().Fields(
 			elastic.NewHighlighterField("title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
+			elastic.NewHighlighterField("full_title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
 			elastic.NewHighlighterField("description").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
 			elastic.NewHighlighterField("description.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
 			elastic.NewHighlighterField("content").NumOfFragments(contentNumOfFragments).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),

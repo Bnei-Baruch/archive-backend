@@ -1,0 +1,254 @@
+<html>
+    <head>
+        <script src="https://www.papaparse.com/resources/js/papaparse.js"></script>
+    </head>
+    <style>
+        #demo-table {
+            border-collapse: collapse;
+        }
+        #demo-table th {
+            padding: 3px;
+        }
+        #demo-table td {
+            border: black solid 1px;
+            padding: 3px;
+        }
+    </style>
+    <script>
+        const sq = (s) => document.querySelector(s);
+        const show = (s) => sq(s).style.display = 'block';
+        const hide = (s) => sq(s).style.display = 'none';
+        const clear = (s) => sq(s).innerHTML = '';
+        const tableAddRow = (s, row, is_header = false) => {
+            const table = typeof(s) === 'string' ? sq(s) : s;
+            const tr = document.createElement('tr');
+            table.appendChild(tr);
+            row.forEach(cell => {
+                if (typeof cell === 'string') {
+                    cell = {html: cell};
+                }
+                const cellTd = document.createElement(is_header ? 'th' : 'td');
+                cellTd.innerHTML = cell.html;
+                ['rowspan', 'style', 'colspan'].forEach((attr) => {
+                    if (attr in cell) {
+                        cellTd.setAttribute(attr, cell[attr]);
+                    }
+                });
+                tr.appendChild(cellTd);
+            });
+        };
+        const setUrlParam = (name, value) => {
+            const url = new URL(window.location.href);
+            url.searchParams.set(name, value);
+            window.history.pushState({ path: url.href }, '', url.href);
+        }
+        const listenToInputUpdateUrl = (elementSelector, urlParam) => {
+            const e = sq(elementSelector);
+            e.addEventListener('keyup', (event) => {
+                setUrlParam(urlParam, event.target.value);
+            });
+        };
+        const listenToRadioUpdateUrl = (elementSelectors, urlParam) => {
+			elementSelectors.forEach((elementSelector) => {
+				const e = sq(elementSelector);
+				e.addEventListener('change', (event) => {
+					console.log('change', event.target);
+					if (event.target.checked) {
+						setUrlParam(urlParam, event.target.value);
+					}
+				});
+			});
+        };
+        const urlParam = (name) => {
+            const url = new URL(window.location.href);
+            return url.searchParams.get(name);
+        }
+        const stopAndClean = (name) => {
+            fetch(`stop_and_clean/${name}`);
+        };
+        const updateReload = (name) => {
+            fetch(`update_reload/${name}`);
+        };
+		const DemosStatus = () => {
+            fetch('status').then(response => {
+                if (response.status !== 200) {
+					const statusCell = sq('#start-status');
+                    const p = !response.body ? new Promise() : response.text();
+                    p.then(data => {
+                        const message = !data ? '' : `. Message: ${data}`;
+                        statusCell.innerHTML = `Status: ${response.status}. ${response.statusText}${message}`;
+                    });
+                } else {
+					response.json().then(demos => {
+                        const table = sq('#demo-table');
+                        table.innerHTML = '';
+                        const headers = ['Name', 'Comment', 'Backend branch', 'Frotnend branch', 'Status', 'Backend', 'Frontend', 'Actions'];
+                        tableAddRow(table, headers, /*is_header=*/true);
+						const values = Object.values(demos).sort((a, b) => a.name.localeCompare(b.name));
+						if (values.length === 0) {
+                            tableAddRow(table, [{
+                                html: '-- No demos --',
+                                colspan: headers.length,
+                                style: 'text-align: center;',
+                            }]);
+						} else {
+                            const buildUrl = (port, path) => {
+                                if (!path) {
+                                    path = '';
+                                }
+								return `${window.location.protocol}//${window.location.hostname}:${port}/${path}`;
+                            }
+							values.forEach((demo) => {
+								const backend_cell = [
+                                    `Server: ${demo.backend_process}`,
+									`<a href="${window.location.protocol}//${window.location.host}/logs/${demo.name}/server.log" target="_blank">server.log</a>`,
+									`<a href="${buildUrl(demo.backend_port, 'eval.html')}" target="_blank">${buildUrl(demo.backend_port, 'eval.html')}</a>`,
+								];
+								if (demo.backend_reindex) {
+									backend_cell.splice(3, 0, `<a href="${window.location.protocol}//${window.location.host}/logs/${demo.name}/index.log" target="_blank">index.log</a>`);
+                                    backend_cell.splice(3, 0, `Reindex: ${demo.backend_reindex}`);
+								}
+								if (demo.backend_reindex_grammars) {
+									backend_cell.splice(3, 0, `<a href="${window.location.protocol}//${window.location.host}/logs/${demo.name}/grammar_index.log" target="_blank">grammar_index.log</a>`);
+                                    backend_cell.splice(3, 0, `Reindex grammars: ${demo.backend_reindex_grammars}`);
+								}
+								if (demo.backend_update_synonyms) {
+									backend_cell.splice(3, 0, `<a href="${window.location.protocol}//${window.location.host}/logs/${demo.name}/update_synonyms.log" target="_blank">update_synonyms.log</a>`);
+                                    backend_cell.splice(3, 0, `Update synonyms: ${demo.backend_update_synonyms}`);
+								}
+                                const frontend_cell = [
+                                    `Frontend: ${demo.frontend_process || 'Not started yet!'}`,
+									`<a href="${window.location.protocol}//${window.location.host}/logs/${demo.name}/frontend.log" target="_blank">frontend.log</a>`,
+									`<a href="${buildUrl(demo.frontend_port)}" target="_blank">${buildUrl(demo.frontend_port)}</a>`,
+                                    //`SSR Frontend: ${demo.ssr_frontend_process || '' /*'Not started yet!'*/}`,
+									//`<a href="${window.location.protocol}//${window.location.host}/logs/${demo.name}/ssr_frontend.log" target="_blank">ssr_frontend.log</a>`,
+									//`<a href="${buildUrl(demo.ssr_frontend_port)}" target="_blank">${buildUrl(demo.ssr_frontend_port)}</a>`,
+                                ];
+                                const actions_cell = {html: `<button onclick="stopAndClean('${demo.name}')">Stop & Clean</button>`};
+                                if (demo.elastic === 'reindex') {
+                                    actions_cell.html += `<br><button onclick="updateReload('${demo.name}')">Update Synonyms & Grammars and Reload</button>`;
+                                }
+                                const cells = [
+									demo.name,
+									demo.comment,
+									demo.backend_branch,
+									demo.frontend_branch,
+									{html: demo.status.join('<br>')},
+									{html: !demo.backend_port ? '-' : backend_cell.join('<br>')},
+									{html: !demo.frontend_process ? '-' : frontend_cell.join('<br>')},
+                                    actions_cell,
+								];
+                                tableAddRow(table, cells);
+							});
+						}
+					});
+					window.setTimeout(DemosStatus, 5000);
+				}
+			});
+		};
+
+        window.onload = () => {
+            const name = sq('#name');
+            name.value = urlParam('name');
+            listenToInputUpdateUrl('#name', 'name');
+
+            const comment = sq('#comment');
+            comment.value = urlParam('comment');
+            listenToInputUpdateUrl('#comment', 'comment');
+
+            const backendBranch = sq('#backend_branch');
+            backendBranch.value = urlParam('backend_branch');
+            listenToInputUpdateUrl('#backend_branch', 'backend_branch');
+
+			const elasticProduction = sq('#elastic_production');
+			const elasticReindex = sq('#elastic_reindex');
+			elasticProduction.checked = urlParam('elastic') === elasticProduction.value;
+			elasticReindex.checked = urlParam('elastic') === elasticReindex.value || !elasticProduction.checked;
+			listenToRadioUpdateUrl(['#elastic_production', '#elastic_reindex'], 'elastic');
+
+            const frontendBranch = sq('#frontend_branch');
+            frontendBranch.value = urlParam('frontend_branch');
+            listenToInputUpdateUrl('#frontend_branch', 'frontend_branch');
+
+			DemosStatus();
+        };
+
+        const StartDemo = () => {
+            const name = sq('#name');
+            const comment = sq('#comment');
+            const backendBranch = sq('#backend_branch');
+            const frontendBranch = sq('#frontend_branch');
+			const elasticProduction = sq('#elastic_production');
+			const elasticReindex = sq('#elastic_reindex');
+            const request  = {
+                name: name.value,
+                comment: comment.value,
+                'backend_branch': backendBranch.value,
+                'frontend_branch': frontendBranch.value,
+				'elastic': elasticProduction.checked ? elasticProduction.value : elasticReindex.value,
+            };
+            console.log('start', request);
+            fetch('start', {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                method: "POST",
+                body: JSON.stringify(request),
+            }).then(response => {
+                console.log(response);
+                const statusCell = sq('#start-status');
+                if (response.status !== 200) {
+                    const p = !response.body ? new Promise() : response.text();
+                    p.then(data => {
+                        const message = !data ? '' : `. Message: ${data}`;
+                        statusCell.innerHTML = `Status: ${response.status}. ${response.statusText}${message}`;
+                    });
+                } else {
+                    statusCell.innerHTML = `Status: ${response.status}. ${response.statusText}`;
+				}
+            });
+        };
+    </script>
+    <body>
+        <div>
+            <h2>Start new demo</h2>
+            <table>
+                <tr>
+                    <td>Name</td>
+                    <td>Comment</td>
+                    <td>Backend branch</td>
+                    <td>Reindex elastic</td>
+                    <td>Frontend branch</td>
+                </tr>
+                <tr>
+                    <td><input id="name" type="text"></td>
+                    <td><input id="comment" type="text"></td>
+                    <td><input id="backend_branch" type="text"></td>
+					<td>
+						<span>
+						  <input type="radio" id="elastic_production" name="elastic" value="production" checked>
+						  <label for="elastic_production">Production</label>
+						</span>
+						<span>
+						  <input type="radio" id="elastic_reindex" name="elastic" value="reindex">
+						  <label for="elastic_reindex">Reindex</label>
+						</span>
+					</td>
+                    <td><input id="frontend_branch" type="text"></td>
+                </tr>
+                <tr style="text-align: center;">
+                    <td colspan="100%"><button onclick="StartDemo()">Start Demo</button></td>
+                </tr>
+                <tr style="text-align: center;"><td colspan=5><span id="start-status"></span></td></tr>
+            </table>
+        </div>
+        <div>
+            <hr />
+            <h2>Demos table</h2>
+            <table id="demo-table">
+                <tr><td>Loading...</td></tr>
+            </table>
+        </div>
+    </body>
+</html>
