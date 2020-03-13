@@ -55,6 +55,11 @@ type TimeLogMap struct {
 	m  map[string]time.Duration
 }
 
+type TypoSuggestResponse struct {
+	Text  null.String
+	Score float64
+}
+
 func NewTimeLogMap() *TimeLogMap {
 	return &TimeLogMap{
 		m: make(map[string]time.Duration),
@@ -478,7 +483,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
-	suggestChannel := make(chan null.String)
+	suggestChannel := make(chan TypoSuggestResponse)
 
 	// Seach intents and grammars in parallel to native search.
 	intentsChannel := make(chan []Intent)
@@ -514,11 +519,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	if checkTypo {
 		go func() {
-			if suggestText, err := e.GetTypoSuggest(query); err != nil {
+			if r, err := e.GetTypoSuggest(query); err != nil {
 				log.Errorf("ESEngine.GetTypoSuggest - Error getting typo suggest: %+v", err)
-				suggestChannel <- null.String{"", false}
+				suggestChannel <- TypoSuggestResponse{null.String{"", false}, 0}
 			} else {
-				suggestChannel <- suggestText
+				suggestChannel <- r
 			}
 		}()
 	}
@@ -629,7 +634,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	ret, err := joinResponses(sortBy, from, size, results...)
 
-	suggestText := null.String{"", false}
+	var suggestResponse TypoSuggestResponse
 
 	if ret != nil && ret.Hits != nil && ret.Hits.Hits != nil {
 
@@ -768,19 +773,36 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 
 		if checkTypo && (ret.Hits.MaxScore == nil || *ret.Hits.MaxScore < consts.MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST) {
-			suggestText = <-suggestChannel
+			suggestResponse = <-suggestChannel
+			if suggestResponse.Score < consts.MIN_RESULTS_SCORE_HARD_USE_TYPO_SUGGEST {
+				newQuery := query
+				newQuery.Term = suggestResponse.Text.String
+				r, err := e.DoSearch(ctx, newQuery, sortBy, from, size, preference, false)
+				r.SuggestResult = TypoSuggestResult{true, query.Term, newQuery.Term}
+				return r, err
+			}
+
+			return &QueryResult{ret, TypoSuggestResult{false, "", query.Term}}, err
 		}
-		return &QueryResult{ret, suggestText}, err
+		return &QueryResult{ret, TypoSuggestResult{}}, err
 	}
 
 	if checkTypo {
-		suggestText = <-suggestChannel
+		suggestResponse = <-suggestChannel
+		if suggestResponse.Score < consts.MIN_RESULTS_SCORE_HARD_USE_TYPO_SUGGEST {
+			newQuery := query
+			newQuery.Term = suggestResponse.Text.String
+			r, err := e.DoSearch(ctx, newQuery, sortBy, from, size, preference, false)
+			r.SuggestResult = TypoSuggestResult{true, query.Term, newQuery.Term}
+			return r, err
+		}
+		return &QueryResult{ret, TypoSuggestResult{false, "", query.Term}}, err
 	}
 
 	if len(mr.Responses) > 0 {
 		// This happens when there are no responses with hits.
 		// Note, we don't filter here intents by language.
-		return &QueryResult{mr.Responses[0], suggestText}, err
+		return &QueryResult{mr.Responses[0], TypoSuggestResult{}}, err
 	}
 	return nil, errors.Wrap(err, "ESEngine.DoSearch - No responses from multi search.")
 }
