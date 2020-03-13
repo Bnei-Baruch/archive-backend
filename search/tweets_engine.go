@@ -48,14 +48,14 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 			return nil, err
 		}
 
-		for _, h := range currentResults.Hits.Hits {
-			if h.Score == nil {
-				s := float64(1)
-				h.Score = &s
-			}
-		}
-
 		if haveHits(currentResults) {
+			for _, h := range currentResults.Hits.Hits {
+				if h.Score == nil {
+					s := float64(1)
+					h.Score = &s
+				}
+			}
+
 			lang := query.LanguageOrder[i]
 			tweetsByLang[lang] = currentResults
 		}
