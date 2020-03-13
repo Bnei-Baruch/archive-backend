@@ -10,6 +10,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -124,9 +125,9 @@ func indexGrammarsFn(cmd *cobra.Command, args []string) {
 		log.Info(fmt.Sprintf("New index date is the same as previous index date %s. Wait a minute and rerun.", prev))
 		return
 	}
-    if prev != "" {
-        prev = search.GrammarIndexName("%s", prev)
-    }
+	if prev != "" {
+		prev = search.GrammarIndexName("%s", prev)
+	}
 
 	log.Infof("Client loaded.")
 	variables, err := search.MakeVariablesV2(es.DataFolder("search", "variables"))
@@ -174,7 +175,7 @@ func indexFn(cmd *cobra.Command, args []string) {
 		return
 	}
 
-    // Check that we did not set specifi index, otherwise we will always have "same date".
+	// Check that we did not set specifi index, otherwise we will always have "same date".
 	indexDate := viper.GetString("elasticsearch.index-date")
 	if indexDate == "" && date == prevDate {
 		log.Info(fmt.Sprintf("New index date is the same as previous index date %s. Wait a minute and rerun.", prevDate))
