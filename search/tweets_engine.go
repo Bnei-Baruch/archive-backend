@@ -78,7 +78,10 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 
 		var maxScore float64
 		maxEd := es.EffectiveDate{EffectiveDate: &utils.Date{time.Now()}}
-		source, _ := json.Marshal(maxEd)
+		source, err := json.Marshal(maxEd)
+		if err != nil {
+			return nil, err
+		}
 		for _, hit := range result.Hits.Hits {
 			if *hit.Score > maxScore {
 				maxScore = *hit.Score
