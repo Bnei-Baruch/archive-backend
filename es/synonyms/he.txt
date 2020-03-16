@@ -151,3 +151,4 @@
 
 #Added by Yuri at 16.02.20 (not in spreadsheet)
 בא	בוא
+ישיבת חברים	ישיבת החברים
