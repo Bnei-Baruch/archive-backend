@@ -60,10 +60,10 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 
 	fmt.Println("Validate source files.")
 	suite.validateSourceFile(indexNameEn, indexer, map[string]string{
-		source1UID: "TEST CONTENT",
+		source1UID: "Test Name > test-name-1 TEST CONTENT",
 	})
 	suite.validateSourceFile(indexNameHe, indexer, map[string]string{
-		source1UID: "TEST CONTENT",
+		source1UID: "שם לבדיקה > שם-בדיקה-1 TEST CONTENT",
 	})
 
 	fmt.Println("Validate source full path.")
@@ -91,8 +91,8 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.validateFullNames(indexNameEn, indexer, []string{"Test Name > test-name-1", "Test Name 2 > test-name-2"})
 
 	suite.validateSourceFile(indexNameEn, indexer, map[string]string{
-		source1UID: "TEST CONTENT",
-		source2UID: "TEST CONTENT",
+		source1UID: "Test Name > test-name-1 TEST CONTENT",
+		source2UID: "Test Name 2 > test-name-2 TEST CONTENT",
 	})
 	suite.validateSourcesFullPath(indexNameEn, indexer, [][]string{[]string{source1UID, "t1", "t2"}, []string{source2UID, "t3", "t4"}})
 
