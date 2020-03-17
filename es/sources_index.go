@@ -323,17 +323,6 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			if i18n.Description.Valid && i18n.Description.String != "" {
 				source.Description = i18n.Description.String
 			}
-			fPath, missingSourceFileErr := index.getDocxPath(mdbSource.UID, i18n.Language)
-			// Ignore err here as if missing source for a language in very common and is ok.
-			if missingSourceFileErr == nil {
-				// Found docx.
-				content, parseErr := ParseDocx(fPath)
-				indexErrors.DocumentError(i18n.Language, parseErr, fmt.Sprintf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language))
-				if parseErr == nil {
-					source.Content = content
-					allLanguages = append(allLanguages, i18n.Language)
-				}
-			}
 			// Find parents...
 			findParentsErr := (error)(nil)
 			for _, i := range parentIds {
@@ -360,9 +349,22 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			}
 			authors := authorsByLanguage[i18n.Language]
 			s := append(authors, pathNames...)
-			source.Title = s[len(s)-1]
-			source.FullTitle = strings.Join(s, " > ")
+			fullTitle := strings.Join(s, " > ")
+			title := s[len(s)-1]
+			source.Title = title
+			source.FullTitle = fullTitle
 			source.TitleSuggest = Suffixes(strings.Join(s, " "))
+			fPath, missingSourceFileErr := index.getDocxPath(mdbSource.UID, i18n.Language)
+			// Ignore err here as if missing source for a language in very common and is ok.
+			if missingSourceFileErr == nil {
+				// Found docx.
+				content, parseErr := ParseDocx(fPath)
+				indexErrors.DocumentError(i18n.Language, parseErr, fmt.Sprintf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language))
+				if parseErr == nil {
+					source.Content = fmt.Sprintf("%s %s", fullTitle, content)
+					allLanguages = append(allLanguages, i18n.Language)
+				}
+			}
 			i18nMap[i18n.Language] = source
 		}
 	}
