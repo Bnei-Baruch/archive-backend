@@ -269,22 +269,19 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		Explain(options.query.Deb)
 
 	if options.useHighlight {
-
-		//  We use special HighlightQuery with SimpleQueryStringQuery to
-		//	 solve elastic issue with synonyms and highlights.
+		terms := make([]string, 1)
+		if options.query.Term != "" {
+			terms = append(terms, options.query.Term)
+		} else {
+			terms = options.query.ExactTerms
+		}
 
 		contentNumOfFragments := 5 //  elastic default
 		if options.highlightFullContent {
 			contentNumOfFragments = 0
 		}
+		highlightQuery := createHighlightQuery(terms, contentNumOfFragments)
 
-		highlightQuery := elastic.NewHighlight().Fields(
-			elastic.NewHighlighterField("title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("full_title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("description").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("description.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("content").NumOfFragments(contentNumOfFragments).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("content.language").NumOfFragments(contentNumOfFragments).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)))
 		if !options.partialHighlight {
 			// Following field not used in intents to solve elastic bug with highlight.
 			highlightQuery.Fields(
@@ -303,6 +300,23 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		SearchSource(source).
 		Index(options.index).
 		Preference(options.preference)
+}
+
+func createHighlightQuery(terms []string, n int) *elastic.Highlight {
+	//  We use special HighlightQuery with SimpleQueryStringQuery to
+	//	 solve elastic issue with synonyms and highlights.
+
+	query := elastic.NewHighlight()
+	for _, term := range terms {
+		query.Fields(
+			elastic.NewHighlighterField("title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
+			elastic.NewHighlighterField("full_title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
+			elastic.NewHighlighterField("description").HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
+			elastic.NewHighlighterField("description.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
+			elastic.NewHighlighterField("content").NumOfFragments(n).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
+			elastic.NewHighlighterField("content.language").NumOfFragments(n).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)))
+	}
+	return query
 }
 
 func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchRequest {
