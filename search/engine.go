@@ -220,6 +220,32 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 		return nil, errors.Wrap(err, "ESEngine.GetSuggestions")
 	}
 
+	//  Nativize response to client - Replace title with full title
+	for _, r := range mr.Responses {
+		for key := range r.Suggest {
+			for j := range r.Suggest[key] {
+				for opIdx, op := range r.Suggest[key][j].Options {
+					var src es.Result
+					err = json.Unmarshal(*op.Source, &src)
+					if err != nil {
+						log.Errorf("ESEngine.GetSuggestions - cannot unmarshal source.")
+						continue
+					}
+					if src.ResultType == consts.ES_RESULT_TYPE_SOURCES && src.FullTitle != "" {
+						src.Title = src.FullTitle
+						src.FullTitle = ""
+						nsrc, err := json.Marshal(src)
+						if err != nil {
+							log.Errorf("ESEngine.GetSuggestions - cannot marshal source with title correction.")
+							continue
+						}
+						r.Suggest[key][j].Options[opIdx].Source = (*json.RawMessage)(&nsrc)
+					}
+				}
+			}
+		}
+	}
+
 	// Merge with grammar suggestions.
 	var grammarSuggestions map[string][]VariablesByPhrase
 	grammarSuggestions = <-grammarSuggestionsChannel
