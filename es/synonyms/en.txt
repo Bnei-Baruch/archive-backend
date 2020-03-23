@@ -352,5 +352,5 @@ kabbalist meal	meal	tish	yortzait
 #All Worlds	shamati 244					
 
 #Added by Yuri at 16.02.20 (not in spreadsheet)
-koronavirus	korona virus
+koronavirus	korona virus	coronavirus	corona
 chanukah	hanukkah	hanuka	chanuka
