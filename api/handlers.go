@@ -451,7 +451,8 @@ func SearchHandler(c *gin.Context) {
 
 	checkTypo := viper.GetBool("elasticsearch.check-typo") &&
 		//  temp. disable typo suggestion for other interface languages than english, russian and hebrew
-		(c.Query("language") == consts.LANG_ENGLISH || c.Query("language") == consts.LANG_RUSSIAN || c.Query("language") == consts.LANG_HEBREW)
+		(c.Query("language") == consts.LANG_ENGLISH || c.Query("language") == consts.LANG_RUSSIAN || c.Query("language") == consts.LANG_HEBREW) &&
+		!(c.Query("checkTypo") != "" && c.Query("checkTypo") == "false")
 
 	res, err := se.DoSearch(
 		context.TODO(),
