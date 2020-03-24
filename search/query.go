@@ -280,13 +280,8 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		if options.highlightFullContent {
 			contentNumOfFragments = 0
 		}
-		highlightQuery := createHighlightQuery(terms, contentNumOfFragments)
+		highlightQuery := createHighlightQuery(terms, contentNumOfFragments, options.partialHighlight)
 
-		if !options.partialHighlight {
-			// Following field not used in intents to solve elastic bug with highlight.
-			highlightQuery.Fields(
-				elastic.NewHighlighterField("title.language").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)))
-		}
 		source = source.Highlight(highlightQuery)
 	}
 
@@ -302,7 +297,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		Preference(options.preference)
 }
 
-func createHighlightQuery(terms []string, n int) *elastic.Highlight {
+func createHighlightQuery(terms []string, n int, partialHighlight bool) *elastic.Highlight {
 	//  We use special HighlightQuery with SimpleQueryStringQuery to
 	//	 solve elastic issue with synonyms and highlights.
 
@@ -315,6 +310,12 @@ func createHighlightQuery(terms []string, n int) *elastic.Highlight {
 			elastic.NewHighlighterField("description.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
 			elastic.NewHighlighterField("content").NumOfFragments(n).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
 			elastic.NewHighlighterField("content.language").NumOfFragments(n).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)))
+
+		if !partialHighlight {
+			// Following field not used in intents to solve elastic bug with highlight.
+			query.Fields(
+				elastic.NewHighlighterField("title.language").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)))
+		}
 	}
 	return query
 }
