@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -20,7 +21,7 @@ import (
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -360,8 +361,19 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			}
 			authors := authorsByLanguage[i18n.Language]
 			s := append(authors, pathNames...)
-			source.Title = s[len(s)-1]
+			leaf := s[len(s)-1]
+			source.Title = leaf
 			source.FullTitle = strings.Join(s, " > ")
+			if mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
+				var position string
+				if i18n.Language == "he" {
+					position = string(mdbSource.Position.Int + 127) //  Convert to Hebrew letter
+				} else {
+					position = strconv.Itoa(mdbSource.Position.Int)
+				}
+				leafWithChapter := fmt.Sprintf("%s.%s", position, leaf)
+				s = append(s[:len(s)-1], leafWithChapter)
+			}
 			source.TitleSuggest = Suffixes(strings.Join(s, " "))
 			i18nMap[i18n.Language] = source
 		}
