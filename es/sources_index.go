@@ -347,7 +347,19 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 					break
 				}
 				if ni18n.Name.Valid && ni18n.Name.String != "" {
-					pathNames = append(pathNames, ni18n.Name.String)
+					var name string
+					if mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
+						var position string
+						if i18n.Language == "he" {
+							position = string(mdbSource.Position.Int + 127) //  Convert to Hebrew letter
+						} else {
+							position = strconv.Itoa(mdbSource.Position.Int)
+						}
+						name = fmt.Sprintf("%s.%s", position, ni18n.Name.String)
+					} else {
+						name = ni18n.Name.String
+					}
+					pathNames = append(pathNames, name)
 				}
 				// We dont take the Description value and use synonyms instead
 				/*if ni18n.Description.Valid && ni18n.Description.String != "" {
@@ -364,16 +376,6 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			leaf := s[len(s)-1]
 			source.Title = leaf
 			source.FullTitle = strings.Join(s, " > ")
-			if mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
-				var position string
-				if i18n.Language == "he" {
-					position = string(mdbSource.Position.Int + 127) //  Convert to Hebrew letter
-				} else {
-					position = strconv.Itoa(mdbSource.Position.Int)
-				}
-				leafWithChapter := fmt.Sprintf("%s.%s", position, leaf)
-				s = append(s[:len(s)-1], leafWithChapter)
-			}
 			source.TitleSuggest = Suffixes(strings.Join(s, " "))
 			i18nMap[i18n.Language] = source
 		}
