@@ -366,7 +366,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			if mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
 				var position string
 				if i18n.Language == "he" {
-					position = string(mdbSource.Position.Int + 127) //  Convert to Hebrew letter
+					position = utils.NumberInHebrew(mdbSource.Position.Int) //  Convert to Hebrew letter
 				} else {
 					position = strconv.Itoa(mdbSource.Position.Int)
 				}
