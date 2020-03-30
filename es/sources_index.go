@@ -363,19 +363,21 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			s := append(authors, pathNames...)
 			leaf := s[len(s)-1]
 			source.Title = leaf
-			if mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
-				var position string
-				if i18n.Language == "he" {
-					position = utils.NumberInHebrew(mdbSource.Position.Int) //  Convert to Hebrew letter
-				} else {
-					position = strconv.Itoa(mdbSource.Position.Int)
+			if mdbSource.ParentID.Valid && mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
+				if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[mdbSource.ParentID.Int64]; ok {
+					var position string
+					if i18n.Language == "he" {
+						position = utils.NumberInHebrew(mdbSource.Position.Int) //  Convert to Hebrew letter
+					} else {
+						position = strconv.Itoa(mdbSource.Position.Int)
+					}
+					leafWithChapter := fmt.Sprintf("%s.%s", position, leaf)
+					s = append(s[:len(s)-1], leafWithChapter)
 				}
-				leafWithChapter := fmt.Sprintf("%s.%s", position, leaf)
-				s = append(s[:len(s)-1], leafWithChapter)
+				source.FullTitle = strings.Join(s, " > ")
+				source.TitleSuggest = Suffixes(strings.Join(s, " "))
+				i18nMap[i18n.Language] = source
 			}
-			source.FullTitle = strings.Join(s, " > ")
-			source.TitleSuggest = Suffixes(strings.Join(s, " "))
-			i18nMap[i18n.Language] = source
 		}
 	}
 
