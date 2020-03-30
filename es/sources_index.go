@@ -374,10 +374,10 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 					leafWithChapter := fmt.Sprintf("%s.%s", position, leaf)
 					s = append(s[:len(s)-1], leafWithChapter)
 				}
-				source.FullTitle = strings.Join(s, " > ")
-				source.TitleSuggest = Suffixes(strings.Join(s, " "))
-				i18nMap[i18n.Language] = source
 			}
+			source.FullTitle = strings.Join(s, " > ")
+			source.TitleSuggest = Suffixes(strings.Join(s, " "))
+			i18nMap[i18n.Language] = source
 		}
 	}
 
