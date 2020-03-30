@@ -720,10 +720,17 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			log.Debug("Searching for highlights and replacing original results with highlighted results.")
 
 			beforeHighlightsDoSearch := time.Now()
-			mr, err := mssHighlights.Do(context.TODO())
+			highlightCtx, cancelFn := context.WithTimeout(context.Background(), 3000*time.Millisecond)
+			defer cancelFn()
+			mr, err := mssHighlights.Do(highlightCtx)
 			e.timeTrack(beforeHighlightsDoSearch, consts.LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO)
 			if err != nil {
-				return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
+				switch highlightCtx.Err() {
+				case context.DeadlineExceeded:
+					mr = new(elastic.MultiSearchResult)
+				default:
+					return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
+				}
 			}
 
 			for _, highlightedResults := range mr.Responses {
