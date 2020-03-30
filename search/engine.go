@@ -178,6 +178,12 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	// Run grammar suggestions in parallel.
 	grammarSuggestionsChannel := make(chan map[string][]VariablesByPhrase)
 	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("ESEngine.DoSearch - Panic adding intents: %+v", err)
+				grammarSuggestionsChannel <- make(map[string][]VariablesByPhrase)
+			}
+		}()
 		beforeSuggestSuggest := time.Now()
 		grammarSuggestions, err := e.SuggestGrammarsV2(&query, preference)
 		if err != nil {
