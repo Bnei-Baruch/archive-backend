@@ -378,6 +378,19 @@ def set_up_backend(name):
                 '%s/config.toml' % backend_dir(name)])
             if returncode != 0:
                 return 'stderr: %s, stdout: %s' % (stderr, stdout)
+        else:
+            (returncode, stdout, stderr) = run_command([
+                'sed', '-i', '-E',
+                's/(.*ELASTIC-LOCAL)/#\\1/g',
+                '%s/config.toml' % backend_dir(name)])
+            if returncode != 0:
+                return 'stderr: %s, stdout: %s' % (stderr, stdout)
+            (returncode, stdout, stderr) = run_command([
+                'sed', '-i', '-E',
+                's/#(.*ELASTIC-PROD)/\\1/g',
+                '%s/config.toml' % backend_dir(name)])
+            if returncode != 0:
+                return 'stderr: %s, stdout: %s' % (stderr, stdout)
 
         if original_branch != branch:
             (returncode, stdout, stderr) = run_command(['git', 'checkout', original_branch])
