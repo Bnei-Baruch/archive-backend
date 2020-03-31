@@ -727,6 +727,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			if err != nil {
 				switch highlightCtx.Err() {
 				case context.DeadlineExceeded:
+					log.Error(err, "ESEngine.DoSearch - DeadlineExceeded mssHighlights Do.")
 					mr = new(elastic.MultiSearchResult)
 				default:
 					return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
