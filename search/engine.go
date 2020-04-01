@@ -180,14 +180,14 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Errorf("ESEngine.DoSearch - Panic adding intents: %+v", err)
+				log.Errorf("ESEngine.GetSuggestions - Panic adding intents: %+v", err)
 				grammarSuggestionsChannel <- make(map[string][]VariablesByPhrase)
 			}
 		}()
 		beforeSuggestSuggest := time.Now()
 		grammarSuggestions, err := e.SuggestGrammarsV2(&query, preference)
 		if err != nil {
-			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
+			log.Errorf("ESEngine.GetSuggestions - Error adding intents: %+v", err)
 			grammarSuggestionsChannel <- make(map[string][]VariablesByPhrase)
 		} else {
 			grammarSuggestionsChannel <- grammarSuggestions
