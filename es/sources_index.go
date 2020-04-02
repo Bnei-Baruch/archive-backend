@@ -371,8 +371,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 					} else {
 						position = strconv.Itoa(mdbSource.Position.Int)
 					}
-					leafWithChapter := fmt.Sprintf("%s. %s", position, leaf)
-					s = append(s[:len(s)-1], leafWithChapter)
+					s = append(s[:len(s)-1], fmt.Sprintf("%s.", position), leaf)
 				}
 			}
 			source.FullTitle = strings.Join(s, " > ")
