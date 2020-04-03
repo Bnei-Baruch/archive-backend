@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Bnei-Baruch/archive-backend/es"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 	"time"
 
 	"gopkg.in/olivere/elastic.v6"
@@ -65,17 +67,12 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 	//  Set the score as the highest score of all hits per language.
 
 	for _, result := range resultsByLang {
+		firstHit := result.Hits.Hits[0]
+		source, _ := json.Marshal(es.EffectiveDate{EffectiveDate: &utils.Date{time.Now()}})
 
-		var maxScore float64
-		for _, hit := range result.Hits.Hits {
-
-			if hit.Score == nil {
-				return nil, errors.Errorf("hit score is nil for hit: %s", hit.Uid)
-			}
-
-			if *hit.Score > maxScore {
-				maxScore = *hit.Score
-			}
+		var ed es.EffectiveDate
+		if err := json.Unmarshal(*firstHit.Source, &ed); err != nil || ed.EffectiveDate == nil {
+			source = *firstHit.Source
 		}
 
 		hitsClone := *result.Hits
@@ -86,14 +83,15 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 		}
 
 		hit := &elastic.SearchHit{
+			Source:    (*json.RawMessage)(&source),
 			Type:      hitType,
-			Score:     &maxScore,
+			Score:     firstHit.Score,
 			InnerHits: innerHitsMap,
 		}
 
 		result.Hits.Hits = []*elastic.SearchHit{hit}
 		result.Hits.TotalHits = 1
-		result.Hits.MaxScore = &maxScore
+		result.Hits.MaxScore = firstHit.Score
 	}
 
 	return resultsByLang, nil
