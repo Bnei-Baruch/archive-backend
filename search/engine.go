@@ -791,6 +791,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 								hit.Highlight["full_title"] = nil
 							}
 						}
+					} else {
+						hit.Highlight = elastic.SearchHitHighlight{}
+						content := src.Content
+						if len(content) > 500 {
+							content = strings.TrimSpace(content[:500]) + "..."
+						}
+						hit.Highlight["content"] = []string{content}
+						hit.Highlight["title"] = []string{src.Title}
 					}
 				}
 			}
