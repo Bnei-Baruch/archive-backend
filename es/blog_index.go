@@ -17,7 +17,7 @@ import (
 	"jaytaylor.com/html2text"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -184,7 +184,7 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) *IndexErrors {
 		TypedUids:     []string{KeyValue(consts.ES_UID_TYPE_BLOG_POST, idStr)},
 		FilterValues:  []string{KeyValue("content_type", consts.SCT_BLOG_POST), KeyValue(consts.FILTER_LANGUAGE, postLang)},
 		Title:         html.UnescapeString(mdbPost.Title),
-		TitleSuggest:  Suffixes(mdbPost.Title),
+		TitleSuggest:  Suffixes(mdbPost.Title, false),
 		EffectiveDate: &utils.Date{Time: mdbPost.PostedAt},
 		Content:       html.UnescapeString(content),
 	}

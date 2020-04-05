@@ -15,7 +15,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -240,7 +240,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 				TypedUids:    typedUIDs,
 				FilterValues: filterValues,
 				Title:        i18n.Name.String,
-				TitleSuggest: Suffixes(i18n.Name.String),
+				TitleSuggest: Suffixes(i18n.Name.String, false),
 			}
 			if effectiveDate != nil {
 				collection.EffectiveDate = effectiveDate

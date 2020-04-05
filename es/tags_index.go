@@ -13,7 +13,7 @@ import (
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -147,7 +147,7 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) *IndexErrors {
 				FilterValues: KeyValues(consts.ES_UID_TYPE_TAG, parentUids),
 				TypedUids:    []string{KeyValue(consts.ES_UID_TYPE_TAG, t.UID)},
 				Title:        strings.Join(pathNames, " - "),
-				TitleSuggest: Suffixes(strings.Join(pathNames, " ")),
+				TitleSuggest: Suffixes(strings.Join(pathNames, " "), false),
 			}
 			name := index.IndexName(i18n.Language)
 			log.Debugf("Tags Index - Add tag %s to index %s", r.ToDebugString(), name)

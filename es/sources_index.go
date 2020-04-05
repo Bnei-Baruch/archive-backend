@@ -376,7 +376,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				}
 			}
 			source.FullTitle = strings.Join(s, " > ")
-			source.TitleSuggest = Suffixes(strings.Join(s, " "))
+			source.TitleSuggest = Suffixes(strings.Join(s, " "), true)
 			i18nMap[i18n.Language] = source
 		}
 	}
