@@ -135,7 +135,7 @@ func (result *Result) ToDebugString() string {
 	return string(resultBytes)
 }
 
-func Suffixes(escapedTitle string, appendFirstToLast bool) []string {
+func Suffixes(escapedTitle string) []string {
 	title := html.UnescapeString(escapedTitle)
 	if title == "" {
 		return []string{}
@@ -145,9 +145,19 @@ func Suffixes(escapedTitle string, appendFirstToLast bool) []string {
 	for i, _ := range parts {
 		ret = append(ret, strings.Join(parts[i:], " "))
 	}
-	if appendFirstToLast && len(parts) > 2 {
-		ret = append(ret, fmt.Sprintf("%s %s", parts[0], parts[len(parts)-1]))
+	return ret
+}
+
+func ConcateFirstToLast(strings []string) string {
+	if len(strings) == 0 {
+		return ""
 	}
+	first := html.UnescapeString(strings[0])
+	if len(strings) == 1 {
+		return first
+	}
+	last := html.UnescapeString(strings[len(strings)-1])
+	ret := fmt.Sprintf("%s %s", first, last)
 	return ret
 }
 

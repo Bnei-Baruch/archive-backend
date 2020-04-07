@@ -166,7 +166,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 				if variablesSetAsString == "" {
 					assignedRulesSuggest := []string{}
 					for i := range rules {
-						assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(rules[i], false)...)
+						assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(rules[i])...)
 					}
 					rule := GrammarRule{
 						HitType:      grammar.HitType,
@@ -211,7 +211,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 
 						assignedRulesSuggest := []string{}
 						for i := range assignedRules {
-							assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i], false)...)
+							assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
 						}
 						for i := range assignedRulesSuggest {
 							if assignedRulesSuggest[i] == "" {

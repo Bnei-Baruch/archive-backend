@@ -375,8 +375,12 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 					s = append(s[:len(s)-1], leafWithChapter)
 				}
 			}
+			suffixes := Suffixes(strings.Join(s, " "))
+			if len(s) > 2 {
+				suffixes = append(suffixes, ConcateFirstToLast(s))
+			}
+			source.TitleSuggest = suffixes
 			source.FullTitle = strings.Join(s, " > ")
-			source.TitleSuggest = Suffixes(strings.Join(s, " "), true)
 			i18nMap[i18n.Language] = source
 		}
 	}
