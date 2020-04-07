@@ -178,10 +178,16 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	// Run grammar suggestions in parallel.
 	grammarSuggestionsChannel := make(chan map[string][]VariablesByPhrase)
 	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("ESEngine.GetSuggestions - Panic adding intents: %+v", err)
+				grammarSuggestionsChannel <- make(map[string][]VariablesByPhrase)
+			}
+		}()
 		beforeSuggestSuggest := time.Now()
 		grammarSuggestions, err := e.SuggestGrammarsV2(&query, preference)
 		if err != nil {
-			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
+			log.Errorf("ESEngine.GetSuggestions - Error adding intents: %+v", err)
 			grammarSuggestionsChannel <- make(map[string][]VariablesByPhrase)
 		} else {
 			grammarSuggestionsChannel <- grammarSuggestions
@@ -509,6 +515,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// Seach intents and grammars in parallel to native search.
 	intentsChannel := make(chan []Intent)
 	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("ESEngine.DoSearch - Panic adding intents: %+v", err)
+				intentsChannel <- []Intent{}
+			}
+		}()
 		intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy)
 		if err != nil {
 			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
@@ -519,6 +531,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}()
 
 	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
+				intentsChannel <- []Intent{}
+			}
+		}()
 		if intents, err := e.SearchGrammarsV2(&query, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
 			intentsChannel <- []Intent{}
@@ -530,6 +548,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// Search tweets in parallel to native search.
 	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("ESEngine.DoSearch - Panic searching tweets: %+v", err)
+				tweetsByLangChannel <- map[string]*elastic.SearchResult{}
+			}
+		}()
 		if tweetsByLang, err := e.SearchTweets(query, sortBy, from, size, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching tweets: %+v", err)
 			tweetsByLangChannel <- map[string]*elastic.SearchResult{}
@@ -540,6 +564,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	if checkTypo {
 		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					log.Errorf("ESEngine.GetTypoSuggest - Panic getting typo suggest: %+v", err)
+					suggestChannel <- null.String{"", false}
+				}
+			}()
 			if suggestText, err := e.GetTypoSuggest(query); err != nil {
 				log.Errorf("ESEngine.GetTypoSuggest - Error getting typo suggest: %+v", err)
 				suggestChannel <- null.String{"", false}
