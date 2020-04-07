@@ -363,6 +363,12 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			s := append(authors, pathNames...)
 			leaf := s[len(s)-1]
 			source.Title = leaf
+			suffixes := Suffixes(strings.Join(s, " "))
+			if len(s) > 2 {
+				suffixes = append(suffixes, ConcateFirstToLast(s))
+			}
+
+			//  Add chapter number\letter to Shamati articles
 			if mdbSource.ParentID.Valid && mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
 				if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[mdbSource.ParentID.Int64]; ok {
 					var position string
@@ -373,12 +379,11 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 					}
 					leafWithChapter := fmt.Sprintf("%s.%s", position, leaf)
 					s = append(s[:len(s)-1], leafWithChapter)
+					suffixesWithChapter := Suffixes(strings.Join(s, " "))
+					suffixes = Unique(append(suffixes, suffixesWithChapter...))
 				}
 			}
-			suffixes := Suffixes(strings.Join(s, " "))
-			if len(s) > 2 {
-				suffixes = append(suffixes, ConcateFirstToLast(s))
-			}
+
 			source.TitleSuggest = suffixes
 			source.FullTitle = strings.Join(s, " > ")
 			i18nMap[i18n.Language] = source
