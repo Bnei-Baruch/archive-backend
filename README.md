@@ -85,9 +85,10 @@ http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.h
 
 ![alt text](https://image.prntscr.com/image/PzmaOTOMQX2Bds_Dv_cXSA.png)
 
-2. Download and install the Elasticsearch 5.6.0 MSI from
-https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-5.6.0.msi
 
+2. Download the Elasticsearch 6.8.2 zip from
+	https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.2.zip
+		2.1. Extract it to C:\elasticsearch-6.8.2
 3. Open CMD as administrator
 
     1. Go to Elasticsearch bin directory
@@ -102,11 +103,12 @@ https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-5.6.0.msi
         elasticsearch-plugin install analysis-phonetic
         ```
 
-    3. To install the hebrew plugin type
+    3. To install the hebrew plugin :
 
-        ```Shell
-        elasticsearch-plugin install https://bintray.com/synhershko/elasticsearch-analysis-hebrew/download_file?file_path=elasticsearch-analysis-hebrew-5.6.0.zip
-        ```
+        Download hunspell_complete.rar from :
+			https://drive.google.com/file/d/18OrFuQU9IzP-lVaXMlr7_eD3IvLWLjJ1/view?usp=sharing
+			
+		Extract hunspell folder to C:\elasticsearch-6.8.2\config
 
     4. Answer 'y' to the security question
 
@@ -166,6 +168,22 @@ https://www.python.org/downloads/
 ## Install go-bindata
 
 go get -u github.com/jteeuwen/go-bindata/...
+
+## Elasticsearch indexation
+
+	Detect local direction for [mdb] section in config.toml (url="postgres://localhost/mdb?sslmode=disable&user=postgres&password=???")
+	
+	Detect local direction for [elasticsearch] section in config.toml (url="http://127.0.0.1:9200")
+	
+	Open Terminal environment and go to archive-backend project's directory, type
+		```Shell
+		go build
+
+		```Shell
+		archive-backend index
+
+		```Shell
+		archive-backend index_grammars
 
 ## License
 
