@@ -720,7 +720,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			log.Debug("Searching for highlights and replacing original results with highlighted results.")
 
 			beforeHighlightsDoSearch := time.Now()
-			highlightCtx, cancelFn := context.WithTimeout(context.Background(), 3000*time.Millisecond)
+			highlightCtx, cancelFn := context.WithTimeout(context.Background(), consts.TIMEOUT_FOR_HIGHLIGHT_SEARCH*time.Millisecond)
 			defer cancelFn()
 			mr, err := mssHighlights.Do(highlightCtx)
 			e.timeTrack(beforeHighlightsDoSearch, consts.LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO)
@@ -791,14 +791,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 								hit.Highlight["full_title"] = nil
 							}
 						}
-					} else {
-						hit.Highlight = elastic.SearchHitHighlight{}
-						content := src.Content
-						if len(content) > 500 {
-							content = strings.TrimSpace(content[:500]) + "..."
-						}
-						hit.Highlight["content"] = []string{content}
-						hit.Highlight["title"] = []string{src.Title}
 					}
 				}
 			}
