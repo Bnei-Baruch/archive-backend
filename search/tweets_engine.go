@@ -68,7 +68,10 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 
 	for _, result := range resultsByLang {
 		firstHit := result.Hits.Hits[0]
-		source, _ := json.Marshal(es.EffectiveDate{EffectiveDate: &utils.Date{time.Now()}})
+		source, marshalErr := json.Marshal(es.EffectiveDate{EffectiveDate: &utils.Date{time.Now()}})
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
 
 		var ed es.EffectiveDate
 		if err := json.Unmarshal(*firstHit.Source, &ed); err != nil || ed.EffectiveDate == nil {
