@@ -88,13 +88,15 @@ http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.h
 
 2. Download the Elasticsearch 6.8.2 zip from
 	https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.2.zip
+	
 		2.1. Extract it to C:\elasticsearch-6.8.2
+		
 3. Open CMD as administrator
 
     1. Go to Elasticsearch bin directory
 
         ```Shell
-        cd C:\Program Files\Elastic\Elasticsearch\bin
+        cd C:\elasticsearch-6.8.2\bin
         ```
 
     2. To install analysis-phonetic type
@@ -108,7 +110,7 @@ http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.h
         Download hunspell_complete.rar from :
 			https://drive.google.com/file/d/18OrFuQU9IzP-lVaXMlr7_eD3IvLWLjJ1/view?usp=sharing
 			
-		Extract hunspell folder to C:\elasticsearch-6.8.2\config
+		Open hunspell_complete.rar and extract hunspell folder to C:\elasticsearch-6.8.2\config
 
     4. Answer 'y' to the security question
 
@@ -175,13 +177,15 @@ go get -u github.com/jteeuwen/go-bindata/...
 	
 	Detect local direction for [elasticsearch] section in config.toml (url="http://127.0.0.1:9200")
 	
-	Open Terminal environment and go to archive-backend project's directory, type
+	Open Terminal environment and in command line change directory to archive-backend project's folder, type:
 		```Shell
 		go build
 
+	In command line type (indexation will take some time , something like 40 minutes ):
 		```Shell
 		archive-backend index
-
+		
+	In command line type:
 		```Shell
 		archive-backend index_grammars
 
