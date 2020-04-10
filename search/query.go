@@ -124,6 +124,9 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		idsQuery := elastic.NewIdsQuery().Ids(docIds...)
 		boolQuery.Filter(idsQuery)
 	}
+	notQueryOfSource := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.FILTER_SOURCE, "hFeGidcS"))
+	notQueryOfContentType := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("content_type:%s", consts.CT_LESSON_PART))
+	boolQuery.MustNot(notQueryOfSource, notQueryOfContentType)
 	if q.Term != "" {
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
@@ -243,6 +246,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 	titleAdded := false
 	fullTitleAdded := false
 	contentAdded := false
+	typedUidsAdded := false
 	//	This is a generic imp. that supports searching tweets together with other results.
 	//	Currently we are not searching for tweets together with other results but in parallel.
 	for _, rt := range options.resultTypes {
@@ -252,6 +256,9 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		} else if !fullTitleAdded && rt == consts.ES_RESULT_TYPE_SOURCES {
 			fetchSourceContext.Include("full_title")
 			fullTitleAdded = true
+		} else if !typedUidsAdded && rt == consts.ES_RESULT_TYPE_UNITS {
+			fetchSourceContext.Include("typed_uids")
+			typedUidsAdded = true
 		} else if !titleAdded {
 			fetchSourceContext.Include("title")
 			titleAdded = true

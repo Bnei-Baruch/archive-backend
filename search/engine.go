@@ -658,6 +658,53 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			if _, ok := resultsByLang[lang]; !ok {
 				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 			}
+
+			//  In order to reduce duplication, remove CU's that has the same Source as of Intent By Source
+			/*for _, intent := range intentResults.Hits.Hits {
+				if intent.Index == consts.INTENT_INDEX_SOURCE {
+					for i := range resultsByLang[lang] {
+						var maxScore float64
+						var hitsCount int64
+						withoutIntentDuplication := make([]*elastic.SearchHit, 0)
+						for _, result := range resultsByLang[lang][i].Hits.Hits {
+							var resultSrc es.Result
+							var intentSrc es.Result
+							err = json.Unmarshal(*result.Source, &resultSrc)
+							if err != nil {
+								log.Warnf("Unable to unmarshal source for result '%s': %+v", result.Id, err)
+								continue
+							}
+							err = json.Unmarshal(*intent.Source, &intentSrc)
+							if err != nil {
+								log.Warnf("Unable to unmarshal source for intent result '%s': %+v", intent.Id, err)
+								continue
+							}
+							toAdd := true
+							if resultSrc.ResultType == consts.ES_RESULT_TYPE_UNITS {
+								for _, tu := range resultSrc.TypedUids {
+									if strings.HasPrefix(tu, consts.FILTER_SOURCE) {
+										srcUid := tu[len(consts.FILTER_SOURCE)+1:]
+										if srcUid == intentSrc.MDB_UID {
+											toAdd = false
+											break
+										}
+									}
+								}
+							}
+							if toAdd {
+								if *result.Score > maxScore {
+									maxScore = *result.Score
+								}
+								hitsCount++
+								withoutIntentDuplication = append(withoutIntentDuplication, result)
+							}
+						}
+						resultsByLang[lang][i].Hits.Hits = withoutIntentDuplication
+						resultsByLang[lang][i].Hits.TotalHits = hitsCount
+						resultsByLang[lang][i].Hits.MaxScore = &maxScore
+					}
+				}
+			}*/
 			resultsByLang[lang] = append(resultsByLang[lang], intentResults)
 		}
 	}
