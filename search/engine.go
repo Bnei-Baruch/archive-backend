@@ -245,7 +245,6 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 							log.Errorf("ESEngine.GetSuggestions - cannot marshal source with title correction.")
 							continue
 						}
-						r.Suggest[key][j].Options[opIdx].Text = src.Title //  Display title in suggest result
 						r.Suggest[key][j].Options[opIdx].Source = (*json.RawMessage)(&nsrc)
 					}
 				}
