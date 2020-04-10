@@ -298,7 +298,7 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 				MDB_UID:      cu.UID,
 				TypedUids:    typedUids,
 				FilterValues: filterValues,
-				Title:        i18n.Name.String,				
+				Title:        i18n.Name.String,
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {

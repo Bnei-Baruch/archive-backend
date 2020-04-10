@@ -222,9 +222,9 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		if resultType == consts.ES_RESULT_TYPE_UNITS {
 			weight = 1.1
 		} else if resultType == consts.ES_RESULT_TYPE_TAGS {
-			weight = 1.75 // We use tags for intents only
+			weight = 2.3 // We use tags for intents only
 		} else if resultType == consts.ES_RESULT_TYPE_SOURCES {
-			weight = 1.5
+			weight = 1.8
 		} else if resultType == consts.ES_RESULT_TYPE_COLLECTIONS {
 			weight = 2.0
 		}
