@@ -114,7 +114,7 @@ func ParseQuery(q string) Query {
 	return Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Original: q, Filters: filters}
 }
 
-func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.Query {
+func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string) elastic.Query {
 	boolQuery := elastic.NewBoolQuery().Must(
 		elastic.NewConstantScoreQuery(
 			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(resultTypes)...),
@@ -124,9 +124,17 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		idsQuery := elastic.NewIdsQuery().Ids(docIds...)
 		boolQuery.Filter(idsQuery)
 	}
-	notQueryOfSource := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.FILTER_SOURCE, "hFeGidcS"))
-	notQueryOfContentType := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("content_type:%s", consts.CT_LESSON_PART))
-	boolQuery.MustNot(notQueryOfSource, notQueryOfContentType)
+	if len(filterOutCUSources) > 0 {
+		rtForMustNotQuery := elastic.NewTermsQuery(consts.ES_RESULT_TYPE, consts.ES_RESULT_TYPE_UNITS)
+		//ctForMustNotQuery := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("content_type:%s", consts.CT_LESSON_PART))
+		//  TBC if filtering out CT_VIDEO_PROGRAM_CHAPTER is also relevant
+		//  PROBLEM - CT_LESSON_PART is not added to content_type. Why? For example: 3Qb2dWQj
+		for _, src := range filterOutCUSources {
+			sourceForMustNotQuery := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.FILTER_SOURCE, src))
+			innerBoolQuery := elastic.NewBoolQuery().Filter(sourceForMustNotQuery, rtForMustNotQuery)
+			boolQuery.MustNot(innerBoolQuery)
+		}
+	}
 	if q.Term != "" {
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
@@ -269,7 +277,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 	}
 
 	source := elastic.NewSearchSource().
-		Query(createResultsQuery(options.resultTypes, options.query, options.docIds)).
+		Query(createResultsQuery(options.resultTypes, options.query, options.docIds, options.filterOutCUSources)).
 		FetchSourceContext(fetchSourceContext).
 		From(options.from).
 		Size(options.size).

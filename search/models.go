@@ -38,4 +38,7 @@ type SearchRequestOptions struct {
 	// Just removed the analyzed fields and uses only standard fields
 	// for highlighting. Only happens with intents.
 	partialHighlight bool
+	// Following field comes to reduce results duplication.
+	// If we have intent by source, filter out this results from the main search.
+	filterOutCUSources []string
 }
