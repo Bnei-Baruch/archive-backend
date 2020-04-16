@@ -126,9 +126,6 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 	}
 	if len(filterOutCUSources) > 0 {
 		rtForMustNotQuery := elastic.NewTermsQuery(consts.ES_RESULT_TYPE, consts.ES_RESULT_TYPE_UNITS)
-		//ctForMustNotQuery := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("content_type:%s", consts.CT_LESSON_PART))
-		//  TBC if filtering out CT_VIDEO_PROGRAM_CHAPTER is also relevant
-		//  PROBLEM - CT_LESSON_PART is not added to content_type. Why? For example: 3Qb2dWQj
 		for _, src := range filterOutCUSources {
 			sourceForMustNotQuery := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.FILTER_SOURCE, src))
 			innerBoolQuery := elastic.NewBoolQuery().Filter(sourceForMustNotQuery, rtForMustNotQuery)
