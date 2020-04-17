@@ -512,36 +512,20 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	suggestChannel := make(chan null.String)
 
-	// Seach intents and grammars in parallel to native search.
-	intentsChannel := make(chan []Intent)
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				log.Errorf("ESEngine.DoSearch - Panic adding intents: %+v", err)
-				intentsChannel <- []Intent{}
-			}
-		}()
-		intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy)
-		if err != nil {
-			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
-			intentsChannel <- []Intent{}
-		} else {
-			intentsChannel <- intents
-		}
-	}()
-
+	// Search grammars in parallel to native search.
+	grammarsChannel := make(chan []Intent)
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
-				intentsChannel <- []Intent{}
+				grammarsChannel <- []Intent{}
 			}
 		}()
-		if intents, err := e.SearchGrammarsV2(&query, preference); err != nil {
+		if grammars, err := e.SearchGrammarsV2(&query, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
-			intentsChannel <- []Intent{}
+			grammarsChannel <- []Intent{}
 		} else {
-			intentsChannel <- intents
+			grammarsChannel <- grammars
 		}
 	}()
 
@@ -591,18 +575,36 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		resultTypes = consts.ES_SEARCH_RESULT_TYPES
 	}
 
+	intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy)
+	if err != nil {
+		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
+	}
+
+	// Filter out duplicates of regular results and intents carousel results
+	filterOutCUSources := make([]string, 0)
+	for _, intent := range intents {
+		if intent.Type == consts.INTENT_TYPE_SOURCE {
+			if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Exist {
+				// This is not a perfect solution since we dont know yet what is the currentLang and we filter by all languages
+				filterOutCUSources = append(filterOutCUSources, intentValue.MDB_UID)
+				log.Infof("MDB_UID added to filterOutCUSources: %s.", intentValue.MDB_UID)
+			}
+		}
+	}
+
 	multiSearchService := e.esc.MultiSearch()
 	multiSearchService.Add(NewResultsSearchRequests(
 		SearchRequestOptions{
-			resultTypes:      resultTypes,
-			index:            "",
-			query:            query,
-			sortBy:           sortBy,
-			from:             0,
-			size:             from + size,
-			preference:       preference,
-			useHighlight:     false,
-			partialHighlight: false})...)
+			resultTypes:        resultTypes,
+			index:              "",
+			query:              query,
+			sortBy:             sortBy,
+			from:               0,
+			size:               from + size,
+			preference:         preference,
+			useHighlight:       false,
+			partialHighlight:   false,
+			filterOutCUSources: filterOutCUSources})...)
 
 	// Do search.
 	beforeDoSearch := time.Now()
@@ -641,9 +643,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
-	// Wait for intent and grammars, expecting exactly two items in intentsChannel channel.
-	query.Intents = append(query.Intents, <-intentsChannel...)
-	query.Intents = append(query.Intents, <-intentsChannel...)
+	query.Intents = append(query.Intents, intents...)
+	query.Intents = append(query.Intents, <-grammarsChannel...)
 
 	log.Debugf("Intents: %+v", query.Intents)
 
