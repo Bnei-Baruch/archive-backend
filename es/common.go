@@ -16,7 +16,7 @@ import (
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -145,6 +145,19 @@ func Suffixes(escapedTitle string) []string {
 	for i, _ := range parts {
 		ret = append(ret, strings.Join(parts[i:], " "))
 	}
+	return ret
+}
+
+func ConcateFirstToLast(strings []string) string {
+	if len(strings) == 0 {
+		return ""
+	}
+	first := html.UnescapeString(strings[0])
+	if len(strings) == 1 {
+		return first
+	}
+	last := html.UnescapeString(strings[len(strings)-1])
+	ret := fmt.Sprintf("%s %s", first, last)
 	return ret
 }
 

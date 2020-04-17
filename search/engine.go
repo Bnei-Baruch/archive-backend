@@ -178,10 +178,16 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	// Run grammar suggestions in parallel.
 	grammarSuggestionsChannel := make(chan map[string][]VariablesByPhrase)
 	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("ESEngine.GetSuggestions - Panic adding intents: %+v", err)
+				grammarSuggestionsChannel <- make(map[string][]VariablesByPhrase)
+			}
+		}()
 		beforeSuggestSuggest := time.Now()
 		grammarSuggestions, err := e.SuggestGrammarsV2(&query, preference)
 		if err != nil {
-			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
+			log.Errorf("ESEngine.GetSuggestions - Error adding intents: %+v", err)
 			grammarSuggestionsChannel <- make(map[string][]VariablesByPhrase)
 		} else {
 			grammarSuggestionsChannel <- grammarSuggestions
@@ -218,6 +224,32 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 			}
 		}
 		return nil, errors.Wrap(err, "ESEngine.GetSuggestions")
+	}
+
+	//  Nativize response to client - Replace title with full title
+	for _, r := range mr.Responses {
+		for key := range r.Suggest {
+			for j := range r.Suggest[key] {
+				for opIdx, op := range r.Suggest[key][j].Options {
+					var src es.Result
+					err = json.Unmarshal(*op.Source, &src)
+					if err != nil {
+						log.Errorf("ESEngine.GetSuggestions - cannot unmarshal source.")
+						continue
+					}
+					if src.ResultType == consts.ES_RESULT_TYPE_SOURCES && src.FullTitle != "" {
+						src.Title = src.FullTitle
+						src.FullTitle = ""
+						nsrc, err := json.Marshal(src)
+						if err != nil {
+							log.Errorf("ESEngine.GetSuggestions - cannot marshal source with title correction.")
+							continue
+						}
+						r.Suggest[key][j].Options[opIdx].Source = (*json.RawMessage)(&nsrc)
+					}
+				}
+			}
+		}
 	}
 
 	// Merge with grammar suggestions.
@@ -480,30 +512,32 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	suggestChannel := make(chan null.String)
 
-	// Seach intents and grammars in parallel to native search.
-	intentsChannel := make(chan []Intent)
+	// Search grammars in parallel to native search.
+	grammarsChannel := make(chan []Intent)
 	go func() {
-		intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy)
-		if err != nil {
-			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
-			intentsChannel <- []Intent{}
-		} else {
-			intentsChannel <- intents
-		}
-	}()
-
-	go func() {
-		if intents, err := e.SearchGrammarsV2(&query, preference); err != nil {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
+				grammarsChannel <- []Intent{}
+			}
+		}()
+		if grammars, err := e.SearchGrammarsV2(&query, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
-			intentsChannel <- []Intent{}
+			grammarsChannel <- []Intent{}
 		} else {
-			intentsChannel <- intents
+			grammarsChannel <- grammars
 		}
 	}()
 
 	// Search tweets in parallel to native search.
 	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("ESEngine.DoSearch - Panic searching tweets: %+v", err)
+				tweetsByLangChannel <- map[string]*elastic.SearchResult{}
+			}
+		}()
 		if tweetsByLang, err := e.SearchTweets(query, sortBy, from, size, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching tweets: %+v", err)
 			tweetsByLangChannel <- map[string]*elastic.SearchResult{}
@@ -514,6 +548,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	if checkTypo {
 		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					log.Errorf("ESEngine.GetTypoSuggest - Panic getting typo suggest: %+v", err)
+					suggestChannel <- null.String{"", false}
+				}
+			}()
 			if suggestText, err := e.GetTypoSuggest(query); err != nil {
 				log.Errorf("ESEngine.GetTypoSuggest - Error getting typo suggest: %+v", err)
 				suggestChannel <- null.String{"", false}
@@ -535,18 +575,36 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		resultTypes = consts.ES_SEARCH_RESULT_TYPES
 	}
 
+	intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy)
+	if err != nil {
+		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
+	}
+
+	// Filter out duplicates of regular results and intents carousel results
+	filterOutCUSources := make([]string, 0)
+	for _, intent := range intents {
+		if intent.Type == consts.INTENT_TYPE_SOURCE {
+			if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Exist {
+				// This is not a perfect solution since we dont know yet what is the currentLang and we filter by all languages
+				filterOutCUSources = append(filterOutCUSources, intentValue.MDB_UID)
+				log.Infof("MDB_UID added to filterOutCUSources: %s.", intentValue.MDB_UID)
+			}
+		}
+	}
+
 	multiSearchService := e.esc.MultiSearch()
 	multiSearchService.Add(NewResultsSearchRequests(
 		SearchRequestOptions{
-			resultTypes:      resultTypes,
-			index:            "",
-			query:            query,
-			sortBy:           sortBy,
-			from:             0,
-			size:             from + size,
-			preference:       preference,
-			useHighlight:     false,
-			partialHighlight: false})...)
+			resultTypes:        resultTypes,
+			index:              "",
+			query:              query,
+			sortBy:             sortBy,
+			from:               0,
+			size:               from + size,
+			preference:         preference,
+			useHighlight:       false,
+			partialHighlight:   false,
+			filterOutCUSources: filterOutCUSources})...)
 
 	// Do search.
 	beforeDoSearch := time.Now()
@@ -585,9 +643,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
-	// Wait for intent and grammars, expecting exactly two items in intentsChannel channel.
-	query.Intents = append(query.Intents, <-intentsChannel...)
-	query.Intents = append(query.Intents, <-intentsChannel...)
+	query.Intents = append(query.Intents, intents...)
+	query.Intents = append(query.Intents, <-grammarsChannel...)
 
 	log.Debugf("Intents: %+v", query.Intents)
 
@@ -694,10 +751,18 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			log.Debug("Searching for highlights and replacing original results with highlighted results.")
 
 			beforeHighlightsDoSearch := time.Now()
-			mr, err := mssHighlights.Do(context.TODO())
+			highlightCtx, cancelFn := context.WithTimeout(context.Background(), consts.TIMEOUT_FOR_HIGHLIGHT_SEARCH*time.Millisecond)
+			defer cancelFn()
+			mr, err := mssHighlights.Do(highlightCtx)
 			e.timeTrack(beforeHighlightsDoSearch, consts.LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO)
 			if err != nil {
-				return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
+				switch highlightCtx.Err() {
+				case context.DeadlineExceeded:
+					log.Error(err, "ESEngine.DoSearch - DeadlineExceeded mssHighlights Do.")
+					mr = new(elastic.MultiSearchResult)
+				default:
+					return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
+				}
 			}
 
 			for _, highlightedResults := range mr.Responses {

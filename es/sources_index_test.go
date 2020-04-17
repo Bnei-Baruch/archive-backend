@@ -83,7 +83,7 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.validateNames(indexNameEn, indexer, []string{"test-name-1"})
 	suite.validateFullNames(indexNameEn, indexer, []string{"Test Name > test-name-1"})
 
-	fmt.Println("Validate adding source with file and author and validate.")
+	fmt.Println("Validate adding source with file and author and and validate.")
 	suite.asa(Source{MDB_UID: source2UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 5, Code: "t3"}, true, true)
 	suite.asa(Source{MDB_UID: source2UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם נוסף לבדיקה", ID: 6, Code: "t4"}, true, true)
 	r.Nil(indexer.SourceUpdate(source2UID))
@@ -95,6 +95,8 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 		source2UID: "TEST CONTENT",
 	})
 	suite.validateSourcesFullPath(indexNameEn, indexer, [][]string{[]string{source1UID, "t1", "t2"}, []string{source2UID, "t3", "t4"}})
+
+	//TBD add test for indexing with position (chapter)
 
 	fmt.Println("Delete sources from DB, reindex and validate we have 0 sources.")
 	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})

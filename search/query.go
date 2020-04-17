@@ -114,7 +114,7 @@ func ParseQuery(q string) Query {
 	return Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Original: q, Filters: filters}
 }
 
-func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.Query {
+func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string) elastic.Query {
 	boolQuery := elastic.NewBoolQuery().Must(
 		elastic.NewConstantScoreQuery(
 			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(resultTypes)...),
@@ -123,6 +123,14 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 	if docIds != nil && len(docIds) > 0 {
 		idsQuery := elastic.NewIdsQuery().Ids(docIds...)
 		boolQuery.Filter(idsQuery)
+	}
+	if len(filterOutCUSources) > 0 {
+		rtForMustNotQuery := elastic.NewTermsQuery(consts.ES_RESULT_TYPE, consts.ES_RESULT_TYPE_UNITS)
+		for _, src := range filterOutCUSources {
+			sourceForMustNotQuery := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.FILTER_SOURCE, src))
+			innerBoolQuery := elastic.NewBoolQuery().Filter(sourceForMustNotQuery, rtForMustNotQuery)
+			boolQuery.MustNot(innerBoolQuery)
+		}
 	}
 	if q.Term != "" {
 		boolQuery = boolQuery.Must(
@@ -222,9 +230,9 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string) elastic.
 		if resultType == consts.ES_RESULT_TYPE_UNITS {
 			weight = 1.1
 		} else if resultType == consts.ES_RESULT_TYPE_TAGS {
-			weight = 1.75 // We use tags for intents only
+			weight = 2.3 // We use tags for intents only
 		} else if resultType == consts.ES_RESULT_TYPE_SOURCES {
-			weight = 1.5
+			weight = 1.8
 		} else if resultType == consts.ES_RESULT_TYPE_COLLECTIONS {
 			weight = 2.0
 		}
@@ -262,34 +270,26 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 	}
 
 	source := elastic.NewSearchSource().
-		Query(createResultsQuery(options.resultTypes, options.query, options.docIds)).
+		Query(createResultsQuery(options.resultTypes, options.query, options.docIds, options.filterOutCUSources)).
 		FetchSourceContext(fetchSourceContext).
 		From(options.from).
 		Size(options.size).
 		Explain(options.query.Deb)
 
 	if options.useHighlight {
-
-		//  We use special HighlightQuery with SimpleQueryStringQuery to
-		//	 solve elastic issue with synonyms and highlights.
+		terms := make([]string, 1)
+		if options.query.Term != "" {
+			terms = append(terms, options.query.Term)
+		} else {
+			terms = options.query.ExactTerms
+		}
 
 		contentNumOfFragments := 5 //  elastic default
 		if options.highlightFullContent {
 			contentNumOfFragments = 0
 		}
+		highlightQuery := createHighlightQuery(terms, contentNumOfFragments, options.partialHighlight)
 
-		highlightQuery := elastic.NewHighlight().Fields(
-			elastic.NewHighlighterField("title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("full_title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("description").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("description.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("content").NumOfFragments(contentNumOfFragments).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)),
-			elastic.NewHighlighterField("content.language").NumOfFragments(contentNumOfFragments).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)))
-		if !options.partialHighlight {
-			// Following field not used in intents to solve elastic bug with highlight.
-			highlightQuery.Fields(
-				elastic.NewHighlighterField("title.language").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(options.query.Term)))
-		}
 		source = source.Highlight(highlightQuery)
 	}
 
@@ -303,6 +303,29 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		SearchSource(source).
 		Index(options.index).
 		Preference(options.preference)
+}
+
+func createHighlightQuery(terms []string, n int, partialHighlight bool) *elastic.Highlight {
+	//  We use special HighlightQuery with SimpleQueryStringQuery to
+	//	 solve elastic issue with synonyms and highlights.
+
+	query := elastic.NewHighlight()
+	for _, term := range terms {
+		query.Fields(
+			elastic.NewHighlighterField("title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
+			elastic.NewHighlighterField("full_title").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
+			elastic.NewHighlighterField("description").HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
+			elastic.NewHighlighterField("description.language").HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
+			elastic.NewHighlighterField("content").NumOfFragments(n).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)),
+			elastic.NewHighlighterField("content.language").NumOfFragments(n).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)))
+
+		if !partialHighlight {
+			// Following field not used in intents to solve elastic bug with highlight.
+			query.Fields(
+				elastic.NewHighlighterField("title.language").NumOfFragments(0).HighlightQuery(elastic.NewSimpleQueryStringQuery(term)))
+		}
+	}
+	return query
 }
 
 func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchRequest {
@@ -320,7 +343,7 @@ func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchReq
 }
 
 func NewResultsSuggestRequest(resultTypes []string, index string, query Query, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title", "full_title")
 	searchSource := elastic.NewSearchSource().
 		FetchSourceContext(fetchSourceContext).
 		Suggester(

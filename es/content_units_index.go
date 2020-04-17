@@ -15,7 +15,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -299,7 +299,6 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 				TypedUids:    typedUids,
 				FilterValues: filterValues,
 				Title:        i18n.Name.String,
-				TitleSuggest: Suffixes(i18n.Name.String),
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
@@ -326,6 +325,9 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 			if val, ok := indexData.Sources[cu.UID]; ok {
 				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.ES_UID_TYPE_SOURCE, val)...)
 				unit.TypedUids = append(unit.TypedUids, KeyValues(consts.ES_UID_TYPE_SOURCE, val)...)
+				//  We dont add TitleSuggest to CU with source
+			} else {
+				unit.TitleSuggest = Suffixes(i18n.Name.String)
 			}
 			if val, ok := indexData.Tags[cu.UID]; ok {
 				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.ES_UID_TYPE_TAG, val)...)

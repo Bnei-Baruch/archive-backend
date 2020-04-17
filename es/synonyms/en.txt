@@ -1,0 +1,109 @@
+# Authors						
+						
+Rabash	Rav Baruch Shalom Halevi Ashlag	Baruch Shalom Ashlag				
+Baal HaSulam	Rav Yehuda Ashlag	Yehuda Ashlag				
+Rav Laitman	Michael Laitman	Laitman	Dr. Michael Laitman			
+#Ari	the Ari					
+Ramchal	Moshe Jaim Luzzato	Luzzato				
+Rav Kook	Abraham Itzhak Hacohen Kook					
+Baal Shem Tov	Habaal Shem Tov					
+						
+# Sources						
+						
+#Zohar for everyone	Zohar	The Book of Zohar	Zohar for All					
+#On the Night of the Bride	The Correction Of The Night Of Shavuot	the night of the bride				
+#Study of the Ten Sefirot	TES					
+Beresheet	Weekly Portion Beresheet	Chapter Beresheet	Weekly Reading Beresheet	Parashat Beresheet	Parshat Beresheet	Book Beresheet
+Shemot	Weekly Portion Shemot	Chapter Shemot	Weekly Reading Shemot	Parashat Shemot	Parshat Shemot	Book Shemot
+VaEra	Weekly Portion VaEra	Chapter VaEra	Weekly Reading VaEra	Parashat VaEra	Parshat VaEra	
+Bo	Weekly Portion Bo	Chapter Bo	Weekly Reading Bo	Parashat Bo	Parshat Bo	
+BeShalach	Weekly Portion BeShalach	Chapter BeShalach	Weekly Reading BeShalach	Parashat BeShalach	Parshat BeShalach	
+Yitro	Weekly Portion Yitro	Chapter Yitro	Weekly Reading Yitro	Parashat Yitro	Parshat Yitro	
+Mishpatim	Weekly Portion Mishpatim	Chapter Mishpatim	Weekly Reading Mishpatim	Parashat Mishpatim	Parshat Mishpatim	
+Truma	Weekly Portion Truma	Chapter Truma	Weekly Reading Truma	Parashat Truma	Parshat Truma	
+Tetzave	Weekly Portion Tetzave	Chapter Tetzave	Weekly Reading Tetzave	Parashat Tetzave	Parshat Tetzave	
+Ki Tisa	Weekly Portion Ki Tisa	Chapter Ki Tisa	Weekly Reading Ki Tisa	Parashat Ki Tisa	Parshat Ki Tisa	
+VaYakhel	Weekly Portion VaYakhel	Chapter VaYakhel	Weekly Reading VaYakhel	Parashat VaYakhel	Parshat VaYakhel	
+Pekudei	Weekly Portion Pekudei	Chapter Pekudei	Weekly Reading Pekudei	Parashat Pekudei	Parshat Pekudei	
+VaYikra	Weekly Portion VaYikra	Chapter VaYikra	Weekly Reading VaYikra	Parashat VaYikra	Parshat VaYikra	Book VaYikra
+Tezav	Weekly Portion Tezav	Chapter Tezav	Weekly Reading Tezav	Parashat Tezav	Parshat Tezav	
+Shmini	Weekly Portion Shmini	Chapter Shmini	Weekly Reading Shmini	Parashat Shmini	Parshat Shmini	
+Tazria	Weekly Portion Tazria	Chapter Tazria	Weekly Reading Tazria	Parashat Tazria	Parshat Tazria	
+Metzora	Weekly Portion Metzora	Chapter Metzora	Weekly Reading Metzora	Parashat Metzora	Parshat Metzora	
+Acharei Mot	Weekly Portion Acharei Mot	Chapter Acharei Mot	Weekly Reading Acharei Mot	Parashat Acharei Mot	Parshat Acharei Mot	
+Kedoshim	Weekly Portion Kedoshim	Chapter Kedoshim	Weekly Reading Kedoshim	Parashat Kedoshim	Parshat Kedoshim	
+Emor	Weekly Portion Emor	Chapter Emor	Weekly Reading Emor	Parashat Emor	Parshat Emor	
+Bahar	Weekly Portion Bahar	Chapter Bahar	Weekly Reading Bahar	Parashat Bahar	Parshat Bahar	
+BeHukotai	Weekly Portion BeHukotai	Chapter BeHukotai	Weekly Reading BeHukotai	Parashat BeHukotai	Parshat BeHukotai	
+Bamidbar	Weekly Portion Bamidbar	Chapter Bamidbar	Weekly Reading Bamidbar	Parashat Bamidbar	Parshat Bamidbar	Book Bamidbar
+Nasso	Weekly Portion Nasso	Chapter Nasso	Weekly Reading Nasso	Parashat Nasso	Parshat Nasso	
+Behaalotcha	Weekly Portion Behaalotcha	Chapter Behaalotcha	Weekly Reading Behaalotcha	Parashat Behaalotcha	Parshat Behaalotcha	
+Shelach	Weekly Portion Shelach	Chapter Shelach	Weekly Reading Shelach	Parashat Shelach	Parshat Shelach	
+Korach	Weekly Portion Korach	Chapter Korach	Weekly Reading Korach	Parashat Korach	Parshat Korach	
+Chukat	Weekly Portion Chukat	Chapter Chukat	Weekly Reading Chukat	Parashat Chukat	Parshat Chukat	
+Balak	Weekly Portion Balak	Chapter Balak	Weekly Reading Balak	Parashat Balak	Parshat Balak	
+Pinchas	Weekly Portion Pinchas	Chapter Pinchas	Weekly Reading Pinchas	Parashat Pinchas	Parshat Pinchas	
+Matot	Weekly Portion Matot	Chapter Matot	Weekly Reading Matot	Parashat Matot	Parshat Matot	
+Masei	Weekly Portion Masei	Chapter Masei	Weekly Reading Masei	Parashat Masei	Parshat Masei	
+Devarim	Weekly Portion Devarim	Chapter Devarim	Weekly Reading Devarim	Parashat Devarim	Parshat Devarim	Book Devarim
+Va'Etchanan	Weekly Portion Va'Etchanan	Chapter Va'Etchanan	Weekly Reading Va'Etchanan	Parashat Va'Etchanan	Parshat Va'Etchanan	
+Ekev	Weekly Portion Ekev	Chapter Ekev	Weekly Reading Ekev	Parashat Ekev	Parshat Ekev	
+Re'eh	Weekly Portion Re'eh	Chapter Re'eh	Weekly Reading Re'eh	Parashat Re'eh	Parshat Re'eh	
+Shoftim	Weekly Portion Shoftim	Chapter Shoftim	Weekly Reading Shoftim	Parashat Shoftim	Parshat Shoftim	
+Ki Tetze	Weekly Portion Ki Tetze	Chapter Ki Tetze	Weekly Reading Ki Tetze	Parashat Ki Tetze	Parshat Ki Tetze	
+Ki Tavo	Weekly Portion Ki Tavo	Chapter Ki Tavo	Weekly Reading Ki Tavo	Parashat Ki Tavo	Parshat Ki Tavo	
+Nitzavim	Weekly Portion Nitzavim	Chapter Nitzavim	Weekly Reading Nitzavim	Parashat Nitzavim	Parshat Nitzavim	
+VaYelech	Weekly Portion VaYelech	Chapter VaYelech	Weekly Reading VaYelech	Parashat VaYelech	Parshat VaYelech	
+Haazinu	Weekly Portion Haazinu	Chapter Haazinu	Weekly Reading Haazinu	Parashat Haazinu	Parshat Haazinu	
+VeZot HaBrach 	Weekly Portion VeZot HaBrach 	Chapter VeZot HaBrach 	Weekly Reading VeZot HaBrach 	Parashat VeZot HaBrach 	Parshat VeZot HaBrach 	
+Noah	Weekly Portion Noah	Chapter Noah	Weekly Reading Noah	Parashat Noah	Parshat Noah	
+Lech Lecha	Weekly Portion Lech Lecha	Chapter Lech Lecha	Weekly Reading Lech Lecha	Parashat Lech Lecha	Parshat Lech Lecha	
+VaYera	Weekly Portion VaYera	Chapter VaYera	Weekly Reading VaYera	Parashat VaYera	Parshat VaYera	
+Chayei Sarah	Weekly Portion Chayei Sarah	Chapter Chayei Sarah	Weekly Reading Chayei Sarah	Parashat Chayei Sarah	Parshat Chayei Sarah	
+Toldot	Weekly Portion Toldot	Chapter Toldot	Weekly Reading Toldot	Parashat Toldot	Parshat Toldot	
+VaYetze	Weekly Portion VaYetze	Chapter VaYetze	Weekly Reading VaYetze	Parashat VaYetze	Parshat VaYetze	
+VaYishlach	Weekly Portion VaYishlach	Chapter VaYishlach	Weekly Reading VaYishlach	Parashat VaYishlach	Parshat VaYishlach	
+VaYeshev	Weekly Portion VaYeshev	Chapter VaYeshev	Weekly Reading VaYeshev	Parashat VaYeshev	Parshat VaYeshev	
+Miketz	Weekly Portion Miketz	Chapter Miketz	Weekly Reading Miketz	Parashat Miketz	Parshat Miketz	
+VaYigash	Weekly Portion VaYigash	Chapter VaYigash	Weekly Reading VaYigash	Parashat VaYigash	Parshat VaYigash	
+VaYechi	Weekly Portion VaYechi	Chapter VaYechi	Weekly Reading VaYechi	Parashat VaYechi	Parshat VaYechi	
+						
+# Topics						
+						
+#Integral education	Wisdom Of Connection					
+#From Lo Lishma we come to Lishma	Lishma and Lo Lishma					
+Spiritual Partzuf	Partzuf					
+Rashbi	Rabbi Shimon	Rabbi Shimon Bar Yochai				
+#Day of Love	Tu BeAv	15th of Av				
+#Tishaa BeAv	9th of Av	Destruction of the Temple	Ninth of Av			
+Sukkot	Sukka					
+Rosh Hashanah	Jewish new year					
+#Yom Kipur	Day of Atonement					
+#Tu BiShvat	15th of Shevat					
+Independence Day Israel	Israel's Independence Day					
+#Fast of the 17 Tamuz	17 Tamuz					
+#The Period of “Between the Straits”	Between the Straits					
+#World of Nikkudim	Nikkudim  Nekudim
+Nikkudim  Nekudim					
+#Work with disturbances	Disturbances					
+#Prayer	To pray					
+Parenting & Family	Parenting	Family				
+community life	community					
+Mysticism & Kabbalah	Mysticism					
+#The Process of Correction	tikkun					
+#dissemination of the Wisdom of Kabbalah	dissemination					
+kabbalah book	kabbalah books					
+Congresses	Convention	Conventions	Congress			
+antisemitsm	jew hatred					
+Kabbalah music	Melody	Melodies				
+Reshimot	Reshimo										
+						
+# Meals						
+kabbalist meal	meal	tish	yortzait			
+						
+# Collections						
+#kabbalah fundamentals	fundamentals of the wisdom of kabbalah					
+						
+#Added by Yuri at 16.02.20 (not in spreadsheet)
+koronavirus	korona virus	coronavirus	corona
+chanukah	hanukkah	hanuka	chanuka
