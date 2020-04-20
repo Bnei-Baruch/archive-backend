@@ -507,7 +507,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	e.ExecutionTimeLog.Store(operation, elapsed)
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool) (*QueryResult, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
 	suggestChannel := make(chan null.String)
@@ -751,7 +751,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			log.Debug("Searching for highlights and replacing original results with highlighted results.")
 
 			beforeHighlightsDoSearch := time.Now()
-			highlightCtx, cancelFn := context.WithTimeout(context.Background(), consts.TIMEOUT_FOR_HIGHLIGHT_SEARCH*time.Millisecond)
+			highlightCtx, cancelFn := context.WithTimeout(context.Background(), timeoutForHighlight)
 			defer cancelFn()
 			mr, err := mssHighlights.Do(highlightCtx)
 			e.timeTrack(beforeHighlightsDoSearch, consts.LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO)

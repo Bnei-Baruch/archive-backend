@@ -453,6 +453,8 @@ func SearchHandler(c *gin.Context) {
 		//  temp. disable typo suggestion for other interface languages than english, russian and hebrew
 		(c.Query("language") == consts.LANG_ENGLISH || c.Query("language") == consts.LANG_RUSSIAN || c.Query("language") == consts.LANG_HEBREW)
 
+	timeoutForHighlight := viper.GetDuration("elasticsearch.timeout-for-highlight")
+
 	res, err := se.DoSearch(
 		context.TODO(),
 		query,
@@ -461,6 +463,7 @@ func SearchHandler(c *gin.Context) {
 		size,
 		preference,
 		checkTypo,
+		timeoutForHighlight,
 	)
 	if err == nil {
 		// TODO: How does this slows the search query? Consider logging in parallel.
