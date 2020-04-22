@@ -2267,12 +2267,12 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 	if len(f.MediaLanguage) == 0 {
 		return nil
 	}
-
+	//TODO: this query should be optimized ASAP and before we do that clients should use it as little as possible
 	*mods = append(*mods,
-		qm.WhereIn("(id in ( SELECT DISTINCT cu.id FROM content_units cu "+
-			"INNER JOIN files f "+
-			"ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE "+
-			"AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))", f.MediaLanguage),
+		qm.WhereIn(`(id in ( SELECT DISTINCT cu.id FROM content_units cu 
+			INNER JOIN files f 
+			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
+			AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))`, f.MediaLanguage),
 	)
 	return nil
 }
