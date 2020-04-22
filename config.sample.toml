@@ -32,6 +32,7 @@ synonyms-folder="/tmp/synonyms-folder"  # At repo, see: ./es/synonyms
 #index-date = "2018-11-28t13:08:31-05:00" # optional, NOT FOR PRODUCTION, comment out to use alias.
 #grammar-index-date = "2018-11-28t13:08:31-05:00" # optional, NOT FOR PRODUCTION, comment out to use alias.
 check-typo=true
+timeout-for-highlight="8s"
 
 [nats]
 url="nats://localhost:4222"
