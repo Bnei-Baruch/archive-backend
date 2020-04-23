@@ -25,12 +25,13 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	// log.Infof("Hit: %+v %+v", *h.Score, classificationIntent)
 	if h.Score != nil && *h.Score > 0 {
 
-		var titleToAdd string
+		/*var titleToAdd string
 		if classificationIntent.FullTitle != "" {
 			titleToAdd = classificationIntent.FullTitle
 		} else {
 			titleToAdd = classificationIntent.Title
-		}
+		}*/
+		titleToAdd := classificationIntent.Title
 
 		classificationIntent.Score = h.Score
 		// Search for specific classification by full name to evaluate max score.
