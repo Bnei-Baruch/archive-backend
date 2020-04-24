@@ -261,7 +261,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 			fetchSourceContext.Include("full_title")
 			fullTitleAdded = true
 		}
-		if !titleAdded {
+		if !titleAdded && rt != consts.ES_RESULT_TYPE_TWEETS {
 			fetchSourceContext.Include("title")
 			titleAdded = true
 		}
