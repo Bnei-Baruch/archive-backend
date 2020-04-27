@@ -67,16 +67,16 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 	//  Set the score as the highest score of all hits per language.
 
 	for _, result := range resultsByLang {
-		firstHit := result.Hits.Hits[0]
 		source, marshalErr := json.Marshal(es.EffectiveDate{EffectiveDate: &utils.Date{time.Now()}})
 		if marshalErr != nil {
 			return nil, marshalErr
 		}
 
-		var ed es.EffectiveDate
-		if err := json.Unmarshal(*firstHit.Source, &ed); err != nil || ed.EffectiveDate == nil {
-			source = *firstHit.Source
+		firstHit, err := findFirstHitWithEffectiveDate(result.Hits.Hits)
+		if err != nil {
+			return nil, err
 		}
+		source = *firstHit.Source
 
 		hitsClone := *result.Hits
 
@@ -98,6 +98,18 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 	}
 
 	return resultsByLang, nil
+}
+
+func findFirstHitWithEffectiveDate(hits []*elastic.SearchHit) (*elastic.SearchHit, error) {
+	var ed es.EffectiveDate
+	for _, hit := range hits {
+		err := json.Unmarshal(*hit.Source, &ed)
+
+		if err != nil && ed.EffectiveDate != nil {
+			return hit, nil
+		}
+	}
+	return nil, errors.New("First tweet EffectiveDate is nil")
 }
 
 // Moving data from InnerHits to Source (as marshaled json) (this is for client).
