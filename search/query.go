@@ -256,9 +256,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 	for _, rt := range options.resultTypes {
 		if rt == consts.ES_RESULT_TYPE_TWEETS && !contentAdded {
 			fetchSourceContext.Include("content")
-			if options.sortBy == consts.SORT_BY_OLDER_TO_NEWER || options.sortBy == consts.SORT_BY_NEWER_TO_OLDER {
-				fetchSourceContext.Include("effective_date")
-			}
+			fetchSourceContext.Include("effective_date")
 			contentAdded = true
 		} else if rt == consts.ES_RESULT_TYPE_SOURCES && !fullTitleAdded {
 			fetchSourceContext.Include("full_title")
