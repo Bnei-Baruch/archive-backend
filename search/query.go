@@ -254,9 +254,9 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 	//	This is a generic imp. that supports searching tweets together with other results.
 	//	Currently we are not searching for tweets together with other results but in parallel.
 	for _, rt := range options.resultTypes {
+		fetchSourceContext.Include("effective_date")
 		if rt == consts.ES_RESULT_TYPE_TWEETS && !contentAdded {
 			fetchSourceContext.Include("content")
-			fetchSourceContext.Include("effective_date")
 			contentAdded = true
 		} else if rt == consts.ES_RESULT_TYPE_SOURCES && !fullTitleAdded {
 			fetchSourceContext.Include("full_title")
