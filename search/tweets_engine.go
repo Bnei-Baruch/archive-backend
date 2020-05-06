@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Bnei-Baruch/archive-backend/es"
-	"github.com/Bnei-Baruch/archive-backend/utils"
-	log "github.com/Sirupsen/logrus"
 	"time"
 
 	"gopkg.in/olivere/elastic.v6"
@@ -19,6 +16,8 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 	tweetsByLang := make(map[string]*elastic.SearchResult)
 	mssTweets := e.esc.MultiSearch()
 	mssTweets.Add(NewResultsSearchRequests(
+		// Inside the carousel, the tweets are always sorted by relevance.
+		//The EffectiveDate of the carousel itself will be equal to the EffectiveDate of the most relevant tweet.
 		SearchRequestOptions{
 			resultTypes:      []string{consts.ES_RESULT_TYPE_TWEETS},
 			index:            "",
@@ -54,7 +53,7 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 		}
 	}
 
-	combinedToSingleHit, err := e.CombineResultsToSingleHit(tweetsByLang, consts.SEARCH_RESULT_TWEETS_MANY, sortBy)
+	combinedToSingleHit, err := e.CombineResultsToSingleHit(tweetsByLang, consts.SEARCH_RESULT_TWEETS_MANY)
 	if err != nil {
 		return nil, err
 	}
@@ -62,33 +61,12 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 	return combinedToSingleHit, nil
 }
 
-func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.SearchResult, hitType, sortBy string) (map[string]*elastic.SearchResult, error) {
+func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.SearchResult, hitType string) (map[string]*elastic.SearchResult, error) {
 
 	//  Create single hit result for each language.
 	//  Set the score as the highest score of all hits per language.
 
 	for _, result := range resultsByLang {
-		edMax := es.EffectiveDate{EffectiveDate: &utils.Date{time.Time{}}}
-		source, marshalErr := json.Marshal(edMax)
-		if marshalErr != nil {
-			return nil, marshalErr
-		}
-
-		//get source of combined hit from latest hit. Relevant when sorted by time
-		if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
-			for _, hit := range result.Hits.Hits {
-				var ed es.EffectiveDate
-				err := json.Unmarshal(*hit.Source, &ed)
-				if err != nil {
-					log.Error("Can't unmarshal tweet result to EffectiveDate", err)
-				}
-				if err == nil && ed.EffectiveDate != nil && ed.EffectiveDate.Time.After(edMax.EffectiveDate.Time) {
-					edMax = ed
-					source = *hit.Source
-				}
-			}
-		}
-
 		hitsClone := *result.Hits
 
 		innerHitsMap := make(map[string]*elastic.SearchHitInnerHits)
@@ -97,7 +75,7 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 		}
 
 		hit := &elastic.SearchHit{
-			Source:    (*json.RawMessage)(&source),
+			Source:    result.Hits.Hits[0].Source,
 			Type:      hitType,
 			Score:     result.Hits.Hits[0].Score,
 			InnerHits: innerHitsMap,
