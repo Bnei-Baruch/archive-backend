@@ -2,6 +2,7 @@ package search
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -116,13 +117,12 @@ func ParseQuery(q string) Query {
 }
 
 func createSpanNearQuery(field string, term string, boost float32, slop int) elastic.Query {
-	// tbd - handle "
 	clauses := make([]string, 0)
 	spanNearMask := "{\"span_near\": { \"clauses\": [%s], \"slop\": %d, \"boost\": %f, \"in_order\": true } }"
 	clauseMask := "{\"span_multi\": { \"match\": { \"fuzzy\": { \"%s\": { \"value\": \"%s\" } } } } }"
 	splitted := strings.Fields(term)
 	for _, t := range splitted {
-		clauses = append(clauses, fmt.Sprintf(clauseMask, field, t))
+		clauses = append(clauses, fmt.Sprintf(clauseMask, field, regexp.QuoteMeta(t)))
 	}
 	clausesStr := strings.Join(clauses, ",")
 	queryStr := fmt.Sprintf(spanNearMask, clausesStr, slop, boost)
