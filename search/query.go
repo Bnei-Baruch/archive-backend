@@ -1,8 +1,8 @@
 package search
 
 import (
+	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 	"unicode"
 
@@ -122,11 +122,23 @@ func createSpanNearQuery(field string, term string, boost float32, slop int) ela
 	clauseMask := "{\"span_multi\": { \"match\": { \"fuzzy\": { \"%s\": { \"value\": \"%s\" } } } } }"
 	splitted := strings.Fields(term)
 	for _, t := range splitted {
-		clauses = append(clauses, fmt.Sprintf(clauseMask, field, regexp.QuoteMeta(t)))
+		//fmt.Printf("=== %s to %s === ", t, html.EscapeString(t))
+		b, err := json.Marshal(t)
+		if err != nil {
+			panic(err) //TBD log
+		}
+		// Trim the beginning and trailing " character
+		esc := string(b[1 : len(b)-1])
+		fmt.Printf("=== %s to %s === ", t, esc)
+		clauses = append(clauses, fmt.Sprintf(clauseMask, field, t))
 	}
 	clausesStr := strings.Join(clauses, ",")
 	queryStr := fmt.Sprintf(spanNearMask, clausesStr, slop, boost)
+	//fmt.Printf("=== %s === ", queryStr)
+	//var esc bytes.Buffer
+	//json.HTMLEscape(&esc, []byte(queryStr))
 	query := elastic.NewRawStringQuery(queryStr)
+	fmt.Printf("NewRawStringQuery created: %s.", queryStr)
 	return query
 }
 
