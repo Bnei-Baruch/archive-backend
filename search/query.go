@@ -29,7 +29,7 @@ const (
 	// Boost for exact phrase match, without slop.
 	EXACT_BOOST = 1.5
 
-	SPAN_NEAR_BOOST = 0.05
+	SPAN_NEAR_BOOST = 0.01
 
 	NUM_SUGGESTS = 30
 )
