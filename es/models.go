@@ -2,6 +2,7 @@ package es
 
 import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
+	"gopkg.in/olivere/elastic.v6"
 )
 
 type EffectiveDate struct {
@@ -32,5 +33,5 @@ type Result struct {
 	EffectiveDate *utils.Date `json:"effective_date,omitempty"`
 
 	// Suggest field for autocomplete.
-	TitleSuggest []string `json:"title_suggest"`
+	TitleSuggest elastic.SuggestField `json:"title_suggest"`
 }
