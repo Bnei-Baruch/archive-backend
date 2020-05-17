@@ -384,7 +384,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				}
 			}
 
-			source.TitleSuggest = *elastic.NewSuggestField(suffixes...).Weight(10)
+			source.TitleSuggest = SuggestField{suffixes, float64(10)}
 			source.FullTitle = strings.Join(s, " > ")
 			i18nMap[i18n.Language] = source
 		}
