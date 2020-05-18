@@ -368,6 +368,10 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				suffixes = append(suffixes, ConcateFirstToLast(s))
 			}
 
+			if _, ok := consts.ES_SRC_ADD_MAAMAR_TO_SUGGEST[mdbSource.ID]; ok {
+				suffixes = append(suffixes, fmt.Sprintf("מאמר %s", leaf))
+			}
+
 			//  Add chapter number\letter to Shamati articles
 			if mdbSource.ParentID.Valid && mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
 				if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[mdbSource.ParentID.Int64]; ok {
