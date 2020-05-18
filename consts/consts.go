@@ -65,6 +65,9 @@ const (
 	SEC_SENSITIVE = int16(1)
 	SEC_PRIVATE   = int16(2)
 
+	// Weight of 'sources' autocomplete results (assigned at index time)
+	SOURCES_SUGGEST_WEIGHT = 50
+
 	// Languages
 	LANG_ENGLISH    = "en"
 	LANG_HEBREW     = "he"
