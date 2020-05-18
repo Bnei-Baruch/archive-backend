@@ -326,6 +326,7 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.ES_UID_TYPE_SOURCE, val)...)
 				unit.TypedUids = append(unit.TypedUids, KeyValues(consts.ES_UID_TYPE_SOURCE, val)...)
 				//  We dont add TitleSuggest to CU with source
+				unit.TitleSuggest = SuggestField{[]string{}, float64(0)}
 			} else {
 				unit.TitleSuggest = SuggestField{Suffixes(i18n.Name.String), float64(1)}
 			}
