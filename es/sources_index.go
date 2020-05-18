@@ -384,7 +384,12 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				}
 			}
 
-			source.TitleSuggest = SuggestField{suffixes, float64(consts.SOURCES_SUGGEST_WEIGHT)}
+			if weight, ok := consts.ES_SUGGEST_SOURCES_WEIGHT[mdbSource.ID]; ok {
+				source.TitleSuggest = SuggestField{suffixes, weight}
+			} else {
+				source.TitleSuggest = SuggestField{suffixes, float64(consts.ES_SOURCES_SUGGEST_WEIGHT)}
+			}
+
 			source.FullTitle = strings.Join(s, " > ")
 			i18nMap[i18n.Language] = source
 		}

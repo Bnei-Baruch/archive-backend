@@ -66,7 +66,7 @@ const (
 	SEC_PRIVATE   = int16(2)
 
 	// Weight of 'sources' autocomplete results (assigned at index time)
-	SOURCES_SUGGEST_WEIGHT = 50
+	ES_SOURCES_SUGGEST_WEIGHT = 50
 
 	// Languages
 	LANG_ENGLISH    = "en"
@@ -595,8 +595,19 @@ var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{
 }
 
 const (
-	SRC_SHAMATI = 141
+	SRC_SHAMATI                = 141
+	SRC_NONE_ELSE_BESIDE_HIM   = 142
+	SRC_PEACE_ARCTICLE         = 86
+	SRC_PEACE_IN_WORLD_ARTICLE = 87
+	SRC_ARVUT_ARTICLE          = 82
 )
+
+var ES_SUGGEST_SOURCES_WEIGHT = map[int64]float64{
+	SRC_NONE_ELSE_BESIDE_HIM:   150,
+	SRC_PEACE_ARCTICLE:         100,
+	SRC_PEACE_IN_WORLD_ARTICLE: 70,
+	SRC_ARVUT_ARTICLE:          70,
+}
 
 var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[int64]bool{
 	SRC_SHAMATI: true,
