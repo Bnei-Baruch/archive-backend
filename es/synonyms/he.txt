@@ -155,3 +155,6 @@
 
 #Added by Yuri at 30.03.20 (not in spreadsheet)
 איגרת	אגרת
+
+#Added by Yuri at 18.05.20 (not in spreadsheet)
+מאמר	מאמרים
