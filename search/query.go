@@ -344,7 +344,7 @@ func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchReq
 }
 
 func NewResultsSuggestRequest(resultTypes []string, index string, query Query, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title", "full_title", "title_suggest")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "title", "full_title")
 	searchSource := elastic.NewSearchSource().
 		FetchSourceContext(fetchSourceContext).
 		Suggester(
