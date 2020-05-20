@@ -65,6 +65,9 @@ const (
 	SEC_SENSITIVE = int16(1)
 	SEC_PRIVATE   = int16(2)
 
+	// Weight of 'sources' autocomplete results (assigned at index time)
+	ES_SOURCES_SUGGEST_WEIGHT = 50
+
 	// Languages
 	LANG_ENGLISH    = "en"
 	LANG_HEBREW     = "he"
@@ -592,8 +595,25 @@ var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{
 }
 
 const (
-	SRC_SHAMATI = 141
+	SRC_SHAMATI                = 141
+	SRC_NONE_ELSE_BESIDE_HIM   = 142
+	SRC_PEACE_ARCTICLE         = 86
+	SRC_PEACE_IN_WORLD_ARTICLE = 87
+	SRC_ARVUT_ARTICLE          = 82
 )
+
+var ES_SUGGEST_SOURCES_WEIGHT = map[int64]float64{
+	SRC_NONE_ELSE_BESIDE_HIM:   200,
+	SRC_PEACE_ARCTICLE:         120,
+	SRC_PEACE_IN_WORLD_ARTICLE: 120,
+	SRC_ARVUT_ARTICLE:          210,
+}
+
+var ES_SRC_ADD_MAAMAR_TO_SUGGEST = map[int64]bool{
+	SRC_PEACE_ARCTICLE:         true,
+	SRC_PEACE_IN_WORLD_ARTICLE: true,
+	SRC_ARVUT_ARTICLE:          true,
+}
 
 var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[int64]bool{
 	SRC_SHAMATI: true,
