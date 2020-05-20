@@ -609,6 +609,12 @@ var ES_SUGGEST_SOURCES_WEIGHT = map[int64]float64{
 	SRC_ARVUT_ARTICLE:          210,
 }
 
+var ES_SRC_ADD_MAAMAR_TO_SUGGEST = map[int64]bool{
+	SRC_PEACE_ARCTICLE:         true,
+	SRC_PEACE_IN_WORLD_ARTICLE: true,
+	SRC_ARVUT_ARTICLE:          true,
+}
+
 var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[int64]bool{
 	SRC_SHAMATI: true,
 }
