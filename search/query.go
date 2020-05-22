@@ -124,21 +124,24 @@ func ParseQuery(q string) Query {
 func createSpanNearQuery(field string, term string, boost float32, slop int) elastic.Query {
 	clauses := make([]string, 0)
 	spanNearMask := "{\"span_near\": { \"clauses\": [%s], \"slop\": %d, \"boost\": %f, \"in_order\": true } }"
-	clauseMask := "{\"span_multi\": { \"match\": { %s } } }"
-	fuzzyMask := "\"fuzzy\": { \"%s\": { \"value\": \"%s\", \"fuzziness\": %s, \"prefix_length\": %s } }"
-	nonFuzzymask := "\"%s\": \"%s\""
+	clauseMask := "{\"span_multi\": { \"match\": { \"fuzzy\": { \"%s\": { \"value\": \"%s\", \"fuzziness\": %s, \"transpositions\": %s } } } } }"
 	splitted := strings.Fields(term)
 	for _, t := range splitted {
 		if t == "<" || t == ">" || t == "-" {
-			continue // TBD change to No Fuzzy?
+			continue
 		}
-		var clause string
+		fuzzines := "\"AUTO\""   // Default.
+		transpositions := "true" // Default.
 		runes := []rune(t)
-		isFuzzy := true
 		_, convertToIntErr := strconv.Atoi(t)
-		if convertToIntErr == nil || (len(runes) == 3 && runes[1] == '"') {
+		if convertToIntErr == nil || (len(runes) == 3 && runes[1] == '"') || (len(runes) == 4 && runes[2] == '"') {
 			//  We dont use fuzzines for numeric values (number or hebrew numeric representation like מ"ג)
-			isFuzzy = false
+			fuzzines = "0"
+		} else if len(runes) == 1 && runes[0] >= 'א' && runes[0] <= 'ת' {
+			// This logic allows finding single hebrew letter with ' symbol without the mention of the ' symbol.
+			// The solution is not perfect for all times. In some (rare) cases the letter may be replaced with another latter.
+			fuzzines = "1"
+			transpositions = "false" // Limit the fuzzines not to include transpositions of two adjacent characters (ח' -> 'ח). Maybe not required.
 		}
 		b, err := json.Marshal(t)
 		if err != nil {
@@ -146,22 +149,7 @@ func createSpanNearQuery(field string, term string, boost float32, slop int) ela
 		}
 		// Trim the beginning and trailing " character
 		esc := string(b[1 : len(b)-1])
-
-		if isFuzzy {
-			var fuzzines string
-			var prefixLength string
-			if len(runes) == 1 && runes[0] >= 'א' && runes[0] < 'ת' {
-				// This logic allows finding single hebrew letter with ' symbol
-				fuzzines = "1"
-				prefixLength = "1"
-			} else {
-				fuzzines = "\"AUTO\""
-				prefixLength = "0"
-			}
-			clause = fmt.Sprintf(clauseMask, fmt.Sprintf(fuzzyMask, field, esc, fuzzines, prefixLength))
-		} else {
-			clause = fmt.Sprintf(clauseMask, fmt.Sprintf(nonFuzzymask, field, esc))
-		}
+		clause := fmt.Sprintf(clauseMask, field, esc, fuzzines, transpositions)
 		clauses = append(clauses, clause)
 	}
 	clausesStr := strings.Join(clauses, ",")
