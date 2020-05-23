@@ -159,7 +159,7 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 	return query
 }
 
-func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string) elastic.Query {
+func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, titlesOnly bool) elastic.Query {
 	boolQuery := elastic.NewBoolQuery().Must(
 		elastic.NewConstantScoreQuery(
 			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(resultTypes)...),
@@ -178,75 +178,123 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 		}
 	}
 	if q.Term != "" {
-		boolQuery = boolQuery.Must(
-			// Don't calculate score here, as we use sloped score below.
-			elastic.NewConstantScoreQuery(
-				elastic.NewBoolQuery().Should(
-					elastic.NewMatchQuery("title.language", q.Term),
-					elastic.NewMatchQuery("full_title.language", q.Term),
-					elastic.NewMatchQuery("description.language", q.Term),
-					elastic.NewMatchQuery("content.language", q.Term),
-				).MinimumNumberShouldMatch(1),
-			).Boost(0.0),
-		).Should(
-			elastic.NewDisMaxQuery().Query(
 
+		constantScoreQueries := []elastic.Query{
+			elastic.NewMatchQuery("title.language", q.Term),
+			elastic.NewMatchQuery("full_title.language", q.Term),
+		}
+		if !titlesOnly {
+			constantScoreQueries = append(constantScoreQueries,
+				elastic.NewMatchQuery("description.language", q.Term),
+				elastic.NewMatchQuery("content.language", q.Term),
+			)
+		}
+
+		disMaxQueries := []elastic.Query{
+			// Language analyzed
+			createSpanNearQuery("title.language", q.Term, TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, true),
+			createSpanNearQuery("full_title.language", q.Term, FULL_TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, false),
+
+			elastic.NewMatchPhraseQuery("title.language", q.Term).Slop(SLOP).Boost(TITLE_BOOST),
+			elastic.NewMatchPhraseQuery("full_title.language", q.Term).Slop(SLOP).Boost(FULL_TITLE_BOOST),
+
+			// Language analyzed, exact (no slop)
+			createSpanNearQuery("title.language", q.Term, EXACT_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
+			createSpanNearQuery("full_title.language", q.Term, EXACT_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
+
+			elastic.NewMatchPhraseQuery("title.language", q.Term).Boost(EXACT_BOOST * TITLE_BOOST),
+			elastic.NewMatchPhraseQuery("full_title.language", q.Term).Boost(EXACT_BOOST * FULL_TITLE_BOOST),
+
+			// Standard analyzed
+			createSpanNearQuery("title", q.Term, STANDARD_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, true),
+			createSpanNearQuery("full_title", q.Term, STANDARD_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, false),
+
+			elastic.NewMatchPhraseQuery("title", q.Term).Slop(SLOP).Boost(STANDARD_BOOST * TITLE_BOOST),
+			elastic.NewMatchPhraseQuery("full_title", q.Term).Slop(SLOP).Boost(STANDARD_BOOST * FULL_TITLE_BOOST),
+
+			// Standard analyzed, exact (no slop).
+			createSpanNearQuery("title", q.Term, STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
+			createSpanNearQuery("full_title", q.Term, STANDARD_BOOST*EXACT_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
+
+			elastic.NewMatchPhraseQuery("title", q.Term).Boost(STANDARD_BOOST * EXACT_BOOST * TITLE_BOOST),
+			elastic.NewMatchPhraseQuery("full_title", q.Term).Boost(STANDARD_BOOST * EXACT_BOOST * FULL_TITLE_BOOST),
+		}
+		if !titlesOnly {
+			disMaxQueries = append(disMaxQueries,
 				// Language analyzed
-				createSpanNearQuery("title.language", q.Term, TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, true),
-				createSpanNearQuery("full_title.language", q.Term, FULL_TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, false),
 				createSpanNearQuery("description.language", q.Term, DESCRIPTION_BOOST*SPAN_NEAR_BOOST, SLOP, true),
 				createSpanNearQuery("content.language", q.Term, DEFAULT_BOOST*SPAN_NEAR_BOOST, SLOP, true),
 
-				elastic.NewMatchPhraseQuery("title.language", q.Term).Slop(SLOP).Boost(TITLE_BOOST),
-				elastic.NewMatchPhraseQuery("full_title.language", q.Term).Slop(SLOP).Boost(FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description.language", q.Term).Slop(SLOP).Boost(DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content.language", q.Term).Slop(SLOP),
 
 				// Language analyzed, exact (no slop)
-				createSpanNearQuery("title.language", q.Term, EXACT_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
-				createSpanNearQuery("full_title.language", q.Term, EXACT_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
 				createSpanNearQuery("description.language", q.Term, EXACT_BOOST*DESCRIPTION_BOOST*SPAN_NEAR_BOOST, 0, true),
 				createSpanNearQuery("content.language", q.Term, EXACT_BOOST*SPAN_NEAR_BOOST, 0, true),
 
-				elastic.NewMatchPhraseQuery("title.language", q.Term).Boost(EXACT_BOOST*TITLE_BOOST),
-				elastic.NewMatchPhraseQuery("full_title.language", q.Term).Boost(EXACT_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description.language", q.Term).Boost(EXACT_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content.language", q.Term).Boost(EXACT_BOOST),
 
 				// Standard analyzed
-				createSpanNearQuery("title", q.Term, STANDARD_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, true),
-				createSpanNearQuery("full_title", q.Term, STANDARD_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, false),
 				createSpanNearQuery("description", q.Term, STANDARD_BOOST*DESCRIPTION_BOOST*SPAN_NEAR_BOOST, SLOP, true),
 				createSpanNearQuery("content", q.Term, STANDARD_BOOST*SPAN_NEAR_BOOST, SLOP, true),
 
-				elastic.NewMatchPhraseQuery("title", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*TITLE_BOOST),
-				elastic.NewMatchPhraseQuery("full_title", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content", q.Term).Slop(SLOP).Boost(STANDARD_BOOST),
 
 				// Standard analyzed, exact (no slop).
-				createSpanNearQuery("title", q.Term, STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
-				createSpanNearQuery("full_title", q.Term, STANDARD_BOOST*EXACT_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
 				createSpanNearQuery("description", q.Term, STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST*SPAN_NEAR_BOOST, 0, true),
 				createSpanNearQuery("content", q.Term, STANDARD_BOOST*EXACT_BOOST*SPAN_NEAR_BOOST, 0, true),
 
-				elastic.NewMatchPhraseQuery("title", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST),
-				elastic.NewMatchPhraseQuery("full_title", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*FULL_TITLE_BOOST),
 				elastic.NewMatchPhraseQuery("description", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
 				elastic.NewMatchPhraseQuery("content", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST),
-			),
-		)
-	}
-	for _, exactTerm := range q.ExactTerms {
+			)
+		}
+
 		boolQuery = boolQuery.Must(
 			// Don't calculate score here, as we use sloped score below.
 			elastic.NewConstantScoreQuery(
-				elastic.NewBoolQuery().Should(
-					elastic.NewMatchPhraseQuery("title", exactTerm),
-					elastic.NewMatchPhraseQuery("full_title", exactTerm),
-					elastic.NewMatchPhraseQuery("description", exactTerm),
-					elastic.NewMatchPhraseQuery("content", exactTerm),
-				).MinimumNumberShouldMatch(1),
+				elastic.NewBoolQuery().Should(constantScoreQueries...).MinimumNumberShouldMatch(1),
+			).Boost(0.0),
+		).Should(
+			elastic.NewDisMaxQuery().Query(disMaxQueries...),
+		)
+	}
+	for _, exactTerm := range q.ExactTerms {
+
+		constantScoreQueries := []elastic.Query{
+			elastic.NewMatchPhraseQuery("title", exactTerm),
+			elastic.NewMatchPhraseQuery("full_title", exactTerm),
+		}
+		if !titlesOnly {
+			constantScoreQueries = append(constantScoreQueries,
+				elastic.NewMatchPhraseQuery("description", exactTerm),
+				elastic.NewMatchPhraseQuery("content", exactTerm),
+			)
+		}
+
+		disMaxQueries := []elastic.Query{
+			// Language analyzed, exact (no slop)
+			elastic.NewMatchPhraseQuery("title.language", exactTerm).Boost(EXACT_BOOST * TITLE_BOOST),
+			elastic.NewMatchPhraseQuery("full_title.language", exactTerm).Boost(EXACT_BOOST * FULL_TITLE_BOOST),
+			// Standard analyzed, exact (no slop).
+			elastic.NewMatchPhraseQuery("title", exactTerm).Boost(STANDARD_BOOST * EXACT_BOOST * TITLE_BOOST),
+			elastic.NewMatchPhraseQuery("full_title", exactTerm).Boost(STANDARD_BOOST * EXACT_BOOST * FULL_TITLE_BOOST),
+		}
+		if !titlesOnly {
+			disMaxQueries = append(disMaxQueries,
+				elastic.NewMatchPhraseQuery("description.language", exactTerm).Boost(EXACT_BOOST*DESCRIPTION_BOOST),
+				elastic.NewMatchPhraseQuery("content.language", exactTerm).Boost(EXACT_BOOST),
+				// Standard analyzed, exact (no slop).
+				elastic.NewMatchPhraseQuery("description", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
+				elastic.NewMatchPhraseQuery("content", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST),
+			)
+		}
+
+		boolQuery = boolQuery.Must(
+			// Don't calculate score here, as we use sloped score below.
+			elastic.NewConstantScoreQuery(
+				elastic.NewBoolQuery().Should(constantScoreQueries...).MinimumNumberShouldMatch(1),
 			).Boost(0.0),
 		).Should(
 			elastic.NewDisMaxQuery().Query(
@@ -340,7 +388,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 	}
 
 	source := elastic.NewSearchSource().
-		Query(createResultsQuery(options.resultTypes, options.query, options.docIds, options.filterOutCUSources)).
+		Query(createResultsQuery(options.resultTypes, options.query, options.docIds, options.filterOutCUSources, options.titlesOnly)).
 		FetchSourceContext(fetchSourceContext).
 		From(options.from).
 		Size(options.size).

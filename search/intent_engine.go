@@ -91,7 +91,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 	mssFirstRound := e.esc.MultiSearch()
 	potentialIntents := make([]Intent, 0)
 	for _, language := range query.LanguageOrder {
-		// Order here provides the priority in results, i.e., tags are more importnt then sources.
+		// Order here provides the priority in results, i.e., tags are more important then sources.
 		index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, language)
 		mssFirstRound.Add(NewResultsSearchRequest(
 			SearchRequestOptions{
@@ -115,7 +115,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 				size:             size,
 				preference:       preference,
 				useHighlight:     false,
-				partialHighlight: true}))
+				partialHighlight: true,
+				titlesOnly:       true}))
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
 	beforeFirstRoundDo := time.Now()
@@ -152,7 +153,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 							size:             size,
 							preference:       preference,
 							useHighlight:     false,
-							partialHighlight: true}))
+							partialHighlight: true,
+							titlesOnly:       true}))
 					finalIntents = append(finalIntents, *intent)
 				}
 			}

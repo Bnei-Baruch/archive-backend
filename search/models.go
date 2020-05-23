@@ -41,4 +41,7 @@ type SearchRequestOptions struct {
 	// Following field comes to reduce results duplication.
 	// If we have intent by source, filter out this results from the main search.
 	filterOutCUSources []string
+	// Setting the following field to 'true' will ignore the search of content and description.
+	// This is used for intents (carousel) search.
+	titlesOnly bool
 }
