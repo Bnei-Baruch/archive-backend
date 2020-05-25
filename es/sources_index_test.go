@@ -98,6 +98,8 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 
 	//TBD add test for indexing with position (chapter)
 
+	//TBD add test for indexing with description
+
 	fmt.Println("Delete sources from DB, reindex and validate we have 0 sources.")
 	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
 	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 4})
