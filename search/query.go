@@ -139,7 +139,7 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 			fuzzines = "0"
 		} else if len(runes) == 1 && runes[0] >= 'א' && runes[0] <= 'ת' {
 			// This logic allows finding single hebrew letter with ' symbol without the mention of the ' symbol.
-			// The solution is not perfect for all times. In some (rare) cases the letter may be replaced with another latter.
+			// The solution is not perfect for all times. In some (rare) cases the letter may be replaced with another latter: ג' קווים - ד
 			fuzzines = "1"
 			transpositions = "false" // Limit the fuzzines not to include transpositions of two adjacent characters (ח' -> 'ח). Maybe not required.
 		}
