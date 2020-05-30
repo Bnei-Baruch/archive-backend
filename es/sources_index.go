@@ -349,10 +349,6 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				if ni18n.Name.Valid && ni18n.Name.String != "" {
 					pathNames = append(pathNames, ni18n.Name.String)
 				}
-				// We dont take the Description value and use synonyms instead
-				/*if ni18n.Description.Valid && ni18n.Description.String != "" {
-					pathNames = append(pathNames, ni18n.Description.String)
-				}*/
 			}
 			indexErrors.DocumentError(i18n.Language, findParentsErr, "SourcesIndex.indexSource - Error finding parent")
 			if findParentsErr != nil {
@@ -362,7 +358,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			authors := authorsByLanguage[i18n.Language]
 			s := append(authors, pathNames...)
 			leaf := s[len(s)-1]
-			if mdbSource.TypeID > 2 && i18n.Description.Valid && i18n.Description.String != "" {
+			if _, ok := consts.SRC_TYPES_FOR_TITLE_DESCRIPTION_CONCAT[mdbSource.TypeID]; ok && i18n.Description.Valid && i18n.Description.String != "" && i18n.Description.String != " " {
 				if i18n.Language == "he" {
 					leaf = fmt.Sprintf("%s %s", leaf, i18n.Description.String)
 				} else {

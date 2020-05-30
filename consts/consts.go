@@ -60,6 +60,18 @@ const (
 	// Persons patterns
 	P_RAV = "rav"
 
+	// Source types
+	SRC_TYPE_COLLECTION = 1
+	SRC_TYPE_BOOK       = 2
+	SRC_TYPE_VOLUME     = 3
+	SRC_TYPE_PART       = 4
+	SRC_TYPE_PARASHA    = 5
+	SRC_TYPE_CHAPTER    = 6
+	SRC_TYPE_ARTICLE    = 7
+	SRC_TYPE_TITLE      = 8
+	SRC_TYPE_LETTER     = 9
+	SRC_TYPE_ITEM       = 10
+
 	// Security levels
 	SEC_PUBLIC    = int16(0)
 	SEC_SENSITIVE = int16(1)
@@ -111,6 +123,11 @@ var ALL_KNOWN_LANGS = [...]string{
 	LANG_JAPANESE, LANG_BULGARIAN, LANG_GEORGIAN, LANG_NORWEGIAN, LANG_SWEDISH, LANG_CROATIAN, LANG_CHINESE,
 	LANG_PERSIAN, LANG_ROMANIAN, LANG_HINDI, LANG_MACEDONIAN, LANG_SLOVENIAN, LANG_LATVIAN, LANG_SLOVAK, LANG_CZECH,
 	LANG_UKRAINIAN, LANG_AMHARIC,
+}
+
+var SRC_TYPES_FOR_TITLE_DESCRIPTION_CONCAT = map[int64]bool{
+	SRC_TYPE_VOLUME: true,
+	SRC_TYPE_PART:   true,
 }
 
 var ANALYZERS = map[string]string{
@@ -307,7 +324,7 @@ const (
 	API_DEFAULT_PAGE_SIZE                     = 50
 	API_MAX_PAGE_SIZE                         = 1000
 	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
-	// Consider makeing a carusele and not limiting.
+	// Consider making a carusele and not limiting.
 	MAX_MATCHES_PER_GRAMMAR_INTENT = 3
 )
 
