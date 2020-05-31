@@ -357,6 +357,9 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			leaf := s[len(s)-1]
 			if i18n.Description.Valid && i18n.Description.String != "" && i18n.Description.String != " " {
 				if _, ok := consts.SRC_TYPES_FOR_TITLE_DESCRIPTION_CONCAT[mdbSource.TypeID]; ok {
+					// We combine title and description in one field for better support (especialy in intents)
+					// of title-subtitle combined queries like:
+					// "Part 8 The Eser Sefirot of Olam ha Atzilut"
 					source.Description = fmt.Sprintf("%s %s", leaf, i18n.Description.String)
 				} else {
 					source.Description = i18n.Description.String
