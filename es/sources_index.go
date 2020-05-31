@@ -401,7 +401,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			if weight, ok := consts.ES_SUGGEST_SOURCES_WEIGHT[mdbSource.UID]; ok {
 				source.TitleSuggest = SuggestField{suffixes, weight}
 			} else {
-				source.TitleSuggest = SuggestField{suffixes, float64(consts.ES_SOURCES_SUGGEST_WEIGHT)}
+				source.TitleSuggest = SuggestField{suffixes, float64(consts.ES_SOURCES_SUGGEST_DEFAULT_WEIGHT)}
 			}
 
 			source.FullTitle = strings.Join(s, " > ")

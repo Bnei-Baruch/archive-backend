@@ -78,7 +78,7 @@ const (
 	SEC_PRIVATE   = int16(2)
 
 	// Weight of 'sources' autocomplete results (assigned at index time)
-	ES_SOURCES_SUGGEST_WEIGHT = 50
+	ES_SOURCES_SUGGEST_DEFAULT_WEIGHT = 50
 
 	// Languages
 	LANG_ENGLISH    = "en"
