@@ -123,14 +123,14 @@ func ParseQuery(q string) Query {
 
 func createSpanNearQuery(field string, term string, boost float32, slop int, inOrder bool) elastic.Query {
 	clauses := make([]string, 0)
-	spanNearMask := "{\"span_near\": { \"clauses\": [%s], \"slop\": %d, \"boost\": %f, \"in_order\": %t } }"
-	clauseMask := "{\"span_multi\": { \"match\": { \"fuzzy\": { \"%s\": { \"value\": \"%s\", \"fuzziness\": %s, \"transpositions\": %s } } } } }"
+	spanNearMask := `{"span_near": { "clauses": [%s], "slop": %d, "boost": %f, "in_order": %t } }`
+	clauseMask := `{"span_multi": { "match": { "fuzzy": { "%s": { "value": "%s", "fuzziness": %s, "transpositions": %s } } } } }`
 	splitted := strings.Fields(term)
 	for _, t := range splitted {
 		if t == "<" || t == ">" || t == "-" {
 			continue
 		}
-		fuzzines := "\"AUTO\""   // Default.
+		fuzzines := `"AUTO"`     // Default.
 		transpositions := "true" // Default.
 		runes := []rune(t)
 		_, convertToIntErr := strconv.Atoi(t)
