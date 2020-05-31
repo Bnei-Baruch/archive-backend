@@ -371,13 +371,20 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				suffixes = append(suffixes, ConcateFirstToLast(s))
 			}
 
-			if _, ok := consts.ES_SRC_ADD_MAAMAR_TO_SUGGEST[mdbSource.ID]; ok {
+			if _, ok := consts.ES_SRC_ADD_MAAMAR_TO_SUGGEST[mdbSource.UID]; ok {
 				suffixes = append(suffixes, fmt.Sprintf("מאמר %s", leaf))
 			}
 
 			//  Add chapter number\letter to Shamati articles
 			if mdbSource.ParentID.Valid && mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
-				if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[mdbSource.ParentID.Int64]; ok {
+				var addPosition bool
+				for _, parent := range parents {
+					if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parent]; ok {
+						addPosition = true
+						break
+					}
+				}
+				if addPosition {
 					var position string
 					if i18n.Language == "he" {
 						position = utils.NumberInHebrew(mdbSource.Position.Int) //  Convert to Hebrew letter
@@ -391,7 +398,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				}
 			}
 
-			if weight, ok := consts.ES_SUGGEST_SOURCES_WEIGHT[mdbSource.ID]; ok {
+			if weight, ok := consts.ES_SUGGEST_SOURCES_WEIGHT[mdbSource.UID]; ok {
 				source.TitleSuggest = SuggestField{suffixes, weight}
 			} else {
 				source.TitleSuggest = SuggestField{suffixes, float64(consts.ES_SOURCES_SUGGEST_WEIGHT)}
