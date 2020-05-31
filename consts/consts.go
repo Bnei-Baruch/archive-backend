@@ -626,6 +626,8 @@ var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
 	SRC_ARVUT_ARTICLE:          210,
 }
 
+// We used to name this articles with the prefix word "maamar" (article).
+// We will suggest the correct source result when the user types their name with the prefix "maamar".
 var ES_SRC_ADD_MAAMAR_TO_SUGGEST = map[string]bool{
 	SRC_PEACE_ARCTICLE:         true,
 	SRC_PEACE_IN_WORLD_ARTICLE: true,
