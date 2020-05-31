@@ -321,9 +321,6 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				FilterValues: KeyValues(consts.ES_UID_TYPE_SOURCE, parents),
 				TypedUids:    []string{KeyValue(consts.ES_UID_TYPE_SOURCE, mdbSource.UID)},
 			}
-			if i18n.Description.Valid && i18n.Description.String != "" {
-				source.Description = i18n.Description.String
-			}
 			fPath, missingSourceFileErr := index.getDocxPath(mdbSource.UID, i18n.Language)
 			// Ignore err here as if missing source for a language in very common and is ok.
 			if missingSourceFileErr == nil {
@@ -358,11 +355,11 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			authors := authorsByLanguage[i18n.Language]
 			s := append(authors, pathNames...)
 			leaf := s[len(s)-1]
-			if _, ok := consts.SRC_TYPES_FOR_TITLE_DESCRIPTION_CONCAT[mdbSource.TypeID]; ok && i18n.Description.Valid && i18n.Description.String != "" && i18n.Description.String != " " {
-				if i18n.Language == "he" {
-					leaf = fmt.Sprintf("%s %s", leaf, i18n.Description.String)
+			if i18n.Description.Valid && i18n.Description.String != "" && i18n.Description.String != " " {
+				if _, ok := consts.SRC_TYPES_FOR_TITLE_DESCRIPTION_CONCAT[mdbSource.TypeID]; ok {
+					source.Description = fmt.Sprintf("%s %s", leaf, i18n.Description.String)
 				} else {
-					leaf = fmt.Sprintf("%s. %s", leaf, i18n.Description.String)
+					source.Description = i18n.Description.String
 				}
 			}
 			source.Title = leaf
