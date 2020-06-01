@@ -160,6 +160,12 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 	return query, nil
 }
 
+// Creates a result query for elastic.
+// resultTypes - list of search result types: sources, topics, CU's, etc..
+// docIds - optional list of _uid's for filtering the search. If the parameter value is nil, no filtering is applied.
+// filterOutCUSources - optional list of sources for which we want to filter out the CU's that connected to those sources
+//	(in order to avoid duplication between carousel and regular results).
+// titlesOnly - limit our search only to title fields: title, full_title and description in case we search for intent sources. Used for intent search.
 func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, titlesOnly bool) (elastic.Query, error) {
 	boolQuery := elastic.NewBoolQuery().Must(
 		elastic.NewConstantScoreQuery(
@@ -178,7 +184,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 			boolQuery.MustNot(innerBoolQuery)
 		}
 	}
-	//  We append description for intents sources search because the description is commonly used as subtitle
+	//  We append description for intent sources search because the description is commonly used as subtitle
 	appendDecription := !titlesOnly || (len(resultTypes) == 1 && resultTypes[0] == consts.ES_RESULT_TYPE_SOURCES)
 	if q.Term != "" {
 
