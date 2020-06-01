@@ -12,6 +12,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/utils"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -121,7 +122,7 @@ func ParseQuery(q string) Query {
 	return Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Original: q, Filters: filters}
 }
 
-func createSpanNearQuery(field string, term string, boost float32, slop int, inOrder bool) elastic.Query {
+func createSpanNearQuery(field string, term string, boost float32, slop int, inOrder bool) (elastic.Query, error) {
 	clauses := make([]string, 0)
 	spanNearMask := `{"span_near": { "clauses": [%s], "slop": %d, "boost": %f, "in_order": %t } }`
 	clauseMask := `{"span_multi": { "match": { "fuzzy": { "%s": { "value": "%s", "fuzziness": %s, "transpositions": %s } } } } }`
@@ -145,7 +146,7 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 		}
 		b, err := json.Marshal(t)
 		if err != nil {
-			panic(err) //TBD log
+			return nil, errors.Wrap(err, "createSpanNearQuery")
 		}
 		// Trim the beginning and trailing " character
 		esc := string(b[1 : len(b)-1])
@@ -156,10 +157,10 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 	queryStr := fmt.Sprintf(spanNearMask, clausesStr, slop, boost, inOrder)
 	//fmt.Printf("SpanNear Query: %s\n", queryStr)
 	query := elastic.NewRawStringQuery(queryStr)
-	return query
+	return query, nil
 }
 
-func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, titlesOnly bool) elastic.Query {
+func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, titlesOnly bool) (elastic.Query, error) {
 	boolQuery := elastic.NewBoolQuery().Must(
 		elastic.NewConstantScoreQuery(
 			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(resultTypes)...),
@@ -198,70 +199,154 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 
 		disMaxQueries := []elastic.Query{
 			// Language analyzed
-			createSpanNearQuery("title.language", q.Term, TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, true),
-			createSpanNearQuery("full_title.language", q.Term, FULL_TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, false),
-
 			elastic.NewMatchPhraseQuery("title.language", q.Term).Slop(SLOP).Boost(TITLE_BOOST),
 			elastic.NewMatchPhraseQuery("full_title.language", q.Term).Slop(SLOP).Boost(FULL_TITLE_BOOST),
 
 			// Language analyzed, exact (no slop)
-			createSpanNearQuery("title.language", q.Term, EXACT_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
-			createSpanNearQuery("full_title.language", q.Term, EXACT_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
-
 			elastic.NewMatchPhraseQuery("title.language", q.Term).Boost(EXACT_BOOST * TITLE_BOOST),
 			elastic.NewMatchPhraseQuery("full_title.language", q.Term).Boost(EXACT_BOOST * FULL_TITLE_BOOST),
 
 			// Standard analyzed
-			createSpanNearQuery("title", q.Term, STANDARD_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, true),
-			createSpanNearQuery("full_title", q.Term, STANDARD_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, false),
-
 			elastic.NewMatchPhraseQuery("title", q.Term).Slop(SLOP).Boost(STANDARD_BOOST * TITLE_BOOST),
 			elastic.NewMatchPhraseQuery("full_title", q.Term).Slop(SLOP).Boost(STANDARD_BOOST * FULL_TITLE_BOOST),
 
 			// Standard analyzed, exact (no slop).
-			createSpanNearQuery("title", q.Term, STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
-			createSpanNearQuery("full_title", q.Term, STANDARD_BOOST*EXACT_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, 0, true),
-
 			elastic.NewMatchPhraseQuery("title", q.Term).Boost(STANDARD_BOOST * EXACT_BOOST * TITLE_BOOST),
 			elastic.NewMatchPhraseQuery("full_title", q.Term).Boost(STANDARD_BOOST * EXACT_BOOST * FULL_TITLE_BOOST),
 		}
+
+		// Language analyzed
+		snq, err := createSpanNearQuery("title.language", q.Term, TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, true)
+		if err != nil {
+			return nil, err
+		}
+		disMaxQueries = append(disMaxQueries, snq)
+		snq, err = createSpanNearQuery("full_title.language", q.Term, FULL_TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, false)
+		if err != nil {
+			return nil, err
+		}
+		disMaxQueries = append(disMaxQueries, snq)
+
+		// Language analyzed, exact (no slop)
+		snq, err = createSpanNearQuery("title.language", q.Term, EXACT_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, 0, true)
+		if err != nil {
+			return nil, err
+		}
+		disMaxQueries = append(disMaxQueries, snq)
+		snq, err = createSpanNearQuery("full_title.language", q.Term, EXACT_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, 0, true)
+		if err != nil {
+			return nil, err
+		}
+		disMaxQueries = append(disMaxQueries, snq)
+
+		// Standard analyzed
+		snq, err = createSpanNearQuery("title", q.Term, STANDARD_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, true)
+		if err != nil {
+			return nil, err
+		}
+		disMaxQueries = append(disMaxQueries, snq)
+		snq, err = createSpanNearQuery("full_title", q.Term, STANDARD_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, SLOP, false)
+		if err != nil {
+			return nil, err
+		}
+		disMaxQueries = append(disMaxQueries, snq)
+
+		// Standard analyzed, exact (no slop).
+		snq, err = createSpanNearQuery("title", q.Term, STANDARD_BOOST*EXACT_BOOST*TITLE_BOOST*SPAN_NEAR_BOOST, 0, true)
+		if err != nil {
+			return nil, err
+		}
+		disMaxQueries = append(disMaxQueries, snq)
+		snq, err = createSpanNearQuery("full_title", q.Term, STANDARD_BOOST*EXACT_BOOST*FULL_TITLE_BOOST*SPAN_NEAR_BOOST, 0, true)
+		if err != nil {
+			return nil, err
+		}
+		disMaxQueries = append(disMaxQueries, snq)
+
 		if appendDecription {
 			disMaxQueries = append(disMaxQueries,
 				// Language analyzed
-				createSpanNearQuery("description.language", q.Term, DESCRIPTION_BOOST*SPAN_NEAR_BOOST, SLOP, true),
 				elastic.NewMatchPhraseQuery("description.language", q.Term).Slop(SLOP).Boost(DESCRIPTION_BOOST),
 
 				// Language analyzed, exact (no slop)
-				createSpanNearQuery("description.language", q.Term, EXACT_BOOST*DESCRIPTION_BOOST*SPAN_NEAR_BOOST, 0, true),
 				elastic.NewMatchPhraseQuery("description.language", q.Term).Boost(EXACT_BOOST*DESCRIPTION_BOOST),
 
 				// Standard analyzed
-				createSpanNearQuery("description", q.Term, STANDARD_BOOST*DESCRIPTION_BOOST*SPAN_NEAR_BOOST, SLOP, true),
 				elastic.NewMatchPhraseQuery("description", q.Term).Slop(SLOP).Boost(STANDARD_BOOST*DESCRIPTION_BOOST),
 
 				// Standard analyzed, exact (no slop).
-				createSpanNearQuery("description", q.Term, STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST*SPAN_NEAR_BOOST, 0, true),
 				elastic.NewMatchPhraseQuery("description", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
 			)
+			// Language analyzed
+			snq, err = createSpanNearQuery("description.language", q.Term, DESCRIPTION_BOOST*SPAN_NEAR_BOOST, SLOP, true)
+			if err != nil {
+				return nil, err
+			}
+			disMaxQueries = append(disMaxQueries, snq)
+
+			// Language analyzed, exact (no slop)
+			snq, err = createSpanNearQuery("description.language", q.Term, EXACT_BOOST*DESCRIPTION_BOOST*SPAN_NEAR_BOOST, 0, true)
+			if err != nil {
+				return nil, err
+			}
+			disMaxQueries = append(disMaxQueries, snq)
+
+			// Standard analyzed
+			snq, err = createSpanNearQuery("description", q.Term, STANDARD_BOOST*DESCRIPTION_BOOST*SPAN_NEAR_BOOST, SLOP, true)
+			if err != nil {
+				return nil, err
+			}
+			disMaxQueries = append(disMaxQueries, snq)
+
+			// Standard analyzed, exact (no slop).
+			snq, err = createSpanNearQuery("description", q.Term, STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST*SPAN_NEAR_BOOST, 0, true)
+			if err != nil {
+				return nil, err
+			}
+			disMaxQueries = append(disMaxQueries, snq)
 		}
 		if !titlesOnly {
 			disMaxQueries = append(disMaxQueries,
 				// Language analyzed
-				createSpanNearQuery("content.language", q.Term, DEFAULT_BOOST*SPAN_NEAR_BOOST, SLOP, true),
 				elastic.NewMatchPhraseQuery("content.language", q.Term).Slop(SLOP),
 
 				// Language analyzed, exact (no slop)
-				createSpanNearQuery("content.language", q.Term, EXACT_BOOST*SPAN_NEAR_BOOST, 0, true),
 				elastic.NewMatchPhraseQuery("content.language", q.Term).Boost(EXACT_BOOST),
 
 				// Standard analyzed
-				createSpanNearQuery("content", q.Term, STANDARD_BOOST*SPAN_NEAR_BOOST, SLOP, true),
 				elastic.NewMatchPhraseQuery("content", q.Term).Slop(SLOP).Boost(STANDARD_BOOST),
 
 				// Standard analyzed, exact (no slop).
-				createSpanNearQuery("content", q.Term, STANDARD_BOOST*EXACT_BOOST*SPAN_NEAR_BOOST, 0, true),
 				elastic.NewMatchPhraseQuery("content", q.Term).Boost(STANDARD_BOOST*EXACT_BOOST),
 			)
+
+			// Language analyzed
+			snq, err = createSpanNearQuery("content.language", q.Term, DEFAULT_BOOST*SPAN_NEAR_BOOST, SLOP, true)
+			if err != nil {
+				return nil, err
+			}
+			disMaxQueries = append(disMaxQueries, snq)
+
+			// Language analyzed, exact (no slop)
+			snq, err = createSpanNearQuery("content.language", q.Term, EXACT_BOOST*SPAN_NEAR_BOOST, 0, true)
+			if err != nil {
+				return nil, err
+			}
+			disMaxQueries = append(disMaxQueries, snq)
+
+			// Standard analyzed
+			snq, err = createSpanNearQuery("content", q.Term, STANDARD_BOOST*SPAN_NEAR_BOOST, SLOP, true)
+			if err != nil {
+				return nil, err
+			}
+			disMaxQueries = append(disMaxQueries, snq)
+
+			// Standard analyzed, exact (no slop).
+			snq, err = createSpanNearQuery("content", q.Term, STANDARD_BOOST*EXACT_BOOST*SPAN_NEAR_BOOST, 0, true)
+			if err != nil {
+				return nil, err
+			}
+			disMaxQueries = append(disMaxQueries, snq)
 		}
 
 		boolQuery = boolQuery.Must(
@@ -372,10 +457,10 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 	scoreQuery.Add(elastic.NewTermsQuery("filter_values", es.KeyValue("content_type", consts.CT_CLIP)), elastic.NewWeightFactorFunction(0.7))
 	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query).MinScore(MIN_SCORE_FOR_RESULTS)).ScoreMode("sum").MaxBoost(100.0).
 		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
-		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d"))
+		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d")), nil
 }
 
-func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchRequest {
+func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchRequest, error) {
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "effective_date")
 
 	titleAdded := false
@@ -400,8 +485,14 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 		}
 	}
 
+	resultsQuery, err := createResultsQuery(options.resultTypes, options.query, options.docIds, options.filterOutCUSources, options.titlesOnly)
+	if err != nil {
+		fmt.Printf("Error creating results query: %s", err.Error())
+		return nil, err
+	}
+
 	source := elastic.NewSearchSource().
-		Query(createResultsQuery(options.resultTypes, options.query, options.docIds, options.filterOutCUSources, options.titlesOnly)).
+		Query(resultsQuery).
 		FetchSourceContext(fetchSourceContext).
 		From(options.from).
 		Size(options.size).
@@ -433,7 +524,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) *elastic.SearchReques
 	return elastic.NewSearchRequest().
 		SearchSource(source).
 		Index(options.index).
-		Preference(options.preference)
+		Preference(options.preference), nil
 }
 
 func createHighlightQuery(terms []string, n int, partialHighlight bool) *elastic.Highlight {
@@ -459,7 +550,7 @@ func createHighlightQuery(terms []string, n int, partialHighlight bool) *elastic
 	return query
 }
 
-func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchRequest {
+func NewResultsSearchRequests(options SearchRequestOptions) ([]*elastic.SearchRequest, error) {
 	requests := make([]*elastic.SearchRequest, 0)
 	indices := make([]string, len(options.query.LanguageOrder))
 	for i := range options.query.LanguageOrder {
@@ -467,10 +558,13 @@ func NewResultsSearchRequests(options SearchRequestOptions) []*elastic.SearchReq
 	}
 	for _, index := range indices {
 		options.index = index
-		request := NewResultsSearchRequest(options)
+		request, err := NewResultsSearchRequest(options)
+		if err != nil {
+			return nil, err
+		}
 		requests = append(requests, request)
 	}
-	return requests
+	return requests, nil
 }
 
 func NewResultsSuggestRequest(resultTypes []string, index string, query Query, preference string) *elastic.SearchRequest {

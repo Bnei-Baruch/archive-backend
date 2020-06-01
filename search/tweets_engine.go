@@ -15,7 +15,7 @@ import (
 func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, preference string) (map[string]*elastic.SearchResult, error) {
 	tweetsByLang := make(map[string]*elastic.SearchResult)
 	mssTweets := e.esc.MultiSearch()
-	mssTweets.Add(NewResultsSearchRequests(
+	requests, err := NewResultsSearchRequests(
 		// Inside the carousel, the tweets are always sorted by relevance.
 		//The EffectiveDate of the carousel itself will be equal to the EffectiveDate of the most relevant tweet.
 		SearchRequestOptions{
@@ -27,7 +27,11 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 			size:             consts.TWEETS_SEARCH_COUNT,
 			preference:       preference,
 			useHighlight:     false,
-			partialHighlight: false})...)
+			partialHighlight: false})
+	if err != nil {
+		return nil, err
+	}
+	mssTweets.Add(requests...)
 
 	beforeTweetsSearch := time.Now()
 	mr, err := mssTweets.Do(context.TODO())
