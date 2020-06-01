@@ -140,7 +140,7 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 			fuzzines = "0"
 		} else if len(runes) == 1 && runes[0] >= 'א' && runes[0] <= 'ת' {
 			// This logic allows finding single hebrew letter with ' symbol without the mention of the ' symbol.
-			// The solution is not perfect for all times. In some (rare) cases the letter may be replaced with another latter: ג' קווים - ד
+			// The solution is not perfect for all times. In some (rare) cases the letter may be replaced with another letter: ג' קווים - ד
 			fuzzines = "1"
 			transpositions = "false" // Limit the fuzzines not to include transpositions of two adjacent characters (ח' -> 'ח). Maybe not required.
 		}
@@ -162,7 +162,7 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 
 // Creates a result query for elastic.
 // resultTypes - list of search result types: sources, topics, CU's, etc..
-// docIds - optional list of _uid's for filtering the search. If the parameter value is nil, no filtering is applied.
+// docIds - optional list of _uid's for filtering the search. If the parameter value is nil, no filtering is applied. Used for highlight search.
 // filterOutCUSources - optional list of sources for which we want to filter out the CU's that connected to those sources
 //	(in order to avoid duplication between carousel and regular results).
 // titlesOnly - limit our search only to title fields: title, full_title and description in case we search for intent sources. Used for intent search.

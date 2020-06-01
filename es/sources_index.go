@@ -360,6 +360,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 					// We combine title and description in one field for better support (especialy in intents)
 					// of title-subtitle combined queries like:
 					// "Part 8 The Eser Sefirot of Olam ha Atzilut"
+					// ("Part 8" is the title and "The Eser Sefirot of Olam ha Atzilut" is the description).
 					source.Description = fmt.Sprintf("%s %s", leaf, i18n.Description.String)
 				} else {
 					source.Description = i18n.Description.String
@@ -391,6 +392,8 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 					} else {
 						position = strconv.Itoa(mdbSource.Position.Int)
 					}
+					// Hebrew example of leaf with position: קלג. אורות דשבת
+					// English example of leaf with position: 133. The Lights of Shabbat
 					leafWithChapter := fmt.Sprintf("%s. %s", position, leaf)
 					s = append(s[:len(s)-1], leafWithChapter)
 					suffixesWithChapter := Suffixes(strings.Join(s, " "))
