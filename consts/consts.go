@@ -80,6 +80,8 @@ const (
 	// Weight of 'sources' autocomplete results (assigned at index time)
 	ES_SOURCES_SUGGEST_DEFAULT_WEIGHT = 50
 
+	ES_GRAMMAR_SUGGEST_DEFAULT_WEIGHT = 100
+
 	// Languages
 	LANG_ENGLISH    = "en"
 	LANG_HEBREW     = "he"

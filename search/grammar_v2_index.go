@@ -167,7 +167,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 						HitType:      grammar.HitType,
 						Intent:       intent,
 						Rules:        rules,
-						RulesSuggest: es.SuggestField{es.Unique(assignedRulesSuggest), float64(100)},
+						RulesSuggest: es.SuggestField{es.Unique(assignedRulesSuggest), float64(consts.ES_GRAMMAR_SUGGEST_DEFAULT_WEIGHT)},
 						Variables:    []string{},
 						Values:       []string{},
 					}
