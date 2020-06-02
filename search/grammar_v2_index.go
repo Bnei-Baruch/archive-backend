@@ -18,18 +18,13 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-type SuggestField struct {
-	Input  []string `json:"input"`
-	Weight float64  `json:"weight"`
-}
-
 type GrammarRule struct {
-	HitType      string       `json:"hit_type"`
-	Intent       string       `json:"intent"`
-	Variables    []string     `json:"variables,omitempty"`
-	Values       []string     `json:"values,omitempty"`
-	Rules        []string     `json:"rules"`
-	RulesSuggest SuggestField `json:"rules_suggest"`
+	HitType      string          `json:"hit_type"`
+	Intent       string          `json:"intent"`
+	Variables    []string        `json:"variables,omitempty"`
+	Values       []string        `json:"values,omitempty"`
+	Rules        []string        `json:"rules"`
+	RulesSuggest es.SuggestField `json:"rules_suggest"`
 }
 
 const (
@@ -172,7 +167,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 						HitType:      grammar.HitType,
 						Intent:       intent,
 						Rules:        rules,
-						RulesSuggest: SuggestField{es.Unique(assignedRulesSuggest), float64(100)},
+						RulesSuggest: es.SuggestField{es.Unique(assignedRulesSuggest), float64(consts.ES_GRAMMAR_SUGGEST_DEFAULT_WEIGHT)},
 						Variables:    []string{},
 						Values:       []string{},
 					}
@@ -229,7 +224,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 								HitType:      grammar.HitType,
 								Intent:       intent,
 								Rules:        assignedRules,
-								RulesSuggest: SuggestField{es.Unique(assignedRulesSuggest), float64(100)},
+								RulesSuggest: es.SuggestField{es.Unique(assignedRulesSuggest), float64(100)},
 								Variables:    variablesSet,
 								Values:       variableValues,
 							}

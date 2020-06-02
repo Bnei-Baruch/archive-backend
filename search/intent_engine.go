@@ -24,20 +24,12 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	}
 	// log.Infof("Hit: %+v %+v", *h.Score, classificationIntent)
 	if h.Score != nil && *h.Score > 0 {
-
-		var titleToAdd string
-		if classificationIntent.FullTitle != "" {
-			titleToAdd = classificationIntent.FullTitle
-		} else {
-			titleToAdd = classificationIntent.Title
-		}
-
 		classificationIntent.Score = h.Score
 		// Search for specific classification by full name to evaluate max score.
 		query.Term = ""
-		query.ExactTerms = []string{titleToAdd}
+		query.ExactTerms = []string{classificationIntent.Title}
 		intent.Value = classificationIntent
-		// log.Infof("Potential intent: %s", titleToAdd)
+		// log.Infof("Potential intent: %s", classificationIntent.Title)
 		return nil, &intent, &query
 	}
 	return nil, nil, nil
@@ -99,9 +91,9 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 	mssFirstRound := e.esc.MultiSearch()
 	potentialIntents := make([]Intent, 0)
 	for _, language := range query.LanguageOrder {
-		// Order here provides the priority in results, i.e., tags are more importnt then sources.
+		// Order here provides the priority in results, i.e., tags are more important then sources.
 		index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, language)
-		mssFirstRound.Add(NewResultsSearchRequest(
+		req, err := NewResultsSearchRequest(
 			SearchRequestOptions{
 				resultTypes:      []string{consts.ES_RESULT_TYPE_TAGS},
 				index:            index,
@@ -111,9 +103,14 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 				size:             size,
 				preference:       preference,
 				useHighlight:     false,
-				partialHighlight: true}))
+				partialHighlight: true})
+		if err != nil {
+			log.Warnf("ESEngine.AddIntents - Failed on creating tags request %+v", err)
+			return nil, err
+		}
+		mssFirstRound.Add(req)
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
-		mssFirstRound.Add(NewResultsSearchRequest(
+		req, err = NewResultsSearchRequest(
 			SearchRequestOptions{
 				resultTypes:      []string{consts.ES_RESULT_TYPE_SOURCES},
 				index:            index,
@@ -123,7 +120,13 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 				size:             size,
 				preference:       preference,
 				useHighlight:     false,
-				partialHighlight: true}))
+				partialHighlight: true,
+				titlesOnly:       true})
+		if err != nil {
+			log.Warnf("ESEngine.AddIntents - Failed on creating sources request %+v", err)
+			return nil, err
+		}
+		mssFirstRound.Add(req)
 		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
 	beforeFirstRoundDo := time.Now()
@@ -150,7 +153,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 					return intents, errors.Wrapf(err, "ESEngine.AddIntents - Error second run for intent %+v", potentialIntents[i])
 				}
 				if intent != nil {
-					mssSecondRound.Add(NewResultsSearchRequest(
+					req, err := NewResultsSearchRequest(
 						SearchRequestOptions{
 							resultTypes:      []string{consts.RESULT_TYPE_BY_INDEX_TYPE[potentialIntents[i].Type]},
 							index:            es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, intent.Language),
@@ -160,7 +163,13 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 							size:             size,
 							preference:       preference,
 							useHighlight:     false,
-							partialHighlight: true}))
+							partialHighlight: true,
+							titlesOnly:       true})
+					if err != nil {
+						log.Warnf("ESEngine.AddIntents - Failed on creating second round request %+v", err)
+						return nil, err
+					}
+					mssSecondRound.Add(req)
 					finalIntents = append(finalIntents, *intent)
 				}
 			}

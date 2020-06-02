@@ -593,7 +593,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	multiSearchService := e.esc.MultiSearch()
-	multiSearchService.Add(NewResultsSearchRequests(
+	requests, err := NewResultsSearchRequests(
 		SearchRequestOptions{
 			resultTypes:        resultTypes,
 			index:              "",
@@ -604,7 +604,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			preference:         preference,
 			useHighlight:       false,
 			partialHighlight:   false,
-			filterOutCUSources: filterOutCUSources})...)
+			filterOutCUSources: filterOutCUSources})
+	if err != nil {
+		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do on creating requests.")
+	}
+	multiSearchService.Add(requests...)
 
 	// Do search.
 	beforeDoSearch := time.Now()
@@ -704,7 +708,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			if h.Type == consts.SEARCH_RESULT_TWEETS_MANY && h.InnerHits != nil {
 				if tweetHits, ok := h.InnerHits[consts.SEARCH_RESULT_TWEETS_MANY]; ok {
 					for _, th := range tweetHits.Hits.Hits {
-						mssHighlights.Add(NewResultsSearchRequest(
+						req, err := NewResultsSearchRequest(
 							SearchRequestOptions{
 								resultTypes:          []string{consts.ES_RESULT_TYPE_TWEETS},
 								docIds:               []string{th.Id},
@@ -716,7 +720,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 								preference:           preference,
 								useHighlight:         true,
 								highlightFullContent: true,
-								partialHighlight:     true}))
+								partialHighlight:     true})
+						if err != nil {
+							return nil, errors.Wrap(err, "ESEngine.DoSearch - Error creating tweets request in multisearch Do.")
+						}
+						mssHighlights.Add(req)
 
 						highlightRequestAdded = true
 					}
@@ -730,7 +738,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 			// We use multiple search request because we saw that a single request
 			// filtered by id's list take more time than multiple requests.
-			mssHighlights.Add(NewResultsSearchRequest(
+			req, err := NewResultsSearchRequest(
 				SearchRequestOptions{
 					resultTypes:      resultTypes,
 					docIds:           []string{h.Id},
@@ -741,7 +749,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					size:             1,
 					preference:       preference,
 					useHighlight:     true,
-					partialHighlight: true}))
+					partialHighlight: true})
+			if err != nil {
+				return nil, errors.Wrap(err, "ESEngine.DoSearch - Error creating highlight request in multisearch Do.")
+			}
+			mssHighlights.Add(req)
 
 			highlightRequestAdded = true
 		}

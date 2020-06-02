@@ -32,5 +32,10 @@ type Result struct {
 	EffectiveDate *utils.Date `json:"effective_date,omitempty"`
 
 	// Suggest field for autocomplete.
-	TitleSuggest []string `json:"title_suggest"`
+	TitleSuggest SuggestField `json:"title_suggest"`
+}
+
+type SuggestField struct {
+	Input  []string `json:"input"`
+	Weight float64  `json:"weight"`
 }

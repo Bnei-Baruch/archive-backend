@@ -134,6 +134,8 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.validateNames(indexNameEn, indexer, []string{"1. test-name-3"})
 	suite.validateNames(indexNameHe, indexer, []string{"א. שם-בדיקה-3"})
 
+	//TBD add test for indexing with description
+
 	fmt.Println("Delete sources from DB, reindex and validate we have 0 sources.")
 	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
 	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 4})

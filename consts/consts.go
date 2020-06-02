@@ -60,10 +60,27 @@ const (
 	// Persons patterns
 	P_RAV = "rav"
 
+	// Source types
+	SRC_TYPE_COLLECTION = 1
+	SRC_TYPE_BOOK       = 2
+	SRC_TYPE_VOLUME     = 3
+	SRC_TYPE_PART       = 4
+	SRC_TYPE_PARASHA    = 5
+	SRC_TYPE_CHAPTER    = 6
+	SRC_TYPE_ARTICLE    = 7
+	SRC_TYPE_TITLE      = 8
+	SRC_TYPE_LETTER     = 9
+	SRC_TYPE_ITEM       = 10
+
 	// Security levels
 	SEC_PUBLIC    = int16(0)
 	SEC_SENSITIVE = int16(1)
 	SEC_PRIVATE   = int16(2)
+
+	// Weight of 'sources' autocomplete results (assigned at index time)
+	ES_SOURCES_SUGGEST_DEFAULT_WEIGHT = 50
+
+	ES_GRAMMAR_SUGGEST_DEFAULT_WEIGHT = 100
 
 	// Languages
 	LANG_ENGLISH    = "en"
@@ -108,6 +125,11 @@ var ALL_KNOWN_LANGS = [...]string{
 	LANG_JAPANESE, LANG_BULGARIAN, LANG_GEORGIAN, LANG_NORWEGIAN, LANG_SWEDISH, LANG_CROATIAN, LANG_CHINESE,
 	LANG_PERSIAN, LANG_ROMANIAN, LANG_HINDI, LANG_MACEDONIAN, LANG_SLOVENIAN, LANG_LATVIAN, LANG_SLOVAK, LANG_CZECH,
 	LANG_UKRAINIAN, LANG_AMHARIC,
+}
+
+var SRC_TYPES_FOR_TITLE_DESCRIPTION_CONCAT = map[int64]bool{
+	SRC_TYPE_VOLUME: true,
+	SRC_TYPE_PART:   true,
 }
 
 var ANALYZERS = map[string]string{
@@ -304,7 +326,7 @@ const (
 	API_DEFAULT_PAGE_SIZE                     = 50
 	API_MAX_PAGE_SIZE                         = 1000
 	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
-	// Consider makeing a carusele and not limiting.
+	// Consider making a carusele and not limiting.
 	MAX_MATCHES_PER_GRAMMAR_INTENT = 3
 )
 
@@ -592,9 +614,28 @@ var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{
 }
 
 const (
-	SRC_SHAMATI = 141
+	SRC_SHAMATI                = "qMUUn22b"
+	SRC_NONE_ELSE_BESIDE_HIM   = "hFeGidcS"
+	SRC_PEACE_ARCTICLE         = "28Cmp7gl"
+	SRC_PEACE_IN_WORLD_ARTICLE = "hqUTKcZz"
+	SRC_ARVUT_ARTICLE          = "itcVAcFn"
 )
 
-var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[int64]bool{
+var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
+	SRC_NONE_ELSE_BESIDE_HIM:   200,
+	SRC_PEACE_ARCTICLE:         120,
+	SRC_PEACE_IN_WORLD_ARTICLE: 120,
+	SRC_ARVUT_ARTICLE:          210,
+}
+
+// We used to name this articles with the prefix word "maamar" (article).
+// We will suggest the correct source result when the user types their name with the prefix "maamar".
+var ES_SRC_ADD_MAAMAR_TO_SUGGEST = map[string]bool{
+	SRC_PEACE_ARCTICLE:         true,
+	SRC_PEACE_IN_WORLD_ARTICLE: true,
+	SRC_ARVUT_ARTICLE:          true,
+}
+
+var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[string]bool{
 	SRC_SHAMATI: true,
 }

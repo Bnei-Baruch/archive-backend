@@ -321,9 +321,6 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				FilterValues: KeyValues(consts.ES_UID_TYPE_SOURCE, parents),
 				TypedUids:    []string{KeyValue(consts.ES_UID_TYPE_SOURCE, mdbSource.UID)},
 			}
-			if i18n.Description.Valid && i18n.Description.String != "" {
-				source.Description = i18n.Description.String
-			}
 			fPath, missingSourceFileErr := index.getDocxPath(mdbSource.UID, i18n.Language)
 			// Ignore err here as if missing source for a language in very common and is ok.
 			if missingSourceFileErr == nil {
@@ -349,10 +346,6 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				if ni18n.Name.Valid && ni18n.Name.String != "" {
 					pathNames = append(pathNames, ni18n.Name.String)
 				}
-				// We dont take the Description value and use synonyms instead
-				/*if ni18n.Description.Valid && ni18n.Description.String != "" {
-					pathNames = append(pathNames, ni18n.Description.String)
-				}*/
 			}
 			indexErrors.DocumentError(i18n.Language, findParentsErr, "SourcesIndex.indexSource - Error finding parent")
 			if findParentsErr != nil {
@@ -362,21 +355,45 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			authors := authorsByLanguage[i18n.Language]
 			s := append(authors, pathNames...)
 			leaf := s[len(s)-1]
+			if i18n.Description.Valid && i18n.Description.String != "" && i18n.Description.String != " " {
+				if _, ok := consts.SRC_TYPES_FOR_TITLE_DESCRIPTION_CONCAT[mdbSource.TypeID]; ok {
+					// We combine title and description in one field for better support (especialy in intents)
+					// of title-subtitle combined queries like:
+					// "Part 8 The Eser Sefirot of Olam ha Atzilut"
+					// ("Part 8" is the title and "The Eser Sefirot of Olam ha Atzilut" is the description).
+					source.Description = fmt.Sprintf("%s %s", leaf, i18n.Description.String)
+				} else {
+					source.Description = i18n.Description.String
+				}
+			}
 			source.Title = leaf
 			suffixes := Suffixes(strings.Join(s, " "))
 			if len(s) > 2 {
 				suffixes = append(suffixes, ConcateFirstToLast(s))
 			}
 
+			if _, ok := consts.ES_SRC_ADD_MAAMAR_TO_SUGGEST[mdbSource.UID]; ok {
+				suffixes = append(suffixes, fmt.Sprintf("מאמר %s", leaf))
+			}
+
 			//  Add chapter number\letter to Shamati articles
 			if mdbSource.ParentID.Valid && mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
-				if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[mdbSource.ParentID.Int64]; ok {
+				var addPosition bool
+				for _, parent := range parents {
+					if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parent]; ok {
+						addPosition = true
+						break
+					}
+				}
+				if addPosition {
 					var position string
 					if i18n.Language == "he" {
 						position = utils.NumberInHebrew(mdbSource.Position.Int) //  Convert to Hebrew letter
 					} else {
 						position = strconv.Itoa(mdbSource.Position.Int)
 					}
+					// Hebrew example of leaf with position: קלג. אורות דשבת
+					// English example of leaf with position: 133. The Lights of Shabbat
 					leafWithChapter := fmt.Sprintf("%s. %s", position, leaf)
 					s = append(s[:len(s)-1], leafWithChapter)
 					suffixesWithChapter := Suffixes(strings.Join(s, " "))
@@ -384,7 +401,12 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				}
 			}
 
-			source.TitleSuggest = suffixes
+			if weight, ok := consts.ES_SUGGEST_SOURCES_WEIGHT[mdbSource.UID]; ok {
+				source.TitleSuggest = SuggestField{suffixes, weight}
+			} else {
+				source.TitleSuggest = SuggestField{suffixes, float64(consts.ES_SOURCES_SUGGEST_DEFAULT_WEIGHT)}
+			}
+
 			source.FullTitle = strings.Join(s, " > ")
 			i18nMap[i18n.Language] = source
 		}
