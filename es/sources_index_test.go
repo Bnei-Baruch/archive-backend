@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"gopkg.in/volatiletech/null.v6"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -96,7 +98,41 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	})
 	suite.validateSourcesFullPath(indexNameEn, indexer, [][]string{[]string{source1UID, "t1", "t2"}, []string{source2UID, "t3", "t4"}})
 
-	//TBD add test for indexing with position (chapter)
+	//TBD add test for indexing with position (chapter)sourceShamatiUID := suite.us(Source{Name: "test-name-3", ParentID: null.NewInt64(int64(consts.SRC_SHAMATI), true),
+
+	fmt.Printf("\n\n\nAdd source Shamati.\n\n")
+	sourceParentShamati := suite.us(Source{Name: "Shamati", MDB_ID: null.NewInt64(int64(consts.SRC_SHAMATI), true)},
+		consts.LANG_ENGLISH)
+	r.Nil(indexer.SourceUpdate(sourceParentShamati))
+
+	fmt.Println("Validate adding source with file but without author - should not index.")
+	suite.usfc(sourceParentShamati, consts.LANG_ENGLISH)
+	r.Nil(indexer.SourceUpdate(sourceParentShamati))
+
+	fmt.Println("Validate adding source with file and author and and validate.")
+	suite.asa(Source{MDB_UID: sourceParentShamati}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 5, Code: "t3"}, true, true)
+	r.Nil(indexer.SourceUpdate(sourceParentShamati))
+	///
+
+	sourceShamatiUID := suite.us(Source{Name: "test-name-3", ParentID: null.NewInt64(int64(consts.SRC_SHAMATI), true),
+		Position: null.NewInt(1, true)}, consts.LANG_ENGLISH)
+	suite.us(Source{Name: "שם-בדיקה-3", ParentID: null.NewInt64(int64(consts.SRC_SHAMATI), true),
+		Position: null.NewInt(1, true)}, consts.LANG_HEBREW)
+	suite.usfc(sourceShamatiUID, consts.LANG_ENGLISH)
+	suite.usfc(sourceShamatiUID, consts.LANG_HEBREW)
+	r.Nil(indexer.SourceUpdate(sourceShamatiUID))
+	///
+	suite.asa(Source{MDB_UID: sourceShamatiUID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 5, Code: "t3"}, true, true)
+	suite.asa(Source{MDB_UID: sourceShamatiUID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם נוסף לבדיקה", ID: 6, Code: "t4"}, true, true)
+	r.Nil(indexer.SourceUpdate(sourceShamatiUID))
+
+	fmt.Printf("\n\n\nReindexing everything for Shamati.\n\n")
+	// Index existing DB data.
+	r.Nil(indexer.ReindexAll(esc))
+	r.Nil(indexer.RefreshAll())
+	fmt.Printf("\n\n\nValidate we have source with 2 languages for Shamati.\n\n")
+	suite.validateNames(indexNameEn, indexer, []string{"1. test-name-3"})
+	suite.validateNames(indexNameHe, indexer, []string{"א. שם-בדיקה-3"})
 
 	fmt.Println("Delete sources from DB, reindex and validate we have 0 sources.")
 	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
@@ -106,9 +142,12 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	UIDs := []string{source1UID, source2UID}
 	r.Nil(deleteSources(UIDs))
 	r.Nil(indexer.ReindexAll(esc))
+	///
+
 	suite.validateFullNames(indexNameEn, indexer, []string{})
 	suite.validateFullNames(indexNameHe, indexer, []string{})
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())
+
 }

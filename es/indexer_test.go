@@ -30,7 +30,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -96,8 +96,10 @@ type Classification struct {
 }
 
 type Source struct {
-	MDB_UID string `json:"mdb_uid"`
-	Name    string `json:"name"`
+	MDB_UID string     `json:"mdb_uid"`
+	MDB_ID  null.Int64 `json:"mdb_id"`
+
+	Name string `json:"name"`
 
 	// Deprecated fields (since we use 'Result Template' in order to index the sources):
 	Description string   `json:"description"`
@@ -106,6 +108,10 @@ type Source struct {
 	Authors     []string `json:"authors"`
 	PathNames   []string `json:"path_names"`
 	FullName    []string `json:"full_name"`
+
+	//
+	ParentID null.Int64 `json:"parent_id"`
+	Position null.Int   `json:"position"`
 }
 
 func (suite *IndexerSuite) SetupSuite() {
@@ -842,6 +848,17 @@ func updateSource(source Source, lang string) (string, error) {
 		if source.Description != "" {
 			mdbSource.Description = null.NewString(source.Description, source.Description != "")
 		}
+		if source.ParentID.Valid {
+			mdbSource.ParentID = source.ParentID
+		}
+		if source.Position.Valid {
+			mdbSource.Position = source.Position
+		}
+		if source.MDB_ID.Valid {
+			/// mdbSource.ID = source.MDB_ID.Value
+
+		}
+
 		if err := mdbSource.Insert(common.DB); err != nil {
 			return "", err
 		}
@@ -1168,6 +1185,14 @@ func (suite *IndexerSuite) rt(id int64) {
 
 //update source
 func (suite *IndexerSuite) us(source Source, lang string) string {
+	r := require.New(suite.T())
+	uid, err := updateSource(source, lang)
+	r.Nil(err)
+	return uid
+}
+
+//update source shamati
+func (suite *IndexerSuite) us_shamati(source Source, lang string) string {
 	r := require.New(suite.T())
 	uid, err := updateSource(source, lang)
 	r.Nil(err)
