@@ -122,6 +122,15 @@ func ParseQuery(q string) Query {
 	return Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Original: q, Filters: filters}
 }
 
+// Here we build the span_near query with span_multi sub queries to allow effective fuzzy search
+//  with slop and special cases like avoiding numeric values from applying fuzziness and handling of single hebrew letter in the query.
+// The query is not supported in the elastic SDK so we build it manually.
+// Arguments:
+// field - the field where we search (title, full_title, description, content).
+// term - the search term.
+// boost - boost for the score.
+// slop - number of words separating the span clauses.
+// inOrder - we expect the words to be in order? We set it as true only for the search in title.
 func createSpanNearQuery(field string, term string, boost float32, slop int, inOrder bool) (elastic.Query, error) {
 	clauses := make([]string, 0)
 	spanNearMask := `{"span_near": { "clauses": [%s], "slop": %d, "boost": %f, "in_order": %t } }`
