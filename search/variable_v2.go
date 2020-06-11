@@ -72,14 +72,19 @@ func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 
 		// Holiday
 		//holidayVariable, err := MakeHolidayVariable(lang, translations)
-		//if err != nil {
-		//	return nil, err
-		//}
-		//if holidayVariable != nil {
-		//	variables[lang][holidayVariable.Name()] = holidayVariable
-		//}
+		holidayVariable, err := MakeHolidayVariable(lang)
+		if err != nil {
+			return nil, err
+		}
+		if holidayVariable != nil {
+			//variables[lang][holidayVariable.Name()] = holidayVariable
+		}
 	}
 	return variables, nil
+}
+
+func MakeHolidayVariable(lang string) (TranslationsV2, error) {
+	return TranslationsV2{}, errors.New("not implemented")
 }
 
 func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
