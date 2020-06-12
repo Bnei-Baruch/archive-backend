@@ -12,7 +12,8 @@ Baal Shem Tov	Habaal Shem Tov
 						
 #Zohar for everyone	Zohar	The Book of Zohar	Zohar for All					
 #On the Night of the Bride	The Correction Of The Night Of Shavuot	the night of the bride				
-#Study of the Ten Sefirot	TES					
+#Study of the Ten Sefirot	TES
+matan tora  the giving of the torah matan torah					
 Beresheet	Weekly Portion Beresheet	Chapter Beresheet	Weekly Reading Beresheet	Parashat Beresheet	Parshat Beresheet	Book Beresheet
 Shemot	Weekly Portion Shemot	Chapter Shemot	Weekly Reading Shemot	Parashat Shemot	Parshat Shemot	Book Shemot
 VaEra	Weekly Portion VaEra	Chapter VaEra	Weekly Reading VaEra	Parashat VaEra	Parshat VaEra	
@@ -107,3 +108,7 @@ kabbalist meal	meal	tish	yortzait
 #Added by Yuri at 16.02.20 (not in spreadsheet)
 koronavirus	korona virus	coronavirus	corona
 chanukah	hanukkah	hanuka	chanuka
+
+#Added by Eran at 12.06.20 (not in spreadsheet)
+extend  revealed
+haim hadashim haim-hadashim new life
