@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/sqlboiler/queries"
 )
 
 // Translations language => value => phrases
@@ -59,12 +60,6 @@ func YearScorePenalty(vMap map[string][]string) float64 {
 	return 1.0
 }
 
-func MakeHolidayVariables() map[string][]string {
-	ret := make(map[string][]string)
-
-	return ret
-}
-
 func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 	// Loads all variables.
 	variables, err := LoadVariablesTranslationsV2(variablesDir)
@@ -83,6 +78,8 @@ func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 
 func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 
+	variables := make(VariablesV2)
+
 	// Load variables from files
 
 	suffix := "variable"
@@ -92,7 +89,6 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 	}
 
 	log.Infof("Globed %d variable translation files.", len(matches))
-	variables := make(VariablesV2)
 	for _, variableFile := range matches {
 		basename := filepath.Base(variableFile)
 		variable := fmt.Sprintf("$%s", snakeCaseToCamelCase(basename[:len(basename)-len(suffix)-1]))
@@ -119,16 +115,36 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 }
 
 func LoadHolidayTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
-	// TBD
 
-	//query := ``
+	translations := make(TranslationsV2)
+	query := `select tn.language, t.pattern, tn.label 
+	from tags t join tags tp on t.parent_id = tp.id
+	join tag_i18n tn on t.id=tn.tag_id
+	where tp.uid = '1nyptSIo'`
+	//  '1nyptSIo' is a const. uid for 'holidays' parent tag
 
-	//rows, err := queries.Raw(db, query).Query()
-	//if err != nil {
-	//	return nil, errors.Wrap(err, "Unable to retrieve from DB the translations for holidays.")
-	//}
+	rows, err := queries.Raw(db, query).Query()
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to retrieve from DB the translations for holidays.")
+	}
+	defer rows.Close()
 
-	return nil, errors.New("No implemented yet.")
+	for rows.Next() {
+		var lang string
+		var value string
+		var phrase string
+		err := rows.Scan(&lang, &value, &phrase)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		if _, ok := translations[lang]; !ok {
+			translations[lang][value] = []string{phrase}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows.Err()")
+	}
+	return translations, nil
 }
 
 func LoadVariableTranslationsFromFile(variableFile string, variableName string) (TranslationsV2, error) {
