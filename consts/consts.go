@@ -580,11 +580,20 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
 }
 
+// Variables
+const (
+	VAR_YEAR                = "$Year"
+	VAR_CONVENTION_LOCATION = "$ConventionLocation"
+	VAR_TEXT                = "$Text"
+	VAR_HOLIDAYS            = "$Holidays"
+)
+
 // Variable name to frontend filter name mapping.
 var VARIABLE_TO_FILTER = map[string]string{
-	"$Year":               "year",
-	"$ConventionLocation": "location",
-	"$Text":               "text",
+	VAR_YEAR:                "year",
+	VAR_CONVENTION_LOCATION: "location",
+	VAR_TEXT:                "text",
+	VAR_HOLIDAYS:            "holidays",
 }
 
 // Latency log

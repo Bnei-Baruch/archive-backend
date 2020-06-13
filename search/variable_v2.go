@@ -39,7 +39,7 @@ func MakeYearVariablesV2() map[string][]string {
 }
 
 func YearScorePenalty(vMap map[string][]string) float64 {
-	if yearStrs, ok := vMap["$Year"]; ok {
+	if yearStrs, ok := vMap[consts.VAR_YEAR]; ok {
 		maxRet := 0.0
 		for _, yearStr := range yearStrs {
 			nowYear := time.Now().Year()
@@ -57,6 +57,12 @@ func YearScorePenalty(vMap map[string][]string) float64 {
 	return 1.0
 }
 
+func MakeHolidayVariables() map[string][]string {
+	ret := make(map[string][]string)
+
+	return ret
+}
+
 func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 	// Loads all variables.
 	variables, err := LoadVariablesTranslationsV2(variablesDir)
@@ -65,10 +71,10 @@ func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 	}
 
 	years := MakeYearVariablesV2()
-	variables["$Year"] = make(TranslationsV2)
+	variables[consts.VAR_YEAR] = make(TranslationsV2)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		// Year
-		variables["$Year"][lang] = years
+		variables[consts.VAR_YEAR][lang] = years
 
 		// Holiday
 		//holidayVariable, err := MakeHolidayVariable(lang, translations)
@@ -78,6 +84,7 @@ func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 		}
 		if holidayVariable != nil {
 			//variables[lang][holidayVariable.Name()] = holidayVariable
+			//variables[consts.VAT_HOLIDAYS][lang] = holidayVariable
 		}
 	}
 	return variables, nil
@@ -88,6 +95,9 @@ func MakeHolidayVariable(lang string) (TranslationsV2, error) {
 }
 
 func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
+
+	// Load variables from files
+
 	suffix := "variable"
 	matches, err := filepath.Glob(filepath.Join(variablesDir, fmt.Sprintf("*.%s", suffix)))
 	if err != nil {
@@ -99,16 +109,19 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 	for _, variableFile := range matches {
 		basename := filepath.Base(variableFile)
 		variable := fmt.Sprintf("$%s", snakeCaseToCamelCase(basename[:len(basename)-len(suffix)-1]))
-		variableTranslations, err := LoadVariableTranslationsV2(variableFile, variable)
+		variableTranslations, err := LoadVariableTranslationsFromFile(variableFile, variable)
 		if err != nil {
 			return nil, err
 		}
 		variables[variable] = variableTranslations
 	}
+
+	// Load holiday variables from DB
+
 	return variables, nil
 }
 
-func LoadVariableTranslationsV2(variableFile string, variableName string) (TranslationsV2, error) {
+func LoadVariableTranslationsFromFile(variableFile string, variableName string) (TranslationsV2, error) {
 	file, err := os.Open(variableFile)
 	if err != nil {
 		return nil, errors.Wrapf(err, "Error reading translation file: %s", variableFile)
