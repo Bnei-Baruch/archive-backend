@@ -2,6 +2,7 @@ package search
 
 import (
 	"bufio"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )
@@ -75,23 +77,8 @@ func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		// Year
 		variables[consts.VAR_YEAR][lang] = years
-
-		// Holiday
-		//holidayVariable, err := MakeHolidayVariable(lang, translations)
-		holidayVariable, err := MakeHolidayVariable(lang)
-		if err != nil {
-			return nil, err
-		}
-		if holidayVariable != nil {
-			//variables[lang][holidayVariable.Name()] = holidayVariable
-			//variables[consts.VAT_HOLIDAYS][lang] = holidayVariable
-		}
 	}
 	return variables, nil
-}
-
-func MakeHolidayVariable(lang string) (TranslationsV2, error) {
-	return TranslationsV2{}, errors.New("not implemented")
 }
 
 func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
@@ -118,7 +105,30 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 
 	// Load holiday variables from DB
 
+	db, err := sql.Open("postgres", viper.GetString("mdb.url"))
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to connect to DB.")
+	}
+	holidayTranslations, err := LoadHolidayTranslationsFromDB(db)
+	if err != nil {
+		return nil, err
+	}
+	variables[consts.VAR_HOLIDAYS] = holidayTranslations
+
 	return variables, nil
+}
+
+func LoadHolidayTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
+	// TBD
+
+	//query := ``
+
+	//rows, err := queries.Raw(db, query).Query()
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "Unable to retrieve from DB the translations for holidays.")
+	//}
+
+	return nil, errors.New("No implemented yet.")
 }
 
 func LoadVariableTranslationsFromFile(variableFile string, variableName string) (TranslationsV2, error) {
