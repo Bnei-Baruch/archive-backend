@@ -77,17 +77,14 @@ func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 }
 
 func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
-
 	variables := make(VariablesV2)
 
 	// Load variables from files
-
 	suffix := "variable"
 	matches, err := filepath.Glob(filepath.Join(variablesDir, fmt.Sprintf("*.%s", suffix)))
 	if err != nil {
 		return nil, err
 	}
-
 	log.Infof("Globed %d variable translation files.", len(matches))
 	for _, variableFile := range matches {
 		basename := filepath.Base(variableFile)
@@ -100,7 +97,6 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 	}
 
 	// Load holiday variables from DB
-
 	db, err := sql.Open("postgres", viper.GetString("mdb.url"))
 	if err != nil {
 		return nil, errors.Wrap(err, "Unable to connect to DB.")
@@ -110,7 +106,6 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 		return nil, err
 	}
 	variables[consts.VAR_HOLIDAYS] = holidayTranslations
-
 	return variables, nil
 }
 
@@ -128,7 +123,6 @@ func LoadHolidayTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 		return nil, errors.Wrap(err, "Unable to retrieve from DB the translations for holidays.")
 	}
 	defer rows.Close()
-
 	for rows.Next() {
 		var lang string
 		var value string
@@ -138,8 +132,9 @@ func LoadHolidayTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
 		if _, ok := translations[lang]; !ok {
-			translations[lang][value] = []string{phrase}
+			translations[lang] = make(map[string][]string)
 		}
+		translations[lang][value] = []string{phrase}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, errors.Wrap(err, "rows.Err()")
