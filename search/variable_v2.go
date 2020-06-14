@@ -112,7 +112,7 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 func LoadHolidayTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 
 	translations := make(TranslationsV2)
-	query := `select tn.language, tn.label 
+	query := `select tn.language, t.uid, tn.label 
 	from tags t join tags tp on t.parent_id = tp.id
 	join tag_i18n tn on t.id=tn.tag_id
 	where tp.uid = '1nyptSIo'`
@@ -125,15 +125,16 @@ func LoadHolidayTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var lang string
+		var uid string
 		var phrase string
-		err := rows.Scan(&lang, &phrase)
+		err := rows.Scan(&lang, &uid, &phrase)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
 		if _, ok := translations[lang]; !ok {
 			translations[lang] = make(map[string][]string)
 		}
-		translations[lang][phrase] = []string{phrase}
+		translations[lang][uid] = []string{phrase}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, errors.Wrap(err, "rows.Err()")
