@@ -6,7 +6,7 @@ Rav Laitman	Michael Laitman	Laitman	Dr. Michael Laitman
 #Ari	the Ari					
 Ramchal	Moshe Jaim Luzzato	Luzzato				
 Rav Kook	Abraham Itzhak Hacohen Kook					
-Baal Shem Tov	Habaal Shem Tov					
+Baal Shem Tov	Habaal Shem Tov	Basht				
 						
 # Sources						
 						
