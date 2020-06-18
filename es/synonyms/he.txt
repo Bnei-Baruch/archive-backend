@@ -158,3 +158,4 @@
 איגרת	אגרת
 #Added by Eran at 12.06.20 (not in spreadsheet)
 תיאטרון	תאטרון
+עשרייה	עשריה
