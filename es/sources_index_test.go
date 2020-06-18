@@ -126,8 +126,7 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.usfc(sourceShamatiDetailUID, consts.LANG_HEBREW)
 	//r.Nil(indexer.SourceUpdate(sourceShamatiDetailUID))
 	///
-	suite.asa(Source{MDB_UID: sourceShamatiDetailUID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 8, Code: "t6"}, true, true)
-	suite.asa(Source{MDB_UID: sourceShamatiDetailUID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם נוסף לבדיקה", ID: 9, Code: "t7"}, true, true)
+
 	r.Nil(indexer.SourceUpdate(sourceShamatiDetailUID))
 
 	fmt.Printf("\n\n\nReindexing everything for Shamati.\n\n")
@@ -135,9 +134,8 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	r.Nil(indexer.ReindexAll(esc))
 	r.Nil(indexer.RefreshAll())
 	fmt.Printf("\n\n\nValidate we have source with 2 languages for Shamati.\n\n")
-	suite.validateNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2", "Shamati", "1. test-name-3"})
-	/// suite.validateNames(indexNameHe, indexer, []string{"שם-בדיקה-1", "שם-בדיקה-2", "שם-בדיקה-3"})
 
+	suite.validateFullNames(indexNameEn, indexer, []string{"Test Name > test-name-1", "Test Name 2 > test-name-2", "Test Name 2 > Shamati", "Test Name 2 > Shamati > 1. test-name-3"})
 	//TBD add test for indexing with description
 
 	fmt.Println("Delete sources from DB, reindex and validate we have 0 sources.")
@@ -147,8 +145,6 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.rsa(Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 6})
 	//
 	suite.rsa(Source{MDB_UID: sourceShamatiUID}, mdbmodels.Author{ID: 7})
-	suite.rsa(Source{MDB_UID: sourceShamatiDetailUID}, mdbmodels.Author{ID: 8})
-	suite.rsa(Source{MDB_UID: sourceShamatiDetailUID}, mdbmodels.Author{ID: 9})
 
 	UIDs := []string{source1UID, source2UID, sourceShamatiUID, sourceShamatiDetailUID}
 	r.Nil(deleteSources(UIDs))
