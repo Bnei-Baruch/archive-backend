@@ -110,5 +110,5 @@ koronavirus	korona virus	coronavirus	corona
 chanukah	hanukkah	hanuka	chanuka
 
 #Added by Eran at 12.06.20 (not in spreadsheet)
-extend  revealed
-haim hadashim haim-hadashim new life
+extend	revealed
+haim hadashim	haim-hadashim	new life
