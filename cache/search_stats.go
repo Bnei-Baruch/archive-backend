@@ -7,12 +7,13 @@ import (
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
 type Histogram map[string]int
@@ -134,19 +135,26 @@ type SearchStatsCache interface {
 	// |location| can be of: "Moscow" or "Russia|Moscow" or "Russia" or "" (empty for year constrain only)
 	// |year| is 4 digit year string, e.g., "1998", "2010" or "" (empty for location constrain only)
 	DoesConventionExist(location string, year string) bool
+	// |holiday| is the UID of the tag that is children of 'holidays' tag
+	DoesHolidayExist(holiday string, year string) bool
 }
 
 type SearchStatsCacheImpl struct {
-	mdb         *sql.DB
-	tags        ClassByTypeStats
-	sources     ClassByTypeStats
-	conventions map[string]map[string]int
+	mdb          *sql.DB
+	tags         ClassByTypeStats
+	sources      ClassByTypeStats
+	conventions  map[string]map[string]int
+	holidayYears map[string]map[string]bool
 }
 
 func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
 	ssc := new(SearchStatsCacheImpl)
 	ssc.mdb = mdb
 	return ssc
+}
+
+func (ssc *SearchStatsCacheImpl) DoesHolidayExist(holiday string, year string) bool {
+	return ssc.holidayYears[holiday][year]
 }
 
 func (ssc *SearchStatsCacheImpl) DoesConventionExist(location string, year string) bool {
@@ -205,8 +213,45 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	if err != nil {
 		return errors.Wrap(err, "Load conventions stats.")
 	}
+	ssc.holidayYears, err = ssc.refreshHolidayYears()
+	if err != nil {
+		return errors.Wrap(err, "Load holidays stats.")
+	}
 
 	return nil
+}
+
+func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]bool, error) {
+	ret := make(map[string]map[string]bool)
+
+	//  '1nyptSIo' is a const. uid for 'holidays' parent tag
+	rows, err := queries.Raw(ssc.mdb, `select t.uid as tag_uid, array_agg(distinct extract(year from (cu.properties ->> 'film_date')::date))
+	from tags t join tags tp on t.parent_id = tp.id
+	join content_units_tags cut on cut.tag_id = t.id
+	join content_units cu on cu.id = cut.content_unit_id
+	where tp.uid = '1nyptSIo' and cu.secure = 0 and cu.published = true
+	group by t.uid`).Query()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "refreshHolidays - Query failed.")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tagUID string
+		var years pq.StringArray
+		err := rows.Scan(&tagUID, &years)
+		if err != nil {
+			return nil, errors.Wrap(err, "refreshHolidays rows.Scan")
+		}
+		ret[tagUID][""] = true // Holiday without specific year
+		for _, year := range years {
+			ret[""][year] = true // Year without specific holiday
+			ret[tagUID][year] = true
+		}
+	}
+
+	return ret, nil
 }
 
 func (ssc *SearchStatsCacheImpl) refreshConventions() (map[string]map[string]int, error) {

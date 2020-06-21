@@ -20,12 +20,12 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 		location := ""
 		year := ""
 		for variable, values := range vMap {
-			if variable == "$Year" {
+			if variable == consts.VAR_YEAR {
 				if len(values) != 1 {
 					return false
 				}
 				year = values[0]
-			} else if variable == "$ConventionLocation" {
+			} else if variable == consts.VAR_CONVENTION_LOCATION {
 				if len(values) != 1 {
 					return false
 				}
@@ -39,6 +39,26 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 			return false
 		}
 		return cm.SearchStats().DoesConventionExist(location, year)
+	} else if intent == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS {
+		year := ""
+		holiday := ""
+		for variable, values := range vMap {
+			if variable == consts.VAR_YEAR {
+				if len(values) != 1 {
+					return false
+				}
+				year = values[0]
+			} else if variable == consts.VAR_HOLIDAYS {
+				if len(values) != 1 {
+					return false
+				}
+				holiday = values[0]
+			}
+		}
+		if cm == nil {
+			return false
+		}
+		return cm.SearchStats().DoesHolidayExist(holiday, year)
 	} else {
 		return true
 	}
