@@ -225,18 +225,20 @@ func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]bo
 	ret := make(map[string]map[string]bool)
 
 	//  '1nyptSIo' is a const. uid for 'holidays' parent tag
-	rows, err := queries.Raw(ssc.mdb, `select t.uid as tag_uid, array_agg(distinct extract(year from (cu.properties ->> 'film_date')::date))
-	from tags t join tags tp on t.parent_id = tp.id
-	join content_units_tags cut on cut.tag_id = t.id
-	join content_units cu on cu.id = cut.content_unit_id
-	where tp.uid = '1nyptSIo' and cu.secure = 0 and cu.published = true
-	group by t.uid`).Query()
+	rows, err := queries.Raw(ssc.mdb, `select t.uid as tag_uid, 
+		array_agg(distinct extract(year from (cu.properties ->> 'film_date')::date))
+			from tags t join tags tp on t.parent_id = tp.id
+		join content_units_tags cut on cut.tag_id = t.id
+		join content_units cu on cu.id = cut.content_unit_id
+			where tp.uid = '1nyptSIo' and cu.secure = 0 and cu.published = true
+		group by t.uid`).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "refreshHolidays - Query failed.")
 	}
 	defer rows.Close()
 
+	ret[""] = make(map[string]bool) // Year without specific holiday
 	for rows.Next() {
 		var tagUID string
 		var years pq.StringArray
@@ -244,9 +246,10 @@ func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]bo
 		if err != nil {
 			return nil, errors.Wrap(err, "refreshHolidays rows.Scan")
 		}
-		ret[tagUID][""] = true // Holiday without specific year
+		ret[tagUID] = make(map[string]bool)
+		ret[tagUID][""] = true
 		for _, year := range years {
-			ret[""][year] = true // Year without specific holiday
+			ret[""][year] = true
 			ret[tagUID][year] = true
 		}
 	}
