@@ -226,12 +226,12 @@ func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]bo
 
 	//  '1nyptSIo' is a const. uid for 'holidays' parent tag
 	rows, err := queries.Raw(ssc.mdb, `select t.uid as tag_uid, 
-		array_agg(distinct extract(year from (cu.properties ->> 'film_date')::date))
-			from tags t join tags tp on t.parent_id = tp.id
+	array_remove(array_agg(distinct extract(year from (cu.properties ->> 'film_date')::date)), NULL)
+		from tags t join tags tp on t.parent_id = tp.id
 		join content_units_tags cut on cut.tag_id = t.id
 		join content_units cu on cu.id = cut.content_unit_id
-			where tp.uid = '1nyptSIo' and cu.secure = 0 and cu.published = true
-		group by t.uid`).Query()
+	where tp.uid = '1nyptSIo' and cu.secure = 0 and cu.published = true
+	group by t.uid;`).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "refreshHolidays - Query failed.")
