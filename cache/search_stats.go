@@ -238,9 +238,7 @@ func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]bo
 	}
 	defer rows.Close()
 
-	fmt.Printf("Init ret['']\n")
 	ret[""] = make(map[string]bool) // Year without specific holiday
-	fmt.Printf("ret[''] initialized\n")
 	for rows.Next() {
 		var tagUID string
 		var years pq.StringArray
@@ -248,17 +246,11 @@ func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]bo
 		if err != nil {
 			return nil, errors.Wrap(err, "refreshHolidays rows.Scan")
 		}
-		fmt.Printf("Init ret[%s]\n", tagUID)
 		ret[tagUID] = make(map[string]bool)
-		fmt.Printf("ret[%s] initialized. Setting ret[%s][''] = true.\n", tagUID, tagUID)
 		ret[tagUID][""] = true
-		fmt.Printf("ret[%s][''] = true is set.\n", tagUID)
 		for _, year := range years {
-			fmt.Printf("Setting ret[''][%s] = true.\n", year)
 			ret[""][year] = true
-			fmt.Printf("ret[''][%s] = true is set. Setting ret[%s][%s] = true.\n", year, tagUID, year)
 			ret[tagUID][year] = true
-			fmt.Printf("ret[%s][%s] = true is set.\n", tagUID, year)
 		}
 	}
 
