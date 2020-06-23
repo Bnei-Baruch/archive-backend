@@ -808,7 +808,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		for _, hit := range ret.Hits.Hits {
 			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
 				err = e.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
-			} else {
+			} else if hit.Type != consts.GRAMMAR_TYPE_LANDING_PAGE {
 				var src es.Result
 				err = json.Unmarshal(*hit.Source, &src)
 				if err != nil {
