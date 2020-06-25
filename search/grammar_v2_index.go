@@ -173,6 +173,16 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 					}
 					bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(rule))
 				} else {
+
+					/* We don't add suggestions for holiday variables since in some cases the search with variables brings worse results:
+					    1. The combination of the 'holiday' prefix with the holiday name is worst then just holiday name:
+					       Searching for 'Hanukkah' brings more and better results than 'holiday Hanukkah'.
+					    2. Searching combination of holiday name with a year ('Hanukkah 2018') brings Landing Page result
+					       that contain only one collection in the list that is already part of the regular search results.
+						  (Note that we will still see this kind of results in the suggest due to holiday collection titles).
+						Although we omit combinations with variables from suggest, we still support the search of landing pages for this combination. */
+					addSuggest := intent != consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS
+
 					// List of variables: ["$Year", "$ConventionLocation"]
 					variablesSet := VariablesFromString(variablesSetAsString)
 					// Set of possible variable values: [["2000", "2001", ...], ["Moscow", "Tel Aviv", "New York", ...]]
@@ -204,16 +214,18 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 							}
 						}
 
-						assignedRulesSuggest := []string{}
-						for i := range assignedRules {
-							assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
-						}
-						for i := range assignedRulesSuggest {
-							if assignedRulesSuggest[i] == "" {
-								log.Infof("NNN: %+v", assignedRulesSuggest[i])
+						if addSuggest {
+							assignedRulesSuggest := []string{}
+							for i := range assignedRules {
+								assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
 							}
+							for i := range assignedRulesSuggest {
+								if assignedRulesSuggest[i] == "" {
+									log.Infof("NNN: %+v", assignedRulesSuggest[i])
+								}
+							}
+							log.Infof("Rules suggest: [%s]", strings.Join(assignedRulesSuggest, "|"))
 						}
-						log.Infof("Rules suggest: [%s]", strings.Join(assignedRulesSuggest, "|"))
 
 						vMap := make(map[string][]string)
 						for i := range variablesSet {
