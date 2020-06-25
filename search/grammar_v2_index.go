@@ -214,8 +214,8 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 							}
 						}
 
+						assignedRulesSuggest := []string{}
 						if addSuggest {
-							assignedRulesSuggest := []string{}
 							for i := range assignedRules {
 								assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
 							}
