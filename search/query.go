@@ -81,6 +81,7 @@ func tokenize(str string) []string {
 					// Closing QuotationMark found
 					lastQuote = r
 					lastQuoteIdx = i
+					break
 				}
 			}
 		}

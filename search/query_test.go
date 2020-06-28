@@ -27,6 +27,14 @@ func (suite *QuerySuite) TestTokenize() {
 	assert.Equal(suite.T(), []string{"שלום", "\"i\"", "s\"k\"", "test"}, tokenize("שלום \"i\" s\"k\" test"))
 	assert.Equal(suite.T(), []string{"שלום", "\"i\"s \"k\"", "test"}, tokenize("שלום \"i\"s \"k\" test"))
 	assert.Equal(suite.T(), []string{"\"שלום", "שלום"}, tokenize("\"שלום שלום"))
+	assert.Equal(suite.T(), []string{"\"ab"}, tokenize("\"ab "))
+	assert.Equal(suite.T(), []string{"aaa", "\"ab"}, tokenize("aaa \"ab "))
+	assert.Equal(suite.T(), []string{"aaa", "\"ab \""}, tokenize("aaa \"ab \""))
+	assert.Equal(suite.T(), []string{"aaa", "\"ab \"", "another"}, tokenize("aaa \"ab \" another"))
+	assert.Equal(suite.T(), []string{"aaa", "\"ab \"", "another\""}, tokenize("aaa \"ab \" another\""))
+	assert.Equal(suite.T(), []string{"aaa", "\"ab \"", "another\"one"}, tokenize("aaa \"ab \" another\"one"))
+	assert.Equal(suite.T(), []string{"aaa", "\"ab another\""}, tokenize("aaa \"ab another\""))
+	assert.Equal(suite.T(), []string{"aaa", "\"ab another\"one else\""}, tokenize("aaa \"ab another\"one else\""))
 	assert.Equal(suite.T(),
 		[]string{"article", "of", "rab\"ash", "\" article of rab\"ash \"", "article", "of", "rab\"ash", "\" article of rab\"ash\""},
 		tokenize("article of rab\"ash \" article of rab\"ash \" article of rab\"ash \" article of rab\"ash\""))
