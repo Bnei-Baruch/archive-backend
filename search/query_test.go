@@ -26,6 +26,7 @@ func (suite *QuerySuite) TestTokenize() {
 	assert.Equal(suite.T(), []string{"שלום", "\"i\"s\"k\"", "test"}, tokenize("שלום \"i\"s\"k\" test"))
 	assert.Equal(suite.T(), []string{"שלום", "\"i\"", "s\"k\"", "test"}, tokenize("שלום \"i\" s\"k\" test"))
 	assert.Equal(suite.T(), []string{"שלום", "\"i\"s \"k\"", "test"}, tokenize("שלום \"i\"s \"k\" test"))
+	assert.Equal(suite.T(), []string{"\"שלום", "שלום"}, tokenize("\"שלום שלום"))
 	assert.Equal(suite.T(),
 		[]string{"article", "of", "rab\"ash", "\" article of rab\"ash \"", "article", "of", "rab\"ash", "\" article of rab\"ash\""},
 		tokenize("article of rab\"ash \" article of rab\"ash \" article of rab\"ash \" article of rab\"ash\""))
