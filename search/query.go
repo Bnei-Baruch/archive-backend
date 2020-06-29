@@ -76,8 +76,14 @@ func tokenize(str string) []string {
 			start = i
 		}
 		if i == start && lastQuote == rune(0) && isRuneQuotationMark(r) {
-			lastQuote = r
-			lastQuoteIdx = i
+			for k := i + 1; k < len(runes); k++ { // Make sure we have closing QuotationMark
+				if isTokenEnd(k, runes, r, i) && isRuneQuotationMark(runes[k]) {
+					// Closing QuotationMark found
+					lastQuote = r
+					lastQuoteIdx = i
+					break
+				}
+			}
 		}
 		if start >= 0 && isTokenEnd(i, runes, lastQuote, lastQuoteIdx) {
 			tokens = append(tokens, string(runes[start:i+1]))
