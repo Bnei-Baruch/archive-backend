@@ -153,9 +153,12 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 		if convertToIntErr == nil || (len(runes) == 3 && runes[1] == '"') || (len(runes) == 4 && runes[2] == '"') {
 			//  We dont use fuzzines for numeric values (number or hebrew numeric representation like מ"ג)
 			fuzzines = "0"
-		} else if len(runes) == 1 && runes[0] >= 'א' && runes[0] <= 'ת' {
-			// This logic allows finding single hebrew letter with ' symbol without the mention of the ' symbol.
-			// The solution is not perfect for all times. In some (rare) cases the letter may be replaced with another letter: ג' קווים - ד
+		} else if len(runes) == 1 || len(runes) == 2 && (runes[0] >= 'א' && runes[0] <= 'ת') {
+			// Allow fuzzines for short Hebrew words (by default fuzzines is disabled for terms length < 3).
+			// This is usefull for:
+			// 1. Finding Hebrew terms that contains word prefix without mention of the prefix (e.g. find וכח when searching for כח).
+			// 2. Finding single hebrew letter with ' symbol without the mention of the ' symbol.
+			//    The solution is not perfect for all times. In some (rare) cases the letter may be replaced with another letter: ג' קווים - ד
 			fuzzines = "1"
 			transpositions = "false" // Limit the fuzzines not to include transpositions of two adjacent characters (ח' -> 'ח). Maybe not required.
 		}
