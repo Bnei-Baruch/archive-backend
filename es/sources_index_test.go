@@ -98,36 +98,39 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	})
 	suite.validateSourcesFullPath(indexNameEn, indexer, [][]string{[]string{source1UID, "t1", "t2"}, []string{source2UID, "t3", "t4"}})
 
-	//TBD add test for indexing with position (chapter)sourceShamatiUID := suite.us(Source{Name: "test-name-3", ParentID: null.NewInt64(int64(consts.SRC_SHAMATI), true),
+	//TBD add test for indexing with position (chapter)parentChapterPositionUID := suite.us(Source{Name: "test-name-3", ParentID: null.NewInt64(int64(consts.SRC_SHAMATI), true),
 
 	fmt.Printf("\n\n\nAdd source Shamati.\n\n")
-	sourceShamati := Source{Name: "Shamati"}
+	parentChapterPosition := Source{Name: "Shamati"}
 
-	sourceShamatiUID, sourceShamatiID := suite.us(sourceShamati, consts.LANG_ENGLISH)
+	parentChapterPositionUID, parentChapterPositionID := suite.us(parentChapterPosition, consts.LANG_ENGLISH)
 
-	consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[sourceShamatiUID] = true
-	//r.Nil(indexer.SourceUpdate(sourceShamatiUID))
+	consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parentChapterPositionUID] = true
+	//r.Nil(indexer.SourceUpdate(parentChapterPositionUID))
+	//source2UID
 
 	fmt.Println("Validate adding source with file but without author - should not index.")
-	suite.usfc(sourceShamatiUID, consts.LANG_ENGLISH)
-	//r.Nil(indexer.SourceUpdate(sourceShamatiUID))
+	suite.usfc(parentChapterPositionUID, consts.LANG_ENGLISH)
+	//r.Nil(indexer.SourceUpdate(parentChapterPositionUID))
 
 	fmt.Println("Validate adding source with file and author and validate.")
-	suite.asa(Source{MDB_UID: sourceShamatiUID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 7, Code: "t5"}, true, true)
-	r.Nil(indexer.SourceUpdate(sourceShamatiUID))
+	suite.asa(Source{MDB_UID: parentChapterPositionUID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 7, Code: "t5"}, true, true)
+	r.Nil(indexer.SourceUpdate(parentChapterPositionUID))
 	///
-	sourceShamatiDetailUID, _ := suite.us(Source{Name: "test-name-3",
-		ParentID: null.NewInt64(sourceShamatiID, true),
+	/// parentChapterPositionID = -1
+	/// First test for -1 position, is it doesn't indexed
+	chapterPositionUID, _ := suite.us(Source{Name: "test-name-3",
+		ParentID: null.NewInt64(parentChapterPositionID, true),
 		Position: null.NewInt(1, true)}, consts.LANG_ENGLISH)
-	suite.us(Source{Name: "שם-בדיקה-3", MDB_UID: sourceShamatiDetailUID,
-		ParentID: null.NewInt64(sourceShamatiID, true),
+	//
+	suite.us(Source{Name: "שם-בדיקה-3", MDB_UID: chapterPositionUID,
+		ParentID: null.NewInt64(parentChapterPositionID, true),
 		Position: null.NewInt(1, true)}, consts.LANG_HEBREW)
-	suite.usfc(sourceShamatiDetailUID, consts.LANG_ENGLISH)
-	suite.usfc(sourceShamatiDetailUID, consts.LANG_HEBREW)
-	//r.Nil(indexer.SourceUpdate(sourceShamatiDetailUID))
+	//
+	suite.usfc(chapterPositionUID, consts.LANG_ENGLISH)
+	suite.usfc(chapterPositionUID, consts.LANG_HEBREW)
 	///
-
-	r.Nil(indexer.SourceUpdate(sourceShamatiDetailUID))
+	r.Nil(indexer.SourceUpdate(chapterPositionUID))
 
 	fmt.Printf("\n\n\nReindexing everything for Shamati.\n\n")
 	// Index existing DB data.
@@ -135,8 +138,40 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	r.Nil(indexer.RefreshAll())
 	fmt.Printf("\n\n\nValidate we have source with 2 languages for Shamati.\n\n")
 
-	suite.validateFullNames(indexNameEn, indexer, []string{"Test Name > test-name-1", "Test Name 2 > test-name-2", "Test Name 2 > Shamati", "Test Name 2 > Shamati > 1. test-name-3"})
-	//TBD add test for indexing with description
+	suite.validateNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2", "Shamati", "test-name-3"})
+	suite.validateFullNames(indexNameEn, indexer,
+		[]string{"Test Name > test-name-1", "Test Name 2 > test-name-2",
+			"Test Name 2 > Shamati", "Test Name 2 > Shamati > 1. test-name-3"})
+	suite.validateFullNames(indexNameHe, indexer,
+		[]string{"שם לבדיקה > שם-בדיקה-1", "שם נוסף לבדיקה > שם-בדיקה-2", "א. שם-בדיקה-3"})
+	//TBD add test for indexing with position -1:
+	suite.us(Source{MDB_UID: chapterPositionUID, Position: null.NewInt(-1, true)}, consts.LANG_ENGLISH)
+	suite.us(Source{MDB_UID: chapterPositionUID, Position: null.NewInt(-1, true)}, consts.LANG_HEBREW)
+	// Index existing DB data.
+	r.Nil(indexer.ReindexAll(esc))
+	suite.validateFullNames(indexNameEn, indexer,
+		[]string{"Test Name > test-name-1", "Test Name 2 > test-name-2",
+			"Test Name 2 > Shamati", "Test Name 2 > Shamati > test-name-3"})
+	suite.validateFullNames(indexNameHe, indexer,
+		[]string{"שם לבדיקה > שם-בדיקה-1", "שם נוסף לבדיקה > שם-בדיקה-2", "שם-בדיקה-3"})
+	//
+	//TBD add test for indexing with different positions:
+	suite.us(Source{MDB_UID: chapterPositionUID, Position: null.NewInt(244, true)}, consts.LANG_ENGLISH)
+	suite.us(Source{MDB_UID: chapterPositionUID, Position: null.NewInt(244, true)}, consts.LANG_HEBREW)
+	// Index existing DB data.
+	r.Nil(indexer.ReindexAll(esc))
+	suite.validateFullNames(indexNameEn, indexer,
+		[]string{"Test Name > test-name-1", "Test Name 2 > test-name-2", "Test Name 2 > Shamati", "Test Name 2 > Shamati > 244. test-name-3"})
+	suite.validateFullNames(indexNameHe, indexer,
+		[]string{"שם לבדיקה > שם-בדיקה-1", "שם נוסף לבדיקה > שם-בדיקה-2", "רמד. שם-בדיקה-3"})
+
+	//TBD add test for indexing with other parent id:
+	//ParentID: null.NewInt64(parentChapterPositionID, true)
+	suite.us(Source{MDB_UID: chapterPositionUID, ParentID: null.NewInt64(1, true)}, consts.LANG_ENGLISH)
+	// Index existing DB data.
+	r.Nil(indexer.ReindexAll(esc))
+	suite.validateFullNames(indexNameEn, indexer,
+		[]string{"Test Name > test-name-1", "Test Name 2 > test-name-2", "Test Name 2 > Shamati", "Test Name > test-name-1 > test-name-3"})
 
 	fmt.Println("Delete sources from DB, reindex and validate we have 0 sources.")
 	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 3})
@@ -144,9 +179,9 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.rsa(Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 5})
 	suite.rsa(Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 6})
 	//
-	suite.rsa(Source{MDB_UID: sourceShamatiUID}, mdbmodels.Author{ID: 7})
+	suite.rsa(Source{MDB_UID: parentChapterPositionUID}, mdbmodels.Author{ID: 7})
 
-	UIDs := []string{source1UID, source2UID, sourceShamatiUID, sourceShamatiDetailUID}
+	UIDs := []string{source1UID, source2UID, parentChapterPositionUID, chapterPositionUID}
 	r.Nil(deleteSources(UIDs))
 	r.Nil(indexer.ReindexAll(esc))
 	///

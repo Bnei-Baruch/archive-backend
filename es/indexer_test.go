@@ -839,6 +839,18 @@ func updateSource(source Source, lang string) (string, int64, error) {
 			return "", 0, err
 		}
 		mdbSource = *s
+		if source.Position.Valid {
+			mdbSource.Position = source.Position
+		}
+
+		if source.ParentID.Valid {
+			mdbSource.ParentID = source.ParentID
+		}
+
+		if err := mdbSource.Update(common.DB); err != nil {
+			return "", 0, err
+		}
+
 	} else {
 		mdbSource = mdbmodels.Source{
 			UID:    utils.GenerateUID(8),
