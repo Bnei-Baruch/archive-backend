@@ -836,6 +836,37 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	return resp, nil
 }
 
+func handleCollectionWOCUs(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
+
+	c, err := mdbmodels.Collections(db,
+		SECURE_PUBLISHED_MOD,
+		qm.Where("uid = ?", r.UID)).
+		One()
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, NewNotFoundError()
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+
+	// collection
+	cl, err := mdbToC(c)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// collection i18n
+	ci18nsMap, err := loadCI18ns(db, r.Language, []int64{c.ID})
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	if i18ns, ok := ci18nsMap[c.ID]; ok {
+		setCI18n(cl, r.Language, i18ns)
+	}
+	return cl, nil
+}
+
 func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 
 	c, err := mdbmodels.Collections(db,
@@ -1209,6 +1240,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		"CollectionsContentUnits",
 		"CollectionsContentUnits.Collection",
 	}
+	if r.WithTags {
+		loadTables = append(loadTables, "Tags")
+	}
 	if r.WithDerivations {
 		loadTables = append(loadTables,
 			"SourceContentUnitDerivations",
@@ -1228,6 +1262,16 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	cus, ex := prepareCUs(db, units, r.Language)
 	if ex != nil {
 		return nil, ex
+	}
+	// tags
+	for idx, unit := range units {
+		cu := cus[idx]
+		if r.WithTags && len(unit.R.Tags) > 0 {
+			cu.tagIDs = make([]int64, len(unit.R.Tags))
+			for i, x := range unit.R.Tags {
+				cu.tagIDs[i] = x.ID
+			}
+		}
 	}
 
 	if r.WithDerivations {
@@ -1555,6 +1599,52 @@ FROM idsGroupedByType
 		LatestContentUnits: cus,
 		Counts:             counts,
 	}, nil
+}
+
+// Convert tag.keys (IDs of tags) to their translation
+func handleTagsTranslation(db *sql.DB, r BaseRequest, tags map[int64]string) *HttpError {
+	ids := make([]int64, len(tags))
+	i := 0
+	for k := range tags {
+		ids[i] = k
+		i++
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	q := fmt.Sprintf(`
+		SELECT t.id,
+			coalesce((SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = '%s'),
+					 (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'en'),
+					 (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'he'))
+			AS label
+		FROM tags t
+		WHERE t.id IN (`,
+		r.Language)
+	args := make([]string, len(ids))
+	for i := range ids {
+		args[i] = fmt.Sprintf("$%d", i+1)
+	}
+	q += strings.Join(args, ",") + ")"
+	var (
+		id    int64
+		label string
+	)
+	rows, err := queries.Raw(db, q, utils.ConvertArgsInt64(ids)...).Query()
+	if err != nil {
+		return NewInternalError(err)
+	}
+	defer rows.Close()
+
+	// Iterate rows, build tree
+	for rows.Next() {
+		err = rows.Scan(&id, &label)
+		if err != nil {
+			return NewInternalError(err)
+		}
+		tags[id] = label
+	}
+	return nil
 }
 
 func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError) {

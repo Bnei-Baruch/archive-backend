@@ -132,6 +132,7 @@ type ContentUnitsRequest struct {
 	MediaLanguageFilter
 	WithFiles       bool `json:"with_files" form:"with_files"`
 	WithDerivations bool `json:"with_derivations" form:"with_derivations"`
+	WithTags        bool `json:"with_tags" form:"with_tags"`
 }
 
 type ContentUnitsResponse struct {
@@ -296,18 +297,19 @@ type Collection struct {
 
 type ContentUnit struct {
 	mdbID            int64
-	ID               string                  `json:"id"`
-	ContentType      string                  `json:"content_type"`
-	NameInCollection string                  `json:"name_in_collection,omitempty"`
-	FilmDate         *utils.Date             `json:"film_date,omitempty"`
-	Name             string                  `json:"name,omitempty"`
-	Description      string                  `json:"description,omitempty"`
-	Duration         float64                 `json:"duration,omitempty"`
-	OriginalLanguage string                  `json:"original_language,omitempty"`
-	Files            []*File                 `json:"files,omitempty"`
-	Collections      map[string]*Collection  `json:"collections,omitempty"`
-	Sources          []string                `json:"sources,omitempty"`
-	Tags             []string                `json:"tags,omitempty"`
+	ID               string                 `json:"id"`
+	ContentType      string                 `json:"content_type"`
+	NameInCollection string                 `json:"name_in_collection,omitempty"`
+	FilmDate         *utils.Date            `json:"film_date,omitempty"`
+	Name             string                 `json:"name,omitempty"`
+	Description      string                 `json:"description,omitempty"`
+	Duration         float64                `json:"duration,omitempty"`
+	OriginalLanguage string                 `json:"original_language,omitempty"`
+	Files            []*File                `json:"files,omitempty"`
+	Collections      map[string]*Collection `json:"collections,omitempty"`
+	Sources          []string               `json:"sources,omitempty"`
+	Tags             []string               `json:"tags,omitempty"`
+	tagIDs           []int64
 	Publishers       []string                `json:"publishers,omitempty"`
 	SourceUnits      map[string]*ContentUnit `json:"source_units,omitempty"`
 	DerivedUnits     map[string]*ContentUnit `json:"derived_units,omitempty"`
