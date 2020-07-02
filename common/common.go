@@ -58,19 +58,19 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	log.Info("Initializing type registries")
 	utils.Must(mdb.InitTypeRegistries(DB))
 
-	log.Info("Setting up connection to ElasticSearch")
-	url := viper.GetString("elasticsearch.url")
-	ESC = search.MakeESManager(url)
-
-	LOGGER = search.MakeSearchLogger(ESC)
-
-	esc, err := ESC.GetClient()
-	if esc != nil && err == nil {
-		esversion, err := esc.ElasticsearchVersion(url)
-		utils.Must(err)
-		log.Infof("Elasticsearch version %s", esversion)
-	}
-
+	//log.Info("Setting up connection to ElasticSearch")
+	//url := viper.GetString("elasticsearch.url")
+	//ESC = search.MakeESManager(url)
+	//
+	//LOGGER = search.MakeSearchLogger(ESC)
+	//
+	//esc, err := ESC.GetClient()
+	//if esc != nil && err == nil {
+	//	esversion, err := esc.ElasticsearchVersion(url)
+	//	utils.Must(err)
+	//	log.Infof("Elasticsearch version %s", esversion)
+	//}
+	//
 	es.InitVars()
 
 	TOKENS_CACHE = search.MakeTokensCache(consts.TOKEN_CACHE_SIZE)
