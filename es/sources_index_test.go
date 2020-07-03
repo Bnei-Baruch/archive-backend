@@ -98,7 +98,7 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	})
 	suite.validateSourcesFullPath(indexNameEn, indexer, [][]string{[]string{source1UID, "t1", "t2"}, []string{source2UID, "t3", "t4"}})
 
-	//TBD add test for indexing with position (chapter)parentChapterPositionUID := suite.us(Source{Name: "test-name-3", ParentID: null.NewInt64(int64(consts.SRC_SHAMATI), true),
+	//TBD add test for indexing with position (chapter)
 
 	fmt.Printf("\n\n\nAdd source Shamati.\n\n")
 	parentChapterPosition := Source{Name: "Shamati"}
@@ -106,19 +106,15 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	parentChapterPositionUID, parentChapterPositionID := suite.us(parentChapterPosition, consts.LANG_ENGLISH)
 
 	consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parentChapterPositionUID] = true
-	//r.Nil(indexer.SourceUpdate(parentChapterPositionUID))
-	//source2UID
 
 	fmt.Println("Validate adding source with file but without author - should not index.")
 	suite.usfc(parentChapterPositionUID, consts.LANG_ENGLISH)
-	//r.Nil(indexer.SourceUpdate(parentChapterPositionUID))
+	r.Nil(indexer.SourceUpdate(parentChapterPositionUID))
 
 	fmt.Println("Validate adding source with file and author and validate.")
 	suite.asa(Source{MDB_UID: parentChapterPositionUID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 7, Code: "t5"}, true, true)
 	r.Nil(indexer.SourceUpdate(parentChapterPositionUID))
-	///
-	/// parentChapterPositionID = -1
-	/// First test for -1 position, is it doesn't indexed
+	/// First test for 1 position
 	chapterPositionUID, _ := suite.us(Source{Name: "test-name-3",
 		ParentID: null.NewInt64(parentChapterPositionID, true),
 		Position: null.NewInt(1, true)}, consts.LANG_ENGLISH)
@@ -144,7 +140,7 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 			"Test Name 2 > Shamati", "Test Name 2 > Shamati > 1. test-name-3"})
 	suite.validateFullNames(indexNameHe, indexer,
 		[]string{"שם לבדיקה > שם-בדיקה-1", "שם נוסף לבדיקה > שם-בדיקה-2", "א. שם-בדיקה-3"})
-	//TBD add test for indexing with position -1:
+	// Add test for not indexed with position -1:
 	suite.us(Source{MDB_UID: chapterPositionUID, Position: null.NewInt(-1, true)}, consts.LANG_ENGLISH)
 	suite.us(Source{MDB_UID: chapterPositionUID, Position: null.NewInt(-1, true)}, consts.LANG_HEBREW)
 	// Index existing DB data.
@@ -155,7 +151,7 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.validateFullNames(indexNameHe, indexer,
 		[]string{"שם לבדיקה > שם-בדיקה-1", "שם נוסף לבדיקה > שם-בדיקה-2", "שם-בדיקה-3"})
 	//
-	//TBD add test for indexing with different positions:
+	//Add test for indexing with different positions:
 	suite.us(Source{MDB_UID: chapterPositionUID, Position: null.NewInt(244, true)}, consts.LANG_ENGLISH)
 	suite.us(Source{MDB_UID: chapterPositionUID, Position: null.NewInt(244, true)}, consts.LANG_HEBREW)
 	// Index existing DB data.
@@ -165,8 +161,7 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.validateFullNames(indexNameHe, indexer,
 		[]string{"שם לבדיקה > שם-בדיקה-1", "שם נוסף לבדיקה > שם-בדיקה-2", "רמד. שם-בדיקה-3"})
 
-	//TBD add test for indexing with other parent id:
-	//ParentID: null.NewInt64(parentChapterPositionID, true)
+	//Add test for indexing with other parent id:
 	suite.us(Source{MDB_UID: chapterPositionUID, ParentID: null.NewInt64(1, true)}, consts.LANG_ENGLISH)
 	// Index existing DB data.
 	r.Nil(indexer.ReindexAll(esc))
@@ -184,7 +179,6 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	UIDs := []string{source1UID, source2UID, parentChapterPositionUID, chapterPositionUID}
 	r.Nil(deleteSources(UIDs))
 	r.Nil(indexer.ReindexAll(esc))
-	///
 
 	suite.validateFullNames(indexNameEn, indexer, []string{})
 	suite.validateFullNames(indexNameHe, indexer, []string{})

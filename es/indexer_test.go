@@ -102,16 +102,14 @@ type Source struct {
 	Name string `json:"name"`
 
 	// Deprecated fields (since we use 'Result Template' in order to index the sources):
-	Description string   `json:"description"`
-	Content     string   `json:"content"`
-	Sources     []string `json:"sources"`
-	Authors     []string `json:"authors"`
-	PathNames   []string `json:"path_names"`
-	FullName    []string `json:"full_name"`
-
-	//
-	ParentID null.Int64 `json:"parent_id"`
-	Position null.Int   `json:"position"`
+	Description string     `json:"description"`
+	Content     string     `json:"content"`
+	Sources     []string   `json:"sources"`
+	Authors     []string   `json:"authors"`
+	PathNames   []string   `json:"path_names"`
+	FullName    []string   `json:"full_name"`
+	ParentID    null.Int64 `json:"parent_id"`
+	Position    null.Int   `json:"position"`
 }
 
 func (suite *IndexerSuite) SetupSuite() {
@@ -831,6 +829,8 @@ func removeTag(id int64) error {
 	return mdbmodels.Tags(common.DB, qm.WhereIn("id = ?", id)).DeleteAll()
 }
 
+//Return values: MDB_UID - key of the source in string interpretation
+//				 MDB_ID - key of the source in int64 interpretation
 func updateSource(source Source, lang string) (string, int64, error) {
 	var mdbSource mdbmodels.Source
 	if source.MDB_UID != "" {
@@ -865,10 +865,6 @@ func updateSource(source Source, lang string) (string, int64, error) {
 		}
 		if source.Position.Valid {
 			mdbSource.Position = source.Position
-		}
-		if source.MDB_ID.Valid {
-			/// mdbSource.ID = source.MDB_ID.Value
-
 		}
 
 		if err := mdbSource.Insert(common.DB); err != nil {
@@ -1196,15 +1192,7 @@ func (suite *IndexerSuite) rt(id int64) {
 }
 
 //update source
-func (suite IndexerSuite) us(source Source, lang string) (string, int64) {
-	r := require.New(suite.T())
-	uid, id, err := updateSource(source, lang)
-	r.Nil(err)
-	return uid, id
-}
-
-//update source shamati
-func (suite *IndexerSuite) us_shamati(source Source, lang string) (string, int64) {
+func (suite *IndexerSuite) us(source Source, lang string) (string, int64) {
 	r := require.New(suite.T())
 	uid, id, err := updateSource(source, lang)
 	r.Nil(err)
