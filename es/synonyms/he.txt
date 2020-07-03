@@ -161,4 +161,4 @@
 10	עשר
 
 #Added by Yuri at 3.07.20 (not in spreadsheet)
-כח כוח
+כח	כוח
