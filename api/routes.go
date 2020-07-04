@@ -42,17 +42,27 @@ func SetupRoutes(router *gin.Engine) {
 		router.POST("/eval/sxs", EvalSxSHandler)
 	}
 
-	router.GET("/feeds/rus_zohar", FeedRusZohar)
-	router.GET("/feeds/rus_zohar.rss", FeedRusZohar)
-	router.GET("/feeds/rus_for_laitman_ru", FeedRusForLaitmanRu)
-	router.GET("/feeds/rus_for_laitman_ru.rss", FeedRusForLaitmanRu)
-	router.GET("/feeds/wsxml.xml", FeedWSXML)
 	router.GET("/rss.php", FeedRssPhp)
-	router.GET("/feeds/rss_video.php", FeedRssVideo)
-	router.GET("/feeds/podcast/:DLANG/:DF", FeedPodcast)
-	router.GET("/feeds/podcast.rss/:DLANG/:DF", FeedPodcast)
-
-	router.GET("/feeds/morning_lesson", FeedMorningLesson)
+	feeds := router.Group("/feeds")
+	{
+		feeds.GET("/rus_zohar", FeedRusZohar)
+		feeds.GET("/rus_zohar.rss", FeedRusZohar)
+		feeds.GET("/rus_for_laitman_ru", FeedRusForLaitmanRu)
+		feeds.GET("/rus_for_laitman_ru.rss", FeedRusForLaitmanRu)
+		feeds.GET("/wsxml.xml", FeedWSXML)
+		feeds.GET("/rss_video.php", FeedRssVideo)
+		feeds.GET("/podcast/:DLANG/:DF", FeedPodcast)
+		feeds.GET("/podcast.rss/:DLANG/:DF", FeedPodcast)
+		feeds.GET("/morning_lesson", FeedMorningLesson)
+		collections := feeds.Group("/collections")
+		{
+			collections.GET("/:DLANG/:COLLECTION", FeedCollections)
+			collections.GET("/:DLANG/:COLLECTION/df/:DF", FeedCollections)
+			collections.GET("/:DLANG/:COLLECTION/tag/:TAG", FeedCollections)
+			collections.GET("/:DLANG/:COLLECTION/df/:DF/tag/:TAG", FeedCollections)
+			collections.GET("/:DLANG/:COLLECTION/tag/:TAG/df/:DF", FeedCollections)
+		}
+	}
 
 	cms := router.Group("/cms")
 	cms.GET("/persons/:id", CMSPerson)

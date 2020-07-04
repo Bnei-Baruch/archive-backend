@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"gopkg.in/gin-gonic/gin.v1"
@@ -133,12 +134,14 @@ func FeedRusForLaitmanRu(c *gin.Context) {
 }
 
 type feedConfig struct {
-	DLANG string
-	Lang  string
-	DAYS  int64
-	CID   int64
-	DF    string
-	DT    string
+	DLANG      string
+	Lang       string
+	DAYS       int64
+	CID        int64
+	DF         string
+	DT         string
+	COLLECTION string
+	TAG        string
 }
 
 // wsxml.xml?CID=4016&DLANG=HEB&DF=2013-04-30&DT=2013-03-31
@@ -629,4 +632,8 @@ func (config *feedConfig) getConfig(c *gin.Context) {
 	if config.DF == "" && df != "" {
 		config.DF = df
 	}
+	config.COLLECTION = c.Param("COLLECTION")
+	tag := c.Param("TAG")
+	parts := strings.Split(tag, "_")
+	config.TAG = parts[len(parts)-1]
 }
