@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bnei-Baruch/archive-backend/es"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
@@ -301,4 +303,55 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	}
 	// log.Infof("Intents: %+v", intents)
 	return normalizedIntents, nil
+}
+
+func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday string, score float64) (*elastic.SearchHit, error) {
+	queryMask := `select c.uid, c.properties from collections c
+	join tags t on c.properties ->> 'holiday_tag' = t.uid
+	%s`
+	uidMask := `t.uid = '%s'`
+	yearMask := `extract(year from (c.properties ->> 'start_date')::date) = %s`
+
+	var whereQuery string
+	if year != "" && holiday != "" {
+		whereQuery = fmt.Sprintf("where %s and %s", fmt.Sprintf(uidMask, holiday), fmt.Sprintf(yearMask, year))
+	} else if year != "" {
+		whereQuery = fmt.Sprintf("where %s", fmt.Sprintf(yearMask, year))
+	} else if holiday != "" {
+		whereQuery = fmt.Sprintf("where %s", fmt.Sprintf(uidMask, holiday))
+	}
+
+	var properties json.RawMessage
+	var mdbUID string
+	var effectiveDate es.EffectiveDate
+
+	query := fmt.Sprintf(queryMask, whereQuery)
+	err := e.mdb.QueryRow(query).Scan(&mdbUID, &properties)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(properties, &effectiveDate)
+	if err != nil {
+		return nil, err
+	}
+
+	result := es.Result{
+		EffectiveDate: effectiveDate.EffectiveDate,
+		MDB_UID:       mdbUID,
+		ResultType:    consts.ES_RESULT_TYPE_COLLECTIONS,
+	}
+
+	resultJson, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+
+	hit := &elastic.SearchHit{
+		Source: (*json.RawMessage)(&resultJson),
+		Type:   "result",
+		Score:  &score,
+		Index:  "SQL",
+	}
+	return hit, nil
 }

@@ -802,17 +802,50 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					}
 				}
 			}
-
 		}
 
-		for _, hit := range ret.Hits.Hits {
+		for i := 0; i < len(ret.Hits.Hits); i++ {
+			hit := ret.Hits.Hits[i]
 			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
 				err = e.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
-			} else if hit.Type != consts.GRAMMAR_TYPE_LANDING_PAGE {
+			} else if hit.Type == consts.GRAMMAR_TYPE_LANDING_PAGE {
+				// TBD same logic for locations
+				var grammarIntent GrammarIntent
+				err = json.Unmarshal(*hit.Source, &grammarIntent)
+				if err != nil {
+					log.Errorf("ESEngine.DoSearch - cannot unmarshal source to es.GrammarIntent.")
+					continue
+				}
+				if grammarIntent.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS && grammarIntent.FilterValues != nil {
+					var year string
+					var holiday string
+					for _, fv := range grammarIntent.FilterValues {
+						if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_HOLIDAYS] {
+							holiday = fv.Value
+
+						} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_YEAR] {
+							year = fv.Value
+						}
+						if year != "" && holiday != "" {
+							break
+						}
+					}
+					if year != "" && holiday != "" { // TBD improve decision - base ALSO on cache!
+						// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
+						log.Infof("Converting LandingPage of %s %s to a single collection.", holiday, year)
+						ret.Hits.Hits[i], err = e.HolidaysLandingPageToCollectionHit(year, holiday, grammarIntent.Score)
+						if err != nil {
+							log.Warnf("%+v", err)
+							return nil, errors.New(fmt.Sprintf("HolidaysLandingPageToCollectionHit Failed: %+v", err))
+						}
+					}
+				}
+				// TBD ConventionsLandingPageToCollectionHit
+			} else {
 				var src es.Result
 				err = json.Unmarshal(*hit.Source, &src)
 				if err != nil {
-					log.Errorf("ESEngine.DoSearch - cannot unmarshal source.")
+					log.Errorf("ESEngine.DoSearch - cannot unmarshal source to es.Result.")
 					continue
 				}
 				if src.ResultType == consts.ES_RESULT_TYPE_SOURCES {
