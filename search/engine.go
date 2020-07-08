@@ -804,12 +804,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 		}
 
+		// Prepare results for client
 		for i := 0; i < len(ret.Hits.Hits); i++ {
 			hit := ret.Hits.Hits[i]
-			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
+
+			switch hit.Type {
+			case consts.SEARCH_RESULT_TWEETS_MANY:
 				err = e.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
-			} else if hit.Type == consts.GRAMMAR_TYPE_LANDING_PAGE {
-				// TBD same logic for locations
+			case consts.GRAMMAR_TYPE_LANDING_PAGE:
 				var grammarIntent GrammarIntent
 				err = json.Unmarshal(*hit.Source, &grammarIntent)
 				if err != nil {
@@ -833,7 +835,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					if year != "" && holiday != "" { // TBD improve decision - base ALSO on cache!
 						// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
 						log.Infof("Converting LandingPage of %s %s to a single collection.", holiday, year)
-						ret.Hits.Hits[i], err = e.HolidaysLandingPageToCollectionHit(year, holiday, grammarIntent.Score)
+						ret.Hits.Hits[i], err = e.HolidaysLandingPageToCollectionHit(year, holiday, grammarIntent.Score, grammarIntent.Explanation)
 						if err != nil {
 							log.Warnf("%+v", err)
 							return nil, errors.New(fmt.Sprintf("HolidaysLandingPageToCollectionHit Failed: %+v", err))
@@ -841,7 +843,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					}
 				}
 				// TBD ConventionsLandingPageToCollectionHit
-			} else {
+			default:
 				var src es.Result
 				err = json.Unmarshal(*hit.Source, &src)
 				if err != nil {
@@ -876,6 +878,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				hit.Highlight = elastic.SearchHitHighlight{}
 			}
 		}
+
+		// TBD Remove duplicate results (added by grammar). Keep the results with a higher score.
 
 		if checkTypo && (ret.Hits.MaxScore == nil || *ret.Hits.MaxScore < consts.MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST) {
 			suggestText = <-suggestChannel
