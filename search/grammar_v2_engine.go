@@ -305,7 +305,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	return normalizedIntents, nil
 }
 
-func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday string, score float64, explanation *elastic.SearchExplanation) (*elastic.SearchHit, error) {
+func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday string) (*elastic.SearchHit, error) {
 	queryMask := `select c.uid, c.properties from collections c
 	join tags t on c.properties ->> 'holiday_tag' = t.uid
 	%s`
@@ -348,11 +348,9 @@ func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday strin
 	}
 
 	hit := &elastic.SearchHit{
-		Source:      (*json.RawMessage)(&resultJson),
-		Type:        "result",
-		Score:       &score,
-		Index:       "SQL",
-		Explanation: explanation,
+		Source: (*json.RawMessage)(&resultJson),
+		Type:   "result",
+		Index:  consts.GRAMMAR_LP_SINGLE_COLLECTION,
 	}
 	return hit, nil
 }

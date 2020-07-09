@@ -381,17 +381,46 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				sh.MaxScore = &boostedScore
 			}
 			intentHit := &elastic.SearchHit{}
+			convertedToSingleCollection := false
+			if intentValue.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS && intentValue.FilterValues != nil {
+				var year string
+				var holiday string
+				for _, fv := range intentValue.FilterValues {
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_HOLIDAYS] {
+						holiday = fv.Value
+
+					} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_YEAR] {
+						year = fv.Value
+					}
+					if year != "" && holiday != "" {
+						break
+					}
+				}
+				if year != "" && holiday != "" { // TBD improve decision - base ALSO on cache!
+					// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
+					log.Infof("Converting LandingPage of %s %s to a single collection.", holiday, year)
+					var err error
+					intentHit, err = e.HolidaysLandingPageToCollectionHit(year, holiday)
+					if err != nil {
+						log.Warnf("%+v", err)
+						return errors.New(fmt.Sprintf("HolidaysLandingPageToCollectionHit Failed: %+v", err)), nil
+					}
+					convertedToSingleCollection = true
+				}
+			}
 			if intentValue.Explanation != nil {
 				intentHit.Explanation = intentValue.Explanation
 			}
 			intentHit.Score = &boostedScore
-			intentHit.Index = consts.GRAMMAR_INDEX
-			intentHit.Type = intent.Type
-			source, err := json.Marshal(intentValue)
-			if err != nil {
-				return err, nil
+			if !convertedToSingleCollection {
+				intentHit.Index = consts.GRAMMAR_INDEX
+				intentHit.Type = intent.Type
+				source, err := json.Marshal(intentValue)
+				if err != nil {
+					return err, nil
+				}
+				intentHit.Source = (*json.RawMessage)(&source)
 			}
-			intentHit.Source = (*json.RawMessage)(&source)
 			sh.Hits = append(sh.Hits, intentHit)
 		}
 	}
@@ -454,25 +483,52 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	if len(results) == 0 {
 		return nil, nil
 	}
+
 	// Concatenate all result hits to single slice.
 	concatenated := make([]*elastic.SearchHit, 0)
 	for _, result := range results {
 		concatenated = append(concatenated, result.Hits.Hits...)
 	}
 
+	// Keep only unique results by MDB_UID (additional results with a duplicate MDB_UID might be added by Grammar). We keep the result with a higher score.
+	unique := make([]*elastic.SearchHit, 0)
+	mdbMap := make(map[string]*elastic.SearchHit)
+	for _, hit := range concatenated {
+		var mdbUid es.MdbUid
+		if hit.Score != nil {
+			if err := json.Unmarshal(*hit.Source, &mdbUid); err == nil {
+				if mdbUid.MDB_UID != "" {
+					if _, ok := mdbMap[mdbUid.MDB_UID]; !ok || *hit.Score > *mdbMap[mdbUid.MDB_UID].Score {
+						mdbMap[mdbUid.MDB_UID] = hit
+					}
+				} else {
+					unique = append(unique, hit)
+				}
+			} else {
+				log.Warnf("Unable to unmarshal source for hit ''%s.", hit.Uid)
+				unique = append(unique, hit)
+			}
+		} else {
+			unique = append(unique, hit)
+		}
+	}
+	for _, hit := range mdbMap {
+		unique = append(unique, hit)
+	}
+
 	// Apply sorting.
 	if sortBy == consts.SORT_BY_RELEVANCE {
-		sort.Stable(byRelevance(concatenated))
+		sort.Stable(byRelevance(unique))
 	} else if sortBy == consts.SORT_BY_OLDER_TO_NEWER {
-		sort.Stable(byOlderToNewer(concatenated))
+		sort.Stable(byOlderToNewer(unique))
 	} else if sortBy == consts.SORT_BY_NEWER_TO_OLDER {
-		sort.Stable(byNewerToOlder(concatenated))
+		sort.Stable(byNewerToOlder(unique))
 	} else if sortBy == consts.SORT_BY_SOURCE_FIRST {
-		sort.Stable(bySourceFirst(concatenated))
+		sort.Stable(bySourceFirst(unique))
 	}
 
 	// Filter by relevant page.
-	concatenated = concatenated[from:utils.Min(from+size, len(concatenated))]
+	unique = unique[from:utils.Min(from+size, len(unique))]
 
 	// Take arbitrary result to use as base and set it's hits.
 	// TODO: Rewrite this to be cleaner.
@@ -495,7 +551,7 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 		}
 	}
 
-	result.Hits.Hits = concatenated
+	result.Hits.Hits = unique
 	result.Hits.TotalHits = totalHits
 	result.Hits.MaxScore = &maxScore
 
@@ -805,49 +861,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 
 		// Prepare results for client
-		for i := 0; i < len(ret.Hits.Hits); i++ {
-			hit := ret.Hits.Hits[i]
-
-			switch hit.Type {
-			case consts.SEARCH_RESULT_TWEETS_MANY:
+		for _, hit := range ret.Hits.Hits {
+			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
 				err = e.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
-			case consts.GRAMMAR_TYPE_LANDING_PAGE:
-				var grammarIntent GrammarIntent
-				err = json.Unmarshal(*hit.Source, &grammarIntent)
-				if err != nil {
-					log.Errorf("ESEngine.DoSearch - cannot unmarshal source to es.GrammarIntent.")
-					continue
-				}
-				if grammarIntent.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS && grammarIntent.FilterValues != nil {
-					var year string
-					var holiday string
-					for _, fv := range grammarIntent.FilterValues {
-						if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_HOLIDAYS] {
-							holiday = fv.Value
-
-						} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_YEAR] {
-							year = fv.Value
-						}
-						if year != "" && holiday != "" {
-							break
-						}
-					}
-					if year != "" && holiday != "" { // TBD improve decision - base ALSO on cache!
-						// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
-						log.Infof("Converting LandingPage of %s %s to a single collection.", holiday, year)
-						ret.Hits.Hits[i], err = e.HolidaysLandingPageToCollectionHit(year, holiday, grammarIntent.Score, grammarIntent.Explanation)
-						if err != nil {
-							log.Warnf("%+v", err)
-							return nil, errors.New(fmt.Sprintf("HolidaysLandingPageToCollectionHit Failed: %+v", err))
-						}
-					}
-				}
-				// TBD ConventionsLandingPageToCollectionHit
-			default:
+			} else if hit.Type != consts.GRAMMAR_TYPE_LANDING_PAGE {
 				var src es.Result
 				err = json.Unmarshal(*hit.Source, &src)
 				if err != nil {
-					log.Errorf("ESEngine.DoSearch - cannot unmarshal source to es.Result.")
+					log.Errorf("ESEngine.DoSearch - cannot unmarshal source.")
 					continue
 				}
 				if src.ResultType == consts.ES_RESULT_TYPE_SOURCES {

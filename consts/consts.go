@@ -478,7 +478,8 @@ var INTENT_HIT_TYPE_BY_CT = map[string]string{
 }
 
 const (
-	GRAMMAR_INDEX = "grammar"
+	GRAMMAR_INDEX                = "grammar"
+	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 
 	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
 
