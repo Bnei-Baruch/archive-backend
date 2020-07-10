@@ -99,7 +99,6 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.validateSourcesFullPath(indexNameEn, indexer, [][]string{[]string{source1UID, "t1", "t2"}, []string{source2UID, "t3", "t4"}})
 
 	//TBD add test for indexing with position (chapter)
-
 	fmt.Printf("\n\n\nAdd source Shamati.\n\n")
 	parentChapterPosition := Source{Name: "Shamati"}
 
@@ -118,14 +117,11 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	chapterPositionUID, _ := suite.us(Source{Name: "test-name-3",
 		ParentID: null.NewInt64(parentChapterPositionID, true),
 		Position: null.NewInt(1, true)}, consts.LANG_ENGLISH)
-	//
 	suite.us(Source{Name: "שם-בדיקה-3", MDB_UID: chapterPositionUID,
 		ParentID: null.NewInt64(parentChapterPositionID, true),
 		Position: null.NewInt(1, true)}, consts.LANG_HEBREW)
-	//
 	suite.usfc(chapterPositionUID, consts.LANG_ENGLISH)
 	suite.usfc(chapterPositionUID, consts.LANG_HEBREW)
-	///
 	r.Nil(indexer.SourceUpdate(chapterPositionUID))
 
 	fmt.Printf("\n\n\nReindexing everything for Shamati.\n\n")
@@ -150,7 +146,6 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 			"Test Name 2 > Shamati", "Test Name 2 > Shamati > test-name-3"})
 	suite.validateFullNames(indexNameHe, indexer,
 		[]string{"שם לבדיקה > שם-בדיקה-1", "שם נוסף לבדיקה > שם-בדיקה-2", "שם-בדיקה-3"})
-	//
 	//Add test for indexing with different positions:
 	suite.us(Source{MDB_UID: chapterPositionUID, Position: null.NewInt(244, true)}, consts.LANG_ENGLISH)
 	suite.us(Source{MDB_UID: chapterPositionUID, Position: null.NewInt(244, true)}, consts.LANG_HEBREW)
@@ -173,7 +168,6 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 4})
 	suite.rsa(Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 5})
 	suite.rsa(Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 6})
-	//
 	suite.rsa(Source{MDB_UID: parentChapterPositionUID}, mdbmodels.Author{ID: 7})
 
 	UIDs := []string{source1UID, source2UID, parentChapterPositionUID, chapterPositionUID}
@@ -185,5 +179,4 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())
-
 }
