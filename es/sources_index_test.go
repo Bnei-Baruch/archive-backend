@@ -98,7 +98,6 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	})
 	suite.validateSourcesFullPath(indexNameEn, indexer, [][]string{[]string{source1UID, "t1", "t2"}, []string{source2UID, "t3", "t4"}})
 
-	//TBD add test for indexing with position (chapter)
 	fmt.Printf("\n\n\nAdd source Shamati.\n\n")
 	parentChapterPosition := Source{Name: "Shamati"}
 
