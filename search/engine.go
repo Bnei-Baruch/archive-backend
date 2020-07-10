@@ -396,7 +396,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 						break
 					}
 				}
-				if year != "" && holiday != "" { // TBD improve decision - base ALSO on cache!
+				if e.cache.SearchStats().DoesHolidaySingle(holiday, year) {
 					// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
 					log.Infof("Converting LandingPage of %s %s to a single collection.", holiday, year)
 					var err error
@@ -899,9 +899,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				hit.Highlight = elastic.SearchHitHighlight{}
 			}
 		}
-
-		// TBD Remove duplicate results (added by grammar). Keep the results with a higher score.
-
 		if checkTypo && (ret.Hits.MaxScore == nil || *ret.Hits.MaxScore < consts.MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST) {
 			suggestText = <-suggestChannel
 		}

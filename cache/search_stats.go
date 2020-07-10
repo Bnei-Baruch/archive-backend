@@ -137,6 +137,7 @@ type SearchStatsCache interface {
 	DoesConventionExist(location string, year string) bool
 	// |holiday| is the UID of the tag that is children of 'holidays' tag
 	DoesHolidayExist(holiday string, year string) bool
+	DoesHolidaySingle(holiday string, year string) bool
 }
 
 type SearchStatsCacheImpl struct {
@@ -144,7 +145,7 @@ type SearchStatsCacheImpl struct {
 	tags         ClassByTypeStats
 	sources      ClassByTypeStats
 	conventions  map[string]map[string]int
-	holidayYears map[string]map[string]bool
+	holidayYears map[string]map[string]int
 }
 
 func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
@@ -154,7 +155,12 @@ func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
 }
 
 func (ssc *SearchStatsCacheImpl) DoesHolidayExist(holiday string, year string) bool {
-	return ssc.holidayYears[holiday][year]
+	return ssc.holidayYears[holiday][year] > 0
+}
+
+func (ssc *SearchStatsCacheImpl) DoesHolidaySingle(holiday string, year string) bool {
+	//fmt.Printf("Holidays count for %s %s - %d", holiday, year, ssc.holidayYears[holiday][year])
+	return ssc.holidayYears[holiday][year] == 1
 }
 
 func (ssc *SearchStatsCacheImpl) DoesConventionExist(location string, year string) bool {
@@ -221,8 +227,8 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	return nil
 }
 
-func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]bool, error) {
-	ret := make(map[string]map[string]bool)
+func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]int, error) {
+	ret := make(map[string]map[string]int)
 
 	rows, err := queries.Raw(ssc.mdb, `select t.uid as tag_uid, 
 		array_remove(array_agg(distinct extract(year from (c.properties ->> 'start_date')::date)), NULL) as years
@@ -236,7 +242,7 @@ func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]bo
 	}
 	defer rows.Close()
 
-	ret[""] = make(map[string]bool) // Year without specific holiday
+	ret[""] = make(map[string]int) // Year without specific holiday
 	for rows.Next() {
 		var tagUID string
 		var years pq.StringArray
@@ -244,11 +250,13 @@ func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]bo
 		if err != nil {
 			return nil, errors.Wrap(err, "refreshHolidays rows.Scan")
 		}
-		ret[tagUID] = make(map[string]bool)
-		ret[tagUID][""] = true
+		if _, ok := ret[tagUID]; !ok {
+			ret[tagUID] = make(map[string]int)
+		}
 		for _, year := range years {
-			ret[""][year] = true
-			ret[tagUID][year] = true
+			ret[tagUID][""]++
+			ret[""][year]++
+			ret[tagUID][year]++
 		}
 	}
 
