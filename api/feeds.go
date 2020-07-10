@@ -134,14 +134,15 @@ func FeedRusForLaitmanRu(c *gin.Context) {
 }
 
 type feedConfig struct {
-	DLANG      string
-	Lang       string
+	DLANG      string // 3-letter lang
+	Lang       string // 2-letter lang
 	DAYS       int64
 	CID        int64
-	DF         string
-	DT         string
+	DF         string // date from; data format
+	DT         string // date to
 	COLLECTION string
-	TAG        string
+	TAG        string   // tag|tag_tag|...
+	CT         []string // comma separated content type(s)
 }
 
 // wsxml.xml?CID=4016&DLANG=HEB&DF=2013-04-30&DT=2013-03-31
@@ -633,6 +634,7 @@ func (config *feedConfig) getConfig(c *gin.Context) {
 		config.DF = df
 	}
 	config.COLLECTION = c.Param("COLLECTION")
+	config.CT = strings.Split(c.Param("CT"), ",")
 	tag := c.Param("TAG")
 	parts := strings.Split(tag, "_")
 	config.TAG = parts[len(parts)-1]

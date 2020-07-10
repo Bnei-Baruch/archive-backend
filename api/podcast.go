@@ -262,7 +262,7 @@ func FeedPodcast(c *gin.Context) {
 	feed := channel.CreateFeed()
 	feedXml, err := xml.Marshal(feed)
 	payload := []byte(xml.Header + string(feedXml))
-	c.Data(http.StatusOK, "application/xml; charset=utf-8", []byte(payload))
+	c.Data(http.StatusOK, "application/xml; charset=utf-8", payload)
 }
 
 func FeedCollections(c *gin.Context) {
@@ -343,6 +343,89 @@ func FeedCollections(c *gin.Context) {
 		cur.Tags = []string{config.TAG}
 	}
 	languages := []string{config.Lang}
+	renderContentUnits(db, cur, mediaTypes, languages, c, channel, href)
+}
+
+func FeedByContentType(c *gin.Context) {
+	var config feedConfig
+	(&config).getConfig(c)
+
+	db := c.MustGet("MDB_DB").(*sql.DB)
+
+	//DF=[A]/V/X
+	var mediaTypes []string
+	if config.DF == "V" {
+		mediaTypes = []string{consts.MEDIA_MP4}
+	} else if config.DF == "A" {
+		mediaTypes = []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
+	} else {
+		mediaTypes = []string{consts.MEDIA_MP4, consts.MEDIA_MP3a, consts.MEDIA_MP3b}
+	}
+	href := "https://old.kabbalahmedia.info/cover_podcast.jpg"
+	l := "/feeds/content_type/" + config.DLANG + "/" + strings.Join(config.CT, ",")
+	if len(config.TAG) > 0 {
+		l += "/tag/" + config.TAG
+	}
+	if config.DF != "" {
+		l += "/df/" + config.DF
+	}
+	r := BaseRequest{
+		Language: config.Lang,
+	}
+	tags, errH := handleTagsTranslationByID(db, r, []string{config.TAG})
+	if errH != nil {
+		errH.Abort(c)
+		return
+	}
+	title := strings.Join(tags, ", ")
+	description := title
+	link := getHref(l, c)
+	channel := &podcastChannel{
+		Title:           title,
+		Link:            "https://www.kabbalahmedia.info/",
+		Description:     description,
+		Image:           &podcastImage{Url: href, Title: title, Link: link},
+		Language:        config.Lang,
+		Copyright:       copyright,
+		PodcastAtomLink: &podcastAtomLink{Href: link, Rel: "self", Type: "application/rss+xml"},
+		LastBuildDate:   time.Now().Format(time.RFC1123), // TODO: get a newest created_at of files
+		Author:          T[config.Lang].Author,
+		Summary:         description,
+		Subtitle:        "",
+		Owner:           &podcastOwner{Name: "Bnei Baruch Association", Email: "info@kab.co.il"},
+		Explicit:        "no",
+		Keywords:        "",
+		ItunesImage:     &itunesImage{Href: href},
+		Category:        &podcastCategory{Text: "Religion & Spirituality", Category: &podcastCategory{Text: "Spirituality"}},
+		PubDate:         time.Now().Format(time.RFC1123),
+
+		Items: make([]*podcastItem, 0),
+	}
+
+	cur := ContentUnitsRequest{
+		ListRequest: ListRequest{
+			BaseRequest: BaseRequest{
+				Language: config.Lang,
+			},
+			StartIndex: 1,
+			StopIndex:  20,
+			OrderBy:    "created_at desc",
+		},
+		ContentTypesFilter: ContentTypesFilter{
+			ContentTypes: config.CT,
+		},
+		WithTags: true,
+	}
+	if config.TAG != "" {
+		cur.TagsFilter = TagsFilter{
+			Tags: []string{config.TAG},
+		}
+	}
+	languages := []string{config.Lang}
+	renderContentUnits(db, cur, mediaTypes, languages, c, channel, href)
+}
+
+func renderContentUnits(db *sql.DB, cur ContentUnitsRequest, mediaTypes []string, languages []string, c *gin.Context, channel *podcastChannel, href string) {
 	item, err := handleContentUnitsFull(db, cur, mediaTypes, languages)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -359,7 +442,10 @@ func FeedCollections(c *gin.Context) {
 			uniqTags[id] = ""
 		}
 	}
-	errH = handleTagsTranslation(db, r, uniqTags)
+	r := BaseRequest{
+		Language: languages[0],
+	}
+	errH := handleTagsTranslation(db, r, uniqTags)
 	if errH != nil {
 		errH.Abort(c)
 		return
@@ -383,7 +469,7 @@ func FeedCollections(c *gin.Context) {
 				description = cu.Name
 			}
 			channel.Items = append(channel.Items, &podcastItem{
-				Title:       file.CreatedAt.Format(time.RFC822) + "; " + cu.Name,
+				Title:       cu.Name,
 				Link:        url,
 				PubDate:     file.CreatedAt.Format(time.RFC822),
 				Description: description,
@@ -411,5 +497,5 @@ func FeedCollections(c *gin.Context) {
 	feed := channel.CreateFeed()
 	feedXml, err := xml.Marshal(feed)
 	payload := []byte(xml.Header + string(feedXml))
-	c.Data(http.StatusOK, "application/xml; charset=utf-8", []byte(payload))
+	c.Data(http.StatusOK, "application/xml; charset=utf-8", payload)
 }
