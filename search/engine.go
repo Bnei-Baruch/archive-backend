@@ -403,7 +403,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 					intentHit, err = e.ConventionsLandingPageToCollectionHit(year, location)
 					if err != nil {
 						log.Warnf("%+v", err)
-						return errors.New(fmt.Sprintf("HolidaysLandingPageToCollectionHit Failed: %+v", err)), nil
+						return errors.New(fmt.Sprintf("ConventionsLandingPageToCollectionHit Failed: %+v", err)), nil
 					}
 					convertedToSingleCollection = true
 				}

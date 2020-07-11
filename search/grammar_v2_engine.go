@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Bnei-Baruch/archive-backend/es"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
@@ -335,8 +336,12 @@ func (e *ESEngine) ConventionsLandingPageToCollectionHit(year string, location s
 		whereClauses = append(whereClauses, fmt.Sprintf(cityMask, city))
 	}
 
-	whereQuery := strings.Join(whereClauses, " and ")
-	query := fmt.Sprintf(queryMask, whereQuery)
+	var whereQuery string
+	if len(whereClauses) > 0 {
+		whereQuery = fmt.Sprintf("and %s", strings.Join(whereClauses, " and "))
+	}
+	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID, whereQuery)
+	//log.Infof("ConventionsLandingPageToCollectionHit Query: %s", query)
 	return e.collectionHitFromSql(query)
 }
 

@@ -162,7 +162,7 @@ func (ssc *SearchStatsCacheImpl) DoesHolidayExist(holiday string, year string) b
 }
 
 func (ssc *SearchStatsCacheImpl) DoesHolidaySingle(holiday string, year string) bool {
-	//fmt.Printf("Holidays count for %s %s - %d", holiday, year, ssc.holidayYears[holiday][year])
+	//fmt.Printf("Holidays count for %s %s - %d\n", holiday, year, ssc.holidayYears[holiday][year])
 	return ssc.holidayYears[holiday][year] == 1
 }
 
@@ -171,6 +171,7 @@ func (ssc *SearchStatsCacheImpl) DoesConventionExist(location string, year strin
 }
 
 func (ssc *SearchStatsCacheImpl) DoesConventionSingle(location string, year string) bool {
+	//fmt.Printf("Conventions count for %s %s - %d\n", location, year, ssc.conventions[year][location])
 	return ssc.conventions[year][location] == 1
 }
 
@@ -278,7 +279,7 @@ func (ssc *SearchStatsCacheImpl) refreshConventions() (map[string]map[string]int
 	var collections []*mdbmodels.Collection
 	if err := mdbmodels.NewQuery(ssc.mdb,
 		qm.From("collections as c"),
-		qm.Where(fmt.Sprintf("c.type_id = %d", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID))).
+		qm.Where(fmt.Sprintf("c.type_id = %d and c.secure = 0 and c.published = true", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID))).
 		Bind(&collections); err != nil {
 		return nil, err
 	}
@@ -293,11 +294,17 @@ func (ssc *SearchStatsCacheImpl) refreshConventions() (map[string]map[string]int
 		city := props["city"].(string)
 		country := props["country"].(string)
 		years := []string{""}
+		var start_year string
+		var end_year string
 		if start_date := props["start_date"]; len(start_date.(string)) >= 4 {
-			years = append(years, start_date.(string)[0:4])
+			start_year = start_date.(string)[0:4]
+			years = append(years, start_year)
 		}
 		if end_date := props["end_date"]; len(end_date.(string)) >= 4 && (len(years) == 0 || years[0] != end_date.(string)[0:4]) {
-			years = append(years, end_date.(string)[0:4])
+			end_year = end_date.(string)[0:4]
+			if end_year != start_year {
+				years = append(years, end_year)
+			}
 		}
 		for _, year := range years {
 			if _, ok := ret[year]; !ok {
