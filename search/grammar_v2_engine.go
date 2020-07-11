@@ -305,12 +305,47 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	return normalizedIntents, nil
 }
 
+func (e *ESEngine) ConventionsLandingPageToCollectionHit(year string, location string) (*elastic.SearchHit, error) {
+	queryMask := `select c.uid, c.properties from collections c 
+	where c.type_id=%d
+	%s`
+	cityMask := `c.properties ->> 'city' = '%s'`
+	countryMask := `c.properties ->> 'country' = '%s'`
+	yearMask := `extract(year from (c.properties ->> 'start_date')::date) = %s`
+
+	var country string
+	var city string
+
+	if location != "" {
+		s := strings.Split(location, "|")
+		country = s[0]
+		if len(s) > 1 {
+			city = s[1]
+		}
+	}
+
+	whereClauses := make([]string, 0)
+	if year != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf(yearMask, year))
+	}
+	if country != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf(countryMask, country))
+	}
+	if city != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf(cityMask, city))
+	}
+
+	whereQuery := strings.Join(whereClauses, " and ")
+	query := fmt.Sprintf(queryMask, whereQuery)
+	return e.collectionHitFromSql(query)
+}
+
 func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday string) (*elastic.SearchHit, error) {
 	queryMask := `select c.uid, c.properties from collections c
 	join tags t on c.properties ->> 'holiday_tag' = t.uid
 	%s`
 	uidMask := `t.uid = '%s'`
-	yearMask := `extract(year from (c.properties ->> 'start_date')::date) = %s`
+	yearMask := `(extract(year from (c.properties ->> 'start_date')::date) = %s or extract(year from (c.properties ->> 'end_date')::date) = %s)`
 
 	var whereQuery string
 	if year != "" && holiday != "" {
@@ -321,11 +356,15 @@ func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday strin
 		whereQuery = fmt.Sprintf("where %s", fmt.Sprintf(uidMask, holiday))
 	}
 
+	query := fmt.Sprintf(queryMask, whereQuery)
+	return e.collectionHitFromSql(query)
+}
+
+func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, error) {
 	var properties json.RawMessage
 	var mdbUID string
 	var effectiveDate es.EffectiveDate
 
-	query := fmt.Sprintf(queryMask, whereQuery)
 	err := e.mdb.QueryRow(query).Scan(&mdbUID, &properties)
 	if err != nil {
 		return nil, err

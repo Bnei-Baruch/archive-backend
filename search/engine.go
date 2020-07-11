@@ -382,6 +382,32 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			}
 			intentHit := &elastic.SearchHit{}
 			convertedToSingleCollection := false
+			if intentValue.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS && intentValue.FilterValues != nil {
+				var year string
+				var location string
+				for _, fv := range intentValue.FilterValues {
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONVENTION_LOCATION] {
+						location = fv.Value
+
+					} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_YEAR] {
+						year = fv.Value
+					}
+					if year != "" && location != "" {
+						break
+					}
+				}
+				if e.cache.SearchStats().DoesConventionSingle(location, year) {
+					// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
+					log.Infof("Converting LandingPage of %s %s to a single collection.", location, year)
+					var err error
+					intentHit, err = e.ConventionsLandingPageToCollectionHit(year, location)
+					if err != nil {
+						log.Warnf("%+v", err)
+						return errors.New(fmt.Sprintf("HolidaysLandingPageToCollectionHit Failed: %+v", err)), nil
+					}
+					convertedToSingleCollection = true
+				}
+			}
 			if intentValue.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS && intentValue.FilterValues != nil {
 				var year string
 				var holiday string

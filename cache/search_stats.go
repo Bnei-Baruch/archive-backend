@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/Bnei-Baruch/archive-backend/es"
+
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/lib/pq"
@@ -135,6 +137,7 @@ type SearchStatsCache interface {
 	// |location| can be of: "Moscow" or "Russia|Moscow" or "Russia" or "" (empty for year constrain only)
 	// |year| is 4 digit year string, e.g., "1998", "2010" or "" (empty for location constrain only)
 	DoesConventionExist(location string, year string) bool
+	DoesConventionSingle(location string, year string) bool
 	// |holiday| is the UID of the tag that is children of 'holidays' tag
 	DoesHolidayExist(holiday string, year string) bool
 	DoesHolidaySingle(holiday string, year string) bool
@@ -165,6 +168,10 @@ func (ssc *SearchStatsCacheImpl) DoesHolidaySingle(holiday string, year string) 
 
 func (ssc *SearchStatsCacheImpl) DoesConventionExist(location string, year string) bool {
 	return ssc.conventions[year][location] > 0
+}
+
+func (ssc *SearchStatsCacheImpl) DoesConventionSingle(location string, year string) bool {
+	return ssc.conventions[year][location] == 1
 }
 
 func (ssc *SearchStatsCacheImpl) IsTagWithUnits(uid string, cts ...string) bool {
@@ -230,12 +237,14 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]int, error) {
 	ret := make(map[string]map[string]int)
 
+	// Replace || operator to & (intersect arrays) after upgrading Postgres to v.12
 	rows, err := queries.Raw(ssc.mdb, `select t.uid as tag_uid, 
-		array_remove(array_agg(distinct extract(year from (c.properties ->> 'start_date')::date)), NULL) as years
-		from tags t 
-		join collections c on c.properties ->> 'holiday_tag' = t.uid
-		where c.secure = 0 and c.published = true
-		group by t.uid;`).Query()
+	array_remove(array_agg(distinct extract(year from (c.properties ->> 'start_date')::date)) || 
+						  array_agg(distinct extract(year from (c.properties ->> 'end_date')::date)), NULL) as years		
+	from tags t 
+	join collections c on c.properties ->> 'holiday_tag' = t.uid
+	where c.secure = 0 and c.published = true
+	group by t.uid;`).Query()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "refreshHolidays - Query failed.")
@@ -250,6 +259,7 @@ func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]in
 		if err != nil {
 			return nil, errors.Wrap(err, "refreshHolidays rows.Scan")
 		}
+		years = es.Unique(years) // Remove this after upgrading to Postgres 12 and changing the query above
 		if _, ok := ret[tagUID]; !ok {
 			ret[tagUID] = make(map[string]int)
 		}
