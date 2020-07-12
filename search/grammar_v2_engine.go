@@ -354,14 +354,15 @@ func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday strin
 
 	var whereQuery string
 	if year != "" && holiday != "" {
-		whereQuery = fmt.Sprintf("where %s and %s", fmt.Sprintf(uidMask, holiday), fmt.Sprintf(yearMask, year))
+		whereQuery = fmt.Sprintf("where %s and %s", fmt.Sprintf(uidMask, holiday), fmt.Sprintf(yearMask, year, year))
 	} else if year != "" {
-		whereQuery = fmt.Sprintf("where %s", fmt.Sprintf(yearMask, year))
+		whereQuery = fmt.Sprintf("where %s", fmt.Sprintf(yearMask, year, year))
 	} else if holiday != "" {
 		whereQuery = fmt.Sprintf("where %s", fmt.Sprintf(uidMask, holiday))
 	}
 
 	query := fmt.Sprintf(queryMask, whereQuery)
+	log.Infof("QUERY: %s", query)
 	return e.collectionHitFromSql(query)
 }
 
