@@ -58,19 +58,29 @@ func SetupRoutes(router *gin.Engine) {
 		collections := feeds.Group("/collections/:DLANG")
 		{
 			collections.GET("/:COLLECTION", FeedCollections)
+			collections.HEAD("/:COLLECTION", FeedCollections)
 			collections.GET("/:COLLECTION/df/:DF", FeedCollections)
+			collections.HEAD("/:COLLECTION/df/:DF", FeedCollections)
 			collections.GET("/:COLLECTION/tag/:TAG", FeedCollections)
+			collections.HEAD("/:COLLECTION/tag/:TAG", FeedCollections)
 			collections.GET("/:COLLECTION/df/:DF/tag/:TAG", FeedCollections)
+			collections.HEAD("/:COLLECTION/df/:DF/tag/:TAG", FeedCollections)
 			collections.GET("/:COLLECTION/tag/:TAG/df/:DF", FeedCollections)
+			collections.HEAD("/:COLLECTION/tag/:TAG/df/:DF", FeedCollections)
 		}
 
 		ct := feeds.Group("/content_type/:DLANG/:CT")
 		{
 			ct.GET("/", FeedByContentType)
+			ct.HEAD("/", FeedByContentType)
 			ct.GET("/df/:DF", FeedByContentType)
+			ct.HEAD("/df/:DF", FeedByContentType)
 			ct.GET("/df/:DF/tag/:TAG", FeedByContentType)
+			ct.HEAD("/df/:DF/tag/:TAG", FeedByContentType)
 			ct.GET("/tag/:TAG", FeedByContentType)
+			ct.HEAD("/tag/:TAG", FeedByContentType)
 			ct.GET("/tag/:TAG/df/:DF", FeedByContentType)
+			ct.HEAD("/tag/:TAG/df/:DF", FeedByContentType)
 		}
 	}
 
