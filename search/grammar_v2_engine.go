@@ -362,7 +362,7 @@ func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday strin
 	}
 
 	query := fmt.Sprintf(queryMask, whereQuery)
-	log.Infof("QUERY: %s", query)
+	//log.Infof("QUERY: %s", query)
 	return e.collectionHitFromSql(query)
 }
 
