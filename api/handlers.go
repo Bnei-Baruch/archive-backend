@@ -1601,6 +1601,45 @@ FROM idsGroupedByType
 	}, nil
 }
 
+// translate tag.keys (UIDs of tags) to their translation
+func handleTagsTranslationByID(db *sql.DB, r BaseRequest, uids []string) ([]string, *HttpError) {
+	if len(uids) == 0 {
+		return []string{}, nil
+	}
+	q := fmt.Sprintf(`
+		SELECT
+			coalesce((SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = '%s'),
+					 (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'en'),
+					 (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'he'))
+			AS label
+		FROM tags t
+		WHERE t.uid IN (`,
+		r.Language)
+	args := make([]string, len(uids))
+	for i := range uids {
+		args[i] = fmt.Sprintf("$%d", i+1)
+	}
+	q += strings.Join(args, ",") + ")"
+	rows, err := queries.Raw(db, q, utils.ConvertArgsString(uids)...).Query()
+	if err != nil {
+		return []string{}, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	// Iterate rows, build tags
+	tags := []string{}
+	var label string
+	for rows.Next() {
+		err = rows.Scan(&label)
+		if err != nil {
+			return []string{}, NewInternalError(err)
+		}
+		tags = append(tags, label)
+	}
+	return tags, nil
+
+}
+
 // Convert tag.keys (IDs of tags) to their translation
 func handleTagsTranslation(db *sql.DB, r BaseRequest, tags map[int64]string) *HttpError {
 	ids := make([]int64, len(tags))
@@ -1636,7 +1675,7 @@ func handleTagsTranslation(db *sql.DB, r BaseRequest, tags map[int64]string) *Ht
 	}
 	defer rows.Close()
 
-	// Iterate rows, build tree
+	// Iterate rows, build tags
 	for rows.Next() {
 		err = rows.Scan(&id, &label)
 		if err != nil {

@@ -54,23 +54,35 @@ func SetupRoutes(router *gin.Engine) {
 		feeds.GET("/podcast/:DLANG/:DF", FeedPodcast)
 		feeds.GET("/podcast.rss/:DLANG/:DF", FeedPodcast)
 		feeds.GET("/morning_lesson", FeedMorningLesson)
-		collections := feeds.Group("/collections")
+
+		collections := feeds.Group("/collections/:DLANG")
 		{
-			collections.GET("/:DLANG/:COLLECTION", FeedCollections)
-			collections.GET("/:DLANG/:COLLECTION/df/:DF", FeedCollections)
-			collections.GET("/:DLANG/:COLLECTION/tag/:TAG", FeedCollections)
-			collections.GET("/:DLANG/:COLLECTION/df/:DF/tag/:TAG", FeedCollections)
-			collections.GET("/:DLANG/:COLLECTION/tag/:TAG/df/:DF", FeedCollections)
+			collections.GET("/:COLLECTION", FeedCollections)
+			collections.GET("/:COLLECTION/df/:DF", FeedCollections)
+			collections.GET("/:COLLECTION/tag/:TAG", FeedCollections)
+			collections.GET("/:COLLECTION/df/:DF/tag/:TAG", FeedCollections)
+			collections.GET("/:COLLECTION/tag/:TAG/df/:DF", FeedCollections)
+		}
+
+		ct := feeds.Group("/content_type/:DLANG/:CT")
+		{
+			ct.GET("/", FeedByContentType)
+			ct.GET("/df/:DF", FeedByContentType)
+			ct.GET("/df/:DF/tag/:TAG", FeedByContentType)
+			ct.GET("/tag/:TAG", FeedByContentType)
+			ct.GET("/tag/:TAG/df/:DF", FeedByContentType)
 		}
 	}
 
 	cms := router.Group("/cms")
-	cms.GET("/persons/:id", CMSPerson)
-	cms.GET("/banners/:id", CMSBanner)
-	cms.GET("/sources/:id", CMSSource)
-	cms.GET("/sourceIndex/:id", CMSSourceIndex)
-	cms.GET("/topics", CMSTopics)
-	cms.GET("/images/*path", CMSImage)
+	{
+		cms.GET("/persons/:id", CMSPerson)
+		cms.GET("/banners/:id", CMSBanner)
+		cms.GET("/sources/:id", CMSSource)
+		cms.GET("/sourceIndex/:id", CMSSourceIndex)
+		cms.GET("/topics", CMSTopics)
+		cms.GET("/images/*path", CMSImage)
+	}
 
 	//router.GET("/_recover", func(c *gin.Context) {
 	//	panic("test recover")
@@ -93,7 +105,7 @@ func SetupRoutes(router *gin.Engine) {
 }
 
 func pprofHandler(h http.HandlerFunc) gin.HandlerFunc {
-	handler := http.HandlerFunc(h)
+	handler := h
 	return func(c *gin.Context) {
 		handler.ServeHTTP(c.Writer, c.Request)
 	}
