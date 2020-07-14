@@ -521,7 +521,7 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	mdbMap := make(map[string]*elastic.SearchHit)
 	for _, hit := range concatenated {
 		var mdbUid es.MdbUid
-		if hit.Score != nil {
+		if hit.Score != nil && hit.Index != consts.INTENT_INDEX_TAG && hit.Index != consts.INTENT_INDEX_SOURCE {
 			if err := json.Unmarshal(*hit.Source, &mdbUid); err == nil {
 				if mdbUid.MDB_UID != "" {
 					if _, ok := mdbMap[mdbUid.MDB_UID]; !ok || *hit.Score > *mdbMap[mdbUid.MDB_UID].Score {
