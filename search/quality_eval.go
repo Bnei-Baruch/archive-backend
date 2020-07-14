@@ -698,7 +698,7 @@ func EvaluateQuery(q EvalQuery, serverUrl string, skipExpectations bool) EvalRes
 					}
 					if HitMatchesExpectation(hit, hitSource, q.Expectations[i]) {
 						rank = j + 1
-						if j <= 2 || i > 2 {
+						if j <= 2 || (i > 2 && j <= 4) {
 							sq = SQ_GOOD
 						} else {
 							sq = SQ_REGULAR
