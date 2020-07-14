@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/xml"
 	"fmt"
+	"hash/crc32"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -753,7 +754,7 @@ func FeedCollections(c *gin.Context) {
 		Language:        config.Lang,
 		Copyright:       copyright,
 		PodcastAtomLink: &podcastAtomLink{Href: link, Rel: "self", Type: "application/rss+xml"},
-		LastBuildDate:   time.Now().Format(time.RFC1123), // TODO: get a newest created_at of files
+		LastBuildDate:   time.Now().Format(time.RFC1123),
 		Author:          T[config.Lang].Author,
 		Summary:         description,
 		Subtitle:        "",
@@ -842,7 +843,7 @@ func FeedByContentType(c *gin.Context) {
 		Language:        config.Lang,
 		Copyright:       copyright,
 		PodcastAtomLink: &podcastAtomLink{Href: link, Rel: "self", Type: "application/rss+xml"},
-		LastBuildDate:   time.Now().Format(time.RFC1123), // TODO: get a newest created_at of files
+		LastBuildDate:   time.Now().Format(time.RFC1123),
 		Author:          T[config.Lang].Author,
 		Summary:         description,
 		Subtitle:        "",
@@ -905,6 +906,7 @@ func renderContentUnits(db *sql.DB, cur ContentUnitsRequest, mediaTypes []string
 		return
 	}
 	var nameToIgnore = regexp.MustCompile("kitei-makor|lelo-mikud")
+	var lastPubDate time.Time
 	for _, cu := range item.ContentUnits {
 		files := cu.Files
 		tags := make([]string, len(cu.tagIDs))
@@ -939,8 +941,12 @@ func renderContentUnits(db *sql.DB, cur ContentUnitsRequest, mediaTypes []string
 				Keywords: strings.Join(tags, ","),
 				Explicit: "no",
 			})
+			if file.CreatedAt.After(lastPubDate) {
+				lastPubDate = file.CreatedAt
+			}
 		}
 	}
+	channel.LastBuildDate = lastPubDate.Format(time.RFC1123)
 	tags := make([]string, len(uniqTags))
 	i := 0
 	for _, k := range uniqTags {
@@ -951,5 +957,13 @@ func renderContentUnits(db *sql.DB, cur ContentUnitsRequest, mediaTypes []string
 	feed := channel.CreateFeed()
 	feedXml, err := xml.Marshal(feed)
 	payload := []byte(xml.Header + string(feedXml))
+	c.Header("Content-Length", fmt.Sprintf("%d", len(payload)))
+	c.Header("ETag", etag("feed", payload))
+	c.Header("Last-Modified", channel.LastBuildDate)
 	c.Data(http.StatusOK, "application/xml; charset=utf-8", payload)
+}
+
+func etag(name string, data []byte) string {
+	crc := crc32.ChecksumIEEE(data)
+	return fmt.Sprintf(`W/"%s-%d-%08X"`, name, len(data), crc)
 }
