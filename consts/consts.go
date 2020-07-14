@@ -619,6 +619,7 @@ const (
 	SRC_PEACE_ARCTICLE         = "28Cmp7gl"
 	SRC_PEACE_IN_WORLD_ARTICLE = "hqUTKcZz"
 	SRC_ARVUT_ARTICLE          = "itcVAcFn"
+	SRC_RABASH_ASSORTED_NOTES  = "2GAdavz0"
 )
 
 var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
@@ -637,5 +638,6 @@ var ES_SRC_ADD_MAAMAR_TO_SUGGEST = map[string]bool{
 }
 
 var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[string]bool{
-	SRC_SHAMATI: true,
+	SRC_SHAMATI:               true,
+	SRC_RABASH_ASSORTED_NOTES: true,
 }
