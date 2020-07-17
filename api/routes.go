@@ -42,25 +42,57 @@ func SetupRoutes(router *gin.Engine) {
 		router.POST("/eval/sxs", EvalSxSHandler)
 	}
 
-	router.GET("/feeds/rus_zohar", FeedRusZohar)
-	router.GET("/feeds/rus_zohar.rss", FeedRusZohar)
-	router.GET("/feeds/rus_for_laitman_ru", FeedRusForLaitmanRu)
-	router.GET("/feeds/rus_for_laitman_ru.rss", FeedRusForLaitmanRu)
-	router.GET("/feeds/wsxml.xml", FeedWSXML)
 	router.GET("/rss.php", FeedRssPhp)
-	router.GET("/feeds/rss_video.php", FeedRssVideo)
-	router.GET("/feeds/podcast/:DLANG/:DF", FeedPodcast)
-	router.GET("/feeds/podcast.rss/:DLANG/:DF", FeedPodcast)
+	feeds := router.Group("/feeds")
+	{
+		feeds.GET("/rus_zohar", FeedRusZohar)
+		feeds.GET("/rus_zohar.rss", FeedRusZohar)
+		feeds.GET("/rus_for_laitman_ru", FeedRusForLaitmanRu)
+		feeds.GET("/rus_for_laitman_ru.rss", FeedRusForLaitmanRu)
+		feeds.GET("/wsxml.xml", FeedWSXML)
+		feeds.GET("/rss_video.php", FeedRssVideo)
+		feeds.GET("/podcast/:DLANG/:DF", FeedPodcast)
+		feeds.GET("/podcast.rss/:DLANG/:DF", FeedPodcast)
+		feeds.GET("/morning_lesson", FeedMorningLesson)
 
-	router.GET("/feeds/morning_lesson", FeedMorningLesson)
+		collections := feeds.Group("/collections/:DLANG")
+		{
+			collections.GET("/:COLLECTION", FeedCollections)
+			collections.HEAD("/:COLLECTION", FeedCollections)
+			collections.GET("/:COLLECTION/df/:DF", FeedCollections)
+			collections.HEAD("/:COLLECTION/df/:DF", FeedCollections)
+			collections.GET("/:COLLECTION/tag/:TAG", FeedCollections)
+			collections.HEAD("/:COLLECTION/tag/:TAG", FeedCollections)
+			collections.GET("/:COLLECTION/df/:DF/tag/:TAG", FeedCollections)
+			collections.HEAD("/:COLLECTION/df/:DF/tag/:TAG", FeedCollections)
+			collections.GET("/:COLLECTION/tag/:TAG/df/:DF", FeedCollections)
+			collections.HEAD("/:COLLECTION/tag/:TAG/df/:DF", FeedCollections)
+		}
+
+		ct := feeds.Group("/content_type/:DLANG/:CT")
+		{
+			ct.GET("/", FeedByContentType)
+			ct.HEAD("/", FeedByContentType)
+			ct.GET("/df/:DF", FeedByContentType)
+			ct.HEAD("/df/:DF", FeedByContentType)
+			ct.GET("/df/:DF/tag/:TAG", FeedByContentType)
+			ct.HEAD("/df/:DF/tag/:TAG", FeedByContentType)
+			ct.GET("/tag/:TAG", FeedByContentType)
+			ct.HEAD("/tag/:TAG", FeedByContentType)
+			ct.GET("/tag/:TAG/df/:DF", FeedByContentType)
+			ct.HEAD("/tag/:TAG/df/:DF", FeedByContentType)
+		}
+	}
 
 	cms := router.Group("/cms")
-	cms.GET("/persons/:id", CMSPerson)
-	cms.GET("/banners/:id", CMSBanner)
-	cms.GET("/sources/:id", CMSSource)
-	cms.GET("/sourceIndex/:id", CMSSourceIndex)
-	cms.GET("/topics", CMSTopics)
-	cms.GET("/images/*path", CMSImage)
+	{
+		cms.GET("/persons/:id", CMSPerson)
+		cms.GET("/banners/:id", CMSBanner)
+		cms.GET("/sources/:id", CMSSource)
+		cms.GET("/sourceIndex/:id", CMSSourceIndex)
+		cms.GET("/topics", CMSTopics)
+		cms.GET("/images/*path", CMSImage)
+	}
 
 	//router.GET("/_recover", func(c *gin.Context) {
 	//	panic("test recover")
@@ -83,7 +115,7 @@ func SetupRoutes(router *gin.Engine) {
 }
 
 func pprofHandler(h http.HandlerFunc) gin.HandlerFunc {
-	handler := http.HandlerFunc(h)
+	handler := h
 	return func(c *gin.Context) {
 		handler.ServeHTTP(c.Writer, c.Request)
 	}
