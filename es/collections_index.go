@@ -42,7 +42,7 @@ func defaultCollectionsSql() string {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSONS_SERIES].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONGS].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOKS].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID, // we use grammar for collections search
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID, // we use grammar for holiday collections search
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
 	)
 }
