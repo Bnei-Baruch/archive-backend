@@ -177,10 +177,6 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 					// List of variables: ["$Year", "$ConventionLocation"]
 					variablesSet := VariablesFromString(variablesSetAsString)
 
-					// For better results, we don't add suggestions for combinations of 'holiday' term with the holiday name (we do add suggest for 'holiday' term with year).
-					// 	e. g. searchig 'Hanukkah' brings more and better results than 'holiday Hanukkah'.
-					addSuggest := intent != consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS || len(variablesSet) == 1 || (len(variablesSet) == 2 && utils.Contains(utils.Is(variablesSet), consts.VAR_YEAR))
-
 					// Set of possible variable values: [["2000", "2001", ...], ["Moscow", "Tel Aviv", "New York", ...]]
 					variablesValues := [][]string(nil)
 					for i := range variablesSet {
@@ -211,17 +207,16 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 						}
 
 						assignedRulesSuggest := []string{}
-						if addSuggest {
-							for i := range assignedRules {
-								assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
-							}
-							for i := range assignedRulesSuggest {
-								if assignedRulesSuggest[i] == "" {
-									log.Infof("NNN: %+v", assignedRulesSuggest[i])
-								}
-							}
-							log.Infof("Rules suggest: [%s]", strings.Join(assignedRulesSuggest, "|"))
+
+						for i := range assignedRules {
+							assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
 						}
+						for i := range assignedRulesSuggest {
+							if assignedRulesSuggest[i] == "" {
+								log.Infof("NNN: %+v", assignedRulesSuggest[i])
+							}
+						}
+						log.Infof("Rules suggest: [%s]", strings.Join(assignedRulesSuggest, "|"))
 
 						vMap := make(map[string][]string)
 						for i := range variablesSet {
