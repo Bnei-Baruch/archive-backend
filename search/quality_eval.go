@@ -353,10 +353,10 @@ type HitSource struct {
 }
 
 func HitSourcesEqual(a, b HitSource) bool {
-    if a.Score == float64(0) && a.Score == b.Score {
-        // All zero score are the same.
-        return true
-    }
+	if a.Score == float64(0) && a.Score == b.Score {
+		// All zero score are the same.
+		return true
+	}
 	if a.MdbUid != b.MdbUid ||
 		a.ResultType != b.ResultType ||
 		a.LandingPage != b.LandingPage ||
@@ -698,7 +698,8 @@ func EvaluateQuery(q EvalQuery, serverUrl string, skipExpectations bool) EvalRes
 					}
 					if HitMatchesExpectation(hit, hitSource, q.Expectations[i]) {
 						rank = j + 1
-						if j <= 2 {
+						//set good if first 3 are till 3 place in results, or 4 and 5 are till 5 place
+						if j <= 2 || (i > 2 && j <= 4) {
 							sq = SQ_GOOD
 						} else {
 							sq = SQ_REGULAR
