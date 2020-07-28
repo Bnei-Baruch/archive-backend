@@ -123,8 +123,9 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	fmt.Printf("Reindexing everything.")
 	r.Nil(indexer.ReindexAll(esc))
 	r.Nil(indexer.RefreshAll())
-	fmt.Printf("Validate we have source with 2 languages and the position is indexed in the full title.")
 
+	r.Nil(es.DumpIndexes(esc, "Before validation", consts.ES_RESULT_TYPE_SOURCES))
+	fmt.Printf("Validate we have source with 2 languages and the position is indexed in the full title.")
 	suite.validateNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2", "Shamati", "test-name-3"})
 	suite.validateNames(indexNameHe, indexer, []string{"שם-בדיקה-2", "שם-בדיקה-1", "שם-בדיקה-3"})
 	suite.validateFullNames(indexNameEn, indexer,
