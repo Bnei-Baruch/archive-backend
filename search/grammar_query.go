@@ -42,6 +42,7 @@ func NewSuggestGammarV2Request(query *Query, language string, preference string)
 
 func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, preference string) *elastic.SearchRequest {
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules")
+
 	source := elastic.NewSearchSource().
 		FetchSourceContext(fetchSourceContext).
 		Suggester(
@@ -49,12 +50,14 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 				Field("rules_suggest").
 				Text(simpleQuery(query)).
 				Size(GRAMMAR_SUGGEST_SIZE).
+				Fuzziness(1).
 				SkipDuplicates(true)).
 		Suggester(
 			elastic.NewCompletionSuggester("rules_suggest.language").
 				Field("rules_suggest.language").
 				Text(simpleQuery(query)).
 				Size(GRAMMAR_SUGGEST_SIZE).
+				Fuzziness(2).
 				SkipDuplicates(true)).
 		Explain(query.Deb)
 
