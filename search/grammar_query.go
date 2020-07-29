@@ -57,7 +57,7 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 				Field("rules_suggest.language").
 				Text(simpleQuery(query)).
 				Size(GRAMMAR_SUGGEST_SIZE).
-				Fuzziness(2).
+				Fuzziness(1).
 				SkipDuplicates(true)).
 		Explain(query.Deb)
 
