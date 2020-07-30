@@ -120,9 +120,9 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.usfc(chapterPositionUID, consts.LANG_HEBREW)
 	r.Nil(indexer.SourceUpdate(chapterPositionUID))
 
-	/*fmt.Printf("Reindexing everything.")
+	fmt.Printf("Reindexing everything.")
 	r.Nil(indexer.ReindexAll(esc))
-	r.Nil(indexer.RefreshAll())*/
+	r.Nil(indexer.RefreshAll())
 
 	r.Nil(es.DumpIndexes(esc, "Before validation", consts.ES_RESULT_TYPE_SOURCES))
 	fmt.Printf("Validate we have source with 2 languages and the position is indexed in the full title.")
