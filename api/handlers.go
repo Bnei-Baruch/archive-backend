@@ -31,6 +31,13 @@ import (
 
 var SECURE_PUBLISHED_MOD = qm.Where(fmt.Sprintf("secure=%d AND published IS TRUE", consts.SEC_PUBLIC))
 
+type firstRowsType struct {
+	id           int64
+	uid          string
+	content_type string
+	film_date    time.Time
+}
+
 func CollectionsHandler(c *gin.Context) {
 	r := CollectionsRequest{
 		WithUnits: true,
@@ -943,29 +950,120 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 }
 
 func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpError) {
-
-	// CU ids query
-	const query = `SELECT DISTINCT ON (type_id) id
-FROM content_units
-WHERE secure = 0 AND published IS TRUE
-ORDER BY type_id, (coalesce(properties ->> 'film_date', created_at :: TEXT)) :: DATE DESC, created_at DESC;`
+	const queryTemplate = `
+WITH CUs AS (
+    SELECT row_number()
+           OVER (PARTITION BY type_id ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC) AS row_number,
+           type_id, uid, id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+    FROM content_units
+    WHERE secure = 0 AND published IS TRUE
+        AND type_id IN (%d, %d, %d, %d, %d, %d, %d, %d)
+), collections AS (
+	SELECT row_number()
+		   OVER (partition by type_id ORDER BY (coalesce(properties ->> 'film_date', created_at :: TEXT)) :: DATE DESC) AS row_number,
+		   type_id, uid, id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+	from collections
+	where secure = 0 AND published IS TRUE
+	  and type_id in (%d, %d)
+)
+SELECT type_id, uid, id, film_date
+FROM CUs
+WHERE row_number <= 4
+	UNION
+SELECT type_id, uid, id, film_date
+FROM collections
+WHERE row_number = 1
+`
+	query := fmt.Sprintf(queryTemplate,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIRTUAL_LESSON].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM_CHAPTER].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID,
+	)
 	rows, err := queries.Raw(db, query).Query()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 	defer rows.Close()
 
-	cuIDs := make([]int64, 0)
+	firstRows := map[string][]firstRowsType{}
 	for rows.Next() {
-		var myId int64
-		err := rows.Scan(&myId)
+		var (
+			type_id   int64
+			id        int64
+			uid       string
+			film_date time.Time
+		)
+		err = rows.Scan(&type_id, &uid, &id, &film_date)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
-		cuIDs = append(cuIDs, myId)
+		name := mdb.CONTENT_TYPE_REGISTRY.ByID[type_id].Name
+		_, ok := firstRows[name]
+		if !ok {
+			firstRows[name] = []firstRowsType{}
+		}
+		firstRows[name] = append(firstRows[name], firstRowsType{
+			id:           id,
+			uid:          uid,
+			content_type: name,
+			film_date:    film_date,
+		})
 	}
-	if err := rows.Err(); err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, NewInternalError(err)
+	}
+	cuIDs := make([]int64, 0)
+	//last daily lesson last part LESSON_PART
+	//previous daily lesson last part LESSON_PART
+	cuIDs = append(cuIDs, firstRows["LESSON_PART"][0].id)
+	cuIDs = append(cuIDs, firstRows["LESSON_PART"][1].id)
+	//last women lesson WOMEN_LESSON
+	if _, ok := firstRows["WOMEN_LESSON"]; ok {
+		wl := firstRows["WOMEN_LESSON"][0]
+		// Is it newer than 14 days?
+		if wl.film_date.After(time.Now().Add(-14 * 24 * time.Hour)) {
+			cuIDs = append(cuIDs, wl.id)
+		} else {
+			cuIDs = append(cuIDs, firstRows["LESSON_PART"][2].id)
+		}
+	} else {
+		cuIDs = append(cuIDs, firstRows["LESSON_PART"][2].id)
+	}
+	//last virtual lesson VIRTUAL_LESSON
+	if _, ok := firstRows["VIRTUAL_LESSON"]; ok {
+		cuIDs = append(cuIDs, firstRows["VIRTUAL_LESSON"][0].id)
+	}
+	//4 latest VIDEO_PROGRAM_CHAPTER
+	if _, ok := firstRows["VIDEO_PROGRAM_CHAPTER"]; ok {
+		for _, r := range firstRows["VIDEO_PROGRAM_CHAPTER"][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	//4 latest CLIP
+	if _, ok := firstRows["CLIP"]; ok {
+		for _, r := range firstRows["CLIP"][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	//4 latest ARTICLE
+	if _, ok := firstRows["ARTICLE"]; ok {
+		for _, r := range firstRows["ARTICLE"][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	//last MEAL, FRIENDS_GATHERING
+	if _, ok := firstRows["MEAL"]; ok {
+		cuIDs = append(cuIDs, firstRows["MEAL"][0].id)
+	}
+	if _, ok := firstRows["FRIENDS_GATHERING"]; ok {
+		cuIDs = append(cuIDs, firstRows["FRIENDS_GATHERING"][0].id)
 	}
 
 	// data query
@@ -981,6 +1079,45 @@ ORDER BY type_id, (coalesce(properties ->> 'film_date', created_at :: TEXT)) :: 
 	cus, ex := prepareCUs(db, units, r.Language)
 	if ex != nil {
 		return nil, ex
+	}
+
+	//last CONGRESS and HOLIDAY -- both are Collections
+	cIDs := make([]int64, 0)
+	cs := make([]firstRowsType, 0)
+	if _, ok := firstRows["CONGRESS"]; ok {
+		cIDs = append(cIDs, firstRows["CONGRESS"][0].id)
+		cs = append(cs, firstRows["CONGRESS"][0])
+	}
+	if _, ok := firstRows["HOLIDAY"]; ok {
+		cIDs = append(cIDs, firstRows["HOLIDAY"][0].id)
+		cs = append(cs, firstRows["HOLIDAY"][0])
+	}
+
+	ci18nsMap, err := loadCI18ns(db, r.Language, cIDs)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	for _, x := range cs {
+		u := &ContentUnit{
+			mdbID:       x.id,
+			ID:          x.uid,
+			ContentType: x.content_type,
+			FilmDate:    &utils.Date{Time: x.film_date},
+		}
+		if i18ns, ok := ci18nsMap[x.id]; ok {
+			for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+				li18n, ok := i18ns[l]
+				if ok {
+					if u.Name == "" && li18n.Name.Valid {
+						u.Name = li18n.Name.String
+					}
+					if u.Description == "" && li18n.Description.Valid {
+						u.Description = li18n.Description.String
+					}
+				}
+			}
+		}
+		cus = append(cus, u)
 	}
 
 	return cus, nil
