@@ -99,22 +99,21 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.validateSourcesFullPath(indexNameEn, indexer, [][]string{[]string{source1UID, "t1", "t2"}, []string{source2UID, "t3", "t4"}})
 
 	fmt.Printf("\n\n\nAdd source parent like Shamati and validate.\n\n")
-	parentChapterPosition := Source{Name: "Shamati"}
-	parentChapterPositionUID, parentChapterPositionID := suite.us(parentChapterPosition, consts.LANG_ENGLISH)
-	_, _ = suite.us(parentChapterPosition, consts.LANG_HEBREW)
-	consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parentChapterPositionUID] = true
-	suite.usfc(parentChapterPositionUID, consts.LANG_ENGLISH)
-	suite.asa(Source{MDB_UID: parentChapterPositionUID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 7, Code: "t5"}, true, true)
-	r.Nil(indexer.SourceUpdate(parentChapterPositionUID))
+	parentShamatiUID, parentShamatiID := suite.us(Source{Name: "Shamati"}, consts.LANG_ENGLISH)
+	suite.us(Source{MDB_UID: parentShamatiUID}, consts.LANG_HEBREW)
+	consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parentShamatiUID] = true
+	suite.usfc(parentShamatiUID, consts.LANG_ENGLISH)
+	suite.asa(Source{MDB_UID: parentShamatiUID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 7, Code: "t5"}, true, true)
+	r.Nil(indexer.SourceUpdate(parentShamatiUID))
 	suite.validateNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2", "Shamati"})
 	suite.validateFullNames(indexNameEn, indexer, []string{"Test Name > test-name-1", "Test Name 2 > test-name-2", "Test Name 2 > Shamati"})
 
 	fmt.Printf("Add sources where the position (1) should be indexed as part of the full title (like Shamati chapters).")
 	chapterPositionUID, _ := suite.us(Source{Name: "test-name-3",
-		ParentID: null.Int64From(parentChapterPositionID),
+		ParentID: null.Int64From(parentShamatiID),
 		Position: null.IntFrom(1)}, consts.LANG_ENGLISH)
 	suite.us(Source{Name: "שם-בדיקה-3", MDB_UID: chapterPositionUID,
-		ParentID: null.Int64From(parentChapterPositionID),
+		ParentID: null.Int64From(parentShamatiID),
 		Position: null.IntFrom(1)}, consts.LANG_HEBREW)
 	suite.usfc(chapterPositionUID, consts.LANG_ENGLISH)
 	suite.usfc(chapterPositionUID, consts.LANG_HEBREW)
@@ -168,9 +167,9 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.rsa(Source{MDB_UID: source1UID}, mdbmodels.Author{ID: 4})
 	suite.rsa(Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 5})
 	suite.rsa(Source{MDB_UID: source2UID}, mdbmodels.Author{ID: 6})
-	suite.rsa(Source{MDB_UID: parentChapterPositionUID}, mdbmodels.Author{ID: 7})
+	suite.rsa(Source{MDB_UID: parentShamatiUID}, mdbmodels.Author{ID: 7})
 
-	UIDs := []string{source1UID, source2UID, parentChapterPositionUID, chapterPositionUID}
+	UIDs := []string{source1UID, source2UID, parentShamatiUID, chapterPositionUID}
 	r.Nil(deleteSources(UIDs))
 	r.Nil(indexer.ReindexAll(esc))
 

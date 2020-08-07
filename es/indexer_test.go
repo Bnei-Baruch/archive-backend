@@ -850,8 +850,6 @@ func updateSource(source Source, lang string) (string, int64, error) {
 		if err := mdbSource.Update(common.DB); err != nil {
 			return "", 0, err
 		}
-		source.MDB_UID = mdbSource.UID
-		source.MDB_ID = null.Int64From(mdbSource.ID)
 	} else {
 		mdbSource = mdbmodels.Source{
 			UID:    utils.GenerateUID(8),
