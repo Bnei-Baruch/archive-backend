@@ -317,6 +317,15 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, source)
 	}
 
+	si8ns, err := mdbmodels.SourceI18ns(mdb).All()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n\nSOURCE_I18N\n-------------\n\n")
+	for i, si8n := range si8ns {
+		fmt.Printf("%d: %+v\n", i, si8n)
+	}
+
 	tags, err := mdbmodels.Tags(mdb).All()
 	if err != nil {
 		return err
