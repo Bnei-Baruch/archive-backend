@@ -983,12 +983,13 @@ WITH CUs AS (
 	) t ON true
 )
 (
-	SELECT * FROM CUs ORDER BY film_date DESC
+	SELECT * FROM CUs
 ) UNION (
-	SELECT * FROM COLs ORDER BY film_date DESC
+	SELECT * FROM COLs
 ) UNION (
-	SELECT * FROM LESSON_COLLs ORDER BY film_date DESC
+	SELECT * FROM LESSON_COLLs
 )
+order by type_id, film_date desc
 `
 	query := fmt.Sprintf(queryTemplate,
 		// CUs
