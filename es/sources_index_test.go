@@ -118,9 +118,7 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.usfc(chapterPositionUID, consts.LANG_ENGLISH)
 	suite.usfc(chapterPositionUID, consts.LANG_HEBREW)
 	r.Nil(indexer.SourceUpdate(chapterPositionUID))
-
-	r.Nil(es.DumpDB(common.DB, "Before ReindexAll"))
-	r.Nil(es.DumpIndexes(esc, "Before ReindexAll", consts.ES_RESULT_TYPE_SOURCES))
+	r.Nil(indexer.RefreshAll())
 
 	fmt.Printf("Reindexing everything.")
 	r.Nil(indexer.ReindexAll(esc))
