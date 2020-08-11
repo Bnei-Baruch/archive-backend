@@ -952,27 +952,38 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpError) {
 	const queryTemplate = `
 WITH CUs AS (
-    SELECT row_number()
-           OVER (PARTITION BY type_id ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC) AS row_number,
-           type_id, uid, id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
-    FROM content_units
-    WHERE secure = 0 AND published IS TRUE
-        AND type_id IN (%d, %d, %d, %d, %d, %d, %d, %d)
-), collections AS (
-	SELECT row_number()
-		   OVER (partition by type_id ORDER BY (coalesce(properties ->> 'film_date', created_at :: TEXT)) :: DATE DESC) AS row_number,
-		   type_id, uid, id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
-	from collections
-	where secure = 0 AND published IS TRUE
-	  and type_id in (%d, %d)
+    SELECT ct.id as type_id, uid, cu_id AS id, film_date
+    FROM (
+		VALUES (%d), (%d), (%d), (%d), (%d), (%d), (%d), (%d)
+	) ct(id)
+	INNER JOIN LATERAL (
+		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+        FROM content_units cu
+        WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
+        ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE
+        FETCH FIRST 4 ROWS ONLY
+	) t ON true
+), COLs AS (
+    SELECT ct.id as type_id, uid, cu_id AS id, film_date
+    FROM (
+		VALUES (%d), (%d), (%d)
+	) ct(id)
+    INNER JOIN LATERAL (
+        SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+        FROM collections c
+        WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
+        ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE
+        FETCH FIRST 1 ROWS ONLY
+    ) t ON true
 )
-SELECT type_id, uid, id, film_date
-FROM CUs
-WHERE row_number <= 4
-	UNION
-SELECT type_id, uid, id, film_date
-FROM collections
-WHERE row_number = 1
+(
+	SELECT type_id, uid, id, film_date
+	FROM CUs
+	ORDER BY film_date
+) UNION (
+	SELECT type_id, uid, id, film_date
+	FROM COLs
+)
 `
 	query := fmt.Sprintf(queryTemplate,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
@@ -983,6 +994,8 @@ WHERE row_number = 1
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LECTURE_SERIES].ID,
+
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID,
 	)
@@ -1020,44 +1033,11 @@ WHERE row_number = 1
 		return nil, NewInternalError(err)
 	}
 	cuIDs := make([]int64, 0)
-	//last daily lesson last part LESSON_PART
-	//previous daily lesson last part LESSON_PART
-	cuIDs = append(cuIDs, firstRows["LESSON_PART"][0].id)
-	cuIDs = append(cuIDs, firstRows["LESSON_PART"][1].id)
-	//last women lesson WOMEN_LESSON
-	if _, ok := firstRows["WOMEN_LESSON"]; ok {
-		wl := firstRows["WOMEN_LESSON"][0]
-		// Is it newer than 14 days?
-		if wl.film_date.After(time.Now().Add(-14 * 24 * time.Hour)) {
-			cuIDs = append(cuIDs, wl.id)
-		} else {
-			cuIDs = append(cuIDs, firstRows["LESSON_PART"][2].id)
-		}
-	} else {
-		cuIDs = append(cuIDs, firstRows["LESSON_PART"][2].id)
-	}
-	//last virtual lesson VIRTUAL_LESSON
-	if _, ok := firstRows["VIRTUAL_LESSON"]; ok {
-		cuIDs = append(cuIDs, firstRows["VIRTUAL_LESSON"][0].id)
-	}
-	//4 latest VIDEO_PROGRAM_CHAPTER
-	if _, ok := firstRows["VIDEO_PROGRAM_CHAPTER"]; ok {
-		for _, r := range firstRows["VIDEO_PROGRAM_CHAPTER"][0:4] {
-			cuIDs = append(cuIDs, r.id)
-		}
-	}
-	//4 latest CLIP
-	if _, ok := firstRows["CLIP"]; ok {
-		for _, r := range firstRows["CLIP"][0:4] {
-			cuIDs = append(cuIDs, r.id)
-		}
-	}
-	//4 latest ARTICLE
-	if _, ok := firstRows["ARTICLE"]; ok {
-		for _, r := range firstRows["ARTICLE"][0:4] {
-			cuIDs = append(cuIDs, r.id)
-		}
-	}
+	ids, useLessonSeries := calculateFirstRow(firstRows)
+	cuIDs = append(cuIDs, ids...)
+	cuIDs = append(cuIDs, fourOfAKind(firstRows, "VIDEO_PROGRAM_CHAPTER")...)
+	cuIDs = append(cuIDs, fourOfAKind(firstRows, "CLIP")...)
+	cuIDs = append(cuIDs, fourOfAKind(firstRows, "ARTICLE")...)
 	//last MEAL, FRIENDS_GATHERING
 	if _, ok := firstRows["MEAL"]; ok {
 		cuIDs = append(cuIDs, firstRows["MEAL"][0].id)
@@ -1081,7 +1061,7 @@ WHERE row_number = 1
 		return nil, ex
 	}
 
-	//last CONGRESS and HOLIDAY -- both are Collections
+	//last Collections: CONGRESS, HOLIDAY, LECTURE_SERIES
 	cIDs := make([]int64, 0)
 	cs := make([]firstRowsType, 0)
 	if _, ok := firstRows["CONGRESS"]; ok {
@@ -1091,6 +1071,12 @@ WHERE row_number = 1
 	if _, ok := firstRows["HOLIDAY"]; ok {
 		cIDs = append(cIDs, firstRows["HOLIDAY"][0].id)
 		cs = append(cs, firstRows["HOLIDAY"][0])
+	}
+	if useLessonSeries {
+		if _, ok := firstRows["LECTURE_SERIES"]; ok {
+			cIDs = append(cIDs, firstRows["LECTURE_SERIES"][0].id)
+			cs = append(cs, firstRows["LECTURE_SERIES"][0])
+		}
 	}
 
 	ci18nsMap, err := loadCI18ns(db, r.Language, cIDs)
@@ -1121,6 +1107,61 @@ WHERE row_number = 1
 	}
 
 	return cus, nil
+}
+
+// first row on homepage:
+// 1. last daily lesson last part LESSON_PART
+// 2. previous daily lesson last part LESSON_PART
+// 3. We have to select two newest of WOMEN_LESSON, VIRTUAL_LESSON, LECTURE_SERIES,
+//    but only if they are not older than 14 days.
+//    To top up to 2 with LESSON_PARTs
+func calculateFirstRow(firstRows map[string][]firstRowsType) ([]int64, bool) {
+	selectable := make([]int64, 0)
+	useLessonSeries := false
+
+	selectable = append(selectable, firstRows["LESSON_PART"][0].id)
+	selectable = append(selectable, firstRows["LESSON_PART"][1].id)
+	total := 2
+	for _, ct := range []string{"WOMEN_LESSON", "VIRTUAL_LESSON"} {
+		if _, ok := firstRows[ct]; ok {
+			fr := firstRows[ct][0]
+			if fr.film_date.After(time.Now().Add(-14 * 24 * time.Hour)) {
+				// Is it newer than 14 days?
+				selectable = append(selectable, fr.id)
+				total++
+			}
+		}
+	}
+
+	if total < 4 {
+		if _, ok := firstRows["LECTURE_SERIES"]; ok {
+			fr := firstRows["LECTURE_SERIES"][0]
+			if fr.film_date.After(time.Now().Add(-14 * 24 * time.Hour)) {
+				// Is it newer than 14 days?
+				useLessonSeries = true
+				total++
+			}
+		}
+	}
+	if total < 4 {
+		selectable = append(selectable, firstRows["LESSON_PART"][2].id)
+		total++
+	}
+	if total < 4 {
+		selectable = append(selectable, firstRows["LESSON_PART"][3].id)
+	}
+
+	return selectable[:4], useLessonSeries
+}
+
+func fourOfAKind(firstRows map[string][]firstRowsType, kind string) []int64 {
+	cuIDs := make([]int64, 0)
+	if _, ok := firstRows[kind]; ok {
+		for _, r := range firstRows[kind][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	return cuIDs
 }
 
 func handleContentUnitsFull(db *sql.DB, r ContentUnitsRequest, mediaTypes []string, languages []string) (cuResp *ContentUnitsResponse, err error) {
