@@ -516,31 +516,8 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 		concatenated = append(concatenated, result.Hits.Hits...)
 	}
 
-	// Keep only unique results by MDB_UID (additional results with a duplicate MDB_UID might be added by Grammar). We keep the result with a higher score.
-	unique := make([]*elastic.SearchHit, 0)
-	mdbMap := make(map[string]*elastic.SearchHit)
-	for _, hit := range concatenated {
-		var mdbUid es.MdbUid
-		if hit.Score != nil && hit.Index != consts.INTENT_INDEX_TAG && hit.Index != consts.INTENT_INDEX_SOURCE {
-			if err := json.Unmarshal(*hit.Source, &mdbUid); err == nil {
-				if mdbUid.MDB_UID != "" {
-					if _, ok := mdbMap[mdbUid.MDB_UID]; !ok || *hit.Score > *mdbMap[mdbUid.MDB_UID].Score {
-						mdbMap[mdbUid.MDB_UID] = hit
-					}
-				} else {
-					unique = append(unique, hit)
-				}
-			} else {
-				log.Warnf("Unable to unmarshal source for hit ''%s.", hit.Uid)
-				unique = append(unique, hit)
-			}
-		} else {
-			unique = append(unique, hit)
-		}
-	}
-	for _, hit := range mdbMap {
-		unique = append(unique, hit)
-	}
+	// Keep only unique results by MDB_UID (additional results with a duplicate MDB_UID might be added by Grammar).
+	unique := uniqueHitsByMdbUid(concatenated, []string{consts.INTENT_INDEX_TAG, consts.INTENT_INDEX_SOURCE})
 
 	// Apply sorting.
 	if sortBy == consts.SORT_BY_RELEVANCE {
@@ -582,6 +559,35 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	result.Hits.MaxScore = &maxScore
 
 	return result, nil
+}
+
+func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string) []*elastic.SearchHit {
+	unique := make([]*elastic.SearchHit, 0)
+	mdbMap := make(map[string]*elastic.SearchHit)
+	for _, hit := range hits {
+		var mdbUid es.MdbUid
+		if hit.Score != nil && !utils.Contains(utils.Is(indexesToIgnore), hit.Index) {
+			if err := json.Unmarshal(*hit.Source, &mdbUid); err == nil {
+				if mdbUid.MDB_UID != "" {
+					// We keep the result with a higher score.
+					if _, ok := mdbMap[mdbUid.MDB_UID]; !ok || *hit.Score > *mdbMap[mdbUid.MDB_UID].Score {
+						mdbMap[mdbUid.MDB_UID] = hit
+					}
+				} else {
+					unique = append(unique, hit)
+				}
+			} else {
+				log.Warnf("Unable to unmarshal source for hit ''%s.", hit.Uid)
+				unique = append(unique, hit)
+			}
+		} else {
+			unique = append(unique, hit)
+		}
+	}
+	for _, hit := range mdbMap {
+		unique = append(unique, hit)
+	}
+	return unique
 }
 
 func (e *ESEngine) timeTrack(start time.Time, operation string) {
