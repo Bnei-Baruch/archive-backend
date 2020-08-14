@@ -960,7 +960,7 @@ WITH CUs AS (
 		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
         FROM content_units cu
         WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
-        ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE
+        ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
         FETCH FIRST 4 ROWS ONLY
 	) t ON true
 ), COLs AS (
@@ -972,7 +972,7 @@ WITH CUs AS (
         SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
         FROM collections c
         WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
-        ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE
+        ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
         FETCH FIRST 1 ROWS ONLY
     ) t ON true
 )
