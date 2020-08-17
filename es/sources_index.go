@@ -205,7 +205,7 @@ func (index *SourcesIndex) loadSources(db *sql.DB, sqlScope string) (map[string]
                                 SELECT    source_id,
                                           an.language,
 										  array [an.name] AS author_names
-										  -- We dont take the an.full_name value and use synonyms instead                   
+										  -- We dont take the author full name (an.full_name) value and use synonyms instead                   
 											/* CASE
 													WHEN an.full_name IS NULL THEN array [an.name]
 													ELSE array [an.name, an.full_name]

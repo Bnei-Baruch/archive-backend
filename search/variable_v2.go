@@ -2,6 +2,7 @@ package search
 
 import (
 	"bufio"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,8 +13,10 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/sqlboiler/queries"
 )
 
 // Translations language => value => phrases
@@ -39,7 +42,7 @@ func MakeYearVariablesV2() map[string][]string {
 }
 
 func YearScorePenalty(vMap map[string][]string) float64 {
-	if yearStrs, ok := vMap["$Year"]; ok {
+	if yearStrs, ok := vMap[consts.VAR_YEAR]; ok {
 		maxRet := 0.0
 		for _, yearStr := range yearStrs {
 			nowYear := time.Now().Year()
@@ -65,45 +68,81 @@ func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 	}
 
 	years := MakeYearVariablesV2()
-	variables["$Year"] = make(TranslationsV2)
+	variables[consts.VAR_YEAR] = make(TranslationsV2)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		// Year
-		variables["$Year"][lang] = years
-
-		// Holiday
-		//holidayVariable, err := MakeHolidayVariable(lang, translations)
-		//if err != nil {
-		//	return nil, err
-		//}
-		//if holidayVariable != nil {
-		//	variables[lang][holidayVariable.Name()] = holidayVariable
-		//}
+		variables[consts.VAR_YEAR][lang] = years
 	}
 	return variables, nil
 }
 
 func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
+	variables := make(VariablesV2)
+
+	// Load variables from files
 	suffix := "variable"
 	matches, err := filepath.Glob(filepath.Join(variablesDir, fmt.Sprintf("*.%s", suffix)))
 	if err != nil {
 		return nil, err
 	}
-
 	log.Infof("Globed %d variable translation files.", len(matches))
-	variables := make(VariablesV2)
 	for _, variableFile := range matches {
 		basename := filepath.Base(variableFile)
 		variable := fmt.Sprintf("$%s", snakeCaseToCamelCase(basename[:len(basename)-len(suffix)-1]))
-		variableTranslations, err := LoadVariableTranslationsV2(variableFile, variable)
+		variableTranslations, err := LoadVariableTranslationsFromFile(variableFile, variable)
 		if err != nil {
 			return nil, err
 		}
 		variables[variable] = variableTranslations
 	}
+
+	// Load holiday variables from DB
+	db, err := sql.Open("postgres", viper.GetString("mdb.url"))
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to connect to DB.")
+	}
+	holidayTranslations, err := LoadHolidayTranslationsFromDB(db)
+	if err != nil {
+		return nil, err
+	}
+	variables[consts.VAR_HOLIDAYS] = holidayTranslations
 	return variables, nil
 }
 
-func LoadVariableTranslationsV2(variableFile string, variableName string) (TranslationsV2, error) {
+func LoadHolidayTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
+
+	translations := make(TranslationsV2)
+	query := `select tn.language, t.uid, tn.label 
+	from tags t join tags tp on t.parent_id = tp.id
+	join tag_i18n tn on t.id=tn.tag_id
+	where tp.uid = '1nyptSIo'`
+	//  '1nyptSIo' is a const. uid for 'holidays' parent tag
+
+	rows, err := queries.Raw(db, query).Query()
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to retrieve from DB the translations for holidays.")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var lang string
+		var uid string
+		var phrase string
+		err := rows.Scan(&lang, &uid, &phrase)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		if _, ok := translations[lang]; !ok {
+			translations[lang] = make(map[string][]string)
+		}
+		translations[lang][uid] = []string{phrase}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows.Err()")
+	}
+	return translations, nil
+}
+
+func LoadVariableTranslationsFromFile(variableFile string, variableName string) (TranslationsV2, error) {
 	file, err := os.Open(variableFile)
 	if err != nil {
 		return nil, errors.Wrapf(err, "Error reading translation file: %s", variableFile)

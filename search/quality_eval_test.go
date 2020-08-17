@@ -20,7 +20,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
@@ -203,6 +203,8 @@ func (suite *QualityEvalSuite) TestParseExpectation() {
 		search.Expectation{search.ET_LANDING_PAGE, "events/conventions", nil, "https://kabbalahmedia.info/he/events/conventions"}, r)
 	suite.validateExpectation("https://kabbalahmedia.info/he/events/holidays",
 		search.Expectation{search.ET_LANDING_PAGE, "events/holidays", nil, "https://kabbalahmedia.info/he/events/holidays"}, r)
+	suite.validateExpectation("https://kabbalahmedia.info/he/events/holidays?holidays=RWqjxgkj",
+		search.Expectation{search.ET_LANDING_PAGE, "events/holidays", []search.Filter{search.Filter{Name: search.FILTER_NAME_HOLIDAYS, Value: "RWqjxgkj"}}, "https://kabbalahmedia.info/he/events/holidays?holidays=RWqjxgkj"}, r)
 	suite.validateExpectation("https://kabbalahmedia.info/he/events/unity-days",
 		search.Expectation{search.ET_LANDING_PAGE, "events/unity-days", nil, "https://kabbalahmedia.info/he/events/unity-days"}, r)
 	suite.validateExpectation("https://kabbalahmedia.info/he/events/friends-gatherings",
