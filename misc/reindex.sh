@@ -22,7 +22,7 @@ supervisorctl start events
 WARNINGS="$(egrep -c "level=(warning|error)" ${LOG_FILE})"
 
 if [ "$WARNINGS" != "0" ];then
-	echo "Errors in periodic import of storage catalog to MDB" | mail -s "ERROR: ES reindex" -r "mdb@bbdomain.org" -a ${LOG_FILE} edoshor@gmail.com kolmanv@gmail.com
+	echo "Errors in periodic import of storage catalog to MDB" | mail -s "ERROR: ES reindex" -r "mdb@bbdomain.org" -a ${LOG_FILE} edoshor@gmail.com kolmanv@gmail.com yurihechter@gmail.com
 fi
 
 # Cleanup old logs (older then week).

@@ -173,8 +173,10 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 					}
 					bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(rule))
 				} else {
+
 					// List of variables: ["$Year", "$ConventionLocation"]
 					variablesSet := VariablesFromString(variablesSetAsString)
+
 					// Set of possible variable values: [["2000", "2001", ...], ["Moscow", "Tel Aviv", "New York", ...]]
 					variablesValues := [][]string(nil)
 					for i := range variablesSet {
@@ -205,6 +207,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 						}
 
 						assignedRulesSuggest := []string{}
+
 						for i := range assignedRules {
 							assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
 						}

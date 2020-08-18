@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/Bnei-Baruch/archive-backend/es"
+
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
 type Histogram map[string]int
@@ -134,13 +137,18 @@ type SearchStatsCache interface {
 	// |location| can be of: "Moscow" or "Russia|Moscow" or "Russia" or "" (empty for year constrain only)
 	// |year| is 4 digit year string, e.g., "1998", "2010" or "" (empty for location constrain only)
 	DoesConventionExist(location string, year string) bool
+	DoesConventionSingle(location string, year string) bool
+	// |holiday| is the UID of the tag that is children of 'holidays' tag
+	DoesHolidayExist(holiday string, year string) bool
+	DoesHolidaySingle(holiday string, year string) bool
 }
 
 type SearchStatsCacheImpl struct {
-	mdb         *sql.DB
-	tags        ClassByTypeStats
-	sources     ClassByTypeStats
-	conventions map[string]map[string]int
+	mdb          *sql.DB
+	tags         ClassByTypeStats
+	sources      ClassByTypeStats
+	conventions  map[string]map[string]int
+	holidayYears map[string]map[string]int
 }
 
 func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
@@ -149,8 +157,22 @@ func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
 	return ssc
 }
 
+func (ssc *SearchStatsCacheImpl) DoesHolidayExist(holiday string, year string) bool {
+	return ssc.holidayYears[holiday][year] > 0
+}
+
+func (ssc *SearchStatsCacheImpl) DoesHolidaySingle(holiday string, year string) bool {
+	//fmt.Printf("Holidays count for %s %s - %d\n", holiday, year, ssc.holidayYears[holiday][year])
+	return ssc.holidayYears[holiday][year] == 1
+}
+
 func (ssc *SearchStatsCacheImpl) DoesConventionExist(location string, year string) bool {
 	return ssc.conventions[year][location] > 0
+}
+
+func (ssc *SearchStatsCacheImpl) DoesConventionSingle(location string, year string) bool {
+	//fmt.Printf("Conventions count for %s %s - %d\n", location, year, ssc.conventions[year][location])
+	return ssc.conventions[year][location] == 1
 }
 
 func (ssc *SearchStatsCacheImpl) IsTagWithUnits(uid string, cts ...string) bool {
@@ -205,8 +227,51 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	if err != nil {
 		return errors.Wrap(err, "Load conventions stats.")
 	}
+	ssc.holidayYears, err = ssc.refreshHolidayYears()
+	if err != nil {
+		return errors.Wrap(err, "Load holidays stats.")
+	}
 
 	return nil
+}
+
+func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]int, error) {
+	ret := make(map[string]map[string]int)
+
+	// Replace || operator to & (intersect arrays) after upgrading Postgres to v.12
+	rows, err := queries.Raw(ssc.mdb, `select t.uid as tag_uid, 
+	array_remove(array_agg(distinct extract(year from (c.properties ->> 'start_date')::date)) || 
+						  array_agg(distinct extract(year from (c.properties ->> 'end_date')::date)), NULL) as years		
+	from tags t 
+	join collections c on c.properties ->> 'holiday_tag' = t.uid
+	where c.secure = 0 and c.published = true
+	group by t.uid;`).Query()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "refreshHolidays - Query failed.")
+	}
+	defer rows.Close()
+
+	ret[""] = make(map[string]int) // Year without specific holiday
+	for rows.Next() {
+		var tagUID string
+		var years pq.StringArray
+		err := rows.Scan(&tagUID, &years)
+		if err != nil {
+			return nil, errors.Wrap(err, "refreshHolidays rows.Scan")
+		}
+		years = es.Unique(years) // Remove this after upgrading to Postgres 12 and changing the query above
+		if _, ok := ret[tagUID]; !ok {
+			ret[tagUID] = make(map[string]int)
+		}
+		for _, year := range years {
+			ret[tagUID][""]++
+			ret[""][year]++
+			ret[tagUID][year]++
+		}
+	}
+
+	return ret, nil
 }
 
 func (ssc *SearchStatsCacheImpl) refreshConventions() (map[string]map[string]int, error) {
@@ -214,7 +279,7 @@ func (ssc *SearchStatsCacheImpl) refreshConventions() (map[string]map[string]int
 	var collections []*mdbmodels.Collection
 	if err := mdbmodels.NewQuery(ssc.mdb,
 		qm.From("collections as c"),
-		qm.Where(fmt.Sprintf("c.type_id = %d", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID))).
+		qm.Where(fmt.Sprintf("c.type_id = %d and c.secure = 0 and c.published = true", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID))).
 		Bind(&collections); err != nil {
 		return nil, err
 	}
@@ -229,11 +294,17 @@ func (ssc *SearchStatsCacheImpl) refreshConventions() (map[string]map[string]int
 		city := props["city"].(string)
 		country := props["country"].(string)
 		years := []string{""}
+		var start_year string
+		var end_year string
 		if start_date := props["start_date"]; len(start_date.(string)) >= 4 {
-			years = append(years, start_date.(string)[0:4])
+			start_year = start_date.(string)[0:4]
+			years = append(years, start_year)
 		}
 		if end_date := props["end_date"]; len(end_date.(string)) >= 4 && (len(years) == 0 || years[0] != end_date.(string)[0:4]) {
-			years = append(years, end_date.(string)[0:4])
+			end_year = end_date.(string)[0:4]
+			if end_year != start_year {
+				years = append(years, end_year)
+			}
 		}
 		for _, year := range years {
 			if _, ok := ret[year]; !ok {
