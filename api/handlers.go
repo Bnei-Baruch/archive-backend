@@ -952,50 +952,64 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpError) {
 	const queryTemplate = `
 WITH CUs AS (
-    SELECT ct.id as type_id, uid, cu_id AS id, film_date
-    FROM (
-		VALUES (%d), (%d), (%d), (%d), (%d), (%d), (%d), (%d)
-	) ct(id)
+	SELECT ct.id as type_id, uid, cu_id AS id, film_date
+	FROM ( VALUES (%d), (%d), (%d), (%d), (%d), (%d), (%d) ) ct(id)
 	INNER JOIN LATERAL (
 		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
-        FROM content_units cu
-        WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
-        ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
-        FETCH FIRST 4 ROWS ONLY
+		FROM content_units cu
+		WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
+		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC 
+		FETCH FIRST 4 ROWS ONLY
+	) t ON true
+), LESSON_COLLs AS (
+	SELECT ct.id as type_id, uid, cu_id AS id, film_date
+	FROM ( VALUES (%d), (%d) ) ct(id)
+	INNER JOIN LATERAL (
+		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+		FROM collections c
+		WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
+		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
+		FETCH FIRST 3 ROWS ONLY
 	) t ON true
 ), COLs AS (
-    SELECT ct.id as type_id, uid, cu_id AS id, film_date
-    FROM (
-		VALUES (%d), (%d), (%d)
-	) ct(id)
-    INNER JOIN LATERAL (
-        SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
-        FROM collections c
-        WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
-        ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
-        FETCH FIRST 1 ROWS ONLY
-    ) t ON true
+	SELECT ct.id as type_id, uid, cu_id AS id, film_date
+	FROM ( VALUES (%d), (%d) ) ct(id)
+	INNER JOIN LATERAL (
+		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+		FROM collections c
+		WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
+		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
+		FETCH FIRST 1 ROWS ONLY
+	) t ON true
 )
 (
-	SELECT type_id, uid, id, film_date
-	FROM CUs
-	ORDER BY film_date
+	SELECT * FROM CUs
 ) UNION (
-	SELECT type_id, uid, id, film_date
-	FROM COLs
+	SELECT * FROM COLs
+) UNION (
+	SELECT * FROM LESSON_COLLs
 )
+order by type_id, film_date desc
 `
 	query := fmt.Sprintf(queryTemplate,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
+		// CUs
+		// row #1: CT_WOMEN_LESSON, CT_VIRTUAL_LESSON x 1
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIRTUAL_LESSON].ID,
+		// row #2: CT_VIDEO_PROGRAM_CHAPTER x 4
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM_CHAPTER].ID,
+		// row #3: CT_CLIP x 4
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
+		// row #4: CT_ARTICLE x 4
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
+		// row #5: CT_FRIENDS_GATHERING, CT_MEAL x 1
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LECTURE_SERIES].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
 
+		// Collections (lessons): CT_LECTURE_SERIES, CT_DAILY_LESSON x 3
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LECTURE_SERIES].ID,
+		// Collections: CT_CONGRESS, CT_HOLIDAY x 1
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID,
 	)
@@ -1033,19 +1047,33 @@ WITH CUs AS (
 		return nil, NewInternalError(err)
 	}
 	cuIDs := make([]int64, 0)
-	ids, useLessonSeries := calculateFirstRow(firstRows)
-	cuIDs = append(cuIDs, ids...)
-	cuIDs = append(cuIDs, fourOfAKind(firstRows, "VIDEO_PROGRAM_CHAPTER")...)
-	cuIDs = append(cuIDs, fourOfAKind(firstRows, "CLIP")...)
-	cuIDs = append(cuIDs, fourOfAKind(firstRows, "ARTICLE")...)
-	//last MEAL, FRIENDS_GATHERING
-	if _, ok := firstRows["MEAL"]; ok {
-		cuIDs = append(cuIDs, firstRows["MEAL"][0].id)
+	if _, ok := firstRows[consts.CT_WOMEN_LESSON]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_WOMEN_LESSON][0].id)
 	}
-	if _, ok := firstRows["FRIENDS_GATHERING"]; ok {
-		cuIDs = append(cuIDs, firstRows["FRIENDS_GATHERING"][0].id)
+	if _, ok := firstRows[consts.CT_VIRTUAL_LESSON]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_VIRTUAL_LESSON][0].id)
 	}
-
+	if _, ok := firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER]; ok {
+		for _, r := range firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	if _, ok := firstRows[consts.CT_CLIP]; ok {
+		for _, r := range firstRows[consts.CT_CLIP][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	if _, ok := firstRows[consts.CT_ARTICLE]; ok {
+		for _, r := range firstRows[consts.CT_ARTICLE][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	if _, ok := firstRows[consts.CT_MEAL]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_MEAL][0].id)
+	}
+	if _, ok := firstRows[consts.CT_FRIENDS_GATHERING]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_FRIENDS_GATHERING][0].id)
+	}
 	// data query
 	units, err := mdbmodels.ContentUnits(db,
 		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
@@ -1064,18 +1092,26 @@ WITH CUs AS (
 	//last Collections: CONGRESS, HOLIDAY, LECTURE_SERIES
 	cIDs := make([]int64, 0)
 	cs := make([]firstRowsType, 0)
-	if _, ok := firstRows["CONGRESS"]; ok {
-		cIDs = append(cIDs, firstRows["CONGRESS"][0].id)
-		cs = append(cs, firstRows["CONGRESS"][0])
+	if _, ok := firstRows[consts.CT_CONGRESS]; ok {
+		cIDs = append(cIDs, firstRows[consts.CT_CONGRESS][0].id)
+		cs = append(cs, firstRows[consts.CT_CONGRESS][0])
 	}
-	if _, ok := firstRows["HOLIDAY"]; ok {
-		cIDs = append(cIDs, firstRows["HOLIDAY"][0].id)
-		cs = append(cs, firstRows["HOLIDAY"][0])
+	if _, ok := firstRows[consts.CT_HOLIDAY]; ok {
+		cIDs = append(cIDs, firstRows[consts.CT_HOLIDAY][0].id)
+		cs = append(cs, firstRows[consts.CT_HOLIDAY][0])
 	}
-	if useLessonSeries {
-		if _, ok := firstRows["LECTURE_SERIES"]; ok {
-			cIDs = append(cIDs, firstRows["LECTURE_SERIES"][0].id)
-			cs = append(cs, firstRows["LECTURE_SERIES"][0])
+	if _, ok := firstRows[consts.CT_LECTURE_SERIES]; ok {
+		// The first one is always on HomePage
+		for _, r := range firstRows[consts.CT_LECTURE_SERIES][0:2] {
+			cIDs = append(cIDs, r.id)
+			cs = append(cs, r)
+		}
+	}
+	if _, ok := firstRows[consts.CT_DAILY_LESSON]; ok {
+		// The first one is always on HomePage
+		for _, r := range firstRows[consts.CT_DAILY_LESSON][1:3] {
+			cIDs = append(cIDs, r.id)
+			cs = append(cs, r)
 		}
 	}
 
@@ -1083,12 +1119,19 @@ WITH CUs AS (
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
+	lastNumber := 1
 	for _, x := range cs {
 		u := &ContentUnit{
 			mdbID:       x.id,
 			ID:          x.uid,
 			ContentType: x.content_type,
 			FilmDate:    &utils.Date{Time: x.film_date},
+		}
+		if x.content_type == consts.CT_DAILY_LESSON {
+			u.NameInCollection = fmt.Sprintf("%d", lastNumber)
+			lastNumber++
+		} else {
+			lastNumber = 1
 		}
 		if i18ns, ok := ci18nsMap[x.id]; ok {
 			for _, l := range consts.I18N_LANG_ORDER[r.Language] {
@@ -1107,61 +1150,6 @@ WITH CUs AS (
 	}
 
 	return cus, nil
-}
-
-// first row on homepage:
-// 1. last daily lesson last part LESSON_PART
-// 2. previous daily lesson last part LESSON_PART
-// 3. We have to select two newest of WOMEN_LESSON, VIRTUAL_LESSON, LECTURE_SERIES,
-//    but only if they are not older than 14 days.
-//    To top up to 2 with LESSON_PARTs
-func calculateFirstRow(firstRows map[string][]firstRowsType) ([]int64, bool) {
-	selectable := make([]int64, 0)
-	useLessonSeries := false
-
-	selectable = append(selectable, firstRows["LESSON_PART"][0].id)
-	selectable = append(selectable, firstRows["LESSON_PART"][1].id)
-	total := 2
-	for _, ct := range []string{"WOMEN_LESSON", "VIRTUAL_LESSON"} {
-		if _, ok := firstRows[ct]; ok {
-			fr := firstRows[ct][0]
-			if fr.film_date.After(time.Now().Add(-14 * 24 * time.Hour)) {
-				// Is it newer than 14 days?
-				selectable = append(selectable, fr.id)
-				total++
-			}
-		}
-	}
-
-	if total < 4 {
-		if _, ok := firstRows["LECTURE_SERIES"]; ok {
-			fr := firstRows["LECTURE_SERIES"][0]
-			if fr.film_date.After(time.Now().Add(-14 * 24 * time.Hour)) {
-				// Is it newer than 14 days?
-				useLessonSeries = true
-				total++
-			}
-		}
-	}
-	if total < 4 {
-		selectable = append(selectable, firstRows["LESSON_PART"][2].id)
-		total++
-	}
-	if total < 4 {
-		selectable = append(selectable, firstRows["LESSON_PART"][3].id)
-	}
-
-	return selectable[:4], useLessonSeries
-}
-
-func fourOfAKind(firstRows map[string][]firstRowsType, kind string) []int64 {
-	cuIDs := make([]int64, 0)
-	if _, ok := firstRows[kind]; ok {
-		for _, r := range firstRows[kind][0:4] {
-			cuIDs = append(cuIDs, r.id)
-		}
-	}
-	return cuIDs
 }
 
 func handleContentUnitsFull(db *sql.DB, r ContentUnitsRequest, mediaTypes []string, languages []string) (cuResp *ContentUnitsResponse, err error) {
