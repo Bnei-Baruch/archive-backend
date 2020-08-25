@@ -478,10 +478,12 @@ var INTENT_HIT_TYPE_BY_CT = map[string]string{
 }
 
 const (
-	GRAMMAR_INDEX                = "grammar"
-	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
+	GRAMMAR_INDEX = "grammar"
 
-	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
+	GRAMMAR_TYPE_FILTER = "filter"
+
+	GRAMMAR_TYPE_LANDING_PAGE    = "landing-page"
+	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS            = "lessons"
 	GRAMMAR_INTENT_LANDING_PAGE_VIRTUAL_LESSONS    = "virtual_lessons"
@@ -587,6 +589,7 @@ const (
 	VAR_CONVENTION_LOCATION = "$ConventionLocation"
 	VAR_TEXT                = "$Text"
 	VAR_HOLIDAYS            = "$Holidays"
+	VAR_CONTENT_TYPE        = "$ContentType"
 )
 
 // Variable name to frontend filter name mapping.
