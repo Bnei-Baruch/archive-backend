@@ -480,9 +480,11 @@ var INTENT_HIT_TYPE_BY_CT = map[string]string{
 const (
 	GRAMMAR_INDEX = "grammar"
 
-	GRAMMAR_TYPE_FILTER = "filter"
+	GRAMMAR_TYPE_FILTER       = "filter"
+	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
 
-	GRAMMAR_TYPE_LANDING_PAGE    = "landing-page"
+	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE = "by_content_type"
+
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS            = "lessons"
@@ -510,6 +512,9 @@ const (
 
 // Map from intent to filters, i.e., filter name to list of values.
 var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
+
+	// Landing pages
+
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LESSON_PART, CT_FULL_LESSON},
 		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON},
@@ -581,6 +586,10 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	},
 	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS: nil,
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
+
+	// Filters
+
+	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
 }
 
 // Variables

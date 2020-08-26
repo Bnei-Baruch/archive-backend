@@ -1,11 +1,11 @@
-en, by_content_type => $ContentType $Text
-en, by_content_type => $ContentType about $Text
-en, by_content_type => $ContentType of $Text
-en, by_content_type => $Text $ContentType
+en,by_content_type => $ContentType $Text
+en,by_content_type => $ContentType about $Text
+en,by_content_type => $ContentType of $Text
+en,by_content_type => $Text $ContentType
 
-he, by_content_type => $ContentType $Text
-he, by_content_type => $ContentType בנושא $Text
-he, by_content_type => $ContentType אודות $Text
-he, by_content_type => $ContentType על $Text
-he, by_content_type => $ContentType של $Text
-he, by_content_type => $Text $ContentType
+he,by_content_type => $ContentType $Text
+he,by_content_type => $ContentType בנושא $Text
+he,by_content_type => $ContentType אודות $Text
+he,by_content_type => $ContentType על $Text
+he,by_content_type => $ContentType של $Text
+he,by_content_type => $Text $ContentType
