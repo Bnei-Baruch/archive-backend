@@ -483,7 +483,7 @@ const (
 	GRAMMAR_TYPE_FILTER       = "filter"
 	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
 
-	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE = "by_content_type"
+	GRAMMAR_INTENT_FILTER_RESULTS = "filter_results"
 
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 
@@ -587,9 +587,9 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS: nil,
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
 
-	// Filters
+	// Filter
 
-	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
+	GRAMMAR_INTENT_FILTER_RESULTS: nil,
 }
 
 // Variables
