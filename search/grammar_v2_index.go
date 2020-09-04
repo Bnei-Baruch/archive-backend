@@ -27,10 +27,10 @@ type GrammarRule struct {
 	RulesSuggest es.SuggestField `json:"rules_suggest"`
 }
 
-type GrammarRulePercolatorQuery struct {
-	GrammarRule GrammarRule             `json:"grammar_rule"`
-	Query       elastic.PercolatorQuery `json:"query"`
-	SearchText  string                  `json:"search_text"`
+type GrammarRuleWithPercolatorQuery struct {
+	GrammarRule GrammarRule   `json:"grammar_rule"`
+	Query       elastic.Query `json:"query"`
+	SearchText  string        `json:"search_text"`
 }
 
 const (
@@ -169,15 +169,18 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 					for i := range rules {
 						assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(rules[i])...)
 					}
-					rule := GrammarRule{
-						HitType:      grammar.HitType,
-						Intent:       intent,
-						Rules:        rules,
-						RulesSuggest: es.SuggestField{es.Unique(assignedRulesSuggest), float64(consts.ES_GRAMMAR_SUGGEST_DEFAULT_WEIGHT)},
-						Variables:    []string{},
-						Values:       []string{},
+					doc := GrammarRuleWithPercolatorQuery{
+						Query: elastic.MatchNoneQuery{},
+						GrammarRule: GrammarRule{
+							HitType:      grammar.HitType,
+							Intent:       intent,
+							Rules:        rules,
+							RulesSuggest: es.SuggestField{es.Unique(assignedRulesSuggest), float64(consts.ES_GRAMMAR_SUGGEST_DEFAULT_WEIGHT)},
+							Variables:    []string{},
+							Values:       []string{},
+						},
 					}
-					bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(rule))
+					bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(doc))
 				} else {
 
 					// List of variables: ["$Year", "$ConventionLocation"]
@@ -193,6 +196,8 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 								// more than one appereance of $Text
 								// ! - make sure the check correct
 								// print error and continue.. or stop indexing
+								log.Errorf("More than one appereance of $Text variable.")
+								continue
 							} else {
 								hasTextVar = true
 							}
@@ -222,9 +227,29 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 								assignedRules = append(assignedRules, assignedRule)
 							}
 						}
-
+						var percolatorQuery elastic.Query
 						assignedRulesSuggest := []string{}
-						if !hasTextVar {
+						if hasTextVar {
+							ruleClauses := []string{}
+							for _, ruleStr := range assignedRules {
+								splitted := strings.Split(ruleStr, consts.VAR_TEXT)
+								withinQuotaionMarks := []string{}
+								for _, str := range splitted {
+									if len(str) > 0 {
+										withinQuotaionMarks = append(withinQuotaionMarks, fmt.Sprintf("\"%s\"", strings.TrimSpace(str)))
+									}
+								}
+								if len(withinQuotaionMarks) > 1 {
+									ruleClauses = append(ruleClauses, fmt.Sprintf("(%s)", strings.Join(withinQuotaionMarks, " AND ")))
+								} else if len(withinQuotaionMarks) == 1 {
+									ruleClauses = append(ruleClauses, fmt.Sprintf("(%s)", withinQuotaionMarks[0]))
+								}
+							}
+							queryStr := strings.Join(ruleClauses, " OR ")
+							fmt.Printf("Query for percolator: %s\n", queryStr)
+							percolatorQuery = elastic.NewQueryStringQuery(queryStr)
+						} else {
+							percolatorQuery = elastic.MatchNoneQuery{}
 							for i := range assignedRules {
 								assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
 							}
@@ -242,20 +267,18 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 						}
 						if GrammarVariablesMatch(intent, vMap, cm) {
 							rule := GrammarRule{
-								HitType: grammar.HitType,
-								Intent:  intent,
-								Rules:   assignedRules,
-								RulesSuggest: func() es.SuggestField {
-									if !hasTextVar {
-										return es.SuggestField{es.Unique(assignedRulesSuggest), float64(100)}
-									} else {
-										return es.SuggestField{}
-									}
-								}(),
-								Variables: variablesSet,
-								Values:    variableValues,
+								HitType:      grammar.HitType,
+								Intent:       intent,
+								Rules:        assignedRules,
+								RulesSuggest: es.SuggestField{es.Unique(assignedRulesSuggest), float64(consts.ES_GRAMMAR_SUGGEST_DEFAULT_WEIGHT)},
+								Variables:    variablesSet,
+								Values:       variableValues,
 							}
-							bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(rule))
+							doc := GrammarRuleWithPercolatorQuery{
+								Query:       percolatorQuery,
+								GrammarRule: rule,
+							}
+							bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(doc))
 						}
 					}
 				}
