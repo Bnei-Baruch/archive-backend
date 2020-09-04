@@ -3,37 +3,49 @@
         "grammars": {
             "dynamic": "strict", 
             "properties": {
-                "hit_type": {
-                    "type": "keyword"
-                }, 
-                "rules": {
-                    "fields": {
-                        "language": {
+                "grammar_rule": {
+                    "dynamic": "strict", 
+                    "properties": {
+                        "hit_type": {
+                            "type": "keyword"
+                        }, 
+                        "rules": {
+                            "fields": {
+                                "language": {
+                                    "type": "text", 
+                                    "analyzer": "dutch"
+                                }
+                            }, 
                             "type": "text", 
-                            "analyzer": "dutch"
-                        }
-                    }, 
-                    "type": "text", 
-                    "analyzer": "standard"
-                }, 
-                "variables": {
-                    "type": "keyword"
-                }, 
-                "intent": {
-                    "type": "keyword"
-                }, 
-                "values": {
-                    "type": "keyword"
-                }, 
-                "rules_suggest": {
-                    "fields": {
-                        "language": {
+                            "analyzer": "standard"
+                        }, 
+                        "variables": {
+                            "type": "keyword"
+                        }, 
+                        "intent": {
+                            "type": "keyword"
+                        }, 
+                        "values": {
+                            "type": "keyword"
+                        }, 
+                        "rules_suggest": {
+                            "fields": {
+                                "language": {
+                                    "type": "completion", 
+                                    "analyzer": "dutch"
+                                }
+                            }, 
                             "type": "completion", 
-                            "analyzer": "dutch"
+                            "analyzer": "standard"
                         }
-                    }, 
-                    "type": "completion", 
-                    "analyzer": "standard"
+                    }
+                }, 
+                "query": {
+                    "type": "percolator"
+                }, 
+                "search_text": {
+                    "type": "text", 
+                    "analyzer": "dutch"
                 }
             }
         }
