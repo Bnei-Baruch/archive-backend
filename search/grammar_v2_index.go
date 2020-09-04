@@ -27,6 +27,12 @@ type GrammarRule struct {
 	RulesSuggest es.SuggestField `json:"rules_suggest"`
 }
 
+type GrammarRulePercolatorQuery struct {
+	GrammarRule GrammarRule             `json:"grammar_rule"`
+	Query       elastic.PercolatorQuery `json:"query"`
+	SearchText  string                  `json:"search_text"`
+}
+
 const (
 	GRAMMARS_INDEX_BASE_NAME = "grammars"
 )
@@ -179,7 +185,18 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 
 					// Set of possible variable values: [["2000", "2001", ...], ["Moscow", "Tel Aviv", "New York", ...]]
 					variablesValues := [][]string(nil)
-					for i := range variablesSet {
+					hasTextVar := false
+					for i, variable := range variablesSet {
+						if variable == consts.VAR_TEXT {
+							if hasTextVar {
+								// TBD
+								// more than one appereance of $Text
+								// ! - make sure the check correct
+								// print error and continue.. or stop indexing
+							} else {
+								hasTextVar = true
+							}
+						}
 						variablesValues = append(variablesValues, utils.StringMapOrderedKeys(variables[variablesSet[i]][lang]))
 					}
 					log.Infof("Cross iterating over %+v", variablesValues)
@@ -207,16 +224,17 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 						}
 
 						assignedRulesSuggest := []string{}
-
-						for i := range assignedRules {
-							assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
-						}
-						for i := range assignedRulesSuggest {
-							if assignedRulesSuggest[i] == "" {
-								log.Infof("NNN: %+v", assignedRulesSuggest[i])
+						if !hasTextVar {
+							for i := range assignedRules {
+								assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
 							}
+							for i := range assignedRulesSuggest {
+								if assignedRulesSuggest[i] == "" {
+									log.Infof("NNN: %+v", assignedRulesSuggest[i])
+								}
+							}
+							log.Infof("Rules suggest: [%s]", strings.Join(assignedRulesSuggest, "|"))
 						}
-						log.Infof("Rules suggest: [%s]", strings.Join(assignedRulesSuggest, "|"))
 
 						vMap := make(map[string][]string)
 						for i := range variablesSet {
@@ -224,12 +242,18 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 						}
 						if GrammarVariablesMatch(intent, vMap, cm) {
 							rule := GrammarRule{
-								HitType:      grammar.HitType,
-								Intent:       intent,
-								Rules:        assignedRules,
-								RulesSuggest: es.SuggestField{es.Unique(assignedRulesSuggest), float64(100)},
-								Variables:    variablesSet,
-								Values:       variableValues,
+								HitType: grammar.HitType,
+								Intent:  intent,
+								Rules:   assignedRules,
+								RulesSuggest: func() es.SuggestField {
+									if !hasTextVar {
+										return es.SuggestField{es.Unique(assignedRulesSuggest), float64(100)}
+									} else {
+										return es.SuggestField{}
+									}
+								}(),
+								Variables: variablesSet,
+								Values:    variableValues,
 							}
 							bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(rule))
 						}
