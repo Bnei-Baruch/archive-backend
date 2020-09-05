@@ -12,6 +12,8 @@ const (
 	GRAMMAR_SUGGEST_SIZE = 30
 
 	GRAMMAR_SEARCH_SIZE = 2000
+
+	GRAMMAR_PERCULATE_SIZE = 1
 )
 
 func createGrammarQuery(q *Query) elastic.Query {
@@ -33,6 +35,20 @@ func createPerculateQuery(q *Query) elastic.Query {
 			SearchText string `json:"search_text"`
 		}{SearchText: simpleQuery(q)})
 	return query
+}
+
+func NewGammarPerculateRequest(query *Query, language string, preference string) *elastic.SearchRequest {
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules")
+	source := elastic.NewSearchSource().
+		Query(createPerculateQuery(query)).
+		Highlight(elastic.NewHighlight().Field("search_text")).
+		FetchSourceContext(fetchSourceContext).
+		Size(GRAMMAR_PERCULATE_SIZE).
+		Explain(query.Deb)
+	return elastic.NewSearchRequest().
+		SearchSource(source).
+		Index(GrammarIndexNameForServing(language)).
+		Preference(preference)
 }
 
 func NewSuggestGammarV2Request(query *Query, language string, preference string) *elastic.SearchRequest {

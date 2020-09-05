@@ -158,6 +158,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, preferences string) ([]Intent,
 	multiSearchService := e.esc.MultiSearch()
 	for _, language := range query.LanguageOrder {
 		multiSearchService.Add(NewSuggestGammarV2Request(query, language, preferences))
+		multiSearchService.Add(NewGammarPerculateRequest(query, language, preferences))
 	}
 	mr, err := multiSearchService.Do(context.TODO())
 	if err != nil {
