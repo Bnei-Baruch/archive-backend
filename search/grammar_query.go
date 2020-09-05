@@ -27,6 +27,14 @@ func createGrammarQuery(q *Query) elastic.Query {
 	return boolQuery
 }
 
+func createPerculateQuery(q *Query) elastic.Query {
+	query := elastic.NewPercolatorQuery().Field("query").Document(
+		struct {
+			SearchText string `json:"search_text"`
+		}{SearchText: simpleQuery(q)})
+	return query
+}
+
 func NewSuggestGammarV2Request(query *Query, language string, preference string) *elastic.SearchRequest {
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules")
 	source := elastic.NewSearchSource().
