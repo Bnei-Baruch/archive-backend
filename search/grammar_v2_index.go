@@ -28,9 +28,9 @@ type GrammarRule struct {
 }
 
 type GrammarRuleWithPercolatorQuery struct {
-	GrammarRule GrammarRule   `json:"grammar_rule"`
-	Query       elastic.Query `json:"query"`
-	SearchText  string        `json:"search_text"`
+	GrammarRule GrammarRule `json:"grammar_rule"`
+	Query       interface{} `json:"query"`
+	SearchText  string      `json:"search_text"`
 }
 
 const (
@@ -169,8 +169,12 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 					for i := range rules {
 						assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(rules[i])...)
 					}
+					qs, err := elastic.NewMatchNoneQuery().Source()
+					if err != nil {
+						return nil
+					}
 					doc := GrammarRuleWithPercolatorQuery{
-						Query: elastic.MatchNoneQuery{},
+						Query: qs,
 						GrammarRule: GrammarRule{
 							HitType:      grammar.HitType,
 							Intent:       intent,
@@ -239,10 +243,16 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 										withinQuotaionMarks = append(withinQuotaionMarks, fmt.Sprintf("\"%s\"", strings.TrimSpace(str)))
 									}
 								}
-								if len(withinQuotaionMarks) > 1 {
-									ruleClauses = append(ruleClauses, fmt.Sprintf("(%s)", strings.Join(withinQuotaionMarks, " AND ")))
-								} else if len(withinQuotaionMarks) == 1 {
-									ruleClauses = append(ruleClauses, fmt.Sprintf("(%s)", withinQuotaionMarks[0]))
+								if len(withinQuotaionMarks) > 0 {
+									var ruleClause string
+									if len(withinQuotaionMarks) == 1 {
+										ruleClause = fmt.Sprintf("(%s)", withinQuotaionMarks[0])
+									} else {
+										ruleClause = fmt.Sprintf("(%s)", strings.Join(withinQuotaionMarks, " AND "))
+									}
+									if !utils.Contains(utils.Is(ruleClauses), ruleClause) {
+										ruleClauses = append(ruleClauses, ruleClause)
+									}
 								}
 							}
 							queryStr := strings.Join(ruleClauses, " OR ")
@@ -274,8 +284,12 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 								Variables:    variablesSet,
 								Values:       variableValues,
 							}
+							qs, err := percolatorQuery.Source()
+							if err != nil {
+								return err
+							}
 							doc := GrammarRuleWithPercolatorQuery{
-								Query:       percolatorQuery,
+								Query:       qs,
 								GrammarRule: rule,
 							}
 							bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(doc))
