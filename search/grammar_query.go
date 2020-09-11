@@ -14,6 +14,8 @@ const (
 	GRAMMAR_SEARCH_SIZE = 2000
 
 	GRAMMAR_PERCULATE_SIZE = 1
+
+	PERCULATE_HIGHLIGHT_SEPERATOR = '$'
 )
 
 func createGrammarQuery(q *Query) elastic.Query {
@@ -41,7 +43,9 @@ func NewGammarPerculateRequest(query *Query, language string, preference string)
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules")
 	source := elastic.NewSearchSource().
 		Query(createPerculateQuery(query)).
-		Highlight(elastic.NewHighlight().Field("search_text")).
+		Highlight(elastic.NewHighlight().Field("search_text").
+			PreTags(string(PERCULATE_HIGHLIGHT_SEPERATOR)).
+			PostTags(string(PERCULATE_HIGHLIGHT_SEPERATOR))).
 		FetchSourceContext(fetchSourceContext).
 		Size(GRAMMAR_PERCULATE_SIZE).
 		Explain(query.Deb)

@@ -265,7 +265,32 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 
 		vMap := make(map[string][]string)
 		for i := range rule.Variables {
-			vMap[rule.Variables[i]] = []string{rule.Values[i]}
+			if rule.Variables[i] == consts.VAR_TEXT {
+				if hit.Highlight != nil {
+					if text, ok := hit.Highlight["search_text"]; ok {
+						if len(text) == 1 && text[0] != "" {
+							runes := []rune(text[0])
+							var filtered []rune
+							var textVarValues []string
+							var inHighlight bool
+							for _, r := range runes {
+								if r == PERCULATE_HIGHLIGHT_SEPERATOR {
+									inHighlight = !inHighlight
+									if inHighlight && len(filtered) > 0 {
+										textVarValues = append(textVarValues, string(filtered))
+									}
+									filtered = make([]rune, 0)
+								} else if !inHighlight {
+									filtered = append(filtered, r)
+								}
+							}
+							vMap[rule.Variables[i]] = textVarValues
+						}
+					}
+				}
+			} else {
+				vMap[rule.Variables[i]] = []string{rule.Values[i]}
+			}
 		}
 		if GrammarVariablesMatch(rule.Intent, vMap, e.cache) {
 			score := *hit.Score * (float64(4) / float64(4+len(vMap))) * YearScorePenalty(vMap)
