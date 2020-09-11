@@ -194,17 +194,8 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 					variablesValues := [][]string(nil)
 					hasTextVar := false
 					for i, variable := range variablesSet {
-						if variable == consts.VAR_TEXT {
-							if hasTextVar {
-								// TBD
-								// more than one appereance of $Text
-								// ! - make sure the check correct
-								// print error and continue.. or stop indexing
-								log.Errorf("More than one appereance of $Text variable.")
-								continue
-							} else {
-								hasTextVar = true
-							}
+						if !hasTextVar && variable == consts.VAR_TEXT {
+							hasTextVar = true
 						}
 						variablesValues = append(variablesValues, utils.StringMapOrderedKeys(variables[variablesSet[i]][lang]))
 					}
