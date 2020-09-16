@@ -228,6 +228,7 @@ func updateIntentCount(intentsCount map[string][]Intent, intent Intent) {
 
 func (e *ESEngine) searchResultsToIntents(query *Query, language string, result *elastic.SearchResult) ([]Intent, error) {
 	// log.Infof("Total Hits: %d, Max Score: %.2f", result.Hits.TotalHits, *result.Hits.MaxScore)
+	intents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
 	for _, hit := range result.Hits.Hits {
 		var rule GrammarRule
@@ -292,28 +293,41 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				vMap[rule.Variables[i]] = []string{rule.Values[i]}
 			}
 		}
+
 		if GrammarVariablesMatch(rule.Intent, vMap, e.cache) {
 			score := *hit.Score * (float64(4) / float64(4+len(vMap))) * YearScorePenalty(vMap)
 			// Issue with tf/idf. For query [congress] the score if very low. For [arava] ok.
 			// Fix this by moving the grammar index into the common index. So tha similar tf/idf will be used.
 			// For now solve by normalizing very small scores.
 			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
-			updateIntentCount(intentsCount, Intent{
-				Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
-				Language: language,
-				Value: GrammarIntent{
-					LandingPage:  rule.Intent,
-					FilterValues: e.VariableMapToFilterValues(vMap, language),
-					Score:        score,
-					Explanation:  hit.Explanation,
-				},
-			})
+
+			if rule.Intent == consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS || rule.Intent == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS {
+				updateIntentCount(intentsCount, Intent{
+					Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
+					Language: language,
+					Value: GrammarIntent{
+						LandingPage:  rule.Intent,
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score,
+						Explanation:  hit.Explanation,
+					},
+				})
+			} else {
+				intents = append(intents, Intent{
+					Type:     consts.GRAMMAR_TYPE_FILTER,
+					Language: language,
+					Value: GrammarIntent{
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score,
+						Explanation:  hit.Explanation,
+					}})
+			}
 		}
 	}
-	intents := []Intent(nil)
 	for _, intentsByLandingPage := range intentsCount {
 		intents = append(intents, intentsByLandingPage...)
 	}
+
 	// Normalize score to be from 2000 and below.
 	maxScore := 0.0
 	for i := range intents {

@@ -18,6 +18,7 @@ func GrammarFilterVariablesMatch(intent string, variablesByPhrase VariablesByPhr
 func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.CacheManager) bool {
 	if intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
 		hasVarText := false
+		hasVarContentType := false
 		for variable, values := range vMap {
 			if variable == consts.VAR_TEXT {
 				if hasVarText || len(values) != 1 { //  Disable if we have more than one $Text appereance or value
@@ -25,6 +26,14 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 					return false
 				}
 				hasVarText = true
+			}
+			if variable == consts.VAR_CONTENT_TYPE {
+				if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
+					// TBD consider support for multiple $ContentType values
+					log.Warning("More than one $ContentType appereance or value in 'by_content' rule.")
+					return false
+				}
+				hasVarContentType = true
 			}
 		}
 		return true
