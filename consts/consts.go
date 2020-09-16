@@ -592,14 +592,68 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
 }
 
-// Variables
 const (
+
+	// Variable types
+
 	VAR_YEAR                = "$Year"
 	VAR_CONVENTION_LOCATION = "$ConventionLocation"
 	VAR_TEXT                = "$Text"
 	VAR_HOLIDAYS            = "$Holidays"
 	VAR_CONTENT_TYPE        = "$ContentType"
+
+	// $ContentType variables
+
+	VAR_CT_PROGRAMS = "programs"
+	VAR_CT_ARTICLES = "articles"
+	VAR_CT_LESSONS  = "lessons"
+	VAR_CT_CLIPS    = "clips"
+	VAR_CT_SOURCES  = "sources"
+	VAR_CT_MEALS    = "meals"
+	VAR_CT_BLOG     = "blog"
+	VAR_CT_TWEETS   = "tweets"
+
+	// TBD if the imp. is needed
+	/*
+		VAR_CT_PUBLICATIONS = "publications"
+		VAR_CT_EVENTS       = "events"
+		VAR_CT_HOLIDAYS     = "holidays"
+		VAR_CT_CONVENTIONS  = "conventions"'
+	*/
 )
+
+// Grammar $ContentType variables to content type filters mapping.
+var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
+	VAR_CT_PROGRAMS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIDEO_PROGRAM_CHAPTER},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIDEO_PROGRAM},
+	},
+	VAR_CT_ARTICLES: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_ARTICLE},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_ARTICLES},
+		FILTERS[FILTER_SECTION_SOURCES]:           []string{""}, // Article is also source (like 'Maamar Ha-Arvut')
+	},
+	VAR_CT_LESSONS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LESSON_PART, CT_FULL_LESSON},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON},
+	},
+	VAR_CT_CLIPS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{CT_CLIP},
+	},
+	VAR_CT_SOURCES: map[string][]string{
+		FILTERS[FILTER_SECTION_SOURCES]: []string{""},
+	},
+	VAR_CT_MEALS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_MEAL},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_MEALS},
+	},
+	VAR_CT_BLOG: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{CT_BLOG_POST, SCT_BLOG_POST},
+	},
+	VAR_CT_TWEETS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{SCT_TWEET},
+	},
+}
 
 // Variable name to frontend filter name mapping.
 var VARIABLE_TO_FILTER = map[string]string{
