@@ -1376,8 +1376,6 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		return nil, NewInternalError(err)
 	}
 
-	// Generally, this field is not reliable in terms of DB cleanups.
-	// Implemented for special case of BLOG_POST (audio version / declamation) only.
 	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2575,9 +2573,13 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 	if len(f.MediaLanguage) == 0 {
 		return nil
 	}
-
-	*mods = append(*mods, qm.Where("properties->>'original_language' = ?", f.MediaLanguage))
-
+	//TODO: this query should be optimized ASAP and before we do that clients should use it as little as possible
+	*mods = append(*mods,
+		qm.WhereIn(`(id in ( SELECT DISTINCT cu.id FROM content_units cu 
+			INNER JOIN files f 
+			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
+			AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))`, f.MediaLanguage),
+	)
 	return nil
 }
 
