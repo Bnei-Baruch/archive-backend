@@ -390,7 +390,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				if addPosition {
 					var position string
 					position = strconv.Itoa(mdbSource.Position.Int)
-					if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX_LETTER[breaked_parent+i18n.Language]; ok {
+					if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX_LETTER[fmt.Sprintf(breaked_parent, ":", i18n.Language)]; ok {
 						position = utils.NumberInHebrew(mdbSource.Position.Int) //  Convert to Hebrew letter
 					} else {
 						position = strconv.Itoa(mdbSource.Position.Int)

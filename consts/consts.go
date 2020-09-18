@@ -1,5 +1,7 @@
 package consts
 
+import "fmt"
+
 /*
 This is a modified version of the github.com/Bnei-Baruch/mdb/api/consts.go
  We take, manually, only what we need from there.
@@ -654,5 +656,5 @@ var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[string]bool{
 	SRC_RABASH_ASSORTED_NOTES: true,
 }
 var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX_LETTER = map[string]bool{
-	SRC_SHAMATI + "he": true,
+	fmt.Sprintf(SRC_SHAMATI, ";", LANG_HEBREW): true,
 }
