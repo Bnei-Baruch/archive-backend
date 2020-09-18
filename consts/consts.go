@@ -653,3 +653,6 @@ var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[string]bool{
 	SRC_SHAMATI:               true,
 	SRC_RABASH_ASSORTED_NOTES: true,
 }
+var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX_LETTER = map[string]bool{
+	SRC_SHAMATI + "he": true,
+}
