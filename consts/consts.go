@@ -665,17 +665,19 @@ var VARIABLE_TO_FILTER = map[string]string{
 
 // Latency log
 const (
-	LAT_DOSEARCH                          = "DoSearch"
-	LAT_DOSEARCH_MULTISEARCHDO            = "DoSearch.MultisearchDo"
-	LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO  = "DoSearch.MultisearcHighlightsDo"
-	LAT_DOSEARCH_ADDINTENTS               = "DoSearch.AddIntents"
-	LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO  = "DoSearch.AddIntents.FirstRoundDo"
-	LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO = "DoSearch.AddIntents.SecondRoundDo"
-	LAT_DOSEARCH_MULTISEARCHTWEETSDO      = "DoSearch.MultisearchTweetsDo"
-	LAT_DOSEARCH_TYPOSUGGESTDO            = "DoSearch.TypoSuggestDo"
-	LAT_GETSUGGESTIONS                    = "GetSuggestions"
-	LAT_SUGGEST_SUGGESTIONS               = "GetSuggestions.SuggestSuggestions"
-	LAT_GETSUGGESTIONS_MULTISEARCHDO      = "GetSuggestions.MultisearchDo"
+	LAT_DOSEARCH                                = "DoSearch"
+	LAT_DOSEARCH_MULTISEARCHDO                  = "DoSearch.MultisearchDo"
+	LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO        = "DoSearch.MultisearcHighlightsDo"
+	LAT_DOSEARCH_ADDINTENTS                     = "DoSearch.AddIntents"
+	LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO        = "DoSearch.AddIntents.FirstRoundDo"
+	LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO       = "DoSearch.AddIntents.SecondRoundDo"
+	LAT_DOSEARCH_MULTISEARCHTWEETSDO            = "DoSearch.MultisearchTweetsDo"
+	LAT_DOSEARCH_TYPOSUGGESTDO                  = "DoSearch.TypoSuggestDo"
+	LAT_GETSUGGESTIONS                          = "GetSuggestions"
+	LAT_SUGGEST_SUGGESTIONS                     = "GetSuggestions.SuggestSuggestions"
+	LAT_GETSUGGESTIONS_MULTISEARCHDO            = "GetSuggestions.MultisearchDo"
+	LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO = "DoSearch.SearchGrammars.MultisearchGrammarsDo"
+	LAT_DOSEARCH_GRAMMARS_MULTISEARCHFILTERDO   = "DoSearch.SearchGrammars.MultisearchFilterDo"
 )
 
 var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{

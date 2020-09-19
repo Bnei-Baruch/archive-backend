@@ -600,8 +600,21 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	suggestChannel := make(chan null.String)
 
+	var resultTypes []string
+	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
+		resultTypes = make([]string, 0)
+		for _, str := range consts.ES_SEARCH_RESULT_TYPES {
+			if str != consts.ES_RESULT_TYPE_COLLECTIONS {
+				resultTypes = append(resultTypes, str)
+			}
+		}
+	} else {
+		resultTypes = consts.ES_SEARCH_RESULT_TYPES
+	}
+
 	// Search grammars in parallel to native search.
 	grammarsChannel := make(chan []Intent)
+	grammarsFilteredResultsByLangChannel := make(chan map[string]*elastic.SearchResult)
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -609,11 +622,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				grammarsChannel <- []Intent{}
 			}
 		}()
-		if grammars, err := e.SearchGrammarsV2(&query, preference); err != nil {
+		if grammars, filtered, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
 			grammarsChannel <- []Intent{}
+			grammarsFilteredResultsByLangChannel <- map[string]*elastic.SearchResult{}
 		} else {
 			grammarsChannel <- grammars
+			grammarsFilteredResultsByLangChannel <- filtered
 		}
 	}()
 
@@ -651,24 +666,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
-	var resultTypes []string
-	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
-		resultTypes = make([]string, 0)
-		for _, str := range consts.ES_SEARCH_RESULT_TYPES {
-			if str != consts.ES_RESULT_TYPE_COLLECTIONS {
-				resultTypes = append(resultTypes, str)
-			}
-		}
-	} else {
-		resultTypes = consts.ES_SEARCH_RESULT_TYPES
-	}
-
 	intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy)
 	if err != nil {
 		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 	}
 
 	// Filter out duplicates of regular results and intents carousel results
+	// Note: Currently we don't have such logic for 'filter grammar' results.
 	filterOutCUSources := make([]string, 0)
 	for _, intent := range intents {
 		if intent.Type == consts.INTENT_TYPE_SOURCE {
@@ -760,6 +764,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
 		resultsByLang[lang] = append(resultsByLang[lang], tweets)
+	}
+
+	filteredByLang := <-grammarsFilteredResultsByLangChannel
+	for lang, filtered := range filteredByLang {
+		if _, ok := resultsByLang[lang]; !ok {
+			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+		}
+		resultsByLang[lang] = append(resultsByLang[lang], filtered)
 	}
 
 	var currentLang string

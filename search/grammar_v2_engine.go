@@ -146,27 +146,30 @@ func (e *ESEngine) suggestResultsToVariablesByPhrases(query *Query, result *elas
 	return ret, nil
 }
 
-func (e *ESEngine) SearchGrammarsV2(query *Query, preferences string) ([]Intent, error) {
+func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy string, resultTypes []string, preference string) ([]Intent, map[string]*elastic.SearchResult, error) {
 	intents := []Intent{}
+	filtered := map[string]*elastic.SearchResult{}
 	if query.Term != "" && len(query.ExactTerms) > 0 {
 		// Will never match any grammar for query having simple terms and exact terms.
 		// This is not acurate but an edge case. Need to better think of query representation.
 		log.Infof("Both term and exact terms are defined, should not trigger: [%s] [%s]", query.Term, strings.Join(query.ExactTerms, " - "))
-		return intents, nil
+		return intents, filtered, nil
 	}
 
 	multiSearchService := e.esc.MultiSearch()
 	for _, language := range query.LanguageOrder {
-		multiSearchService.Add(NewSuggestGammarV2Request(query, language, preferences))
-		multiSearchService.Add(NewGammarPerculateRequest(query, language, preferences))
+		multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference))
+		multiSearchService.Add(NewGammarPerculateRequest(query, language, preference))
 	}
+	beforeGrammarSearch := time.Now()
 	mr, err := multiSearchService.Do(context.TODO())
+	e.timeTrack(beforeGrammarSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error loking for grammar suggest.")
+		return nil, nil, errors.Wrap(err, "Error looking for grammar search.")
 	}
 
 	if len(mr.Responses) != len(query.LanguageOrder) {
-		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
+		return nil, nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
 			len(mr.Responses), len(query.LanguageOrder)))
 	}
 
@@ -174,25 +177,76 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, preferences string) ([]Intent,
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
-			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
+			return nil, nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
 		language := query.LanguageOrder[i]
-
+		filterSearchRequests := []*elastic.SearchRequest{}
 		if haveHits(currentResults) {
-			if langIntents, err := e.searchResultsToIntents(query, language, currentResults); err != nil {
-				return nil, err
+			if singleHitIntents, filterIntents, err := e.searchResultsToIntents(query, language, currentResults); err == nil {
+				return nil, nil, err
 			} else {
-				intents = append(intents, langIntents...)
+				intents = append(intents, singleHitIntents...)
+				if filterIntents != nil && len(filterIntents) > 0 {
+					for _, filterIntent := range filterIntents {
+						//  Currently we support "filter grammar" with only one appereance of each variable.
+						//  This may be changed in the future.
+						if intentValue, ok := filterIntent.Value.(GrammarIntent); ok {
+							var contentType string
+							var text string
+							for _, fv := range intentValue.FilterValues {
+								if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
+									contentType = fv.Value
+								} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_TEXT] {
+									text = fv.Value
+								}
+								if contentType != "" && text != "" {
+									break
+								}
+							}
+							if contentType != "" && text != "" {
+								requests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, query.LanguageOrder, preference, query.Deb)
+								if err != nil {
+									return nil, nil, err
+								}
+								filterSearchRequests = append(filterSearchRequests, requests...)
+							}
+						}
+					}
+				}
 			}
 		}
+		if len(filterSearchRequests) > 0 {
+			multiSearchFilteredService := e.esc.MultiSearch()
+			beforeFilterSearch := time.Now()
+			mr, err := multiSearchFilteredService.Do(context.TODO())
+			e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
+			}
+			if len(mr.Responses) != len(query.LanguageOrder) {
+				return nil, nil, errors.New(fmt.Sprintf("Unexpected number of results in grammar based filter search %d, expected %d",
+					len(mr.Responses), len(query.LanguageOrder)))
+			}
 
+			for i, currentResults := range mr.Responses {
+				if currentResults.Error != nil {
+					log.Warnf("%+v", currentResults.Error)
+					return nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
+				}
+				if haveHits(currentResults) {
+					// TBD boost scores
+					lang := query.LanguageOrder[i]
+					filtered[lang] = currentResults
+				}
+			}
+		}
 	}
 	elapsed := time.Since(start)
 	if elapsed > 10*time.Millisecond {
 		fmt.Printf("build grammar intent - %s\n\n", elapsed.String())
 	}
 
-	return intents, nil
+	return intents, filtered, nil
 }
 
 func (e *ESEngine) VariableMapToFilterValues(vMap map[string][]string, language string) []FilterValue {
@@ -226,25 +280,27 @@ func updateIntentCount(intentsCount map[string][]Intent, intent Intent) {
 	intentsCount[intent.Value.(GrammarIntent).LandingPage] = intents
 }
 
-func (e *ESEngine) searchResultsToIntents(query *Query, language string, result *elastic.SearchResult) ([]Intent, error) {
+// Return values: singleHitIntents, filterIntents, error
+func (e *ESEngine) searchResultsToIntents(query *Query, language string, result *elastic.SearchResult) ([]Intent, []Intent, error) {
 	// log.Infof("Total Hits: %d, Max Score: %.2f", result.Hits.TotalHits, *result.Hits.MaxScore)
-	intents := []Intent(nil)
+	filterIntents := []Intent(nil)
+	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
 	for _, hit := range result.Hits.Hits {
 		var rule GrammarRule
 		if err := json.Unmarshal(*hit.Source, &rule); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", *hit.Score, hit.Index, hit.Type, hit.Id, rule)
 		if len(rule.Values) != len(rule.Variables) {
-			return nil, errors.New(fmt.Sprintf("Expected Variables to be of size %d, but it is %d", len(rule.Values), len(rule.Variables)))
+			return nil, nil, errors.New(fmt.Sprintf("Expected Variables to be of size %d, but it is %d", len(rule.Values), len(rule.Variables)))
 		}
 
 		// Check filters match, i.e., existing query filter match at least one supported grammar intent filter.
 		if len(query.Filters) > 0 {
 			filters, filterExist := consts.GRAMMAR_INTENTS_TO_FILTER_VALUES[rule.Intent]
 			if !filterExist {
-				return nil, errors.New(fmt.Sprintf("Filters not found for intent: [%s]", rule.Intent))
+				return nil, nil, errors.New(fmt.Sprintf("Filters not found for intent: [%s]", rule.Intent))
 			}
 			common := false
 			for filterName, values := range query.Filters {
@@ -313,7 +369,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					},
 				})
 			} else {
-				intents = append(intents, Intent{
+				filterIntents = append(filterIntents, Intent{
 					Type:     consts.GRAMMAR_TYPE_FILTER,
 					Language: language,
 					Value: GrammarIntent{
@@ -325,25 +381,25 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 		}
 	}
 	for _, intentsByLandingPage := range intentsCount {
-		intents = append(intents, intentsByLandingPage...)
+		singleHitIntents = append(singleHitIntents, intentsByLandingPage...)
 	}
 
 	// Normalize score to be from 2000 and below.
 	maxScore := 0.0
-	for i := range intents {
-		if intents[i].Value.(GrammarIntent).Score > maxScore {
-			maxScore = intents[i].Value.(GrammarIntent).Score
+	for i := range singleHitIntents {
+		if singleHitIntents[i].Value.(GrammarIntent).Score > maxScore {
+			maxScore = singleHitIntents[i].Value.(GrammarIntent).Score
 		}
 	}
-	normalizedIntents := []Intent(nil)
-	for _, intent := range intents {
+	normalizedLandingPageIntents := []Intent(nil)
+	for _, intent := range singleHitIntents {
 		grammarIntent := intent.Value.(GrammarIntent)
 		grammarIntent.Score = 3000 * (grammarIntent.Score / maxScore)
 		intent.Value = grammarIntent
-		normalizedIntents = append(normalizedIntents, intent)
+		normalizedLandingPageIntents = append(normalizedLandingPageIntents, intent)
 	}
 	// log.Infof("Intents: %+v", intents)
-	return normalizedIntents, nil
+	return normalizedLandingPageIntents, filterIntents, nil
 }
 
 func (e *ESEngine) ConventionsLandingPageToCollectionHit(year string, location string) (*elastic.SearchHit, error) {

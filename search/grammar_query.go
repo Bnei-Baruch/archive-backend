@@ -3,6 +3,7 @@ package search
 import (
 	"gopkg.in/olivere/elastic.v6"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -90,6 +91,23 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 		SearchSource(source).
 		Index(GrammarIndexNameForServing(language)).
 		Preference(preference)
+}
+
+func NewFilteredResultsSearchRequest(text string, contentType string, from int, size int, sortBy string, resultTypes []string, languageOrder []string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
+	requests, err := NewResultsSearchRequests(
+		SearchRequestOptions{
+			resultTypes:        resultTypes,
+			index:              "",
+			query:              Query{Term: text, Filters: consts.CT_VARIABLE_TO_FILTER_VALUES[contentType], LanguageOrder: languageOrder, Deb: deb},
+			sortBy:             sortBy,
+			from:               0,
+			size:               from + size,
+			preference:         preference,
+			useHighlight:       false,
+			partialHighlight:   false,
+			filterOutCUSources: []string{}})
+
+	return requests, err
 }
 
 func wordToHist(word string) map[rune]int {
