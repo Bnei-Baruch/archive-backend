@@ -234,7 +234,11 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 					return nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
 				}
 				if haveHits(currentResults) {
-					// TBD boost scores
+					for _, hit := range currentResults.Hits.Hits {
+						if hit.Score != nil {
+							*hit.Score += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
+						}
+					}
 					lang := query.LanguageOrder[i]
 					filtered[lang] = currentResults
 				}
