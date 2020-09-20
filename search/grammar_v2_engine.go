@@ -168,9 +168,9 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		return nil, nil, errors.Wrap(err, "Error looking for grammar search.")
 	}
 
-	if len(mr.Responses) != len(query.LanguageOrder) {
+	if len(mr.Responses) != len(query.LanguageOrder)*2 {
 		return nil, nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
-			len(mr.Responses), len(query.LanguageOrder)))
+			len(mr.Responses), len(query.LanguageOrder)*2))
 	}
 
 	start := time.Now()
@@ -179,7 +179,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 			log.Warnf("%+v", currentResults.Error)
 			return nil, nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
-		language := query.LanguageOrder[i]
+		language := query.LanguageOrder[i/2]
 		filterSearchRequests := []*elastic.SearchRequest{}
 		if haveHits(currentResults) {
 			if singleHitIntents, filterIntents, err := e.searchResultsToIntents(query, language, currentResults); err == nil {
