@@ -182,7 +182,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		language := query.LanguageOrder[i/2]
 		filterSearchRequests := []*elastic.SearchRequest{}
 		if haveHits(currentResults) {
-			if singleHitIntents, filterIntents, err := e.searchResultsToIntents(query, language, currentResults); err == nil {
+			if singleHitIntents, filterIntents, err := e.searchResultsToIntents(query, language, currentResults); err != nil {
 				return nil, nil, err
 			} else {
 				intents = append(intents, singleHitIntents...)
@@ -249,7 +249,6 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	if elapsed > 10*time.Millisecond {
 		fmt.Printf("build grammar intent - %s\n\n", elapsed.String())
 	}
-
 	return intents, filtered, nil
 }
 
@@ -402,7 +401,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 		intent.Value = grammarIntent
 		normalizedLandingPageIntents = append(normalizedLandingPageIntents, intent)
 	}
-	// log.Infof("Intents: %+v", intents)
+	//log.Infof("Intents: %+v", normalizedLandingPageIntents)
 	return normalizedLandingPageIntents, filterIntents, nil
 }
 
