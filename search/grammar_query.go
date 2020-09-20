@@ -24,8 +24,8 @@ func createGrammarQuery(q *Query) elastic.Query {
 	if simpleQuery(q) != "" {
 		boolQuery = boolQuery.Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("rules.language", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
-				elastic.NewMatchPhraseQuery("rules", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
+				elastic.NewMatchPhraseQuery("grammar_rule.rules.language", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
+				elastic.NewMatchPhraseQuery("grammar_rule.rules", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
 			),
 		)
 	}
@@ -41,7 +41,7 @@ func createPerculateQuery(q *Query) elastic.Query {
 }
 
 func NewGammarPerculateRequest(query *Query, language string, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("grammar_rule.intent", "grammar_rule.variables", "grammar_rule.values", "grammar_rule.rules")
 	source := elastic.NewSearchSource().
 		Query(createPerculateQuery(query)).
 		Highlight(elastic.NewHighlight().Field("search_text").
@@ -57,7 +57,7 @@ func NewGammarPerculateRequest(query *Query, language string, preference string)
 }
 
 func NewSuggestGammarV2Request(query *Query, language string, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("grammar_rule.intent", "grammar_rule.variables", "grammar_rule.values", "grammar_rule.rules")
 	source := elastic.NewSearchSource().
 		Query(createGrammarQuery(query)).
 		FetchSourceContext(fetchSourceContext).
@@ -70,18 +70,18 @@ func NewSuggestGammarV2Request(query *Query, language string, preference string)
 }
 
 func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("grammar_rule.intent", "grammar_rule.variables", "grammar_rule.values", "grammar_rule.rules")
 	source := elastic.NewSearchSource().
 		FetchSourceContext(fetchSourceContext).
 		Suggester(
 			elastic.NewCompletionSuggester("rules_suggest").
-				Field("rules_suggest").
+				Field("grammar_rule.rules_suggest").
 				Text(simpleQuery(query)).
 				Size(GRAMMAR_SUGGEST_SIZE).
 				SkipDuplicates(true)).
 		Suggester(
 			elastic.NewCompletionSuggester("rules_suggest.language").
-				Field("rules_suggest.language").
+				Field("grammar_rule.rules_suggest.language").
 				Text(simpleQuery(query)).
 				Size(GRAMMAR_SUGGEST_SIZE).
 				SkipDuplicates(true)).

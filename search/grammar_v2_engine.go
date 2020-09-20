@@ -43,7 +43,7 @@ func (e *ESEngine) SuggestGrammarsV2(query *Query, preference string) (map[strin
 		fmt.Printf("multiSearchService.Do - %s\n\n", elapsed.String())
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, "Error loking for grammar suggest.")
+		return nil, errors.Wrap(err, "Error looking for grammar suggest.")
 	}
 
 	if len(mr.Responses) != len(query.LanguageOrder) {
@@ -290,10 +290,11 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
 	for _, hit := range result.Hits.Hits {
-		var rule GrammarRule
-		if err := json.Unmarshal(*hit.Source, &rule); err != nil {
+		var ruleObj GrammarRuleWithPercolatorQuery
+		if err := json.Unmarshal(*hit.Source, &ruleObj); err != nil {
 			return nil, nil, err
 		}
+		rule := ruleObj.GrammarRule
 		// log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", *hit.Score, hit.Index, hit.Type, hit.Id, rule)
 		if len(rule.Values) != len(rule.Variables) {
 			return nil, nil, errors.New(fmt.Sprintf("Expected Variables to be of size %d, but it is %d", len(rule.Values), len(rule.Variables)))
@@ -359,7 +360,6 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			// Fix this by moving the grammar index into the common index. So tha similar tf/idf will be used.
 			// For now solve by normalizing very small scores.
 			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
-
 			if rule.Intent == consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS || rule.Intent == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS {
 				updateIntentCount(intentsCount, Intent{
 					Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
