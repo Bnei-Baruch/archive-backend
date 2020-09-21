@@ -274,3 +274,17 @@ func (suite *EngineSuite) TestFilterOutDuplicateHits() {
 	r.Equal(maxScore, int(scoreH))
 	r.Equal(scoresSum, 7)
 }
+
+func (suite *EngineSuite) TestRetrieveTextVarValues() {
+	fmt.Printf("\n------ TestFilterOutDuplicateHits ------\n\n")
+	r := require.New(suite.T())
+
+	r.Equal(retrieveTextVarValues(""), []string(nil))
+	r.Equal(retrieveTextVarValues("$aaa$"), []string(nil))
+	r.Equal(retrieveTextVarValues("$aaa"), []string(nil))
+	r.Equal(retrieveTextVarValues("aaa$"), []string{"aaa"})
+	r.Equal(retrieveTextVarValues("aaa $bbb$ ccc"), []string{"aaa", "ccc"})
+	r.Equal(retrieveTextVarValues("$bbb$ ccc"), []string{"ccc"})
+	r.Equal(retrieveTextVarValues("aaa $bbb$"), []string{"aaa"})
+	r.Equal(retrieveTextVarValues("aaa $bbb$ ccc $ddd"), []string{"aaa", "ccc"})
+}

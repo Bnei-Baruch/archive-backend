@@ -330,22 +330,9 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				if hit.Highlight != nil {
 					if text, ok := hit.Highlight["search_text"]; ok {
 						if len(text) == 1 && text[0] != "" {
-							runes := []rune(text[0])
-							var filtered []rune
-							var textVarValues []string
-							var inHighlight bool
-							for _, r := range runes {
-								if r == PERCULATE_HIGHLIGHT_SEPERATOR {
-									inHighlight = !inHighlight
-									if inHighlight && len(filtered) > 0 {
-										textVarValues = append(textVarValues, string(filtered))
-									}
-									filtered = make([]rune, 0)
-								} else if !inHighlight {
-									filtered = append(filtered, r)
-								}
-							}
+							textVarValues := retrieveTextVarValues(text[0])
 							vMap[rule.Variables[i]] = textVarValues
+							log.Infof("VAR_TEXT values is %+v", textVarValues)
 						}
 					}
 				}
@@ -401,7 +388,8 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 		intent.Value = grammarIntent
 		normalizedLandingPageIntents = append(normalizedLandingPageIntents, intent)
 	}
-	//log.Infof("Intents: %+v", normalizedLandingPageIntents)
+	//log.Infof("landingPageIntents: %+v", normalizedLandingPageIntents)
+	//log.Infof("filterIntents: %+v", filterIntents)
 	return normalizedLandingPageIntents, filterIntents, nil
 }
 
@@ -497,4 +485,26 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, error
 		Index:  consts.GRAMMAR_LP_SINGLE_COLLECTION,
 	}
 	return hit, nil
+}
+
+func retrieveTextVarValues(str string) []string {
+	runes := []rune(str)
+	var filtered []rune
+	var textVarValues []string
+	var inHighlight bool
+	for i, r := range runes {
+		if r == PERCULATE_HIGHLIGHT_SEPERATOR || i == len(runes)-1 {
+			inHighlight = !inHighlight
+			if inHighlight && len(filtered) > 0 {
+				if r != PERCULATE_HIGHLIGHT_SEPERATOR {
+					filtered = append(filtered, r)
+				}
+				textVarValues = append(textVarValues, strings.Trim(string(filtered), " "))
+			}
+			filtered = make([]rune, 0)
+		} else if !inHighlight {
+			filtered = append(filtered, r)
+		}
+	}
+	return textVarValues
 }
