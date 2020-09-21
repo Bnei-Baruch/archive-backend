@@ -620,6 +620,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			if err := recover(); err != nil {
 				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
 				grammarsChannel <- []Intent{}
+				grammarsFilteredResultsByLangChannel <- map[string]*elastic.SearchResult{}
 			}
 		}()
 		if grammars, filtered, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
