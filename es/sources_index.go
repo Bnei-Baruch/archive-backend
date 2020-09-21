@@ -379,29 +379,21 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			//  Add chapter number\letter to Shamati articles
 			if mdbSource.ParentID.Valid && mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
 				var addPosition bool
-				var breaked_parent string
-				for _, parent := range parents {
+				var parent string
+				for _, parent = range parents {
 					if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parent]; ok {
 						addPosition = true
-						breaked_parent = parent
 						break
 					}
 				}
 				if addPosition {
 					var position string
 					position = strconv.Itoa(mdbSource.Position.Int)
-					if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX_LETTER[fmt.Sprintf(breaked_parent, ":", i18n.Language)]; ok {
+					if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX_LETTER[fmt.Sprintf(parent, ":", i18n.Language)]; ok {
 						position = utils.NumberInHebrew(mdbSource.Position.Int) //  Convert to Hebrew letter
 					} else {
 						position = strconv.Itoa(mdbSource.Position.Int)
 					}
-					/*
-						if i18n.Language == "he" {
-							position = utils.NumberInHebrew(mdbSource.Position.Int) //  Convert to Hebrew letter
-						} else {
-							position = strconv.Itoa(mdbSource.Position.Int)
-						}
-					*/
 					// Hebrew example of leaf with position: קלג. אורות דשבת
 					// English example of leaf with position: 133. The Lights of Shabbat
 					leafWithChapter := fmt.Sprintf("%s. %s", position, leaf)
