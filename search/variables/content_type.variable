@@ -1,69 +1,69 @@
-en, programs => program
-en, programs => programs
+en,programs => program
+en,programs => programs
 
-en, articles => article
-en, articles => articles
+en,articles => article
+en,articles => articles
 
-en, lessons => lessons
-en, lessons => lesson
-en, lessons => morning lesson
-en, lessons => morning lessons
-en, lessons => daily lesson
-en, lessons => daily lessons
-en, lessons => lesson with rav
-en, lessons => lessons with rav
-en, lessons => rav lesson
-en, lessons => rav lessons
+en,lessons => lessons
+en,lessons => lesson
+en,lessons => morning lesson
+en,lessons => morning lessons
+en,lessons => daily lesson
+en,lessons => daily lessons
+en,lessons => lesson with rav
+en,lessons => lessons with rav
+en,lessons => rav lesson
+en,lessons => rav lessons
 
-en, clips => clips
-en, clips => clip
+en,clips => clips
+en,clips => clip
 
-en, sources => sources
-en, sources => source
-en, sources => book
-en, sources => books
-en, sources => library
+en,sources => sources
+en,sources => source
+en,sources => book
+en,sources => books
+en,sources => library
 
-en, meals => meal
-en, meals => meals
+en,meals => meal
+en,meals => meals
 
-en, blog => blog
+en,blog => blog
 
-en, tweets => tweets
-en, tweets => tweet
-en, tweets => tweeter
+en,tweets => tweets
+en,tweets => tweet
+en,tweets => tweeter
 
-he, programs => תוכנית
-he, programs => תוכניות
+he,programs => תוכנית
+he,programs => תוכניות
 
-he, articles => מאמר
-he, articles => מאמרים
+he,articles => מאמר
+he,articles => מאמרים
 
-he, lessons => שיעורים
-he, lessons => שיעור
-he, lessons => שיעור בוקר
-he, lessons => שיעורי בוקר
-he, lessons => שיעור יומי
-he, lessons => שיעורים יומיים
+he,lessons => שיעורים
+he,lessons => שיעור
+he,lessons => שיעור בוקר
+he,lessons => שיעורי בוקר
+he,lessons => שיעור יומי
+he,lessons => שיעורים יומיים
 
-he, clips => קליפים
-he, clips => קליפ
-he, clips => סרטונים
-he, clips => סרטון
+he,clips => קליפים
+he,clips => קליפ
+he,clips => סרטונים
+he,clips => סרטון
 
-he, sources => מקורות
-he, sources => מקור
-he, sources => ספר
-he, sources => ספרים
-he, sources => ספרייה
-he, sources => כתבי מקובלים
-he, sources => כתבי המקובלים
+he,sources => מקורות
+he,sources => מקור
+he,sources => ספר
+he,sources => ספרים
+he,sources => ספרייה
+he,sources => כתבי מקובלים
+he,sources => כתבי המקובלים
 
-he, meals => סעודה
-he, meals => סעודות
+he,meals => סעודה
+he,meals => סעודות
 
-he, blog => בלוג
+he,blog => בלוג
 
-he, tweets => טוויטים
-he, tweets => טוויט
-he, tweets => טוויטר
+he,tweets => טוויטים
+he,tweets => טוויט
+he,tweets => טוויטר
