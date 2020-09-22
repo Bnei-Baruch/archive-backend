@@ -1,6 +1,8 @@
 package search
 
 import (
+	"fmt"
+
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -94,20 +96,23 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 }
 
 func NewFilteredResultsSearchRequest(text string, contentType string, from int, size int, sortBy string, resultTypes []string, languageOrder []string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
-	requests, err := NewResultsSearchRequests(
-		SearchRequestOptions{
-			resultTypes:        resultTypes,
-			index:              "",
-			query:              Query{Term: text, Filters: consts.CT_VARIABLE_TO_FILTER_VALUES[contentType], LanguageOrder: languageOrder, Deb: deb},
-			sortBy:             sortBy,
-			from:               0,
-			size:               from + size,
-			preference:         preference,
-			useHighlight:       false,
-			partialHighlight:   false,
-			filterOutCUSources: []string{}})
+	if filters, ok := consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]; ok {
+		requests, err := NewResultsSearchRequests(
+			SearchRequestOptions{
+				resultTypes:        resultTypes,
+				index:              "",
+				query:              Query{Term: text, Filters: filters, LanguageOrder: languageOrder, Deb: deb},
+				sortBy:             sortBy,
+				from:               0,
+				size:               from + size,
+				preference:         preference,
+				useHighlight:       false,
+				partialHighlight:   false,
+				filterOutCUSources: []string{}})
 
-	return requests, err
+		return requests, err
+	}
+	return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES.", contentType)
 }
 
 func wordToHist(word string) map[rune]int {
