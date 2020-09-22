@@ -662,6 +662,7 @@ var VARIABLE_TO_FILTER = map[string]string{
 	VAR_CONVENTION_LOCATION: "location",
 	VAR_TEXT:                "text",
 	VAR_HOLIDAYS:            "holidays",
+	VAR_CONTENT_TYPE:        "content_type",
 }
 
 // Latency log
