@@ -204,6 +204,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 								}
 							}
 							if contentType != "" && text != "" {
+								log.Infof("Filtered Search Request: ContentType is %s, Text is %s.", contentType, text)
 								requests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, query.LanguageOrder, preference, query.Deb)
 								if err != nil {
 									return nil, nil, err
@@ -217,6 +218,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		}
 		if len(filterSearchRequests) > 0 {
 			multiSearchFilteredService := e.esc.MultiSearch()
+			multiSearchFilteredService.Add(filterSearchRequests...)
 			beforeFilterSearch := time.Now()
 			mr, err := multiSearchFilteredService.Do(context.TODO())
 			e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
@@ -262,11 +264,16 @@ func (e *ESEngine) VariableMapToFilterValues(vMap map[string][]string, language 
 			filterName = name
 		}
 		for _, value := range values {
+			var origin string
+			if len(e.variables[name][language][value]) > 0 {
+				//  we store 'origin' only for variables with a finite values list
+				origin = e.variables[name][language][value][0]
+			}
 			ret = append(ret, FilterValue{
 				Name:       filterName,
 				Value:      value,
-				Origin:     e.variables[name][language][value][0],
-				OriginFull: e.variables[name][language][value][0],
+				Origin:     origin,
+				OriginFull: origin,
 			})
 		}
 	}
@@ -332,7 +339,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						if len(text) == 1 && text[0] != "" {
 							textVarValues := retrieveTextVarValues(text[0])
 							vMap[rule.Variables[i]] = textVarValues
-							log.Infof("VAR_TEXT values is %+v", textVarValues)
+							log.Infof("$Text values are %+v", textVarValues)
 						}
 					}
 				}
