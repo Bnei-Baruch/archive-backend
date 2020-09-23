@@ -86,8 +86,7 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 				Field("grammar_rule.rules_suggest.language").
 				Text(simpleQuery(query)).
 				Size(GRAMMAR_SUGGEST_SIZE).
-				SkipDuplicates(true)).
-		Explain(query.Deb)
+				SkipDuplicates(true))
 
 	return elastic.NewSearchRequest().
 		SearchSource(source).
