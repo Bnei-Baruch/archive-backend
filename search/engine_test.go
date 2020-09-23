@@ -285,6 +285,8 @@ func (suite *EngineSuite) TestRetrieveTextVarValues() {
 	r.Equal(retrieveTextVarValues("aaa$"), []string{"aaa"})
 	r.Equal(retrieveTextVarValues("aaa $bbb$ ccc"), []string{"aaa", "ccc"})
 	r.Equal(retrieveTextVarValues("$bbb$ ccc"), []string{"ccc"})
+	r.Equal(retrieveTextVarValues("$aaa$ $bbb$ ccc"), []string{"ccc"})
 	r.Equal(retrieveTextVarValues("aaa $bbb$"), []string{"aaa"})
 	r.Equal(retrieveTextVarValues("aaa $bbb$ ccc $ddd"), []string{"aaa", "ccc"})
+
 }

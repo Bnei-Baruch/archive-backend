@@ -336,6 +336,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			if rule.Variables[i] == consts.VAR_TEXT {
 				if hit.Highlight != nil {
 					if text, ok := hit.Highlight["search_text"]; ok {
+						log.Infof("search_text: %s", text)
 						if len(text) == 1 && text[0] != "" {
 							textVarValues := retrieveTextVarValues(text[0])
 							vMap[rule.Variables[i]] = textVarValues
@@ -506,7 +507,10 @@ func retrieveTextVarValues(str string) []string {
 				if r != PERCULATE_HIGHLIGHT_SEPERATOR {
 					filtered = append(filtered, r)
 				}
-				textVarValues = append(textVarValues, strings.Trim(string(filtered), " "))
+				trimmed := strings.Trim(string(filtered), " ")
+				if trimmed != "" {
+					textVarValues = append(textVarValues, trimmed)
+				}
 			}
 			filtered = make([]rune, 0)
 		} else if !inHighlight {
