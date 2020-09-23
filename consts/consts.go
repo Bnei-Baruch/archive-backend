@@ -656,5 +656,5 @@ var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[string]bool{
 	SRC_RABASH_ASSORTED_NOTES: true,
 }
 var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX_LETTER = map[string]bool{
-	fmt.Sprintf(SRC_SHAMATI, ":", LANG_HEBREW): true,
+	fmt.Sprintf("%s:%s", SRC_SHAMATI, LANG_HEBREW): true,
 }
