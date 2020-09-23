@@ -206,7 +206,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 						log.Infof("values set: %+v", variableValues)
 						assignedRules := []string(nil)
 						for i := range rules {
-							assignedRule := rules[i]
+							var assignedRule string
 							// For set of values: ["2018", "Moscow"] provide list of phrases:
 							// [["2018", "Two thousand and eigheen"], ["Moscow", "Russian, Moscow"]]
 							variableValuesPhrases := [][]string(nil)
@@ -216,6 +216,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 							// Iterate over different pheases for each value, see |variableValuesPhrases| variable.
 							for phrasesIter := CreateCrossIter(variableValuesPhrases); phrasesIter.Next(); {
 								assignValues := phrasesIter.Values()
+								assignedRule = rules[i]
 								for j := range assignValues {
 									assignedRule = strings.Replace(assignedRule, variablesSet[j], assignValues[j], -1)
 								}
