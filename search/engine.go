@@ -614,19 +614,19 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	// Search grammars in parallel to native search.
 	grammarsChannel := make(chan []Intent)
-	grammarsFilteredResultsByLangChannel := make(chan map[string]*elastic.SearchResult)
+	grammarsFilteredResultsByLangChannel := make(chan map[string][]*elastic.SearchResult)
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
 				grammarsChannel <- []Intent{}
-				grammarsFilteredResultsByLangChannel <- map[string]*elastic.SearchResult{}
+				grammarsFilteredResultsByLangChannel <- map[string][]*elastic.SearchResult{}
 			}
 		}()
 		if grammars, filtered, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
 			grammarsChannel <- []Intent{}
-			grammarsFilteredResultsByLangChannel <- map[string]*elastic.SearchResult{}
+			grammarsFilteredResultsByLangChannel <- map[string][]*elastic.SearchResult{}
 		} else {
 			grammarsChannel <- grammars
 			grammarsFilteredResultsByLangChannel <- filtered
@@ -772,7 +772,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
-		resultsByLang[lang] = append(resultsByLang[lang], filtered)
+		resultsByLang[lang] = append(resultsByLang[lang], filtered...)
 	}
 
 	var currentLang string
@@ -889,6 +889,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							if h.Id == hr.Id {
 								//  Replacing original search result with highlighted result.
 								ret.Hits.Hits[i] = hr
+								//  Keep the score of the original hit (possibly incr. by grammar)
+								ret.Hits.Hits[i].Score = h.Score
 							} else if h.Type == consts.SEARCH_RESULT_TWEETS_MANY && h.InnerHits != nil {
 								if tweetHits, ok := h.InnerHits[consts.SEARCH_RESULT_TWEETS_MANY]; ok {
 									for k, th := range tweetHits.Hits.Hits {

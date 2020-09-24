@@ -94,22 +94,58 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 		Preference(preference)
 }
 
-func NewFilteredResultsSearchRequest(text string, contentType string, from int, size int, sortBy string, resultTypes []string, languageOrder []string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
+func NewFilteredResultsSearchRequest(text string, contentType string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
 	if filters, ok := consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]; ok {
-		requests, err := NewResultsSearchRequests(
-			SearchRequestOptions{
-				resultTypes:        resultTypes,
-				index:              "",
-				query:              Query{Term: text, Filters: filters, LanguageOrder: languageOrder, Deb: deb},
-				sortBy:             sortBy,
-				from:               0,
-				size:               from + size,
-				preference:         preference,
-				useHighlight:       false,
-				partialHighlight:   false,
-				filterOutCUSources: []string{}})
+		requests := []*elastic.SearchRequest{}
+		if val, ok := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
+			sourceOnlyFilter := map[string][]string{
+				consts.FILTERS[consts.FILTER_SECTION_SOURCES]: val,
+			}
+			sourceRequests, err := NewResultsSearchRequests(
+				SearchRequestOptions{
+					resultTypes:        resultTypes,
+					index:              "",
+					query:              Query{Term: text, Filters: sourceOnlyFilter, LanguageOrder: []string{language}, Deb: deb},
+					sortBy:             sortBy,
+					from:               0,
+					size:               from + size,
+					preference:         preference,
+					useHighlight:       false,
+					partialHighlight:   false,
+					filterOutCUSources: []string{}})
+			if err != nil {
+				return nil, err
+			}
+			requests = append(requests, sourceRequests...)
+		}
 
-		return requests, err
+		filtersWithoutSource := map[string][]string{}
+		for key, value := range filters {
+			if key != consts.FILTERS[consts.FILTER_SECTION_SOURCES] {
+				filtersWithoutSource[key] = value
+			}
+		}
+		if len(filtersWithoutSource) > 0 {
+			nonSourceRequests, err := NewResultsSearchRequests(
+				SearchRequestOptions{
+					resultTypes:        resultTypes,
+					index:              "",
+					query:              Query{Term: text, Filters: filtersWithoutSource, LanguageOrder: []string{language}, Deb: deb},
+					sortBy:             sortBy,
+					from:               0,
+					size:               from + size,
+					preference:         preference,
+					useHighlight:       false,
+					partialHighlight:   false,
+					filterOutCUSources: []string{}})
+			if err != nil {
+				return nil, err
+			}
+			requests = append(requests, nonSourceRequests...)
+		}
+
+		//fmt.Printf("\nGrammar filter requests count: %d\n", len(requests))
+		return requests, nil
 	}
 	return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES.", contentType)
 }

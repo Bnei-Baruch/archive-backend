@@ -146,9 +146,9 @@ func (e *ESEngine) suggestResultsToVariablesByPhrases(query *Query, result *elas
 	return ret, nil
 }
 
-func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy string, resultTypes []string, preference string) ([]Intent, map[string]*elastic.SearchResult, error) {
+func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy string, resultTypes []string, preference string) ([]Intent, map[string][]*elastic.SearchResult, error) {
 	intents := []Intent{}
-	filtered := map[string]*elastic.SearchResult{}
+	filtered := map[string][]*elastic.SearchResult{}
 	if query.Term != "" && len(query.ExactTerms) > 0 {
 		// Will never match any grammar for query having simple terms and exact terms.
 		// This is not acurate but an edge case. Need to better think of query representation.
@@ -205,7 +205,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 							}
 							if contentType != "" && text != "" {
 								log.Infof("Filtered Search Request: ContentType is %s, Text is %s.", contentType, text)
-								requests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, query.LanguageOrder, preference, query.Deb)
+								requests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, language, preference, query.Deb)
 								if err != nil {
 									return nil, nil, err
 								}
@@ -225,12 +225,8 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 			if err != nil {
 				return nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
 			}
-			if len(mr.Responses) != len(query.LanguageOrder) {
-				return nil, nil, errors.New(fmt.Sprintf("Unexpected number of results in grammar based filter search %d, expected %d",
-					len(mr.Responses), len(query.LanguageOrder)))
-			}
 
-			for i, currentResults := range mr.Responses {
+			for _, currentResults := range mr.Responses {
 				if currentResults.Error != nil {
 					log.Warnf("%+v", currentResults.Error)
 					return nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
@@ -244,8 +240,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 					if currentResults.Hits.MaxScore != nil {
 						*currentResults.Hits.MaxScore += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
 					}
-					lang := query.LanguageOrder[i]
-					filtered[lang] = currentResults
+					filtered[language] = append(filtered[language], currentResults)
 				}
 			}
 		}
