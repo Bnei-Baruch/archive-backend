@@ -162,4 +162,4 @@
 
 # Added by Yuri at 23.09.20 (not in spreadsheet)
 # Used for the search of Rabash Assorted Notes
-רשומה רשומות
+רשומה	רשומות
