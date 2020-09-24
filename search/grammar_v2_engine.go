@@ -241,6 +241,9 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 							*hit.Score += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
 						}
 					}
+					if currentResults.Hits.MaxScore != nil {
+						*currentResults.Hits.MaxScore += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
+					}
 					lang := query.LanguageOrder[i]
 					filtered[lang] = currentResults
 				}
