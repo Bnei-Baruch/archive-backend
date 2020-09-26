@@ -50,6 +50,12 @@ type ClassificationIntent struct {
 	MaxExplanation elastic.SearchExplanation `json:"max_explanation,omitempty"`
 }
 
+type FilteredSearchResult struct {
+	Term      string
+	HitIdsMap map[string]bool
+	Results   []*elastic.SearchResult
+}
+
 type TimeLogMap struct {
 	mx sync.Mutex
 	m  map[string]time.Duration
@@ -614,19 +620,19 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	// Search grammars in parallel to native search.
 	grammarsChannel := make(chan []Intent)
-	grammarsFilteredResultsByLangChannel := make(chan map[string][]*elastic.SearchResult)
+	grammarsFilteredResultsByLangChannel := make(chan map[string]FilteredSearchResult)
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
 				grammarsChannel <- []Intent{}
-				grammarsFilteredResultsByLangChannel <- map[string][]*elastic.SearchResult{}
+				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
 			}
 		}()
 		if grammars, filtered, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
 			grammarsChannel <- []Intent{}
-			grammarsFilteredResultsByLangChannel <- map[string][]*elastic.SearchResult{}
+			grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
 		} else {
 			grammarsChannel <- grammars
 			grammarsFilteredResultsByLangChannel <- filtered
@@ -722,6 +728,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
 			len(mr.Responses), len(query.LanguageOrder)))
 	}
+
 	resultsByLang := make(map[string][]*elastic.SearchResult)
 
 	// Responses are ordered by language by index, i.e., for languages [bg, ru, en].
@@ -772,7 +779,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
-		resultsByLang[lang] = append(resultsByLang[lang], filtered...)
+		resultsByLang[lang] = append(resultsByLang[lang], filtered.Results...)
 	}
 
 	var currentLang string
@@ -837,6 +844,17 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				continue
 			}
 
+			term := query.Term
+			for _, lang := range highlightsLangs {
+				if filtered, ok := filteredByLang[lang]; ok {
+					if _, hasId := filtered.HitIdsMap[h.Id]; hasId {
+						// set highlight search term as the grammar filter search term
+						term = filteredByLang[lang].Term
+						break
+					}
+				}
+			}
+
 			// We use multiple search request because we saw that a single request
 			// filtered by id's list take more time than multiple requests.
 			req, err := NewResultsSearchRequest(
@@ -844,7 +862,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					resultTypes:      resultTypes,
 					docIds:           []string{h.Id},
 					index:            h.Index,
-					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
+					query:            Query{ExactTerms: query.ExactTerms, Term: term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
 					sortBy:           consts.SORT_BY_RELEVANCE,
 					from:             0,
 					size:             1,

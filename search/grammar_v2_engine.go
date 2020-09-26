@@ -146,9 +146,9 @@ func (e *ESEngine) suggestResultsToVariablesByPhrases(query *Query, result *elas
 	return ret, nil
 }
 
-func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy string, resultTypes []string, preference string) ([]Intent, map[string][]*elastic.SearchResult, error) {
+func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy string, resultTypes []string, preference string) ([]Intent, map[string]FilteredSearchResult, error) {
 	intents := []Intent{}
-	filtered := map[string][]*elastic.SearchResult{}
+	filtered := map[string]FilteredSearchResult{}
 	if query.Term != "" && len(query.ExactTerms) > 0 {
 		// Will never match any grammar for query having simple terms and exact terms.
 		// This is not acurate but an edge case. Need to better think of query representation.
@@ -211,11 +211,15 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 								}
 								if len(filterSearchRequests) > 0 {
 									// All search requests here are for the same language
-									results, err := e.filterSearch(filterSearchRequests)
+									results, hitIdsMap, err := e.filterSearch(filterSearchRequests)
 									if err != nil {
 										return nil, nil, err
 									}
-									filtered[language] = append(filtered[language], results...)
+									filtered[language] = FilteredSearchResult{
+										Results:   results,
+										Term:      text,
+										HitIdsMap: hitIdsMap,
+									}
 								}
 							}
 						}
@@ -497,24 +501,27 @@ func retrieveTextVarValues(str string) []string {
 	return textVarValues
 }
 
-func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.SearchResult, error) {
+func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.SearchResult, map[string]bool, error) {
 	results := []*elastic.SearchResult{}
+	hitIdsMap := map[string]bool{}
+
 	multiSearchFilteredService := e.esc.MultiSearch()
 	multiSearchFilteredService.Add(requests...)
 	beforeFilterSearch := time.Now()
 	mr, err := multiSearchFilteredService.Do(context.TODO())
 	e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error looking for grammar based filter search.")
+		return nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
 	}
 
 	for _, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
-			return nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
+			return nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
 		}
 		if haveHits(currentResults) {
 			for _, hit := range currentResults.Hits.Hits {
+				hitIdsMap[hit.Id] = true
 				if hit.Score != nil {
 					*hit.Score += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
 				}
@@ -525,5 +532,5 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.S
 			results = append(results, currentResults)
 		}
 	}
-	return results, nil
+	return results, hitIdsMap, nil
 }
