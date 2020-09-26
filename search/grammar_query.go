@@ -103,7 +103,7 @@ func NewFilteredResultsSearchRequest(text string, contentType string, from int, 
 			}
 			sourceRequests, err := NewResultsSearchRequests(
 				SearchRequestOptions{
-					resultTypes:        resultTypes,
+					resultTypes:        []string{consts.ES_RESULT_TYPE_SOURCES},
 					index:              "",
 					query:              Query{Term: text, Filters: sourceOnlyFilter, LanguageOrder: []string{language}, Deb: deb},
 					sortBy:             sortBy,
