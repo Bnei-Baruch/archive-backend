@@ -612,10 +612,10 @@ const (
 	VAR_CT_SOURCES  = "sources"
 	VAR_CT_MEALS    = "meals"
 	VAR_CT_BLOG     = "blog"
-	VAR_CT_TWEETS   = "tweets"
 
 	// TBD if the imp. is needed
 	/*
+		VAR_CT_TWEETS   	= "tweets"
 		VAR_CT_PUBLICATIONS = "publications"
 		VAR_CT_EVENTS       = "events"
 		VAR_CT_HOLIDAYS     = "holidays"
@@ -651,9 +651,9 @@ var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
 	VAR_CT_BLOG: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{CT_BLOG_POST, SCT_BLOG_POST},
 	},
-	VAR_CT_TWEETS: map[string][]string{
+	/*VAR_CT_TWEETS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{SCT_TWEET},
-	},
+	},*/
 }
 
 // Variable name to frontend filter name mapping.

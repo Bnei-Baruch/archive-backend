@@ -29,10 +29,6 @@ en,meals => meals
 
 en,blog => blog
 
-en,tweets => tweets
-en,tweets => tweet
-en,tweets => tweeter
-
 he,programs => תוכנית
 he,programs => תוכניות
 
@@ -64,7 +60,3 @@ he,meals => סעודת
 he,meals => סעודות
 
 he,blog => בלוג
-
-he,tweets => טוויטים
-he,tweets => טוויט
-he,tweets => טוויטר
