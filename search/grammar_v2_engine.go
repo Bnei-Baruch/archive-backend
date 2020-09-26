@@ -88,10 +88,11 @@ func (e *ESEngine) suggestOptionsToVariablesByPhrases(query *Query, suggest *ela
 		for _, s := range v {
 			if len(s.Options) > 0 {
 				for _, option := range s.Options {
-					var rule GrammarRule
-					if err := json.Unmarshal(*option.Source, &rule); err != nil {
+					var ruleObj GrammarRuleWithPercolatorQuery
+					if err := json.Unmarshal(*option.Source, &ruleObj); err != nil {
 						return nil, err
 					}
+					rule := ruleObj.GrammarRule
 					// log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", option.Score, option.Index, option.Type, option.Id, rule)
 					if len(rule.Values) != len(rule.Variables) {
 						return nil, errors.New(fmt.Sprintf("Expected Variables to be of size %d, but it is %d", len(rule.Values), len(rule.Variables)))
