@@ -205,42 +205,21 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 							}
 							if contentType != "" && text != "" {
 								log.Infof("Filtered Search Request: ContentType is %s, Text is %s.", contentType, text)
-								requests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, language, preference, query.Deb)
+								filterSearchRequests, err = NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, language, preference, query.Deb)
 								if err != nil {
 									return nil, nil, err
 								}
-								filterSearchRequests = append(filterSearchRequests, requests...)
+								if len(filterSearchRequests) > 0 {
+									// All search requests here are for the same language
+									results, err := e.filterSearch(filterSearchRequests)
+									if err != nil {
+										return nil, nil, err
+									}
+									filtered[language] = append(filtered[language], results...)
+								}
 							}
 						}
 					}
-				}
-			}
-		}
-		if len(filterSearchRequests) > 0 {
-			multiSearchFilteredService := e.esc.MultiSearch()
-			multiSearchFilteredService.Add(filterSearchRequests...)
-			beforeFilterSearch := time.Now()
-			mr, err := multiSearchFilteredService.Do(context.TODO())
-			e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
-			if err != nil {
-				return nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
-			}
-
-			for _, currentResults := range mr.Responses {
-				if currentResults.Error != nil {
-					log.Warnf("%+v", currentResults.Error)
-					return nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
-				}
-				if haveHits(currentResults) {
-					for _, hit := range currentResults.Hits.Hits {
-						if hit.Score != nil {
-							*hit.Score += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
-						}
-					}
-					if currentResults.Hits.MaxScore != nil {
-						*currentResults.Hits.MaxScore += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
-					}
-					filtered[language] = append(filtered[language], currentResults)
 				}
 			}
 		}
@@ -516,4 +495,35 @@ func retrieveTextVarValues(str string) []string {
 		}
 	}
 	return textVarValues
+}
+
+func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.SearchResult, error) {
+	results := []*elastic.SearchResult{}
+	multiSearchFilteredService := e.esc.MultiSearch()
+	multiSearchFilteredService.Add(requests...)
+	beforeFilterSearch := time.Now()
+	mr, err := multiSearchFilteredService.Do(context.TODO())
+	e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error looking for grammar based filter search.")
+	}
+
+	for _, currentResults := range mr.Responses {
+		if currentResults.Error != nil {
+			log.Warnf("%+v", currentResults.Error)
+			return nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
+		}
+		if haveHits(currentResults) {
+			for _, hit := range currentResults.Hits.Hits {
+				if hit.Score != nil {
+					*hit.Score += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
+				}
+			}
+			if currentResults.Hits.MaxScore != nil {
+				*currentResults.Hits.MaxScore += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
+			}
+			results = append(results, currentResults)
+		}
+	}
+	return results, nil
 }
