@@ -380,16 +380,18 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			if mdbSource.ParentID.Valid && mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
 				var addPosition bool
 				var parent string
+				var positionIndexType consts.PositionIndexType
 				for _, parent = range parents {
-					if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parent]; ok {
+					if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parent]; ok {
 						addPosition = true
+						positionIndexType = val
 						break
 					}
 				}
 				if addPosition {
 					var position string
 					position = strconv.Itoa(mdbSource.Position.Int)
-					if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX_LETTER[fmt.Sprintf(parent, ":", i18n.Language)]; ok {
+					if i18n.Language == consts.LANG_HEBREW && positionIndexType == consts.LETTER_IF_HEBREW {
 						position = utils.NumberInHebrew(mdbSource.Position.Int) //  Convert to Hebrew letter
 					} else {
 						position = strconv.Itoa(mdbSource.Position.Int)
