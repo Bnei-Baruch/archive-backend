@@ -219,3 +219,58 @@ func (suite *EngineSuite) TestJoinResponsesTimeOlderToNewer() {
 		r.Equal(expected[i].Uid, h.Uid)
 	}
 }
+
+func (suite *EngineSuite) TestFilterOutDuplicateHits() {
+	fmt.Printf("\n------ TestFilterOutDuplicateHits ------\n\n")
+	r := require.New(suite.T())
+
+	hits := make([]*elastic.SearchHit, 0)
+	var scoreL float64 = 1
+	var scoreM float64 = 2
+	var scoreH float64 = 3
+
+	uid1 := es.MdbUid{"A"}
+	msg1, err := json.Marshal(uid1)
+	r.Nil(err)
+
+	uid2 := es.MdbUid{"B"}
+	msg2, err := json.Marshal(uid2)
+	r.Nil(err)
+
+	srcUidA := (*json.RawMessage)(&msg1)
+	srcUidB := (*json.RawMessage)(&msg2)
+
+	//  Add 4 hits with a same uid - A
+
+	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreL, Index: "I1"})
+	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreM, Index: "I1"})
+	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreL, Index: "I1"})
+	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreL, Index: "I1"})
+
+	expected := uniqueHitsByMdbUid(hits, []string{"I2", "I3"})
+	r.Equal(len(expected), 1)
+	r.Equal(*expected[0].Score, scoreM)
+
+	// Add another hit with uid A but with an ignored index
+
+	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreL, Index: "I2"})
+	expected = uniqueHitsByMdbUid(hits, []string{"I2", "I3"})
+	r.Equal(len(expected), 2)
+
+	// Add another 3 hits with uid B where one of the hits has an ignored index
+
+	hits = append(hits, &elastic.SearchHit{Source: srcUidB, Score: &scoreL, Index: "I4"})
+	hits = append(hits, &elastic.SearchHit{Source: srcUidB, Score: &scoreL, Index: "I1"})
+	hits = append(hits, &elastic.SearchHit{Source: srcUidB, Score: &scoreH, Index: "I3"})
+	expected = uniqueHitsByMdbUid(hits, []string{"I2", "I3"})
+	r.Equal(len(expected), 4)
+
+	scores := make([]int, 0)
+	for _, ex := range expected {
+		scores = append(scores, int(*ex.Score))
+	}
+
+	scoresSum, maxScore := utils.SumAndMax(scores)
+	r.Equal(maxScore, int(scoreH))
+	r.Equal(scoresSum, 7)
+}

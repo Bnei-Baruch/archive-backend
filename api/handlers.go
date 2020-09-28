@@ -31,6 +31,13 @@ import (
 
 var SECURE_PUBLISHED_MOD = qm.Where(fmt.Sprintf("secure=%d AND published IS TRUE", consts.SEC_PUBLIC))
 
+type firstRowsType struct {
+	id           int64
+	uid          string
+	content_type string
+	film_date    time.Time
+}
+
 func CollectionsHandler(c *gin.Context) {
 	r := CollectionsRequest{
 		WithUnits: true,
@@ -943,31 +950,130 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 }
 
 func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpError) {
+	const queryTemplate = `
+WITH CUs AS (
+	SELECT ct.id as type_id, uid, cu_id AS id, film_date
+	FROM ( VALUES (%d), (%d), (%d), (%d), (%d), (%d), (%d) ) ct(id)
+	INNER JOIN LATERAL (
+		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+		FROM content_units cu
+		WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
+		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC 
+		FETCH FIRST 4 ROWS ONLY
+	) t ON true
+), LESSON_COLLs AS (
+	SELECT ct.id as type_id, uid, cu_id AS id, film_date
+	FROM ( VALUES (%d), (%d) ) ct(id)
+	INNER JOIN LATERAL (
+		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+		FROM collections c
+		WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
+		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
+		FETCH FIRST 3 ROWS ONLY
+	) t ON true
+), COLs AS (
+	SELECT ct.id as type_id, uid, cu_id AS id, film_date
+	FROM ( VALUES (%d), (%d) ) ct(id)
+	INNER JOIN LATERAL (
+		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+		FROM collections c
+		WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
+		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
+		FETCH FIRST 1 ROWS ONLY
+	) t ON true
+)
+(
+	SELECT * FROM CUs
+) UNION (
+	SELECT * FROM COLs
+) UNION (
+	SELECT * FROM LESSON_COLLs
+)
+order by type_id, film_date desc
+`
+	query := fmt.Sprintf(queryTemplate,
+		// CUs
+		// row #1: CT_WOMEN_LESSON, CT_VIRTUAL_LESSON x 1
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIRTUAL_LESSON].ID,
+		// row #2: CT_VIDEO_PROGRAM_CHAPTER x 4
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM_CHAPTER].ID,
+		// row #3: CT_CLIP x 4
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
+		// row #4: CT_ARTICLE x 4
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID,
+		// row #5: CT_FRIENDS_GATHERING, CT_MEAL x 1
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
 
-	// CU ids query
-	const query = `SELECT DISTINCT ON (type_id) id
-FROM content_units
-WHERE secure = 0 AND published IS TRUE
-ORDER BY type_id, (coalesce(properties ->> 'film_date', created_at :: TEXT)) :: DATE DESC, created_at DESC;`
+		// Collections (lessons): CT_LECTURE_SERIES, CT_DAILY_LESSON x 3
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LECTURE_SERIES].ID,
+		// Collections: CT_CONGRESS, CT_HOLIDAY x 1
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID,
+	)
 	rows, err := queries.Raw(db, query).Query()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 	defer rows.Close()
 
-	cuIDs := make([]int64, 0)
+	firstRows := map[string][]firstRowsType{}
 	for rows.Next() {
-		var myId int64
-		err := rows.Scan(&myId)
+		var (
+			type_id   int64
+			id        int64
+			uid       string
+			film_date time.Time
+		)
+		err = rows.Scan(&type_id, &uid, &id, &film_date)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
-		cuIDs = append(cuIDs, myId)
+		name := mdb.CONTENT_TYPE_REGISTRY.ByID[type_id].Name
+		_, ok := firstRows[name]
+		if !ok {
+			firstRows[name] = []firstRowsType{}
+		}
+		firstRows[name] = append(firstRows[name], firstRowsType{
+			id:           id,
+			uid:          uid,
+			content_type: name,
+			film_date:    film_date,
+		})
 	}
-	if err := rows.Err(); err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, NewInternalError(err)
 	}
-
+	cuIDs := make([]int64, 0)
+	if _, ok := firstRows[consts.CT_WOMEN_LESSON]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_WOMEN_LESSON][0].id)
+	}
+	if _, ok := firstRows[consts.CT_VIRTUAL_LESSON]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_VIRTUAL_LESSON][0].id)
+	}
+	if _, ok := firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER]; ok {
+		for _, r := range firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	if _, ok := firstRows[consts.CT_CLIP]; ok {
+		for _, r := range firstRows[consts.CT_CLIP][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	if _, ok := firstRows[consts.CT_ARTICLE]; ok {
+		for _, r := range firstRows[consts.CT_ARTICLE][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	if _, ok := firstRows[consts.CT_MEAL]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_MEAL][0].id)
+	}
+	if _, ok := firstRows[consts.CT_FRIENDS_GATHERING]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_FRIENDS_GATHERING][0].id)
+	}
 	// data query
 	units, err := mdbmodels.ContentUnits(db,
 		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
@@ -981,6 +1087,66 @@ ORDER BY type_id, (coalesce(properties ->> 'film_date', created_at :: TEXT)) :: 
 	cus, ex := prepareCUs(db, units, r.Language)
 	if ex != nil {
 		return nil, ex
+	}
+
+	//last Collections: CONGRESS, HOLIDAY, LECTURE_SERIES
+	cIDs := make([]int64, 0)
+	cs := make([]firstRowsType, 0)
+	if _, ok := firstRows[consts.CT_CONGRESS]; ok {
+		cIDs = append(cIDs, firstRows[consts.CT_CONGRESS][0].id)
+		cs = append(cs, firstRows[consts.CT_CONGRESS][0])
+	}
+	if _, ok := firstRows[consts.CT_HOLIDAY]; ok {
+		cIDs = append(cIDs, firstRows[consts.CT_HOLIDAY][0].id)
+		cs = append(cs, firstRows[consts.CT_HOLIDAY][0])
+	}
+	if _, ok := firstRows[consts.CT_LECTURE_SERIES]; ok {
+		// The first one is always on HomePage
+		for _, r := range firstRows[consts.CT_LECTURE_SERIES][0:2] {
+			cIDs = append(cIDs, r.id)
+			cs = append(cs, r)
+		}
+	}
+	if _, ok := firstRows[consts.CT_DAILY_LESSON]; ok {
+		// The first one is always on HomePage
+		for _, r := range firstRows[consts.CT_DAILY_LESSON][1:3] {
+			cIDs = append(cIDs, r.id)
+			cs = append(cs, r)
+		}
+	}
+
+	ci18nsMap, err := loadCI18ns(db, r.Language, cIDs)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	lastNumber := 1
+	for _, x := range cs {
+		u := &ContentUnit{
+			mdbID:       x.id,
+			ID:          x.uid,
+			ContentType: x.content_type,
+			FilmDate:    &utils.Date{Time: x.film_date},
+		}
+		if x.content_type == consts.CT_DAILY_LESSON {
+			u.NameInCollection = fmt.Sprintf("%d", lastNumber)
+			lastNumber++
+		} else {
+			lastNumber = 1
+		}
+		if i18ns, ok := ci18nsMap[x.id]; ok {
+			for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+				li18n, ok := i18ns[l]
+				if ok {
+					if u.Name == "" && li18n.Name.Valid {
+						u.Name = li18n.Name.String
+					}
+					if u.Description == "" && li18n.Description.Valid {
+						u.Description = li18n.Description.String
+					}
+				}
+			}
+		}
+		cus = append(cus, u)
 	}
 
 	return cus, nil

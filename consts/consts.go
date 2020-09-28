@@ -478,7 +478,8 @@ var INTENT_HIT_TYPE_BY_CT = map[string]string{
 }
 
 const (
-	GRAMMAR_INDEX = "grammar"
+	GRAMMAR_INDEX                = "grammar"
+	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 
 	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
 
@@ -580,11 +581,20 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
 }
 
+// Variables
+const (
+	VAR_YEAR                = "$Year"
+	VAR_CONVENTION_LOCATION = "$ConventionLocation"
+	VAR_TEXT                = "$Text"
+	VAR_HOLIDAYS            = "$Holidays"
+)
+
 // Variable name to frontend filter name mapping.
 var VARIABLE_TO_FILTER = map[string]string{
-	"$Year":               "year",
-	"$ConventionLocation": "location",
-	"$Text":               "text",
+	VAR_YEAR:                "year",
+	VAR_CONVENTION_LOCATION: "location",
+	VAR_TEXT:                "text",
+	VAR_HOLIDAYS:            "holidays",
 }
 
 // Latency log
@@ -619,6 +629,7 @@ const (
 	SRC_PEACE_ARCTICLE         = "28Cmp7gl"
 	SRC_PEACE_IN_WORLD_ARTICLE = "hqUTKcZz"
 	SRC_ARVUT_ARTICLE          = "itcVAcFn"
+	SRC_RABASH_ASSORTED_NOTES  = "2GAdavz0"
 	SRC_THE_ROSE_ARTICLE       = "yUcfylRm"
 )
 
@@ -639,5 +650,6 @@ var ES_SRC_ADD_MAAMAR_TO_SUGGEST = map[string]bool{
 }
 
 var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[string]bool{
-	SRC_SHAMATI: true,
+	SRC_SHAMATI:               true,
+	SRC_RABASH_ASSORTED_NOTES: true,
 }

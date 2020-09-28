@@ -96,10 +96,8 @@ type Classification struct {
 }
 
 type Source struct {
-	MDB_UID string     `json:"mdb_uid"`
-	MDB_ID  null.Int64 `json:"mdb_id"`
-
-	Name string `json:"name"`
+	MDB_UID string `json:"mdb_uid"`
+	Name    string `json:"name"`
 
 	// Deprecated fields (since we use 'Result Template' in order to index the sources):
 	Description string     `json:"description"`
@@ -850,7 +848,6 @@ func updateSource(source Source, lang string) (string, int64, error) {
 		if err := mdbSource.Update(common.DB); err != nil {
 			return "", 0, err
 		}
-
 	} else {
 		mdbSource = mdbmodels.Source{
 			UID:    utils.GenerateUID(8),

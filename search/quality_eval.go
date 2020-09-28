@@ -174,6 +174,7 @@ const (
 	FILTER_NAME_SOURCE       = "source"
 	FILTER_NAME_TOPIC        = "topic"
 	FILTER_NAME_CONTENT_TYPE = "contentType"
+	FILTER_NAME_HOLIDAYS     = "holidays"
 	PREFIX_LATEST            = "[latest]"
 	BLOG_OR_TWEET_MARK       = "blog_or_tweet"
 )
@@ -438,9 +439,13 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	landingPage := path.Join(contentUnitOrCollection, uidOrSection)
 	subSection := ""
 	t := ET_NOT_SET
-	if _, ok := LANDING_PAGES[landingPage]; q == "" && !takeLatest && ok {
+	if _, ok := LANDING_PAGES[landingPage]; !takeLatest && ok {
 		t = ET_LANDING_PAGE
-		uidOrSection = landingPage
+		if q == "" {
+			uidOrSection = landingPage
+		} else {
+			subSection = landingPage
+		}
 	} else if _, ok := LANDING_PAGES[uidOrSection]; q == "" && !takeLatest && ok {
 		t = ET_LANDING_PAGE
 	} else {
@@ -1040,13 +1045,13 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 				</tr>`,
 				goodStyle, tdStyle, quality,
 				goodStyle, tdStyle,
-				100*counters[1]/totalCounters[1], // Weighted percentage.
+				100*counters[1]/totalCounters[1],                                                                           // Weighted percentage.
 				diffToHtml(100*counters[1]/totalCounters[1]-100*counters[3]/totalCounters[3], false /*round*/, true /*%*/), // Weighted percentage diff.
 				tdStyle,
-				100*counters[0]/totalCounters[0], // Unique Percentage.
+				100*counters[0]/totalCounters[0],                                                                           // Unique Percentage.
 				diffToHtml(100*counters[0]/totalCounters[0]-100*counters[2]/totalCounters[2], false /*round*/, true /*%*/), // Unique percentage diff.
 				tdStyle,
-				(int)(counters[0]), // Unique.
+				(int)(counters[0]),                                               // Unique.
 				diffToHtml(counters[0]-counters[2], true /*round*/, false /*%*/), // Unique diff.
 			))
 		}

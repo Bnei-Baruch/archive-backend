@@ -8,6 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bnei-Baruch/archive-backend/es"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
@@ -301,4 +304,98 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	}
 	// log.Infof("Intents: %+v", intents)
 	return normalizedIntents, nil
+}
+
+func (e *ESEngine) ConventionsLandingPageToCollectionHit(year string, location string) (*elastic.SearchHit, error) {
+	queryMask := `select c.uid, c.properties from collections c 
+	where c.type_id=%d
+	%s`
+	cityMask := `c.properties ->> 'city' = '%s'`
+	countryMask := `c.properties ->> 'country' = '%s'`
+	yearMask := `extract(year from (c.properties ->> 'start_date')::date) = %s`
+
+	var country string
+	var city string
+
+	if location != "" {
+		s := strings.Split(location, "|")
+		country = s[0]
+		if len(s) > 1 {
+			city = s[1]
+		}
+	}
+
+	whereClauses := make([]string, 0)
+	if year != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf(yearMask, year))
+	}
+	if country != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf(countryMask, country))
+	}
+	if city != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf(cityMask, city))
+	}
+
+	var whereQuery string
+	if len(whereClauses) > 0 {
+		whereQuery = fmt.Sprintf("and %s", strings.Join(whereClauses, " and "))
+	}
+	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID, whereQuery)
+	//log.Infof("ConventionsLandingPageToCollectionHit Query: %s", query)
+	return e.collectionHitFromSql(query)
+}
+
+func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday string) (*elastic.SearchHit, error) {
+	queryMask := `select c.uid, c.properties from collections c
+	join tags t on c.properties ->> 'holiday_tag' = t.uid
+	%s`
+	uidMask := `t.uid = '%s'`
+	yearMask := `(extract(year from (c.properties ->> 'start_date')::date) = %s or extract(year from (c.properties ->> 'end_date')::date) = %s)`
+
+	var whereQuery string
+	if year != "" && holiday != "" {
+		whereQuery = fmt.Sprintf("where %s and %s", fmt.Sprintf(uidMask, holiday), fmt.Sprintf(yearMask, year, year))
+	} else if year != "" {
+		whereQuery = fmt.Sprintf("where %s", fmt.Sprintf(yearMask, year, year))
+	} else if holiday != "" {
+		whereQuery = fmt.Sprintf("where %s", fmt.Sprintf(uidMask, holiday))
+	}
+
+	query := fmt.Sprintf(queryMask, whereQuery)
+	//log.Infof("QUERY: %s", query)
+	return e.collectionHitFromSql(query)
+}
+
+func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, error) {
+	var properties json.RawMessage
+	var mdbUID string
+	var effectiveDate es.EffectiveDate
+
+	err := e.mdb.QueryRow(query).Scan(&mdbUID, &properties)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(properties, &effectiveDate)
+	if err != nil {
+		return nil, err
+	}
+
+	result := es.Result{
+		EffectiveDate: effectiveDate.EffectiveDate,
+		MDB_UID:       mdbUID,
+		ResultType:    consts.ES_RESULT_TYPE_COLLECTIONS,
+	}
+
+	resultJson, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+
+	hit := &elastic.SearchHit{
+		Source: (*json.RawMessage)(&resultJson),
+		Type:   "result",
+		Index:  consts.GRAMMAR_LP_SINGLE_COLLECTION,
+	}
+	return hit, nil
 }
