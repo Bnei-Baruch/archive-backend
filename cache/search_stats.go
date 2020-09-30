@@ -141,6 +141,8 @@ type SearchStatsCache interface {
 	// |holiday| is the UID of the tag that is children of 'holidays' tag
 	DoesHolidayExist(holiday string, year string) bool
 	DoesHolidaySingle(holiday string, year string) bool
+
+	DoesSourceTitleWithMoreThanOneWordExist(title string) bool
 }
 
 type SearchStatsCacheImpl struct {
@@ -149,6 +151,7 @@ type SearchStatsCacheImpl struct {
 	sources      ClassByTypeStats
 	conventions  map[string]map[string]int
 	holidayYears map[string]map[string]int
+	sourceTitles map[string]bool
 }
 
 func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
@@ -191,6 +194,11 @@ func (ssc *SearchStatsCacheImpl) IsSourceWithEnoughUnits(uid string, count int, 
 	return ssc.isClassWithUnits("sources", uid, count, cts...)
 }
 
+func (ssc *SearchStatsCacheImpl) DoesSourceTitleWithMoreThanOneWordExist(title string) bool {
+	_, exist := ssc.sourceTitles[title]
+	return exist
+}
+
 func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, count int, cts ...string) bool {
 	var stats ClassByTypeStats
 	switch class {
@@ -230,6 +238,10 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	ssc.holidayYears, err = ssc.refreshHolidayYears()
 	if err != nil {
 		return errors.Wrap(err, "Load holidays stats.")
+	}
+	ssc.sourceTitles, err = ssc.loadSourceTitlesWithMoreThanOeWord()
+	if err != nil {
+		return errors.Wrap(err, "Load source titles with more than one word.")
 	}
 
 	return nil
@@ -389,4 +401,24 @@ group by s.id, cu.type_id;`).Query()
 	sources.accumulate()
 
 	return tags.flatten(), sources.flatten(), nil
+}
+
+func (ssc *SearchStatsCacheImpl) loadSourceTitlesWithMoreThanOeWord() (map[string]bool, error) {
+	rows, err := queries.Raw(ssc.mdb, `select distinct sn.name from sources s
+	join source_i18n sn on sn.source_id=s.id
+	where (length(sn.name) - length(replace(sn.name, ' ', ''))) > 0`).Query()
+	if err != nil {
+		return nil, errors.Wrap(err, "queries.Raw")
+	}
+	defer rows.Close()
+	ret := map[string]bool{}
+	for rows.Next() {
+		var name string
+		err = rows.Scan(&name)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		ret[name] = true
+	}
+	return ret, nil
 }

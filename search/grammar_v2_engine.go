@@ -156,6 +156,10 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		log.Infof("Both term and exact terms are defined, should not trigger: [%s] [%s]", query.Term, strings.Join(query.ExactTerms, " - "))
 		return intents, filtered, nil
 	}
+	if e.cache != nil && e.cache.SearchStats().DoesSourceTitleWithMoreThanOneWordExist(query.Term) {
+		log.Infof("The term is identical to a title of a source, should not trigger: [%s]", query.Term)
+		return intents, filtered, nil
+	}
 
 	multiSearchService := e.esc.MultiSearch()
 	for _, language := range query.LanguageOrder {
