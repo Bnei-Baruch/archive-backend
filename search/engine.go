@@ -733,12 +733,24 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	// Responses are ordered by language by index, i.e., for languages [bg, ru, en].
 	// We want the first matching language that has at least any result.
+	var maxRegularScore *float64 // max score for regular result - not intent, grammar or tweet
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
 			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
 		if haveHits(currentResults) {
+			if currentResults.Hits.MaxScore != nil {
+				if maxRegularScore == nil {
+					maxRegularScore = new(float64)
+					*maxRegularScore = *currentResults.Hits.MaxScore
+				}
+				if shouldMergeResults {
+					if *currentResults.Hits.MaxScore > *maxRegularScore {
+						*maxRegularScore = *currentResults.Hits.MaxScore
+					}
+				}
+			}
 			lang := query.LanguageOrder[i]
 			if _, ok := resultsByLang[lang]; !ok {
 				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
@@ -778,6 +790,21 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	for lang, filtered := range filteredByLang {
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+		}
+		for _, result := range filtered.Results {
+			var maxScore float64
+			for _, hit := range result.Hits.Hits {
+				if hit.Score != nil {
+					if *maxRegularScore >= consts.MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT {
+						*hit.Score = math.Min(*maxRegularScore*0.9, *hit.Score)
+					} else {
+						*hit.Score += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
+					}
+					maxScore = math.Max(*hit.Score, maxScore)
+				}
+				result.Hits.MaxScore = &maxScore
+			}
+
 		}
 		resultsByLang[lang] = append(resultsByLang[lang], filtered.Results...)
 	}

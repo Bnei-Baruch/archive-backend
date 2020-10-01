@@ -527,12 +527,6 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.S
 		if haveHits(currentResults) {
 			for _, hit := range currentResults.Hits.Hits {
 				hitIdsMap[hit.Id] = true
-				if hit.Score != nil {
-					*hit.Score += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
-				}
-			}
-			if currentResults.Hits.MaxScore != nil {
-				*currentResults.Hits.MaxScore += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
 			}
 			results = append(results, currentResults)
 		}
