@@ -522,8 +522,8 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON},
 	},
 	GRAMMAR_INTENT_LANDING_PAGE_VIRTUAL_LESSONS: map[string][]string{
-		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIRTUAL_LESSONS},
-		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIRTUAL_LESSON},
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIRTUAL_LESSON},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIRTUAL_LESSONS},
 	},
 	GRAMMAR_INTENT_LANDING_PAGE_LECTURES: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LECTURE},
@@ -606,13 +606,15 @@ const (
 
 	// $ContentType variables
 
-	VAR_CT_PROGRAMS = "programs"
-	VAR_CT_ARTICLES = "articles"
-	VAR_CT_LESSONS  = "lessons"
-	VAR_CT_CLIPS    = "clips"
-	VAR_CT_SOURCES  = "sources"
-	VAR_CT_MEALS    = "meals"
-	VAR_CT_BLOG     = "blog"
+	VAR_CT_PROGRAMS        = "programs"
+	VAR_CT_ARTICLES        = "articles"
+	VAR_CT_LESSONS         = "lessons"
+	VAR_CT_CLIPS           = "clips"
+	VAR_CT_SOURCES         = "sources"
+	VAR_CT_MEALS           = "meals"
+	VAR_CT_BLOG            = "blog"
+	VAR_CT_VIRTUAL_LESSONS = "virtual_lessons"
+	VAR_CT_WOMEN_LESSONS   = "women_lessons"
 
 	// TBD if the imp. is needed
 	/*
@@ -651,6 +653,14 @@ var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
 	},
 	VAR_CT_BLOG: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{CT_BLOG_POST, SCT_BLOG_POST},
+	},
+	VAR_CT_VIRTUAL_LESSONS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIRTUAL_LESSON},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIRTUAL_LESSONS},
+	},
+	VAR_CT_WOMEN_LESSONS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_WOMEN_LESSON},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_WOMEN_LESSONS},
 	},
 	/*VAR_CT_TWEETS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{SCT_TWEET},

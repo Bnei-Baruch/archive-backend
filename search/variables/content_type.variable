@@ -29,6 +29,16 @@ en,meals => meals
 
 en,blog => blog
 
+en,virtual_lessons => virtual lesson
+en,virtual_lessons => virtual lessons
+en,virtual_lessons => webinar
+en,virtual_lessons => webinars
+
+en,women_lessons => women lesson
+en,women_lessons => women lessons
+en,women_lessons => lesson for women
+en,women_lessons => lessons for women
+
 he,programs => תוכנית
 he,programs => תוכניות
 
@@ -60,6 +70,19 @@ he,meals => סעודת
 he,meals => סעודות
 
 he,blog => בלוג
+
+en,virtual_lessons => שיעור וירטואלי
+en,virtual_lessons => שיעורים וירטואלים
+en,virtual_lessons => שיעורים וירטואליים
+en,virtual_lessons => ובינר
+en,virtual_lessons => וובינר
+en,virtual_lessons => ובינרים
+en,virtual_lessons => וובינרים
+
+en,women_lessons => שיעור נשים
+en,women_lessons => שיעורי נשים
+en,women_lessons => שיעור לנשים
+en,women_lessons => שיעורים לנשים
 
 es,programs => programa
 es,programs => programas
@@ -147,3 +170,13 @@ ru,meals => трапеза
 ru,meals => трапезы
 
 ru,blog => блог
+
+ru,virtual_lessons => вебинар
+ru,virtual_lessons => вебинары
+ru,virtual_lessons => виртуальные уроки
+ru,virtual_lessons => виртуальный урок
+
+ru,women_lessons => женский урок
+ru,women_lessons => женские уроки
+ru,women_lessons => урок для женщин
+ru,women_lessons => уроки для женщин
