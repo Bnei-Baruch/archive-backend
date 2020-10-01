@@ -341,7 +341,16 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			// Fix this by moving the grammar index into the common index. So tha similar tf/idf will be used.
 			// For now solve by normalizing very small scores.
 			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
-			if rule.Intent == consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS || rule.Intent == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS {
+			if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
+				filterIntents = append(filterIntents, Intent{
+					Type:     consts.GRAMMAR_TYPE_FILTER,
+					Language: language,
+					Value: GrammarIntent{
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score,
+						Explanation:  hit.Explanation,
+					}})
+			} else {
 				updateIntentCount(intentsCount, Intent{
 					Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
 					Language: language,
@@ -352,15 +361,6 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Explanation:  hit.Explanation,
 					},
 				})
-			} else {
-				filterIntents = append(filterIntents, Intent{
-					Type:     consts.GRAMMAR_TYPE_FILTER,
-					Language: language,
-					Value: GrammarIntent{
-						FilterValues: e.VariableMapToFilterValues(vMap, language),
-						Score:        score,
-						Explanation:  hit.Explanation,
-					}})
 			}
 		}
 	}
