@@ -379,9 +379,8 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			//  Add chapter number\letter to Shamati articles
 			if mdbSource.ParentID.Valid && mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
 				var addPosition bool
-				var parent string
 				var positionIndexType consts.PositionIndexType
-				for _, parent = range parents {
+				for _, parent := range parents {
 					if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parent]; ok {
 						addPosition = true
 						positionIndexType = val
