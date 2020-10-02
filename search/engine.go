@@ -791,20 +791,21 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
-		for _, result := range filtered.Results {
-			var maxScore float64
-			for _, hit := range result.Hits.Hits {
-				if hit.Score != nil {
-					if *maxRegularScore >= consts.MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT {
-						*hit.Score = math.Min(*maxRegularScore*0.9, *hit.Score)
-					} else {
-						*hit.Score += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
+		if maxRegularScore != nil { // if we have regular scores, we should increase or decrease the filtered results scores
+			for _, result := range filtered.Results {
+				var maxScore float64
+				for _, hit := range result.Hits.Hits {
+					if hit.Score != nil {
+						if *maxRegularScore >= consts.MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT {
+							*hit.Score = math.Min(*maxRegularScore*0.9, *hit.Score)
+						} else {
+							*hit.Score += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
+						}
+						maxScore = math.Max(*hit.Score, maxScore)
 					}
-					maxScore = math.Max(*hit.Score, maxScore)
+					result.Hits.MaxScore = &maxScore
 				}
-				result.Hits.MaxScore = &maxScore
 			}
-
 		}
 		resultsByLang[lang] = append(resultsByLang[lang], filtered.Results...)
 	}
