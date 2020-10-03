@@ -730,7 +730,14 @@ var ES_SRC_ADD_MAAMAR_TO_SUGGEST = map[string]bool{
 	SRC_THE_ROSE_ARTICLE:       true,
 }
 
-var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[string]bool{
-	SRC_SHAMATI:               true,
-	SRC_RABASH_ASSORTED_NOTES: true,
+type PositionIndexType int
+
+const (
+	ALWAYS_NUMBER    PositionIndexType = iota
+	LETTER_IF_HEBREW PositionIndexType = iota
+)
+
+var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[string]PositionIndexType{
+	SRC_SHAMATI:               LETTER_IF_HEBREW,
+	SRC_RABASH_ASSORTED_NOTES: ALWAYS_NUMBER,
 }

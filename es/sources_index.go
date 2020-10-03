@@ -379,15 +379,18 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			//  Add chapter number\letter to Shamati articles
 			if mdbSource.ParentID.Valid && mdbSource.Position.Valid && mdbSource.Position.Int > 0 {
 				var addPosition bool
+				var positionIndexType consts.PositionIndexType
 				for _, parent := range parents {
-					if _, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parent]; ok {
+					if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parent]; ok {
 						addPosition = true
+						positionIndexType = val
 						break
 					}
 				}
 				if addPosition {
 					var position string
-					if i18n.Language == "he" {
+					position = strconv.Itoa(mdbSource.Position.Int)
+					if i18n.Language == consts.LANG_HEBREW && positionIndexType == consts.LETTER_IF_HEBREW {
 						position = utils.NumberInHebrew(mdbSource.Position.Int) //  Convert to Hebrew letter
 					} else {
 						position = strconv.Itoa(mdbSource.Position.Int)
