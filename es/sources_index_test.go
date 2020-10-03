@@ -101,7 +101,7 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	fmt.Printf("\n\n\nAdd source parent like Shamati and validate.\n\n")
 	parentShamatiUID, parentShamatiID := suite.us(Source{Name: "Shamati"}, consts.LANG_ENGLISH)
 	suite.us(Source{MDB_UID: parentShamatiUID}, consts.LANG_HEBREW)
-	consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parentShamatiUID] = true
+	consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[parentShamatiUID] = consts.LETTER_IF_HEBREW
 	suite.usfc(parentShamatiUID, consts.LANG_ENGLISH)
 	suite.asa(Source{MDB_UID: parentShamatiUID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 7, Code: "t5"}, true, true)
 	r.Nil(indexer.SourceUpdate(parentShamatiUID))
