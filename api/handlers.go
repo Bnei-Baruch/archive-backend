@@ -1006,9 +1006,9 @@ order by type_id, film_date desc
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
 
-		// Collections (lessons): CT_LECTURE_SERIES, CT_DAILY_LESSON x 3
+		// Collections (lessons): CT_LESSONS_SERIES x 2, CT_DAILY_LESSON x 3
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LECTURE_SERIES].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSONS_SERIES].ID,
 		// Collections: CT_CONGRESS, CT_HOLIDAY x 1
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID,
@@ -1100,15 +1100,21 @@ order by type_id, film_date desc
 		cIDs = append(cIDs, firstRows[consts.CT_HOLIDAY][0].id)
 		cs = append(cs, firstRows[consts.CT_HOLIDAY][0])
 	}
-	if _, ok := firstRows[consts.CT_LECTURE_SERIES]; ok {
+	if _, ok := firstRows[consts.CT_LESSONS_SERIES]; ok {
 		// The first one is always on HomePage
-		for _, r := range firstRows[consts.CT_LECTURE_SERIES][0:2] {
+		for _, r := range firstRows[consts.CT_LESSONS_SERIES][0:2] {
 			cIDs = append(cIDs, r.id)
 			cs = append(cs, r)
 		}
 	}
+
+	var lastNumber int
+	var lastDate time.Time
+
 	if _, ok := firstRows[consts.CT_DAILY_LESSON]; ok {
 		// The first one is always on HomePage
+		lastNumber = 1
+		lastDate = firstRows[consts.CT_DAILY_LESSON][0].film_date
 		for _, r := range firstRows[consts.CT_DAILY_LESSON][1:3] {
 			cIDs = append(cIDs, r.id)
 			cs = append(cs, r)
@@ -1119,7 +1125,6 @@ order by type_id, film_date desc
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
-	lastNumber := 1
 	for _, x := range cs {
 		u := &ContentUnit{
 			mdbID:       x.id,
@@ -1128,10 +1133,13 @@ order by type_id, film_date desc
 			FilmDate:    &utils.Date{Time: x.film_date},
 		}
 		if x.content_type == consts.CT_DAILY_LESSON {
+			if x.film_date == lastDate {
+				lastNumber++
+			} else {
+				lastNumber = 1
+				lastDate = x.film_date
+			}
 			u.NameInCollection = fmt.Sprintf("%d", lastNumber)
-			lastNumber++
-		} else {
-			lastNumber = 1
 		}
 		if i18ns, ok := ci18nsMap[x.id]; ok {
 			for _, l := range consts.I18N_LANG_ORDER[r.Language] {
@@ -1368,8 +1376,6 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		return nil, NewInternalError(err)
 	}
 
-	// Generally, this field is not reliable in terms of DB cleanups.
-	// Implemented for special case of BLOG_POST (audio version / declamation) only.
 	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2567,9 +2573,13 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 	if len(f.MediaLanguage) == 0 {
 		return nil
 	}
-
-	*mods = append(*mods, qm.Where("properties->>'original_language' = ?", f.MediaLanguage))
-
+	//TODO: this query should be optimized ASAP and before we do that clients should use it as little as possible
+	*mods = append(*mods,
+		qm.WhereIn(`(id in ( SELECT DISTINCT cu.id FROM content_units cu 
+			INNER JOIN files f 
+			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
+			AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))`, f.MediaLanguage),
+	)
 	return nil
 }
 
