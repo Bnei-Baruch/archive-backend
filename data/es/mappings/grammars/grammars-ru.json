@@ -45,7 +45,7 @@
                 }, 
                 "search_text": {
                     "type": "text", 
-                    "analyzer": "russian_synonym"
+                    "analyzer": "russian"
                 }
             }
         }

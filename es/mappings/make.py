@@ -119,6 +119,41 @@ LanguageAnalyzer = {
     AMHARIC: "standard",
 }
 
+LanguageAnalyzerWithoutSynonyms  = {
+    ENGLISH: "english",
+    HEBREW: "he",
+    RUSSIAN: "russian",
+    SPANISH: "spanish",
+    ITALIAN: "italian",
+    GERMAN: "german",
+    DUTCH: "dutch",
+    FRENCH: "french",
+    PORTUGUESE: "portuguese",
+    TURKISH: "turkish",
+    POLISH: "standard",
+    ARABIC: "arabic",
+    HUNGARIAN: "hungarian",
+    FINNISH: "finnish",
+    LITHUANIAN: "lithuanian",
+    JAPANESE: "cjk",
+    BULGARIAN: "bulgarian",
+    GEORGIAN: "standard",
+    NORWEGIAN: "norwegian",
+    SWEDISH: "swedish",
+    CROATIAN: "standard",
+    CHINESE: "cjk",
+    PERSIAN: "persian",
+    ROMANIAN: "romanian",
+    HINDI: "hindi",
+    UKRAINIAN: "standard",
+    MACEDONIAN: "standard",
+    SLOVENIAN: "standard",
+    LATVIAN: "latvian",
+    SLOVAK: "standard",
+    CZECH: "czech",
+    AMHARIC: "standard",
+}
+
 SynonymGraphFilterImp = {
     "type": "synonym_graph",
     "tokenizer": "keyword",
@@ -152,6 +187,15 @@ LanguageAnalyzerImp = {
             "char_filter": [
                 "quotes"
             ]
+        },
+        "he": {
+          "tokenizer": "standard",
+          "filter": [
+            "he_IL"
+          ],
+          "char_filter": [
+            "quotes"
+          ]
         }
     },
     RUSSIAN: {
@@ -568,7 +612,7 @@ GRAMMARS_TEMPLATE = {
               # Text query from user. Assigned only in query time. Must be defined in index for percolator functionality.
                "search_text": {
                 "type": "text",
-                "analyzer": lambda lang: LanguageAnalyzer[lang]
+                "analyzer": lambda lang: LanguageAnalyzerWithoutSynonyms[lang]
               },
               "grammar_rule": {
                     "dynamic": "strict",

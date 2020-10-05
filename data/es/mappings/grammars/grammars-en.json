@@ -45,7 +45,7 @@
                 }, 
                 "search_text": {
                     "type": "text", 
-                    "analyzer": "english_synonym"
+                    "analyzer": "english"
                 }
             }
         }

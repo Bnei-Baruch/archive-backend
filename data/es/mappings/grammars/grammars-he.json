@@ -45,7 +45,7 @@
                 }, 
                 "search_text": {
                     "type": "text", 
-                    "analyzer": "hebrew_synonym"
+                    "analyzer": "he"
                 }
             }
         }
@@ -89,6 +89,15 @@
                     "hebrew_synonym": {
                         "filter": [
                             "synonym_graph", 
+                            "he_IL"
+                        ], 
+                        "char_filter": [
+                            "quotes"
+                        ], 
+                        "tokenizer": "standard"
+                    }, 
+                    "he": {
+                        "filter": [
                             "he_IL"
                         ], 
                         "char_filter": [

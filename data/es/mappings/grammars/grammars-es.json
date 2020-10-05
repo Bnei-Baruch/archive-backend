@@ -45,7 +45,7 @@
                 }, 
                 "search_text": {
                     "type": "text", 
-                    "analyzer": "spanish_synonym"
+                    "analyzer": "spanish"
                 }
             }
         }
