@@ -14,3 +14,5 @@ _vendor-*/
 archive-backend
 
 bindata/bindata.go
+
+make-golden.bat
