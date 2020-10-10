@@ -35,6 +35,9 @@ func createGrammarQuery(q *Query) elastic.Query {
 }
 
 func createPerculateQuery(q *Query) elastic.Query {
+	if len(q.ExactTerms) > 0 { // TBD consider support for query with partly exact term
+		return elastic.NewMatchNoneQuery()
+	}
 	query := elastic.NewPercolatorQuery().Field("query").Document(
 		struct {
 			SearchText string `json:"search_text"`
