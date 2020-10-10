@@ -210,10 +210,15 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 							}
 							if contentType != "" && text != "" {
 								log.Infof("Filtered Search Request: ContentType is %s, Text is %s.", contentType, text)
-								filterSearchRequests, err = NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, language, preference, query.Deb)
+								textValSearchRequests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, language, preference, query.Deb)
 								if err != nil {
 									return nil, nil, err
 								}
+								fullTermSearchRequests, err := NewFilteredResultsSearchRequest(query.Term, contentType, from, size, sortBy, resultTypes, language, preference, query.Deb)
+								if err != nil {
+									return nil, nil, err
+								}
+								filterSearchRequests = append(textValSearchRequests, fullTermSearchRequests...)
 								if len(filterSearchRequests) > 0 {
 									// All search requests here are for the same language
 									results, hitIdsMap, err := e.filterSearch(filterSearchRequests)
@@ -221,9 +226,10 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 										return nil, nil, err
 									}
 									filtered[language] = FilteredSearchResult{
-										Results:   results,
-										Term:      text,
-										HitIdsMap: hitIdsMap,
+										Results:     results,
+										Term:        text,
+										ContentType: contentType,
+										HitIdsMap:   hitIdsMap,
 									}
 								}
 							}

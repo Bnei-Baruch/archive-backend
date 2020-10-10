@@ -51,9 +51,10 @@ type ClassificationIntent struct {
 }
 
 type FilteredSearchResult struct {
-	Term      string
-	HitIdsMap map[string]bool
-	Results   []*elastic.SearchResult
+	Term        string
+	ContentType string
+	HitIdsMap   map[string]bool
+	Results     []*elastic.SearchResult
 }
 
 type TimeLogMap struct {
@@ -791,15 +792,39 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
+		for _, result := range resultsByLang[lang] {
+			for _, hit := range result.Hits.Hits {
+				if hit.Score != nil {
+					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
+						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
+						if hit.Score != nil {
+							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM
+						}
+						// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
+						delete(filtered.HitIdsMap, hit.Id)
+					}
+				}
+			}
+		}
 		if maxRegularScore != nil { // if we have regular scores, we should increase or decrease the filtered results scores
 			for _, result := range filtered.Results {
 				var maxScore float64
+				var minScore float64
 				for _, hit := range result.Hits.Hits {
 					if hit.Score != nil {
-						if *maxRegularScore >= consts.MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT {
+						minScore = math.Min(*hit.Score, minScore)
+					}
+				}
+				var threshold float64 = consts.DEFAULT_MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT
+				if val, ok := consts.CT_TO_MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT[filtered.ContentType]; ok {
+					threshold = val
+				}
+				incr := math.Max(0, threshold-minScore)
+				for _, hit := range result.Hits.Hits {
+					if hit.Score != nil {
+						*hit.Score += incr
+						if *maxRegularScore >= threshold {
 							*hit.Score = math.Min(*maxRegularScore*0.9, *hit.Score)
-						} else {
-							*hit.Score += consts.FILTERED_BY_GRAMMAR_SCORE_INCREMENT
 						}
 						maxScore = math.Max(*hit.Score, maxScore)
 					}

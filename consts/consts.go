@@ -327,9 +327,9 @@ const (
 	API_MAX_PAGE_SIZE                         = 1000
 	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
 	// Consider making a carusele and not limiting.
-	MAX_MATCHES_PER_GRAMMAR_INTENT                = 3
-	FILTERED_BY_GRAMMAR_SCORE_INCREMENT           = 100
-	MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT = 350
+	MAX_MATCHES_PER_GRAMMAR_INTENT                        = 3
+	DEFAULT_MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT = 350
+	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM   = 200
 )
 
 const (
@@ -665,6 +665,11 @@ var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
 	/*VAR_CT_TWEETS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{SCT_TWEET},
 	},*/
+}
+
+var CT_TO_MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT = map[string]float64{
+	VAR_CT_LESSONS: 15,
+	VAR_CT_SOURCES: 110,
 }
 
 // Variable name to frontend filter name mapping.
