@@ -20,9 +20,10 @@ en,clips => clip
 
 en,sources => sources
 en,sources => source
-en,sources => book
-en,sources => books
 en,sources => library
+
+en,books_titles = > book
+en,books_titles = > books
 
 en,meals => meal
 en,meals => meals
@@ -59,12 +60,13 @@ he,clips => סרטון
 
 he,sources => מקורות
 he,sources => מקור
-he,sources => ספר
-he,sources => ספרים
-he,sources => ספרייה
+he,sources => ספריה
 he,sources => כתבי מקובלים
 he,sources => כתבי המקובלים
 he,sources => קטעי מקור
+
+he,books_titles = > ספר
+he,books_titles = > ספרים
 
 he,meals => סעודה
 he,meals => סעודת
@@ -73,18 +75,18 @@ he,meals => סעודת מקובלים
 
 he,blog => בלוג
 
-en,virtual_lessons => שיעור וירטואלי
-en,virtual_lessons => שיעורים וירטואלים
-en,virtual_lessons => שיעורים וירטואליים
-en,virtual_lessons => ובינר
-en,virtual_lessons => וובינר
-en,virtual_lessons => ובינרים
-en,virtual_lessons => וובינרים
+he,virtual_lessons => שיעור וירטואלי
+he,virtual_lessons => שיעורים וירטואלים
+he,virtual_lessons => שיעורים וירטואליים
+he,virtual_lessons => ובינר
+he,virtual_lessons => וובינר
+he,virtual_lessons => ובינרים
+he,virtual_lessons => וובינרים
 
-en,women_lessons => שיעור נשים
-en,women_lessons => שיעורי נשים
-en,women_lessons => שיעור לנשים
-en,women_lessons => שיעורים לנשים
+he,women_lessons => שיעור נשים
+he,women_lessons => שיעורי נשים
+he,women_lessons => שיעור לנשים
+he,women_lessons => שיעורים לנשים
 
 es,programs => programa
 es,programs => programas
@@ -111,11 +113,12 @@ es,clips => video corto
 
 es,sources => fuentes
 es,sources => fuente
-es,sources => libro
-es,sources => libros
 es,sources => biblioteca
 es,sources => escritos cabalisticos
 es,sources => escritos cabalistas
+
+es,books_titles = > libro
+es,books_titles = > libros
 
 es,meals => comida cabalista
 es,meals => comida
@@ -163,10 +166,11 @@ ru,sources => первоисточники
 ru,sources => первоисточник
 ru,sources => каббалистические первоисточники
 ru,sources => каббалистический первоисточник
-ru,sources => книга
-ru,sources => книги
 ru,sources => библиотека
 ru,sources => каббалистические писания
+
+ru,books_titles = > книга
+ru,books_titles = > книги
 
 ru,meals => трапеза
 ru,meals => трапезы

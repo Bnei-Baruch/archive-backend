@@ -611,6 +611,7 @@ const (
 	VAR_CT_LESSONS         = "lessons"
 	VAR_CT_CLIPS           = "clips"
 	VAR_CT_SOURCES         = "sources"
+	VAR_CT_BOOK_TITLES     = "books_titles"
 	VAR_CT_MEALS           = "meals"
 	VAR_CT_BLOG            = "blog"
 	VAR_CT_VIRTUAL_LESSONS = "virtual_lessons"
@@ -645,6 +646,9 @@ var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{CT_CLIP},
 	},
 	VAR_CT_SOURCES: map[string][]string{
+		FILTERS[FILTER_SECTION_SOURCES]: []string{""},
+	},
+	VAR_CT_BOOK_TITLES: map[string][]string{
 		FILTERS[FILTER_SECTION_SOURCES]: []string{""},
 	},
 	VAR_CT_MEALS: map[string][]string{

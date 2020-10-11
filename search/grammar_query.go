@@ -104,6 +104,7 @@ func NewFilteredResultsSearchRequest(text string, contentType string, from int, 
 			sourceOnlyFilter := map[string][]string{
 				consts.FILTERS[consts.FILTER_SECTION_SOURCES]: val,
 			}
+			titlesOnly := contentType == consts.VAR_CT_BOOK_TITLES
 			sourceRequests, err := NewResultsSearchRequests(
 				SearchRequestOptions{
 					resultTypes:        []string{consts.ES_RESULT_TYPE_SOURCES},
@@ -115,7 +116,8 @@ func NewFilteredResultsSearchRequest(text string, contentType string, from int, 
 					preference:         preference,
 					useHighlight:       false,
 					partialHighlight:   false,
-					filterOutCUSources: []string{}})
+					filterOutCUSources: []string{},
+					titlesOnly:         titlesOnly})
 			if err != nil {
 				return nil, err
 			}
