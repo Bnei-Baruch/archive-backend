@@ -806,7 +806,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				}
 			}
 		}
-		if maxRegularScore != nil { // if we have regular scores, we should increase or decrease the filtered results scores
+		/*var threshold float64 = consts.DEFAULT_MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT
+		if val, ok := consts.CT_TO_MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT[filtered.ContentType]; ok {
+			threshold = val
+		}*/
+		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
 			for _, result := range filtered.Results {
 				var maxScore float64
 				var minScore float64
@@ -815,17 +819,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						minScore = math.Min(*hit.Score, minScore)
 					}
 				}
-				var threshold float64 = consts.DEFAULT_MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT
-				if val, ok := consts.CT_TO_MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT[filtered.ContentType]; ok {
-					threshold = val
-				}
-				incr := math.Max(0, threshold-minScore)
+
+				boost := (*maxRegularScore * 0.9) / *result.Hits.MaxScore
 				for _, hit := range result.Hits.Hits {
 					if hit.Score != nil {
-						*hit.Score += incr
-						if *maxRegularScore >= threshold {
-							*hit.Score = math.Min(*maxRegularScore*0.9, *hit.Score)
-						}
+						*hit.Score *= boost
 						maxScore = math.Max(*hit.Score, maxScore)
 					}
 					result.Hits.MaxScore = &maxScore
