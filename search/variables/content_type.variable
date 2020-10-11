@@ -22,8 +22,8 @@ en,sources => sources
 en,sources => source
 en,sources => library
 
-en,books_titles = > book
-en,books_titles = > books
+en,books_titles => book
+en,books_titles => books
 
 en,meals => meal
 en,meals => meals
@@ -60,13 +60,13 @@ he,clips => סרטון
 
 he,sources => מקורות
 he,sources => מקור
-he,sources => ספריה
+he,sources => ספרייה
 he,sources => כתבי מקובלים
 he,sources => כתבי המקובלים
 he,sources => קטעי מקור
 
-he,books_titles = > ספר
-he,books_titles = > ספרים
+he,books_titles => ספר
+he,books_titles => ספרים
 
 he,meals => סעודה
 he,meals => סעודת
@@ -117,8 +117,8 @@ es,sources => biblioteca
 es,sources => escritos cabalisticos
 es,sources => escritos cabalistas
 
-es,books_titles = > libro
-es,books_titles = > libros
+es,books_titles => libro
+es,books_titles => libros
 
 es,meals => comida cabalista
 es,meals => comida
@@ -169,8 +169,8 @@ ru,sources => каббалистический первоисточник
 ru,sources => библиотека
 ru,sources => каббалистические писания
 
-ru,books_titles = > книга
-ru,books_titles = > книги
+ru,books_titles => книга
+ru,books_titles => книги
 
 ru,meals => трапеза
 ru,meals => трапезы
