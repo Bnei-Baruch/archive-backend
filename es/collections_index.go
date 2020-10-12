@@ -241,7 +241,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 				TypedUids:    typedUIDs,
 				FilterValues: filterValues,
 				Title:        i18n.Name.String,
-				TitleSuggest: SuggestField{Suffixes(i18n.Name.String), float64(1)},
+				TitleSuggest: SuggestField{Suffixes(i18n.Name.String), float64(consts.ES_COLLECTIONS_SUGGEST_DEFAULT_WEIGHT)},
 			}
 			if effectiveDate != nil {
 				collection.EffectiveDate = effectiveDate
