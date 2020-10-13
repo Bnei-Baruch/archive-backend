@@ -474,10 +474,13 @@ func SearchHandler(c *gin.Context) {
 	)
 	if err == nil {
 		// TODO: How does this slows the search query? Consider logging in parallel.
-		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
-		if err != nil {
-			log.Warnf("Error logging search: %+v %+v", err, res)
+		if !query.Deb {
+			err = logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
+			if err != nil {
+				log.Warnf("Error logging search: %+v %+v", err, res)
+			}
 		}
+
 		for _, hit := range res.SearchResult.Hits.Hits {
 			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
 				// Move Tweets from innerHits to Source, to make client more consistent (work with source only).
