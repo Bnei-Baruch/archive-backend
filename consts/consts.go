@@ -77,8 +77,9 @@ const (
 	SEC_SENSITIVE = int16(1)
 	SEC_PRIVATE   = int16(2)
 
-	// Weight of 'sources' autocomplete results (assigned at index time)
-	ES_SOURCES_SUGGEST_DEFAULT_WEIGHT = 50
+	// Weight of 'sources' and 'collections' autocomplete results (assigned at index time)
+	ES_SOURCES_SUGGEST_DEFAULT_WEIGHT     = 50
+	ES_COLLECTIONS_SUGGEST_DEFAULT_WEIGHT = 40
 
 	ES_GRAMMAR_SUGGEST_DEFAULT_WEIGHT = 100
 
