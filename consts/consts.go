@@ -640,7 +640,7 @@ var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
 	SRC_PEACE_ARCTICLE:         120,
 	SRC_PEACE_IN_WORLD_ARTICLE: 120,
 	SRC_ARVUT_ARTICLE:          210,
-	SRC_PTICHA:                 120,
+	SRC_PTICHA:                 250,
 }
 
 // We used to name this articles with the prefix word "maamar" (article).
