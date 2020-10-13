@@ -221,7 +221,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 								filterSearchRequests = append(textValSearchRequests, fullTermSearchRequests...)
 								if len(filterSearchRequests) > 0 {
 									// All search requests here are for the same language
-									results, hitIdsMap, err := e.filterSearch(filterSearchRequests)
+									results, hitIdsMap, maxScore, err := e.filterSearch(filterSearchRequests)
 									if err != nil {
 										return nil, nil, err
 									}
@@ -230,6 +230,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 										Term:        text,
 										ContentType: contentType,
 										HitIdsMap:   hitIdsMap,
+										MaxScore:    maxScore,
 									}
 								}
 							}
@@ -512,9 +513,10 @@ func retrieveTextVarValues(str string) []string {
 	return textVarValues
 }
 
-func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.SearchResult, map[string]bool, error) {
+func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
 	results := []*elastic.SearchResult{}
 	hitIdsMap := map[string]bool{}
+	var maxScore *float64
 
 	multiSearchFilteredService := e.esc.MultiSearch()
 	multiSearchFilteredService.Add(requests...)
@@ -522,20 +524,24 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.S
 	mr, err := multiSearchFilteredService.Do(context.TODO())
 	e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
+		return nil, nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
 	}
 
 	for _, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
-			return nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
+			return nil, nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
 		}
 		if haveHits(currentResults) {
+			if currentResults.Hits.MaxScore != nil &&
+				(maxScore == nil || *currentResults.Hits.MaxScore > *maxScore) {
+				maxScore = currentResults.Hits.MaxScore
+			}
 			for _, hit := range currentResults.Hits.Hits {
 				hitIdsMap[hit.Id] = true
 			}
 			results = append(results, currentResults)
 		}
 	}
-	return results, hitIdsMap, nil
+	return results, hitIdsMap, maxScore, nil
 }

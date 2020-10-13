@@ -149,7 +149,6 @@ func NewFilteredResultsSearchRequest(text string, contentType string, from int, 
 			requests = append(requests, nonSourceRequests...)
 		}
 
-		//fmt.Printf("\nGrammar filter requests count: %d\n", len(requests))
 		return requests, nil
 	}
 	return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES.", contentType)

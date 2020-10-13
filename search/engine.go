@@ -55,6 +55,7 @@ type FilteredSearchResult struct {
 	ContentType string
 	HitIdsMap   map[string]bool
 	Results     []*elastic.SearchResult
+	MaxScore    *float64
 }
 
 type TimeLogMap struct {
@@ -820,7 +821,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					}
 				}
 
-				boost := (*maxRegularScore * 0.9) / *result.Hits.MaxScore
+				boost := (*maxRegularScore * 0.9) / *filtered.MaxScore
 				for _, hit := range result.Hits.Hits {
 					if hit.Score != nil {
 						*hit.Score *= boost
