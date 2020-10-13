@@ -474,7 +474,9 @@ func SearchHandler(c *gin.Context) {
 	)
 	if err == nil {
 		// TODO: How does this slows the search query? Consider logging in parallel.
-		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
+		if !query.Deb {
+			err = logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
+		}
 		if err != nil {
 			log.Warnf("Error logging search: %+v %+v", err, res)
 		}
