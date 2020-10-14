@@ -470,7 +470,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 		} else if resultType == consts.ES_RESULT_TYPE_SOURCES {
 			weight = 1.8
 		} else if resultType == consts.ES_RESULT_TYPE_COLLECTIONS {
-			weight = 2.2
+			weight = 2.1
 		}
 		scoreQuery.Add(elastic.NewTermsQuery("result_type", resultType), elastic.NewWeightFactorFunction(weight))
 	}
