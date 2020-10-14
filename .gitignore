@@ -11,7 +11,7 @@ sqlboiler.toml
 *.dump.sql
 _vendor-*/
 
-archive-backend
+archive-backend*
 
 bindata/bindata.go
 
