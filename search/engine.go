@@ -807,10 +807,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				}
 			}
 		}
-		/*var threshold float64 = consts.DEFAULT_MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT
-		if val, ok := consts.CT_TO_MAX_REGULAR_SCORE_FOR_GRAMMAR_INCREMENT_LIMIT[filtered.ContentType]; ok {
-			threshold = val
-		}*/
+
 		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
 			for _, result := range filtered.Results {
 				var maxScore float64
