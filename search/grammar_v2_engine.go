@@ -492,6 +492,11 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, error
 	return hit, nil
 }
 
+// This function retrieves the 'free text' values from a grammar result that was searched by perculator query with highlight.
+// The 'highlighted' part of the input string contains the values that are NOT 'free text'. This parts starts and ends with PERCULATE_HIGHLIGHT_SEPERATOR rune ('$').
+// The return value of the function is a slice of all term parts thar are outside of the 'highlight'.
+// For example, the 'free text' values for the term 'aaa $bbb$ ccc $ddd' are 'aaa' and 'ccc'.
+// We have a test for this function in engine_test.go
 func retrieveTextVarValues(str string) []string {
 	runes := []rune(str)
 	var filtered []rune
