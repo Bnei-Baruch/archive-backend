@@ -522,6 +522,8 @@ func retrieveTextVarValues(str string) []string {
 	return textVarValues
 }
 
+// Results search according to grammar based filter (currently by content types).
+// Return: Results, Unique list of hit id's as a map, Max score
 func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
 	results := []*elastic.SearchResult{}
 	hitIdsMap := map[string]bool{}
