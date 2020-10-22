@@ -135,6 +135,15 @@
                             "quotes"
                         ], 
                         "tokenizer": "standard"
+                    }, 
+                    "he": {
+                        "filter": [
+                            "he_IL"
+                        ], 
+                        "char_filter": [
+                            "quotes"
+                        ], 
+                        "tokenizer": "standard"
                     }
                 }
             }, 

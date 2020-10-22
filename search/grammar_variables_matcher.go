@@ -1,7 +1,7 @@
 package search
 
 import (
-	// log "github.com/Sirupsen/logrus"
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -16,7 +16,28 @@ func GrammarFilterVariablesMatch(intent string, variablesByPhrase VariablesByPhr
 }
 
 func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.CacheManager) bool {
-	if intent == consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS {
+	if intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
+		hasVarText := false
+		hasVarContentType := false
+		for variable, values := range vMap {
+			if variable == consts.VAR_TEXT {
+				if hasVarText || len(values) != 1 { //  Disable if we have more than one $Text appereance or value
+					log.Warningf("Number of $Text appearances or values in 'by_content' rule is not 1. Values: %+v", values)
+					return false
+				}
+				hasVarText = true
+			}
+			if variable == consts.VAR_CONTENT_TYPE {
+				if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
+					// TBD consider support for multiple $ContentType values
+					log.Warningf("Number of $ContentType appearances or values in 'by_content' rule is not 1. Values: %+v", values)
+					return false
+				}
+				hasVarContentType = true
+			}
+		}
+		return true
+	} else if intent == consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS {
 		location := ""
 		year := ""
 		for variable, values := range vMap {

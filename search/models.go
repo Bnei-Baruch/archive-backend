@@ -45,6 +45,6 @@ type SearchRequestOptions struct {
 	// Setting the following field to 'true' will ignore the search of content and in some cases also description.
 	// Description is considered as subtitle in sources,
 	//  so the 'description' field will be included only when this field is true and resultTypes contains only 'sources'.
-	// This field is used for intents (carousel) search.
+	// This field is used for intents (carousel) search and grammar filter for 'books'.
 	titlesOnly bool
 }

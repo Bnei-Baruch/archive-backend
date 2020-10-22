@@ -50,6 +50,14 @@ type ClassificationIntent struct {
 	MaxExplanation elastic.SearchExplanation `json:"max_explanation,omitempty"`
 }
 
+type FilteredSearchResult struct {
+	Term        string
+	ContentType string
+	HitIdsMap   map[string]bool
+	Results     []*elastic.SearchResult
+	MaxScore    *float64
+}
+
 type TimeLogMap struct {
 	mx sync.Mutex
 	m  map[string]time.Duration
@@ -600,20 +608,36 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	suggestChannel := make(chan null.String)
 
+	var resultTypes []string
+	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
+		resultTypes = make([]string, 0)
+		for _, str := range consts.ES_SEARCH_RESULT_TYPES {
+			if str != consts.ES_RESULT_TYPE_COLLECTIONS {
+				resultTypes = append(resultTypes, str)
+			}
+		}
+	} else {
+		resultTypes = consts.ES_SEARCH_RESULT_TYPES
+	}
+
 	// Search grammars in parallel to native search.
 	grammarsChannel := make(chan []Intent)
+	grammarsFilteredResultsByLangChannel := make(chan map[string]FilteredSearchResult)
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
 				grammarsChannel <- []Intent{}
+				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
 			}
 		}()
-		if grammars, err := e.SearchGrammarsV2(&query, preference); err != nil {
+		if grammars, filtered, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
 			grammarsChannel <- []Intent{}
+			grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
 		} else {
 			grammarsChannel <- grammars
+			grammarsFilteredResultsByLangChannel <- filtered
 		}
 	}()
 
@@ -651,24 +675,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
-	var resultTypes []string
-	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
-		resultTypes = make([]string, 0)
-		for _, str := range consts.ES_SEARCH_RESULT_TYPES {
-			if str != consts.ES_RESULT_TYPE_COLLECTIONS {
-				resultTypes = append(resultTypes, str)
-			}
-		}
-	} else {
-		resultTypes = consts.ES_SEARCH_RESULT_TYPES
-	}
-
 	intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy)
 	if err != nil {
 		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 	}
 
-	// Filter out duplicates of regular results and intents carousel results
+	// When we have a lessons carousel we filter out the regular results that are also exist in the carousel.
+	// Note on grammar:
+	// Currently we don't support showing intent carousels for grammar filtered results so we are also not filtering many appearances of the lesson results.
 	filterOutCUSources := make([]string, 0)
 	for _, intent := range intents {
 		if intent.Type == consts.INTENT_TYPE_SOURCE {
@@ -717,16 +731,29 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
 			len(mr.Responses), len(query.LanguageOrder)))
 	}
+
 	resultsByLang := make(map[string][]*elastic.SearchResult)
 
 	// Responses are ordered by language by index, i.e., for languages [bg, ru, en].
 	// We want the first matching language that has at least any result.
+	var maxRegularScore *float64 // max score for regular result - not intent, grammar or tweet
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
 			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
 		if haveHits(currentResults) {
+			if currentResults.Hits.MaxScore != nil {
+				if maxRegularScore == nil {
+					maxRegularScore = new(float64)
+					*maxRegularScore = *currentResults.Hits.MaxScore
+				}
+				if shouldMergeResults {
+					if *currentResults.Hits.MaxScore > *maxRegularScore {
+						*maxRegularScore = *currentResults.Hits.MaxScore
+					}
+				}
+			}
 			lang := query.LanguageOrder[i]
 			if _, ok := resultsByLang[lang]; !ok {
 				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
@@ -760,6 +787,50 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
 		resultsByLang[lang] = append(resultsByLang[lang], tweets)
+	}
+
+	filteredByLang := <-grammarsFilteredResultsByLangChannel
+	// Loop over grammar filtered results to apply the score logic for combination with regular results
+	for lang, filtered := range filteredByLang {
+		if _, ok := resultsByLang[lang]; !ok {
+			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+		}
+		for _, result := range resultsByLang[lang] {
+			for _, hit := range result.Hits.Hits {
+				if hit.Score != nil {
+					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
+						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
+						if hit.Score != nil {
+							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM
+						}
+						// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
+						delete(filtered.HitIdsMap, hit.Id)
+					}
+				}
+			}
+		}
+
+		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
+			for _, result := range filtered.Results {
+				var maxScore float64
+				var minScore float64
+				for _, hit := range result.Hits.Hits {
+					if hit.Score != nil {
+						minScore = math.Min(*hit.Score, minScore)
+					}
+				}
+
+				boost := (*maxRegularScore * 0.9) / *filtered.MaxScore
+				for _, hit := range result.Hits.Hits {
+					if hit.Score != nil {
+						*hit.Score *= boost
+						maxScore = math.Max(*hit.Score, maxScore)
+					}
+					result.Hits.MaxScore = &maxScore
+				}
+			}
+		}
+		resultsByLang[lang] = append(resultsByLang[lang], filtered.Results...)
 	}
 
 	var currentLang string
@@ -824,6 +895,17 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				continue
 			}
 
+			term := query.Term
+			for _, lang := range highlightsLangs {
+				if filtered, ok := filteredByLang[lang]; ok {
+					if _, hasId := filtered.HitIdsMap[h.Id]; hasId {
+						// set highlight search term as the grammar filter search term
+						term = filteredByLang[lang].Term
+						break
+					}
+				}
+			}
+
 			// We use multiple search request because we saw that a single request
 			// filtered by id's list take more time than multiple requests.
 			req, err := NewResultsSearchRequest(
@@ -831,7 +913,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					resultTypes:      resultTypes,
 					docIds:           []string{h.Id},
 					index:            h.Index,
-					query:            Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
+					query:            Query{ExactTerms: query.ExactTerms, Term: term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
 					sortBy:           consts.SORT_BY_RELEVANCE,
 					from:             0,
 					size:             1,
@@ -876,6 +958,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							if h.Id == hr.Id {
 								//  Replacing original search result with highlighted result.
 								ret.Hits.Hits[i] = hr
+								//  Keep the score of the original hit (possibly incr. by grammar)
+								ret.Hits.Hits[i].Score = h.Score
 							} else if h.Type == consts.SEARCH_RESULT_TWEETS_MANY && h.InnerHits != nil {
 								if tweetHits, ok := h.InnerHits[consts.SEARCH_RESULT_TWEETS_MANY]; ok {
 									for k, th := range tweetHits.Hits.Hits {

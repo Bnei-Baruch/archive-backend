@@ -77,8 +77,9 @@ const (
 	SEC_SENSITIVE = int16(1)
 	SEC_PRIVATE   = int16(2)
 
-	// Weight of 'sources' autocomplete results (assigned at index time)
-	ES_SOURCES_SUGGEST_DEFAULT_WEIGHT = 50
+	// Weight of 'sources' and 'collections' autocomplete results (assigned at index time)
+	ES_SOURCES_SUGGEST_DEFAULT_WEIGHT     = 50
+	ES_COLLECTIONS_SUGGEST_DEFAULT_WEIGHT = 40
 
 	ES_GRAMMAR_SUGGEST_DEFAULT_WEIGHT = 100
 
@@ -327,7 +328,8 @@ const (
 	API_MAX_PAGE_SIZE                         = 1000
 	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
 	// Consider making a carusele and not limiting.
-	MAX_MATCHES_PER_GRAMMAR_INTENT = 3
+	MAX_MATCHES_PER_GRAMMAR_INTENT                      = 3
+	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM = 200
 )
 
 const (
@@ -478,10 +480,14 @@ var INTENT_HIT_TYPE_BY_CT = map[string]string{
 }
 
 const (
-	GRAMMAR_INDEX                = "grammar"
-	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
+	GRAMMAR_INDEX = "grammar"
 
+	GRAMMAR_TYPE_FILTER       = "filter"
 	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
+
+	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE = "by_content_type"
+
+	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS            = "lessons"
 	GRAMMAR_INTENT_LANDING_PAGE_VIRTUAL_LESSONS    = "virtual_lessons"
@@ -508,13 +514,16 @@ const (
 
 // Map from intent to filters, i.e., filter name to list of values.
 var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
+
+	// Landing pages
+
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LESSON_PART, CT_FULL_LESSON},
 		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON},
 	},
 	GRAMMAR_INTENT_LANDING_PAGE_VIRTUAL_LESSONS: map[string][]string{
-		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIRTUAL_LESSONS},
-		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIRTUAL_LESSON},
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIRTUAL_LESSON},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIRTUAL_LESSONS},
 	},
 	GRAMMAR_INTENT_LANDING_PAGE_LECTURES: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LECTURE},
@@ -579,15 +588,88 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	},
 	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS: nil,
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
+
+	// Filters
+
+	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
 }
 
-// Variables
 const (
+
+	// Variable types
+
 	VAR_YEAR                = "$Year"
 	VAR_CONVENTION_LOCATION = "$ConventionLocation"
 	VAR_TEXT                = "$Text"
 	VAR_HOLIDAYS            = "$Holidays"
+	VAR_CONTENT_TYPE        = "$ContentType"
+
+	// $ContentType variables
+
+	VAR_CT_PROGRAMS        = "programs"
+	VAR_CT_ARTICLES        = "articles"
+	VAR_CT_LESSONS         = "lessons"
+	VAR_CT_CLIPS           = "clips"
+	VAR_CT_SOURCES         = "sources"
+	VAR_CT_BOOK_TITLES     = "books_titles"
+	VAR_CT_MEALS           = "meals"
+	VAR_CT_BLOG            = "blog"
+	VAR_CT_VIRTUAL_LESSONS = "virtual_lessons"
+	VAR_CT_WOMEN_LESSONS   = "women_lessons"
+
+	// TBD if the imp. is needed
+	/*
+		VAR_CT_TWEETS   	= "tweets"
+		VAR_CT_PUBLICATIONS = "publications"
+		VAR_CT_EVENTS       = "events"
+		VAR_CT_HOLIDAYS     = "holidays"
+		VAR_CT_CONVENTIONS  = "conventions"'
+	*/
 )
+
+// Grammar $ContentType variables to content type filters mapping.
+var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
+	VAR_CT_PROGRAMS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIDEO_PROGRAM_CHAPTER},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIDEO_PROGRAM},
+	},
+	VAR_CT_ARTICLES: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_ARTICLE},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_ARTICLES},
+		FILTERS[FILTER_SECTION_SOURCES]:           []string{""}, // Article is also source (like 'Maamar Ha-Arvut')
+	},
+	VAR_CT_LESSONS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LESSON_PART, CT_FULL_LESSON},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON},
+	},
+	VAR_CT_CLIPS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{CT_CLIP},
+	},
+	VAR_CT_SOURCES: map[string][]string{
+		FILTERS[FILTER_SECTION_SOURCES]: []string{""},
+	},
+	VAR_CT_BOOK_TITLES: map[string][]string{
+		FILTERS[FILTER_SECTION_SOURCES]: []string{""},
+	},
+	VAR_CT_MEALS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_MEAL},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_MEALS},
+	},
+	VAR_CT_BLOG: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{CT_BLOG_POST, SCT_BLOG_POST},
+	},
+	VAR_CT_VIRTUAL_LESSONS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIRTUAL_LESSON},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIRTUAL_LESSONS},
+	},
+	VAR_CT_WOMEN_LESSONS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_WOMEN_LESSON},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_WOMEN_LESSONS},
+	},
+	/*VAR_CT_TWEETS: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{SCT_TWEET},
+	},*/
+}
 
 // Variable name to frontend filter name mapping.
 var VARIABLE_TO_FILTER = map[string]string{
@@ -595,21 +677,24 @@ var VARIABLE_TO_FILTER = map[string]string{
 	VAR_CONVENTION_LOCATION: "location",
 	VAR_TEXT:                "text",
 	VAR_HOLIDAYS:            "holidays",
+	VAR_CONTENT_TYPE:        "content_type",
 }
 
 // Latency log
 const (
-	LAT_DOSEARCH                          = "DoSearch"
-	LAT_DOSEARCH_MULTISEARCHDO            = "DoSearch.MultisearchDo"
-	LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO  = "DoSearch.MultisearcHighlightsDo"
-	LAT_DOSEARCH_ADDINTENTS               = "DoSearch.AddIntents"
-	LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO  = "DoSearch.AddIntents.FirstRoundDo"
-	LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO = "DoSearch.AddIntents.SecondRoundDo"
-	LAT_DOSEARCH_MULTISEARCHTWEETSDO      = "DoSearch.MultisearchTweetsDo"
-	LAT_DOSEARCH_TYPOSUGGESTDO            = "DoSearch.TypoSuggestDo"
-	LAT_GETSUGGESTIONS                    = "GetSuggestions"
-	LAT_SUGGEST_SUGGESTIONS               = "GetSuggestions.SuggestSuggestions"
-	LAT_GETSUGGESTIONS_MULTISEARCHDO      = "GetSuggestions.MultisearchDo"
+	LAT_DOSEARCH                                = "DoSearch"
+	LAT_DOSEARCH_MULTISEARCHDO                  = "DoSearch.MultisearchDo"
+	LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO        = "DoSearch.MultisearcHighlightsDo"
+	LAT_DOSEARCH_ADDINTENTS                     = "DoSearch.AddIntents"
+	LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO        = "DoSearch.AddIntents.FirstRoundDo"
+	LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO       = "DoSearch.AddIntents.SecondRoundDo"
+	LAT_DOSEARCH_MULTISEARCHTWEETSDO            = "DoSearch.MultisearchTweetsDo"
+	LAT_DOSEARCH_TYPOSUGGESTDO                  = "DoSearch.TypoSuggestDo"
+	LAT_GETSUGGESTIONS                          = "GetSuggestions"
+	LAT_SUGGEST_SUGGESTIONS                     = "GetSuggestions.SuggestSuggestions"
+	LAT_GETSUGGESTIONS_MULTISEARCHDO            = "GetSuggestions.MultisearchDo"
+	LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO = "DoSearch.SearchGrammars.MultisearchGrammarsDo"
+	LAT_DOSEARCH_GRAMMARS_MULTISEARCHFILTERDO   = "DoSearch.SearchGrammars.MultisearchFilterDo"
 )
 
 var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{

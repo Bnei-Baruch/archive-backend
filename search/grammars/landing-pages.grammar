@@ -179,6 +179,7 @@ he,conventions => כנסים $ConventionLocation $Year
 he,conventions => כנסים $Year $ConventionLocation
 he,downloads => הורדה
 he,downloads => קבצים להורדה
+he,downloads => הורדות
 he,friends_gatherings => ישיבות
 he,friends_gatherings => ישיבות חברים
 he,friends_gatherings => ישיבת

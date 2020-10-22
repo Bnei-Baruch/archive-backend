@@ -65,83 +65,118 @@ ALL = 'ALL_LANGS'
 CYRILLIC = 'CYRILLIC'
 CJK = 'CJK'
 LANG_GROUPS = {
-  ALL: [
-    ENGLISH, HEBREW, RUSSIAN, SPANISH, ITALIAN, GERMAN, DUTCH, FRENCH,
-    PORTUGUESE, TURKISH, POLISH, ARABIC, HUNGARIAN, FINNISH, LITHUANIAN,
-    JAPANESE, BULGARIAN, GEORGIAN, NORWEGIAN, SWEDISH, CROATIAN, CHINESE,
-    PERSIAN, ROMANIAN, HINDI, MACEDONIAN, SLOVENIAN, LATVIAN, SLOVAK,
-    CZECH, UKRAINIAN, AMHARIC,
-  ],
-  CYRILLIC: [RUSSIAN, BULGARIAN, MACEDONIAN, UKRAINIAN],
-  CJK: [CHINESE, JAPANESE],
+    ALL: [
+        ENGLISH, HEBREW, RUSSIAN, SPANISH, ITALIAN, GERMAN, DUTCH, FRENCH,
+        PORTUGUESE, TURKISH, POLISH, ARABIC, HUNGARIAN, FINNISH, LITHUANIAN,
+        JAPANESE, BULGARIAN, GEORGIAN, NORWEGIAN, SWEDISH, CROATIAN, CHINESE,
+        PERSIAN, ROMANIAN, HINDI, MACEDONIAN, SLOVENIAN, LATVIAN, SLOVAK,
+        CZECH, UKRAINIAN, AMHARIC,
+    ],
+    CYRILLIC: [RUSSIAN, BULGARIAN, MACEDONIAN, UKRAINIAN],
+    CJK: [CHINESE, JAPANESE],
 }
 
 # Units indexing
 LanguageAnalyzer = {
-  ENGLISH: "english_synonym",
-  HEBREW: "hebrew_synonym",
-  RUSSIAN: "russian_synonym",
-  SPANISH: "spanish_synonym",
+    ENGLISH: "english_synonym",
+    HEBREW: "hebrew_synonym",
+    RUSSIAN: "russian_synonym",
+    SPANISH: "spanish_synonym",
 
-  # In order to allow synonyms in other languages,
-  # reimplement their analyzer by adding the necessary filters for each language
-  # + the synonym_graph filter and defining a new analyzer that include this filters.
-  # List of definitions for each language analyzer are available here:
-  # https://www.elastic.co/guide/en/elasticsearch/reference/6.7/analysis-lang-analyzer.html#spanish-analyzer
+    # In order to allow synonyms in other languages,
+    # reimplement their analyzer by adding the necessary filters for each language
+    # + the synonym_graph filter and defining a new analyzer that include this filters.
+    # List of definitions for each language analyzer are available here:
+    # https://www.elastic.co/guide/en/elasticsearch/reference/6.7/analysis-lang-analyzer.html#spanish-analyzer
 
-  ITALIAN: "italian",
-  GERMAN: "german",
-  DUTCH: "dutch",
-  FRENCH: "french",
-  PORTUGUESE: "portuguese",
-  TURKISH: "turkish",
-  POLISH: "standard",
-  ARABIC: "arabic",
-  HUNGARIAN: "hungarian",
-  FINNISH: "finnish",
-  LITHUANIAN: "lithuanian",
-  JAPANESE: "cjk",
-  BULGARIAN: "bulgarian",
-  GEORGIAN: "standard",
-  NORWEGIAN: "norwegian",
-  SWEDISH: "swedish",
-  CROATIAN: "standard",
-  CHINESE: "cjk",
-  PERSIAN: "persian",
-  ROMANIAN: "romanian",
-  HINDI: "hindi",
-  UKRAINIAN: "standard",
-  MACEDONIAN: "standard",
-  SLOVENIAN: "standard",
-  LATVIAN: "latvian",
-  SLOVAK: "standard",
-  CZECH: "czech",
-  AMHARIC: "standard",
+    ITALIAN: "italian",
+    GERMAN: "german",
+    DUTCH: "dutch",
+    FRENCH: "french",
+    PORTUGUESE: "portuguese",
+    TURKISH: "turkish",
+    POLISH: "standard",
+    ARABIC: "arabic",
+    HUNGARIAN: "hungarian",
+    FINNISH: "finnish",
+    LITHUANIAN: "lithuanian",
+    JAPANESE: "cjk",
+    BULGARIAN: "bulgarian",
+    GEORGIAN: "standard",
+    NORWEGIAN: "norwegian",
+    SWEDISH: "swedish",
+    CROATIAN: "standard",
+    CHINESE: "cjk",
+    PERSIAN: "persian",
+    ROMANIAN: "romanian",
+    HINDI: "hindi",
+    UKRAINIAN: "standard",
+    MACEDONIAN: "standard",
+    SLOVENIAN: "standard",
+    LATVIAN: "latvian",
+    SLOVAK: "standard",
+    CZECH: "czech",
+    AMHARIC: "standard",
+}
+
+LanguageAnalyzerWithoutSynonyms  = {
+    ENGLISH: "english",
+    HEBREW: "he",
+    RUSSIAN: "russian",
+    SPANISH: "spanish",
+    ITALIAN: "italian",
+    GERMAN: "german",
+    DUTCH: "dutch",
+    FRENCH: "french",
+    PORTUGUESE: "portuguese",
+    TURKISH: "turkish",
+    POLISH: "standard",
+    ARABIC: "arabic",
+    HUNGARIAN: "hungarian",
+    FINNISH: "finnish",
+    LITHUANIAN: "lithuanian",
+    JAPANESE: "cjk",
+    BULGARIAN: "bulgarian",
+    GEORGIAN: "standard",
+    NORWEGIAN: "norwegian",
+    SWEDISH: "swedish",
+    CROATIAN: "standard",
+    CHINESE: "cjk",
+    PERSIAN: "persian",
+    ROMANIAN: "romanian",
+    HINDI: "hindi",
+    UKRAINIAN: "standard",
+    MACEDONIAN: "standard",
+    SLOVENIAN: "standard",
+    LATVIAN: "latvian",
+    SLOVAK: "standard",
+    CZECH: "czech",
+    AMHARIC: "standard",
 }
 
 SynonymGraphFilterImp = {
-            "type" : "synonym_graph",
-            "tokenizer": "keyword",
-            "synonyms" : [],
+    "type": "synonym_graph",
+    "tokenizer": "keyword",
+            "synonyms": [],
 }
 
 LanguageAnalyzerImp = {
-  ENGLISH: {
-      "english_synonym": {
-              "tokenizer":  "standard",
-              "filter": [
+    ENGLISH: {
+        "english_synonym": {
+            "tokenizer":  "standard",
+            "filter": [
                 "english_possessive_stemmer",
                 "lowercase",
                 "english_stop",
                 "english_stemmer",
                 "synonym_graph",
-              ]
+            ]
         }
-  },
-  HEBREW: {
-    "hebrew_synonym": {
-            "tokenizer" : "standard",
-            "filter" : [
+    },
+    HEBREW: {
+        "hebrew_synonym": {
+            "tokenizer": "standard",
+            "filter": [
                 # The order here is important. As hunspell in many cases produces alternative
                 # tokens synonym graph is not able to consume non linear (graph) tokens and fails
                 # So for now until issue (https://github.com/elastic/elasticsearch/issues/29426)
@@ -150,293 +185,305 @@ LanguageAnalyzerImp = {
                 "he_IL",
             ],
             "char_filter": [
-              "quotes"
+                "quotes"
             ]
-    }
-  },
-  RUSSIAN: {
-     "russian_synonym": {
-            "tokenizer":  "standard",
-            "filter": [
-              "lowercase",
-              "russian_stop",
-              "russian_stemmer",
-              "synonym_graph"
-            ]
-    }
-  },
-  SPANISH: {
-    "spanish_synonym": {
-            "tokenizer":  "standard",
-            "filter": [
-              "lowercase",
-              "spanish_stop",
-              "spanish_stemmer",
-              "synonym_graph"
-            ]
+        },
+        "he": {
+          "tokenizer": "standard",
+          "filter": [
+            "he_IL"
+          ],
+          "char_filter": [
+            "quotes"
+          ]
+        }
     },
-  }
+    RUSSIAN: {
+        "russian_synonym": {
+            "tokenizer":  "standard",
+            "filter": [
+                "lowercase",
+                "russian_stop",
+                "russian_stemmer",
+                "synonym_graph"
+            ]
+        }
+    },
+    SPANISH: {
+        "spanish_synonym": {
+            "tokenizer":  "standard",
+            "filter": [
+                "lowercase",
+                "spanish_stop",
+                "spanish_stemmer",
+                "synonym_graph"
+            ]
+        },
+    }
 }
 
-LanguageFiltersImp ={
-  ENGLISH: {
-            "english_stop": {
-              "type":      "stop",
-              "stopwords": "_english_" 
-            },
-            "english_stemmer": {
-              "type":     "stemmer",
-              "language": "english"
-            },
-            "english_possessive_stemmer": {
-              "type":     "stemmer",
-              "language": "possessive_english"
-            },
-            "synonym_graph": SynonymGraphFilterImp
-  },
-  HEBREW: {
-          "he_IL": {
+LanguageFiltersImp = {
+    ENGLISH: {
+        "english_stop": {
+            "type":      "stop",
+            "stopwords": "_english_"
+        },
+        "english_stemmer": {
+            "type":     "stemmer",
+            "language": "english"
+        },
+        "english_possessive_stemmer": {
+            "type":     "stemmer",
+            "language": "possessive_english"
+        },
+        "synonym_graph": SynonymGraphFilterImp
+    },
+    HEBREW: {
+        "he_IL": {
             "type": "hunspell",
             "locale": "he_IL",
             "dedup": True,
-          },
-          "synonym_graph": SynonymGraphFilterImp
-  },
-  RUSSIAN: {
-            "russian_stop": {
-              "type":       "stop",
-              "stopwords":  "_russian_" 
-            },
-            "russian_stemmer": {
-              "type":       "stemmer",
-              "language":   "russian"
-            },
-            "synonym_graph": SynonymGraphFilterImp
-  },
-  SPANISH: {
-            "spanish_stop": {
-              "type":       "stop",
-              "stopwords":  "_spanish_" 
-            },
-            "spanish_stemmer": {
-              "type":       "stemmer",
-              "language":   "light_spanish"
-            },
-            "synonym_graph": SynonymGraphFilterImp
-  },
+        },
+        "synonym_graph": SynonymGraphFilterImp
+    },
+    RUSSIAN: {
+        "russian_stop": {
+            "type":       "stop",
+            "stopwords":  "_russian_"
+        },
+        "russian_stemmer": {
+            "type":       "stemmer",
+            "language":   "russian"
+        },
+        "synonym_graph": SynonymGraphFilterImp
+    },
+    SPANISH: {
+        "spanish_stop": {
+            "type":       "stop",
+            "stopwords":  "_spanish_"
+        },
+        "spanish_stemmer": {
+            "type":       "stemmer",
+            "language":   "light_spanish"
+        },
+        "synonym_graph": SynonymGraphFilterImp
+    },
 }
 
 # Phonetic analyzer
 BEIDER_MORSE_LANGUAGESET = {
-  CYRILLIC: 'cyrillic',
-  ENGLISH: 'english',
-  FRENCH: 'french',
-  GERMAN: 'german',
-  HEBREW: 'hebrew',
-  HUNGARIAN: 'hungarian',
-  POLISH: 'polish',
-  ROMANIAN: 'romanian',
-  RUSSIAN: 'russian',
-  SPANISH: 'spanish',
+    CYRILLIC: 'cyrillic',
+    ENGLISH: 'english',
+    FRENCH: 'french',
+    GERMAN: 'german',
+    HEBREW: 'hebrew',
+    HUNGARIAN: 'hungarian',
+    POLISH: 'polish',
+    ROMANIAN: 'romanian',
+    RUSSIAN: 'russian',
+    SPANISH: 'spanish',
 }
 
 
 def BeiderMorseLanguageset(lang):
-  if lang in BEIDER_MORSE_LANGUAGESET:
-    return BEIDER_MORSE_LANGUAGESET[lang]
-  elif lang in LANG_GROUPS[CYRILLIC]:
-    return BEIDER_MORSE_LANGUAGESET[CYRILLIC]
-  else:
-    return None
+    if lang in BEIDER_MORSE_LANGUAGESET:
+        return BEIDER_MORSE_LANGUAGESET[lang]
+    elif lang in LANG_GROUPS[CYRILLIC]:
+        return BEIDER_MORSE_LANGUAGESET[CYRILLIC]
+    else:
+        return None
 
 
 def IsCyrillic(lang, something):
-  return something if lang in LANG_GROUPS[CYRILLIC] else None
+    return something if lang in LANG_GROUPS[CYRILLIC] else None
+
 
 def GetAnalyzerImp(lang):
-  if lang in LanguageAnalyzerImp:
-    return LanguageAnalyzerImp[lang]
-  else:
-    return None
+    if lang in LanguageAnalyzerImp:
+        return LanguageAnalyzerImp[lang]
+    else:
+        return None
+
 
 def GetFiltersImp(lang):
-  if lang in LanguageFiltersImp:
-    return LanguageFiltersImp[lang]
-  else:
-    return None
+    if lang in LanguageFiltersImp:
+        return LanguageFiltersImp[lang]
+    else:
+        return None
+
 
 SETTINGS = {
-  "index": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0,
-    "analysis": {
-      "analyzer": lambda lang: GetAnalyzerImp(lang),
-      # "analyzer": {
-      #      Tested, but didnt bring quality enough results:
-      #     "phonetic_analyzer": {
-      #       "tokenizer": "standard",
-      #       "char_filter": ["quotes"],
-      #       "filter": [
-      #         "standard",
-      #         "lowercase",
-      #         lambda lang: IsCyrillic(lang, 'icu_transliterate'),
-      #         "custom_phonetic",
-      #       ],
-      #     },        
-      # },
-      "char_filter": {
-        "quotes": {
-          "type": "mapping",
-          "mappings": [
-            "\\u0091=>\\u0027",
-            "\\u0092=>\\u0027",
-            "\\u2018=>\\u0027",
-            "\\u2019=>\\u0027",
-            "\\u201B=>\\u0027",
-            "\\u05F3=>\\u0027",
-            "\\u059C=>\\u0027",
-            "\\u059D=>\\u0027",
-            "\\u0022=>",
-            "\\u201C=>",
-            "\\u201D=>",
-            "\\u05F4=>",
-          ],
+    "index": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
+        "analysis": {
+            "analyzer": lambda lang: GetAnalyzerImp(lang),
+            # "analyzer": {
+            #      Tested, but didnt bring quality enough results:
+            #     "phonetic_analyzer": {
+            #       "tokenizer": "standard",
+            #       "char_filter": ["quotes"],
+            #       "filter": [
+            #         "standard",
+            #         "lowercase",
+            #         lambda lang: IsCyrillic(lang, 'icu_transliterate'),
+            #         "custom_phonetic",
+            #       ],
+            #     },
+            # },
+            "char_filter": {
+                "quotes": {
+                    "type": "mapping",
+                    "mappings": [
+                        "\\u0091=>\\u0027",
+                        "\\u0092=>\\u0027",
+                        "\\u2018=>\\u0027",
+                        "\\u2019=>\\u0027",
+                        "\\u201B=>\\u0027",
+                        "\\u05F3=>\\u0027",
+                        "\\u059C=>\\u0027",
+                        "\\u059D=>\\u0027",
+                        "\\u0022=>",
+                        "\\u201C=>",
+                        "\\u201D=>",
+                        "\\u05F4=>",
+                    ],
+                },
+            },
+            "filter": lambda lang: GetFiltersImp(lang),
+            # "filter": {
+            #     "icu_transliterate": lambda lang: IsCyrillic(lang, {
+            #       "type": "icu_transform",
+            #       "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
+            #     }),
+            #     "custom_phonetic": {
+            #       "type": "phonetic",
+            #       "encoder": "beider_morse",
+            #       "replace": True,
+            #       "languageset": BeiderMorseLanguageset,
+            #     },
+            # },
         },
-      },
-      "filter": lambda lang: GetFiltersImp(lang),
-      # "filter": {      
-      #     "icu_transliterate": lambda lang: IsCyrillic(lang, {
-      #       "type": "icu_transform",
-      #       "id": "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC",
-      #     }),
-      #     "custom_phonetic": {
-      #       "type": "phonetic",
-      #       "encoder": "beider_morse",
-      #       "replace": True,
-      #       "languageset": BeiderMorseLanguageset,
-      #     },
-      # },
     },
-  },
 }
 
 
 RESULTS_TEMPLATE = {
-  # "settings": {
-  #   "index": {
-  #     "number_of_shards": 1,
-  #     "number_of_replicas": 0,
-  #   },
-  # },
-  "settings": SETTINGS,
-  "mappings": {
-    "result": {
-      "dynamic": "strict",
-      "properties": {
-        # Document type, unit, collection, source, tag.
-        "result_type": {
-          "type": "keyword",
-        },
-        # Document index date.
-        "index_date": {
-          "type": "date",
-          "format": "strict_date",
-        },
-        "mdb_uid": {
-          "type": "keyword",
-        },
-        # Typed uids, are list of entities (uid and entity type) in MDB that
-        # this document depends on. For example: "content_unit:lHDLZWxq",
-        # "file:0uzDZVqV". We use this list to reindex the document if one
-        # the items in this list changes.
-        "typed_uids": {
-          "type": "keyword",
-        },
-        # List of keywords in format filter:value are required for correct
-        # filtering of this document by all different filters. Time is handled
-        # by effective_date.
-        # For example: content_type:DAILY_LESSON or tag:0db5BBS3
-        "filter_values": {
-          "type": "keyword",
-        },
-        # Title, Description and Content are the typical result fields which
-        # should have the same tf/idf across all different retult types such
-        # as units, collections, sources, topics and others to follow.
-        "title": {
-          "type": "text",
-          "analyzer": "standard",
-          "fields": {
-            "language": {
-              "type": "text",
-              "analyzer": lambda lang: LanguageAnalyzer[lang],
-            }
-          }
-        },
-        "full_title": {
-          "type": "text",
-          "analyzer": "standard",
-          "fields": {
-            "language": {
-              "type": "text",
-              "analyzer": lambda lang: LanguageAnalyzer[lang],
-            }
-          }
-        },
-        "description": {
-          "type": "text",
-          "analyzer": "standard",
-          "fields": {
-            "language": {
-              "type": "text",
-              "analyzer": lambda lang: LanguageAnalyzer[lang],
-            },
-          },
-        },
-        "content": {
-          "type": "text",
-          "analyzer": "standard",
-          "fields": {
-            "language": {
-              "type": "text",
-              "analyzer": lambda lang: LanguageAnalyzer[lang],
-            },
-          },
-        },
-
-        # Suggest field for autocomplete.
-        "title_suggest": {
-          "type": "completion",
-          "analyzer": "standard",
-          "contexts": [
-            {
-              "name": "result_type",
-              "type": "category",
-              "path": "result_type",
-            },
-          ],
-          "fields": {
-              "language": {
-                  "type": "completion",
-                  "analyzer": lambda lang: LanguageAnalyzer[lang],
-                  "contexts": [
-                    {
-                      "name": "result_type",
-                      "type": "category",
-                      "path": "result_type",
+    # "settings": {
+    #   "index": {
+    #     "number_of_shards": 1,
+    #     "number_of_replicas": 0,
+    #   },
+    # },
+    "settings": SETTINGS,
+    "mappings": {
+        "result": {
+            "dynamic": "strict",
+            "properties": {
+                # Document type, unit, collection, source, tag.
+                "result_type": {
+                    "type": "keyword",
+                },
+                # Document index date.
+                "index_date": {
+                    "type": "date",
+                    "format": "strict_date",
+                },
+                "mdb_uid": {
+                    "type": "keyword",
+                },
+                # Typed uids, are list of entities (uid and entity type) in MDB that
+                # this document depends on. For example: "content_unit:lHDLZWxq",
+                # "file:0uzDZVqV". We use this list to reindex the document if one
+                # the items in this list changes.
+                "typed_uids": {
+                    "type": "keyword",
+                },
+                # List of keywords in format filter:value are required for correct
+                # filtering of this document by all different filters. Time is handled
+                # by effective_date.
+                # For example: content_type:DAILY_LESSON or tag:0db5BBS3
+                "filter_values": {
+                    "type": "keyword",
+                },
+                # Title, Description and Content are the typical result fields which
+                # should have the same tf/idf across all different retult types such
+                # as units, collections, sources, topics and others to follow.
+                "title": {
+                    "type": "text",
+                    "analyzer": "standard",
+                    "fields": {
+                        "language": {
+                            "type": "text",
+                            "analyzer": lambda lang: LanguageAnalyzer[lang],
+                        }
+                    }
+                },
+                "full_title": {
+                    "type": "text",
+                    "analyzer": "standard",
+                    "fields": {
+                        "language": {
+                            "type": "text",
+                            "analyzer": lambda lang: LanguageAnalyzer[lang],
+                        }
+                    }
+                },
+                "description": {
+                    "type": "text",
+                    "analyzer": "standard",
+                    "fields": {
+                        "language": {
+                            "type": "text",
+                            "analyzer": lambda lang: LanguageAnalyzer[lang],
+                        },
                     },
-                  ],
-              }
-          }
-        },
+                },
+                "content": {
+                    "type": "text",
+                    "analyzer": "standard",
+                    "fields": {
+                        "language": {
+                            "type": "text",
+                            "analyzer": lambda lang: LanguageAnalyzer[lang],
+                        },
+                    },
+                },
 
-        # Content unit specific fields.
-        "effective_date": {
-          "type": "date",
-          "format": "strict_date",
-        },
-      }
+                # Suggest field for autocomplete.
+                "title_suggest": {
+                    "type": "completion",
+                    "analyzer": "standard",
+                    "contexts": [
+                        {
+                            "name": "result_type",
+                            "type": "category",
+                            "path": "result_type",
+                        },
+                    ],
+                    "fields": {
+                        "language": {
+                            "type": "completion",
+                            "analyzer": lambda lang: LanguageAnalyzer[lang],
+                            "contexts": [
+                              {
+                                  "name": "result_type",
+                                  "type": "category",
+                                  "path": "result_type",
+                              },
+                            ],
+                        }
+                    }
+                },
+
+                # Content unit specific fields.
+                "effective_date": {
+                    "type": "date",
+                    "format": "strict_date",
+                },
+            }
+        }
     }
-  }
 }
 
 
@@ -553,78 +600,87 @@ SEARCH_LOGS_TEMPLATE = {
 }
 
 GRAMMARS_TEMPLATE = {
-  # "settings": {
-  #   "index": {
-  #     "number_of_shards": 1,
-  #     "number_of_replicas": 0,
-  #   },
-  # },
-  "settings": SETTINGS,
-  "mappings": {
-    "grammars": {
-      "dynamic": "strict",
-      "properties": {
-        # Hit type, e.g., "landing-page" or other grammars later on..
-        "hit_type": {
-          "type": "keyword",
-        },
-        # Intent, e.g., which landing page, "conventions" or "lessons".
-        "intent": {
-          "type": "keyword",
-        },
-        # Set of variables for a grammar rule, e.g., [congress $Year $ConventionLocation]
-        # will lead to two keywords: ['$Year', '$ConventionLocation']
-        "variables": {
-          "type": "keyword",
-        },
-        # One value for each variable, e.g., "2019" for $Year or "Bulgaria" for $ConventionLocation.
-        "values": {
-          "type": "keyword",
-        },
-        # Grammar rule: [congress $Year $ConventionLocation] or [$Year $ConventionLocation congress]
-        "rules": {
-          "type": "text",
-          "analyzer": "standard",
-          "fields": {
-            "language": {
-              "type": "text",
-              "analyzer": lambda lang: LanguageAnalyzer[lang],
+    "settings": SETTINGS,
+    "mappings": {
+        "grammars": {
+            "dynamic": "strict",
+            "properties": {
+              # Percolator query for matching rules with $Text variable
+              "query": {
+                "type": "percolator"
+              },
+              # Text query from user. Assigned only in query time. Must be defined in index for percolator functionality.
+               "search_text": {
+                "type": "text",
+                "analyzer": lambda lang: LanguageAnalyzerWithoutSynonyms[lang]
+              },
+              "grammar_rule": {
+                    "dynamic": "strict",
+                    "properties": {
+                        # Hit type, e.g., "landing-page" or other grammars later on..
+                        "hit_type": {
+                            "type": "keyword",
+                        },
+                        # Intent, e.g., which landing page, "conventions" or "lessons".
+                        "intent": {
+                            "type": "keyword",
+                        },
+                        # Set of variables for a grammar rule, e.g., [congress $Year $ConventionLocation]
+                        # will lead to two keywords: ['$Year', '$ConventionLocation']
+                        "variables": {
+                            "type": "keyword",
+                        },
+                        # One value for each variable, e.g., "2019" for $Year or "Bulgaria" for $ConventionLocation.
+                        "values": {
+                            "type": "keyword",
+                        },
+                        # Grammar rule: [congress $Year $ConventionLocation] or [$Year $ConventionLocation congress]
+                        "rules": {
+                            "type": "text",
+                            "analyzer": "standard",
+                            "fields": {
+                                "language": {
+                                    "type": "text",
+                                    "analyzer": lambda lang: LanguageAnalyzer[lang],
+                                }
+                            }
+                        },
+                        # Suggest field for autocomplete.
+                        "rules_suggest": {
+                            "type": "completion",
+                            "analyzer": "standard",
+                            "fields": {
+                                "language": {
+                                    "type": "completion",
+                                    "analyzer": lambda lang: LanguageAnalyzer[lang],
+                                }
+                            }
+                        },
+                    }
+                }
             }
-          }
-        },
-        # Suggest field for autocomplete.
-        "rules_suggest": {
-          "type": "completion",
-          "analyzer": "standard",
-          "fields": {
-            "language": {
-              "type": "completion",
-              "analyzer": lambda lang: LanguageAnalyzer[lang],
-            }
-          }
-        },
-      }
+        }
     }
-  }
 }
 
+
 def Resolve(lang, value):
-  if isinstance(value, dict):
-    l = [(k, Resolve(lang, v)) for (k, v) in value.iteritems()]
-    return dict([(k, v) for k, v in l if v is not None])
-  elif isinstance(value, list):
-    return [x for x in [Resolve(lang, v) for v in value] if x is not None]
-  elif callable(value):
-    return value(lang)
-  else:
-    return value
+    if isinstance(value, dict):
+        l = [(k, Resolve(lang, v)) for (k, v) in value.iteritems()]
+        return dict([(k, v) for k, v in l if v is not None])
+    elif isinstance(value, list):
+        return [x for x in [Resolve(lang, v) for v in value] if x is not None]
+    elif callable(value):
+        return value(lang)
+    else:
+        return value
 
 
 for lang in LANG_GROUPS[ALL]:
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'results', 'results-%s.json' % lang), 'w') as f:
-    json.dump(Resolve(lang, RESULTS_TEMPLATE), f, indent=4)
-  with open(os.path.join('.', 'data', 'es', 'mappings', 'grammars', 'grammars-%s.json' % lang), 'w') as f:
-    json.dump(Resolve(lang, GRAMMARS_TEMPLATE), f, indent=4)
+    with open(os.path.join('.', 'data', 'es', 'mappings', 'results', 'results-%s.json' % lang), 'w') as f:
+        json.dump(Resolve(lang, RESULTS_TEMPLATE), f, indent=4)
+    with open(os.path.join('.', 'data', 'es', 'mappings', 'grammars', 'grammars-%s.json' % lang), 'w') as f:
+        json.dump(Resolve(lang, GRAMMARS_TEMPLATE), f, indent=4)
 # Without languages
 with open(os.path.join('.', 'data', 'es', 'mappings', 'search_logs.json'), 'w') as f:
-  json.dump(Resolve('xx', SEARCH_LOGS_TEMPLATE), f, indent=4)
+    json.dump(Resolve('xx', SEARCH_LOGS_TEMPLATE), f, indent=4)

@@ -1,8 +1,11 @@
 package search
 
 import (
+	"fmt"
+
 	"gopkg.in/olivere/elastic.v6"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -12,6 +15,10 @@ const (
 	GRAMMAR_SUGGEST_SIZE = 30
 
 	GRAMMAR_SEARCH_SIZE = 2000
+
+	GRAMMAR_PERCULATE_SIZE = 1
+
+	PERCULATE_HIGHLIGHT_SEPERATOR = '$'
 )
 
 func createGrammarQuery(q *Query) elastic.Query {
@@ -19,16 +26,43 @@ func createGrammarQuery(q *Query) elastic.Query {
 	if simpleQuery(q) != "" {
 		boolQuery = boolQuery.Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("rules.language", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
-				elastic.NewMatchPhraseQuery("rules", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
+				elastic.NewMatchPhraseQuery("grammar_rule.rules.language", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
+				elastic.NewMatchPhraseQuery("grammar_rule.rules", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
 			),
 		)
 	}
 	return boolQuery
 }
 
+func createPerculateQuery(q *Query) elastic.Query {
+	if len(q.ExactTerms) > 0 { // TBD consider support for query with partly exact term
+		return elastic.NewMatchNoneQuery()
+	}
+	query := elastic.NewPercolatorQuery().Field("query").Document(
+		struct {
+			SearchText string `json:"search_text"`
+		}{SearchText: simpleQuery(q)})
+	return query
+}
+
+func NewGammarPerculateRequest(query *Query, language string, preference string) *elastic.SearchRequest {
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("grammar_rule.intent", "grammar_rule.variables", "grammar_rule.values", "grammar_rule.rules")
+	source := elastic.NewSearchSource().
+		Query(createPerculateQuery(query)).
+		Highlight(elastic.NewHighlight().Field("search_text").
+			PreTags(string(PERCULATE_HIGHLIGHT_SEPERATOR)).
+			PostTags(string(PERCULATE_HIGHLIGHT_SEPERATOR))).
+		FetchSourceContext(fetchSourceContext).
+		Size(GRAMMAR_PERCULATE_SIZE).
+		Explain(query.Deb)
+	return elastic.NewSearchRequest().
+		SearchSource(source).
+		Index(GrammarIndexNameForServing(language)).
+		Preference(preference)
+}
+
 func NewSuggestGammarV2Request(query *Query, language string, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("grammar_rule.intent", "grammar_rule.variables", "grammar_rule.values", "grammar_rule.rules")
 	source := elastic.NewSearchSource().
 		Query(createGrammarQuery(query)).
 		FetchSourceContext(fetchSourceContext).
@@ -41,27 +75,83 @@ func NewSuggestGammarV2Request(query *Query, language string, preference string)
 }
 
 func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("intent", "variables", "values", "rules")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("grammar_rule.intent", "grammar_rule.variables", "grammar_rule.values", "grammar_rule.rules")
 	source := elastic.NewSearchSource().
 		FetchSourceContext(fetchSourceContext).
 		Suggester(
 			elastic.NewCompletionSuggester("rules_suggest").
-				Field("rules_suggest").
+				Field("grammar_rule.rules_suggest").
 				Text(simpleQuery(query)).
 				Size(GRAMMAR_SUGGEST_SIZE).
 				SkipDuplicates(true)).
 		Suggester(
 			elastic.NewCompletionSuggester("rules_suggest.language").
-				Field("rules_suggest.language").
+				Field("grammar_rule.rules_suggest.language").
 				Text(simpleQuery(query)).
 				Size(GRAMMAR_SUGGEST_SIZE).
-				SkipDuplicates(true)).
-		Explain(query.Deb)
+				SkipDuplicates(true))
 
 	return elastic.NewSearchRequest().
 		SearchSource(source).
 		Index(GrammarIndexNameForServing(language)).
 		Preference(preference)
+}
+
+func NewFilteredResultsSearchRequest(text string, contentType string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
+	if filters, ok := consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]; ok {
+		requests := []*elastic.SearchRequest{}
+		if val, ok := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
+			sourceOnlyFilter := map[string][]string{
+				consts.FILTERS[consts.FILTER_SECTION_SOURCES]: val,
+			}
+			titlesOnly := contentType == consts.VAR_CT_BOOK_TITLES
+			sourceRequests, err := NewResultsSearchRequests(
+				SearchRequestOptions{
+					resultTypes:        []string{consts.ES_RESULT_TYPE_SOURCES},
+					index:              "",
+					query:              Query{Term: text, Filters: sourceOnlyFilter, LanguageOrder: []string{language}, Deb: deb},
+					sortBy:             sortBy,
+					from:               0,
+					size:               from + size,
+					preference:         preference,
+					useHighlight:       false,
+					partialHighlight:   false,
+					filterOutCUSources: []string{},
+					titlesOnly:         titlesOnly})
+			if err != nil {
+				return nil, err
+			}
+			requests = append(requests, sourceRequests...)
+		}
+
+		filtersWithoutSource := map[string][]string{}
+		for key, value := range filters {
+			if key != consts.FILTERS[consts.FILTER_SECTION_SOURCES] {
+				filtersWithoutSource[key] = value
+			}
+		}
+		if len(filtersWithoutSource) > 0 {
+			nonSourceRequests, err := NewResultsSearchRequests(
+				SearchRequestOptions{
+					resultTypes:        resultTypes,
+					index:              "",
+					query:              Query{Term: text, Filters: filtersWithoutSource, LanguageOrder: []string{language}, Deb: deb},
+					sortBy:             sortBy,
+					from:               0,
+					size:               from + size,
+					preference:         preference,
+					useHighlight:       false,
+					partialHighlight:   false,
+					filterOutCUSources: []string{}})
+			if err != nil {
+				return nil, err
+			}
+			requests = append(requests, nonSourceRequests...)
+		}
+
+		return requests, nil
+	}
+	return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES.", contentType)
 }
 
 func wordToHist(word string) map[rune]int {
