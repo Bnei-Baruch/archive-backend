@@ -680,8 +680,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 	}
 
-	// Filter out duplicates of regular results and intents carousel results
-	// Note: Currently we don't have such logic for 'filter grammar' results.
+	// When we have a lessons carousel we filter out the regular results that are also exist in the carousel.
+	// Note on grammar:
+	// Currently we don't support showing intent carousels for grammar filtered results so we are also not filtering many appearances of the lesson results.
 	filterOutCUSources := make([]string, 0)
 	for _, intent := range intents {
 		if intent.Type == consts.INTENT_TYPE_SOURCE {
