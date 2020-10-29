@@ -197,7 +197,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 				intents = append(intents, singleHitIntents...)
 				if filterIntents != nil {
 					if len(filterIntents) > 1 {
-						return nil, nil, errors.Errorf("Number of filter intents is %v but only one filter intent is currently supported.", len(filterIntents))
+						return nil, nil, errors.Errorf("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported.", language, len(filterIntents))
 					} else if len(filterIntents) == 1 {
 						if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
 							var contentType string
