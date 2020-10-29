@@ -195,11 +195,11 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 				return nil, nil, err
 			} else {
 				intents = append(intents, singleHitIntents...)
-				if filterIntents != nil && len(filterIntents) > 0 {
-					for _, filterIntent := range filterIntents {
-						//  Currently we support "filter grammar" with only one appereance of each variable.
-						//  This may be changed in the future.
-						if intentValue, ok := filterIntent.Value.(GrammarIntent); ok {
+				if filterIntents != nil {
+					if len(filterIntents) > 1 {
+						return nil, nil, errors.Errorf("Number of filter intents is %v but only one filter intent is currently supported.", len(filterIntents))
+					} else if len(filterIntents) == 1 {
+						if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
 							var contentType string
 							var text string
 							for _, fv := range intentValue.FilterValues {
@@ -209,6 +209,8 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 									text = fv.Value
 								}
 								if contentType != "" && text != "" {
+									//  Currently we support "filter grammar" with only one appereance of each variable.
+									//  This may be changed in the future.
 									break
 								}
 							}
@@ -223,6 +225,8 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 									return nil, nil, err
 								}
 								filterSearchRequests = append(textValSearchRequests, fullTermSearchRequests...)
+								// we have a bug in case the nu,ber of intents is above 1
+								// search will ovveride the previos
 								if len(filterSearchRequests) > 0 {
 									// All search requests here are for the same language
 									results, hitIdsMap, maxScore, err := e.filterSearch(filterSearchRequests)
