@@ -621,23 +621,32 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	// Search grammars in parallel to native search.
-	grammarsChannel := make(chan []Intent)
+	grammarsSingleHitIntentsChannel := make(chan []Intent)
+	grammarsFilterIntentsChannel := make(chan []Intent)
 	grammarsFilteredResultsByLangChannel := make(chan map[string]FilteredSearchResult)
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
-				grammarsChannel <- []Intent{}
+				grammarsSingleHitIntentsChannel <- []Intent{}
+				grammarsFilterIntentsChannel <- []Intent{}
 				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
 			}
 		}()
-		if grammars, filtered, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
+		if singleHitIntents, filterIntents, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
-			grammarsChannel <- []Intent{}
+			grammarsSingleHitIntentsChannel <- []Intent{}
+			grammarsFilterIntentsChannel <- []Intent{}
 			grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
 		} else {
-			grammarsChannel <- grammars
-			grammarsFilteredResultsByLangChannel <- filtered
+			grammarsSingleHitIntentsChannel <- singleHitIntents
+			grammarsFilterIntentsChannel <- filterIntents
+			if filtered, err := e.SearchByFilterIntents(filterIntents, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
+				grammarsFilteredResultsByLangChannel <- filtered
+			} else {
+				log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
+				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
+			}
 		}
 	}()
 
@@ -675,7 +684,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
-	intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy)
+	intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy, <-grammarsFilterIntentsChannel)
 	if err != nil {
 		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 	}
@@ -763,7 +772,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	query.Intents = append(query.Intents, intents...)
-	query.Intents = append(query.Intents, <-grammarsChannel...)
+	query.Intents = append(query.Intents, <-grammarsSingleHitIntentsChannel...)
 
 	log.Debugf("Intents: %+v", query.Intents)
 

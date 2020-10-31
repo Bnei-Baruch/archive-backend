@@ -463,6 +463,13 @@ var ES_INTENT_SUPPORTED_CONTENT_TYPES = map[string]bool{
 	CT_CLIP:                  true,
 }
 
+var ES_INTENT_SUPPORTED_GRAMMAR_CT_VARIABLES = map[string]bool{
+	VAR_CT_PROGRAMS:    true,
+	VAR_CT_ARTICLES:    true,
+	VAR_CT_LESSONS:     true,
+	VAR_CT_BOOK_TITLES: true,
+}
+
 // Fake index for intents.
 var INTENT_INDEX_BY_TYPE = map[string]string{
 	INTENT_TYPE_TAG:    INTENT_INDEX_TAG,
