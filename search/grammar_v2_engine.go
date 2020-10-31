@@ -230,34 +230,34 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchT
 					//  This may be changed in the future.
 					break
 				}
-				if contentType != "" && text != "" {
-					log.Infof("Filtered Search Request: ContentType is %s, Text is %s.", contentType, text)
-					textValSearchRequests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+			}
+			if contentType != "" && text != "" {
+				log.Infof("Filtered Search Request: ContentType is %s, Text is %s.", contentType, text)
+				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				if err != nil {
+					return nil, err
+				}
+				fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, contentType, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				if err != nil {
+					return nil, err
+				}
+				requests := append(textValSearchRequests, fullTermSearchRequests...)
+				if len(requests) > 0 {
+					// All search requests here are for the same language
+					results, hitIdsMap, maxScore, err := e.filterSearch(requests)
 					if err != nil {
 						return nil, err
 					}
-					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, contentType, from, size, sortBy, resultTypes, intent.Language, preference, deb)
-					if err != nil {
-						return nil, err
+					resultsByLang[intent.Language] = FilteredSearchResult{
+						Results:     results,
+						Term:        text,
+						ContentType: contentType,
+						HitIdsMap:   hitIdsMap,
+						MaxScore:    maxScore,
 					}
-					requests := append(textValSearchRequests, fullTermSearchRequests...)
-					if len(requests) > 0 {
-						// All search requests here are for the same language
-						results, hitIdsMap, maxScore, err := e.filterSearch(requests)
-						if err != nil {
-							return nil, err
-						}
-						resultsByLang[intent.Language] = FilteredSearchResult{
-							Results:     results,
-							Term:        text,
-							ContentType: contentType,
-							HitIdsMap:   hitIdsMap,
-							MaxScore:    maxScore,
-						}
-						if len(results) > 0 {
-							// we assume that there is no need to make the search for other languages if a results found for one language
-							break
-						}
+					if len(results) > 0 {
+						// we assume that there is no need to make the search for other languages if a results found for one language
+						break
 					}
 				}
 			}

@@ -607,8 +607,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
 	suggestChannel := make(chan null.String)
-	grammarsSingleHitIntentsChannel := make(chan []Intent)
-	grammarsFilterIntentsChannel := make(chan []Intent)
+	grammarsSingleHitIntentsChannel := make(chan []Intent, 1)
+	grammarsFilterIntentsChannel := make(chan []Intent, 1)
 	grammarsFilteredResultsByLangChannel := make(chan map[string]FilteredSearchResult)
 	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 
@@ -644,10 +644,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			grammarsSingleHitIntentsChannel <- singleHitIntents
 			grammarsFilterIntentsChannel <- filterIntents
 			if filtered, err := e.SearchByFilterIntents(filterIntents, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
-				grammarsFilteredResultsByLangChannel <- filtered
-			} else {
 				log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
 				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
+			} else {
+				grammarsFilteredResultsByLangChannel <- filtered
 			}
 		}
 	}()
