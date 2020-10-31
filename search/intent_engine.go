@@ -19,6 +19,16 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
 		return err, nil, nil
 	}
+	secondRoundQuery := query
+	intentValue, grammarOk := intent.Value.(GrammarIntent)
+	if grammarOk {
+		for _, fv := range intentValue.FilterValues {
+			if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_TEXT] {
+				secondRoundQuery.Term = fv.Value
+				break
+			}
+		}
+	}
 	if query.Deb {
 		classificationIntent.Explanation = *h.Explanation
 	}
@@ -35,7 +45,7 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	return nil, nil, nil
 }
 
-func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy string) ([]Intent, error) {
+func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy string, filterIntents []Intent) ([]Intent, error) {
 
 	intents := make([]Intent, 0)
 
@@ -91,13 +101,43 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 	mssFirstRound := e.esc.MultiSearch()
 	potentialIntents := make([]Intent, 0)
 	for _, language := range query.LanguageOrder {
+
+		var grammarIntent GrammarIntent
+		queryForSearch := queryWithoutFilters
+		if filterIntents != nil {
+			for _, filterIntent := range filterIntents {
+				if intentValue, ok := filterIntent.Value.(GrammarIntent); filterIntent.Language == language && ok {
+					var text string
+					var contentType string
+					for _, fv := range intentValue.FilterValues {
+						if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_TEXT] {
+							text = fv.Value
+
+						} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
+							contentType = fv.Value
+						}
+						if text != "" && contentType != "" {
+							break
+						}
+					}
+					if text != "" && contentType != "" {
+						if _, ok := consts.ES_INTENT_SUPPORTED_GRAMMAR_CT_VARIABLES[contentType]; ok {
+							// search for intents by the "free text" value from the detected grammar rule
+							queryForSearch.Term = text
+							grammarIntent = filterIntent.Value.(GrammarIntent)
+						}
+					}
+				}
+			}
+		}
+
 		// Order here provides the priority in results, i.e., tags are more important then sources.
 		index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, language)
 		req, err := NewResultsSearchRequest(
 			SearchRequestOptions{
 				resultTypes:      []string{consts.ES_RESULT_TYPE_TAGS},
 				index:            index,
-				query:            queryWithoutFilters,
+				query:            queryForSearch,
 				sortBy:           consts.SORT_BY_RELEVANCE,
 				from:             0,
 				size:             size,
@@ -109,12 +149,12 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 			return nil, err
 		}
 		mssFirstRound.Add(req)
-		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
+		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, grammarIntent})
 		req, err = NewResultsSearchRequest(
 			SearchRequestOptions{
 				resultTypes:      []string{consts.ES_RESULT_TYPE_SOURCES},
 				index:            index,
-				query:            queryWithoutFilters,
+				query:            queryForSearch,
 				sortBy:           consts.SORT_BY_RELEVANCE,
 				from:             0,
 				size:             size,
@@ -127,7 +167,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 			return nil, err
 		}
 		mssFirstRound.Add(req)
-		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
+		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, grammarIntent})
 	}
 	beforeFirstRoundDo := time.Now()
 	mr, err := mssFirstRound.Do(context.TODO())
