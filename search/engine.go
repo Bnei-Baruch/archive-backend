@@ -607,6 +607,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
 	suggestChannel := make(chan null.String)
+	grammarsSingleHitIntentsChannel := make(chan []Intent)
+	grammarsFilterIntentsChannel := make(chan []Intent)
+	grammarsFilteredResultsByLangChannel := make(chan map[string]FilteredSearchResult)
+	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 
 	var resultTypes []string
 	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
@@ -621,9 +625,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	// Search grammars in parallel to native search.
-	grammarsSingleHitIntentsChannel := make(chan []Intent)
-	grammarsFilterIntentsChannel := make(chan []Intent)
-	grammarsFilteredResultsByLangChannel := make(chan map[string]FilteredSearchResult)
+
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -651,7 +653,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}()
 
 	// Search tweets in parallel to native search.
-	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -667,6 +668,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
+	filterIntents := <-grammarsFilterIntentsChannel
+
 	if checkTypo {
 		go func() {
 			defer func() {
@@ -675,7 +678,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					suggestChannel <- null.String{"", false}
 				}
 			}()
-			if suggestText, err := e.GetTypoSuggest(query); err != nil {
+			if suggestText, err := e.GetTypoSuggest(query, filterIntents); err != nil {
 				log.Errorf("ESEngine.GetTypoSuggest - Error getting typo suggest: %+v", err)
 				suggestChannel <- null.String{"", false}
 			} else {
@@ -684,7 +687,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
-	intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy, <-grammarsFilterIntentsChannel)
+	intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy, filterIntents)
 	if err != nil {
 		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 	}

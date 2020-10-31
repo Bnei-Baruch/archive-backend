@@ -104,7 +104,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 
 		var grammarIntent GrammarIntent
 		queryForSearch := queryWithoutFilters
-		if filterIntents != nil {
+		if filterIntents != nil && len(filterIntents) > 0 {
 			for _, filterIntent := range filterIntents {
 				if intentValue, ok := filterIntent.Value.(GrammarIntent); filterIntent.Language == language && ok {
 					var text string
@@ -112,7 +112,6 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 					for _, fv := range intentValue.FilterValues {
 						if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_TEXT] {
 							text = fv.Value
-
 						} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
 							contentType = fv.Value
 						}
