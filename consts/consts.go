@@ -463,11 +463,25 @@ var ES_INTENT_SUPPORTED_CONTENT_TYPES = map[string]bool{
 	CT_CLIP:                  true,
 }
 
-var ES_INTENT_SUPPORTED_GRAMMAR_CT_VARIABLES = map[string]bool{
+var INTENT_SUPPORTED_GRAMMAR_CT_VARIABLES = map[string]bool{
 	VAR_CT_PROGRAMS:    true,
 	VAR_CT_ARTICLES:    true,
 	VAR_CT_LESSONS:     true,
 	VAR_CT_BOOK_TITLES: true,
+}
+
+var INTENT_HIT_TYPES_BY_GRAMMAR_CT = map[string]map[string]bool{
+	VAR_CT_PROGRAMS:    map[string]bool{ES_RESULT_TYPE_TAGS: true, ES_RESULT_TYPE_SOURCES: true},
+	VAR_CT_ARTICLES:    map[string]bool{ES_RESULT_TYPE_TAGS: false, ES_RESULT_TYPE_SOURCES: true},
+	VAR_CT_LESSONS:     map[string]bool{ES_RESULT_TYPE_TAGS: true, ES_RESULT_TYPE_SOURCES: true},
+	VAR_CT_BOOK_TITLES: map[string]bool{ES_RESULT_TYPE_TAGS: false, ES_RESULT_TYPE_SOURCES: true},
+}
+
+var INTENT_CT_BY_GRAMMAR_CT = map[string][]string{
+	VAR_CT_PROGRAMS:    []string{INTENT_HIT_TYPE_PROGRAMS},
+	VAR_CT_ARTICLES:    []string{INTENT_HIT_TYPE_PROGRAMS, INTENT_HIT_TYPE_LESSONS},
+	VAR_CT_LESSONS:     []string{INTENT_HIT_TYPE_LESSONS},
+	VAR_CT_BOOK_TITLES: []string{INTENT_HIT_TYPE_PROGRAMS, INTENT_HIT_TYPE_LESSONS},
 }
 
 // Fake index for intents.

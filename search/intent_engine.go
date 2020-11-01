@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Bnei-Baruch/archive-backend/utils"
+
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 
@@ -104,6 +106,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 
 		var grammarIntent GrammarIntent
 		queryForSearch := queryWithoutFilters
+		searchTags := true
+		searchSources := true
 		if filterIntents != nil && len(filterIntents) > 0 {
 			for _, filterIntent := range filterIntents {
 				if intentValue, ok := filterIntent.Value.(GrammarIntent); filterIntent.Language == language && ok {
@@ -120,9 +124,12 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 						}
 					}
 					if text != "" && contentType != "" {
-						if _, ok := consts.ES_INTENT_SUPPORTED_GRAMMAR_CT_VARIABLES[contentType]; ok {
+						if _, ok := consts.INTENT_SUPPORTED_GRAMMAR_CT_VARIABLES[contentType]; ok {
 							// search for intents by the "free text" value from the detected grammar rule
 							queryForSearch.Term = text
+							searchTags = consts.INTENT_HIT_TYPES_BY_GRAMMAR_CT[contentType][consts.ES_RESULT_TYPE_TAGS]
+							searchSources = consts.INTENT_HIT_TYPES_BY_GRAMMAR_CT[contentType][consts.ES_RESULT_TYPE_SOURCES]
+							checkContentUnitsTypes = utils.IntersectSortedStringSlices(checkContentUnitsTypes, consts.INTENT_CT_BY_GRAMMAR_CT[contentType])
 							grammarIntent = filterIntent.Value.(GrammarIntent)
 						}
 					}
@@ -130,43 +137,47 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 			}
 		}
 
-		// Order here provides the priority in results, i.e., tags are more important then sources.
+		// Order here provides the priority in results, i.e., tags are more important than sources.
 		index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, language)
-		req, err := NewResultsSearchRequest(
-			SearchRequestOptions{
-				resultTypes:      []string{consts.ES_RESULT_TYPE_TAGS},
-				index:            index,
-				query:            queryForSearch,
-				sortBy:           consts.SORT_BY_RELEVANCE,
-				from:             0,
-				size:             size,
-				preference:       preference,
-				useHighlight:     false,
-				partialHighlight: true})
-		if err != nil {
-			log.Warnf("ESEngine.AddIntents - Failed on creating tags request %+v", err)
-			return nil, err
+		if searchTags {
+			req, err := NewResultsSearchRequest(
+				SearchRequestOptions{
+					resultTypes:      []string{consts.ES_RESULT_TYPE_TAGS},
+					index:            index,
+					query:            queryForSearch,
+					sortBy:           consts.SORT_BY_RELEVANCE,
+					from:             0,
+					size:             size,
+					preference:       preference,
+					useHighlight:     false,
+					partialHighlight: true})
+			if err != nil {
+				log.Warnf("ESEngine.AddIntents - Failed on creating tags request %+v", err)
+				return nil, err
+			}
+			mssFirstRound.Add(req)
+			potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, grammarIntent})
 		}
-		mssFirstRound.Add(req)
-		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, grammarIntent})
-		req, err = NewResultsSearchRequest(
-			SearchRequestOptions{
-				resultTypes:      []string{consts.ES_RESULT_TYPE_SOURCES},
-				index:            index,
-				query:            queryForSearch,
-				sortBy:           consts.SORT_BY_RELEVANCE,
-				from:             0,
-				size:             size,
-				preference:       preference,
-				useHighlight:     false,
-				partialHighlight: true,
-				titlesOnly:       true})
-		if err != nil {
-			log.Warnf("ESEngine.AddIntents - Failed on creating sources request %+v", err)
-			return nil, err
+		if searchSources {
+			req, err := NewResultsSearchRequest(
+				SearchRequestOptions{
+					resultTypes:      []string{consts.ES_RESULT_TYPE_SOURCES},
+					index:            index,
+					query:            queryForSearch,
+					sortBy:           consts.SORT_BY_RELEVANCE,
+					from:             0,
+					size:             size,
+					preference:       preference,
+					useHighlight:     false,
+					partialHighlight: true,
+					titlesOnly:       true})
+			if err != nil {
+				log.Warnf("ESEngine.AddIntents - Failed on creating sources request %+v", err)
+				return nil, err
+			}
+			mssFirstRound.Add(req)
+			potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, grammarIntent})
 		}
-		mssFirstRound.Add(req)
-		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, grammarIntent})
 	}
 	beforeFirstRoundDo := time.Now()
 	mr, err := mssFirstRound.Do(context.TODO())
