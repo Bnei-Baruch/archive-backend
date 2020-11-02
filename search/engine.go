@@ -832,7 +832,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					}
 				}
 
-				boost := (*maxRegularScore * 0.9) / *filtered.MaxScore
+				boost := ((*maxRegularScore * 0.9) + 10) / *filtered.MaxScore
 				for _, hit := range result.Hits.Hits {
 					if hit.Score != nil {
 						*hit.Score *= boost
