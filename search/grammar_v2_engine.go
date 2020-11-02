@@ -233,15 +233,19 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchT
 			}
 			if contentType != "" && text != "" {
 				log.Infof("Filtered Search Request: ContentType is %s, Text is %s.", contentType, text)
+				requests := []*elastic.SearchRequest{}
 				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 				if err != nil {
 					return nil, err
 				}
-				fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, contentType, from, size, sortBy, resultTypes, intent.Language, preference, deb)
-				if err != nil {
-					return nil, err
+				requests = append(requests, textValSearchRequests...)
+				if contentType != consts.VAR_CT_ARTICLES {
+					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, contentType, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+					if err != nil {
+						return nil, err
+					}
+					requests = append(requests, fullTermSearchRequests...)
 				}
-				requests := append(textValSearchRequests, fullTermSearchRequests...)
 				if len(requests) > 0 {
 					// All search requests here are for the same language
 					results, hitIdsMap, maxScore, err := e.filterSearch(requests)
