@@ -812,7 +812,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				if hit.Score != nil {
 					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
 						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
-						if hit.Score != nil {
+						if hit.Score != nil && *hit.Score > 5 {
 							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM
 						}
 						// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
