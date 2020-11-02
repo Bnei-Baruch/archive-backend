@@ -687,7 +687,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
-	intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy, filterIntents)
+	intents, err := e.AddIntents(&query, preference, sortBy, filterIntents)
 	if err != nil {
 		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 	}

@@ -320,7 +320,8 @@ var LANG2CODE = map[string]string{
 // api
 
 const (
-	INTENTS_SEARCH_COUNT                      = 10
+	INTENTS_SEARCH_DEFAULT_COUNT              = 10
+	INTENTS_SEARCH_BY_FILTER_GRAMMAR_COUNT    = 2
 	TWEETS_SEARCH_COUNT                       = 20
 	INTENTS_MIN_UNITS                         = 3
 	MAX_CLASSIFICATION_INTENTS                = 3

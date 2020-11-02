@@ -48,7 +48,7 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	return nil, nil, nil
 }
 
-func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy string, filterIntents []Intent) ([]Intent, error) {
+func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, filterIntents []Intent) ([]Intent, error) {
 
 	intents := make([]Intent, 0)
 
@@ -103,6 +103,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 
 	mssFirstRound := e.esc.MultiSearch()
 	potentialIntents := make([]Intent, 0)
+	size := consts.INTENTS_SEARCH_DEFAULT_COUNT
 	for _, language := range query.LanguageOrder {
 
 		var grammarIntent GrammarIntent
@@ -133,6 +134,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 							sort.Strings(checkContentUnitsTypes)
 							sort.Strings(consts.INTENT_CT_BY_GRAMMAR_CT[contentType])
 							checkContentUnitsTypes = utils.IntersectSortedStringSlices(checkContentUnitsTypes, consts.INTENT_CT_BY_GRAMMAR_CT[contentType])
+							size = consts.INTENTS_SEARCH_BY_FILTER_GRAMMAR_COUNT
 							grammarIntent = filterIntent.Value.(GrammarIntent)
 							log.Infof("Intents carousel search is according to grammar rule (content type '%v'). Relevant content units types: %+v. Result types: %+v.", contentType, checkContentUnitsTypes, consts.INTENT_RT_BY_GRAMMAR_CT[contentType])
 							break // we excpect for only one filterIntent for a language
