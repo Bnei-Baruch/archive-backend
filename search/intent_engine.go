@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/Bnei-Baruch/archive-backend/utils"
@@ -127,10 +128,14 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 						if _, ok := consts.INTENT_SUPPORTED_GRAMMAR_CT_VARIABLES[contentType]; ok {
 							// search for intents by the "free text" value from the detected grammar rule
 							queryForSearch.Term = text
-							searchTags = consts.INTENT_HIT_TYPES_BY_GRAMMAR_CT[contentType][consts.ES_RESULT_TYPE_TAGS]
-							searchSources = consts.INTENT_HIT_TYPES_BY_GRAMMAR_CT[contentType][consts.ES_RESULT_TYPE_SOURCES]
+							searchTags = consts.INTENT_RT_BY_GRAMMAR_CT[contentType][consts.ES_RESULT_TYPE_TAGS]
+							searchSources = consts.INTENT_RT_BY_GRAMMAR_CT[contentType][consts.ES_RESULT_TYPE_SOURCES]
+							sort.Strings(checkContentUnitsTypes)
+							sort.Strings(consts.INTENT_CT_BY_GRAMMAR_CT[contentType])
 							checkContentUnitsTypes = utils.IntersectSortedStringSlices(checkContentUnitsTypes, consts.INTENT_CT_BY_GRAMMAR_CT[contentType])
 							grammarIntent = filterIntent.Value.(GrammarIntent)
+							log.Infof("Intents carousel search is according to grammar rule (content type '%v'). Relevant content units types: %+v. Result types: %+v.", contentType, checkContentUnitsTypes, consts.INTENT_RT_BY_GRAMMAR_CT[contentType])
+							break // we excpect for only one filterIntent for a language
 						}
 					}
 				}
