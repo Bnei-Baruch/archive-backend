@@ -183,7 +183,7 @@ SELECT
 FROM files AS f
     INNER JOIN content_units AS cu ON f.content_unit_id = cu.id
 WHERE f.secure = 0  and f.published = true AND
-    name ~ '.docx?' AND name not like '%%tzitutim.do%' AND
+    name ~ '.docx?' AND name not like '%%tzitutim.do%%' AND
     f.language NOT IN ('zz', 'xx') AND
     f.content_unit_id IS NOT NULL AND
     cu.type_id != %d AND
