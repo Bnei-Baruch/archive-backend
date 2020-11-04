@@ -36,6 +36,10 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 				hasVarContentType = true
 			}
 		}
+		if !(hasVarText && hasVarContentType) {
+			log.Warningf("Filter intent must have one appearance of $Text and one appearance of $ContentType")
+			return false
+		}
 		return true
 	} else if intent == consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS {
 		location := ""
