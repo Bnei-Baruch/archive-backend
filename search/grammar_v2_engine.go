@@ -147,14 +147,15 @@ func (e *ESEngine) suggestResultsToVariablesByPhrases(query *Query, result *elas
 	return ret, nil
 }
 
-func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy string, resultTypes []string, preference string) ([]Intent, map[string]FilteredSearchResult, error) {
-	intents := []Intent{}
-	filtered := map[string]FilteredSearchResult{}
+// Return: single hit intents, filtering intents
+func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy string, resultTypes []string, preference string) ([]Intent, []Intent, error) {
+	singleHitIntents := []Intent{}
+	filterIntents := []Intent{}
 	if query.Term != "" && len(query.ExactTerms) > 0 {
 		// Will never match any grammar for query having simple terms and exact terms.
 		// This is not acurate but an edge case. Need to better think of query representation.
 		log.Infof("Both term and exact terms are defined, should not trigger: [%s] [%s]", query.Term, strings.Join(query.ExactTerms, " - "))
-		return intents, filtered, nil
+		return singleHitIntents, filterIntents, nil
 	}
 	if e.cache != nil && e.cache.SearchStats().DoesSourceTitleWithMoreThanOneWordExist(query.Term) {
 		// Since some source titles contains grammar variable values,
@@ -162,7 +163,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		// Some examples for such source titles:
 		// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
 		log.Infof("The term is identical to a title of a source, should not trigger: [%s]", query.Term)
-		return intents, filtered, nil
+		return singleHitIntents, filterIntents, nil
 	}
 
 	multiSearchService := e.esc.MultiSearch()
@@ -189,56 +190,16 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 			return nil, nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
 		language := query.LanguageOrder[i/2]
-		filterSearchRequests := []*elastic.SearchRequest{}
 		if haveHits(currentResults) {
-			if singleHitIntents, filterIntents, err := e.searchResultsToIntents(query, language, currentResults); err != nil {
+			if languageSingleHitIntents, languageFilterIntents, err := e.searchResultsToIntents(query, language, currentResults); err != nil {
 				return nil, nil, err
 			} else {
-				intents = append(intents, singleHitIntents...)
-				if filterIntents != nil && len(filterIntents) > 0 {
-					for _, filterIntent := range filterIntents {
-						//  Currently we support "filter grammar" with only one appereance of each variable.
-						//  This may be changed in the future.
-						if intentValue, ok := filterIntent.Value.(GrammarIntent); ok {
-							var contentType string
-							var text string
-							for _, fv := range intentValue.FilterValues {
-								if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
-									contentType = fv.Value
-								} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_TEXT] {
-									text = fv.Value
-								}
-								if contentType != "" && text != "" {
-									break
-								}
-							}
-							if contentType != "" && text != "" {
-								log.Infof("Filtered Search Request: ContentType is %s, Text is %s.", contentType, text)
-								textValSearchRequests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, language, preference, query.Deb)
-								if err != nil {
-									return nil, nil, err
-								}
-								fullTermSearchRequests, err := NewFilteredResultsSearchRequest(query.Term, contentType, from, size, sortBy, resultTypes, language, preference, query.Deb)
-								if err != nil {
-									return nil, nil, err
-								}
-								filterSearchRequests = append(textValSearchRequests, fullTermSearchRequests...)
-								if len(filterSearchRequests) > 0 {
-									// All search requests here are for the same language
-									results, hitIdsMap, maxScore, err := e.filterSearch(filterSearchRequests)
-									if err != nil {
-										return nil, nil, err
-									}
-									filtered[language] = FilteredSearchResult{
-										Results:     results,
-										Term:        text,
-										ContentType: contentType,
-										HitIdsMap:   hitIdsMap,
-										MaxScore:    maxScore,
-									}
-								}
-							}
-						}
+				singleHitIntents = append(singleHitIntents, languageSingleHitIntents...)
+				if languageFilterIntents != nil {
+					if len(languageFilterIntents) > 1 {
+						return singleHitIntents, nil, errors.Errorf("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported.", language, len(filterIntents))
+					} else if len(languageFilterIntents) == 1 {
+						filterIntents = append(filterIntents, languageFilterIntents...)
 					}
 				}
 			}
@@ -248,7 +209,67 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	if elapsed > 10*time.Millisecond {
 		fmt.Printf("build grammar intent - %s\n\n", elapsed.String())
 	}
-	return intents, filtered, nil
+	return singleHitIntents, filterIntents, nil
+}
+
+// Search according to grammar based filter (currently by content types and free text).
+func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchTerm string, from int, size int, sortBy string, resultTypes []string, preference string, deb bool) (map[string]FilteredSearchResult, error) {
+	resultsByLang := map[string]FilteredSearchResult{}
+	for _, intent := range filterIntents {
+		if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
+			var contentType string
+			var text string
+			for _, fv := range intentValue.FilterValues {
+				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
+					contentType = fv.Value
+				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_TEXT] {
+					text = fv.Value
+				}
+				if contentType != "" && text != "" {
+					//  Currently we support "filter grammar" with only one appereance of each variable.
+					//  This may be changed in the future.
+					break
+				}
+			}
+			if contentType != "" && text != "" {
+				log.Infof("Filtered Search Request: ContentType is %s, Text is %s.", contentType, text)
+				requests := []*elastic.SearchRequest{}
+				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				if err != nil {
+					return nil, err
+				}
+				requests = append(requests, textValSearchRequests...)
+				if contentType != consts.VAR_CT_ARTICLES {
+					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, contentType, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+					if err != nil {
+						return nil, err
+					}
+					requests = append(requests, fullTermSearchRequests...)
+				}
+				if len(requests) > 0 {
+					// All search requests here are for the same language
+					results, hitIdsMap, maxScore, err := e.filterSearch(requests)
+					if err != nil {
+						return nil, err
+					}
+					resultsByLang[intent.Language] = FilteredSearchResult{
+						Results:     results,
+						Term:        text,
+						ContentType: contentType,
+						HitIdsMap:   hitIdsMap,
+						MaxScore:    maxScore,
+					}
+					if len(results) > 0 {
+						// we assume that there is no need to make the search for other languages if a results found for one language
+						break
+					}
+				}
+			}
+		} else {
+			return nil, errors.Errorf("FilterSearch error. Intent is not GrammarIntent. Intent: %+v", intent)
+		}
+	}
+	return resultsByLang, nil
 }
 
 func (e *ESEngine) VariableMapToFilterValues(vMap map[string][]string, language string) []FilterValue {
@@ -522,7 +543,7 @@ func retrieveTextVarValues(str string) []string {
 	return textVarValues
 }
 
-// Results search according to grammar based filter (currently by content types).
+// Results search according to grammar based filter (currently by content types and free text).
 // Return: Results, Unique list of hit id's as a map, Max score
 func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
 	results := []*elastic.SearchResult{}

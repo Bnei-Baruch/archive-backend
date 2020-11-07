@@ -320,7 +320,8 @@ var LANG2CODE = map[string]string{
 // api
 
 const (
-	INTENTS_SEARCH_COUNT                      = 10
+	INTENTS_SEARCH_DEFAULT_COUNT              = 10
+	INTENTS_SEARCH_BY_FILTER_GRAMMAR_COUNT    = 2
 	TWEETS_SEARCH_COUNT                       = 20
 	INTENTS_MIN_UNITS                         = 3
 	MAX_CLASSIFICATION_INTENTS                = 3
@@ -461,6 +462,35 @@ var ES_INTENT_SUPPORTED_CONTENT_TYPES = map[string]bool{
 	CT_VIDEO_PROGRAM_CHAPTER: true,
 	CT_FULL_LESSON:           true,
 	CT_CLIP:                  true,
+}
+
+type IntentSearchOptions struct {
+	SearchTags    bool
+	SearchSources bool
+	ContentTypes  []string
+}
+
+var INTENT_OPTIONS_BY_GRAMMAR_CT_VARIABLES = map[string]IntentSearchOptions{
+	VAR_CT_PROGRAMS: IntentSearchOptions{
+		SearchSources: true,
+		SearchTags:    true,
+		ContentTypes:  []string{CT_VIDEO_PROGRAM_CHAPTER},
+	},
+	VAR_CT_ARTICLES: IntentSearchOptions{
+		SearchSources: true,
+		SearchTags:    false,
+		ContentTypes:  []string{CT_VIDEO_PROGRAM_CHAPTER, CT_LESSON_PART},
+	},
+	VAR_CT_LESSONS: IntentSearchOptions{
+		SearchSources: true,
+		SearchTags:    true,
+		ContentTypes:  []string{CT_LESSON_PART},
+	},
+	VAR_CT_BOOK_TITLES: IntentSearchOptions{
+		SearchSources: true,
+		SearchTags:    false,
+		ContentTypes:  []string{CT_VIDEO_PROGRAM_CHAPTER, CT_LESSON_PART},
+	},
 }
 
 // Fake index for intents.

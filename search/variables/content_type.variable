@@ -42,12 +42,17 @@ en,women_lessons => lessons for women
 
 he,programs => תוכנית
 he,programs => תוכניות
+he,programs => תוכנית טלוויזיה
+he,programs => תוכניות טלוויזיה
+he,programs => תוכנית טלויזיה
+he,programs => תוכניות טלויזיה
 
 he,articles => מאמר
 he,articles => מאמרים
 
 he,lessons => שיעורים
 he,lessons => שיעור
+he,lessons => שיעורי
 he,lessons => שיעור בוקר
 he,lessons => שיעורי בוקר
 he,lessons => שיעור יומי
@@ -64,6 +69,7 @@ he,sources => ספרייה
 he,sources => כתבי מקובלים
 he,sources => כתבי המקובלים
 he,sources => קטעי מקור
+he,sources => קטע מקור
 
 he,books_titles => ספר
 he,books_titles => ספרים

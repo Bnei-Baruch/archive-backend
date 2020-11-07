@@ -606,7 +606,12 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
+	// Initializing all channels.
 	suggestChannel := make(chan null.String)
+	grammarsSingleHitIntentsChannel := make(chan []Intent, 1)
+	grammarsFilterIntentsChannel := make(chan []Intent, 1)
+	grammarsFilteredResultsByLangChannel := make(chan map[string]FilteredSearchResult)
+	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 
 	var resultTypes []string
 	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
@@ -621,28 +626,34 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	// Search grammars in parallel to native search.
-	grammarsChannel := make(chan []Intent)
-	grammarsFilteredResultsByLangChannel := make(chan map[string]FilteredSearchResult)
+
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
-				grammarsChannel <- []Intent{}
+				grammarsSingleHitIntentsChannel <- []Intent{}
+				grammarsFilterIntentsChannel <- []Intent{}
 				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
 			}
 		}()
-		if grammars, filtered, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
+		if singleHitIntents, filterIntents, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
-			grammarsChannel <- []Intent{}
+			grammarsSingleHitIntentsChannel <- []Intent{}
+			grammarsFilterIntentsChannel <- []Intent{}
 			grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
 		} else {
-			grammarsChannel <- grammars
-			grammarsFilteredResultsByLangChannel <- filtered
+			grammarsSingleHitIntentsChannel <- singleHitIntents
+			grammarsFilterIntentsChannel <- filterIntents
+			if filtered, err := e.SearchByFilterIntents(filterIntents, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
+				log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
+				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
+			} else {
+				grammarsFilteredResultsByLangChannel <- filtered
+			}
 		}
 	}()
 
 	// Search tweets in parallel to native search.
-	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -658,6 +669,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
+	filterIntents := <-grammarsFilterIntentsChannel
+
 	if checkTypo {
 		go func() {
 			defer func() {
@@ -666,7 +679,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					suggestChannel <- null.String{"", false}
 				}
 			}()
-			if suggestText, err := e.GetTypoSuggest(query); err != nil {
+			if suggestText, err := e.GetTypoSuggest(query, filterIntents); err != nil {
 				log.Errorf("ESEngine.GetTypoSuggest - Error getting typo suggest: %+v", err)
 				suggestChannel <- null.String{"", false}
 			} else {
@@ -675,7 +688,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
-	intents, err := e.AddIntents(&query, preference, consts.INTENTS_SEARCH_COUNT, sortBy)
+	intents, err := e.AddIntents(&query, preference, sortBy, filterIntents)
 	if err != nil {
 		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 	}
@@ -763,7 +776,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	query.Intents = append(query.Intents, intents...)
-	query.Intents = append(query.Intents, <-grammarsChannel...)
+	query.Intents = append(query.Intents, <-grammarsSingleHitIntentsChannel...)
 
 	log.Debugf("Intents: %+v", query.Intents)
 
@@ -800,7 +813,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				if hit.Score != nil {
 					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
 						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
-						if hit.Score != nil {
+						if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
 							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM
 						}
 						// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
@@ -820,7 +833,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					}
 				}
 
-				boost := (*maxRegularScore * 0.9) / *filtered.MaxScore
+				boost := ((*maxRegularScore * 0.9) + 10) / *filtered.MaxScore
+				// Why we add +10 to the formula:
+				// In some cases we have several regular results with a very close scores that above 90% of the maxRegularScore.
+				// Since the top score for the best 'filter grammar' result is 90% of the maxRegularScore,
+				//	we have cases where the best 'filter grammar' result will be below the high regular results with a VERY SMALL GAP between them.
+				// To minimize this gap, we add +10 the formula.
+				// e.g. search of term "ביטול קטעי מקור" without adding 10 bring the relevant result in position #4. With adding 10, the relevant result is the first.
 				for _, hit := range result.Hits.Hits {
 					if hit.Score != nil {
 						*hit.Score *= boost
