@@ -606,6 +606,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
+	// Initializing all channels.
 	suggestChannel := make(chan null.String)
 	grammarsSingleHitIntentsChannel := make(chan []Intent, 1)
 	grammarsFilterIntentsChannel := make(chan []Intent, 1)
@@ -812,7 +813,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				if hit.Score != nil {
 					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
 						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
-						if hit.Score != nil && *hit.Score > 5 {
+						if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
 							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM
 						}
 						// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
@@ -833,6 +834,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				}
 
 				boost := ((*maxRegularScore * 0.9) + 10) / *filtered.MaxScore
+				// Why we add +10 to the formula:
+				// In some cases we have several regular results with a very close scores that above 90% of the maxRegularScore.
+				// Since the top score for the best 'filter grammar' result is 90% of the maxRegularScore,
+				//	we have cases where the best 'filter grammar' result will be below the high regular results with a VERY SMALL GAP between them.
+				// To minimize this gap, we add +10 the formula.
+				// e.g. search of term "ביטול קטעי מקור" without adding 10 bring the relevant result in position #4. With adding 10, the relevant result is the first.
 				for _, hit := range result.Hits.Hits {
 					if hit.Score != nil {
 						*hit.Score *= boost
