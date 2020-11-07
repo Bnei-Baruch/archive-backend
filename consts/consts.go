@@ -464,25 +464,33 @@ var ES_INTENT_SUPPORTED_CONTENT_TYPES = map[string]bool{
 	CT_CLIP:                  true,
 }
 
-var INTENT_SUPPORTED_GRAMMAR_CT_VARIABLES = map[string]bool{
-	VAR_CT_PROGRAMS:    true,
-	VAR_CT_ARTICLES:    true,
-	VAR_CT_LESSONS:     true,
-	VAR_CT_BOOK_TITLES: true,
+type IntentSearchOptions struct {
+	SearchTags    bool
+	SearchSources bool
+	ContentTypes  []string
 }
 
-var INTENT_RT_BY_GRAMMAR_CT = map[string]map[string]bool{
-	VAR_CT_PROGRAMS:    map[string]bool{ES_RESULT_TYPE_TAGS: true, ES_RESULT_TYPE_SOURCES: true},
-	VAR_CT_ARTICLES:    map[string]bool{ES_RESULT_TYPE_TAGS: false, ES_RESULT_TYPE_SOURCES: true},
-	VAR_CT_LESSONS:     map[string]bool{ES_RESULT_TYPE_TAGS: true, ES_RESULT_TYPE_SOURCES: true},
-	VAR_CT_BOOK_TITLES: map[string]bool{ES_RESULT_TYPE_TAGS: false, ES_RESULT_TYPE_SOURCES: true},
-}
-
-var INTENT_CT_BY_GRAMMAR_CT = map[string][]string{
-	VAR_CT_PROGRAMS:    []string{CT_VIDEO_PROGRAM_CHAPTER},
-	VAR_CT_ARTICLES:    []string{CT_VIDEO_PROGRAM_CHAPTER, CT_LESSON_PART},
-	VAR_CT_LESSONS:     []string{CT_LESSON_PART},
-	VAR_CT_BOOK_TITLES: []string{CT_VIDEO_PROGRAM_CHAPTER, CT_LESSON_PART},
+var INTENT_OPTIONS_BY_GRAMMAR_CT_VARIABLES = map[string]IntentSearchOptions{
+	VAR_CT_PROGRAMS: IntentSearchOptions{
+		SearchSources: true,
+		SearchTags:    true,
+		ContentTypes:  []string{CT_VIDEO_PROGRAM_CHAPTER},
+	},
+	VAR_CT_ARTICLES: IntentSearchOptions{
+		SearchSources: true,
+		SearchTags:    false,
+		ContentTypes:  []string{CT_VIDEO_PROGRAM_CHAPTER, CT_LESSON_PART},
+	},
+	VAR_CT_LESSONS: IntentSearchOptions{
+		SearchSources: true,
+		SearchTags:    true,
+		ContentTypes:  []string{CT_LESSON_PART},
+	},
+	VAR_CT_BOOK_TITLES: IntentSearchOptions{
+		SearchSources: true,
+		SearchTags:    false,
+		ContentTypes:  []string{CT_VIDEO_PROGRAM_CHAPTER, CT_LESSON_PART},
+	},
 }
 
 // Fake index for intents.
