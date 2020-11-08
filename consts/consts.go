@@ -516,6 +516,7 @@ const (
 	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
 
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE = "by_content_type"
+	GRAMMAR_INTENT_FILTER_BY_SOURCE       = "by_source"
 
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 
@@ -622,6 +623,11 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	// Filters
 
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
+	GRAMMAR_INTENT_FILTER_BY_SOURCE: map[string][]string{ // TBD need to be tested that work for congress lessons, webinar etc
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LESSON_PART, CT_FULL_LESSON, CT_VIDEO_PROGRAM_CHAPTER, CT_LECTURE},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON, CT_VIDEO_PROGRAM, CT_LECTURE_SERIES},
+		FILTERS[FILTER_SECTION_SOURCES]:           []string{""},
+	},
 }
 
 const (
@@ -633,6 +639,7 @@ const (
 	VAR_TEXT                = "$Text"
 	VAR_HOLIDAYS            = "$Holidays"
 	VAR_CONTENT_TYPE        = "$ContentType"
+	VAR_SOURCE              = "$Source"
 
 	// $ContentType variables
 
@@ -708,6 +715,7 @@ var VARIABLE_TO_FILTER = map[string]string{
 	VAR_TEXT:                "text",
 	VAR_HOLIDAYS:            "holidays",
 	VAR_CONTENT_TYPE:        "content_type",
+	VAR_SOURCE:              "source",
 }
 
 // Latency log
