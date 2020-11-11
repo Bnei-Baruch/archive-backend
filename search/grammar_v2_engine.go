@@ -219,28 +219,26 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchT
 		if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
 			var contentType string
 			var text string
+			sources := []string{}
 			for _, fv := range intentValue.FilterValues {
 				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
 					contentType = fv.Value
 				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_TEXT] {
 					text = fv.Value
-				}
-				if contentType != "" && text != "" {
-					//  Currently we support "filter grammar" with only one appereance of each variable.
-					//  This may be changed in the future.
-					break
+				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
+					sources = append(sources, fv.Value)
 				}
 			}
-			if contentType != "" && text != "" {
-				log.Infof("Filtered Search Request: ContentType is %s, Text is %s.", contentType, text)
+			if text != "" && (contentType != "" || len(sources) > 0) {
+				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Sources are '%+v'.", contentType, text, sources)
 				requests := []*elastic.SearchRequest{}
-				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, contentType, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, contentType, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 				if err != nil {
 					return nil, err
 				}
 				requests = append(requests, textValSearchRequests...)
 				if contentType != consts.VAR_CT_ARTICLES {
-					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, contentType, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, contentType, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 					if err != nil {
 						return nil, err
 					}
