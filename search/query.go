@@ -487,10 +487,14 @@ func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchReque
 	titleAdded := false
 	fullTitleAdded := false
 	contentAdded := false
+	typedUidsAdded := false
 	//	This is a generic imp. that supports searching tweets together with other results.
 	//	Currently we are not searching for tweets together with other results but in parallel.
 	for _, rt := range options.resultTypes {
-		if rt == consts.ES_RESULT_TYPE_TWEETS && !contentAdded {
+		if options.includeTypedUidsFromContentUnits && rt == consts.ES_RESULT_TYPE_UNITS && !typedUidsAdded {
+			fetchSourceContext.Include("typed_uids")
+			typedUidsAdded = true
+		} else if rt == consts.ES_RESULT_TYPE_TWEETS && !contentAdded {
 			fetchSourceContext.Include("content")
 			contentAdded = true
 		} else if rt == consts.ES_RESULT_TYPE_SOURCES && !fullTitleAdded {
@@ -501,7 +505,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchReque
 			fetchSourceContext.Include("title")
 			titleAdded = true
 		}
-		if contentAdded && titleAdded && fullTitleAdded {
+		if contentAdded && titleAdded && fullTitleAdded && (!options.includeTypedUidsFromContentUnits || typedUidsAdded) {
 			break
 		}
 	}
