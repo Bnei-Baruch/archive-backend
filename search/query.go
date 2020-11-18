@@ -63,9 +63,40 @@ func isRuneQuotationMark(r rune) bool {
 	return unicode.In(r, unicode.Quotation_Mark) || r == rune(1523) || r == rune(1524)
 }
 
+var SINGLE_QUOTE_RUNES = map[rune]bool{
+	rune(39):   true,
+	rune(145):  true,
+	rune(146):  true,
+	rune(8216): true,
+	rune(8217): true,
+	rune(8219): true,
+	rune(1523): true,
+	rune(1436): true,
+	rune(1437): true,
+}
+
+func doubleSingleQuotesToDoubleQuotes(runes []rune) []rune {
+	ret := []rune(nil)
+	i := 0
+	for ; i < len(runes)-1; i++ {
+		_, quoteFirst := SINGLE_QUOTE_RUNES[runes[i]]
+		_, quoteSecond := SINGLE_QUOTE_RUNES[runes[i+1]]
+		if quoteFirst && quoteSecond {
+			ret = append(ret, rune(34))
+			i++
+		} else {
+			ret = append(ret, runes[i])
+		}
+	}
+	if i < len(runes) {
+		ret = append(ret, runes[i])
+	}
+	return ret
+}
+
 // Tokenizes string to work with user friendly escapings of quotes (see tests).
 func tokenize(str string) []string {
-	runes := []rune(str)
+	runes := doubleSingleQuotesToDoubleQuotes([]rune(str))
 	start := -1
 	lastQuote := rune(0)
 	lastQuoteIdx := -1
