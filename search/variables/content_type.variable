@@ -24,6 +24,7 @@ en,sources => library
 
 en,books_titles => book
 en,books_titles => books
+en,books_titles => writings
 
 en,meals => meal
 en,meals => meals
@@ -73,6 +74,7 @@ he,sources => קטע מקור
 
 he,books_titles => ספר
 he,books_titles => ספרים
+he,books_titles => כתבי
 
 he,meals => סעודה
 he,meals => סעודת
@@ -177,6 +179,8 @@ ru,sources => каббалистические писания
 
 ru,books_titles => книга
 ru,books_titles => книги
+ru,books_titles => писания
+ru,books_titles => сочинения
 
 ru,meals => трапеза
 ru,meals => трапезы
