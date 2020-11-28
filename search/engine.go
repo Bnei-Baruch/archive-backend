@@ -531,6 +531,7 @@ func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string) []*
 		if hit.Score != nil && !utils.Contains(utils.Is(indexesToIgnore), hit.Index) {
 			if err := json.Unmarshal(*hit.Source, &mdbUid); err == nil {
 				if mdbUid.MDB_UID != "" {
+					// Uncomment for debug
 					/*if _, ok := mdbMap[mdbUid.MDB_UID]; ok {
 						log.Infof("Found duplicate of %+v", hit)
 					}*/
