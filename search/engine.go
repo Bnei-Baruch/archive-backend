@@ -388,59 +388,13 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			} else {
 				sh.MaxScore = &boostedScore
 			}
-			intentHit := &elastic.SearchHit{}
+			var intentHit *elastic.SearchHit
 			convertedToSingleCollection := false
-			if intentValue.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS && intentValue.FilterValues != nil {
-				var year string
-				var location string
-				for _, fv := range intentValue.FilterValues {
-					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONVENTION_LOCATION] {
-						location = fv.Value
-
-					} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_YEAR] {
-						year = fv.Value
-					}
-					if year != "" && location != "" {
-						break
-					}
-				}
-				if e.cache.SearchStats().DoesConventionSingle(location, year) {
-					// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
-					log.Infof("Converting LandingPage of %s %s to a single collection.", location, year)
-					var err error
-					intentHit, err = e.ConventionsLandingPageToCollectionHit(year, location)
-					if err != nil {
-						log.Warnf("%+v", err)
-						return errors.New(fmt.Sprintf("ConventionsLandingPageToCollectionHit Failed: %+v", err)), nil
-					}
-					convertedToSingleCollection = true
-				}
-			}
-			if intentValue.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS && intentValue.FilterValues != nil {
-				var year string
-				var holiday string
-				for _, fv := range intentValue.FilterValues {
-					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_HOLIDAYS] {
-						holiday = fv.Value
-
-					} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_YEAR] {
-						year = fv.Value
-					}
-					if year != "" && holiday != "" {
-						break
-					}
-				}
-				if e.cache.SearchStats().DoesHolidaySingle(holiday, year) {
-					// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
-					log.Infof("Converting LandingPage of %s %s to a single collection.", holiday, year)
-					var err error
-					intentHit, err = e.HolidaysLandingPageToCollectionHit(year, holiday)
-					if err != nil {
-						log.Warnf("%+v", err)
-						return errors.New(fmt.Sprintf("HolidaysLandingPageToCollectionHit Failed: %+v", err)), nil
-					}
-					convertedToSingleCollection = true
-				}
+			if intentValue.SingleCollection != nil {
+				intentHit = intentValue.SingleCollection
+				convertedToSingleCollection = true
+			} else {
+				intentHit = &elastic.SearchHit{}
 			}
 			if intentValue.Explanation != nil {
 				intentHit.Explanation = intentValue.Explanation
@@ -577,6 +531,10 @@ func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string) []*
 		if hit.Score != nil && !utils.Contains(utils.Is(indexesToIgnore), hit.Index) {
 			if err := json.Unmarshal(*hit.Source, &mdbUid); err == nil {
 				if mdbUid.MDB_UID != "" {
+					// Uncomment for debug
+					/*if _, ok := mdbMap[mdbUid.MDB_UID]; ok {
+						log.Infof("Found duplicate of %+v", hit)
+					}*/
 					// We keep the result with a higher score.
 					if _, ok := mdbMap[mdbUid.MDB_UID]; !ok || *hit.Score > *mdbMap[mdbUid.MDB_UID].Score {
 						mdbMap[mdbUid.MDB_UID] = hit
@@ -694,13 +652,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	// When we have a lessons carousel we filter out the regular results that are also exist in the carousel.
-	// Note on grammar:
-	// Currently we don't support showing intent carousels for grammar filtered results so we are also not filtering many appearances of the lesson results.
 	filterOutCUSources := make([]string, 0)
 	for _, intent := range intents {
 		if intent.Type == consts.INTENT_TYPE_SOURCE {
 			if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Exist {
 				// This is not a perfect solution since we dont know yet what is the currentLang and we filter by all languages
+				// Also: it is possible that we may filter regular lesson results even if the carousel is not on the first page.
 				filterOutCUSources = append(filterOutCUSources, intentValue.MDB_UID)
 				log.Infof("MDB_UID added to filterOutCUSources: %s.", intentValue.MDB_UID)
 			}
@@ -808,31 +765,34 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
-		for _, result := range resultsByLang[lang] {
+		for _, result := range filtered.Results {
+			var zeroScore float64 = 0
+			sort.Strings(filterOutCUSources)
 			for _, hit := range result.Hits.Hits {
-				if hit.Score != nil {
-					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
-						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
-						if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
-							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM
-						}
-						// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
-						delete(filtered.HitIdsMap, hit.Id)
+				var src es.Result
+				err = json.Unmarshal(*hit.Source, &src)
+				if err != nil {
+					log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Uid)
+					continue
+				}
+				if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
+					hitSources, err := es.KeyValuesToValues(consts.ES_UID_TYPE_SOURCE, src.TypedUids)
+					if err != nil {
+						log.Errorf("ESEngine.DoSearch - cannot read TypedUids for hit '%v'.", hit.Uid)
+						continue
+					}
+					sort.Strings(hitSources)
+					if len(utils.IntersectSortedStringSlices(hitSources, filterOutCUSources)) > 0 {
+						// We assign a zero score to the hits we recieved from 'filter grammar' that are duplicate the existed items inside carousels
+						log.Infof("Set zero score for CU hit from 'filter grammar' that duplicates carousels source: %v", src.MDB_UID)
+						hit.Score = &zeroScore
 					}
 				}
 			}
 		}
-
 		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
 			for _, result := range filtered.Results {
 				var maxScore float64
-				var minScore float64
-				for _, hit := range result.Hits.Hits {
-					if hit.Score != nil {
-						minScore = math.Min(*hit.Score, minScore)
-					}
-				}
-
 				boost := ((*maxRegularScore * 0.9) + 10) / *filtered.MaxScore
 				// Why we add +10 to the formula:
 				// In some cases we have several regular results with a very close scores that above 90% of the maxRegularScore.
@@ -846,6 +806,20 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						maxScore = math.Max(*hit.Score, maxScore)
 					}
 					result.Hits.MaxScore = &maxScore
+				}
+			}
+		}
+		for _, result := range resultsByLang[lang] {
+			for _, hit := range result.Hits.Hits {
+				if hit.Score != nil {
+					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
+						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
+						if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
+							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM
+						}
+						// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
+						delete(filtered.HitIdsMap, hit.Id)
+					}
 				}
 			}
 		}

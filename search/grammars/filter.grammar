@@ -1,6 +1,8 @@
 en,by_content_type => $ContentType $Text
 en,by_content_type => $ContentType about $Text
 en,by_content_type => $ContentType of $Text
+en,by_content_type => $ContentType about the $Text
+en,by_content_type => $ContentType of the $Text
 en,by_content_type => $Text $ContentType
 
 en,by_source => $Source $Text

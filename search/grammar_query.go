@@ -148,16 +148,17 @@ func NewFilteredResultsSearchRequest(text string, contentType string, sources []
 	if len(filtersWithoutSource) > 0 {
 		nonSourceRequests, err := NewResultsSearchRequests(
 			SearchRequestOptions{
-				resultTypes:        resultTypes,
-				index:              "",
-				query:              Query{Term: text, Filters: filtersWithoutSource, LanguageOrder: []string{language}, Deb: deb},
-				sortBy:             sortBy,
-				from:               0,
-				size:               from + size,
-				preference:         preference,
-				useHighlight:       false,
-				partialHighlight:   false,
-				filterOutCUSources: []string{}})
+				resultTypes:                      resultTypes,
+				index:                            "",
+				query:                            Query{Term: text, Filters: filtersWithoutSource, LanguageOrder: []string{language}, Deb: deb},
+				sortBy:                           sortBy,
+				from:                             0,
+				size:                             from + size,
+				preference:                       preference,
+				useHighlight:                     false,
+				partialHighlight:                 false,
+				filterOutCUSources:               []string{},
+				includeTypedUidsFromContentUnits: true})
 		if err != nil {
 			return nil, err
 		}

@@ -296,14 +296,35 @@ func (e *ESEngine) VariableMapToFilterValues(vMap map[string][]string, language 
 	return ret
 }
 
-func updateIntentCount(intentsCount map[string][]Intent, intent Intent) {
+// For specific landing page, keep only some amount of intents with the highest score (according to MAX_MATCHES_PER_GRAMMAR_INTENT) and filter out all the rest.
+// Return the minimum score of the intents slice for the given intent landing page.
+func updateIntentCount(intentsCount map[string][]Intent, intent Intent) float64 {
+	var minScore float64
 	intents := intentsCount[intent.Value.(GrammarIntent).LandingPage]
+	if len(intents) > 0 {
+		lastElem := intents[len(intents)-1]
+		minScore = lastElem.Value.(GrammarIntent).Score
+	}
+	if intent.Value.(GrammarIntent).SingleCollectionMdbUid != nil {
+		for _, i := range intents {
+			if i.Value.(GrammarIntent).SingleCollectionMdbUid != nil &&
+				*i.Value.(GrammarIntent).SingleCollectionMdbUid == *intent.Value.(GrammarIntent).SingleCollectionMdbUid {
+				// Ignore duplicate collections
+				return minScore
+			}
+		}
+	}
 	intents = append(intents, intent)
 	sort.SliceStable(intents, func(i, j int) bool {
 		return intents[i].Value.(GrammarIntent).Score > intents[j].Value.(GrammarIntent).Score
 	})
 	intents = intents[:utils.MinInt(consts.MAX_MATCHES_PER_GRAMMAR_INTENT, len(intents))]
+	if len(intents) > 0 {
+		lastElem := intents[len(intents)-1]
+		minScore = lastElem.Value.(GrammarIntent).Score
+	}
 	intentsCount[intent.Value.(GrammarIntent).LandingPage] = intents
+	return minScore
 }
 
 // Return values: singleHitIntents, filterIntents, error
@@ -312,6 +333,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	filterIntents := []Intent(nil)
 	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
+	minScoreByLandingPage := make(map[string]float64)
 	for _, hit := range result.Hits.Hits {
 		var ruleObj GrammarRuleWithPercolatorQuery
 		if err := json.Unmarshal(*hit.Source, &ruleObj); err != nil {
@@ -381,16 +403,78 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Explanation:  hit.Explanation,
 					}})
 			} else {
-				updateIntentCount(intentsCount, Intent{
+				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
+					if score <= minScoreByLandingPage[rule.Intent] {
+						// Initial filtering (before updateIntentCount func.) to avoid the SQL call for converting LP to collection.
+						continue
+					}
+				}
+				intentValue := GrammarIntent{
+					LandingPage:  rule.Intent,
+					FilterValues: e.VariableMapToFilterValues(vMap, language),
+					Score:        score,
+					Explanation:  hit.Explanation,
+				}
+				if intentValue.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS && intentValue.FilterValues != nil {
+					var year string
+					var location string
+					for _, fv := range intentValue.FilterValues {
+						if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONVENTION_LOCATION] {
+							location = fv.Value
+
+						} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_YEAR] {
+							year = fv.Value
+						}
+						if year != "" && location != "" {
+							break
+						}
+					}
+					if e.cache.SearchStats().DoesConventionSingle(location, year) {
+						// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
+						log.Infof("Converting LandingPage of %s %s to a single collection.", location, year)
+						var err error
+						collectionHit, mdbUid, err := e.conventionsLandingPageToCollectionHit(year, location)
+						if err != nil {
+							log.Warnf("%+v", err)
+							return nil, nil, errors.New(fmt.Sprintf("ConventionsLandingPageToCollectionHit Failed: %+v", err))
+						}
+						intentValue.SingleCollection = collectionHit
+						intentValue.SingleCollectionMdbUid = mdbUid
+					}
+				}
+				if intentValue.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS && intentValue.FilterValues != nil {
+					var year string
+					var holiday string
+					for _, fv := range intentValue.FilterValues {
+						if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_HOLIDAYS] {
+							holiday = fv.Value
+
+						} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_YEAR] {
+							year = fv.Value
+						}
+						if year != "" && holiday != "" {
+							break
+						}
+					}
+					if e.cache.SearchStats().DoesHolidaySingle(holiday, year) {
+						// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
+						log.Infof("Converting LandingPage of %s %s to a single collection.", holiday, year)
+						var err error
+						collectionHit, mdbUid, err := e.holidaysLandingPageToCollectionHit(year, holiday)
+						if err != nil {
+							log.Warnf("%+v", err)
+							return nil, nil, errors.New(fmt.Sprintf("HolidaysLandingPageToCollectionHit Failed: %+v", err))
+						}
+						intentValue.SingleCollection = collectionHit
+						intentValue.SingleCollectionMdbUid = mdbUid
+					}
+				}
+				intent := Intent{
 					Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
 					Language: language,
-					Value: GrammarIntent{
-						LandingPage:  rule.Intent,
-						FilterValues: e.VariableMapToFilterValues(vMap, language),
-						Score:        score,
-						Explanation:  hit.Explanation,
-					},
-				})
+					Value:    intentValue,
+				}
+				minScoreByLandingPage[intent.Value.(GrammarIntent).LandingPage] = updateIntentCount(intentsCount, intent)
 			}
 		}
 	}
@@ -417,7 +501,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	return normalizedLandingPageIntents, filterIntents, nil
 }
 
-func (e *ESEngine) ConventionsLandingPageToCollectionHit(year string, location string) (*elastic.SearchHit, error) {
+func (e *ESEngine) conventionsLandingPageToCollectionHit(year string, location string) (*elastic.SearchHit, *string, error) {
 	queryMask := `select c.uid, c.properties from collections c 
 	where c.type_id=%d
 	%s`
@@ -456,7 +540,7 @@ func (e *ESEngine) ConventionsLandingPageToCollectionHit(year string, location s
 	return e.collectionHitFromSql(query)
 }
 
-func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday string) (*elastic.SearchHit, error) {
+func (e *ESEngine) holidaysLandingPageToCollectionHit(year string, holiday string) (*elastic.SearchHit, *string, error) {
 	queryMask := `select c.uid, c.properties from collections c
 	join tags t on c.properties ->> 'holiday_tag' = t.uid
 	%s`
@@ -477,19 +561,19 @@ func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday strin
 	return e.collectionHitFromSql(query)
 }
 
-func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, error) {
+func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *string, error) {
 	var properties json.RawMessage
 	var mdbUID string
 	var effectiveDate es.EffectiveDate
 
 	err := e.mdb.QueryRow(query).Scan(&mdbUID, &properties)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	err = json.Unmarshal(properties, &effectiveDate)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	result := es.Result{
@@ -500,7 +584,7 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, error
 
 	resultJson, err := json.Marshal(result)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	hit := &elastic.SearchHit{
@@ -508,7 +592,7 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, error
 		Type:   "result",
 		Index:  consts.GRAMMAR_LP_SINGLE_COLLECTION,
 	}
-	return hit, nil
+	return hit, &mdbUID, nil
 }
 
 // This function retrieves the 'free text' values from a grammar result that was searched by perculator query with highlight.

@@ -40,11 +40,15 @@ type SearchRequestOptions struct {
 	// for highlighting. Only happens with intents.
 	partialHighlight bool
 	// Following field comes to reduce results duplication.
-	// If we have intent by source, filter out this results from the main search.
+	// If we have classification intent (carousel) by source, filter out this results from the main search.
 	filterOutCUSources []string
 	// Setting the following field to 'true' will ignore the search of content and in some cases also description.
 	// Description is considered as subtitle in sources,
 	//  so the 'description' field will be included only when this field is true and resultTypes contains only 'sources'.
-	// This field is used for intents (carousel) search and grammar filter for 'books'.
+	// This field is used for classification intents (carousel) search and grammar filter for 'books'.
 	titlesOnly bool
+	// Setting the following field to 'true' will include 'typed_uids' values for results of type 'content units'.
+	// We use this data for a further filtering out of hits recieved from 'grammar filter' search that duplicates the carousel items.
+	// Since the search for 'grammar filter' is async. to  classification intents (carousel) search, we don't have yet the data for filterOutCUSources fild.
+	includeTypedUidsFromContentUnits bool
 }
