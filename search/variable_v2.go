@@ -110,7 +110,66 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 		return nil, err
 	}
 	variables[consts.VAR_HOLIDAYS] = holidayTranslations
+	// Load source name variables from DB
+	sourceNamesTranslationsFromDB, err := LoadSourceNameTranslationsFromDB(db)
+	if err != nil {
+		return nil, err
+	}
+	// Combine source name variables from DB with source name variables from file
+	if _, ok := variables[consts.VAR_SOURCE]; !ok {
+		variables[consts.VAR_SOURCE] = make(TranslationsV2)
+	}
+	for lang, translations := range sourceNamesTranslationsFromDB {
+		if _, ok := variables[consts.VAR_SOURCE][lang]; !ok {
+			variables[consts.VAR_SOURCE][lang] = make(map[string][]string)
+		}
+		for sourceUID, phrasesFromDB := range translations {
+			uniquePhrases := map[string]bool{}
+			for _, phrase := range phrasesFromDB {
+				uniquePhrases[phrase] = true
+			}
+			if phrasesFromFile, ok := variables[consts.VAR_SOURCE][lang][sourceUID]; ok {
+				for _, phrase := range phrasesFromFile {
+					uniquePhrases[phrase] = true
+				}
+			}
+			finalPhrases := []string{}
+			for uniquePhrase := range uniquePhrases {
+				finalPhrases = append(finalPhrases, uniquePhrase)
+			}
+			variables[consts.VAR_SOURCE][lang][sourceUID] = finalPhrases
+		}
+	}
 	return variables, nil
+}
+
+func LoadSourceNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
+	translations := make(TranslationsV2)
+	query := `select sn.language, s.uid, sn.name
+	from sources s join source_i18n sn on s.id=sn.source_id`
+
+	rows, err := queries.Raw(db, query).Query()
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to retrieve source name translations from DB.")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var lang string
+		var uid string
+		var phrase string
+		err := rows.Scan(&lang, &uid, &phrase)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		if _, ok := translations[lang]; !ok {
+			translations[lang] = make(map[string][]string)
+		}
+		translations[lang][uid] = []string{phrase}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows.Err()")
+	}
+	return translations, nil
 }
 
 func LoadHolidayTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
