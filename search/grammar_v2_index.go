@@ -249,7 +249,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 							}
 							queryStr := strings.Join(ruleClauses, " OR ")
 							fmt.Printf("Query for percolator: %s\n", queryStr)
-							percolatorQuery = elastic.NewQueryStringQuery(queryStr)
+							percolatorQuery = elastic.NewQueryStringQuery(queryStr).Field("search_text")
 						} else {
 							percolatorQuery = elastic.MatchNoneQuery{}
 							for i := range assignedRules {
