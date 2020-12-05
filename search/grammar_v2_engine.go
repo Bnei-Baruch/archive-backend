@@ -402,6 +402,35 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Score:        score,
 						Explanation:  hit.Explanation,
 					}})
+			} else if rule.Intent == consts.GRAMMAR_INTENT_CLASSIFICATION_BY_CONTENT_TYPE_AND_SOURCE {
+				var contentType string
+				var source string
+				filterValues := e.VariableMapToFilterValues(vMap, language)
+				for _, fv := range filterValues {
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
+						contentType = fv.Value
+					} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
+						source = fv.Value
+					}
+					if contentType != "" && source != "" {
+						break
+					}
+				}
+				if opt, ok := consts.INTENT_OPTIONS_BY_GRAMMAR_CT_VARIABLES[contentType]; ok {
+					for _, cut := range opt.ContentTypes {
+						//var score float64 = 3000 //TBC
+						ci := ClassificationIntent{
+							ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+							MDB_UID:     source,
+							Title:       query.Term,
+							ContentType: cut,
+							Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, cut),
+							Score:       &score,
+						}
+						intent := Intent{consts.INTENT_TYPE_SOURCE, language, ci}
+						singleHitIntents = append(singleHitIntents, intent)
+					}
+				}
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {
