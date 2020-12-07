@@ -16,7 +16,40 @@ func GrammarFilterVariablesMatch(intent string, variablesByPhrase VariablesByPhr
 }
 
 func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.CacheManager) bool {
-	if intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
+	if intent == consts.GRAMMAR_INTENT_CLASSIFICATION_BY_CONTENT_TYPE_AND_SOURCE {
+		var contentType string
+		var source string
+		for variable, values := range vMap {
+			if variable == consts.VAR_TEXT {
+				if contentType != "" || len(values) != 1 { //  Disable if we have more than one $Text appereance or value
+					log.Warningf("Number of $Text appearances or values in 'by_content_type_and_source' rule is not 1. Values: %+v", values)
+					return false
+				}
+				contentType = values[0]
+			}
+			if variable == consts.VAR_SOURCE {
+				if source != "" || len(values) != 1 { //  Disable if we have more than one $Source appereance or value
+					// TBD consider support for multiple $Source values
+					log.Warningf("Number of $Source appearances or values in 'by_content_type_and_source' rule is not 1. Values: %+v", values)
+					return false
+				}
+				source = values[0]
+			}
+		}
+		if contentType == "" || source == "" {
+			log.Warningf("Classification intent by content type and source must have one appearance of $Source and one appearance of $ContentType")
+			return false
+		}
+		if opt, ok := consts.INTENT_OPTIONS_BY_GRAMMAR_CT_VARIABLES[contentType]; ok {
+			for _, cut := range opt.ContentTypes {
+				if !cm.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, cut) {
+					return false
+				}
+			}
+			return true
+		}
+		return false
+	} else if intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
 		hasVarText := false
 		hasVarSource := false
 		for variable, values := range vMap {
@@ -37,7 +70,7 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 			}
 		}
 		if !(hasVarText && hasVarSource) {
-			log.Warningf("Filter intent by content type must have one appearance of $Text and one appearance of $ContentType")
+			log.Warningf("Filter intent by content type must have one appearance of $Text and one appearance of $Source")
 			return false
 		}
 		return true
