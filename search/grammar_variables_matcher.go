@@ -20,7 +20,7 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 		var contentType string
 		var source string
 		for variable, values := range vMap {
-			if variable == consts.VAR_TEXT {
+			if variable == consts.VAR_CONTENT_TYPE {
 				if contentType != "" || len(values) != 1 { //  Disable if we have more than one $Text appereance or value
 					log.Warningf("Number of $Text appearances or values in 'by_content_type_and_source' rule is not 1. Values: %+v", values)
 					return false
