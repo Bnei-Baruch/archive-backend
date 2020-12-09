@@ -197,7 +197,12 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 				singleHitIntents = append(singleHitIntents, languageSingleHitIntents...)
 				if languageFilterIntents != nil {
 					if len(languageFilterIntents) > 1 {
-						return singleHitIntents, nil, errors.Errorf("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported.", language, len(filterIntents))
+						log.Warnf("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported. Due to this ambiguity, returning empty filter intents slice.", language, len(languageFilterIntents))
+						elapsed := time.Since(start)
+						if elapsed > 10*time.Millisecond {
+							fmt.Printf("build grammar intent - %s\n\n", elapsed.String())
+						}
+						return singleHitIntents, []Intent{}, nil
 					} else if len(languageFilterIntents) == 1 {
 						filterIntents = append(filterIntents, languageFilterIntents...)
 					}
@@ -418,7 +423,6 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				}
 				if opt, ok := consts.INTENT_OPTIONS_BY_GRAMMAR_CT_VARIABLES[contentType]; ok {
 					for _, cut := range opt.ContentTypes {
-						//var score float64 = 3000 //TBC
 						ci := ClassificationIntent{
 							ResultType:  consts.ES_RESULT_TYPE_SOURCES,
 							MDB_UID:     source,
@@ -514,20 +518,31 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	// Normalize score to be from 2000 and below.
 	maxScore := 0.0
 	for i := range singleHitIntents {
-		if singleHitIntents[i].Value.(GrammarIntent).Score > maxScore {
-			maxScore = singleHitIntents[i].Value.(GrammarIntent).Score
+		var score float64
+		if intentValue, ok := singleHitIntents[i].Value.(GrammarIntent); ok {
+			score = intentValue.Score
+		} else if intentValue, ok := singleHitIntents[i].Value.(ClassificationIntent); ok && intentValue.Score != nil {
+			score = *intentValue.Score
+		}
+		if score > maxScore {
+			maxScore = score
 		}
 	}
-	normalizedLandingPageIntents := []Intent(nil)
+	normalizedSingleHitIntents := []Intent(nil)
 	for _, intent := range singleHitIntents {
-		grammarIntent := intent.Value.(GrammarIntent)
-		grammarIntent.Score = 3000 * (grammarIntent.Score / maxScore)
-		intent.Value = grammarIntent
-		normalizedLandingPageIntents = append(normalizedLandingPageIntents, intent)
+		if intentValue, ok := intent.Value.(GrammarIntent); ok {
+			intentValue.Score = 3000 * (intentValue.Score / maxScore)
+			intent.Value = intentValue
+		} else if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Score != nil {
+			var normScore float64 = 3000 * (*intentValue.Score / maxScore)
+			intentValue.Score = &normScore
+			intent.Value = intentValue
+		}
+		normalizedSingleHitIntents = append(normalizedSingleHitIntents, intent)
 	}
-	//log.Infof("landingPageIntents: %+v", normalizedLandingPageIntents)
-	//log.Infof("filterIntents: %+v", filterIntents)
-	return normalizedLandingPageIntents, filterIntents, nil
+	//log.Infof("Single Hit Intents: %+v", normalizedSingleHitIntents)
+	//log.Infof("Filter Intentys: %+v", filterIntents)
+	return normalizedSingleHitIntents, filterIntents, nil
 }
 
 func (e *ESEngine) conventionsLandingPageToCollectionHit(year string, location string) (*elastic.SearchHit, *string, error) {
