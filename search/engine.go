@@ -650,14 +650,26 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
-	intents, err := e.AddIntents(&query, preference, sortBy, filterIntents)
-	if err != nil {
-		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
+	query.Intents = append(query.Intents, <-grammarsSingleHitIntentsChannel...)
+	hasClassificationIntentFromGrammar := false
+	for _, intent := range query.Intents {
+		if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Exist {
+			hasClassificationIntentFromGrammar = true
+			break
+		}
 	}
+	if !hasClassificationIntentFromGrammar {
+		intents, err := e.AddIntents(&query, preference, sortBy, filterIntents)
+		if err != nil {
+			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
+		}
+		query.Intents = append(query.Intents, intents...)
+	}
+	log.Debugf("Intents: %+v", query.Intents)
 
 	// When we have a lessons carousel we filter out the regular results that are also exist in the carousel.
 	filterOutCUSources := make([]string, 0)
-	for _, intent := range intents {
+	for _, intent := range query.Intents {
 		if intent.Type == consts.INTENT_TYPE_SOURCE {
 			if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Exist {
 				// This is not a perfect solution since we dont know yet what is the currentLang and we filter by all languages
@@ -735,11 +747,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			resultsByLang[lang] = append(resultsByLang[lang], currentResults)
 		}
 	}
-
-	query.Intents = append(query.Intents, intents...)
-	query.Intents = append(query.Intents, <-grammarsSingleHitIntentsChannel...)
-
-	log.Debugf("Intents: %+v", query.Intents)
 
 	// Convert intents and grammars to results.
 	err, intentResultsMap := e.IntentsToResults(&query)
