@@ -339,6 +339,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
 	minScoreByLandingPage := make(map[string]float64)
+	classificationIntentsMDBUIDs := make(map[string]bool)
 	for _, hit := range result.Hits.Hits {
 		var ruleObj GrammarRuleWithPercolatorQuery
 		if err := json.Unmarshal(*hit.Source, &ruleObj); err != nil {
@@ -421,18 +422,21 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						break
 					}
 				}
-				if opt, ok := consts.INTENT_OPTIONS_BY_GRAMMAR_CT_VARIABLES[contentType]; ok {
-					for _, cut := range opt.ContentTypes {
-						ci := ClassificationIntent{
-							ResultType:  consts.ES_RESULT_TYPE_SOURCES,
-							MDB_UID:     source,
-							Title:       query.Term,
-							ContentType: cut,
-							Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, cut),
-							Score:       &score,
+				if _, ok := classificationIntentsMDBUIDs[source]; !ok {
+					if opt, ok := consts.INTENT_OPTIONS_BY_GRAMMAR_CT_VARIABLES[contentType]; ok {
+						for _, cut := range opt.ContentTypes {
+							ci := ClassificationIntent{
+								ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+								MDB_UID:     source,
+								Title:       query.Term,
+								ContentType: cut,
+								Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, cut),
+								Score:       &score,
+							}
+							intent := Intent{consts.INTENT_TYPE_SOURCE, language, ci}
+							classificationIntentsMDBUIDs[source] = true
+							singleHitIntents = append(singleHitIntents, intent)
 						}
-						intent := Intent{consts.INTENT_TYPE_SOURCE, language, ci}
-						singleHitIntents = append(singleHitIntents, intent)
 					}
 				}
 			} else {
