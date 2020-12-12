@@ -195,17 +195,17 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 				return nil, nil, err
 			} else {
 				singleHitIntents = append(singleHitIntents, languageSingleHitIntents...)
-				if languageFilterIntents != nil {
+				if languageFilterIntents != nil && len(languageFilterIntents) > 0 {
+					intentToAdd := languageFilterIntents[0]
 					if len(languageFilterIntents) > 1 {
-						log.Warnf("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported. Due to this ambiguity, returning empty filter intents slice.", language, len(languageFilterIntents))
-						elapsed := time.Since(start)
-						if elapsed > 10*time.Millisecond {
-							fmt.Printf("build grammar intent - %s\n\n", elapsed.String())
+						for i := 1; i < len(languageFilterIntents); i++ {
+							if languageFilterIntents[i].Value.(GrammarIntent).Score > intentToAdd.Value.(GrammarIntent).Score {
+								intentToAdd = languageFilterIntents[i]
+							}
 						}
-						return singleHitIntents, []Intent{}, nil
-					} else if len(languageFilterIntents) == 1 {
-						filterIntents = append(filterIntents, languageFilterIntents...)
+						log.Infof("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported. Intent with max score is selected: %+v.", language, len(languageFilterIntents), intentToAdd)
 					}
+					filterIntents = append(filterIntents, intentToAdd)
 				}
 			}
 		}
