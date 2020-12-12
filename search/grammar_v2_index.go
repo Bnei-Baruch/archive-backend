@@ -232,6 +232,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 								withinQuotaionMarks := []string{}
 								for _, str := range splitted {
 									if len(str) > 0 {
+										str = strings.Replace(str, "\"", "\\\"", -1)
 										withinQuotaionMarks = append(withinQuotaionMarks, fmt.Sprintf("\"%s\"", strings.TrimSpace(str)))
 									}
 								}
