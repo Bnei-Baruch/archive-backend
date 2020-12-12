@@ -55,7 +55,6 @@ he,by_source => $Text עפי $Source
 he,by_source => $Text על פי $Source
 he,by_source => $Text $Source
 he,by_source => מאמר $Source $Text
-he,by_source => מאמר $Source $Text
 he,by_source => מאמר $Source בנושא $Text
 he,by_source => מאמר $Source אודות $Text
 he,by_source => מאמר $Source על $Text
