@@ -623,15 +623,12 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS: nil,
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
 
+	GRAMMAR_INTENT_CLASSIFICATION_BY_CONTENT_TYPE_AND_SOURCE: nil,
+
 	// Filters
 
-	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE:                    nil,
-	GRAMMAR_INTENT_CLASSIFICATION_BY_CONTENT_TYPE_AND_SOURCE: nil,
-	GRAMMAR_INTENT_FILTER_BY_SOURCE: map[string][]string{ // TBD need to be tested that work for congress lessons, webinar etc
-		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LESSON_PART, CT_FULL_LESSON, CT_VIDEO_PROGRAM_CHAPTER, CT_LECTURE},
-		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON, CT_VIDEO_PROGRAM, CT_LECTURE_SERIES},
-		FILTERS[FILTER_SECTION_SOURCES]:           []string{""},
-	},
+	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
+	GRAMMAR_INTENT_FILTER_BY_SOURCE:       nil, // Currently the rule is not triggered with section filters. Consider to enable combination of sections + rule filter.
 }
 
 const (
