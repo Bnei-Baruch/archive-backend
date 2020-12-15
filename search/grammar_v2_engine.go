@@ -520,26 +520,18 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	}
 
 	// Normalize score to be from 2000 and below.
-	maxScore := 0.0
+	maxScoreForLandingPages := 0.0
 	for i := range singleHitIntents {
-		var score float64
 		if intentValue, ok := singleHitIntents[i].Value.(GrammarIntent); ok {
-			score = intentValue.Score
-		} else if intentValue, ok := singleHitIntents[i].Value.(ClassificationIntent); ok && intentValue.Score != nil {
-			score = *intentValue.Score
-		}
-		if score > maxScore {
-			maxScore = score
+			if intentValue.Score > maxScoreForLandingPages {
+				maxScoreForLandingPages = intentValue.Score
+			}
 		}
 	}
 	normalizedSingleHitIntents := []Intent(nil)
 	for _, intent := range singleHitIntents {
 		if intentValue, ok := intent.Value.(GrammarIntent); ok {
-			intentValue.Score = 3000 * (intentValue.Score / maxScore)
-			intent.Value = intentValue
-		} else if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Score != nil {
-			var normScore float64 = 3000 * (*intentValue.Score / maxScore)
-			intentValue.Score = &normScore
+			intentValue.Score = 3000 * (intentValue.Score / maxScoreForLandingPages)
 			intent.Value = intentValue
 		}
 		normalizedSingleHitIntents = append(normalizedSingleHitIntents, intent)

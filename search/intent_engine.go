@@ -48,7 +48,7 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	return nil, nil, nil
 }
 
-func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, filterIntents []Intent) ([]Intent, error) {
+func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, searchTags bool, searchSources bool, filterIntents []Intent) ([]Intent, error) {
 
 	intents := make([]Intent, 0)
 
@@ -108,8 +108,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, fi
 
 		var grammarIntent GrammarIntent
 		queryForSearch := queryWithoutFilters
-		searchTags := true
-		searchSources := true
+		searchTagsForLang := true
+		searchSourcesForLang := true
 		if filterIntents != nil && len(filterIntents) > 0 {
 			for _, filterIntent := range filterIntents {
 				if intentValue, ok := filterIntent.Value.(GrammarIntent); filterIntent.Language == language && ok {
@@ -129,8 +129,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, fi
 						if opt, ok := consts.INTENT_OPTIONS_BY_GRAMMAR_CT_VARIABLES[contentType]; ok {
 							// search for intents by the "free text" value from the detected grammar rule
 							queryForSearch.Term = text
-							searchTags = opt.SearchTags
-							searchSources = opt.SearchSources
+							searchTagsForLang = opt.SearchTags
+							searchSourcesForLang = opt.SearchSources
 							sort.Strings(checkContentUnitsTypes)
 							sort.Strings(opt.ContentTypes)
 							checkContentUnitsTypes = utils.IntersectSortedStringSlices(checkContentUnitsTypes, opt.ContentTypes)
@@ -146,7 +146,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, fi
 
 		// Order here provides the priority in results, i.e., tags are more important than sources.
 		index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, language)
-		if searchTags {
+		if searchTags && searchTagsForLang {
 			req, err := NewResultsSearchRequest(
 				SearchRequestOptions{
 					resultTypes:      []string{consts.ES_RESULT_TYPE_TAGS},
@@ -165,7 +165,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, fi
 			mssFirstRound.Add(req)
 			potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, grammarIntent})
 		}
-		if searchSources {
+		if searchSources && searchSourcesForLang {
 			req, err := NewResultsSearchRequest(
 				SearchRequestOptions{
 					resultTypes:      []string{consts.ES_RESULT_TYPE_SOURCES},

@@ -333,11 +333,33 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 		}
 		return *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
 	}
+	boostClassificationScoreAndNormalize := func(intentValue *ClassificationIntent, maxGrammarEngineScore float64, maxIntentsEngineScore float64) float64 {
+		score := boostClassificationScore(intentValue)
+		if maxGrammarEngineScore > 0 && maxIntentsEngineScore > 0 {
+			if intentValue.MaxScore == nil {
+				score = score * (maxIntentsEngineScore / maxGrammarEngineScore)
+			} else {
+				score = score * (maxGrammarEngineScore / maxIntentsEngineScore)
+			}
+		}
+		return score
+	}
 	scores := []float64{}
+	var maxGrammarEngineScore float64
+	var maxIntentsEngineScore float64
+	for i := range query.Intents {
+		if intentValue, ok := query.Intents[i].Value.(ClassificationIntent); ok && intentValue.Exist {
+			if intentValue.MaxScore == nil {
+				maxGrammarEngineScore = math.Max(*intentValue.Score, maxGrammarEngineScore)
+			} else {
+				maxIntentsEngineScore = math.Max(boostClassificationScore(&intentValue), maxIntentsEngineScore)
+			}
+		}
+	}
 	for i := range query.Intents {
 		// Convert intent to result with score.
 		if intentValue, ok := query.Intents[i].Value.(ClassificationIntent); ok && intentValue.Exist {
-			scores = append(scores, boostClassificationScore(&intentValue))
+			scores = append(scores, boostClassificationScoreAndNormalize(&intentValue, maxGrammarEngineScore, maxIntentsEngineScore))
 		}
 	}
 	sort.Float64s(scores)
@@ -355,7 +377,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			if intentValue.Exist {
 				sh := srMap[intent.Language].Hits
 				sh.TotalHits++
-				boostedScore = boostClassificationScore(&intentValue)
+				boostedScore = boostClassificationScoreAndNormalize(&intentValue, maxGrammarEngineScore, maxIntentsEngineScore)
 				if boostedScore < minClassificationScore {
 					continue // Skip classificaiton intents with score lower then first MAX_CLASSIFICATION_INTENTS
 				}
@@ -658,13 +680,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			break
 		}
 	}
-	if !hasClassificationIntentFromGrammar {
-		intents, err := e.AddIntents(&query, preference, sortBy, filterIntents)
-		if err != nil {
-			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
-		}
-		query.Intents = append(query.Intents, intents...)
+	// Grammar engine is currently support a search for classification intents according to 'by_content_type_and_source' rule only.
+	// If we have classification intents from Grammar, IntentsEngine will search for intents only by tag.
+	intents, err := e.AddIntents(&query, preference, sortBy, true, !hasClassificationIntentFromGrammar, filterIntents)
+	if err != nil {
+		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 	}
+	query.Intents = append(query.Intents, intents...)
 	log.Debugf("Intents: %+v", query.Intents)
 
 	// When we have a lessons carousel we filter out the regular results that are also exist in the carousel.
