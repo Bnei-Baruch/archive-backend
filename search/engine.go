@@ -329,37 +329,15 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 		// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
 		if intentValue.MaxScore == nil {
 			// No max score is set - means that this intent comes from the grammar engine and not from the intents engine
-			return *intentValue.Score
+			return *intentValue.Score / 4.0
 		}
 		return *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
 	}
-	boostClassificationScoreAndNormalize := func(intentValue *ClassificationIntent, maxGrammarEngineScore float64, maxIntentsEngineScore float64) float64 {
-		score := boostClassificationScore(intentValue)
-		if maxGrammarEngineScore > 0 && maxIntentsEngineScore > 0 {
-			if intentValue.MaxScore == nil {
-				score = score * (maxIntentsEngineScore / maxGrammarEngineScore)
-			} else {
-				score = score * (maxGrammarEngineScore / maxIntentsEngineScore)
-			}
-		}
-		return score
-	}
 	scores := []float64{}
-	var maxGrammarEngineScore float64
-	var maxIntentsEngineScore float64
-	for i := range query.Intents {
-		if intentValue, ok := query.Intents[i].Value.(ClassificationIntent); ok && intentValue.Exist {
-			if intentValue.MaxScore == nil {
-				maxGrammarEngineScore = math.Max(*intentValue.Score, maxGrammarEngineScore)
-			} else {
-				maxIntentsEngineScore = math.Max(boostClassificationScore(&intentValue), maxIntentsEngineScore)
-			}
-		}
-	}
 	for i := range query.Intents {
 		// Convert intent to result with score.
 		if intentValue, ok := query.Intents[i].Value.(ClassificationIntent); ok && intentValue.Exist {
-			scores = append(scores, boostClassificationScoreAndNormalize(&intentValue, maxGrammarEngineScore, maxIntentsEngineScore))
+			scores = append(scores, boostClassificationScore(&intentValue))
 		}
 	}
 	sort.Float64s(scores)
@@ -377,7 +355,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			if intentValue.Exist {
 				sh := srMap[intent.Language].Hits
 				sh.TotalHits++
-				boostedScore = boostClassificationScoreAndNormalize(&intentValue, maxGrammarEngineScore, maxIntentsEngineScore)
+				boostedScore = boostClassificationScore(&intentValue)
 				if boostedScore < minClassificationScore {
 					continue // Skip classificaiton intents with score lower then first MAX_CLASSIFICATION_INTENTS
 				}
