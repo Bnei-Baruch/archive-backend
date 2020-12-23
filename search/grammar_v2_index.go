@@ -220,7 +220,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 								for j := range assignValues {
 									assignedRule = strings.Replace(assignedRule, variablesSet[j], assignValues[j], -1)
 								}
-								assignedRule = fmt.Sprintf("%v %v %v", consts.GRAMMAR_INDEX_RULE_WRAPPER, assignedRule, consts.GRAMMAR_INDEX_RULE_WRAPPER)
+								assignedRule = fmt.Sprintf("%c %v %c", consts.GRAMMAR_INDEX_RULE_WRAPPER, assignedRule, consts.GRAMMAR_INDEX_RULE_WRAPPER)
 								assignedRules = append(assignedRules, assignedRule)
 							}
 						}

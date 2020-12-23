@@ -23,7 +23,7 @@ const (
 
 func createGrammarQuery(q *Query) elastic.Query {
 	boolQuery := elastic.NewBoolQuery()
-	termValue := fmt.Sprintf("%v %v %v", consts.GRAMMAR_INDEX_RULE_WRAPPER, simpleQuery(q), consts.GRAMMAR_INDEX_RULE_WRAPPER)
+	termValue := fmt.Sprintf("%c %v %c", consts.GRAMMAR_INDEX_RULE_WRAPPER, simpleQuery(q), consts.GRAMMAR_INDEX_RULE_WRAPPER)
 
 	if simpleQuery(q) != "" {
 		boolQuery = boolQuery.Should(
