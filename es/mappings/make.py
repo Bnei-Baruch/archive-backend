@@ -645,9 +645,8 @@ GRAMMARS_TEMPLATE = {
                         },
                         # Grammar rule: [congress $Year $ConventionLocation] or [$Year $ConventionLocation congress]
                         "rules": {
-                            "type": "keyword",
+                            "type": "text",
                             "analyzer": "standard",
-                            }
                         },
                         # Suggest field for autocomplete.
                         "rules_suggest": {
