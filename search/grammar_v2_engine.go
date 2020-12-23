@@ -422,6 +422,10 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						break
 					}
 				}
+				var expl elastic.SearchExplanation
+				if hit.Explanation != nil {
+					expl = *hit.Explanation
+				}
 				if _, ok := classificationIntentsMDBUIDs[source]; !ok {
 					if opt, ok := consts.INTENT_OPTIONS_BY_GRAMMAR_CT_VARIABLES[contentType]; ok {
 						for _, cut := range opt.ContentTypes {
@@ -432,10 +436,12 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 								ContentType: cut,
 								Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, cut),
 								Score:       &score,
+								Explanation: expl,
 							}
 							intent := Intent{consts.INTENT_TYPE_SOURCE, language, ci}
 							classificationIntentsMDBUIDs[source] = true
 							singleHitIntents = append(singleHitIntents, intent)
+							log.Infof("Classification intent added in Grammar Engine: %+v. SCORE: %v.", intent, *ci.Score)
 						}
 					}
 				}
