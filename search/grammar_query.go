@@ -23,11 +23,13 @@ const (
 
 func createGrammarQuery(q *Query) elastic.Query {
 	boolQuery := elastic.NewBoolQuery()
+	termValue := fmt.Sprintf("%v %v %v", consts.GRAMMAR_INDEX_RULE_WRAPPER, simpleQuery(q), consts.GRAMMAR_INDEX_RULE_WRAPPER)
+
 	if simpleQuery(q) != "" {
 		boolQuery = boolQuery.Should(
 			elastic.NewDisMaxQuery().Query(
-				elastic.NewMatchPhraseQuery("grammar_rule.rules.language", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
-				elastic.NewMatchPhraseQuery("grammar_rule.rules", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
+				//elastic.NewMatchPhraseQuery("grammar_rule.rules.language", termValue).Slop(SLOP).Boost(GRAMMAR_BOOST),
+				elastic.NewMatchPhraseQuery("grammar_rule.rules", termValue).Slop(SLOP).Boost(GRAMMAR_BOOST),
 			),
 		)
 	}

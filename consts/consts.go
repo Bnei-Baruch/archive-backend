@@ -512,6 +512,8 @@ var INTENT_HIT_TYPE_BY_CT = map[string]string{
 const (
 	GRAMMAR_INDEX = "grammar"
 
+	GRAMMAR_INDEX_RULE_WRAPPER = '#'
+
 	GRAMMAR_TYPE_FILTER         = "filter"
 	GRAMMAR_TYPE_LANDING_PAGE   = "landing-page"
 	GRAMMAR_TYPE_CLASSIFICATION = "classification"

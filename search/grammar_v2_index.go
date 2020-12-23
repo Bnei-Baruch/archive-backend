@@ -220,6 +220,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 								for j := range assignValues {
 									assignedRule = strings.Replace(assignedRule, variablesSet[j], assignValues[j], -1)
 								}
+								assignedRule = fmt.Sprintf("%v %v %v", consts.GRAMMAR_INDEX_RULE_WRAPPER, assignedRule, consts.GRAMMAR_INDEX_RULE_WRAPPER)
 								assignedRules = append(assignedRules, assignedRule)
 							}
 						}
@@ -254,8 +255,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 						} else {
 							percolatorQuery = elastic.MatchNoneQuery{}
 							for i := range assignedRules {
-								//assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
-								assignedRulesSuggest = append(assignedRulesSuggest, assignedRules[i])
+								assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
 							}
 							for i := range assignedRulesSuggest {
 								if assignedRulesSuggest[i] == "" {
