@@ -348,6 +348,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 	}
 
 	// log.Infof("IntentsToResults - %d intents.", len(query.Intents))
+	addedIntentScores := map[float64]bool{}
 	for _, intent := range query.Intents {
 		// Convert intent to result with score.
 		if intentValue, ok := intent.Value.(ClassificationIntent); ok {
@@ -356,6 +357,9 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				sh := srMap[intent.Language].Hits
 				sh.TotalHits++
 				boostedScore = boostClassificationScore(&intentValue)
+				if _, ok := addedIntentScores[boostedScore]; ok {
+					continue
+				}
 				if boostedScore < minClassificationScore {
 					continue // Skip classificaiton intents with score lower then first MAX_CLASSIFICATION_INTENTS
 				}
@@ -376,6 +380,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				}
 				intentHit.Source = (*json.RawMessage)(&source)
 				sh.Hits = append(sh.Hits, intentHit)
+				addedIntentScores[boostedScore] = true
 			}
 			// log.Infof("Added intent %s %s %s boost score:%f exist:%t", intentValue.Title, intent.Type, intent.Language, boostedScore, intentValue.Exist)
 		}
