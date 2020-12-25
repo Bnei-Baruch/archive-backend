@@ -647,6 +647,12 @@ GRAMMARS_TEMPLATE = {
                         "rules": {
                             "type": "text",
                             "analyzer": "standard",
+                            "fields": {
+                                "language": {
+                                    "type": "text",
+                                    "analyzer": lambda lang: LanguageAnalyzer[lang],
+                                }
+                            }
                         },
                         # Suggest field for autocomplete.
                         "rules_suggest": {

@@ -28,7 +28,7 @@ func createGrammarQuery(q *Query) elastic.Query {
 	if simpleQuery(q) != "" {
 		boolQuery = boolQuery.Should(
 			elastic.NewDisMaxQuery().Query(
-				//elastic.NewMatchPhraseQuery("grammar_rule.rules.language", termValue).Slop(SLOP).Boost(GRAMMAR_BOOST),
+				elastic.NewMatchPhraseQuery("grammar_rule.rules.language", termValue).Slop(SLOP).Boost(GRAMMAR_BOOST),
 				elastic.NewMatchPhraseQuery("grammar_rule.rules", termValue).Slop(SLOP).Boost(GRAMMAR_BOOST),
 			),
 		)
