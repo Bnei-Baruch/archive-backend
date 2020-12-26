@@ -339,7 +339,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
 	minScoreByLandingPage := make(map[string]float64)
-	classificationIntentsMDBUIDs := make(map[string]bool)
+	//classificationIntentsMDBUIDs := make(map[string]bool)
 	for _, hit := range result.Hits.Hits {
 		var ruleObj GrammarRuleWithPercolatorQuery
 		if err := json.Unmarshal(*hit.Source, &ruleObj); err != nil {
@@ -408,7 +408,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Score:        score,
 						Explanation:  hit.Explanation,
 					}})
-			} else if rule.Intent == consts.GRAMMAR_INTENT_CLASSIFICATION_BY_CONTENT_TYPE_AND_SOURCE {
+				/*} else if rule.Intent == consts.GRAMMAR_INTENT_CLASSIFICATION_BY_CONTENT_TYPE_AND_SOURCE {
 				var contentType string
 				var source string
 				filterValues := e.VariableMapToFilterValues(vMap, language)
@@ -444,7 +444,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 							log.Infof("Classification intent added in Grammar Engine: %+v. SCORE: %v.", intent, *ci.Score)
 						}
 					}
-				}
+				}*/
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {
