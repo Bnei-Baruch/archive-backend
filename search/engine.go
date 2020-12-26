@@ -316,7 +316,7 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	return sRes, nil
 }
 
-func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.SearchResult) {
+func (e *ESEngine) IntentsToResults(query *Query, maxRegularScore *float64) (error, map[string]*elastic.SearchResult) {
 	srMap := make(map[string]*elastic.SearchResult)
 	for _, lang := range query.LanguageOrder {
 		sh := &elastic.SearchHits{TotalHits: 0}
@@ -325,19 +325,31 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 	}
 
 	// Limit ClassificationIntents to top MAX_CLASSIFICATION_INTENTS
-	boostClassificationScore := func(intentValue *ClassificationIntent) float64 {
-		// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
+	boostClassificationScore := func(intentValue *ClassificationIntent, maxGrammarEngineScore float64) float64 {
 		if intentValue.MaxScore == nil {
 			// No max score is set - means that this intent comes from the grammar engine and not from the intents engine
-			return *intentValue.Score / 4.0
+			score := *intentValue.Score
+			if maxGrammarEngineScore > 0 && maxRegularScore != nil && *maxRegularScore >= 15 {
+				boost := (*maxRegularScore) / maxGrammarEngineScore
+				score *= boost
+			}
+			return score
 		}
+		// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
 		return *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
 	}
 	scores := []float64{}
+	var maxGrammarEngineScore float64
+	for i := range query.Intents {
+		if intentValue, ok := query.Intents[i].Value.(ClassificationIntent); ok && intentValue.Exist && intentValue.MaxScore == nil {
+			maxGrammarEngineScore = math.Max(maxGrammarEngineScore, *intentValue.Score)
+		}
+	}
+	log.Infof("maxGrammarEngineScore - %v", maxGrammarEngineScore)
 	for i := range query.Intents {
 		// Convert intent to result with score.
 		if intentValue, ok := query.Intents[i].Value.(ClassificationIntent); ok && intentValue.Exist {
-			scores = append(scores, boostClassificationScore(&intentValue))
+			scores = append(scores, boostClassificationScore(&intentValue, maxGrammarEngineScore))
 		}
 	}
 	sort.Float64s(scores)
@@ -356,9 +368,11 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			if intentValue.Exist {
 				sh := srMap[intent.Language].Hits
 				sh.TotalHits++
-				boostedScore = boostClassificationScore(&intentValue)
-				if _, ok := addedIntentScores[boostedScore]; ok {
-					continue
+				boostedScore = boostClassificationScore(&intentValue, maxGrammarEngineScore)
+				if len(addedIntentScores) >= consts.MAX_CLASSIFICATION_INTENTS {
+					if _, ok := addedIntentScores[boostedScore]; ok {
+						continue
+					}
 				}
 				if boostedScore < minClassificationScore {
 					continue // Skip classificaiton intents with score lower then first MAX_CLASSIFICATION_INTENTS
@@ -754,7 +768,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	// Convert intents and grammars to results.
-	err, intentResultsMap := e.IntentsToResults(&query)
+	err, intentResultsMap := e.IntentsToResults(&query, maxRegularScore)
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents to results.")
 	}

@@ -255,6 +255,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 						} else {
 							percolatorQuery = elastic.MatchNoneQuery{}
 							for i := range assignedRules {
+								// TBD DO NOT ADD SUGGESTS WITH #
 								assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
 							}
 							for i := range assignedRulesSuggest {
