@@ -540,6 +540,8 @@ const (
 	GRAMMAR_INTENT_LANDING_PAGE_ARTICLES           = "articles"
 	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS          = "downloads"
 	GRAMMAR_INTENT_LANDING_PAGE_HELP               = "help"
+
+	GRAMMAR_INTENT_LANDING_PAGE_PERSONS = "persons"
 )
 
 // Map from intent to filters, i.e., filter name to list of values.
@@ -618,6 +620,8 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	},
 	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS: nil,
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
+
+	GRAMMAR_INTENT_LANDING_PAGE_PERSONS: nil,
 
 	// Filters
 
