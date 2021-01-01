@@ -844,9 +844,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			if shouldMergeResults {
 				results = append(results, resultsByLang[lang]...)
 			} else {
-				results = r
-				currentLang = lang
-				break
+				if len(r) > 0 {
+					results = r
+					currentLang = lang
+					break
+				}
 			}
 		}
 	}
