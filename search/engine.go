@@ -327,10 +327,6 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 	// Limit ClassificationIntents to top MAX_CLASSIFICATION_INTENTS
 	boostClassificationScore := func(intentValue *ClassificationIntent) float64 {
 		// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
-		/*if intentValue.MaxScore == nil {
-			// No max score is set - means that this intent comes from the grammar engine and not from the intents engine
-			return *intentValue.Score / 4.0
-		}*/
 		return *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
 	}
 	scores := []float64{}
