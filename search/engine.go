@@ -773,8 +773,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
 		for _, result := range filtered.Results {
-			var zeroScore float64 = 0
 			sort.Strings(filterOutCUSources)
+			withoutCarouselDuplications := []*elastic.SearchHit{}
+			var maxScore float64
 			for _, hit := range result.Hits.Hits {
 				var src es.Result
 				err = json.Unmarshal(*hit.Source, &src)
@@ -790,12 +791,19 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					}
 					sort.Strings(hitSources)
 					if len(utils.IntersectSortedStringSlices(hitSources, filterOutCUSources)) > 0 {
-						// We assign a zero score to the hits we recieved from 'filter grammar' that are duplicate the existed items inside carousels
-						log.Infof("Set zero score for CU hit from 'filter grammar' that duplicates carousels source: %v", src.MDB_UID)
-						hit.Score = &zeroScore
+						// We remove the hits we recieved from 'filter grammar' that are duplicate the existed items inside carousels
+						log.Infof("Remove CU hit from 'filter grammar' that duplicates carousels source: %v", src.MDB_UID)
+					} else {
+						if hit.Score != nil {
+							maxScore = math.Max(*hit.Score, maxScore)
+						}
+						withoutCarouselDuplications = append(withoutCarouselDuplications, hit)
 					}
 				}
 			}
+			result.Hits.Hits = withoutCarouselDuplications
+			result.Hits.MaxScore = &maxScore
+			result.Hits.TotalHits = int64(len(withoutCarouselDuplications))
 		}
 		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
 			for _, result := range filtered.Results {
