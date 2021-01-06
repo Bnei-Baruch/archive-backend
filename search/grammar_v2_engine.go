@@ -203,7 +203,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 								intentToAdd = languageFilterIntents[i]
 							}
 						}
-						log.Infof("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported. Intent with max score is selected: %+v.", language, len(languageFilterIntents), intentToAdd)
+						log.Infof("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported. Intent with max score is selected (with special boost for 'by_content_type' intents): %+v.", language, len(languageFilterIntents), intentToAdd)
 					}
 					filterIntents = append(filterIntents, intentToAdd)
 				}
@@ -399,7 +399,16 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			// Fix this by moving the grammar index into the common index. So tha similar tf/idf will be used.
 			// For now solve by normalizing very small scores.
 			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
-			if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE || rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
+			if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
+				filterIntents = append(filterIntents, Intent{
+					Type:     consts.GRAMMAR_TYPE_FILTER,
+					Language: language,
+					Value: GrammarIntent{
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score * consts.CONTENT_TYPE_INTENTS_BOOST,
+						Explanation:  hit.Explanation,
+					}})
+			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
 				filterIntents = append(filterIntents, Intent{
 					Type:     consts.GRAMMAR_TYPE_FILTER,
 					Language: language,
