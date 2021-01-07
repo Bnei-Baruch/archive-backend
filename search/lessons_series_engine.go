@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func (e *ESEngine) SearchSeries(query Query, preference string) (map[string]*elastic.SearchResult, error) {
+func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*elastic.SearchResult, error) {
 	byLang := make(map[string]*elastic.SearchResult)
 	mss := e.esc.MultiSearch()
 
@@ -22,7 +22,7 @@ func (e *ESEngine) SearchSeries(query Query, preference string) (map[string]*ela
 	//filter := map[string][]string{"collections_content_type": {consts.CT_LESSONS_SERIES}}
 	//filter := map[string][]string{consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]: {consts.CT_LESSONS_SERIES}}
 
-	log.Infof("SearchSeries before run search")
+	log.Infof("LessonsSeries before run search")
 	req, err := NewResultsSearchRequest(
 		SearchRequestOptions{
 			resultTypes:      []string{consts.ES_RESULT_TYPE_COLLECTIONS},
@@ -41,7 +41,7 @@ func (e *ESEngine) SearchSeries(query Query, preference string) (map[string]*ela
 	before := time.Now()
 	mr, err := mss.Do(context.TODO())
 
-	log.Infof("SearchSeries after run search")
+	log.Infof("LessonsSeries after run search")
 	e.timeTrack(before, consts.LAT_DOSEARCH_MULTISEARCHTWEETSDO)
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func combineBySource(byLang map[string]*elastic.SearchResult) map[string]*elasti
 		for k, h := range hitByS {
 			newH := &elastic.SearchHit{
 				Source: h.Source,
-				Type:   consts.SEARCH__RESULT_LECTURE_SERIES,
+				Type:   consts.SEARCH__RESULT_LESSONS_SERIES,
 				Score:  h.Score,
 				Uid:    k,
 			}

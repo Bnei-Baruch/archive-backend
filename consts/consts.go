@@ -392,7 +392,7 @@ const ES_RESULT_TYPE_TWEETS = "tweets"
 
 // Result of many tweets in one hit
 const SEARCH_RESULT_TWEETS_MANY = "tweets_many"
-const SEARCH__RESULT_LECTURE_SERIES = "lecture_series"
+const SEARCH__RESULT_LESSONS_SERIES = "lessons_series"
 
 // Typed UIDs and Filter
 const ES_UID_TYPE_CONTENT_UNIT = "content_unit"
