@@ -70,7 +70,8 @@ func combineBySource(byLang map[string]*elastic.SearchResult) map[string]*elasti
 				hitByS[key] = h
 			}
 		}
-		var hits *elastic.SearchHits
+
+		byLang[l].Hits = nil
 		for k, h := range hitByS {
 			newH := &elastic.SearchHit{
 				Source: h.Source,
@@ -78,11 +79,16 @@ func combineBySource(byLang map[string]*elastic.SearchResult) map[string]*elasti
 				Score:  h.Score,
 				Uid:    k,
 			}
-			hits.Hits = append(hits.Hits, newH)
+			if *h.Score > *byLang[l].Hits.MaxScore {
+				byLang[l].Hits.MaxScore = h.Score
+			}
+			byLang[l].Hits.TotalHits++
+			byLang[l].Hits.Hits = append(byLang[l].Hits.Hits, newH)
 		}
-		byLang[l].Hits = hits
+		if byLang[l].Hits == nil {
+			delete(byLang, l)
+		}
 	}
-
 	return byLang
 }
 
