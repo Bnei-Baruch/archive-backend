@@ -666,7 +666,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				seriesLangChannel <- map[string]*elastic.SearchResult{}
 			}
 		}()
-		if byLang, err := e.SearchSeries(query, preference); err != nil {
+		if byLang, err := e.LessonsSeries(query, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching lesson series: %+v", err)
 			seriesLangChannel <- map[string]*elastic.SearchResult{}
 		} else {
