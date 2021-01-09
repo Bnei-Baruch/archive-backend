@@ -321,6 +321,9 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				FilterValues: KeyValues(consts.ES_UID_TYPE_SOURCE, parents),
 				TypedUids:    []string{KeyValue(consts.ES_UID_TYPE_SOURCE, mdbSource.UID)},
 			}
+			if mdbSource.Position.Valid {
+				source.TypedUids = append(source.TypedUids, KeyValue(consts.ES_UID_TYPE_POSITION, strconv.Itoa(mdbSource.Position.Int)))
+			}
 			fPath, missingSourceFileErr := index.getDocxPath(mdbSource.UID, i18n.Language)
 			// Ignore err here as if missing source for a language in very common and is ok.
 			if missingSourceFileErr == nil {

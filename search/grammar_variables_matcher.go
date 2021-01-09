@@ -41,6 +41,35 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 			return false
 		}
 		return true
+	} else if intent == consts.GRAMMAR_INTENT_BY_POSITION {
+		varPosition := ""
+		varSource := ""
+		for variable, values := range vMap {
+			if variable == consts.VAR_POSITION {
+				if varPosition != "" || len(values) != 1 { //  Disable if we have more than one $Text appereance or value
+					log.Warningf("Number of $Position appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+					return false
+				}
+				varPosition = values[0]
+			}
+			if variable == consts.VAR_SOURCE {
+				if varSource != "" || len(values) != 1 { //  Disable if we have more than one $Source appereance or value
+					// TBD consider support for multiple $Source values
+					log.Warningf("Number of $Source appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+					return false
+				}
+				varSource = values[0]
+			}
+		}
+		if varPosition == "" || varSource == "" {
+			log.Warningf("Intent of source by position must have one appearance of $Position and one appearance of $Source")
+			return false
+		}
+		posExist, err := cm.SearchStats().DoesPositionExist(varSource, varPosition)
+		if err != nil {
+			log.Error(err)
+		}
+		return posExist
 	} else if intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
 		hasVarText := false
 		hasVarContentType := false

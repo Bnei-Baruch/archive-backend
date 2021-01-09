@@ -397,6 +397,7 @@ const ES_UID_TYPE_COLLECTION = "collection"
 const ES_UID_TYPE_SOURCE = "source"
 const ES_UID_TYPE_TWEET = "tweet"
 const ES_UID_TYPE_BLOG_POST = "blog_post"
+const ES_UID_TYPE_POSITION = "position"
 
 //  ES_RESULT_TYPE_TWEETS is not part of the array since it's searched in parallel to other results search
 var ES_SEARCH_RESULT_TYPES = []string{
@@ -520,6 +521,8 @@ const (
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE = "by_content_type"
 	GRAMMAR_INTENT_FILTER_BY_SOURCE       = "by_source"
 
+	GRAMMAR_INTENT_BY_POSITION = "by_position"
+
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS            = "lessons"
@@ -625,7 +628,10 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	// Filters
 
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
-	GRAMMAR_INTENT_FILTER_BY_SOURCE:       nil, // Currently the rule is not triggered with section filters. Consider to enable combination of sections + rule filter.
+
+	// Currently these rules are not triggered with section filters. Consider to enable combination of sections + rule filter.
+	GRAMMAR_INTENT_FILTER_BY_SOURCE: nil,
+	GRAMMAR_INTENT_BY_POSITION:      nil,
 }
 
 const (
@@ -638,6 +644,7 @@ const (
 	VAR_HOLIDAYS            = "$Holidays"
 	VAR_CONTENT_TYPE        = "$ContentType"
 	VAR_SOURCE              = "$Source"
+	VAR_POSITION            = "$Position"
 
 	// $ContentType variables
 

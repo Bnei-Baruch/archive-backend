@@ -1,0 +1,31 @@
+en,by_position => $Source $Position
+en,by_position => $Source article $Position
+en,by_position => article $Position $Source
+en,by_position => $Source chapter $Position
+en,by_position => $Source volume $Position
+en,by_position => $Source vol $Position
+en,by_position => $Source part $Position
+en,by_position => $Source number $Position
+en,by_position => $Source n. $Position
+en,by_position => $Source num $Position
+en,by_position => $Source note $Position
+
+he,by_position => $Source $Position
+he,by_position => $Source מאמר $Position
+he,by_position => מאמר $Position $Source
+he,by_position => $Source פרק $Position
+he,by_position => $Source חלק $Position
+he,by_position => $Source מספר $Position
+he,by_position => $Source מס $Position
+he,by_position => $Source רשומה $Position
+
+ru,by_position => $Source $Position
+ru,by_position => $Source статья $Position
+ru,by_position => статья $Position $Source
+ru,by_position => $Source глава $Position
+ru,by_position => $Source г. $Position
+ru,by_position => $Source часть $Position
+ru,by_position => $Source ч. $Position
+ru,by_position => $Source номер $Position
+ru,by_position => $Source н. $Position
+ru,by_position => $Source запись $Position

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bnei-Baruch/archive-backend/utils"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -110,6 +112,12 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 		return nil, err
 	}
 	variables[consts.VAR_HOLIDAYS] = holidayTranslations
+	// Generate source position variables
+	positionTranslations, err := GenerateSourcePositionVariables(db)
+	if err != nil {
+		return nil, err
+	}
+	variables[consts.VAR_POSITION] = positionTranslations
 	// Load source name variables from DB
 	sourceNamesTranslationsFromDB, err := LoadSourceNameTranslationsFromDB(db)
 	if err != nil {
@@ -245,5 +253,29 @@ func LoadVariableTranslationsFromFile(variableFile string, variableName string) 
 		return nil, errors.Wrapf(err, "Error reading translation file: %s", variableFile)
 	}
 
+	return translations, nil
+}
+
+func GenerateSourcePositionVariables(db *sql.DB) (TranslationsV2, error) {
+	translations := make(TranslationsV2)
+	query := `select max(position) from sources`
+	var max int
+	err := queries.Raw(db, query).QueryRow().Scan(&max)
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to retrieve max sources position from DB.")
+	}
+	for _, lang := range consts.ALL_KNOWN_LANGS {
+		values := make(map[string][]string)
+		for i := 1; i < max+1; i++ {
+			numStr := strconv.Itoa(i)
+			values[numStr] = []string{
+				numStr,
+			}
+			if lang == consts.LANG_HEBREW {
+				values[numStr] = append(values[numStr], utils.NumberInHebrew(i))
+			}
+		}
+		translations[lang] = values
+	}
 	return translations, nil
 }
