@@ -17,15 +17,11 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 	byLang := make(map[string]*elastic.SearchResult)
 	mss := e.esc.MultiSearch()
 
-	//value := fmt.Sprintf("%s:%s", consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES], consts.CT_LESSONS_SERIES)
-
-	//filter := map[string][]string{"collections_content_type": {consts.CT_LESSONS_SERIES}}
 	filter := map[string][]string{consts.FILTER_COLLECTIONS_CONTENT_TYPES: {consts.CT_LESSONS_SERIES}}
-
-	log.Infof("LessonsSeries before run search")
+	log.Infof("LessonsSeries before run search. Filter: ", filter)
 	req, err := NewResultsSearchRequest(
 		SearchRequestOptions{
-			resultTypes:      []string{consts.ES_RESULT_TYPE_COLLECTIONS, consts.ES_RESULT_TYPE_UNITS},
+			resultTypes:      []string{consts.ES_RESULT_TYPE_COLLECTIONS},
 			index:            "",
 			query:            Query{Term: query.Term, Filters: filter, LanguageOrder: query.LanguageOrder, Deb: query.Deb},
 			sortBy:           consts.SORT_BY_RELEVANCE,
