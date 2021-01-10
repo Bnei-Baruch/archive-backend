@@ -20,14 +20,14 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 	//value := fmt.Sprintf("%s:%s", consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES], consts.CT_LESSONS_SERIES)
 
 	//filter := map[string][]string{"collections_content_type": {consts.CT_LESSONS_SERIES}}
-	//filter := map[string][]string{consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]: {consts.CT_LESSONS_SERIES}}
+	filter := map[string][]string{consts.FILTER_COLLECTIONS_CONTENT_TYPES: {consts.CT_LESSONS_SERIES}}
 
 	log.Infof("LessonsSeries before run search")
 	req, err := NewResultsSearchRequest(
 		SearchRequestOptions{
-			resultTypes:      []string{consts.ES_RESULT_TYPE_COLLECTIONS},
+			resultTypes:      []string{consts.ES_RESULT_TYPE_COLLECTIONS, consts.ES_RESULT_TYPE_UNITS},
 			index:            "",
-			query:            Query{Term: query.Term /*, Filters: filter*/, LanguageOrder: query.LanguageOrder, Deb: query.Deb},
+			query:            Query{Term: query.Term, Filters: filter, LanguageOrder: query.LanguageOrder, Deb: query.Deb},
 			sortBy:           consts.SORT_BY_RELEVANCE,
 			from:             0,
 			size:             100,
@@ -71,7 +71,7 @@ func combineBySource(byLang map[string]*elastic.SearchResult) map[string]*elasti
 			}
 		}
 
-		byLang[l].Hits = nil
+		byLang[l].Hits = new(elastic.SearchHits)
 		for k, h := range hitByS {
 			newH := &elastic.SearchHit{
 				Source: h.Source,
@@ -79,7 +79,7 @@ func combineBySource(byLang map[string]*elastic.SearchResult) map[string]*elasti
 				Score:  h.Score,
 				Uid:    k,
 			}
-			if *h.Score > *byLang[l].Hits.MaxScore {
+			if byLang[l].Hits.MaxScore == nil || *h.Score > *byLang[l].Hits.MaxScore {
 				byLang[l].Hits.MaxScore = h.Score
 			}
 			byLang[l].Hits.TotalHits++

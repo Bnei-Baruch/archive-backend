@@ -206,6 +206,19 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 	return query, nil
 }
 
+func addMastNotSeries(q Query) *elastic.BoolQuery {
+	if filters, ok := q.Filters[consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]]; ok {
+		for _, f := range filters {
+			if f == consts.CT_LESSONS_SERIES {
+				return nil
+			}
+		}
+	}
+
+	val := fmt.Sprintf("%s:%s", consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES], consts.CT_LESSONS_SERIES)
+	return elastic.NewBoolQuery().Filter(elastic.NewTermsQuery("result_type", val))
+}
+
 // Creates a result query for elastic.
 // resultTypes - list of search result types: sources, topics, CU's, etc..
 // docIds - optional list of _uid's for filtering the search. If the parameter value is nil, no filtering is applied. Used for highlight search.
@@ -230,6 +243,19 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 			boolQuery.MustNot(innerBoolQuery)
 		}
 	}
+
+	if len(filterOutCUSources) > 0 {
+		rtForMustNotQuery := elastic.NewTermsQuery(consts.ES_RESULT_TYPE, consts.ES_RESULT_TYPE_UNITS)
+		for _, src := range filterOutCUSources {
+			sourceForMustNotQuery := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.FILTER_SOURCE, src))
+			innerBoolQuery := elastic.NewBoolQuery().Filter(sourceForMustNotQuery, rtForMustNotQuery)
+			boolQuery.MustNot(innerBoolQuery)
+		}
+	}
+	if mustNot := addMastNotSeries(q); mustNot != nil {
+		boolQuery.MustNot(mustNot)
+	}
+
 	//  We append description for intent sources search because the description is commonly used as subtitle
 	appendDecription := !titlesOnly || (len(resultTypes) == 1 && resultTypes[0] == consts.ES_RESULT_TYPE_SOURCES)
 	if q.Term != "" {
@@ -485,8 +511,10 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 			boolQuery.Filter(contentTypeQuery)
 		}
 	}
+
 	var query elastic.Query
 	query = boolQuery
+
 	if q.Term == "" && len(q.ExactTerms) == 0 {
 		// No potential score from string matching.
 		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
@@ -505,9 +533,10 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 		}
 		scoreQuery.Add(elastic.NewTermsQuery("result_type", resultType), elastic.NewWeightFactorFunction(weight))
 	}
+
 	// Reduce score for clips.
 	scoreQuery.Add(elastic.NewTermsQuery("filter_values", es.KeyValue("content_type", consts.CT_CLIP)), elastic.NewWeightFactorFunction(0.7))
-	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query).MinScore(MIN_SCORE_FOR_RESULTS)).ScoreMode("sum").MaxBoost(100.0).
+	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query)).ScoreMode("sum").MaxBoost(100.0).
 		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d")), nil
 }
