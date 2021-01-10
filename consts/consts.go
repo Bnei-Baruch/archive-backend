@@ -397,7 +397,6 @@ const ES_UID_TYPE_COLLECTION = "collection"
 const ES_UID_TYPE_SOURCE = "source"
 const ES_UID_TYPE_TWEET = "tweet"
 const ES_UID_TYPE_BLOG_POST = "blog_post"
-const ES_UID_TYPE_POSITION = "position"
 
 //  ES_RESULT_TYPE_TWEETS is not part of the array since it's searched in parallel to other results search
 var ES_SEARCH_RESULT_TYPES = []string{
@@ -518,10 +517,10 @@ const (
 	GRAMMAR_TYPE_LANDING_PAGE   = "landing-page"
 	GRAMMAR_TYPE_CLASSIFICATION = "classification"
 
-	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE = "by_content_type"
-	GRAMMAR_INTENT_FILTER_BY_SOURCE       = "by_source"
-
-	GRAMMAR_INTENT_BY_POSITION = "by_position"
+	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE        = "by_content_type"
+	GRAMMAR_INTENT_FILTER_BY_SOURCE              = "by_source"
+	GRAMMAR_INTENT_FILTER_BY_SOURCE_AND_POSITION = "by_source_and_position"
+	GRAMMAR_INTENT_BY_POSITION                   = "by_position"
 
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 
@@ -630,8 +629,9 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
 
 	// Currently these rules are not triggered with section filters. Consider to enable combination of sections + rule filter.
-	GRAMMAR_INTENT_FILTER_BY_SOURCE: nil,
-	GRAMMAR_INTENT_BY_POSITION:      nil,
+	GRAMMAR_INTENT_FILTER_BY_SOURCE:              nil,
+	GRAMMAR_INTENT_FILTER_BY_SOURCE_AND_POSITION: nil,
+	GRAMMAR_INTENT_BY_POSITION:                   nil,
 }
 
 const (

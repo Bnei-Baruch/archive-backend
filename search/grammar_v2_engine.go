@@ -226,6 +226,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchT
 		if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
 			var contentType string
 			var text string
+			var position string
 			sources := []string{}
 			for _, fv := range intentValue.FilterValues {
 				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
@@ -234,6 +235,14 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchT
 					text = fv.Value
 				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
 					sources = append(sources, fv.Value)
+				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_POSITION] {
+					position = fv.Value
+				}
+			}
+			if position != "" && len(sources) == 1 {
+				relevantSource := e.cache.SearchStats().GetSourceByPositionAndParent(sources[0], position)
+				if relevantSource != nil {
+					sources[0] = *relevantSource
 				}
 			}
 			if text != "" && (contentType != "" || len(sources) > 0) {

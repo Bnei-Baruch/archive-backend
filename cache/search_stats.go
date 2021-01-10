@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/Bnei-Baruch/archive-backend/es"
 
@@ -145,17 +144,17 @@ type SearchStatsCache interface {
 
 	DoesSourceTitleWithMoreThanOneWordExist(title string) bool
 
-	DoesPositionExist(source string, position string) (bool, error)
+	GetSourceByPositionAndParent(parent string, position string) *string
 }
 
 type SearchStatsCacheImpl struct {
-	mdb                *sql.DB
-	tags               ClassByTypeStats
-	sources            ClassByTypeStats
-	conventions        map[string]map[string]int
-	holidayYears       map[string]map[string]int
-	sourceTitles       map[string]bool
-	sourcesMaxPosition map[string]int
+	mdb                        *sql.DB
+	tags                       ClassByTypeStats
+	sources                    ClassByTypeStats
+	conventions                map[string]map[string]int
+	holidayYears               map[string]map[string]int
+	sourceTitles               map[string]bool
+	sourcesByPositionAndParent map[string]string
 }
 
 func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
@@ -203,13 +202,13 @@ func (ssc *SearchStatsCacheImpl) DoesSourceTitleWithMoreThanOneWordExist(title s
 	return exist
 }
 
-func (ssc *SearchStatsCacheImpl) DoesPositionExist(source string, position string) (bool, error) {
-	posInt, err := strconv.Atoi(position)
-	if err != nil {
-		return false, err
+func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, position string) *string {
+	key := fmt.Sprintf("%v-%v", parent, position)
+	if _, exists := ssc.sourcesByPositionAndParent[key]; exists {
+		source := ssc.sourcesByPositionAndParent[key]
+		return &source
 	}
-	maxPos, exist := ssc.sourcesMaxPosition[source]
-	return exist && posInt >= maxPos, nil
+	return nil
 }
 
 func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, count int, cts ...string) bool {
@@ -256,7 +255,7 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	if err != nil {
 		return errors.Wrap(err, "Load source titles with more than one word.")
 	}
-	ssc.sourcesMaxPosition, err = ssc.loadMaxPositionForSources()
+	ssc.sourcesByPositionAndParent, err = ssc.loadSourcesByPositionAndParent()
 	if err != nil {
 		return errors.Wrap(err, "Load source max position.")
 	}
@@ -439,24 +438,25 @@ func (ssc *SearchStatsCacheImpl) loadSourceTitlesWithMoreThanOeWord() (map[strin
 	return ret, nil
 }
 
-func (ssc *SearchStatsCacheImpl) loadMaxPositionForSources() (map[string]int, error) {
-	rows, err := queries.Raw(ssc.mdb, `select p.uid, max(c.position) from sources p
+func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]string, error) {
+	rows, err := queries.Raw(ssc.mdb, `select p.uid as parent_uid, c.uid as source_uid, c.position from sources p
 	join sources c on c.parent_id = p.id
-	where c.position is not null
-	group by p.uid`).Query()
+	where c.position is not null`).Query()
 	if err != nil {
 		return nil, errors.Wrap(err, "queries.Raw")
 	}
 	defer rows.Close()
-	ret := map[string]int{}
+	ret := map[string]string{}
 	for rows.Next() {
-		var uid string
-		var maxPosition int
-		err = rows.Scan(&uid, &maxPosition)
+		var parent_uid string
+		var source_uid string
+		var position int
+		err = rows.Scan(&parent_uid, &source_uid, &position)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
-		ret[uid] = maxPosition
+		key := fmt.Sprintf("%v-%v", parent_uid, position)
+		ret[key] = source_uid
 	}
 	return ret, nil
 }
