@@ -185,7 +185,7 @@ func addMastNotSeries(q Query) *elastic.BoolQuery {
 	}
 
 	val := fmt.Sprintf("%s:%s", consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES], consts.CT_LESSONS_SERIES)
-	return elastic.NewBoolQuery().Filter(elastic.NewTermsQuery("result_type", val))
+	return elastic.NewBoolQuery().Filter(elastic.NewTermsQuery("filter_values", val))
 }
 
 // Creates a result query for elastic.
