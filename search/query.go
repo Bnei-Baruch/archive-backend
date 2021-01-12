@@ -63,9 +63,40 @@ func isRuneQuotationMark(r rune) bool {
 	return unicode.In(r, unicode.Quotation_Mark) || r == rune(1523) || r == rune(1524)
 }
 
+var SINGLE_QUOTE_RUNES = map[rune]bool{
+	rune(39):   true,
+	rune(145):  true,
+	rune(146):  true,
+	rune(8216): true,
+	rune(8217): true,
+	rune(8219): true,
+	rune(1523): true,
+	rune(1436): true,
+	rune(1437): true,
+}
+
+func doubleSingleQuotesToDoubleQuotes(runes []rune) []rune {
+	ret := []rune(nil)
+	i := 0
+	for ; i < len(runes)-1; i++ {
+		_, quoteFirst := SINGLE_QUOTE_RUNES[runes[i]]
+		_, quoteSecond := SINGLE_QUOTE_RUNES[runes[i+1]]
+		if quoteFirst && quoteSecond {
+			ret = append(ret, rune(34))
+			i++
+		} else {
+			ret = append(ret, runes[i])
+		}
+	}
+	if i < len(runes) {
+		ret = append(ret, runes[i])
+	}
+	return ret
+}
+
 // Tokenizes string to work with user friendly escapings of quotes (see tests).
 func tokenize(str string) []string {
-	runes := []rune(str)
+	runes := doubleSingleQuotesToDoubleQuotes([]rune(str))
 	start := -1
 	lastQuote := rune(0)
 	lastQuoteIdx := -1
@@ -516,13 +547,17 @@ func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchReque
 	titleAdded := false
 	fullTitleAdded := false
 	contentAdded := false
+	typedUidsAdded := false
 	//	This is a generic imp. that supports searching tweets together with other results.
 	//	Currently we are not searching for tweets together with other results but in parallel.
 	for _, rt := range options.resultTypes {
 		if rt == consts.ES_RESULT_TYPE_COLLECTIONS {
+		fetchSourceContext.Include("typed_uids")
+	}
+		if options.includeTypedUidsFromContentUnits && rt == consts.ES_RESULT_TYPE_UNITS && !typedUidsAdded {
 			fetchSourceContext.Include("typed_uids")
-		}
-		if rt == consts.ES_RESULT_TYPE_TWEETS && !contentAdded {
+			typedUidsAdded = true
+		} else if rt == consts.ES_RESULT_TYPE_TWEETS && !contentAdded {
 			fetchSourceContext.Include("content")
 			contentAdded = true
 		} else if rt == consts.ES_RESULT_TYPE_SOURCES && !fullTitleAdded {
@@ -533,7 +568,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchReque
 			fetchSourceContext.Include("title")
 			titleAdded = true
 		}
-		if contentAdded && titleAdded && fullTitleAdded {
+		if contentAdded && titleAdded && fullTitleAdded && (!options.includeTypedUidsFromContentUnits || typedUidsAdded) {
 			break
 		}
 	}
