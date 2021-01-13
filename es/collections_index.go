@@ -206,7 +206,7 @@ func collectionSource(c *mdbmodels.Collection) string {
 	if err != nil {
 		return ""
 	}
-	if s, ok := props["source"]; ok {
+	if s, ok := props[consts.ES_UID_TYPE_SOURCE]; ok {
 		return s.(string)
 	}
 	return ""
@@ -248,7 +248,6 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
 			typedUIDs = append([]string{
 				KeyValue(consts.ES_UID_TYPE_COLLECTION, c.UID),
-				KeyValue("source", source),
 			},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
 
