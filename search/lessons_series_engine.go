@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
-	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 	"strings"
@@ -18,7 +17,6 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 	mss := e.esc.MultiSearch()
 
 	filter := map[string][]string{consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]: {consts.CT_LESSONS_SERIES}}
-	log.Infof("LessonsSeries before run search. Filter: ", filter)
 	req, err := NewResultsSearchRequest(
 		SearchRequestOptions{
 			resultTypes:      []string{consts.ES_RESULT_TYPE_COLLECTIONS},
@@ -37,7 +35,6 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 	before := time.Now()
 	mr, err := mss.Do(context.TODO())
 
-	log.Infof("LessonsSeries after run search")
 	e.timeTrack(before, consts.LAT_DOSEARCH_MULTISEARCHTWEETSDO)
 	if err != nil {
 		return nil, err
