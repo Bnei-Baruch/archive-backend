@@ -244,14 +244,6 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 		}
 	}
 
-	if len(filterOutCUSources) > 0 {
-		rtForMustNotQuery := elastic.NewTermsQuery(consts.ES_RESULT_TYPE, consts.ES_RESULT_TYPE_UNITS)
-		for _, src := range filterOutCUSources {
-			sourceForMustNotQuery := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.FILTER_SOURCE, src))
-			innerBoolQuery := elastic.NewBoolQuery().Filter(sourceForMustNotQuery, rtForMustNotQuery)
-			boolQuery.MustNot(innerBoolQuery)
-		}
-	}
 	if mustNot := addMastNotSeries(q); mustNot != nil {
 		boolQuery.MustNot(mustNot)
 	}
