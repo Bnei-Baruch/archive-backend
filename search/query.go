@@ -536,7 +536,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 
 	// Reduce score for clips.
 	scoreQuery.Add(elastic.NewTermsQuery("filter_values", es.KeyValue("content_type", consts.CT_CLIP)), elastic.NewWeightFactorFunction(0.7))
-	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query)).ScoreMode("sum").MaxBoost(100.0).
+	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query).MinScore(MIN_SCORE_FOR_RESULTS)).ScoreMode("sum").MaxBoost(100.0).
 		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d")), nil
 }
@@ -552,8 +552,8 @@ func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchReque
 	//	Currently we are not searching for tweets together with other results but in parallel.
 	for _, rt := range options.resultTypes {
 		if rt == consts.ES_RESULT_TYPE_COLLECTIONS {
-		fetchSourceContext.Include("typed_uids")
-	}
+			fetchSourceContext.Include("typed_uids")
+		}
 		if options.includeTypedUidsFromContentUnits && rt == consts.ES_RESULT_TYPE_UNITS && !typedUidsAdded {
 			fetchSourceContext.Include("typed_uids")
 			typedUidsAdded = true
