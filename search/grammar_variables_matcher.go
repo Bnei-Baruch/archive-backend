@@ -75,7 +75,7 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 		}
 		src := cm.SearchStats().GetSourceByPositionAndParent(varSource, varPosition)
 		return src != nil
-	} else if intent == consts.GRAMMAR_INTENT_BY_POSITION {
+	} else if intent == consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
 		varPosition := ""
 		varSource := ""
 		for variable, values := range vMap {

@@ -389,10 +389,10 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				sh.MaxScore = &boostedScore
 			}
 			var intentHit *elastic.SearchHit
-			convertedToSingleCollection := false
-			if intentValue.SingleCollection != nil {
-				intentHit = intentValue.SingleCollection
-				convertedToSingleCollection = true
+			convertedToSingleHit := false
+			if intentValue.SingleHit != nil {
+				intentHit = intentValue.SingleHit
+				convertedToSingleHit = true
 			} else {
 				intentHit = &elastic.SearchHit{}
 			}
@@ -400,7 +400,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				intentHit.Explanation = intentValue.Explanation
 			}
 			intentHit.Score = &boostedScore
-			if !convertedToSingleCollection {
+			if !convertedToSingleHit {
 				intentHit.Index = consts.GRAMMAR_INDEX
 				intentHit.Type = intent.Type
 				source, err := json.Marshal(intentValue)

@@ -219,7 +219,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	return singleHitIntents, filterIntents, nil
 }
 
-// Search according to grammar based filter (currently by content types and free text).
+// Search according to grammar based filter.
 func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchTerm string, from int, size int, sortBy string, resultTypes []string, preference string, deb bool) (map[string]FilteredSearchResult, error) {
 	resultsByLang := map[string]FilteredSearchResult{}
 	for _, intent := range filterIntents {
@@ -321,11 +321,11 @@ func updateIntentCount(intentsCount map[string][]Intent, intent Intent) float64 
 		lastElem := intents[len(intents)-1]
 		minScore = lastElem.Value.(GrammarIntent).Score
 	}
-	if intent.Value.(GrammarIntent).SingleCollectionMdbUid != nil {
+	if intent.Value.(GrammarIntent).SingleHitMdbUid != nil {
 		for _, i := range intents {
-			if i.Value.(GrammarIntent).SingleCollectionMdbUid != nil &&
-				*i.Value.(GrammarIntent).SingleCollectionMdbUid == *intent.Value.(GrammarIntent).SingleCollectionMdbUid {
-				// Ignore duplicate collections
+			if i.Value.(GrammarIntent).SingleHitMdbUid != nil &&
+				*i.Value.(GrammarIntent).SingleHitMdbUid == *intent.Value.(GrammarIntent).SingleHitMdbUid {
+				// Ignore duplicate collection hits
 				return minScore
 			}
 		}
@@ -419,7 +419,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Score:        score * consts.CONTENT_TYPE_INTENTS_BOOST,
 						Explanation:  hit.Explanation,
 					}})
-			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
+			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE || rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE_AND_POSITION {
 				filterIntents = append(filterIntents, Intent{
 					Type:     consts.GRAMMAR_TYPE_FILTER,
 					Language: language,
@@ -428,6 +428,69 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Score:        score,
 						Explanation:  hit.Explanation,
 					}})
+			} else if rule.Intent == consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
+				filterValues := e.VariableMapToFilterValues(vMap, language)
+				var source string
+				var position string
+				for _, fv := range filterValues {
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
+						source = fv.Value
+					}
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_POSITION] {
+						position = fv.Value
+					}
+					if source != "" && position != "" {
+						break
+					}
+				}
+				relevantSource := e.cache.SearchStats().GetSourceByPositionAndParent(source, position)
+				if relevantSource == nil {
+					return nil, nil, errors.New(fmt.Sprintf("Relevant source is not found by source parent '%v' and position '%v'.", source, position))
+				}
+				var expl elastic.SearchExplanation
+				if hit.Explanation != nil {
+					expl = *hit.Explanation
+				}
+				lessonsIntent := ClassificationIntent{
+					ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+					MDB_UID:     *relevantSource,
+					Title:       query.Term,
+					ContentType: consts.CT_LESSON_PART,
+					Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_LESSON_PART),
+					Score:       &score,
+					Explanation: expl,
+				}
+				programsIntent := ClassificationIntent{
+					ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+					MDB_UID:     *relevantSource,
+					Title:       query.Term,
+					ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER,
+					Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_VIDEO_PROGRAM_CHAPTER),
+					Score:       &score,
+					Explanation: expl,
+				}
+				srcResult := es.Result{ // TBD title?
+					MDB_UID:    *relevantSource,
+					ResultType: consts.ES_RESULT_TYPE_SOURCES,
+				}
+				srcResultJson, err := json.Marshal(srcResult)
+				if err != nil {
+					return nil, nil, err
+				}
+				singleSourceIntent := GrammarIntent{
+					FilterValues: filterValues,
+					Score:        score,
+					Explanation:  &expl,
+					SingleHit: &elastic.SearchHit{
+						Source: (*json.RawMessage)(&srcResultJson),
+						Type:   "result",
+						Index:  consts.GRAMMAR_GENERATED_SOURCE_HIT,
+					},
+				}
+				singleHitIntents = append(singleHitIntents,
+					Intent{consts.INTENT_TYPE_SOURCE, language, lessonsIntent},
+					Intent{consts.INTENT_TYPE_SOURCE, language, programsIntent},
+					Intent{"", language, singleSourceIntent})
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {
@@ -464,8 +527,8 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 							log.Warnf("%+v", err)
 							return nil, nil, errors.New(fmt.Sprintf("ConventionsLandingPageToCollectionHit Failed: %+v", err))
 						}
-						intentValue.SingleCollection = collectionHit
-						intentValue.SingleCollectionMdbUid = mdbUid
+						intentValue.SingleHit = collectionHit
+						intentValue.SingleHitMdbUid = mdbUid
 					}
 				}
 				if intentValue.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS && intentValue.FilterValues != nil {
@@ -491,8 +554,8 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 							log.Warnf("%+v", err)
 							return nil, nil, errors.New(fmt.Sprintf("HolidaysLandingPageToCollectionHit Failed: %+v", err))
 						}
-						intentValue.SingleCollection = collectionHit
-						intentValue.SingleCollectionMdbUid = mdbUid
+						intentValue.SingleHit = collectionHit
+						intentValue.SingleHitMdbUid = mdbUid
 					}
 				}
 				intent := Intent{
