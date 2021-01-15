@@ -204,9 +204,8 @@ func (ssc *SearchStatsCacheImpl) DoesSourceTitleWithMoreThanOneWordExist(title s
 
 func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, position string) *string {
 	key := fmt.Sprintf("%v-%v", parent, position)
-	if _, exists := ssc.sourcesByPositionAndParent[key]; exists {
-		source := ssc.sourcesByPositionAndParent[key]
-		return &source
+	if src, ok := ssc.sourcesByPositionAndParent[key]; ok {
+		return &src
 	}
 	return nil
 }
