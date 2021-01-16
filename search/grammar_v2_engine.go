@@ -454,24 +454,25 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				lessonsIntent := ClassificationIntent{
 					ResultType:  consts.ES_RESULT_TYPE_SOURCES,
 					MDB_UID:     *relevantSource,
-					Title:       query.Term,
 					ContentType: consts.CT_LESSON_PART,
 					Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_LESSON_PART),
 					Score:       &score,
+					MaxScore:    &score,
 					Explanation: expl,
 				}
 				programsIntent := ClassificationIntent{
 					ResultType:  consts.ES_RESULT_TYPE_SOURCES,
 					MDB_UID:     *relevantSource,
-					Title:       query.Term,
 					ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER,
 					Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_VIDEO_PROGRAM_CHAPTER),
 					Score:       &score,
+					MaxScore:    &score,
 					Explanation: expl,
 				}
-				srcResult := es.Result{ // TBD title?
+				srcResult := es.Result{ //TBD fix title
 					MDB_UID:    *relevantSource,
 					ResultType: consts.ES_RESULT_TYPE_SOURCES,
+					Title:      query.Term,
 				}
 				srcResultJson, err := json.Marshal(srcResult)
 				if err != nil {
