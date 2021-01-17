@@ -158,8 +158,8 @@ func LoadSourceNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 
 	query := `select sn.language, s.uid, sn.name
 		from sources s join source_i18n sn on s.id=sn.source_id
-		join sources sp on s.parent_id=sp.id
-		where sp.uid <> '2GAdavz0'` // Filter out Rabash Assorted Notes
+		left join sources sp on s.parent_id=sp.id
+		where sp.uid is null or sp.uid <> '2GAdavz0'` // Filter out Rabash Assorted Notes
 
 	rows, err := queries.Raw(db, query).Query()
 	if err != nil {
