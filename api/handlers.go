@@ -714,6 +714,9 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
+	appendCollectionSourceFilterMods(&mods, r.CollectionSourceFilter)
+
+	appendCollectionTagsFilterMods(&mods, r.TagsFilter)
 
 	// count query
 	var total int64
@@ -2310,6 +2313,18 @@ func appendContentTypesFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) err
 
 func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
+}
+
+func appendCollectionSourceFilterMods(mods *[]qm.QueryMod, f CollectionSourceFilter) {
+	if f.Source != "" {
+		*mods = append(*mods, qm.Where("properties->>'source' = ?", f.Source))
+	}
+}
+func appendCollectionTagsFilterMods(mods *[]qm.QueryMod, f TagsFilter) {
+	if len(f.Tags) > 0 {
+		where := fmt.Sprintf("(c.properties->>'tags')::jsonb ?| %s", f.Tags)
+		*mods = append(*mods, qm.Where(where))
+	}
 }
 
 func appendDateRangeFilterModsTwitter(mods *[]qm.QueryMod, f DateRangeFilter) error {
