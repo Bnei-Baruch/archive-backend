@@ -240,6 +240,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchT
 				}
 			}
 			if position != "" && len(sources) == 1 {
+				// Filter by source+position is currently not implemented. So this logic is not in use.
 				relevantSource := e.cache.SearchStats().GetSourceByPositionAndParent(sources[0], position)
 				if relevantSource != nil {
 					sources[0] = *relevantSource
@@ -419,7 +420,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Score:        score * consts.CONTENT_TYPE_INTENTS_BOOST,
 						Explanation:  hit.Explanation,
 					}})
-			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE || rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE_AND_POSITION {
+			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURC {
 				filterIntents = append(filterIntents, Intent{
 					Type:     consts.GRAMMAR_TYPE_FILTER,
 					Language: language,
@@ -429,6 +430,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Explanation:  hit.Explanation,
 					}})
 			} else if rule.Intent == consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
+				log.Infof("GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM %+v", rule)
 				filterValues := e.VariableMapToFilterValues(vMap, language)
 				var source string
 				var position string

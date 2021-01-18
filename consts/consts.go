@@ -517,10 +517,9 @@ const (
 	GRAMMAR_TYPE_LANDING_PAGE   = "landing-page"
 	GRAMMAR_TYPE_CLASSIFICATION = "classification"
 
-	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE        = "by_content_type"
-	GRAMMAR_INTENT_FILTER_BY_SOURCE              = "by_source"
-	GRAMMAR_INTENT_FILTER_BY_SOURCE_AND_POSITION = "by_source_and_position"
-	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM  = "source_position_without_term"
+	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE       = "by_content_type"
+	GRAMMAR_INTENT_FILTER_BY_SOURCE             = "by_source"
+	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM = "source_position_without_term"
 
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 	GRAMMAR_GENERATED_SOURCE_HIT = "grammar_generated_source_hit"
@@ -630,9 +629,8 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
 
 	// Currently these rules are not triggered with section filters. Consider to enable combination of sections + rule filter.
-	GRAMMAR_INTENT_FILTER_BY_SOURCE:              nil,
-	GRAMMAR_INTENT_FILTER_BY_SOURCE_AND_POSITION: nil,
-	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM:  nil,
+	GRAMMAR_INTENT_FILTER_BY_SOURCE:             nil,
+	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM: nil,
 }
 
 const (
