@@ -420,7 +420,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Score:        score * consts.CONTENT_TYPE_INTENTS_BOOST,
 						Explanation:  hit.Explanation,
 					}})
-			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURC {
+			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
 				filterIntents = append(filterIntents, Intent{
 					Type:     consts.GRAMMAR_TYPE_FILTER,
 					Language: language,
