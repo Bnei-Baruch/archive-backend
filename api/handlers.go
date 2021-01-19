@@ -2326,6 +2326,7 @@ func appendCollectionTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f T
 	if len(f.Tags) == 0 {
 		return nil
 	}
+	//use Raw query because of need to use operator ?
 	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
 	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
@@ -2333,7 +2334,7 @@ func appendCollectionTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f T
 		return err
 	}
 	if ids == nil || len(ids) == 0 {
-		*mods = append(*mods, qm.Where("id < 0"))
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
 		*mods = append(*mods, qm.WhereIn("id in ?", utils.ConvertArgsInt64(ids)...))
 	}
