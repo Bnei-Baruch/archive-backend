@@ -715,8 +715,9 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		return nil, NewBadRequestError(err)
 	}
 	appendCollectionSourceFilterMods(&mods, r.CollectionSourceFilter)
-
-	appendCollectionTagsFilterMods(&mods, r.TagsFilter)
+	if err := appendCollectionTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 
 	// count query
 	var total int64
@@ -2320,11 +2321,23 @@ func appendCollectionSourceFilterMods(mods *[]qm.QueryMod, f CollectionSourceFil
 		*mods = append(*mods, qm.Where("properties->>'source' = ?", f.Source))
 	}
 }
-func appendCollectionTagsFilterMods(mods *[]qm.QueryMod, f TagsFilter) {
-	if len(f.Tags) > 0 {
-		where := fmt.Sprintf("(c.properties->>'tags')::jsonb ?| %s", f.Tags)
-		*mods = append(*mods, qm.Where(where))
+
+func appendCollectionTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
+	if len(f.Tags) == 0 {
+		return nil
 	}
+	var ids pq.Int64Array
+	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
+	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
+	if err != nil {
+		return err
+	}
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0"))
+	} else {
+		*mods = append(*mods, qm.WhereIn("id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+	return nil
 }
 
 func appendDateRangeFilterModsTwitter(mods *[]qm.QueryMod, f DateRangeFilter) error {
