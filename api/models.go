@@ -45,10 +45,6 @@ type ContentTypesFilter struct {
 	ContentTypes []string `json:"content_types" form:"content_type" binding:"omitempty"`
 }
 
-type CollectionSourceFilter struct {
-	Source string `json:"source" form:"source" binding:"omitempty,len=8"`
-}
-
 type SourcesFilter struct {
 	Authors []string `json:"authors" form:"author" binding:"omitempty"`
 	Sources []string `json:"sources" form:"source" binding:"omitempty,dive,len=8"`
@@ -114,7 +110,7 @@ type CollectionsRequest struct {
 	IDsFilter
 	ContentTypesFilter
 	DateRangeFilter
-	CollectionSourceFilter
+	SourcesFilter
 	TagsFilter
 	WithUnits bool `json:"with_units" form:"with_units"`
 }

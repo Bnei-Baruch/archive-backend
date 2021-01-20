@@ -714,7 +714,7 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	appendCollectionSourceFilterMods(&mods, r.CollectionSourceFilter)
+	appendCollectionSourceFilterMods(&mods, r.SourcesFilter)
 	if err := appendCollectionTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
@@ -2316,9 +2316,9 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
 }
 
-func appendCollectionSourceFilterMods(mods *[]qm.QueryMod, f CollectionSourceFilter) {
-	if f.Source != "" {
-		*mods = append(*mods, qm.Where("properties->>'source' = ?", f.Source))
+func appendCollectionSourceFilterMods(mods *[]qm.QueryMod, f SourcesFilter) {
+	if len(f.Sources) != 0 {
+		*mods = append(*mods, qm.WhereIn("properties->>'source' in ?", utils.ConvertArgsString(f.Sources)...))
 	}
 }
 
