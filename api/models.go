@@ -110,6 +110,8 @@ type CollectionsRequest struct {
 	IDsFilter
 	ContentTypesFilter
 	DateRangeFilter
+	SourcesFilter
+	TagsFilter
 	WithUnits bool `json:"with_units" form:"with_units"`
 }
 
