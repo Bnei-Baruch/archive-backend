@@ -262,13 +262,15 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 							percolatorQuery = elastic.NewQueryStringQuery(queryStr).Field("search_text")
 						} else {
 							percolatorQuery = elastic.MatchNoneQuery{}
-							for i := range assignedRules {
-								//assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
-								assignedRulesSuggest = append(assignedRulesSuggest, assignedRules[i])
-							}
-							for i := range assignedRulesSuggest {
-								if assignedRulesSuggest[i] == "" {
-									log.Infof("NNN: %+v", assignedRulesSuggest[i])
+							if intent != consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
+								for i := range assignedRules {
+									//assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
+									assignedRulesSuggest = append(assignedRulesSuggest, assignedRules[i])
+								}
+								for i := range assignedRulesSuggest {
+									if assignedRulesSuggest[i] == "" {
+										log.Infof("NNN: %+v", assignedRulesSuggest[i])
+									}
 								}
 							}
 							log.Infof("Rules suggest: [%s]", strings.Join(assignedRulesSuggest, "|"))
