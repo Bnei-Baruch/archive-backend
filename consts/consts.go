@@ -738,6 +738,7 @@ const (
 	LAT_GETSUGGESTIONS_MULTISEARCHDO            = "GetSuggestions.MultisearchDo"
 	LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO = "DoSearch.SearchGrammars.MultisearchGrammarsDo"
 	LAT_DOSEARCH_GRAMMARS_MULTISEARCHFILTERDO   = "DoSearch.SearchGrammars.MultisearchFilterDo"
+	LAT_DOSEARCH_GRAMMARS_RESULTSTOINTENTS      = "DoSearch.SearchGrammars.ResultsToIntents"
 )
 
 var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{

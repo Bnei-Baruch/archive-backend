@@ -347,6 +347,7 @@ func updateIntentCount(intentsCount map[string][]Intent, intent Intent) float64 
 // Return values: singleHitIntents, filterIntents, error
 func (e *ESEngine) searchResultsToIntents(query *Query, language string, result *elastic.SearchResult) ([]Intent, []Intent, error) {
 	// log.Infof("Total Hits: %d, Max Score: %.2f", result.Hits.TotalHits, *result.Hits.MaxScore)
+	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH_GRAMMARS_RESULTSTOINTENTS)
 	filterIntents := []Intent(nil)
 	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
@@ -449,6 +450,10 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				if relevantSource == nil {
 					return nil, nil, errors.New(fmt.Sprintf("Relevant source is not found by source parent '%v' and position '%v'.", source, position))
 				}
+				path, err := e.sourcePathFromSql(*relevantSource, language)
+				if err != nil {
+					return nil, nil, err
+				}
 				var expl elastic.SearchExplanation
 				if hit.Explanation != nil {
 					expl = *hit.Explanation
@@ -461,6 +466,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					Score:       &score,
 					MaxScore:    &score,
 					Explanation: expl,
+					Title:       path, // Actually this value is generated in client for classification intent results.
 				}
 				programsIntent := ClassificationIntent{
 					ResultType:  consts.ES_RESULT_TYPE_SOURCES,
@@ -470,11 +476,12 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					Score:       &score,
 					MaxScore:    &score,
 					Explanation: expl,
+					Title:       path, // Actually this value is generated in client for classification intent results.
 				}
-				srcResult := es.Result{ //TBD fix title
+				srcResult := es.Result{
 					MDB_UID:    *relevantSource,
 					ResultType: consts.ES_RESULT_TYPE_SOURCES,
-					Title:      query.Term,
+					FullTitle:  path,
 				}
 				srcResultJson, err := json.Marshal(srcResult)
 				if err != nil {
@@ -688,6 +695,50 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *stri
 		Index:  consts.GRAMMAR_LP_SINGLE_COLLECTION,
 	}
 	return hit, &mdbUID, nil
+}
+
+func (e *ESEngine) sourcePathFromSql(sourceUid string, language string) (string, error) {
+	queryMask := `with recursive sourcesPath as (
+		select s.id, s.uid, s.parent_id, sn.name from source_i18n sn
+		  join  sources s on sn.source_id = s.id
+		 and s.uid='%s'
+			  where sn.language='%s'
+	  
+		union all
+	  
+		select  s.id, s.uid, s.parent_id, sn.name  from source_i18n sn
+		  join  sources s on sn.source_id = s.id
+		join sourcesPath on sourcesPath.parent_id = s.id
+			  where sn.language='%s'
+	  )
+	  
+	  select name from sourcesPath sp
+	  union all
+	  select aun.name as id from author_i18n aun
+	  join authors_sources aus on aus.author_id = aun.author_id
+	  join sourcesPath sp on sp.id = aus.source_id
+	  where aun.language='%s'`
+	query := fmt.Sprintf(queryMask, sourceUid, language, language, language)
+	rows, err := e.mdb.Query(query)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	names := []string{}
+	for rows.Next() {
+		var name string
+		err := rows.Scan(&name)
+		if err != nil {
+			return "", err
+		}
+		names = append([]string{name}, names...)
+	}
+	err = rows.Err()
+	if err != nil {
+		return "", err
+	}
+	ret := strings.Join(names, " > ")
+	return ret, nil
 }
 
 // This function retrieves the 'free text' values from a grammar result that was searched by perculator query with highlight.
