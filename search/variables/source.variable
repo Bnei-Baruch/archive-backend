@@ -6,10 +6,20 @@ en,xtKmrbb9 => TES
 en,xtKmrbb9 => TAAS
 en,xtKmrbb9 => TAS
 
-
 en,AwGBQX2L => Zohar
 en,rb => Rabash
 en,bs => Baal HaSulam
+
+he,rQ6sIUZK => Rabash Article
+he,rQ6sIUZK => Rabash Articles
+
+he,b8SHlrfH => Rabash Letter
+he,b8SHlrfH => Rabash Letters
+
+he,DVSS0xAR => Baal HaSulam Letter
+he,DVSS0xAR => Baal HaSulam Letters
+
+he,qMUUn22b => Baal HaSulam Shamati
 
 es,xtKmrbb9 => Estudio de las diez Sefirot
 es,xtKmrbb9 => Estudio de las eser Sefirot
@@ -32,7 +42,6 @@ es,rb => Rabash
 es,rQ6sIUZK => escritos de rabash
 
 es,bs => Baal HaSulam
-
 
 he,xtKmrbb9 => תלמוד עשר ספירות
 he,xtKmrbb9 => תלמוד עשר הספירות
@@ -59,6 +68,27 @@ he,bs => בעל הסולם
 
 he,OqZMFGHu => הקדמה לתעס
 
+he,rQ6sIUZK => רבש מאמר
+he,rQ6sIUZK => הרבש מאמר
+he,rQ6sIUZK => רבש מאמרים
+he,rQ6sIUZK => הרבש מאמרים
+
+he,b8SHlrfH => רבש אגרת
+he,b8SHlrfH => הרבש אגרת
+he,b8SHlrfH => רבש אגרות
+he,b8SHlrfH => הרבש אגרות
+he,b8SHlrfH => רבש איגרת
+he,b8SHlrfH => הרבש איגרת
+he,b8SHlrfH => רבש איגרות
+he,b8SHlrfH => הרבש איגרות
+
+he,DVSS0xAR => בעל הסולם אגרת
+he,DVSS0xAR => בעל הסולם אגרות
+he,DVSS0xAR => בעל הסולם איגרת
+he,DVSS0xAR => בעל הסולם איגרות
+
+he,qMUUn22b => בעל הסולם שמעתי
+
 ru,xtKmrbb9 => Учение Десяти Сфирот
 ru,xtKmrbb9 => Талмуд Десяти Сфирот
 ru,xtKmrbb9 => ТЕС
@@ -73,3 +103,14 @@ ru,rb => Рабаша
 
 ru,bs => Бааль Сулам
 ru,bs => Бааль Сулама
+
+he,rQ6sIUZK => Рабаш Статьи
+he,rQ6sIUZK => Рабаш статья
+
+he,b8SHlrfH => Рабаш Письма
+he,b8SHlrfH => Рабаш Письмо
+
+he,DVSS0xAR => Бааль Сулам Письма
+he,DVSS0xAR => Бааль Сулам Письмо
+
+he,qMUUn22b => Бааль Сулам Шамати
