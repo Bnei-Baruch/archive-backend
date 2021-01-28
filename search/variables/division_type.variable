@@ -7,7 +7,6 @@ en,part => part
 en,number => number
 en,number => n.
 en,number => num
-en,note => note
 
 he,article => מאמר
 he,chapter => פרק
@@ -15,7 +14,6 @@ he,volume => כרך
 he,part => חלק
 he,number => מספר
 he,number => מס
-he,note => רשומה
 
 ru,article => статья
 ru,chapter => глава
@@ -24,4 +22,3 @@ ru,part => часть
 ru,part => ч.
 ru,number => номер
 ru,number => н.
-ru,note => запись
