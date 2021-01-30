@@ -13,10 +13,10 @@ en,bs => Baal HaSulam
 en,rQ6sIUZK => Rabash Article
 en,rQ6sIUZK => Rabash Articles
 
-en,2GAdavz0 -> Rabash Assorted Notes
-en,2GAdavz0 -> Rabash Assorted Note
-en,2GAdavz0 -> Rabash Notes
-en,2GAdavz0 -> Rabash Note
+en,2GAdavz0 => Rabash Assorted Notes
+en,2GAdavz0 => Rabash Assorted Note
+en,2GAdavz0 => Rabash Notes
+en,2GAdavz0 => Rabash Note
 
 en,b8SHlrfH => Rabash Letter
 en,b8SHlrfH => Rabash Letters
@@ -87,10 +87,10 @@ he,b8SHlrfH => הרבש איגרת
 he,b8SHlrfH => רבש איגרות
 he,b8SHlrfH => הרבש איגרות
 
-he,2GAdavz0 -> רבש רשומות
-he,2GAdavz0 -> הרבש רשומות
-he,2GAdavz0 -> רבש רשומה
-he,2GAdavz0 -> הרבש רשומה
+he,2GAdavz0 => רבש רשומות
+he,2GAdavz0 => הרבש רשומות
+he,2GAdavz0 => רבש רשומה
+he,2GAdavz0 => הרבש רשומה
 
 he,DVSS0xAR => בעל הסולם אגרת
 he,DVSS0xAR => בעל הסולם אגרות
@@ -123,7 +123,7 @@ ru,b8SHlrfH => Рабаш Письмо
 ru,DVSS0xAR => Бааль Сулам Письма
 ru,DVSS0xAR => Бааль Сулам Письмо
 
-ru,2GAdavz0 -> Рабаш Записки
-ru,2GAdavz0 -> Рабаш Записка
+ru,2GAdavz0 => Рабаш Записки
+ru,2GAdavz0 => Рабаш Записка
 
 ru,qMUUn22b => Бааль Сулам Шамати
