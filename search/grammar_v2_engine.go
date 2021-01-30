@@ -226,7 +226,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchT
 		if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
 			var contentType string
 			var text string
-			var position string
+			//var position string // For future use of filter rule by source+position
 			sources := []string{}
 			for _, fv := range intentValue.FilterValues {
 				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
@@ -235,17 +235,17 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchT
 					text = fv.Value
 				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
 					sources = append(sources, fv.Value)
-				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_POSITION] {
-					position = fv.Value
-				}
+				} //else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_POSITION] {
+				// position = fv.Value
+				//}
 			}
-			if position != "" && len(sources) == 1 {
-				// Filter by source+position is currently not implemented. So this logic is not in use.
-				relevantSource := e.cache.SearchStats().GetSourceByPositionAndParent(sources[0], position)
+			// For future use of filter rule by source+position
+			/*if position != "" && len(sources) == 1 {
+				relevantSource := e.cache.SearchStats().GetSourceByPositionAndParent(sources[0], position, typeIds)
 				if relevantSource != nil {
 					sources[0] = *relevantSource
 				}
-			}
+			}*/
 			if text != "" && (contentType != "" || len(sources) > 0) {
 				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Sources are '%+v'.", contentType, text, sources)
 				requests := []*elastic.SearchRequest{}
@@ -435,6 +435,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				filterValues := e.VariableMapToFilterValues(vMap, language)
 				var source string
 				var position string
+				var divType string
 				for _, fv := range filterValues {
 					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
 						source = fv.Value
@@ -442,11 +443,20 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_POSITION] {
 						position = fv.Value
 					}
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_DIVISION_TYPE] {
+						divType = fv.Value
+					}
 					if source != "" && position != "" {
 						break
 					}
 				}
-				relevantSource := e.cache.SearchStats().GetSourceByPositionAndParent(source, position)
+				var divTypes []int64
+				if divType != "" {
+					if val, ok := consts.ES_GRAMMAR_DIVT_TYPE_TO_SOURCE_TYPES[divType]; ok {
+						divTypes = val
+					}
+				}
+				relevantSource := e.cache.SearchStats().GetSourceByPositionAndParent(source, position, divTypes)
 				if relevantSource == nil {
 					return nil, nil, errors.New(fmt.Sprintf("Relevant source is not found by source parent '%v' and position '%v'.", source, position))
 				}

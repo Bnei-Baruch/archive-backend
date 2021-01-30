@@ -44,6 +44,7 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 	} else if intent == consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
 		varPosition := ""
 		varSource := ""
+		varDivType := ""
 		for variable, values := range vMap {
 			if variable == consts.VAR_POSITION {
 				if varPosition != "" || len(values) != 1 { //  Disable if we have more than one $Position appereance or value
@@ -60,12 +61,26 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 				}
 				varSource = values[0]
 			}
+			if variable == consts.VAR_DIVISION_TYPE {
+				if varDivType != "" || len(values) != 1 { //  Disable if we have more than one $DivisionType appereance or value
+					log.Warningf("Number of $DivisionType appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+					return false
+				}
+				varDivType = values[0]
+			}
 		}
 		if varPosition == "" || varSource == "" {
 			log.Warningf("Intent of source by position must have one appearance of $Position and one appearance of $Source")
 			return false
 		}
-		src := cm.SearchStats().GetSourceByPositionAndParent(varSource, varPosition)
+		var divTypes []int64
+		if varDivType != "" {
+			if val, ok := consts.ES_GRAMMAR_DIVT_TYPE_TO_SOURCE_TYPES[varDivType]; ok {
+				divTypes = val
+			}
+		}
+		// If divTypes is not assigned, GetSourceByPositionAndParent will check all types
+		src := cm.SearchStats().GetSourceByPositionAndParent(varSource, varPosition, divTypes)
 		return src != nil
 	} else if intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
 		hasVarText := false

@@ -144,7 +144,7 @@ type SearchStatsCache interface {
 
 	DoesSourceTitleWithMoreThanOneWordExist(title string) bool
 
-	GetSourceByPositionAndParent(parent string, position string) *string
+	GetSourceByPositionAndParent(parent string, position string, typeIds []int64) *string
 }
 
 type SearchStatsCacheImpl struct {
@@ -202,10 +202,15 @@ func (ssc *SearchStatsCacheImpl) DoesSourceTitleWithMoreThanOneWordExist(title s
 	return exist
 }
 
-func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, position string) *string {
-	key := fmt.Sprintf("%v-%v", parent, position)
-	if src, ok := ssc.sourcesByPositionAndParent[key]; ok {
-		return &src
+func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, position string, typeIds []int64) *string {
+	if typeIds == nil || len(typeIds) == 0 {
+		typeIds = []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	}
+	for typeId := range typeIds {
+		key := fmt.Sprintf("%v-%v-%v", parent, position, typeId)
+		if src, ok := ssc.sourcesByPositionAndParent[key]; ok {
+			return &src
+		}
 	}
 	return nil
 }
@@ -438,9 +443,9 @@ func (ssc *SearchStatsCacheImpl) loadSourceTitlesWithMoreThanOeWord() (map[strin
 }
 
 func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]string, error) {
-	rows, err := queries.Raw(ssc.mdb, `select p.uid as parent_uid, c.uid as source_uid, c.position from sources p
+	rows, err := queries.Raw(ssc.mdb, `select p.uid as parent_uid, c.uid as source_uid, c.position, c.type_id from sources p
 	join sources c on c.parent_id = p.id
-	where c.position is not null`).Query()
+	where c.position is not null`).Query() // Authors are not part of the query.
 	if err != nil {
 		return nil, errors.Wrap(err, "queries.Raw")
 	}
@@ -450,11 +455,12 @@ func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]st
 		var parent_uid string
 		var source_uid string
 		var position int
-		err = rows.Scan(&parent_uid, &source_uid, &position)
+		var type_id int64
+		err = rows.Scan(&parent_uid, &source_uid, &position, &type_id)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
-		key := fmt.Sprintf("%v-%v", parent_uid, position)
+		key := fmt.Sprintf("%v-%v-%v", parent_uid, position, type_id)
 		ret[key] = source_uid
 	}
 	return ret, nil

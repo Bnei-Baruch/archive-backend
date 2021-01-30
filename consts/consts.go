@@ -644,8 +644,9 @@ const (
 	VAR_CONTENT_TYPE        = "$ContentType"
 	VAR_SOURCE              = "$Source"
 	VAR_POSITION            = "$Position"
+	VAR_DIVISION_TYPE       = "$DivType"
 
-	// $ContentType variables
+	// $ContentType variable values
 
 	VAR_CT_PROGRAMS        = "programs"
 	VAR_CT_ARTICLES        = "articles"
@@ -666,6 +667,14 @@ const (
 		VAR_CT_HOLIDAYS     = "holidays"
 		VAR_CT_CONVENTIONS  = "conventions"'
 	*/
+
+	// $DivisionType variable values
+
+	VAR_DIV_ARTICLE = "article"
+	VAR_DIV_CHAPTER = "chapter"
+	VAR_DIV_VOLUME  = "volume"
+	VAR_DIV_PART    = "part"
+	VAR_DIV_NUMBER  = "number"
 )
 
 // Grammar $ContentType variables to content type filters mapping.
@@ -790,4 +799,12 @@ const (
 var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[string]PositionIndexType{
 	SRC_SHAMATI:               LETTER_IF_HEBREW,
 	SRC_RABASH_ASSORTED_NOTES: ALWAYS_NUMBER,
+}
+
+var ES_GRAMMAR_DIVT_TYPE_TO_SOURCE_TYPES = map[string][]int64{
+	VAR_DIV_ARTICLE: []int64{7},
+	VAR_DIV_CHAPTER: []int64{6, 7, 9},
+	VAR_DIV_VOLUME:  []int64{3},
+	VAR_DIV_PART:    []int64{4},
+	VAR_DIV_NUMBER:  []int64{6, 7, 9},
 }
