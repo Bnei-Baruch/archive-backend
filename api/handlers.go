@@ -2641,6 +2641,7 @@ func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 		DefaultLanguage: props.DefaultLanguage,
 		HolidayID:       props.HolidayTag,
 		SourceID:        props.Source,
+		TagIDs:          props.Tags,
 		Number:          props.Number,
 	}
 
