@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -460,7 +461,11 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				if relevantSource == nil {
 					return nil, nil, errors.New(fmt.Sprintf("Relevant source is not found by source parent '%v' and position '%v'.", source, position))
 				}
-				path, err := e.sourcePathFromSql(*relevantSource, language)
+				var leafPrefixType *consts.PositionIndexType
+				if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[source]; ok {
+					*leafPrefixType = val
+				}
+				path, err := e.sourcePathFromSql(*relevantSource, language, position, leafPrefixType)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -707,7 +712,7 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *stri
 	return hit, &mdbUID, nil
 }
 
-func (e *ESEngine) sourcePathFromSql(sourceUid string, language string) (string, error) {
+func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position string, leafPrefixType *consts.PositionIndexType) (string, error) {
 	queryMask := `with recursive sourcesPath as (
 		select s.id, s.uid, s.parent_id, sn.name from source_i18n sn
 		  join  sources s on sn.source_id = s.id
@@ -746,6 +751,16 @@ func (e *ESEngine) sourcePathFromSql(sourceUid string, language string) (string,
 	err = rows.Err()
 	if err != nil {
 		return "", err
+	}
+	if leafPrefixType != nil && len(names) > 0 {
+		if language == consts.LANG_HEBREW && *leafPrefixType == consts.LETTER_IF_HEBREW {
+			posInt, err := strconv.Atoi(position)
+			if err != nil {
+				return "", err
+			}
+			position = utils.NumberInHebrew(posInt) //  Convert to Hebrew letter
+		}
+		names[len(names)-1] = fmt.Sprintf("%s. %s", position, names[len(names)-1])
 	}
 	ret := strings.Join(names, " > ")
 	return ret, nil
