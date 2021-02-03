@@ -463,7 +463,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				}
 				var leafPrefixType *consts.PositionIndexType
 				if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[source]; ok {
-					*leafPrefixType = val
+					leafPrefixType = &val
 				}
 				path, err := e.sourcePathFromSql(*relevantSource, language, position, leafPrefixType)
 				if err != nil {
