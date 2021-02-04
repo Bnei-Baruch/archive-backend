@@ -447,7 +447,11 @@ func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]st
 	queryMask := `select p.uid as parent_uid, c.uid as source_uid, c.position, c.type_id from sources p
 	join sources c on c.parent_id = p.id
 	where c.position is not null and p.uid not in (%s)`
-	query := fmt.Sprintf(queryMask, strings.Join(consts.NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION, ","))
+	notToInclude := []string{}
+	for _, s := range consts.NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION {
+		notToInclude = append(notToInclude, fmt.Sprintf("'%s'", s))
+	}
+	query := fmt.Sprintf(queryMask, strings.Join(notToInclude, ","))
 	rows, err := queries.Raw(ssc.mdb, query).Query() // Authors are not part of the query.
 	if err != nil {
 		return nil, errors.Wrap(err, "queries.Raw")
