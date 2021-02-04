@@ -771,6 +771,9 @@ const (
 	SRC_ARVUT_ARTICLE          = "itcVAcFn"
 	SRC_RABASH_ASSORTED_NOTES  = "2GAdavz0"
 	SRC_THE_ROSE_ARTICLE       = "yUcfylRm"
+	SRC_LETTERS_RABASH         = "b8SHlrfH"
+	SRC_ARTICLES_RABASH        = "rQ6sIUZK"
+	SRC_ARTICLES_BAAL_SULAM    = "qMeV5M3Y"
 )
 
 var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
@@ -807,4 +810,8 @@ var ES_GRAMMAR_DIVT_TYPE_TO_SOURCE_TYPES = map[string][]int64{
 	VAR_DIV_VOLUME:  []int64{3},
 	VAR_DIV_PART:    []int64{4},
 	VAR_DIV_NUMBER:  []int64{6, 7, 9},
+}
+
+var NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION = []string{
+	SRC_LETTERS_RABASH, SRC_ARTICLES_RABASH, SRC_ARTICLES_BAAL_SULAM, // Children 'position' value of these sources are not according to their actual chapter
 }

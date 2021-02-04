@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Bnei-Baruch/archive-backend/es"
 
@@ -443,9 +444,11 @@ func (ssc *SearchStatsCacheImpl) loadSourceTitlesWithMoreThanOeWord() (map[strin
 }
 
 func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]string, error) {
-	rows, err := queries.Raw(ssc.mdb, `select p.uid as parent_uid, c.uid as source_uid, c.position, c.type_id from sources p
+	queryMask := `select p.uid as parent_uid, c.uid as source_uid, c.position, c.type_id from sources p
 	join sources c on c.parent_id = p.id
-	where c.position is not null`).Query() // Authors are not part of the query.
+	where c.position is not null and p.uid not in (%s)`
+	query := fmt.Sprintf(queryMask, strings.Join(consts.NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION, ","))
+	rows, err := queries.Raw(ssc.mdb, query).Query() // Authors are not part of the query.
 	if err != nil {
 		return nil, errors.Wrap(err, "queries.Raw")
 	}
