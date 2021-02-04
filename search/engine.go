@@ -799,6 +799,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						}
 						withoutCarouselDuplications = append(withoutCarouselDuplications, hit)
 					}
+				} else {
+					withoutCarouselDuplications = append(withoutCarouselDuplications, hit)
 				}
 			}
 			result.Hits.Hits = withoutCarouselDuplications
