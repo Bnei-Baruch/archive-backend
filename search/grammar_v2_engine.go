@@ -414,12 +414,21 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			// For now solve by normalizing very small scores.
 			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
 			if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
+				ctBoost := consts.CONTENT_TYPE_INTENTS_BOOST
+				runes := []rune(query.Term)
+				for _, c := range runes {
+					if c < '0' || c > '9' {
+						// Disable 'by content type' priorty boost if the query contains a number
+						ctBoost = 1
+						break
+					}
+				}
 				filterIntents = append(filterIntents, Intent{
 					Type:     consts.GRAMMAR_TYPE_FILTER,
 					Language: language,
 					Value: GrammarIntent{
 						FilterValues: e.VariableMapToFilterValues(vMap, language),
-						Score:        score * consts.CONTENT_TYPE_INTENTS_BOOST,
+						Score:        score * ctBoost,
 						Explanation:  hit.Explanation,
 					}})
 			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
