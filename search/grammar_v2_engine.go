@@ -353,7 +353,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
 	minScoreByLandingPage := make(map[string]float64)
-	//classificationIntentsMDBUIDs := make(map[string]bool)
+	sourcesPositionWithoutTermAdded := false
 	for _, hit := range result.Hits.Hits {
 		var ruleObj GrammarRuleWithPercolatorQuery
 		if err := json.Unmarshal(*hit.Source, &ruleObj); err != nil {
@@ -441,6 +441,9 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Explanation:  hit.Explanation,
 					}})
 			} else if rule.Intent == consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
+				if sourcesPositionWithoutTermAdded {
+					continue
+				}
 				log.Infof("GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM %+v", rule)
 				filterValues := e.VariableMapToFilterValues(vMap, language)
 				var source string
@@ -525,6 +528,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					Intent{consts.INTENT_TYPE_SOURCE, language, lessonsIntent},
 					Intent{consts.INTENT_TYPE_SOURCE, language, programsIntent},
 					Intent{"", language, singleSourceIntent})
+				sourcesPositionWithoutTermAdded = true
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {
