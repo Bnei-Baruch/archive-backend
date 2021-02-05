@@ -761,6 +761,10 @@ func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position
 	if err != nil {
 		return "", err
 	}
+	if len(names) == 0 && language != consts.LANG_HEBREW {
+		// Try with default language
+		return e.sourcePathFromSql(sourceUid, consts.LANG_HEBREW, position, leafPrefixType)
+	}
 	if leafPrefixType != nil && len(names) > 0 {
 		if language == consts.LANG_HEBREW && *leafPrefixType == consts.LETTER_IF_HEBREW {
 			posInt, err := strconv.Atoi(position)
