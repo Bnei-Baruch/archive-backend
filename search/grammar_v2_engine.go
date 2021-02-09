@@ -158,14 +158,29 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		log.Infof("Both term and exact terms are defined, should not trigger: [%s] [%s]", query.Term, strings.Join(query.ExactTerms, " - "))
 		return singleHitIntents, filterIntents, nil
 	}
-	if e.cache != nil && e.cache.SearchStats().DoesSourceTitleWithMoreThanOneWordExist(query.Term) {
+	for _, language := range query.LanguageOrder {
+		varsByLang := e.variables[consts.VAR_SOURCE][language]
+		for _, v := range varsByLang {
+			for _, srcName := range v {
+				if query.Term == srcName {
+					// Since some source titles contains grammar variable values,
+					// we are not triggering grammar search if the term eqauls to a title of a source.
+					// Some examples for such source titles:
+					// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
+					log.Infof("The term is identical to a title of a source, should not trigger: [%s]", query.Term)
+					return singleHitIntents, filterIntents, nil
+				}
+			}
+		}
+	}
+	/*if e.cache != nil && e.cache.SearchStats().DoesSourceTitleWithMoreThanOneWordExist(query.Term) {
 		// Since some source titles contains grammar variable values,
 		// we are not triggering grammar search if the term eqauls to a title of a source.
 		// Some examples for such source titles:
 		// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
 		log.Infof("The term is identical to a title of a source, should not trigger: [%s]", query.Term)
 		return singleHitIntents, filterIntents, nil
-	}
+	}*/
 
 	multiSearchService := e.esc.MultiSearch()
 	for _, language := range query.LanguageOrder {
