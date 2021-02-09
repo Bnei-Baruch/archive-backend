@@ -173,15 +173,6 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 			}
 		}
 	}
-	/*if e.cache != nil && e.cache.SearchStats().DoesSourceTitleWithMoreThanOneWordExist(query.Term) {
-		// Since some source titles contains grammar variable values,
-		// we are not triggering grammar search if the term eqauls to a title of a source.
-		// Some examples for such source titles:
-		// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
-		log.Infof("The term is identical to a title of a source, should not trigger: [%s]", query.Term)
-		return singleHitIntents, filterIntents, nil
-	}*/
-
 	multiSearchService := e.esc.MultiSearch()
 	for _, language := range query.LanguageOrder {
 		multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference))
