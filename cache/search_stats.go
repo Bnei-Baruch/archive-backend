@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -144,6 +145,7 @@ type SearchStatsCache interface {
 	DoesHolidaySingle(holiday string, year string) bool
 
 	GetSourceByPositionAndParent(parent string, position string, typeIds []int64) *string
+	GetSourceParentAndPosition(source string, getTypeIds bool) (*string, *string, []int64, error)
 }
 
 type SearchStatsCacheImpl struct {
@@ -206,6 +208,33 @@ func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, pos
 		}
 	}
 	return nil
+}
+
+func (ssc *SearchStatsCacheImpl) GetSourceParentAndPosition(source string, getTypeIds bool) (*string, *string, []int64, error) {
+	var parent *string
+	var position *string
+	typeIds := []int64{}
+	for k, v := range ssc.sourcesByPositionAndParent {
+		if v == source {
+			s := strings.Split(k, "-")
+			if parent == nil {
+				parent = &s[0]
+			}
+			if position == nil {
+				position = &s[1]
+			}
+			typeIdStr := s[2]
+			if !getTypeIds {
+				break
+			}
+			typeId, err := strconv.ParseInt(typeIdStr, 10, 64)
+			if err != nil {
+				return nil, nil, []int64{}, err
+			}
+			typeIds = append(typeIds, typeId)
+		}
+	}
+	return parent, position, typeIds, nil
 }
 
 func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, count int, cts ...string) bool {

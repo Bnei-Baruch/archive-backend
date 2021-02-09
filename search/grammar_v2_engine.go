@@ -160,15 +160,30 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	}
 	for _, language := range query.LanguageOrder {
 		varsByLang := e.variables[consts.VAR_SOURCE][language]
-		for _, v := range varsByLang {
+		for k, v := range varsByLang {
 			for _, srcName := range v {
 				if query.Term == srcName {
 					// Since some source titles contains grammar variable values,
 					// we are not triggering grammar search if the term eqauls to a title of a source.
 					// Some examples for such source titles:
 					// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
-					log.Infof("The term is identical to a title of a source, should not trigger: [%s]", query.Term)
-					return singleHitIntents, filterIntents, nil
+					log.Infof("The term [%s] is identical to a title of a source, should not trigger grammar search in ES. Adding intents by the source.", query.Term)
+					parent, position, _, err := e.cache.SearchStats().GetSourceParentAndPosition(k, false)
+					if err != nil {
+						return nil, nil, errors.Wrap(err, "GetSourceParentAndPositionAndTypeIds")
+					}
+					var leafPrefixType *consts.PositionIndexType
+					if parent != nil {
+						if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[*parent]; ok {
+							leafPrefixType = &val
+						}
+					}
+					path, err := e.sourcePathFromSql(k, language, position, leafPrefixType)
+					if err != nil {
+						return nil, nil, errors.Wrap(err, "sourcePathFromSql")
+					}
+					singleHitIntents, err = e.getSingleHitIntentsBySource(k, language, path, 3000.0, elastic.SearchExplanation{})
+					return singleHitIntents, filterIntents, err
 				}
 			}
 		}
@@ -483,7 +498,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[source]; ok {
 					leafPrefixType = &val
 				}
-				path, err := e.sourcePathFromSql(*relevantSource, language, position, leafPrefixType)
+				path, err := e.sourcePathFromSql(*relevantSource, language, &position, leafPrefixType)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -491,49 +506,11 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				if hit.Explanation != nil {
 					expl = *hit.Explanation
 				}
-				lessonsIntent := ClassificationIntent{
-					ResultType:  consts.ES_RESULT_TYPE_SOURCES,
-					MDB_UID:     *relevantSource,
-					ContentType: consts.CT_LESSON_PART,
-					Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(*relevantSource, consts.INTENTS_MIN_UNITS, consts.CT_LESSON_PART),
-					Score:       &score,
-					MaxScore:    &score,
-					Explanation: expl,
-					Title:       path, // Actually this value is generated in client for classification intent results.
-				}
-				programsIntent := ClassificationIntent{
-					ResultType:  consts.ES_RESULT_TYPE_SOURCES,
-					MDB_UID:     *relevantSource,
-					ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER,
-					Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(*relevantSource, consts.INTENTS_MIN_UNITS, consts.CT_VIDEO_PROGRAM_CHAPTER),
-					Score:       &score,
-					MaxScore:    &score,
-					Explanation: expl,
-					Title:       path, // Actually this value is generated in client for classification intent results.
-				}
-				srcResult := es.Result{
-					MDB_UID:    *relevantSource,
-					ResultType: consts.ES_RESULT_TYPE_SOURCES,
-					FullTitle:  path,
-				}
-				srcResultJson, err := json.Marshal(srcResult)
-				if err != nil {
+				intents, err := e.getSingleHitIntentsBySource(*relevantSource, language, path, *hit.Score, expl)
+				if err == nil {
 					return nil, nil, err
 				}
-				singleSourceIntent := GrammarIntent{
-					FilterValues: filterValues,
-					Score:        score,
-					Explanation:  &expl,
-					SingleHit: &elastic.SearchHit{
-						Source: (*json.RawMessage)(&srcResultJson),
-						Type:   "result",
-						Index:  consts.GRAMMAR_GENERATED_SOURCE_HIT,
-					},
-				}
-				singleHitIntents = append(singleHitIntents,
-					Intent{consts.INTENT_TYPE_SOURCE, language, lessonsIntent},
-					Intent{consts.INTENT_TYPE_SOURCE, language, programsIntent},
-					Intent{"", language, singleSourceIntent})
+				singleHitIntents = append(singleHitIntents, intents...)
 				sourcesPositionWithoutTermAdded = true
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
@@ -731,7 +708,7 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *stri
 	return hit, &mdbUID, nil
 }
 
-func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position string, leafPrefixType *consts.PositionIndexType) (string, error) {
+func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position *string, leafPrefixType *consts.PositionIndexType) (string, error) {
 	queryMask := `with recursive sourcesPath as (
 		select s.id, s.uid, s.parent_id, sn.name from source_i18n sn
 		  join  sources s on sn.source_id = s.id
@@ -775,18 +752,64 @@ func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position
 		// Try with default language
 		return e.sourcePathFromSql(sourceUid, consts.LANG_HEBREW, position, leafPrefixType)
 	}
-	if leafPrefixType != nil && len(names) > 0 {
+	if leafPrefixType != nil && position != nil && len(names) > 0 {
 		if language == consts.LANG_HEBREW && *leafPrefixType == consts.LETTER_IF_HEBREW {
-			posInt, err := strconv.Atoi(position)
+			posInt, err := strconv.Atoi(*position)
 			if err != nil {
 				return "", err
 			}
-			position = utils.NumberInHebrew(posInt) //  Convert to Hebrew letter
+			hebLetter := utils.NumberInHebrew(posInt) //  Convert to Hebrew letter
+			position = &hebLetter
 		}
-		names[len(names)-1] = fmt.Sprintf("%s. %s", position, names[len(names)-1])
+		names[len(names)-1] = fmt.Sprintf("%s. %s", *position, names[len(names)-1])
 	}
 	ret := strings.Join(names, " > ")
 	return ret, nil
+}
+
+func (e *ESEngine) getSingleHitIntentsBySource(source string, language string, title string, score float64, explanation elastic.SearchExplanation) ([]Intent, error) {
+	lessonsIntent := ClassificationIntent{
+		ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+		MDB_UID:     source,
+		ContentType: consts.CT_LESSON_PART,
+		Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_LESSON_PART),
+		Score:       &score,
+		MaxScore:    &score,
+		Explanation: explanation,
+		Title:       title, // Actually this value is generated in client for classification intent results.
+	}
+	programsIntent := ClassificationIntent{
+		ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+		MDB_UID:     source,
+		ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER,
+		Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_VIDEO_PROGRAM_CHAPTER),
+		Score:       &score,
+		MaxScore:    &score,
+		Explanation: explanation,
+		Title:       title, // Actually this value is generated in client for classification intent results.
+	}
+	srcResult := es.Result{
+		MDB_UID:    source,
+		ResultType: consts.ES_RESULT_TYPE_SOURCES,
+		FullTitle:  title,
+	}
+	srcResultJson, err := json.Marshal(srcResult)
+	if err != nil {
+		return []Intent{}, err
+	}
+	singleSourceIntent := GrammarIntent{
+		Score:       score,
+		Explanation: &explanation,
+		SingleHit: &elastic.SearchHit{
+			Source: (*json.RawMessage)(&srcResultJson),
+			Type:   "result",
+			Index:  consts.GRAMMAR_GENERATED_SOURCE_HIT,
+		},
+	}
+	intents := []Intent{Intent{consts.INTENT_TYPE_SOURCE, language, lessonsIntent},
+		Intent{consts.INTENT_TYPE_SOURCE, language, programsIntent},
+		Intent{"", language, singleSourceIntent}}
+	return intents, nil
 }
 
 // This function retrieves the 'free text' values from a grammar result that was searched by perculator query with highlight.
