@@ -162,16 +162,16 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	queriesNumForLang := 2
 	sourceUid, language, isAuthor := e.sourceUidByTerm(query.Term, query.LanguageOrder)
 	if sourceUid != nil {
-		if isAuthor {
-			log.Infof("The term [%s] is identical to a name of author. Search only for Landing Pages.", query.Term)
-			searchLandingPagesOnly = true
-			queriesNumForLang = 1
-		} else {
-			// Since some source titles contains grammar variable values,
-			// we are not triggering grammar search if the term eqauls to a title of a source.
-			// Some examples for such source titles:
-			// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
-			log.Infof("The term [%s] is identical to a title of a source. Should not trigger grammar search in ES. Adding intents by the source.", query.Term)
+		// Since some source titles contains grammar variable values,
+		// we are limiting the grammar search to LP's only if the term eqauls to a title of a source\author.
+		// Some examples for such source titles:
+		// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
+		// If the term is not a name of author, automatically add classification intents and source result.
+		log.Infof("The term [%s] is identical to a name of author or source. Search only for Landing Pages.", query.Term)
+		searchLandingPagesOnly = true
+		queriesNumForLang = 1
+		if !isAuthor {
+			log.Infof("Adding intents by the source.", query.Term)
 			parent, position, _, err := e.cache.SearchStats().GetSourceParentAndPosition(*sourceUid, false)
 			if err != nil {
 				return nil, nil, errors.Wrap(err, "GetSourceParentAndPositionAndTypeIds")
@@ -186,8 +186,11 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 			if err != nil {
 				return nil, nil, errors.Wrap(err, "sourcePathFromSql")
 			}
-			singleHitIntents, err = e.getSingleHitIntentsBySource(*sourceUid, language, path, 3000.0, elastic.SearchExplanation{})
-			return singleHitIntents, filterIntents, err
+			intents, err := e.getSingleHitIntentsBySource(*sourceUid, language, path, 3000.0, elastic.SearchExplanation{})
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "getSingleHitIntentsBySource")
+			}
+			singleHitIntents = append(singleHitIntents, intents...)
 		}
 	}
 	multiSearchService := e.esc.MultiSearch()
