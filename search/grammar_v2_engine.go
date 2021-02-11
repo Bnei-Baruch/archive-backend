@@ -171,7 +171,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		searchLandingPagesOnly = true
 		queriesNumForLang = 1
 		if !isAuthor {
-			log.Infof("Adding intents by the source.", query.Term)
+			log.Infof("Adding intents by the source [%s] (%s).", sourceUid, query.Term)
 			parent, position, _, err := e.cache.SearchStats().GetSourceParentAndPosition(*sourceUid, false)
 			if err != nil {
 				return nil, nil, errors.Wrap(err, "GetSourceParentAndPositionAndTypeIds")
