@@ -158,15 +158,19 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		log.Infof("Both term and exact terms are defined, should not trigger: [%s] [%s]", query.Term, strings.Join(query.ExactTerms, " - "))
 		return singleHitIntents, filterIntents, nil
 	}
+	termWithoutQuotes := strings.Replace(query.Term, "\"", "", -1)
 	for _, language := range query.LanguageOrder {
 		varsByLang := e.variables[consts.VAR_SOURCE][language]
 		for k, v := range varsByLang {
 			for _, srcName := range v {
-				if query.Term == srcName {
-					parent, position, _, err := e.cache.SearchStats().GetSourceParentAndPosition(k, false)
-					if err != nil {
-						return nil, nil, errors.Wrap(err, "GetSourceParentAndPositionAndTypeIds")
-					}
+				var identical bool
+				if language == consts.LANG_HEBREW {
+					srcNameWithoutQuotes := strings.Replace(srcName, "\"", "", -1)
+					identical = termWithoutQuotes == srcNameWithoutQuotes
+				} else {
+					identical = query.Term == srcName
+				}
+				if identical {
 					if len(k) < 4 {
 						log.Infof("The term [%s] is identical to a name of author. Should not trigger grammar search in ES. Adding Library Landing Page.", query.Term)
 						lp := Intent{
@@ -183,6 +187,10 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 						// Some examples for such source titles:
 						// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
 						log.Infof("The term [%s] is identical to a title of a source. Should not trigger grammar search in ES. Adding intents by the source.", query.Term)
+						parent, position, _, err := e.cache.SearchStats().GetSourceParentAndPosition(k, false)
+						if err != nil {
+							return nil, nil, errors.Wrap(err, "GetSourceParentAndPositionAndTypeIds")
+						}
 						var leafPrefixType *consts.PositionIndexType
 						if parent != nil {
 							if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[*parent]; ok {
