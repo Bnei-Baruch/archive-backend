@@ -458,7 +458,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				ctBoost := consts.CONTENT_TYPE_INTENTS_BOOST
 				runes := []rune(query.Term)
 				for _, c := range runes {
-					if c < '0' || c > '9' {
+					if c > '0' && c <= '9' {
 						// Disable 'by content type' priorty boost if the query contains a number
 						ctBoost = 1
 						break
