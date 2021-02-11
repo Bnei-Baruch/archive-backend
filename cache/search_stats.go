@@ -144,6 +144,7 @@ type SearchStatsCache interface {
 	DoesHolidayExist(holiday string, year string) bool
 	DoesHolidaySingle(holiday string, year string) bool
 
+	// Some of the sources (consts.NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION) are restricted from these functions so you should not use them for general porpuses.
 	GetSourceByPositionAndParent(parent string, position string, typeIds []int64) *string
 	GetSourceParentAndPosition(source string, getTypeIds bool) (*string, *string, []int64, error)
 }

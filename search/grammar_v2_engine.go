@@ -167,7 +167,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 					if err != nil {
 						return nil, nil, errors.Wrap(err, "GetSourceParentAndPositionAndTypeIds")
 					}
-					if parent == nil {
+					if len(k) < 4 {
 						log.Infof("The term [%s] is identical to a name of author. Should not trigger grammar search in ES. Adding Library Landing Page.", query.Term)
 						lp := Intent{
 							Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
@@ -184,10 +184,11 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 						// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
 						log.Infof("The term [%s] is identical to a title of a source. Should not trigger grammar search in ES. Adding intents by the source.", query.Term)
 						var leafPrefixType *consts.PositionIndexType
-						if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[*parent]; ok {
-							leafPrefixType = &val
+						if parent != nil {
+							if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[*parent]; ok {
+								leafPrefixType = &val
+							}
 						}
-
 						path, err := e.sourcePathFromSql(k, language, position, leafPrefixType)
 						if err != nil {
 							return nil, nil, errors.Wrap(err, "sourcePathFromSql")
