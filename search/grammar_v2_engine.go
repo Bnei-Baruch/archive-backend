@@ -158,60 +158,48 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		log.Infof("Both term and exact terms are defined, should not trigger: [%s] [%s]", query.Term, strings.Join(query.ExactTerms, " - "))
 		return singleHitIntents, filterIntents, nil
 	}
-	termWithoutQuotes := strings.Replace(query.Term, "\"", "", -1)
-	for _, language := range query.LanguageOrder {
-		varsByLang := e.variables[consts.VAR_SOURCE][language]
-		for k, v := range varsByLang {
-			for _, srcName := range v {
-				var identical bool
-				if language == consts.LANG_HEBREW {
-					srcNameWithoutQuotes := strings.Replace(srcName, "\"", "", -1)
-					identical = termWithoutQuotes == srcNameWithoutQuotes
-				} else {
-					identical = query.Term == srcName
-				}
-				if identical {
-					if len(k) < 4 {
-						log.Infof("The term [%s] is identical to a name of author. Should not trigger grammar search in ES. Adding Library Landing Page.", query.Term)
-						lp := Intent{
-							Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
-							Language: language,
-							Value: GrammarIntent{
-								LandingPage: consts.GRAMMAR_INTENT_LANDING_PAGE_LIBRARY,
-								Score:       3000.0,
-							}}
-						return []Intent{lp}, filterIntents, nil
-					} else {
-						// Since some source titles contains grammar variable values,
-						// we are not triggering grammar search if the term eqauls to a title of a source.
-						// Some examples for such source titles:
-						// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
-						log.Infof("The term [%s] is identical to a title of a source. Should not trigger grammar search in ES. Adding intents by the source.", query.Term)
-						parent, position, _, err := e.cache.SearchStats().GetSourceParentAndPosition(k, false)
-						if err != nil {
-							return nil, nil, errors.Wrap(err, "GetSourceParentAndPositionAndTypeIds")
-						}
-						var leafPrefixType *consts.PositionIndexType
-						if parent != nil {
-							if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[*parent]; ok {
-								leafPrefixType = &val
-							}
-						}
-						path, err := e.sourcePathFromSql(k, language, position, leafPrefixType)
-						if err != nil {
-							return nil, nil, errors.Wrap(err, "sourcePathFromSql")
-						}
-						singleHitIntents, err = e.getSingleHitIntentsBySource(k, language, path, 3000.0, elastic.SearchExplanation{})
-						return singleHitIntents, filterIntents, err
-					}
+	searchLandingPagesOnly := false
+	queriesNumForLang := 2
+	sourceUid, language, isAuthor := e.sourceUidByTerm(query.Term, query.LanguageOrder)
+	if sourceUid != nil {
+		if isAuthor {
+			log.Infof("The term [%s] is identical to a name of author. Search only for Landing Pages.", query.Term)
+			searchLandingPagesOnly = true
+			queriesNumForLang = 1
+		} else {
+			// Since some source titles contains grammar variable values,
+			// we are not triggering grammar search if the term eqauls to a title of a source.
+			// Some examples for such source titles:
+			// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
+			log.Infof("The term [%s] is identical to a title of a source. Should not trigger grammar search in ES. Adding intents by the source.", query.Term)
+			parent, position, _, err := e.cache.SearchStats().GetSourceParentAndPosition(*sourceUid, false)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "GetSourceParentAndPositionAndTypeIds")
+			}
+			var leafPrefixType *consts.PositionIndexType
+			if parent != nil {
+				if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[*parent]; ok {
+					leafPrefixType = &val
 				}
 			}
+			path, err := e.sourcePathFromSql(*sourceUid, language, position, leafPrefixType)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "sourcePathFromSql")
+			}
+			singleHitIntents, err = e.getSingleHitIntentsBySource(*sourceUid, language, path, 3000.0, elastic.SearchExplanation{})
+			return singleHitIntents, filterIntents, err
 		}
 	}
 	multiSearchService := e.esc.MultiSearch()
-	for _, language := range query.LanguageOrder {
-		multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference))
-		multiSearchService.Add(NewGammarPerculateRequest(query, language, preference))
+	if searchLandingPagesOnly {
+		for _, language := range query.LanguageOrder {
+			multiSearchService.Add(NewGammarV2RequestByHitType(query, language, preference, "landing-pages"))
+		}
+	} else {
+		for _, language := range query.LanguageOrder {
+			multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference))
+			multiSearchService.Add(NewGammarPerculateRequest(query, language, preference))
+		}
 	}
 	beforeGrammarSearch := time.Now()
 	mr, err := multiSearchService.Do(context.TODO())
@@ -220,9 +208,9 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		return nil, nil, errors.Wrap(err, "Error looking for grammar search.")
 	}
 
-	if len(mr.Responses) != len(query.LanguageOrder)*2 {
+	if len(mr.Responses) != len(query.LanguageOrder)*queriesNumForLang {
 		return nil, nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
-			len(mr.Responses), len(query.LanguageOrder)*2))
+			len(mr.Responses), len(query.LanguageOrder)*queriesNumForLang))
 	}
 
 	start := time.Now()
@@ -231,7 +219,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 			log.Warnf("%+v", currentResults.Error)
 			return nil, nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
-		language := query.LanguageOrder[i/2]
+		language := query.LanguageOrder[i/queriesNumForLang]
 		if haveHits(currentResults) {
 			if languageSingleHitIntents, languageFilterIntents, err := e.searchResultsToIntents(query, language, currentResults); err != nil {
 				return nil, nil, err
@@ -895,4 +883,28 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.S
 		}
 	}
 	return results, hitIdsMap, maxScore, nil
+}
+
+// Return: source uid, language, is author?
+func (e *ESEngine) sourceUidByTerm(term string, languages []string) (*string, string, bool) {
+	termWithoutQuotes := strings.Replace(term, "\"", "", -1)
+	termLC := strings.ToLower(term)
+	for _, language := range languages {
+		varsByLang := e.variables[consts.VAR_SOURCE][language]
+		for k, v := range varsByLang {
+			for _, srcName := range v {
+				var identical bool
+				if language == consts.LANG_HEBREW {
+					srcNameWithoutQuotes := strings.Replace(srcName, "\"", "", -1)
+					identical = termWithoutQuotes == srcNameWithoutQuotes
+				} else {
+					identical = termLC == strings.ToLower(srcName)
+				}
+				if identical {
+					return &k, language, len(k) < 4
+				}
+			}
+		}
+	}
+	return nil, "", false
 }

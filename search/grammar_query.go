@@ -21,6 +21,14 @@ const (
 	PERCULATE_HIGHLIGHT_SEPERATOR = '$'
 )
 
+func createGrammarQueryOfSpecificHitType(q *Query, hitType string) elastic.Query {
+	boolQuery := elastic.NewBoolQuery().Must(
+		elastic.NewMatchQuery("grammar_rule.hit_type", hitType),
+		createGrammarQuery(q),
+	)
+	return boolQuery
+}
+
 func createGrammarQuery(q *Query) elastic.Query {
 	boolQuery := elastic.NewBoolQuery()
 	if simpleQuery(q) != "" {
@@ -54,6 +62,19 @@ func NewGammarPerculateRequest(query *Query, language string, preference string)
 			PostTags(string(PERCULATE_HIGHLIGHT_SEPERATOR))).
 		FetchSourceContext(fetchSourceContext).
 		Size(GRAMMAR_PERCULATE_SIZE).
+		Explain(query.Deb)
+	return elastic.NewSearchRequest().
+		SearchSource(source).
+		Index(GrammarIndexNameForServing(language)).
+		Preference(preference)
+}
+
+func NewGammarV2RequestByHitType(query *Query, language string, preference string, hitType string) *elastic.SearchRequest {
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("grammar_rule.intent", "grammar_rule.variables", "grammar_rule.values", "grammar_rule.rules")
+	source := elastic.NewSearchSource().
+		Query(createGrammarQueryOfSpecificHitType(query, hitType)).
+		FetchSourceContext(fetchSourceContext).
+		Size(GRAMMAR_SEARCH_SIZE).
 		Explain(query.Deb)
 	return elastic.NewSearchRequest().
 		SearchSource(source).
