@@ -491,7 +491,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_DIVISION_TYPE] {
 						divType = fv.Value
 					}
-					if source != "" && position != "" {
+					if source != "" && position != "" && divType != "" {
 						break
 					}
 				}
@@ -518,7 +518,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					expl = *hit.Explanation
 				}
 				intents, err := e.getSingleHitIntentsBySource(*relevantSource, language, path, *hit.Score, expl)
-				if err == nil {
+				if err != nil {
 					return nil, nil, err
 				}
 				singleHitIntents = append(singleHitIntents, intents...)
