@@ -326,8 +326,11 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 
 	// Limit ClassificationIntents to top MAX_CLASSIFICATION_INTENTS
 	boostClassificationScore := func(intentValue *ClassificationIntent) float64 {
-		// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
-		return *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
+		if intentValue.MaxScore != nil {
+			// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
+			return *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
+		}
+		return *intentValue.Score
 	}
 	scores := []float64{}
 	for i := range query.Intents {

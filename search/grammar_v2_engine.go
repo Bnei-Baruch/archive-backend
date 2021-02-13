@@ -779,13 +779,13 @@ func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position
 }
 
 func (e *ESEngine) getSingleHitIntentsBySource(source string, language string, title string, score float64, explanation elastic.SearchExplanation) ([]Intent, error) {
+	ciScore := score * 0.98 // lower classification intents score to display the source above them
 	lessonsIntent := ClassificationIntent{
 		ResultType:  consts.ES_RESULT_TYPE_SOURCES,
 		MDB_UID:     source,
 		ContentType: consts.CT_LESSON_PART,
 		Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_LESSON_PART),
-		Score:       &score,
-		MaxScore:    &score,
+		Score:       &ciScore,
 		Explanation: explanation,
 		Title:       title, // Actually this value is generated in client for classification intent results.
 	}
@@ -794,8 +794,7 @@ func (e *ESEngine) getSingleHitIntentsBySource(source string, language string, t
 		MDB_UID:     source,
 		ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER,
 		Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_VIDEO_PROGRAM_CHAPTER),
-		Score:       &score,
-		MaxScore:    &score,
+		Score:       &ciScore,
 		Explanation: explanation,
 		Title:       title, // Actually this value is generated in client for classification intent results.
 	}
