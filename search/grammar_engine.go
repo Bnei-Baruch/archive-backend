@@ -27,8 +27,8 @@ type GrammarIntent struct {
 	FilterValues    []FilterValue              `json:"filter_values,omitempty"`
 	Score           float64                    `json:"score,omitempty"`
 	Explanation     *elastic.SearchExplanation `json:"explanation,omitempty"`
-	SingleHit       *elastic.SearchHit         `json:"single_collection,omitempty"`
-	SingleHitMdbUid *string                    `json:"single_collection_mdb_uid,omitempty"`
+	SingleHit       *elastic.SearchHit         `json:"single_hit,omitempty"`
+	SingleHitMdbUid *string                    `json:"single_hit_mdb_uid,omitempty"`
 }
 
 func (e *ESEngine) SuggestGrammars(query *Query) (map[string][]VariablesByPhrase, error) {
