@@ -110,6 +110,8 @@ type CollectionsRequest struct {
 	IDsFilter
 	ContentTypesFilter
 	DateRangeFilter
+	SourcesFilter
+	TagsFilter
 	WithUnits bool `json:"with_units" form:"with_units"`
 }
 
@@ -291,6 +293,7 @@ type Collection struct {
 	DefaultLanguage string         `json:"default_language,omitempty"`
 	HolidayID       string         `json:"holiday_id,omitempty"`
 	SourceID        string         `json:"source_id,omitempty"`
+	TagIDs          []string       `json:"tag_id,omitempty"`
 	Number          int            `json:"number,omitempty"`
 	ContentUnits    []*ContentUnit `json:"content_units,omitempty"`
 }
