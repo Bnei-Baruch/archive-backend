@@ -230,10 +230,10 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 				singleHitIntents = append(singleHitIntents, languageSingleHitIntents...)
 				if languageFilterIntents != nil && len(languageFilterIntents) > 0 {
 					intentToAdd := languageFilterIntents[0]
-					log.Infof("==> Optional intent: %+v.", intentToAdd)
+					log.Infof("Optional intent: %+v.", intentToAdd)
 					if len(languageFilterIntents) > 1 {
 						for i := 1; i < len(languageFilterIntents); i++ {
-							log.Infof("==> Optional intent: %+v.", languageFilterIntents[i])
+							log.Infof("Optional intent: %+v.", languageFilterIntents[i])
 							if languageFilterIntents[i].Value.(GrammarIntent).Score > intentToAdd.Value.(GrammarIntent).Score {
 								intentToAdd = languageFilterIntents[i]
 							}
