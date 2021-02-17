@@ -154,13 +154,15 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 func LoadSourceNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 	translations := make(TranslationsV2)
 
-	// Select all source names without Rabash Assorted Notes ('2GAdavz0')
-	// and without Russian only sources (campus materials and article summaries) for languages other than Russian.
-	query := `select sn.language, s.uid, sn.name
+	notToInclude := []string{}
+	for _, s := range consts.SOURCE_PARENTS_NOT_TO_INCLUDE_IN_VARIABLE_VALUES {
+		notToInclude = append(notToInclude, fmt.Sprintf("'%s'", s))
+	}
+	queryMask := `select sn.language, s.uid, sn.name, sp.uid as spuid
 	from sources s join source_i18n sn on s.id=sn.source_id
 	left join sources sp on s.parent_id=sp.id
-	where (sp.uid is null or sp.uid <> '2GAdavz0')
-	and (sn.language = 'ru' or sp.uid not in ('8Y0f8Jg9','FZhiWkph','LPk2bK2d','rsC6qkVs'))`
+	where (sp.uid is null or sp.uid not in (%s))`
+	query := fmt.Sprintf(queryMask, strings.Join(notToInclude, ","))
 
 	rows, err := queries.Raw(db, query).Query()
 	if err != nil {

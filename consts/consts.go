@@ -454,7 +454,7 @@ var ES_INTENT_SUPPORTED_FILTERS = map[string]bool{
 	FILTER_SOURCE: true,
 }
 
-var AUTO_INTENTS_BY_TERM_EQUALS_SOURCE_SUPPORTED_FILTERS = map[string]bool{
+var AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS = map[string]bool{
 	FILTERS[FILTER_UNITS_CONTENT_TYPES]:       true,
 	FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: true,
 	FILTERS[FILTER_SECTION_SOURCES]:           true,
@@ -770,16 +770,18 @@ var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{
 }
 
 const (
-	SRC_SHAMATI                = "qMUUn22b"
-	SRC_NONE_ELSE_BESIDE_HIM   = "hFeGidcS"
-	SRC_PEACE_ARCTICLE         = "28Cmp7gl"
-	SRC_PEACE_IN_WORLD_ARTICLE = "hqUTKcZz"
-	SRC_ARVUT_ARTICLE          = "itcVAcFn"
-	SRC_RABASH_ASSORTED_NOTES  = "2GAdavz0"
-	SRC_THE_ROSE_ARTICLE       = "yUcfylRm"
-	SRC_LETTERS_RABASH         = "b8SHlrfH"
-	SRC_ARTICLES_RABASH        = "rQ6sIUZK"
-	SRC_ARTICLES_BAAL_SULAM    = "qMeV5M3Y"
+	SRC_SHAMATI                               = "qMUUn22b"
+	SRC_NONE_ELSE_BESIDE_HIM                  = "hFeGidcS"
+	SRC_PEACE_ARCTICLE                        = "28Cmp7gl"
+	SRC_PEACE_IN_WORLD_ARTICLE                = "hqUTKcZz"
+	SRC_ARVUT_ARTICLE                         = "itcVAcFn"
+	SRC_RABASH_ASSORTED_NOTES                 = "2GAdavz0"
+	SRC_THE_ROSE_ARTICLE                      = "yUcfylRm"
+	SRC_LETTERS_RABASH                        = "b8SHlrfH"
+	SRC_ARTICLES_RABASH                       = "rQ6sIUZK"
+	SRC_ARTICLES_BAAL_SULAM                   = "qMeV5M3Y"
+	SRC_BAAL_SULAM_ARTICLES_LETTERS_SUMMARIES = "QUBP2DYe"
+	SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU         = "8Y0f8Jg9"
 )
 
 var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
@@ -820,4 +822,8 @@ var ES_GRAMMAR_DIVT_TYPE_TO_SOURCE_TYPES = map[string][]int64{
 
 var NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION = []string{
 	SRC_LETTERS_RABASH, SRC_ARTICLES_RABASH, SRC_ARTICLES_BAAL_SULAM, // Children 'position' value of these sources are not according to their actual chapter
+}
+
+var SOURCE_PARENTS_NOT_TO_INCLUDE_IN_VARIABLE_VALUES = []string{
+	SRC_RABASH_ASSORTED_NOTES, SRC_BAAL_SULAM_ARTICLES_LETTERS_SUMMARIES, SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU,
 }

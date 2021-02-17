@@ -162,7 +162,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	queriesNumForLang := 2
 	checkIfTermEqualsSource := true
 	for filterKey := range query.Filters {
-		if _, ok := consts.AUTO_INTENTS_BY_TERM_EQUALS_SOURCE_SUPPORTED_FILTERS[filterKey]; !ok {
+		if _, ok := consts.AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS[filterKey]; !ok {
 			checkIfTermEqualsSource = false
 			break
 		}
