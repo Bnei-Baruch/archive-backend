@@ -158,7 +158,7 @@ func LoadSourceNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 	for _, s := range consts.SOURCE_PARENTS_NOT_TO_INCLUDE_IN_VARIABLE_VALUES {
 		notToInclude = append(notToInclude, fmt.Sprintf("'%s'", s))
 	}
-	queryMask := `select sn.language, s.uid, sn.name, sp.uid as spuid
+	queryMask := `select sn.language, s.uid, sn.name
 	from sources s join source_i18n sn on s.id=sn.source_id
 	left join sources sp on s.parent_id=sp.id
 	where (sp.uid is null or sp.uid not in (%s))`
