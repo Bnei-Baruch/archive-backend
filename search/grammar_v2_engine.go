@@ -277,17 +277,8 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchT
 					text = fv.Value
 				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
 					sources = append(sources, fv.Value)
-				} //else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_POSITION] {
-				// position = fv.Value
-				//}
-			}
-			// For future use of filter rule by source+position
-			/*if position != "" && len(sources) == 1 {
-				relevantSource := e.cache.SearchStats().GetSourceByPositionAndParent(sources[0], position, typeIds)
-				if relevantSource != nil {
-					sources[0] = *relevantSource
 				}
-			}*/
+			}
 			if text != "" && (contentType != "" || len(sources) > 0) {
 				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Sources are '%+v'.", contentType, text, sources)
 				requests := []*elastic.SearchRequest{}
