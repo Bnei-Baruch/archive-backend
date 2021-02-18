@@ -630,13 +630,18 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS: nil,
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
 
+	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM: map[string][]string{
+		FILTERS[FILTER_SECTION_SOURCES]:           []string{""},
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LESSON_PART, CT_FULL_LESSON, CT_VIDEO_PROGRAM_CHAPTER},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON, CT_VIDEO_PROGRAM},
+	},
+
 	// Filters
 
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
 
-	// Currently these rules are not triggered with section filters. Consider to enable combination of sections + rule filter.
-	GRAMMAR_INTENT_FILTER_BY_SOURCE:             nil,
-	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM: nil,
+	// Currently this rule is not triggered with section filters. Consider to enable combination of sections + rule filter.
+	GRAMMAR_INTENT_FILTER_BY_SOURCE: nil,
 }
 
 const (

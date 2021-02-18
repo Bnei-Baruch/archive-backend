@@ -385,7 +385,13 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
 	minScoreByLandingPage := make(map[string]float64)
-	sourcesPositionWithoutTermAdded := false
+	addPositionWithoutTerm := true
+	for filterKey := range query.Filters {
+		if _, ok := consts.AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS[filterKey]; !ok {
+			addPositionWithoutTerm = false
+			break
+		}
+	}
 	for _, hit := range result.Hits.Hits {
 		var ruleObj GrammarRuleWithPercolatorQuery
 		if err := json.Unmarshal(*hit.Source, &ruleObj); err != nil {
@@ -473,7 +479,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Explanation:  hit.Explanation,
 					}})
 			} else if rule.Intent == consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
-				if sourcesPositionWithoutTermAdded {
+				if !addPositionWithoutTerm {
 					continue
 				}
 				log.Infof("GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM %+v", rule)
@@ -522,7 +528,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					return nil, nil, err
 				}
 				singleHitIntents = append(singleHitIntents, intents...)
-				sourcesPositionWithoutTermAdded = true
+				addPositionWithoutTerm = false // We add results only one time for this rule type
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {
