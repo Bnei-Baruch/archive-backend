@@ -268,7 +268,6 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, originalSearchT
 		if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
 			var contentType string
 			var text string
-			//var position string // For future use of filter rule by source+position
 			sources := []string{}
 			for _, fv := range intentValue.FilterValues {
 				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
