@@ -454,6 +454,7 @@ var ES_INTENT_SUPPORTED_FILTERS = map[string]bool{
 	FILTER_SOURCE: true,
 }
 
+// If these filters present, we automatically add some search results when the search term is identical to source name.
 var AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS = map[string]bool{
 	FILTERS[FILTER_UNITS_CONTENT_TYPES]:       true,
 	FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: true,
