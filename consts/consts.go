@@ -831,6 +831,8 @@ var NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION = []string{
 	SRC_LETTERS_RABASH, SRC_ARTICLES_RABASH, SRC_ARTICLES_BAAL_SULAM, // Children 'position' value of these sources are not according to their actual chapter
 }
 
+// We avoid adding source names from Rabash Assorted notes because many of them are similar to concepts or topics and less known as names of Rabash sources.
+// Also we avoid adding names of article summaries and campus material to avoid confusion with the original sources.
 var SOURCE_PARENTS_NOT_TO_INCLUDE_IN_VARIABLE_VALUES = []string{
 	SRC_RABASH_ASSORTED_NOTES, SRC_BAAL_SULAM_ARTICLES_LETTERS_SUMMARIES, SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU, SRC_CONNECTING_TO_THE_SOURCE,
 }
