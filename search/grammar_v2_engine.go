@@ -182,7 +182,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 				log.Infof("Adding intents by the source [%s] (%s).", *sourceUid, query.Term)
 				parent, position, _, err := e.cache.SearchStats().GetSourceParentAndPosition(*sourceUid, false)
 				if err != nil {
-					return nil, nil, errors.Wrap(err, "GetSourceParentAndPositionAndTypeIds")
+					return nil, nil, errors.Wrap(err, "GetSourceParentAndPosition")
 				}
 				var leafPrefixType *consts.PositionIndexType
 				if parent != nil {
