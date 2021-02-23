@@ -145,8 +145,8 @@ type SearchStatsCache interface {
 	DoesHolidaySingle(holiday string, year string) bool
 
 	// Some of the sources (consts.NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION) are restricted from these functions so you should not use them for general porpuses.
-	GetSourceByPositionAndParent(parent string, position string, typeIds []int64) *string
-	GetSourceParentAndPosition(source string, getTypeIds bool) (*string, *string, []int64, error)
+	GetSourceByPositionAndParent(parent string, position string, sourceTypeIds []int64) *string
+	GetSourceParentAndPosition(source string, getSourceTypeIds bool) (*string, *string, []int64, error)
 }
 
 type SearchStatsCacheImpl struct {
@@ -198,11 +198,11 @@ func (ssc *SearchStatsCacheImpl) IsSourceWithEnoughUnits(uid string, count int, 
 	return ssc.isClassWithUnits("sources", uid, count, cts...)
 }
 
-func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, position string, typeIds []int64) *string {
-	if typeIds == nil || len(typeIds) == 0 {
-		typeIds = []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, position string, sourceTypeIds []int64) *string {
+	if sourceTypeIds == nil || len(sourceTypeIds) == 0 {
+		sourceTypeIds = []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	}
-	for typeId := range typeIds {
+	for typeId := range sourceTypeIds {
 		key := fmt.Sprintf("%v-%v-%v", parent, position, typeId)
 		if src, ok := ssc.sourcesByPositionAndParent[key]; ok {
 			return &src
@@ -211,7 +211,7 @@ func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, pos
 	return nil
 }
 
-func (ssc *SearchStatsCacheImpl) GetSourceParentAndPosition(source string, getTypeIds bool) (*string, *string, []int64, error) {
+func (ssc *SearchStatsCacheImpl) GetSourceParentAndPosition(source string, getSourceTypeIds bool) (*string, *string, []int64, error) {
 	var parent *string
 	var position *string
 	typeIds := []int64{}
@@ -225,7 +225,7 @@ func (ssc *SearchStatsCacheImpl) GetSourceParentAndPosition(source string, getTy
 				position = &s[1]
 			}
 			typeIdStr := s[2]
-			if !getTypeIds {
+			if !getSourceTypeIds {
 				break
 			}
 			typeId, err := strconv.ParseInt(typeIdStr, 10, 64)
