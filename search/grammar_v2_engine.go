@@ -171,7 +171,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		sourceUid, language, isAuthor := e.sourceUidByTerm(query.Term, query.LanguageOrder)
 		if sourceUid != nil {
 			// Since some source titles contains grammar variable values,
-			// we are limiting the grammar search to LP's only if the term eqauls to a title of a source\author.
+			// we are limiting the grammar search to landing pages only if the term eqauls to a title of a source\author.
 			// Some examples for such source titles:
 			// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
 			// If the term is not a name of author, automatically add classification intents and source result.
