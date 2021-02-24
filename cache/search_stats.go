@@ -200,7 +200,7 @@ func (ssc *SearchStatsCacheImpl) IsSourceWithEnoughUnits(uid string, count int, 
 
 func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, position string, sourceTypeIds []int64) *string {
 	if sourceTypeIds == nil || len(sourceTypeIds) == 0 {
-		sourceTypeIds = []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+		sourceTypeIds = consts.ALL_SRC_TYPES
 	}
 	for typeId := range sourceTypeIds {
 		key := fmt.Sprintf("%v-%v-%v", parent, position, typeId)
