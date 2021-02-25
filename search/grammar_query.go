@@ -69,23 +69,16 @@ func NewGammarPerculateRequest(query *Query, language string, preference string)
 		Preference(preference)
 }
 
-func NewGammarV2RequestByHitType(query *Query, language string, preference string, hitType string) *elastic.SearchRequest {
+func NewSuggestGammarV2Request(query *Query, language string, preference string, hitType *string) *elastic.SearchRequest {
+	var grammarQuery elastic.Query
+	if hitType != nil {
+		grammarQuery = createGrammarQueryOfSpecificHitType(query, *hitType)
+	} else {
+		grammarQuery = createGrammarQuery(query)
+	}
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("grammar_rule.intent", "grammar_rule.variables", "grammar_rule.values", "grammar_rule.rules")
 	source := elastic.NewSearchSource().
-		Query(createGrammarQueryOfSpecificHitType(query, hitType)).
-		FetchSourceContext(fetchSourceContext).
-		Size(GRAMMAR_SEARCH_SIZE).
-		Explain(query.Deb)
-	return elastic.NewSearchRequest().
-		SearchSource(source).
-		Index(GrammarIndexNameForServing(language)).
-		Preference(preference)
-}
-
-func NewSuggestGammarV2Request(query *Query, language string, preference string) *elastic.SearchRequest {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("grammar_rule.intent", "grammar_rule.variables", "grammar_rule.values", "grammar_rule.rules")
-	source := elastic.NewSearchSource().
-		Query(createGrammarQuery(query)).
+		Query(grammarQuery).
 		FetchSourceContext(fetchSourceContext).
 		Size(GRAMMAR_SEARCH_SIZE).
 		Explain(query.Deb)

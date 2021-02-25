@@ -159,6 +159,8 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		return singleHitIntents, filterIntents, nil
 	}
 	searchLandingPagesOnly := false
+	// queriesNumForLang is the number of multiSearchService requests for each language.
+	// The number is 2 if we trigger a percolator search (for free text variables) in addition to a regular grammar search.
 	queriesNumForLang := 2
 	checkIfTermEqualsSource := true
 	for filterKey := range query.Filters {
@@ -205,11 +207,12 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	multiSearchService := e.esc.MultiSearch()
 	if searchLandingPagesOnly {
 		for _, language := range query.LanguageOrder {
-			multiSearchService.Add(NewGammarV2RequestByHitType(query, language, preference, "landing-pages"))
+			hitType := "landing-pages"
+			multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference, &hitType))
 		}
 	} else {
 		for _, language := range query.LanguageOrder {
-			multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference))
+			multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference, nil))
 			multiSearchService.Add(NewGammarPerculateRequest(query, language, preference))
 		}
 	}
