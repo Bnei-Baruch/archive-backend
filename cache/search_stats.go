@@ -203,6 +203,7 @@ func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, pos
 		sourceTypeIds = consts.ALL_SRC_TYPES
 	}
 	for typeId := range sourceTypeIds {
+		// Key structure: parent of the requested source (like book name) - position of the requested source child (like chapter or part number) - source type (book, volume, article, etc...)
 		key := fmt.Sprintf("%v-%v-%v", parent, position, typeId)
 		if src, ok := ssc.sourcesByPositionAndParent[key]; ok {
 			return &src
@@ -215,6 +216,7 @@ func (ssc *SearchStatsCacheImpl) GetSourceParentAndPosition(source string, getSo
 	var parent *string
 	var position *string
 	typeIds := []int64{}
+	// If a common usage for this function is needed, it is better to optimize it by managing a reverse map.
 	for k, v := range ssc.sourcesByPositionAndParent {
 		if v == source {
 			s := strings.Split(k, "-")
