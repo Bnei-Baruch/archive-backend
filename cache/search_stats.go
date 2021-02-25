@@ -459,10 +459,10 @@ func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]st
 	defer rows.Close()
 	ret := map[string]string{}
 	for rows.Next() {
-		var parent_uid string
-		var source_uid string
-		var position int
-		var type_id int64
+		var parent_uid string // uid of parent source
+		var source_uid string // uid of child source
+		var position int      // position of child source
+		var type_id int64     // type of child source
 		err = rows.Scan(&parent_uid, &source_uid, &position, &type_id)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
