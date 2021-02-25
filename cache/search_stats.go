@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/Bnei-Baruch/archive-backend/es"
 
@@ -142,16 +144,18 @@ type SearchStatsCache interface {
 	DoesHolidayExist(holiday string, year string) bool
 	DoesHolidaySingle(holiday string, year string) bool
 
-	DoesSourceTitleWithMoreThanOneWordExist(title string) bool
+	// Some of the sources (consts.NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION) are restricted from these functions so you should not use them for general porpuses.
+	GetSourceByPositionAndParent(parent string, position string, sourceTypeIds []int64) *string
+	GetSourceParentAndPosition(source string, getSourceTypeIds bool) (*string, *string, []int64, error)
 }
 
 type SearchStatsCacheImpl struct {
-	mdb          *sql.DB
-	tags         ClassByTypeStats
-	sources      ClassByTypeStats
-	conventions  map[string]map[string]int
-	holidayYears map[string]map[string]int
-	sourceTitles map[string]bool
+	mdb                        *sql.DB
+	tags                       ClassByTypeStats
+	sources                    ClassByTypeStats
+	conventions                map[string]map[string]int
+	holidayYears               map[string]map[string]int
+	sourcesByPositionAndParent map[string]string
 }
 
 func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
@@ -194,9 +198,46 @@ func (ssc *SearchStatsCacheImpl) IsSourceWithEnoughUnits(uid string, count int, 
 	return ssc.isClassWithUnits("sources", uid, count, cts...)
 }
 
-func (ssc *SearchStatsCacheImpl) DoesSourceTitleWithMoreThanOneWordExist(title string) bool {
-	_, exist := ssc.sourceTitles[title]
-	return exist
+func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, position string, sourceTypeIds []int64) *string {
+	if sourceTypeIds == nil || len(sourceTypeIds) == 0 {
+		sourceTypeIds = consts.ALL_SRC_TYPES
+	}
+	for typeId := range sourceTypeIds {
+		// Key structure: parent of the requested source (like book name) - position of the requested source child (like chapter or part number) - source type (book, volume, article, etc...)
+		key := fmt.Sprintf("%v-%v-%v", parent, position, typeId)
+		if src, ok := ssc.sourcesByPositionAndParent[key]; ok {
+			return &src
+		}
+	}
+	return nil
+}
+
+func (ssc *SearchStatsCacheImpl) GetSourceParentAndPosition(source string, getSourceTypeIds bool) (*string, *string, []int64, error) {
+	var parent *string
+	var position *string
+	typeIds := []int64{}
+	// If a common usage for this function is needed, it is better to optimize it by managing a reverse map.
+	for k, v := range ssc.sourcesByPositionAndParent {
+		if v == source {
+			s := strings.Split(k, "-")
+			if parent == nil {
+				parent = &s[0]
+			}
+			if position == nil {
+				position = &s[1]
+			}
+			typeIdStr := s[2]
+			if !getSourceTypeIds {
+				break
+			}
+			typeId, err := strconv.ParseInt(typeIdStr, 10, 64)
+			if err != nil {
+				return nil, nil, []int64{}, err
+			}
+			typeIds = append(typeIds, typeId)
+		}
+	}
+	return parent, position, typeIds, nil
 }
 
 func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, count int, cts ...string) bool {
@@ -239,11 +280,10 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	if err != nil {
 		return errors.Wrap(err, "Load holidays stats.")
 	}
-	ssc.sourceTitles, err = ssc.loadSourceTitlesWithMoreThanOeWord()
+	ssc.sourcesByPositionAndParent, err = ssc.loadSourcesByPositionAndParent()
 	if err != nil {
-		return errors.Wrap(err, "Load source titles with more than one word.")
+		return errors.Wrap(err, "Load source max position.")
 	}
-
 	return nil
 }
 
@@ -403,22 +443,32 @@ group by s.id, cu.type_id;`).Query()
 	return tags.flatten(), sources.flatten(), nil
 }
 
-func (ssc *SearchStatsCacheImpl) loadSourceTitlesWithMoreThanOeWord() (map[string]bool, error) {
-	rows, err := queries.Raw(ssc.mdb, `select distinct sn.name from sources s
-	join source_i18n sn on sn.source_id=s.id
-	where (length(sn.name) - length(replace(sn.name, ' ', ''))) > 0`).Query()
+func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]string, error) {
+	queryMask := `select p.uid as parent_uid, c.uid as source_uid, c.position, c.type_id from sources p
+	join sources c on c.parent_id = p.id
+	where c.position is not null and p.uid not in (%s)`
+	notToInclude := []string{}
+	for _, s := range consts.NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION {
+		notToInclude = append(notToInclude, fmt.Sprintf("'%s'", s))
+	}
+	query := fmt.Sprintf(queryMask, strings.Join(notToInclude, ","))
+	rows, err := queries.Raw(ssc.mdb, query).Query() // Authors are not part of the query.
 	if err != nil {
 		return nil, errors.Wrap(err, "queries.Raw")
 	}
 	defer rows.Close()
-	ret := map[string]bool{}
+	ret := map[string]string{}
 	for rows.Next() {
-		var name string
-		err = rows.Scan(&name)
+		var parent_uid string // uid of parent source
+		var source_uid string // uid of child source
+		var position int      // position of child source
+		var type_id int64     // type of child source
+		err = rows.Scan(&parent_uid, &source_uid, &position, &type_id)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
-		ret[name] = true
+		key := fmt.Sprintf("%v-%v-%v", parent_uid, position, type_id)
+		ret[key] = source_uid
 	}
 	return ret, nil
 }

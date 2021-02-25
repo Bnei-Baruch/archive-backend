@@ -128,6 +128,10 @@ var ALL_KNOWN_LANGS = [...]string{
 	LANG_UKRAINIAN, LANG_AMHARIC,
 }
 
+var ALL_SRC_TYPES = []int64{
+	SRC_TYPE_COLLECTION, SRC_TYPE_BOOK, SRC_TYPE_VOLUME, SRC_TYPE_PART, SRC_TYPE_PARASHA, SRC_TYPE_CHAPTER, SRC_TYPE_ARTICLE, SRC_TYPE_TITLE, SRC_TYPE_LETTER, SRC_TYPE_ITEM,
+}
+
 var SRC_TYPES_FOR_TITLE_DESCRIPTION_CONCAT = map[int64]bool{
 	SRC_TYPE_VOLUME: true,
 	SRC_TYPE_PART:   true,
@@ -331,6 +335,7 @@ const (
 	// Consider making a carusele and not limiting.
 	MAX_MATCHES_PER_GRAMMAR_INTENT                      = 3
 	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM = 200
+	CONTENT_TYPE_INTENTS_BOOST                          = 4.0 // For priority between several filter intent types
 )
 
 const (
@@ -453,6 +458,13 @@ var ES_INTENT_SUPPORTED_FILTERS = map[string]bool{
 	FILTER_SOURCE: true,
 }
 
+// If these filters present, we automatically add some search results when the search term is identical to source name.
+var AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS = map[string]bool{
+	FILTERS[FILTER_UNITS_CONTENT_TYPES]:       true,
+	FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: true,
+	FILTERS[FILTER_SECTION_SOURCES]:           true,
+}
+
 var ES_INTENT_SUPPORTED_CONTENT_TYPES = map[string]bool{
 	CT_LESSON_PART:           true,
 	CT_LECTURE:               true,
@@ -512,12 +524,16 @@ var INTENT_HIT_TYPE_BY_CT = map[string]string{
 const (
 	GRAMMAR_INDEX = "grammar"
 
-	GRAMMAR_TYPE_FILTER       = "filter"
-	GRAMMAR_TYPE_LANDING_PAGE = "landing-page"
+	GRAMMAR_TYPE_FILTER         = "filter"
+	GRAMMAR_TYPE_LANDING_PAGE   = "landing-page"
+	GRAMMAR_TYPE_CLASSIFICATION = "classification"
 
-	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE = "by_content_type"
+	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE       = "by_content_type"
+	GRAMMAR_INTENT_FILTER_BY_SOURCE             = "by_source"
+	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM = "source_position_without_term"
 
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
+	GRAMMAR_GENERATED_SOURCE_HIT = "grammar_generated_source_hit"
 
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS            = "lessons"
 	GRAMMAR_INTENT_LANDING_PAGE_VIRTUAL_LESSONS    = "virtual_lessons"
@@ -619,9 +635,18 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS: nil,
 	GRAMMAR_INTENT_LANDING_PAGE_HELP:      nil,
 
+	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM: map[string][]string{
+		FILTERS[FILTER_SECTION_SOURCES]:           []string{""},
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LESSON_PART, CT_FULL_LESSON, CT_VIDEO_PROGRAM_CHAPTER},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON, CT_VIDEO_PROGRAM},
+	},
+
 	// Filters
 
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
+
+	// Currently this rule is not triggered with section filters. Consider to enable combination of sections + rule filter.
+	GRAMMAR_INTENT_FILTER_BY_SOURCE: nil,
 }
 
 const (
@@ -633,8 +658,11 @@ const (
 	VAR_TEXT                = "$Text"
 	VAR_HOLIDAYS            = "$Holidays"
 	VAR_CONTENT_TYPE        = "$ContentType"
+	VAR_SOURCE              = "$Source"
+	VAR_POSITION            = "$Position"
+	VAR_DIVISION_TYPE       = "$DivType"
 
-	// $ContentType variables
+	// $ContentType variable values
 
 	VAR_CT_PROGRAMS        = "programs"
 	VAR_CT_ARTICLES        = "articles"
@@ -655,6 +683,14 @@ const (
 		VAR_CT_HOLIDAYS     = "holidays"
 		VAR_CT_CONVENTIONS  = "conventions"'
 	*/
+
+	// $DivisionType variable values
+
+	VAR_DIV_ARTICLE = "article"
+	VAR_DIV_CHAPTER = "chapter"
+	VAR_DIV_VOLUME  = "volume"
+	VAR_DIV_PART    = "part"
+	VAR_DIV_NUMBER  = "number"
 )
 
 // Grammar $ContentType variables to content type filters mapping.
@@ -708,6 +744,8 @@ var VARIABLE_TO_FILTER = map[string]string{
 	VAR_TEXT:                "text",
 	VAR_HOLIDAYS:            "holidays",
 	VAR_CONTENT_TYPE:        "content_type",
+	VAR_SOURCE:              "source",
+	VAR_POSITION:            "position",
 }
 
 // Latency log
@@ -725,6 +763,7 @@ const (
 	LAT_GETSUGGESTIONS_MULTISEARCHDO            = "GetSuggestions.MultisearchDo"
 	LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO = "DoSearch.SearchGrammars.MultisearchGrammarsDo"
 	LAT_DOSEARCH_GRAMMARS_MULTISEARCHFILTERDO   = "DoSearch.SearchGrammars.MultisearchFilterDo"
+	LAT_DOSEARCH_GRAMMARS_RESULTSTOINTENTS      = "DoSearch.SearchGrammars.ResultsToIntents"
 )
 
 var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{
@@ -741,13 +780,19 @@ var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{
 }
 
 const (
-	SRC_SHAMATI                = "qMUUn22b"
-	SRC_NONE_ELSE_BESIDE_HIM   = "hFeGidcS"
-	SRC_PEACE_ARCTICLE         = "28Cmp7gl"
-	SRC_PEACE_IN_WORLD_ARTICLE = "hqUTKcZz"
-	SRC_ARVUT_ARTICLE          = "itcVAcFn"
-	SRC_RABASH_ASSORTED_NOTES  = "2GAdavz0"
-	SRC_THE_ROSE_ARTICLE       = "yUcfylRm"
+	SRC_SHAMATI                               = "qMUUn22b"
+	SRC_NONE_ELSE_BESIDE_HIM                  = "hFeGidcS"
+	SRC_PEACE_ARCTICLE                        = "28Cmp7gl"
+	SRC_PEACE_IN_WORLD_ARTICLE                = "hqUTKcZz"
+	SRC_ARVUT_ARTICLE                         = "itcVAcFn"
+	SRC_RABASH_ASSORTED_NOTES                 = "2GAdavz0"
+	SRC_THE_ROSE_ARTICLE                      = "yUcfylRm"
+	SRC_LETTERS_RABASH                        = "b8SHlrfH"
+	SRC_ARTICLES_RABASH                       = "rQ6sIUZK"
+	SRC_ARTICLES_BAAL_SULAM                   = "qMeV5M3Y"
+	SRC_BAAL_SULAM_ARTICLES_LETTERS_SUMMARIES = "QUBP2DYe"
+	SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU         = "8Y0f8Jg9"
+	SRC_CONNECTING_TO_THE_SOURCE              = "wWm6fbn4"
 )
 
 var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
@@ -776,4 +821,22 @@ const (
 var ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX = map[string]PositionIndexType{
 	SRC_SHAMATI:               LETTER_IF_HEBREW,
 	SRC_RABASH_ASSORTED_NOTES: ALWAYS_NUMBER,
+}
+
+var ES_GRAMMAR_DIVT_TYPE_TO_SOURCE_TYPES = map[string][]int64{
+	VAR_DIV_ARTICLE: []int64{SRC_TYPE_ARTICLE},
+	VAR_DIV_CHAPTER: []int64{SRC_TYPE_CHAPTER, SRC_TYPE_ARTICLE, SRC_TYPE_LETTER},
+	VAR_DIV_VOLUME:  []int64{SRC_TYPE_VOLUME},
+	VAR_DIV_PART:    []int64{SRC_TYPE_PART},
+	VAR_DIV_NUMBER:  []int64{SRC_TYPE_CHAPTER, SRC_TYPE_ARTICLE, SRC_TYPE_LETTER},
+}
+
+var NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION = []string{
+	SRC_LETTERS_RABASH, SRC_ARTICLES_RABASH, SRC_ARTICLES_BAAL_SULAM, // Children 'position' value of these sources are not according to their actual chapter
+}
+
+// We avoid adding source names from Rabash Assorted notes because many of them are similar to concepts or topics and less known as names of Rabash sources.
+// Also we avoid adding names of article summaries and campus material to avoid confusion with the original sources.
+var SOURCE_PARENTS_NOT_TO_INCLUDE_IN_VARIABLE_VALUES = []string{
+	SRC_RABASH_ASSORTED_NOTES, SRC_BAAL_SULAM_ARTICLES_LETTERS_SUMMARIES, SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU, SRC_CONNECTING_TO_THE_SOURCE,
 }

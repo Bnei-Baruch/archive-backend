@@ -16,10 +16,18 @@ const (
 
 	GRAMMAR_SEARCH_SIZE = 2000
 
-	GRAMMAR_PERCULATE_SIZE = 1
+	GRAMMAR_PERCULATE_SIZE = 5
 
 	PERCULATE_HIGHLIGHT_SEPERATOR = '$'
 )
+
+func createGrammarQueryOfSpecificHitType(q *Query, hitType string) elastic.Query {
+	boolQuery := elastic.NewBoolQuery().Must(
+		elastic.NewMatchQuery("grammar_rule.hit_type", hitType),
+		createGrammarQuery(q),
+	)
+	return boolQuery
+}
 
 func createGrammarQuery(q *Query) elastic.Query {
 	boolQuery := elastic.NewBoolQuery()
@@ -61,10 +69,16 @@ func NewGammarPerculateRequest(query *Query, language string, preference string)
 		Preference(preference)
 }
 
-func NewSuggestGammarV2Request(query *Query, language string, preference string) *elastic.SearchRequest {
+func NewSuggestGammarV2Request(query *Query, language string, preference string, hitType *string) *elastic.SearchRequest {
+	var grammarQuery elastic.Query
+	if hitType != nil {
+		grammarQuery = createGrammarQueryOfSpecificHitType(query, *hitType)
+	} else {
+		grammarQuery = createGrammarQuery(query)
+	}
 	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("grammar_rule.intent", "grammar_rule.variables", "grammar_rule.values", "grammar_rule.rules")
 	source := elastic.NewSearchSource().
-		Query(createGrammarQuery(query)).
+		Query(grammarQuery).
 		FetchSourceContext(fetchSourceContext).
 		Size(GRAMMAR_SEARCH_SIZE).
 		Explain(query.Deb)
@@ -97,62 +111,75 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 		Preference(preference)
 }
 
-func NewFilteredResultsSearchRequest(text string, contentType string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
-	if filters, ok := consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]; ok {
-		requests := []*elastic.SearchRequest{}
-		if val, ok := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
-			sourceOnlyFilter := map[string][]string{
-				consts.FILTERS[consts.FILTER_SECTION_SOURCES]: val,
-			}
-			titlesOnly := contentType == consts.VAR_CT_BOOK_TITLES
-			sourceRequests, err := NewResultsSearchRequests(
-				SearchRequestOptions{
-					resultTypes:        []string{consts.ES_RESULT_TYPE_SOURCES},
-					index:              "",
-					query:              Query{Term: text, Filters: sourceOnlyFilter, LanguageOrder: []string{language}, Deb: deb},
-					sortBy:             sortBy,
-					from:               0,
-					size:               from + size,
-					preference:         preference,
-					useHighlight:       false,
-					partialHighlight:   false,
-					filterOutCUSources: []string{},
-					titlesOnly:         titlesOnly})
-			if err != nil {
-				return nil, err
-			}
-			requests = append(requests, sourceRequests...)
-		}
-
-		filtersWithoutSource := map[string][]string{}
-		for key, value := range filters {
-			if key != consts.FILTERS[consts.FILTER_SECTION_SOURCES] {
-				filtersWithoutSource[key] = value
-			}
-		}
-		if len(filtersWithoutSource) > 0 {
-			nonSourceRequests, err := NewResultsSearchRequests(
-				SearchRequestOptions{
-					resultTypes:                      resultTypes,
-					index:                            "",
-					query:                            Query{Term: text, Filters: filtersWithoutSource, LanguageOrder: []string{language}, Deb: deb},
-					sortBy:                           sortBy,
-					from:                             0,
-					size:                             from + size,
-					preference:                       preference,
-					useHighlight:                     false,
-					partialHighlight:                 false,
-					filterOutCUSources:               []string{},
-					includeTypedUidsFromContentUnits: true})
-			if err != nil {
-				return nil, err
-			}
-			requests = append(requests, nonSourceRequests...)
-		}
-
-		return requests, nil
+func NewFilteredResultsSearchRequest(text string, contentType string, sources []string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
+	if contentType == "" && len(sources) == 0 {
+		return nil, fmt.Errorf("No contentType and sources provided for NewFilteredResultsSearchRequest().")
 	}
-	return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES.", contentType)
+	filters := map[string][]string{}
+	if contentType != "" {
+		var ok bool
+		if filters, ok = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]; !ok {
+			return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES.", contentType)
+		}
+	}
+	if len(sources) > 0 {
+		filters[consts.FILTERS[consts.FILTERS[consts.FILTER_SOURCE]]] = sources
+	}
+	requests := []*elastic.SearchRequest{}
+	if val, ok := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok || len(sources) > 0 {
+		sourceOnlyFilter := map[string][]string{
+			consts.FILTERS[consts.FILTER_SECTION_SOURCES]: val,
+		}
+		if len(sources) > 0 {
+			sourceOnlyFilter[consts.FILTERS[consts.FILTERS[consts.FILTER_SOURCE]]] = sources
+		}
+		titlesOnly := contentType == consts.VAR_CT_BOOK_TITLES
+		sourceRequests, err := NewResultsSearchRequests(
+			SearchRequestOptions{
+				resultTypes:        []string{consts.ES_RESULT_TYPE_SOURCES},
+				index:              "",
+				query:              Query{Term: text, Filters: sourceOnlyFilter, LanguageOrder: []string{language}, Deb: deb},
+				sortBy:             sortBy,
+				from:               0,
+				size:               from + size,
+				preference:         preference,
+				useHighlight:       false,
+				partialHighlight:   false,
+				filterOutCUSources: []string{},
+				titlesOnly:         titlesOnly})
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, sourceRequests...)
+	}
+
+	filtersWithoutSource := map[string][]string{}
+	for key, value := range filters {
+		if key != consts.FILTERS[consts.FILTER_SECTION_SOURCES] {
+			filtersWithoutSource[key] = value
+		}
+	}
+	if len(filtersWithoutSource) > 0 {
+		nonSourceRequests, err := NewResultsSearchRequests(
+			SearchRequestOptions{
+				resultTypes:                      resultTypes,
+				index:                            "",
+				query:                            Query{Term: text, Filters: filtersWithoutSource, LanguageOrder: []string{language}, Deb: deb},
+				sortBy:                           sortBy,
+				from:                             0,
+				size:                             from + size,
+				preference:                       preference,
+				useHighlight:                     false,
+				partialHighlight:                 false,
+				filterOutCUSources:               []string{},
+				includeTypedUidsFromContentUnits: true})
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, nonSourceRequests...)
+	}
+
+	return requests, nil
 }
 
 func wordToHist(word string) map[rune]int {

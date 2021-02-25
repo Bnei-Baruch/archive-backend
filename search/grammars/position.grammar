@@ -1,0 +1,11 @@
+en,source_position_without_term => $Source $Position
+en,source_position_without_term => $Source $DivisionType $Position
+en,source_position_without_term => $DivisionType $Position $Source
+
+he,source_position_without_term => $Source $Position
+he,source_position_without_term => $Source $DivisionType $Position
+he,source_position_without_term => $DivisionType $Position $Source
+
+ru,source_position_without_term => $Source $Position
+ru,source_position_without_term => $Source $DivisionType $Position
+ru,source_position_without_term => $DivisionType $Position $Source

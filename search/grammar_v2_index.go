@@ -202,7 +202,16 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 					log.Infof("Cross iterating over %+v", variablesValues)
 					// Iterate over each pair of values, e.g., ["2018", "Moscow"], ["2019", "Moscow"], ..., ["2018", "Tel Aviv"], ...
 					for valueIter := CreateCrossIter(variablesValues); valueIter.Next(); {
+
 						variableValues := valueIter.Values()
+						vMap := make(map[string][]string)
+						for i := range variablesSet {
+							vMap[variablesSet[i]] = []string{variableValues[i]}
+						}
+						if !GrammarVariablesMatch(intent, vMap, cm) {
+							continue
+						}
+
 						log.Infof("values set: %+v", variableValues)
 						assignedRules := []string(nil)
 						for i := range rules {
@@ -232,6 +241,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 								withinQuotaionMarks := []string{}
 								for _, str := range splitted {
 									if len(str) > 0 {
+										str = strings.Replace(str, "\"", "\\\"", -1)
 										withinQuotaionMarks = append(withinQuotaionMarks, fmt.Sprintf("\"%s\"", strings.TrimSpace(str)))
 									}
 								}
@@ -249,43 +259,38 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 							}
 							queryStr := strings.Join(ruleClauses, " OR ")
 							fmt.Printf("Query for percolator: %s\n", queryStr)
-							percolatorQuery = elastic.NewQueryStringQuery(queryStr)
+							percolatorQuery = elastic.NewQueryStringQuery(queryStr).Field("search_text")
 						} else {
 							percolatorQuery = elastic.MatchNoneQuery{}
-							for i := range assignedRules {
-								assignedRulesSuggest = append(assignedRulesSuggest, es.Suffixes(assignedRules[i])...)
-							}
-							for i := range assignedRulesSuggest {
-								if assignedRulesSuggest[i] == "" {
-									log.Infof("NNN: %+v", assignedRulesSuggest[i])
+							if intent != consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
+								for i := range assignedRules {
+									assignedRulesSuggest = append(assignedRulesSuggest, assignedRules[i])
+								}
+								for i := range assignedRulesSuggest {
+									if assignedRulesSuggest[i] == "" {
+										log.Infof("NNN: %+v", assignedRulesSuggest[i])
+									}
 								}
 							}
 							log.Infof("Rules suggest: [%s]", strings.Join(assignedRulesSuggest, "|"))
 						}
-
-						vMap := make(map[string][]string)
-						for i := range variablesSet {
-							vMap[variablesSet[i]] = []string{variableValues[i]}
+						rule := GrammarRule{
+							HitType:      grammar.HitType,
+							Intent:       intent,
+							Rules:        assignedRules,
+							RulesSuggest: es.SuggestField{es.Unique(assignedRulesSuggest), float64(consts.ES_GRAMMAR_SUGGEST_DEFAULT_WEIGHT)},
+							Variables:    variablesSet,
+							Values:       variableValues,
 						}
-						if GrammarVariablesMatch(intent, vMap, cm) {
-							rule := GrammarRule{
-								HitType:      grammar.HitType,
-								Intent:       intent,
-								Rules:        assignedRules,
-								RulesSuggest: es.SuggestField{es.Unique(assignedRulesSuggest), float64(consts.ES_GRAMMAR_SUGGEST_DEFAULT_WEIGHT)},
-								Variables:    variablesSet,
-								Values:       variableValues,
-							}
-							qs, err := percolatorQuery.Source()
-							if err != nil {
-								return err
-							}
-							doc := GrammarRuleWithPercolatorQuery{
-								Query:       qs,
-								GrammarRule: rule,
-							}
-							bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(doc))
+						qs, err := percolatorQuery.Source()
+						if err != nil {
+							return err
 						}
+						doc := GrammarRuleWithPercolatorQuery{
+							Query:       qs,
+							GrammarRule: rule,
+						}
+						bulkService.Add(elastic.NewBulkIndexRequest().Index(name).Type("grammars").Doc(doc))
 					}
 				}
 			}

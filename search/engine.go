@@ -326,8 +326,11 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 
 	// Limit ClassificationIntents to top MAX_CLASSIFICATION_INTENTS
 	boostClassificationScore := func(intentValue *ClassificationIntent) float64 {
-		// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
-		return *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
+		if intentValue.MaxScore != nil {
+			// Boost up to 33% for exact match, i.e., for score / max score of 1.0.
+			return *intentValue.Score * (3.0 + *intentValue.Score / *intentValue.MaxScore) / 3.0
+		}
+		return *intentValue.Score
 	}
 	scores := []float64{}
 	for i := range query.Intents {
@@ -389,10 +392,10 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				sh.MaxScore = &boostedScore
 			}
 			var intentHit *elastic.SearchHit
-			convertedToSingleCollection := false
-			if intentValue.SingleCollection != nil {
-				intentHit = intentValue.SingleCollection
-				convertedToSingleCollection = true
+			convertedToSingleHit := false
+			if intentValue.SingleHit != nil {
+				intentHit = intentValue.SingleHit
+				convertedToSingleHit = true
 			} else {
 				intentHit = &elastic.SearchHit{}
 			}
@@ -400,7 +403,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				intentHit.Explanation = intentValue.Explanation
 			}
 			intentHit.Score = &boostedScore
-			if !convertedToSingleCollection {
+			if !convertedToSingleHit {
 				intentHit.Index = consts.GRAMMAR_INDEX
 				intentHit.Type = intent.Type
 				source, err := json.Marshal(intentValue)
@@ -646,14 +649,26 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
-	intents, err := e.AddIntents(&query, preference, sortBy, filterIntents)
+	query.Intents = append(query.Intents, <-grammarsSingleHitIntentsChannel...)
+	hasClassificationIntentFromGrammar := false
+	for _, intent := range query.Intents {
+		if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Exist {
+			hasClassificationIntentFromGrammar = true
+			break
+		}
+	}
+	// Grammar engine is currently support a search for classification intents according to 'by_content_type_and_source' rule only.
+	// If we have classification intents from Grammar, IntentsEngine will search for intents only by tag.
+	intents, err := e.AddIntents(&query, preference, sortBy, true, !hasClassificationIntentFromGrammar, filterIntents)
 	if err != nil {
 		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 	}
+	query.Intents = append(query.Intents, intents...)
+	log.Debugf("Intents: %+v", query.Intents)
 
 	// When we have a lessons carousel we filter out the regular results that are also exist in the carousel.
 	filterOutCUSources := make([]string, 0)
-	for _, intent := range intents {
+	for _, intent := range query.Intents {
 		if intent.Type == consts.INTENT_TYPE_SOURCE {
 			if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Exist {
 				// This is not a perfect solution since we dont know yet what is the currentLang and we filter by all languages
@@ -732,11 +747,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
-	query.Intents = append(query.Intents, intents...)
-	query.Intents = append(query.Intents, <-grammarsSingleHitIntentsChannel...)
-
-	log.Debugf("Intents: %+v", query.Intents)
-
 	// Convert intents and grammars to results.
 	err, intentResultsMap := e.IntentsToResults(&query)
 	if err != nil {
@@ -766,8 +776,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
 		for _, result := range filtered.Results {
-			var zeroScore float64 = 0
 			sort.Strings(filterOutCUSources)
+			withoutCarouselDuplications := []*elastic.SearchHit{}
+			var maxScore float64
 			for _, hit := range result.Hits.Hits {
 				var src es.Result
 				err = json.Unmarshal(*hit.Source, &src)
@@ -783,12 +794,21 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					}
 					sort.Strings(hitSources)
 					if len(utils.IntersectSortedStringSlices(hitSources, filterOutCUSources)) > 0 {
-						// We assign a zero score to the hits we recieved from 'filter grammar' that are duplicate the existed items inside carousels
-						log.Infof("Set zero score for CU hit from 'filter grammar' that duplicates carousels source: %v", src.MDB_UID)
-						hit.Score = &zeroScore
+						// We remove the hits we recieved from 'filter grammar' that are duplicate the existed items inside carousels
+						log.Infof("Remove CU hit from 'filter grammar' that duplicates carousels source: %v", src.MDB_UID)
+					} else {
+						if hit.Score != nil {
+							maxScore = math.Max(*hit.Score, maxScore)
+						}
+						withoutCarouselDuplications = append(withoutCarouselDuplications, hit)
 					}
+				} else {
+					withoutCarouselDuplications = append(withoutCarouselDuplications, hit)
 				}
 			}
+			result.Hits.Hits = withoutCarouselDuplications
+			result.Hits.MaxScore = &maxScore
+			result.Hits.TotalHits = int64(len(withoutCarouselDuplications))
 		}
 		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
 			for _, result := range filtered.Results {
@@ -833,9 +853,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			if shouldMergeResults {
 				results = append(results, resultsByLang[lang]...)
 			} else {
-				results = r
-				currentLang = lang
-				break
+				if len(r) > 0 {
+					results = r
+					currentLang = lang
+					break
+				}
 			}
 		}
 	}
