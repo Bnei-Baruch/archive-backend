@@ -211,7 +211,8 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 				continue
 			}
 			if filmDate, ok := props["film_date"]; ok {
-				val, err := time.Parse("2006-01-02", filmDate.(string))
+				dateStr := strings.Split(filmDate.(string), "T")[0] // remove the 'time' part
+				val, err := time.Parse("2006-01-02", dateStr)
 				indexErrors.DocumentError("", err, fmt.Sprintf("time.Parse film_date %s", cu.UID))
 				if err != nil {
 					continue
