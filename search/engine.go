@@ -605,7 +605,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		} else {
 			grammarsSingleHitIntentsChannel <- singleHitIntents
 			grammarsFilterIntentsChannel <- filterIntents
-			if filtered, err := e.SearchByFilterIntents(filterIntents, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
+			if filtered, err := e.SearchByFilterIntents(filterIntents, query.Filters, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
 				log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
 				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
 			} else {
