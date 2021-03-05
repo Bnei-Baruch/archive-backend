@@ -707,7 +707,6 @@ var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
 	VAR_CT_ARTICLES: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_ARTICLE},
 		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_ARTICLES},
-		FILTERS[FILTER_SECTION_SOURCES]:           []string{""}, // Article is also source (like 'Maamar Ha-Arvut')
 	},
 	VAR_CT_LESSONS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LESSON_PART, CT_FULL_LESSON},
@@ -715,12 +714,6 @@ var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
 	},
 	VAR_CT_CLIPS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{CT_CLIP},
-	},
-	VAR_CT_SOURCES: map[string][]string{
-		FILTERS[FILTER_SECTION_SOURCES]: []string{""},
-	},
-	VAR_CT_BOOK_TITLES: map[string][]string{
-		FILTERS[FILTER_SECTION_SOURCES]: []string{""},
 	},
 	VAR_CT_MEALS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_MEAL},
@@ -740,6 +733,12 @@ var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
 	/*VAR_CT_TWEETS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{SCT_TWEET},
 	},*/
+}
+
+var CT_VARIABLES_ENABLE_SOURCES_SEARCH = map[string]bool{
+	VAR_CT_ARTICLES:    true, // Article is also source (like 'Maamar Ha-Arvut')
+	VAR_CT_SOURCES:     true,
+	VAR_CT_BOOK_TITLES: true,
 }
 
 // Variable name to frontend filter name mapping.

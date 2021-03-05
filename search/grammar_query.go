@@ -115,18 +115,30 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 	if contentType == "" && len(sources) == 0 {
 		return nil, fmt.Errorf("No contentType and sources provided for NewFilteredResultsSearchRequest().")
 	}
+	if contentType != "" && len(sources) > 0 {
+		return nil, fmt.Errorf("Filter by source and content type combination is not currently supported.")
+	}
+	var searchSources bool
+	_, isSectionSources := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]
+	searchSources = len(filters) == 0 || isSectionSources // Search for sources only on the main section (without filters) or on the sources section.
 	if contentType != "" {
-		var ok bool
-		if filters, ok = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]; !ok {
-			return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES.", contentType)
+		// by content type filter
+		if len(filters) > 0 {
+			return nil, fmt.Errorf("Attempt to assign extra filters for filtering by content type operation.") // Consider to support this.
 		}
+		filters, _ = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]
+		_, enableSourcesSearch := consts.CT_VARIABLES_ENABLE_SOURCES_SEARCH[contentType]
+		if len(filters) == 0 && !enableSourcesSearch {
+			return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES and not in CT_VARIABLES_ENABLE_SOURCES_SEARCH.", contentType)
+		}
+		searchSources = searchSources && enableSourcesSearch
 	}
 	if len(sources) > 0 {
+		// by source filter
 		filters[consts.FILTERS[consts.FILTERS[consts.FILTER_SOURCE]]] = sources
 	}
 	requests := []*elastic.SearchRequest{}
-	_, isSectionSources := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]
-	if isSectionSources || (len(filters) == 0 && len(sources) > 0) {
+	if searchSources {
 		sourceOnlyFilter := map[string][]string{
 			consts.FILTERS[consts.FILTER_SECTION_SOURCES]: nil,
 		}
@@ -152,20 +164,13 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 		}
 		requests = append(requests, sourceRequests...)
 	}
-
 	if !isSectionSources {
-		filtersWithoutSource := map[string][]string{}
-		for key, value := range filters {
-			if key != consts.FILTERS[consts.FILTER_SECTION_SOURCES] {
-				filtersWithoutSource[key] = value
-			}
-		}
-		if len(filtersWithoutSource) > 0 {
+		if len(filters) > 0 {
 			nonSourceRequests, err := NewResultsSearchRequests(
 				SearchRequestOptions{
 					resultTypes:                      resultTypes,
 					index:                            "",
-					query:                            Query{Term: text, Filters: filtersWithoutSource, LanguageOrder: []string{language}, Deb: deb},
+					query:                            Query{Term: text, Filters: filters, LanguageOrder: []string{language}, Deb: deb},
 					sortBy:                           sortBy,
 					from:                             0,
 					size:                             from + size,
