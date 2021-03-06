@@ -554,6 +554,10 @@ func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchReque
 		Size(options.size).
 		Explain(options.query.Deb)
 
+	if options.Timeout != nil {
+		source = source.Timeout(*options.Timeout)
+	}
+
 	if options.useHighlight {
 		terms := make([]string, 1)
 		if options.query.Term != "" {

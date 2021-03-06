@@ -51,4 +51,6 @@ type SearchRequestOptions struct {
 	// We use this data for a further filtering out of hits recieved from 'grammar filter' search that duplicates the carousel items.
 	// Since the search for 'grammar filter' is async. to  classification intents (carousel) search, we don't have yet the data for filterOutCUSources fild.
 	includeTypedUidsFromContentUnits bool
+	// If not nil, set how long a search is allowed to take, e.g. "1s" or "500ms".
+	Timeout *string
 }

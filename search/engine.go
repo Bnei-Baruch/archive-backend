@@ -564,7 +564,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	e.ExecutionTimeLog.Store(operation, elapsed)
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, timeoutForHighlight string) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
 	// Initializing all channels.
@@ -938,7 +938,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					size:             1,
 					preference:       preference,
 					useHighlight:     true,
-					partialHighlight: true})
+					partialHighlight: true,
+					Timeout:          &timeoutForHighlight})
 			if err != nil {
 				return nil, errors.Wrap(err, "ESEngine.DoSearch - Error creating highlight request in multisearch Do.")
 			}
@@ -952,18 +953,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			log.Debug("Searching for highlights and replacing original results with highlighted results.")
 
 			beforeHighlightsDoSearch := time.Now()
-			highlightCtx, cancelFn := context.WithTimeout(context.Background(), timeoutForHighlight)
-			defer cancelFn()
-			mr, err := mssHighlights.Do(highlightCtx)
+			mr, err := mssHighlights.Do(context.TODO())
 			e.timeTrack(beforeHighlightsDoSearch, consts.LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO)
 			if err != nil {
-				switch highlightCtx.Err() {
-				case context.DeadlineExceeded:
-					log.Error(err, "ESEngine.DoSearch - DeadlineExceeded mssHighlights Do.")
-					mr = new(elastic.MultiSearchResult)
-				default:
-					return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
-				}
+				return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
 			}
 
 			for _, highlightedResults := range mr.Responses {
