@@ -297,7 +297,8 @@ func LessonsHandler(c *gin.Context) {
 
 	if utils.IsEmpty(r.Authors) &&
 		utils.IsEmpty(r.Sources) &&
-		utils.IsEmpty(r.Tags) {
+		utils.IsEmpty(r.Tags) &&
+		r.MediaLanguage == "" {
 		if r.OrderBy == "" {
 			r.OrderBy = "(properties->>'film_date')::date desc, (properties->>'number')::int desc, created_at desc"
 		}
