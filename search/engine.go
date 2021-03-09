@@ -564,7 +564,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	e.ExecutionTimeLog.Store(operation, elapsed)
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, timeoutForHighlight string) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
 	// Initializing all channels.
@@ -605,7 +605,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		} else {
 			grammarsSingleHitIntentsChannel <- singleHitIntents
 			grammarsFilterIntentsChannel <- filterIntents
-			if filtered, err := e.SearchByFilterIntents(filterIntents, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
+			filtersCopy := map[string][]string{}
+			for k, v := range query.Filters {
+				filtersCopy[k] = v
+			}
+			if filtered, err := e.SearchByFilterIntents(filterIntents, filtersCopy, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
 				log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
 				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
 			} else {
@@ -810,6 +814,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			result.Hits.MaxScore = &maxScore
 			result.Hits.TotalHits = int64(len(withoutCarouselDuplications))
 		}
+		// Note:
+		// Below we handle 2 result types from a different elastic queries: grammar based results and regular results.
+		// Changes we made to the scores that is based on the reliance to the results of another type
+		//  can potentially break in some way the uniqueness of results for each page (page 2 may contain a result from page 1).
+		// Also the logic of boosting results that identical to both types has a limited effect
+		//  since we we are not checking identification in all results but only in the results we received according to page filter.
+		// Ideal solution for these issues is to handle all score calculations for both types within a single elastic query.
 		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
 			for _, result := range filtered.Results {
 				var maxScore float64
@@ -818,7 +829,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				// In some cases we have several regular results with a very close scores that above 90% of the maxRegularScore.
 				// Since the top score for the best 'filter grammar' result is 90% of the maxRegularScore,
 				//	we have cases where the best 'filter grammar' result will be below the high regular results with a VERY SMALL GAP between them.
-				// To minimize this gap, we add +10 the formula.
+				// To minimize this gap, we add +10 to the formula.
 				// e.g. search of term "ביטול קטעי מקור" without adding 10 bring the relevant result in position #4. With adding 10, the relevant result is the first.
 				for _, hit := range result.Hits.Hits {
 					if hit.Score != nil {
@@ -835,7 +846,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
 						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
 						if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
-							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM
+							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM
 						}
 						// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
 						delete(filtered.HitIdsMap, hit.Id)
@@ -934,7 +945,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					size:             1,
 					preference:       preference,
 					useHighlight:     true,
-					partialHighlight: true})
+					partialHighlight: true,
+					Timeout:          &timeoutForHighlight})
 			if err != nil {
 				return nil, errors.Wrap(err, "ESEngine.DoSearch - Error creating highlight request in multisearch Do.")
 			}
@@ -948,18 +960,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			log.Debug("Searching for highlights and replacing original results with highlighted results.")
 
 			beforeHighlightsDoSearch := time.Now()
-			highlightCtx, cancelFn := context.WithTimeout(context.Background(), timeoutForHighlight)
-			defer cancelFn()
-			mr, err := mssHighlights.Do(highlightCtx)
+			mr, err := mssHighlights.Do(context.TODO())
 			e.timeTrack(beforeHighlightsDoSearch, consts.LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO)
 			if err != nil {
-				switch highlightCtx.Err() {
-				case context.DeadlineExceeded:
-					log.Error(err, "ESEngine.DoSearch - DeadlineExceeded mssHighlights Do.")
-					mr = new(elastic.MultiSearchResult)
-				default:
-					return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
-				}
+				return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
 			}
 
 			for _, highlightedResults := range mr.Responses {

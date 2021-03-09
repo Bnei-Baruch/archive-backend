@@ -111,24 +111,36 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 		Preference(preference)
 }
 
-func NewFilteredResultsSearchRequest(text string, contentType string, sources []string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
+func NewFilteredResultsSearchRequest(text string, filters map[string][]string, contentType string, sources []string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
 	if contentType == "" && len(sources) == 0 {
 		return nil, fmt.Errorf("No contentType and sources provided for NewFilteredResultsSearchRequest().")
 	}
-	filters := map[string][]string{}
+	if contentType != "" && len(sources) > 0 {
+		return nil, fmt.Errorf("Filter by source and content type combination is not currently supported.")
+	}
+	var searchSources bool
+	_, isSectionSources := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]
+	searchSources = len(filters) == 0 || isSectionSources // Search for sources only on the main section (without filters) or on the sources section.
 	if contentType != "" {
-		var ok bool
-		if filters, ok = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]; !ok {
-			return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES.", contentType)
+		// by content type filter
+		if len(filters) > 0 {
+			return nil, fmt.Errorf("Attempt to assign extra filters for filtering by content type operation.") // Consider to support this.
 		}
+		filters, _ = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]
+		_, enableSourcesSearch := consts.CT_VARIABLES_ENABLE_SOURCES_SEARCH[contentType]
+		if len(filters) == 0 && !enableSourcesSearch {
+			return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES and not in CT_VARIABLES_ENABLE_SOURCES_SEARCH.", contentType)
+		}
+		searchSources = searchSources && enableSourcesSearch
 	}
 	if len(sources) > 0 {
+		// by source filter
 		filters[consts.FILTERS[consts.FILTERS[consts.FILTER_SOURCE]]] = sources
 	}
 	requests := []*elastic.SearchRequest{}
-	if val, ok := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok || len(sources) > 0 {
+	if searchSources {
 		sourceOnlyFilter := map[string][]string{
-			consts.FILTERS[consts.FILTER_SECTION_SOURCES]: val,
+			consts.FILTERS[consts.FILTER_SECTION_SOURCES]: nil,
 		}
 		if len(sources) > 0 {
 			sourceOnlyFilter[consts.FILTERS[consts.FILTERS[consts.FILTER_SOURCE]]] = sources
@@ -152,31 +164,26 @@ func NewFilteredResultsSearchRequest(text string, contentType string, sources []
 		}
 		requests = append(requests, sourceRequests...)
 	}
-
-	filtersWithoutSource := map[string][]string{}
-	for key, value := range filters {
-		if key != consts.FILTERS[consts.FILTER_SECTION_SOURCES] {
-			filtersWithoutSource[key] = value
+	if !isSectionSources {
+		if len(filters) > 0 {
+			nonSourceRequests, err := NewResultsSearchRequests(
+				SearchRequestOptions{
+					resultTypes:                      resultTypes,
+					index:                            "",
+					query:                            Query{Term: text, Filters: filters, LanguageOrder: []string{language}, Deb: deb},
+					sortBy:                           sortBy,
+					from:                             0,
+					size:                             from + size,
+					preference:                       preference,
+					useHighlight:                     false,
+					partialHighlight:                 false,
+					filterOutCUSources:               []string{},
+					includeTypedUidsFromContentUnits: true})
+			if err != nil {
+				return nil, err
+			}
+			requests = append(requests, nonSourceRequests...)
 		}
-	}
-	if len(filtersWithoutSource) > 0 {
-		nonSourceRequests, err := NewResultsSearchRequests(
-			SearchRequestOptions{
-				resultTypes:                      resultTypes,
-				index:                            "",
-				query:                            Query{Term: text, Filters: filtersWithoutSource, LanguageOrder: []string{language}, Deb: deb},
-				sortBy:                           sortBy,
-				from:                             0,
-				size:                             from + size,
-				preference:                       preference,
-				useHighlight:                     false,
-				partialHighlight:                 false,
-				filterOutCUSources:               []string{},
-				includeTypedUidsFromContentUnits: true})
-		if err != nil {
-			return nil, err
-		}
-		requests = append(requests, nonSourceRequests...)
 	}
 
 	return requests, nil

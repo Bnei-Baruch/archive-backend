@@ -333,9 +333,9 @@ const (
 	API_MAX_PAGE_SIZE                         = 1000
 	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
 	// Consider making a carusele and not limiting.
-	MAX_MATCHES_PER_GRAMMAR_INTENT                      = 3
-	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM = 200
-	CONTENT_TYPE_INTENTS_BOOST                          = 4.0 // For priority between several filter intent types
+	MAX_MATCHES_PER_GRAMMAR_INTENT                  = 3
+	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM = 200
+	CONTENT_TYPE_INTENTS_BOOST                      = 4.0 // For priority between several filter intent types
 )
 
 const (
@@ -645,8 +645,13 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
 
-	// Currently this rule is not triggered with section filters. Consider to enable combination of sections + rule filter.
-	GRAMMAR_INTENT_FILTER_BY_SOURCE: nil,
+	GRAMMAR_INTENT_FILTER_BY_SOURCE: map[string][]string{
+		FILTERS[FILTER_SECTION_SOURCES]: []string{""},
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{CT_LESSON_PART, CT_FULL_LESSON, CT_VIDEO_PROGRAM_CHAPTER, CT_VIRTUAL_LESSON, CT_LECTURE,
+			CT_WOMEN_LESSON, CT_EVENT_PART, CT_FRIENDS_GATHERING, CT_MEAL},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON, CT_VIDEO_PROGRAM, CT_VIRTUAL_LESSONS, CT_LECTURE_SERIES, CT_LECTURE_SERIES,
+			CT_CONGRESS, CT_HOLIDAY, CT_UNITY_DAY, CT_FRIENDS_GATHERINGS, CT_MEALS},
+	},
 }
 
 const (
@@ -702,7 +707,6 @@ var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
 	VAR_CT_ARTICLES: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_ARTICLE},
 		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_ARTICLES},
-		FILTERS[FILTER_SECTION_SOURCES]:           []string{""}, // Article is also source (like 'Maamar Ha-Arvut')
 	},
 	VAR_CT_LESSONS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_LESSON_PART, CT_FULL_LESSON},
@@ -710,12 +714,6 @@ var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
 	},
 	VAR_CT_CLIPS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{CT_CLIP},
-	},
-	VAR_CT_SOURCES: map[string][]string{
-		FILTERS[FILTER_SECTION_SOURCES]: []string{""},
-	},
-	VAR_CT_BOOK_TITLES: map[string][]string{
-		FILTERS[FILTER_SECTION_SOURCES]: []string{""},
 	},
 	VAR_CT_MEALS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_MEAL},
@@ -735,6 +733,12 @@ var CT_VARIABLE_TO_FILTER_VALUES = map[string]map[string][]string{
 	/*VAR_CT_TWEETS: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{SCT_TWEET},
 	},*/
+}
+
+var CT_VARIABLES_ENABLE_SOURCES_SEARCH = map[string]bool{
+	VAR_CT_ARTICLES:    true, // Article is also source (like 'Maamar Ha-Arvut')
+	VAR_CT_SOURCES:     true,
+	VAR_CT_BOOK_TITLES: true,
 }
 
 // Variable name to frontend filter name mapping.
