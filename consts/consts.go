@@ -333,9 +333,9 @@ const (
 	API_MAX_PAGE_SIZE                         = 1000
 	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
 	// Consider making a carusele and not limiting.
-	MAX_MATCHES_PER_GRAMMAR_INTENT                      = 3
-	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM = 200
-	CONTENT_TYPE_INTENTS_BOOST                          = 4.0 // For priority between several filter intent types
+	MAX_MATCHES_PER_GRAMMAR_INTENT                  = 3
+	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM = 200
+	CONTENT_TYPE_INTENTS_BOOST                      = 4.0 // For priority between several filter intent types
 )
 
 const (
