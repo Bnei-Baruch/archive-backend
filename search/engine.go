@@ -816,8 +816,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 		// Note:
 		// Below we handle 2 result types from a different elastic queries: grammar based results and regular results.
-		// Any changes we made to the scores that is based on the reliance to the results of another type
-		//  can break in some way the uniqueness of results for each page (page 2 may contain a result from page 1).
+		// Changes we made to the scores that is based on the reliance to the results of another type
+		//  can potentially break in some way the uniqueness of results for each page (page 2 may contain a result from page 1).
 		// Also the logic of boosting results that identical to both types has a limited effect
 		//  since we we are not checking identification in all results but only in the results we received according to page filter.
 		// Ideal solution for these issues is to handle all score calculations for both types within a single elastic query.
