@@ -819,7 +819,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		// Any changes we made to the scores that is based on the reliance to the results of another type
 		//  can break in some way the uniqueness of results for each page (page 2 may contain a result from page 1).
 		// Also the logic of boosting results that identical to both types has a limited effect
-		//  since we we are not checking identification in all results but only in the results we recieved according to page filter.
+		//  since we we are not checking identification in all results but only in the results we received according to page filter.
 		// Ideal solution for these issues is to handle all score calculations for both types within a single elastic query.
 		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
 			for _, result := range filtered.Results {
