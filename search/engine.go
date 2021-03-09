@@ -814,6 +814,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			result.Hits.MaxScore = &maxScore
 			result.Hits.TotalHits = int64(len(withoutCarouselDuplications))
 		}
+		// Note:
+		// Below we handle 2 result types from a different elastic queries: grammar based results and regular results.
+		// Any changes we made to the scores that is based on the reliance to the results of another type
+		//  can break in some way the uniqueness of results for each page (page 2 may contain a result from page 1).
+		// Also the logic of boosting results that identical to both types has a limited effect
+		//  since we we are not checking identification in all results but only in the results we recieved according to page filter.
+		// Ideal solution for these issues is to handle all score calculations for both types within a single elastic query.
 		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
 			for _, result := range filtered.Results {
 				var maxScore float64
@@ -822,7 +829,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				// In some cases we have several regular results with a very close scores that above 90% of the maxRegularScore.
 				// Since the top score for the best 'filter grammar' result is 90% of the maxRegularScore,
 				//	we have cases where the best 'filter grammar' result will be below the high regular results with a VERY SMALL GAP between them.
-				// To minimize this gap, we add +10 the formula.
+				// To minimize this gap, we add +10 to the formula.
 				// e.g. search of term "ביטול קטעי מקור" without adding 10 bring the relevant result in position #4. With adding 10, the relevant result is the first.
 				for _, hit := range result.Hits.Hits {
 					if hit.Score != nil {
@@ -839,7 +846,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
 						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
 						if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
-							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_CT_AND_FULL_TERM
+							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM
 						}
 						// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
 						delete(filtered.HitIdsMap, hit.Id)
