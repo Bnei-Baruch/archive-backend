@@ -329,11 +329,12 @@ func LessonsHandler(c *gin.Context) {
 			ContentTypesFilter: ContentTypesFilter{
 				ContentTypes: []string{consts.CT_LESSON_PART},
 			},
-			ListRequest:     r.ListRequest,
-			DateRangeFilter: r.DateRangeFilter,
-			SourcesFilter:   r.SourcesFilter,
-			TagsFilter:      r.TagsFilter,
-			WithFiles:       withFiles,
+			ListRequest:         r.ListRequest,
+			DateRangeFilter:     r.DateRangeFilter,
+			SourcesFilter:       r.SourcesFilter,
+			TagsFilter:          r.TagsFilter,
+			WithFiles:           withFiles,
+			MediaLanguageFilter: r.MediaLanguageFilter,
 		}
 		resp, err := handleContentUnits(c.MustGet("MDB_DB").(*sql.DB), cur)
 		concludeRequest(c, resp, err)
