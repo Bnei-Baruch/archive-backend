@@ -564,7 +564,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	e.ExecutionTimeLog.Store(operation, elapsed)
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, timeoutForHighlight string) (*QueryResult, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
 	// Initializing all channels.
@@ -880,8 +880,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	if ret != nil && ret.Hits != nil && ret.Hits.Hits != nil {
 
 		// Preparing highlights search.
-		mssHighlights := e.esc.MultiSearch()
-		highlightRequestAdded := false
+		// Since some highlight queries are acting like bottlenecks (in cases of scanning large documents)
+		// and may hold the overall search duration for a few tens of seconds,
+		// we prefer to execute several ES calls in parallel with a timeout limit for each call.
+		highlightRequests := []*elastic.SearchRequest{}
 
 		highlightsLangs := query.LanguageOrder
 		if !shouldMergeResults {
@@ -909,9 +911,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						if err != nil {
 							return nil, errors.Wrap(err, "ESEngine.DoSearch - Error creating tweets request in multisearch Do.")
 						}
-						mssHighlights.Add(req)
-
-						highlightRequestAdded = true
+						highlightRequests = append(highlightRequests, req)
 					}
 				}
 				continue
@@ -945,28 +945,51 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					size:             1,
 					preference:       preference,
 					useHighlight:     true,
-					partialHighlight: true,
-					Timeout:          &timeoutForHighlight})
+					partialHighlight: true})
 			if err != nil {
 				return nil, errors.Wrap(err, "ESEngine.DoSearch - Error creating highlight request in multisearch Do.")
 			}
-			mssHighlights.Add(req)
-
-			highlightRequestAdded = true
+			highlightRequests = append(highlightRequests, req)
 		}
 
-		if highlightRequestAdded {
+		if len(highlightRequests) > 0 {
 
 			log.Debug("Searching for highlights and replacing original results with highlighted results.")
 
-			beforeHighlightsDoSearch := time.Now()
-			mr, err := mssHighlights.Do(context.TODO())
-			e.timeTrack(beforeHighlightsDoSearch, consts.LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO)
-			if err != nil {
-				return nil, errors.Wrap(err, "ESEngine.DoSearch - Error mssHighlights Do.")
-			}
+			var wg sync.WaitGroup
+			wg.Add(len(highlightRequests))
+			mhErrors := make([]error, len(highlightRequests))
+			mhResults := make([]*elastic.MultiSearchResult, len(highlightRequests))
 
-			for _, highlightedResults := range mr.Responses {
+			beforeHighlightsDoSearch := time.Now()
+			for i, hr := range highlightRequests {
+				go func(req *elastic.SearchRequest, idx int) {
+					highlightCtx, cancelFn := context.WithTimeout(context.TODO(), timeoutForHighlight)
+					defer cancelFn()
+					mssHighlights := e.esc.MultiSearch().Add(req)
+					mr, err := mssHighlights.Do(highlightCtx)
+					if highlightCtx.Err() != nil {
+						mhErrors[idx] = highlightCtx.Err()
+					} else {
+						mhErrors[idx] = err
+					}
+					mhResults[idx] = mr
+					wg.Done()
+				}(hr, i)
+			}
+			wg.Wait()
+			e.timeTrack(beforeHighlightsDoSearch, consts.LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO)
+			responses := []*elastic.SearchResult{}
+			for i, mhResult := range mhResults {
+				if mhErrors[i] == context.DeadlineExceeded {
+					continue
+				}
+				if mhErrors[i] != nil {
+					return nil, errors.Wrap(mhErrors[i], "ESEngine.DoSearch - Error mssHighlights Do.")
+				}
+				responses = append(responses, mhResult.Responses...)
+			}
+			for _, highlightedResults := range responses {
 				if highlightedResults.Error != nil {
 					log.Warnf("%+v", highlightedResults.Error)
 					return nil, errors.New(fmt.Sprintf("Failed multi get highlights: %+v", highlightedResults.Error))
