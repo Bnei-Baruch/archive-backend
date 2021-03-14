@@ -68,7 +68,7 @@ func combineBySource(byLang map[string]*elastic.SearchResult) map[string]*elasti
 		for k, h := range hitByS {
 			newH := &elastic.SearchHit{
 				Source:      h.Source,
-				Type:        consts.SEARCH__RESULT_LESSONS_SERIES,
+				Type:        consts.SEARCH_RESULT_LESSONS_SERIES,
 				Score:       h.Score,
 				Uid:         k,
 				Explanation: h.Explanation,
