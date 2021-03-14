@@ -206,7 +206,7 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 	return query, nil
 }
 
-func addMastNotSeries(q Query) *elastic.BoolQuery {
+func addMustNotSeries(q Query) *elastic.BoolQuery {
 	if filters, ok := q.Filters[consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]]; ok {
 		for _, f := range filters {
 			if f == consts.CT_LESSONS_SERIES {
@@ -245,7 +245,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 		}
 	}
 
-	if mustNot := addMastNotSeries(q); mustNot != nil {
+	if mustNot := addMustNotSeries(q); mustNot != nil {
 		boolQuery.MustNot(mustNot)
 	}
 
