@@ -147,6 +147,7 @@ type LessonsRequest struct {
 	DateRangeFilter
 	SourcesFilter
 	TagsFilter
+	MediaLanguageFilter
 }
 
 type PublishersRequest struct {
