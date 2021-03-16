@@ -462,7 +462,7 @@ func SearchHandler(c *gin.Context) {
 		//  temp. disable typo suggestion for other interface languages than english, russian and hebrew
 		(c.Query("language") == consts.LANG_ENGLISH || c.Query("language") == consts.LANG_RUSSIAN || c.Query("language") == consts.LANG_HEBREW)
 
-	timeoutForHighlight := viper.GetString("elasticsearch.timeout-for-highlight")
+	timeoutForHighlight := viper.GetDuration("elasticsearch.timeout-for-highlight")
 
 	res, err := se.DoSearch(
 		context.TODO(),
