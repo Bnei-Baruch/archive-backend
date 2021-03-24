@@ -215,7 +215,7 @@ func addMustNotSeries(q Query) *elastic.BoolQuery {
 		}
 	}
 	//remove from results lesson series collections
-	fCollections := elastic.NewTermsQuery(consts.ES_RESULT_TYPE_COLLECTIONS)
+	fCollections := elastic.NewTermsQuery(consts.ES_RESULT_TYPE, consts.ES_RESULT_TYPE_COLLECTIONS)
 	fSeries := elastic.NewTermsQuery("filter_values", fmt.Sprintf("%s:%s", consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES], consts.CT_LESSONS_SERIES))
 	return elastic.NewBoolQuery().Filter(fCollections, fSeries)
 }
