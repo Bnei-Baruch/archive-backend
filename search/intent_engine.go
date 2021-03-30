@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
+
+	"github.com/Bnei-Baruch/archive-backend/utils"
 
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
@@ -18,6 +21,16 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	var classificationIntent ClassificationIntent
 	if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
 		return err, nil, nil
+	}
+	secondRoundQuery := query
+	intentValue, grammarOk := intent.Value.(GrammarIntent)
+	if grammarOk {
+		for _, fv := range intentValue.FilterValues {
+			if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_TEXT] {
+				secondRoundQuery.Term = fv.Value
+				break
+			}
+		}
 	}
 	if query.Deb {
 		classificationIntent.Explanation = *h.Explanation
@@ -35,7 +48,7 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	return nil, nil, nil
 }
 
-func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy string) ([]Intent, error) {
+func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, searchTags bool, searchSources bool, filterIntents []Intent) ([]Intent, error) {
 
 	intents := make([]Intent, 0)
 
@@ -90,44 +103,88 @@ func (e *ESEngine) AddIntents(query *Query, preference string, size int, sortBy 
 
 	mssFirstRound := e.esc.MultiSearch()
 	potentialIntents := make([]Intent, 0)
+	size := consts.INTENTS_SEARCH_DEFAULT_COUNT
 	for _, language := range query.LanguageOrder {
-		// Order here provides the priority in results, i.e., tags are more important then sources.
+
+		var grammarIntent GrammarIntent
+		queryForSearch := queryWithoutFilters
+		searchTagsForLang := true
+		searchSourcesForLang := true
+		if filterIntents != nil && len(filterIntents) > 0 {
+			for _, filterIntent := range filterIntents {
+				if intentValue, ok := filterIntent.Value.(GrammarIntent); filterIntent.Language == language && ok {
+					var text string
+					var contentType string
+					for _, fv := range intentValue.FilterValues {
+						if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_TEXT] {
+							text = fv.Value
+						} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
+							contentType = fv.Value
+						}
+						if text != "" && contentType != "" {
+							break
+						}
+					}
+					if text != "" && contentType != "" {
+						if opt, ok := consts.INTENT_OPTIONS_BY_GRAMMAR_CT_VARIABLES[contentType]; ok {
+							// search for intents by the "free text" value from the detected grammar rule
+							queryForSearch.Term = text
+							searchTagsForLang = opt.SearchTags
+							searchSourcesForLang = opt.SearchSources
+							sort.Strings(checkContentUnitsTypes)
+							sort.Strings(opt.ContentTypes)
+							checkContentUnitsTypes = utils.IntersectSortedStringSlices(checkContentUnitsTypes, opt.ContentTypes)
+							size = consts.INTENTS_SEARCH_BY_FILTER_GRAMMAR_COUNT
+							grammarIntent = filterIntent.Value.(GrammarIntent)
+							log.Infof("Intents carousel search is according to grammar rule (content type '%v'). Relevant intent options: %+v.", contentType, opt)
+							break // we excpect for only one filterIntent for a language
+						}
+					}
+				}
+			}
+		}
+
+		// Order here provides the priority in results, i.e., tags are more important than sources.
 		index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, language)
-		req, err := NewResultsSearchRequest(
-			SearchRequestOptions{
-				resultTypes:      []string{consts.ES_RESULT_TYPE_TAGS},
-				index:            index,
-				query:            queryWithoutFilters,
-				sortBy:           consts.SORT_BY_RELEVANCE,
-				from:             0,
-				size:             size,
-				preference:       preference,
-				useHighlight:     false,
-				partialHighlight: true})
-		if err != nil {
-			log.Warnf("ESEngine.AddIntents - Failed on creating tags request %+v", err)
-			return nil, err
+		if searchTags && searchTagsForLang {
+			req, err := NewResultsSearchRequest(
+				SearchRequestOptions{
+					resultTypes:      []string{consts.ES_RESULT_TYPE_TAGS},
+					index:            index,
+					query:            queryForSearch,
+					sortBy:           consts.SORT_BY_RELEVANCE,
+					from:             0,
+					size:             size,
+					preference:       preference,
+					useHighlight:     false,
+					partialHighlight: true})
+			if err != nil {
+				log.Warnf("ESEngine.AddIntents - Failed on creating tags request %+v", err)
+				return nil, err
+			}
+			mssFirstRound.Add(req)
+			potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, grammarIntent})
 		}
-		mssFirstRound.Add(req)
-		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, nil})
-		req, err = NewResultsSearchRequest(
-			SearchRequestOptions{
-				resultTypes:      []string{consts.ES_RESULT_TYPE_SOURCES},
-				index:            index,
-				query:            queryWithoutFilters,
-				sortBy:           consts.SORT_BY_RELEVANCE,
-				from:             0,
-				size:             size,
-				preference:       preference,
-				useHighlight:     false,
-				partialHighlight: true,
-				titlesOnly:       true})
-		if err != nil {
-			log.Warnf("ESEngine.AddIntents - Failed on creating sources request %+v", err)
-			return nil, err
+		if searchSources && searchSourcesForLang {
+			req, err := NewResultsSearchRequest(
+				SearchRequestOptions{
+					resultTypes:      []string{consts.ES_RESULT_TYPE_SOURCES},
+					index:            index,
+					query:            queryForSearch,
+					sortBy:           consts.SORT_BY_RELEVANCE,
+					from:             0,
+					size:             size,
+					preference:       preference,
+					useHighlight:     false,
+					partialHighlight: true,
+					titlesOnly:       true})
+			if err != nil {
+				log.Warnf("ESEngine.AddIntents - Failed on creating sources request %+v", err)
+				return nil, err
+			}
+			mssFirstRound.Add(req)
+			potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, grammarIntent})
 		}
-		mssFirstRound.Add(req)
-		potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, nil})
 	}
 	beforeFirstRoundDo := time.Now()
 	mr, err := mssFirstRound.Do(context.TODO())

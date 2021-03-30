@@ -350,7 +350,7 @@ func testTypoSuggestFn(cmd *cobra.Command, args []string) {
 
 	for _, t := range typos {
 		query := search.Query{Term: t, LanguageOrder: consts.SEARCH_LANG_ORDER[language]}
-		res, err := engine.GetTypoSuggest(query)
+		res, err := engine.GetTypoSuggest(query, nil)
 		utils.Must(err)
 		if res.Valid {
 			log.Infof("Suggest for '%s' is: '%s'.", t, res.String)
@@ -366,7 +366,7 @@ func testTypoSuggestFn(cmd *cobra.Command, args []string) {
 
 		query := search.Query{Term: e.Query, LanguageOrder: consts.SEARCH_LANG_ORDER[language]}
 
-		res, err := engine.GetTypoSuggest(query)
+		res, err := engine.GetTypoSuggest(query, nil)
 		utils.Must(err)
 		if res.Valid {
 			log.Infof("Suggest for '%s' is: '%s'. Check if this is false positive.", e.Query, res.String)

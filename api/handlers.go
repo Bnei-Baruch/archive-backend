@@ -297,7 +297,8 @@ func LessonsHandler(c *gin.Context) {
 
 	if utils.IsEmpty(r.Authors) &&
 		utils.IsEmpty(r.Sources) &&
-		utils.IsEmpty(r.Tags) {
+		utils.IsEmpty(r.Tags) &&
+		r.MediaLanguage == "" {
 		if r.OrderBy == "" {
 			r.OrderBy = "(properties->>'film_date')::date desc, (properties->>'number')::int desc, created_at desc"
 		}
@@ -328,11 +329,12 @@ func LessonsHandler(c *gin.Context) {
 			ContentTypesFilter: ContentTypesFilter{
 				ContentTypes: []string{consts.CT_LESSON_PART},
 			},
-			ListRequest:     r.ListRequest,
-			DateRangeFilter: r.DateRangeFilter,
-			SourcesFilter:   r.SourcesFilter,
-			TagsFilter:      r.TagsFilter,
-			WithFiles:       withFiles,
+			ListRequest:         r.ListRequest,
+			DateRangeFilter:     r.DateRangeFilter,
+			SourcesFilter:       r.SourcesFilter,
+			TagsFilter:          r.TagsFilter,
+			WithFiles:           withFiles,
+			MediaLanguageFilter: r.MediaLanguageFilter,
 		}
 		resp, err := handleContentUnits(c.MustGet("MDB_DB").(*sql.DB), cur)
 		concludeRequest(c, resp, err)
@@ -474,10 +476,13 @@ func SearchHandler(c *gin.Context) {
 	)
 	if err == nil {
 		// TODO: How does this slows the search query? Consider logging in parallel.
-		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
-		if err != nil {
-			log.Warnf("Error logging search: %+v %+v", err, res)
+		if !query.Deb {
+			err = logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
+			if err != nil {
+				log.Warnf("Error logging search: %+v %+v", err, res)
+			}
 		}
+
 		for _, hit := range res.SearchResult.Hits.Hits {
 			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
 				// Move Tweets from innerHits to Source, to make client more consistent (work with source only).
@@ -709,6 +714,10 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	appendCollectionSourceFilterMods(&mods, r.SourcesFilter)
+	if err := appendCollectionTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 
@@ -2309,6 +2318,31 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
 }
 
+func appendCollectionSourceFilterMods(mods *[]qm.QueryMod, f SourcesFilter) {
+	if len(f.Sources) != 0 {
+		*mods = append(*mods, qm.WhereIn("properties->>'source' in ?", utils.ConvertArgsString(f.Sources)...))
+	}
+}
+
+func appendCollectionTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
+	if len(f.Tags) == 0 {
+		return nil
+	}
+	//use Raw query because of need to use operator ?
+	var ids pq.Int64Array
+	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
+	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
+	if err != nil {
+		return err
+	}
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods, qm.WhereIn("id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+	return nil
+}
+
 func appendDateRangeFilterModsTwitter(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "tweet_at")
 }
@@ -2609,6 +2643,7 @@ func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 		DefaultLanguage: props.DefaultLanguage,
 		HolidayID:       props.HolidayTag,
 		SourceID:        props.Source,
+		TagIDs:          props.Tags,
 		Number:          props.Number,
 	}
 

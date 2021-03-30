@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -12,13 +13,36 @@ import (
 	null "gopkg.in/volatiletech/null.v6"
 )
 
-func (e *ESEngine) GetTypoSuggest(query Query) (null.String, error) {
+func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.String, error) {
 	srv := e.esc.Search()
 	suggestText := null.String{"", false}
 
 	if _, err := strconv.Atoi(query.Term); err == nil {
 		//  ignore numbers
 		return suggestText, nil
+	}
+
+	checkTerm := query.Term
+	considerGrammarTextValue := false
+	if filterIntents != nil && len(filterIntents) > 0 {
+		// Check typos for the "free text" value from the detected grammar rule.
+		// Currently we support the check for only one appeareance of "free text" value.
+		for _, filterIntent := range filterIntents {
+			if intentValue, ok := filterIntent.Value.(GrammarIntent); ok {
+				for _, fv := range intentValue.FilterValues {
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_TEXT] {
+						checkTerm = fv.Value
+						considerGrammarTextValue = true
+						break
+					}
+				}
+				if considerGrammarTextValue {
+					break
+				}
+			} else {
+				return suggestText, errors.Errorf("ESEngine.DoSearch - Intent is not GrammarIntent. Intent: %+v", filterIntent)
+			}
+		}
 	}
 
 	var hasHebrew bool
@@ -67,7 +91,7 @@ func (e *ESEngine) GetTypoSuggest(query Query) (null.String, error) {
 	}
 
 	suggester := elastic.NewPhraseSuggester("pharse-suggest").
-		Text(query.Term).
+		Text(checkTerm).
 		Field(suggestorField).
 		Size(1).
 		GramSize(1).
@@ -99,7 +123,11 @@ func (e *ESEngine) GetTypoSuggest(query Query) (null.String, error) {
 
 	if sp, ok := r.Suggest["pharse-suggest"]; ok {
 		if len(sp) > 0 && sp[0].Options != nil && len(sp[0].Options) > 0 {
-			suggestText = null.String{sp[0].Options[0].Text, true}
+			suggested := sp[0].Options[0].Text
+			if considerGrammarTextValue {
+				suggested = strings.Replace(query.Term, checkTerm, suggested, -1)
+			}
+			suggestText = null.String{suggested, true}
 		}
 	}
 

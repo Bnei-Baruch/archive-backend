@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bnei-Baruch/archive-backend/utils"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -69,10 +71,14 @@ func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 
 	years := MakeYearVariablesV2()
 	variables[consts.VAR_YEAR] = make(TranslationsV2)
+	variables[consts.VAR_TEXT] = make(TranslationsV2)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
 		// Year
 		variables[consts.VAR_YEAR][lang] = years
+		// Special free text variable. Proceeded with percolator search.
+		variables[consts.VAR_TEXT][lang] = map[string][]string{consts.VAR_TEXT: []string{consts.VAR_TEXT}}
 	}
+
 	return variables, nil
 }
 
@@ -106,7 +112,80 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 		return nil, err
 	}
 	variables[consts.VAR_HOLIDAYS] = holidayTranslations
+	// Generate source position variables
+	positionTranslations, err := GenerateSourcePositionVariables(db)
+	if err != nil {
+		return nil, err
+	}
+	variables[consts.VAR_POSITION] = positionTranslations
+	// Load source name variables from DB
+	sourceNamesTranslationsFromDB, err := LoadSourceNameTranslationsFromDB(db)
+	if err != nil {
+		return nil, err
+	}
+	// Combine source name variables from DB with source name variables from file
+	if _, ok := variables[consts.VAR_SOURCE]; !ok {
+		variables[consts.VAR_SOURCE] = make(TranslationsV2)
+	}
+	for lang, translations := range sourceNamesTranslationsFromDB {
+		if _, ok := variables[consts.VAR_SOURCE][lang]; !ok {
+			variables[consts.VAR_SOURCE][lang] = make(map[string][]string)
+		}
+		for sourceUID, phrasesFromDB := range translations {
+			uniquePhrases := map[string]bool{}
+			for _, phrase := range phrasesFromDB {
+				uniquePhrases[phrase] = true
+			}
+			if phrasesFromFile, ok := variables[consts.VAR_SOURCE][lang][sourceUID]; ok {
+				for _, phrase := range phrasesFromFile {
+					uniquePhrases[phrase] = true
+				}
+			}
+			finalPhrases := []string{}
+			for uniquePhrase := range uniquePhrases {
+				finalPhrases = append(finalPhrases, uniquePhrase)
+			}
+			variables[consts.VAR_SOURCE][lang][sourceUID] = finalPhrases
+		}
+	}
 	return variables, nil
+}
+
+func LoadSourceNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
+	translations := make(TranslationsV2)
+
+	notToInclude := []string{}
+	for _, s := range consts.SOURCE_PARENTS_NOT_TO_INCLUDE_IN_VARIABLE_VALUES {
+		notToInclude = append(notToInclude, fmt.Sprintf("'%s'", s))
+	}
+	queryMask := `select sn.language, s.uid, sn.name
+	from sources s join source_i18n sn on s.id=sn.source_id
+	left join sources sp on s.parent_id=sp.id
+	where (sp.uid is null or sp.uid not in (%s))`
+	query := fmt.Sprintf(queryMask, strings.Join(notToInclude, ","))
+
+	rows, err := queries.Raw(db, query).Query()
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to retrieve source name translations from DB.")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var lang string
+		var uid string
+		var phrase string
+		err := rows.Scan(&lang, &uid, &phrase)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		if _, ok := translations[lang]; !ok {
+			translations[lang] = make(map[string][]string)
+		}
+		translations[lang][uid] = []string{phrase}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows.Err()")
+	}
+	return translations, nil
 }
 
 func LoadHolidayTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
@@ -182,5 +261,29 @@ func LoadVariableTranslationsFromFile(variableFile string, variableName string) 
 		return nil, errors.Wrapf(err, "Error reading translation file: %s", variableFile)
 	}
 
+	return translations, nil
+}
+
+func GenerateSourcePositionVariables(db *sql.DB) (TranslationsV2, error) {
+	translations := make(TranslationsV2)
+	query := `select max(position) from sources`
+	var max int
+	err := queries.Raw(db, query).QueryRow().Scan(&max)
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to retrieve max sources position from DB.")
+	}
+	for _, lang := range consts.ALL_KNOWN_LANGS {
+		values := make(map[string][]string)
+		for i := 1; i < max+1; i++ {
+			numStr := strconv.Itoa(i)
+			values[numStr] = []string{
+				numStr,
+			}
+			if lang == consts.LANG_HEBREW {
+				values[numStr] = append(values[numStr], utils.NumberInHebrew(i))
+			}
+		}
+		translations[lang] = values
+	}
 	return translations, nil
 }

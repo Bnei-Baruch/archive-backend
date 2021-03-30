@@ -112,3 +112,6 @@ chanukah	hanukkah	hanuka	chanuka
 #Added by Eran at 12.06.20 (not in spreadsheet)
 extend	revealed
 haim hadashim	haim-hadashim	new life
+
+#Added at 19.02.20 (not in spreadsheet)
+volume	vol

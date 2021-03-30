@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,7 +44,7 @@ func (e *ESEngine) SuggestGrammarsV2(query *Query, preference string) (map[strin
 		fmt.Printf("multiSearchService.Do - %s\n\n", elapsed.String())
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, "Error loking for grammar suggest.")
+		return nil, errors.Wrap(err, "Error looking for grammar suggest.")
 	}
 
 	if len(mr.Responses) != len(query.LanguageOrder) {
@@ -88,10 +89,11 @@ func (e *ESEngine) suggestOptionsToVariablesByPhrases(query *Query, suggest *ela
 		for _, s := range v {
 			if len(s.Options) > 0 {
 				for _, option := range s.Options {
-					var rule GrammarRule
-					if err := json.Unmarshal(*option.Source, &rule); err != nil {
+					var ruleObj GrammarRuleWithPercolatorQuery
+					if err := json.Unmarshal(*option.Source, &ruleObj); err != nil {
 						return nil, err
 					}
+					rule := ruleObj.GrammarRule
 					// log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", option.Score, option.Index, option.Type, option.Id, rule)
 					if len(rule.Values) != len(rule.Variables) {
 						return nil, errors.New(fmt.Sprintf("Expected Variables to be of size %d, but it is %d", len(rule.Values), len(rule.Variables)))
@@ -146,52 +148,178 @@ func (e *ESEngine) suggestResultsToVariablesByPhrases(query *Query, result *elas
 	return ret, nil
 }
 
-func (e *ESEngine) SearchGrammarsV2(query *Query, preferences string) ([]Intent, error) {
-	intents := []Intent{}
+// Return: single hit intents, filtering intents
+func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy string, resultTypes []string, preference string) ([]Intent, []Intent, error) {
+	singleHitIntents := []Intent{}
+	filterIntents := []Intent{}
 	if query.Term != "" && len(query.ExactTerms) > 0 {
 		// Will never match any grammar for query having simple terms and exact terms.
 		// This is not acurate but an edge case. Need to better think of query representation.
 		log.Infof("Both term and exact terms are defined, should not trigger: [%s] [%s]", query.Term, strings.Join(query.ExactTerms, " - "))
-		return intents, nil
+		return singleHitIntents, filterIntents, nil
 	}
-
+	searchLandingPagesOnly := false
+	// queriesNumForLang is the number of multiSearchService requests for each language.
+	// The number is 2 if we trigger a percolator search (for free text variables) in addition to a regular grammar search.
+	queriesNumForLang := 2
+	checkIfTermEqualsSource := true
+	for filterKey := range query.Filters {
+		if _, ok := consts.AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS[filterKey]; !ok {
+			checkIfTermEqualsSource = false
+			break
+		}
+	}
+	if checkIfTermEqualsSource {
+		sourceUid, language, isAuthor := e.sourceUidByTerm(query.Term, query.LanguageOrder)
+		if sourceUid != nil {
+			// Since some source titles contains grammar variable values,
+			// we are limiting the grammar search to landing pages only if the term eqauls to a title of a source\author.
+			// Some examples for such source titles:
+			// 'Book, Author, Story','Connecting to the Source', 'Introduction to articles', 'שיעור ההתגברות', 'ספר הזוהר'
+			// If the term is not a name of author, automatically add classification intents and source result.
+			log.Infof("The term [%s] is identical to a name of author or source. Search only for Landing Pages.", query.Term)
+			searchLandingPagesOnly = true
+			queriesNumForLang = 1
+			if !isAuthor {
+				log.Infof("Adding intents by the source [%s] (%s).", *sourceUid, query.Term)
+				parent, position, _, err := e.cache.SearchStats().GetSourceParentAndPosition(*sourceUid, false)
+				if err != nil {
+					return nil, nil, errors.Wrap(err, "GetSourceParentAndPosition")
+				}
+				var leafPrefixType *consts.PositionIndexType
+				if parent != nil {
+					if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[*parent]; ok {
+						leafPrefixType = &val
+					}
+				}
+				path, err := e.sourcePathFromSql(*sourceUid, language, position, leafPrefixType)
+				if err != nil {
+					return nil, nil, errors.Wrap(err, "sourcePathFromSql")
+				}
+				intents, err := e.getSingleHitIntentsBySource(*sourceUid, query.Filters, language, path, 3000.0, elastic.SearchExplanation{})
+				if err != nil {
+					return nil, nil, errors.Wrap(err, "getSingleHitIntentsBySource")
+				}
+				singleHitIntents = append(singleHitIntents, intents...)
+			}
+		}
+	}
 	multiSearchService := e.esc.MultiSearch()
-	for _, language := range query.LanguageOrder {
-		multiSearchService.Add(NewSuggestGammarV2Request(query, language, preferences))
+	if searchLandingPagesOnly {
+		for _, language := range query.LanguageOrder {
+			hitType := "landing-pages"
+			multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference, &hitType))
+		}
+	} else {
+		for _, language := range query.LanguageOrder {
+			multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference, nil))
+			multiSearchService.Add(NewGammarPerculateRequest(query, language, preference))
+		}
 	}
+	beforeGrammarSearch := time.Now()
 	mr, err := multiSearchService.Do(context.TODO())
+	e.timeTrack(beforeGrammarSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error loking for grammar suggest.")
+		return nil, nil, errors.Wrap(err, "Error looking for grammar search.")
 	}
 
-	if len(mr.Responses) != len(query.LanguageOrder) {
-		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
-			len(mr.Responses), len(query.LanguageOrder)))
+	if len(mr.Responses) != len(query.LanguageOrder)*queriesNumForLang {
+		return nil, nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
+			len(mr.Responses), len(query.LanguageOrder)*queriesNumForLang))
 	}
 
 	start := time.Now()
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
-			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
+			return nil, nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
-		language := query.LanguageOrder[i]
-
+		language := query.LanguageOrder[i/queriesNumForLang]
 		if haveHits(currentResults) {
-			if langIntents, err := e.searchResultsToIntents(query, language, currentResults); err != nil {
-				return nil, err
+			if languageSingleHitIntents, languageFilterIntents, err := e.searchResultsToIntents(query, language, currentResults); err != nil {
+				return nil, nil, err
 			} else {
-				intents = append(intents, langIntents...)
+				singleHitIntents = append(singleHitIntents, languageSingleHitIntents...)
+				if languageFilterIntents != nil && len(languageFilterIntents) > 0 {
+					intentToAdd := languageFilterIntents[0]
+					log.Infof("Optional intent: %+v.", intentToAdd)
+					if len(languageFilterIntents) > 1 {
+						for i := 1; i < len(languageFilterIntents); i++ {
+							log.Infof("Optional intent: %+v.", languageFilterIntents[i])
+							if languageFilterIntents[i].Value.(GrammarIntent).Score > intentToAdd.Value.(GrammarIntent).Score {
+								intentToAdd = languageFilterIntents[i]
+							}
+						}
+						log.Infof("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported. Intent with max score is selected (with special boost for 'by_content_type' intents): %+v.", language, len(languageFilterIntents), intentToAdd)
+					}
+					filterIntents = append(filterIntents, intentToAdd)
+				}
 			}
 		}
-
 	}
 	elapsed := time.Since(start)
 	if elapsed > 10*time.Millisecond {
 		fmt.Printf("build grammar intent - %s\n\n", elapsed.String())
 	}
+	return singleHitIntents, filterIntents, nil
+}
 
-	return intents, nil
+// Search according to grammar based filter.
+func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[string][]string, originalSearchTerm string, from int, size int, sortBy string, resultTypes []string, preference string, deb bool) (map[string]FilteredSearchResult, error) {
+	resultsByLang := map[string]FilteredSearchResult{}
+	for _, intent := range filterIntents {
+		if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
+			var contentType string
+			var text string
+			sources := []string{}
+			for _, fv := range intentValue.FilterValues {
+				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
+					contentType = fv.Value
+				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_TEXT] {
+					text = fv.Value
+				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
+					sources = append(sources, fv.Value)
+				}
+			}
+			if text != "" && (contentType != "" || len(sources) > 0) {
+				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Sources are '%+v'.", contentType, text, sources)
+				requests := []*elastic.SearchRequest{}
+				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				if err != nil {
+					return nil, err
+				}
+				requests = append(requests, textValSearchRequests...)
+				if contentType != consts.VAR_CT_ARTICLES {
+					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+					if err != nil {
+						return nil, err
+					}
+					requests = append(requests, fullTermSearchRequests...)
+				}
+				if len(requests) > 0 {
+					// All search requests here are for the same language
+					results, hitIdsMap, maxScore, err := e.filterSearch(requests)
+					if err != nil {
+						return nil, err
+					}
+					resultsByLang[intent.Language] = FilteredSearchResult{
+						Results:     results,
+						Term:        text,
+						ContentType: contentType,
+						HitIdsMap:   hitIdsMap,
+						MaxScore:    maxScore,
+					}
+					if len(results) > 0 {
+						// we assume that there is no need to make the search for other languages if a results found for one language
+						break
+					}
+				}
+			}
+		} else {
+			return nil, errors.Errorf("FilterSearch error. Intent is not GrammarIntent. Intent: %+v", intent)
+		}
+	}
+	return resultsByLang, nil
 }
 
 func (e *ESEngine) VariableMapToFilterValues(vMap map[string][]string, language string) []FilterValue {
@@ -204,45 +332,84 @@ func (e *ESEngine) VariableMapToFilterValues(vMap map[string][]string, language 
 			filterName = name
 		}
 		for _, value := range values {
+			var origin string
+			if len(e.variables[name][language][value]) > 0 {
+				//  we store 'origin' only for variables with a finite values list
+				origin = e.variables[name][language][value][0]
+			}
 			ret = append(ret, FilterValue{
 				Name:       filterName,
 				Value:      value,
-				Origin:     e.variables[name][language][value][0],
-				OriginFull: e.variables[name][language][value][0],
+				Origin:     origin,
+				OriginFull: origin,
 			})
 		}
 	}
 	return ret
 }
 
-func updateIntentCount(intentsCount map[string][]Intent, intent Intent) {
+// For specific landing page, keep only some amount of intents with the highest score (according to MAX_MATCHES_PER_GRAMMAR_INTENT) and filter out all the rest.
+// Return the minimum score of the intents slice for the given intent landing page.
+func updateIntentCount(intentsCount map[string][]Intent, intent Intent) float64 {
+	var minScore float64
 	intents := intentsCount[intent.Value.(GrammarIntent).LandingPage]
+	if len(intents) > 0 {
+		lastElem := intents[len(intents)-1]
+		minScore = lastElem.Value.(GrammarIntent).Score
+	}
+	if intent.Value.(GrammarIntent).SingleHitMdbUid != nil {
+		for _, i := range intents {
+			if i.Value.(GrammarIntent).SingleHitMdbUid != nil &&
+				*i.Value.(GrammarIntent).SingleHitMdbUid == *intent.Value.(GrammarIntent).SingleHitMdbUid {
+				// Ignore duplicate collection hits
+				return minScore
+			}
+		}
+	}
 	intents = append(intents, intent)
 	sort.SliceStable(intents, func(i, j int) bool {
 		return intents[i].Value.(GrammarIntent).Score > intents[j].Value.(GrammarIntent).Score
 	})
 	intents = intents[:utils.MinInt(consts.MAX_MATCHES_PER_GRAMMAR_INTENT, len(intents))]
+	if len(intents) > 0 {
+		lastElem := intents[len(intents)-1]
+		minScore = lastElem.Value.(GrammarIntent).Score
+	}
 	intentsCount[intent.Value.(GrammarIntent).LandingPage] = intents
+	return minScore
 }
 
-func (e *ESEngine) searchResultsToIntents(query *Query, language string, result *elastic.SearchResult) ([]Intent, error) {
+// Return values: singleHitIntents, filterIntents, error
+func (e *ESEngine) searchResultsToIntents(query *Query, language string, result *elastic.SearchResult) ([]Intent, []Intent, error) {
 	// log.Infof("Total Hits: %d, Max Score: %.2f", result.Hits.TotalHits, *result.Hits.MaxScore)
+	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH_GRAMMARS_RESULTSTOINTENTS)
+	filterIntents := []Intent(nil)
+	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
-	for _, hit := range result.Hits.Hits {
-		var rule GrammarRule
-		if err := json.Unmarshal(*hit.Source, &rule); err != nil {
-			return nil, err
+	minScoreByLandingPage := make(map[string]float64)
+	addPositionWithoutTerm := true
+	for filterKey := range query.Filters {
+		if _, ok := consts.AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS[filterKey]; !ok {
+			addPositionWithoutTerm = false
+			break
 		}
+	}
+	for _, hit := range result.Hits.Hits {
+		var ruleObj GrammarRuleWithPercolatorQuery
+		if err := json.Unmarshal(*hit.Source, &ruleObj); err != nil {
+			return nil, nil, err
+		}
+		rule := ruleObj.GrammarRule
 		// log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", *hit.Score, hit.Index, hit.Type, hit.Id, rule)
 		if len(rule.Values) != len(rule.Variables) {
-			return nil, errors.New(fmt.Sprintf("Expected Variables to be of size %d, but it is %d", len(rule.Values), len(rule.Variables)))
+			return nil, nil, errors.New(fmt.Sprintf("Expected Variables to be of size %d, but it is %d", len(rule.Values), len(rule.Variables)))
 		}
 
 		// Check filters match, i.e., existing query filter match at least one supported grammar intent filter.
 		if len(query.Filters) > 0 {
 			filters, filterExist := consts.GRAMMAR_INTENTS_TO_FILTER_VALUES[rule.Intent]
 			if !filterExist {
-				return nil, errors.New(fmt.Sprintf("Filters not found for intent: [%s]", rule.Intent))
+				return nil, nil, errors.New(fmt.Sprintf("Filters not found for intent: [%s]", rule.Intent))
 			}
 			common := false
 			for filterName, values := range query.Filters {
@@ -264,49 +431,209 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 
 		vMap := make(map[string][]string)
 		for i := range rule.Variables {
-			vMap[rule.Variables[i]] = []string{rule.Values[i]}
+			if rule.Variables[i] == consts.VAR_TEXT {
+				if hit.Highlight != nil {
+					if text, ok := hit.Highlight["search_text"]; ok {
+						log.Infof("search_text: %s", text)
+						if len(text) == 1 && text[0] != "" {
+							textVarValues := retrieveTextVarValues(text[0])
+							vMap[rule.Variables[i]] = textVarValues
+							log.Infof("$Text values are %+v", textVarValues)
+						}
+					}
+				}
+			} else {
+				vMap[rule.Variables[i]] = []string{rule.Values[i]}
+			}
 		}
+
 		if GrammarVariablesMatch(rule.Intent, vMap, e.cache) {
 			score := *hit.Score * (float64(4) / float64(4+len(vMap))) * YearScorePenalty(vMap)
 			// Issue with tf/idf. For query [congress] the score if very low. For [arava] ok.
 			// Fix this by moving the grammar index into the common index. So tha similar tf/idf will be used.
 			// For now solve by normalizing very small scores.
 			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
-			updateIntentCount(intentsCount, Intent{
-				Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
-				Language: language,
-				Value: GrammarIntent{
+			if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
+				ctBoost := consts.CONTENT_TYPE_INTENTS_BOOST
+				runes := []rune(query.Term)
+				for _, c := range runes {
+					if c > '0' && c <= '9' {
+						// Disable 'by content type' priorty boost if the query contains a number
+						ctBoost = 1
+						break
+					}
+				}
+				filterIntents = append(filterIntents, Intent{
+					Type:     consts.GRAMMAR_TYPE_FILTER,
+					Language: language,
+					Value: GrammarIntent{
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score * ctBoost,
+						Explanation:  hit.Explanation,
+					}})
+			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
+				filterIntents = append(filterIntents, Intent{
+					Type:     consts.GRAMMAR_TYPE_FILTER,
+					Language: language,
+					Value: GrammarIntent{
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score,
+						Explanation:  hit.Explanation,
+					}})
+			} else if rule.Intent == consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
+				if !addPositionWithoutTerm {
+					continue
+				}
+				log.Infof("GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM %+v", rule)
+				filterValues := e.VariableMapToFilterValues(vMap, language)
+				var source string
+				var position string
+				var divType string
+				for _, fv := range filterValues {
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
+						source = fv.Value
+					}
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_POSITION] {
+						position = fv.Value
+					}
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_DIVISION_TYPE] {
+						divType = fv.Value
+					}
+					if source != "" && position != "" && divType != "" {
+						break
+					}
+				}
+				var divTypes []int64
+				if divType != "" {
+					if val, ok := consts.ES_GRAMMAR_DIVT_TYPE_TO_SOURCE_TYPES[divType]; ok {
+						divTypes = val
+					}
+				}
+				relevantSource := e.cache.SearchStats().GetSourceByPositionAndParent(source, position, divTypes)
+				if relevantSource == nil {
+					return nil, nil, errors.New(fmt.Sprintf("Relevant source is not found by source parent '%v' and position '%v'.", source, position))
+				}
+				var leafPrefixType *consts.PositionIndexType
+				if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[source]; ok {
+					leafPrefixType = &val
+				}
+				path, err := e.sourcePathFromSql(*relevantSource, language, &position, leafPrefixType)
+				if err != nil {
+					return nil, nil, err
+				}
+				var expl elastic.SearchExplanation
+				if hit.Explanation != nil {
+					expl = *hit.Explanation
+				}
+				intents, err := e.getSingleHitIntentsBySource(*relevantSource, query.Filters, language, path, *hit.Score, expl)
+				if err != nil {
+					return nil, nil, err
+				}
+				singleHitIntents = append(singleHitIntents, intents...)
+				addPositionWithoutTerm = false // We add results only one time for this rule type
+			} else {
+				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
+					if score <= minScoreByLandingPage[rule.Intent] {
+						// Initial filtering (before updateIntentCount func.) to avoid the SQL call for converting LP to collection.
+						continue
+					}
+				}
+				intentValue := GrammarIntent{
 					LandingPage:  rule.Intent,
 					FilterValues: e.VariableMapToFilterValues(vMap, language),
 					Score:        score,
 					Explanation:  hit.Explanation,
-				},
-			})
+				}
+				if intentValue.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS && intentValue.FilterValues != nil {
+					var year string
+					var location string
+					for _, fv := range intentValue.FilterValues {
+						if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONVENTION_LOCATION] {
+							location = fv.Value
+
+						} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_YEAR] {
+							year = fv.Value
+						}
+						if year != "" && location != "" {
+							break
+						}
+					}
+					if e.cache.SearchStats().DoesConventionSingle(location, year) {
+						// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
+						log.Infof("Converting LandingPage of %s %s to a single collection.", location, year)
+						var err error
+						collectionHit, mdbUid, err := e.conventionsLandingPageToCollectionHit(year, location)
+						if err != nil {
+							log.Warnf("%+v", err)
+							return nil, nil, errors.New(fmt.Sprintf("ConventionsLandingPageToCollectionHit Failed: %+v", err))
+						}
+						intentValue.SingleHit = collectionHit
+						intentValue.SingleHitMdbUid = mdbUid
+					}
+				}
+				if intentValue.LandingPage == consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS && intentValue.FilterValues != nil {
+					var year string
+					var holiday string
+					for _, fv := range intentValue.FilterValues {
+						if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_HOLIDAYS] {
+							holiday = fv.Value
+
+						} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_YEAR] {
+							year = fv.Value
+						}
+						if year != "" && holiday != "" {
+							break
+						}
+					}
+					if e.cache.SearchStats().DoesHolidaySingle(holiday, year) {
+						// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
+						log.Infof("Converting LandingPage of %s %s to a single collection.", holiday, year)
+						var err error
+						collectionHit, mdbUid, err := e.holidaysLandingPageToCollectionHit(year, holiday)
+						if err != nil {
+							log.Warnf("%+v", err)
+							return nil, nil, errors.New(fmt.Sprintf("HolidaysLandingPageToCollectionHit Failed: %+v", err))
+						}
+						intentValue.SingleHit = collectionHit
+						intentValue.SingleHitMdbUid = mdbUid
+					}
+				}
+				intent := Intent{
+					Type:     consts.GRAMMAR_TYPE_LANDING_PAGE,
+					Language: language,
+					Value:    intentValue,
+				}
+				minScoreByLandingPage[intent.Value.(GrammarIntent).LandingPage] = updateIntentCount(intentsCount, intent)
+			}
 		}
 	}
-	intents := []Intent(nil)
 	for _, intentsByLandingPage := range intentsCount {
-		intents = append(intents, intentsByLandingPage...)
+		singleHitIntents = append(singleHitIntents, intentsByLandingPage...)
 	}
+
 	// Normalize score to be from 2000 and below.
-	maxScore := 0.0
-	for i := range intents {
-		if intents[i].Value.(GrammarIntent).Score > maxScore {
-			maxScore = intents[i].Value.(GrammarIntent).Score
+	maxScoreForLandingPages := 0.0
+	for i := range singleHitIntents {
+		if intentValue, ok := singleHitIntents[i].Value.(GrammarIntent); ok {
+			if intentValue.Score > maxScoreForLandingPages {
+				maxScoreForLandingPages = intentValue.Score
+			}
 		}
 	}
-	normalizedIntents := []Intent(nil)
-	for _, intent := range intents {
-		grammarIntent := intent.Value.(GrammarIntent)
-		grammarIntent.Score = 3000 * (grammarIntent.Score / maxScore)
-		intent.Value = grammarIntent
-		normalizedIntents = append(normalizedIntents, intent)
+	normalizedSingleHitIntents := []Intent(nil)
+	for _, intent := range singleHitIntents {
+		if intentValue, ok := intent.Value.(GrammarIntent); ok {
+			intentValue.Score = 3000 * (intentValue.Score / maxScoreForLandingPages)
+			intent.Value = intentValue
+		}
+		normalizedSingleHitIntents = append(normalizedSingleHitIntents, intent)
 	}
-	// log.Infof("Intents: %+v", intents)
-	return normalizedIntents, nil
+	//log.Infof("Single Hit Intents: %+v", normalizedSingleHitIntents)
+	//log.Infof("Filter Intentys: %+v", filterIntents)
+	return normalizedSingleHitIntents, filterIntents, nil
 }
 
-func (e *ESEngine) ConventionsLandingPageToCollectionHit(year string, location string) (*elastic.SearchHit, error) {
+func (e *ESEngine) conventionsLandingPageToCollectionHit(year string, location string) (*elastic.SearchHit, *string, error) {
 	queryMask := `select c.uid, c.properties from collections c 
 	where c.type_id=%d
 	%s`
@@ -345,7 +672,7 @@ func (e *ESEngine) ConventionsLandingPageToCollectionHit(year string, location s
 	return e.collectionHitFromSql(query)
 }
 
-func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday string) (*elastic.SearchHit, error) {
+func (e *ESEngine) holidaysLandingPageToCollectionHit(year string, holiday string) (*elastic.SearchHit, *string, error) {
 	queryMask := `select c.uid, c.properties from collections c
 	join tags t on c.properties ->> 'holiday_tag' = t.uid
 	%s`
@@ -366,19 +693,19 @@ func (e *ESEngine) HolidaysLandingPageToCollectionHit(year string, holiday strin
 	return e.collectionHitFromSql(query)
 }
 
-func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, error) {
+func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *string, error) {
 	var properties json.RawMessage
 	var mdbUID string
 	var effectiveDate es.EffectiveDate
 
 	err := e.mdb.QueryRow(query).Scan(&mdbUID, &properties)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	err = json.Unmarshal(properties, &effectiveDate)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	result := es.Result{
@@ -389,7 +716,7 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, error
 
 	resultJson, err := json.Marshal(result)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	hit := &elastic.SearchHit{
@@ -397,5 +724,227 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, error
 		Type:   "result",
 		Index:  consts.GRAMMAR_LP_SINGLE_COLLECTION,
 	}
-	return hit, nil
+	return hit, &mdbUID, nil
+}
+
+func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position *string, leafPrefixType *consts.PositionIndexType) (string, error) {
+	queryMask := `with recursive sourcesPath as (
+		select s.id, s.uid, s.parent_id, sn.name from source_i18n sn
+		  join  sources s on sn.source_id = s.id
+		 and s.uid='%s'
+			  where sn.language='%s'
+	  
+		union all
+	  
+		select  s.id, s.uid, s.parent_id, sn.name  from source_i18n sn
+		  join  sources s on sn.source_id = s.id
+		join sourcesPath on sourcesPath.parent_id = s.id
+			  where sn.language='%s'
+	  )
+	  
+	  select name from sourcesPath sp
+	  union all
+	  select aun.name as id from author_i18n aun
+	  join authors_sources aus on aus.author_id = aun.author_id
+	  join sourcesPath sp on sp.id = aus.source_id
+	  where aun.language='%s'`
+	query := fmt.Sprintf(queryMask, sourceUid, language, language, language)
+	rows, err := e.mdb.Query(query)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	names := []string{}
+	for rows.Next() {
+		var name string
+		err := rows.Scan(&name)
+		if err != nil {
+			return "", err
+		}
+		names = append([]string{name}, names...)
+	}
+	err = rows.Err()
+	if err != nil {
+		return "", err
+	}
+	if len(names) == 0 && language != consts.LANG_HEBREW {
+		// Try with default language
+		return e.sourcePathFromSql(sourceUid, consts.LANG_HEBREW, position, leafPrefixType)
+	}
+	if leafPrefixType != nil && position != nil && len(names) > 0 {
+		if language == consts.LANG_HEBREW && *leafPrefixType == consts.LETTER_IF_HEBREW {
+			posInt, err := strconv.Atoi(*position)
+			if err != nil {
+				return "", err
+			}
+			hebLetter := utils.NumberInHebrew(posInt) //  Convert to Hebrew letter
+			position = &hebLetter
+		}
+		names[len(names)-1] = fmt.Sprintf("%s. %s", *position, names[len(names)-1])
+	}
+	ret := strings.Join(names, " > ")
+	return ret, nil
+}
+
+func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string][]string, language string, title string, score float64, explanation elastic.SearchExplanation) ([]Intent, error) {
+	var getLessonCI bool
+	var getProgramCI bool
+	var getSourceGI bool
+	if len(filters) == 0 {
+		getLessonCI = true
+		getProgramCI = true
+		getSourceGI = true
+	} else {
+		if values, ok := filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
+			for _, value := range values {
+				if value == consts.CT_LESSON_PART {
+					getLessonCI = true
+				}
+				if value == consts.CT_VIDEO_PROGRAM_CHAPTER {
+					getProgramCI = true
+				}
+			}
+		}
+		if _, ok := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
+			getSourceGI = true
+		}
+	}
+	log.Infof("getSingleHitIntentsBySource filters: %+v. getLessonCI = %v. getProgramCI = %v. getSourceGI = %v.", filters, getLessonCI, getProgramCI, getSourceGI)
+	ciScore := score * 0.98 // lower classification intents score to display the source above them
+	intents := []Intent{}
+	if getLessonCI {
+		lessonsIntent := ClassificationIntent{
+			ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+			MDB_UID:     source,
+			ContentType: consts.CT_LESSON_PART,
+			Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_LESSON_PART),
+			Score:       &ciScore,
+			Explanation: explanation,
+			Title:       title, // Actually this value is generated in client for classification intent results.
+		}
+		intents = append(intents, Intent{consts.INTENT_TYPE_SOURCE, language, lessonsIntent})
+	}
+	if getProgramCI {
+		programsIntent := ClassificationIntent{
+			ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+			MDB_UID:     source,
+			ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER,
+			Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_VIDEO_PROGRAM_CHAPTER),
+			Score:       &ciScore,
+			Explanation: explanation,
+			Title:       title, // Actually this value is generated in client for classification intent results.
+		}
+		intents = append(intents, Intent{consts.INTENT_TYPE_SOURCE, language, programsIntent})
+	}
+	if getSourceGI {
+		srcResult := es.Result{
+			MDB_UID:    source,
+			ResultType: consts.ES_RESULT_TYPE_SOURCES,
+			FullTitle:  title,
+		}
+		srcResultJson, err := json.Marshal(srcResult)
+		if err != nil {
+			return []Intent{}, err
+		}
+		singleSourceIntent := GrammarIntent{
+			Score:       score,
+			Explanation: &explanation,
+			SingleHit: &elastic.SearchHit{
+				Source: (*json.RawMessage)(&srcResultJson),
+				Type:   "result",
+				Index:  consts.GRAMMAR_GENERATED_SOURCE_HIT,
+			},
+		}
+		intents = append(intents, Intent{"", language, singleSourceIntent})
+	}
+	return intents, nil
+}
+
+// This function retrieves the 'free text' values from a grammar result that was searched by perculator query with highlight.
+// The 'highlighted' part of the input string contains the values that are NOT 'free text'. This parts starts and ends with PERCULATE_HIGHLIGHT_SEPERATOR rune ('$').
+// The return value of the function is a slice of all term parts thar are outside of the 'highlight'.
+// For example, the 'free text' values for the term 'aaa $bbb$ ccc $ddd' are 'aaa' and 'ccc'.
+// We have a test for this function in engine_test.go
+func retrieveTextVarValues(str string) []string {
+	runes := []rune(str)
+	var filtered []rune
+	var textVarValues []string
+	var inHighlight bool
+	for i, r := range runes {
+		if r == PERCULATE_HIGHLIGHT_SEPERATOR || i == len(runes)-1 {
+			inHighlight = !inHighlight
+			if inHighlight && len(filtered) > 0 {
+				if r != PERCULATE_HIGHLIGHT_SEPERATOR {
+					filtered = append(filtered, r)
+				}
+				trimmed := strings.Trim(string(filtered), " ")
+				if trimmed != "" {
+					textVarValues = append(textVarValues, trimmed)
+				}
+			}
+			filtered = make([]rune, 0)
+		} else if !inHighlight {
+			filtered = append(filtered, r)
+		}
+	}
+	return textVarValues
+}
+
+// Results search according to grammar based filter (currently by content types and free text).
+// Return: Results, Unique list of hit id's as a map, Max score
+func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
+	results := []*elastic.SearchResult{}
+	hitIdsMap := map[string]bool{}
+	var maxScore *float64
+
+	multiSearchFilteredService := e.esc.MultiSearch()
+	multiSearchFilteredService.Add(requests...)
+	beforeFilterSearch := time.Now()
+	mr, err := multiSearchFilteredService.Do(context.TODO())
+	e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
+	}
+
+	for _, currentResults := range mr.Responses {
+		if currentResults.Error != nil {
+			log.Warnf("%+v", currentResults.Error)
+			return nil, nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
+		}
+		if haveHits(currentResults) {
+			if currentResults.Hits.MaxScore != nil &&
+				(maxScore == nil || *currentResults.Hits.MaxScore > *maxScore) {
+				maxScore = currentResults.Hits.MaxScore
+			}
+			for _, hit := range currentResults.Hits.Hits {
+				hitIdsMap[hit.Id] = true
+			}
+			results = append(results, currentResults)
+		}
+	}
+	return results, hitIdsMap, maxScore, nil
+}
+
+// Return: source uid, language, is author?
+func (e *ESEngine) sourceUidByTerm(term string, languages []string) (*string, string, bool) {
+	termWithoutQuotes := strings.Replace(term, "\"", "", -1)
+	termLC := strings.ToLower(term)
+	for _, language := range languages {
+		varsByLang := e.variables[consts.VAR_SOURCE][language]
+		for k, v := range varsByLang {
+			for _, srcName := range v {
+				var identical bool
+				if language == consts.LANG_HEBREW {
+					srcNameWithoutQuotes := strings.Replace(srcName, "\"", "", -1)
+					identical = termWithoutQuotes == srcNameWithoutQuotes
+				} else {
+					identical = termLC == strings.ToLower(srcName)
+				}
+				if identical {
+					return &k, language, len(k) < 4
+				}
+			}
+		}
+	}
+	return nil, "", false
 }
