@@ -11,8 +11,11 @@
 #   https://www.elastic.co/guide/en/elasticsearch/guide/current/hunspell.html
 #   To install download: he_IL.aff, he_IL.dic, settings.yml files from
 #   https://github.com/elastic/hunspell/tree/master/dicts/he_IL
-#   and put under: elasticsearch-6.3.0/config/hunspell/he_IL
-#
+#   and put under: elasticsearch-6.X.X/config/hunspell/he_IL
+#   Additional dictionary terms are managed in .delta.dic files located in search/hunspell directory of the repo.
+#   Copy these files into corresponding folders inside elasticsearch-6.X.X/config/hunspell/
+#   For Hebrew dictionary files, the supported format is ISO 8859-8. 
+#   
 #
 # Deprecated plugins (already not in use):
 # Hebrew analyzer plugin:
