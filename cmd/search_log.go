@@ -54,6 +54,12 @@ var latencyAggregateCmd = &cobra.Command{
 	Run:   latencyAggregateFn,
 }
 
+var queriesAggregateCmd = &cobra.Command{
+	Use:   "queries_aggregate",
+	Short: "Get most popular queries from ElasticSearch.",
+	Run:   queriesAggregateFn,
+}
+
 var elasticUrl string
 var csvFile string
 var lastDays int
@@ -77,11 +83,13 @@ func init() {
 	latencyCmd.MarkFlagRequired("output_file")
 	latencyAggregateCmd.MarkFlagRequired("output_html")
 	latencyAggregateCmd.MarkFlagRequired("csv_file")
+	queriesAggregateCmd.PersistentFlags().IntVar(&lastDays, "last_days", 0, "Number of days for the lattest queries (unlimited if 0 or not set.).")
 
 	logCmd.AddCommand(queriesCmd)
 	logCmd.AddCommand(clicksCmd)
 	logCmd.AddCommand(latencyCmd)
 	logCmd.AddCommand(latencyAggregateCmd)
+	logCmd.AddCommand(queriesAggregateCmd)
 }
 
 func logFn(cmd *cobra.Command, args []string) {
@@ -136,7 +144,7 @@ func printHtmlTr(records []string, isHeaders bool, style string) string {
 
 func queriesFn(cmd *cobra.Command, args []string) {
 	logger := initLogger()
-	printCsv([][]string{[]string{
+	printCsv([][]string{{
 		"#", "SearchId", "Created", "Term", "Exact", "Filters",
 		"Languages", "From", "Size", "SortBy", "Error", "Suggestion",
 		"Deb"}})
@@ -179,7 +187,7 @@ func queriesFn(cmd *cobra.Command, args []string) {
 
 func clicksFn(cmd *cobra.Command, args []string) {
 	logger := initLogger()
-	printCsv([][]string{[]string{
+	printCsv([][]string{{
 		"#", "SearchId", "Created", "Rank", "MdbUid", "Index", "ResultType"}})
 	clicks, err := logger.GetAllClicks()
 	utils.Must(err)
@@ -269,16 +277,16 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 
 	var operationsHtmlPart string
 	var worstQueriesHtmlPart string
- 	reader, err := os.Open(csvFile)
+	reader, err := os.Open(csvFile)
 	r := csv.NewReader(bufio.NewReader(reader))
 	records, err := r.ReadAll()
 	utils.Must(err)
-	
+
 	opLatenciesMap := make(map[string][]int, len(consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH))
 	for _, op := range consts.LATENCY_LOG_OPERATIONS_FOR_SEARCH {
 		opLatenciesMap[op] = make([]int, 0)
 	}
-	
+
 	for i := 1; i < len(records); i++ { //  skip first line (headers)
 
 		record := records[i]
@@ -332,8 +340,8 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 		worstQueriesHtmlPart = ""
 
 	} else {
-		sortedRecords:=records[1:]
-		formatedHeaders := make([]string, 0)		
+		sortedRecords := records[1:]
+		formatedHeaders := make([]string, 0)
 		/// print the worst queries
 		sort.Slice(sortedRecords, func(i, j int) bool {
 			left, err := strconv.Atoi(strings.TrimSpace(sortedRecords[i][wholeSearchLatencyOperatinIndex]))
@@ -354,10 +362,70 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 			printCsv([][]string{sortedRecords[i]})
 			worstQueriesTrs = fmt.Sprintf("%s%s", worstQueriesTrs, printHtmlTr(sortedRecords[i], false, ""))
 		}
-		worstQueriesHtmlPart = fmt.Sprintf("<h3>%d worst queries</h3><table>%s</table>", worstQueriesPrintCnt, worstQueriesTrs)		
+		worstQueriesHtmlPart = fmt.Sprintf("<h3>%d worst queries</h3><table>%s</table>", worstQueriesPrintCnt, worstQueriesTrs)
 	}
 	finalHtml := fmt.Sprintf("%s%s", operationsHtmlPart, worstQueriesHtmlPart)
 	err = ioutil.WriteFile(latencyOutputHtml, []byte(finalHtml), 0644)
 	utils.Must(err)
 	log.Info("HTML printed.")
+}
+
+func queriesAggregateFn(cmd *cobra.Command, args []string) {
+	logger := initLogger()
+	printCsv([][]string{{"Term", "Count"}})
+	totalQueries := 0
+	SLICES := 100
+	RESULTS := 1000
+	gteStr := null.NewString("", false)
+	countByQuery := map[string]int{}
+	if lastDays > 0 {
+		gteStr = null.StringFrom(fmt.Sprintf("now-%dd/d", lastDays))
+	}
+	for i := 0; i < SLICES; i++ {
+		s := elastic.NewSliceQuery().Id(i).Max(SLICES)
+		queries, err := logger.GetLattestQueries(s, gteStr, null.NewBool(false, false))
+		utils.Must(err)
+		totalQueries += len(queries)
+		sortedQueries := make(search.CreatedSearchLogs, 0, len(queries)) // TBC why sort?
+		for _, q := range queries {
+			sortedQueries = append(sortedQueries, q)
+		}
+		sort.Sort(sortedQueries)
+		for _, sl := range sortedQueries {
+			var term string
+			if !sl.Query.Deb && sl.From == 0 {
+				if sl.Query.Term != "" {
+					term = sl.Query.Term
+				} else if len(sl.Query.ExactTerms) == 1 { // TBT
+					term = sl.Query.ExactTerms[0]
+				} else {
+					continue
+				}
+				if _, ok := countByQuery[term]; !ok {
+					countByQuery[term] = 0
+				}
+				countByQuery[term]++
+			}
+		}
+	}
+	tcs := []TermAndCount{}
+	for k, v := range countByQuery {
+		tcs = append(tcs, TermAndCount{Term: k, Count: v})
+	}
+	sort.Slice(tcs, func(i, j int) bool {
+		return tcs[i].Count > tcs[j].Count
+	})
+	records := [][]string{}
+	for i, tc := range tcs {
+		if i < RESULTS {
+			records = append(records, []string{tc.Term, strconv.Itoa(tc.Count)})
+		}
+	}
+	printCsv(records)
+	log.Infof("Found %d queries.", totalQueries)
+}
+
+type TermAndCount struct {
+	Term  string
+	Count int
 }
