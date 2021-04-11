@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
-	"math/rand"
 	"time"
 
 	"gopkg.in/volatiletech/null.v6"
@@ -422,13 +422,13 @@ func queriesAggregateFn(cmd *cobra.Command, args []string) {
 	}
 	// Pick random values using Durstenfeld's algorithm (no need to shuffle the whole slice)
 	r := rand.New(rand.NewSource(time.Now().Unix()))
-	for i := len(tcs) - 1; i >= len(tcs) - RESULTS; i-- {
+	for i := len(tcs) - 1; i >= len(tcs)-RESULTS; i-- {
 		ridx := r.Intn(i + 1)
 		tcs[i], tcs[ridx] = tcs[ridx], tcs[i]
 		records = append(records, []string{tcs[i].Term, strconv.Itoa(tcs[i].Count), "Random"})
 	}
 	printCsv(records)
-	log.Infof("Printed %d rows.", 1 + (RESULTS*2))
+	log.Infof("Printed %d rows.", 1+(RESULTS*2))
 }
 
 type TermAndCount struct {
