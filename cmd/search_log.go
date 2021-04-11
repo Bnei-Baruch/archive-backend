@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"math/rand"
+	"time"
 
 	"gopkg.in/volatiletech/null.v6"
 
@@ -372,8 +374,7 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 
 func queriesAggregateFn(cmd *cobra.Command, args []string) {
 	logger := initLogger()
-	printCsv([][]string{{"Term", "Count"}})
-	totalQueries := 0
+	printCsv([][]string{{"Term", "Count", "SortType"}})
 	SLICES := 100
 	RESULTS := 1000
 	gteStr := null.NewString("", false)
@@ -385,13 +386,7 @@ func queriesAggregateFn(cmd *cobra.Command, args []string) {
 		s := elastic.NewSliceQuery().Id(i).Max(SLICES)
 		queries, err := logger.GetLattestQueries(s, gteStr, null.NewBool(false, false))
 		utils.Must(err)
-		totalQueries += len(queries)
-		sortedQueries := make(search.CreatedSearchLogs, 0, len(queries)) // TBC why sort?
-		for _, q := range queries {
-			sortedQueries = append(sortedQueries, q)
-		}
-		sort.Sort(sortedQueries)
-		for _, sl := range sortedQueries {
+		for _, sl := range queries {
 			var term string
 			if !sl.Query.Deb && sl.From == 0 {
 				if sl.Query.Term != "" {
@@ -412,17 +407,28 @@ func queriesAggregateFn(cmd *cobra.Command, args []string) {
 	for k, v := range countByQuery {
 		tcs = append(tcs, TermAndCount{Term: k, Count: v})
 	}
+	if len(tcs) < RESULTS {
+		log.Errorf("Amount of found terms (%d) is smaller than RESULTS const (%d).", len(tcs), RESULTS)
+		return
+	}
 	sort.Slice(tcs, func(i, j int) bool {
 		return tcs[i].Count > tcs[j].Count
 	})
 	records := [][]string{}
 	for i, tc := range tcs {
 		if i < RESULTS {
-			records = append(records, []string{tc.Term, strconv.Itoa(tc.Count)})
+			records = append(records, []string{tc.Term, strconv.Itoa(tc.Count), "Count"})
 		}
 	}
+	// Pick random values using Durstenfeld's algorithm (no need to shuffle the whole slice)
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+	for i := len(tcs) - 1; i >= len(tcs) - RESULTS; i-- {
+		ridx := r.Intn(i + 1)
+		tcs[i], tcs[ridx] = tcs[ridx], tcs[i]
+		records = append(records, []string{tcs[i].Term, strconv.Itoa(tcs[i].Count), "Random"})
+	}
 	printCsv(records)
-	log.Infof("Found %d queries.", totalQueries)
+	log.Infof("Printed %d rows.", 1 + (RESULTS*2))
 }
 
 type TermAndCount struct {
