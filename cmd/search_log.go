@@ -374,11 +374,12 @@ func latencyAggregateFn(cmd *cobra.Command, args []string) {
 
 func queriesAggregateFn(cmd *cobra.Command, args []string) {
 	logger := initLogger()
-	printCsv([][]string{{"Term", "Count", "SortType"}})
+	printCsv([][]string{{"Term", "Count", "SortType", "Language"}})
 	SLICES := 100
-	RESULTS := 1000
+	RESULTS_FOR_LANGUAGE := 1000
 	gteStr := null.NewString("", false)
-	countByQuery := map[string]int{}
+	languages := []string{consts.LANG_HEBREW, consts.LANG_ENGLISH, consts.LANG_RUSSIAN} // Currently only the 3 main languages are supported due to language recognition issues
+	queryCountByLang := map[string]map[string]int{}                                     // Language -> [Search Term -> Count]
 	if lastDays > 0 {
 		gteStr = null.StringFrom(fmt.Sprintf("now-%dd/d", lastDays))
 	}
@@ -387,48 +388,64 @@ func queriesAggregateFn(cmd *cobra.Command, args []string) {
 		queries, err := logger.GetLattestQueries(s, gteStr, null.NewBool(false, false))
 		utils.Must(err)
 		for _, sl := range queries {
-			var term string
-			if !sl.Query.Deb && sl.From == 0 {
-				if sl.Query.Term != "" {
-					term = sl.Query.Term
-				} else if len(sl.Query.ExactTerms) == 1 { // TBT
-					term = sl.Query.ExactTerms[0]
-				} else {
-					continue
+			term := simpleQuery(sl.Query)
+			if term == "" || sl.Error != nil || sl.QueryResult == nil || sl.Query.Deb || sl.From > 0 {
+				continue
+			}
+			lang := sl.QueryResult.(map[string]interface{})["language"].(string)
+			if lang == "" {
+				sort.Strings(sl.Query.LanguageOrder)
+				intersected := utils.IntersectSortedStringSlices(languages, sl.Query.LanguageOrder)
+				if len(intersected) > 0 {
+					lang = intersected[0]
 				}
-				if _, ok := countByQuery[term]; !ok {
-					countByQuery[term] = 0
+			}
+			if utils.Contains(utils.Is(languages), lang) {
+				if _, ok := queryCountByLang[lang]; !ok {
+					queryCountByLang[lang] = map[string]int{}
 				}
-				countByQuery[term]++
+				if _, ok := queryCountByLang[lang][term]; !ok {
+					queryCountByLang[lang][term] = 0
+				}
+				queryCountByLang[lang][term]++
 			}
 		}
 	}
-	tcs := []TermAndCount{}
-	for k, v := range countByQuery {
-		tcs = append(tcs, TermAndCount{Term: k, Count: v})
-	}
-	if len(tcs) < RESULTS {
-		log.Errorf("Amount of found terms (%d) is smaller than RESULTS const (%d).", len(tcs), RESULTS)
-		return
-	}
-	sort.Slice(tcs, func(i, j int) bool {
-		return tcs[i].Count > tcs[j].Count
-	})
 	records := [][]string{}
-	for i, tc := range tcs {
-		if i < RESULTS {
-			records = append(records, []string{tc.Term, strconv.Itoa(tc.Count), "Count"})
+	for _, lang := range languages {
+		tcs := []TermAndCount{}
+		for k, v := range queryCountByLang[lang] {
+			tcs = append(tcs, TermAndCount{Term: k, Count: v})
+		}
+		if len(tcs) < RESULTS_FOR_LANGUAGE {
+			log.Errorf("Amount of found terms (%d) for language '%s' is smaller than RESULTS_FOR_LANGUAGE const (%d).", len(tcs), lang, RESULTS_FOR_LANGUAGE)
+			return
+		}
+		sort.Slice(tcs, func(i, j int) bool {
+			return tcs[i].Count > tcs[j].Count
+		})
+		for i, tc := range tcs {
+			if i < RESULTS_FOR_LANGUAGE {
+				records = append(records, []string{tc.Term, strconv.Itoa(tc.Count), "Count", lang})
+			}
+		}
+		// Pick random values using Durstenfeld's algorithm (no need to shuffle the whole slice)
+		r := rand.New(rand.NewSource(time.Now().Unix()))
+		for i := len(tcs) - 1; i >= len(tcs)-RESULTS_FOR_LANGUAGE; i-- {
+			ridx := r.Intn(i + 1)
+			tcs[i], tcs[ridx] = tcs[ridx], tcs[i]
+			records = append(records, []string{tcs[i].Term, strconv.Itoa(tcs[i].Count), "Random", lang})
 		}
 	}
-	// Pick random values using Durstenfeld's algorithm (no need to shuffle the whole slice)
-	r := rand.New(rand.NewSource(time.Now().Unix()))
-	for i := len(tcs) - 1; i >= len(tcs)-RESULTS; i-- {
-		ridx := r.Intn(i + 1)
-		tcs[i], tcs[ridx] = tcs[ridx], tcs[i]
-		records = append(records, []string{tcs[i].Term, strconv.Itoa(tcs[i].Count), "Random"})
-	}
 	printCsv(records)
-	log.Infof("Printed %d rows.", 1+(RESULTS*2))
+	log.Infof("Printed %d rows.", len(records)+1)
+}
+
+func simpleQuery(q search.Query) string {
+	if q.Term == "" && len(q.ExactTerms) == 1 {
+		return q.ExactTerms[0]
+	}
+	return q.Term
 }
 
 type TermAndCount struct {
