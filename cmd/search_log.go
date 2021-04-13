@@ -58,7 +58,7 @@ var latencyAggregateCmd = &cobra.Command{
 
 var queriesAggregateCmd = &cobra.Command{
 	Use:   "queries_aggregate",
-	Short: "Get most popular queries from ElasticSearch.",
+	Short: "Get 1000 most popular queries and 1000 random queries for each language from ElasticSearch.",
 	Run:   queriesAggregateFn,
 }
 
