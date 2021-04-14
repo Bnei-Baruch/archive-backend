@@ -426,7 +426,7 @@ func queriesAggregateFn(cmd *cobra.Command, args []string) {
 		})
 		for i, tc := range tcs {
 			if i < RESULTS_FOR_LANGUAGE {
-				records = append(records, []string{tc.Term, strconv.Itoa(tc.Count), "Count", lang})
+				records = append(records, []string{tc.Term, strconv.Itoa(tc.Count), "Top", lang})
 			}
 		}
 		// Pick random values using Durstenfeld's algorithm (no need to shuffle the whole slice)
