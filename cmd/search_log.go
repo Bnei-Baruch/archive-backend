@@ -392,7 +392,10 @@ func queriesAggregateFn(cmd *cobra.Command, args []string) {
 			if term == "" || sl.Error != nil || sl.QueryResult == nil || sl.Query.Deb || sl.From > 0 {
 				continue
 			}
-			lang := sl.QueryResult.(map[string]interface{})["language"].(string)
+			var lang string
+			if val, ok := sl.QueryResult.(map[string]interface{})["language"]; ok && val != nil {
+				lang = val.(string)
+			}
 			if lang == "" {
 				sort.Strings(sl.Query.LanguageOrder)
 				intersected := utils.IntersectSortedStringSlices(languages, sl.Query.LanguageOrder)
