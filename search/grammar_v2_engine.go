@@ -471,6 +471,15 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Score:        score * ctBoost,
 						Explanation:  hit.Explanation,
 					}})
+			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_PROGRAM {
+				filterIntents = append(filterIntents, Intent{
+					Type:     consts.GRAMMAR_TYPE_FILTER,
+					Language: language,
+					Value: GrammarIntent{
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score,
+						Explanation:  hit.Explanation,
+					}})
 			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
 				filterIntents = append(filterIntents, Intent{
 					Type:     consts.GRAMMAR_TYPE_FILTER,
