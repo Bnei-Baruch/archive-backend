@@ -361,6 +361,7 @@ const (
 	FILTER_COLLECTIONS_CONTENT_TYPES = "collections_content_types"
 	FILTER_SECTION_SOURCES           = "filter_section_sources"
 	FILTER_LANGUAGE                  = "media_language"
+	FILTER_COLLECTION                = "collection"
 )
 
 // Use to identify and map request filters
@@ -376,6 +377,7 @@ var FILTERS = map[string]string{
 	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
 	FILTER_SECTION_SOURCES:           "filter_section_sources",
 	FILTER_LANGUAGE:                  "media_language",
+	FILTER_COLLECTION:                "collection", //  internally used age by grammar. Not available in frontend.
 }
 
 // ElasticSearch 'es'
@@ -757,6 +759,7 @@ var VARIABLE_TO_FILTER = map[string]string{
 	VAR_CONTENT_TYPE:        "content_type",
 	VAR_SOURCE:              "source",
 	VAR_POSITION:            "position",
+	VAR_PROGRAM:             "program",
 }
 
 // Latency log

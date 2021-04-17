@@ -271,6 +271,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 		if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
 			var contentType string
 			var text string
+			var programCollection string
 			sources := []string{}
 			for _, fv := range intentValue.FilterValues {
 				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
@@ -279,18 +280,20 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 					text = fv.Value
 				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
 					sources = append(sources, fv.Value)
+				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM] {
+					programCollection = fv.Value
 				}
 			}
-			if text != "" && (contentType != "" || len(sources) > 0) {
+			if text != "" && (contentType != "" || programCollection != "" || len(sources) > 0) {
 				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Sources are '%+v'.", contentType, text, sources)
 				requests := []*elastic.SearchRequest{}
-				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 				if err != nil {
 					return nil, err
 				}
 				requests = append(requests, textValSearchRequests...)
 				if contentType != consts.VAR_CT_ARTICLES {
-					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 					if err != nil {
 						return nil, err
 					}
@@ -303,11 +306,11 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 						return nil, err
 					}
 					resultsByLang[intent.Language] = FilteredSearchResult{
-						Results:     results,
-						Term:        text,
-						ContentType: contentType,
-						HitIdsMap:   hitIdsMap,
-						MaxScore:    maxScore,
+						Results:                  results,
+						Term:                     text,
+						PreserveTermForHighlight: programCollection != "",
+						HitIdsMap:                hitIdsMap,
+						MaxScore:                 maxScore,
 					}
 					if len(results) > 0 {
 						// we assume that there is no need to make the search for other languages if a results found for one language

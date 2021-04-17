@@ -51,11 +51,11 @@ type ClassificationIntent struct {
 }
 
 type FilteredSearchResult struct {
-	Term        string
-	ContentType string
-	HitIdsMap   map[string]bool
-	Results     []*elastic.SearchResult
-	MaxScore    *float64
+	Term                     string
+	PreserveTermForHighlight bool //Use the term as highlight term even if we have same hit result from regular search
+	HitIdsMap                map[string]bool
+	Results                  []*elastic.SearchResult
+	MaxScore                 *float64
 }
 
 type TimeLogMap struct {
@@ -848,8 +848,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
 							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM
 						}
-						// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
-						delete(filtered.HitIdsMap, hit.Id)
+						if !filteredByLang[lang].PreserveTermForHighlight {
+							// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
+							delete(filtered.HitIdsMap, hit.Id)
+						}
 					}
 				}
 			}

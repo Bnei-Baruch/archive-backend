@@ -478,6 +478,8 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 			filterByContentType = true
 		case consts.FILTERS[consts.FILTER_SECTION_SOURCES]:
 			boolQuery.Filter(elastic.NewTermsQuery("result_type", consts.ES_RESULT_TYPE_SOURCES))
+		case consts.FILTERS[consts.FILTER_COLLECTION]:
+			boolQuery.Filter(elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.ES_UID_TYPE_COLLECTION, values[0])))
 		default:
 			boolQuery.Filter(elastic.NewTermsQuery("filter_values", es.KeyIValues(filter, s)...))
 		}
