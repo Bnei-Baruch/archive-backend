@@ -666,6 +666,7 @@ const (
 	VAR_SOURCE              = "$Source"
 	VAR_POSITION            = "$Position"
 	VAR_DIVISION_TYPE       = "$DivType"
+	VAR_PROGRAM             = "$Program"
 
 	// $ContentType variable values
 
