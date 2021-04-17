@@ -17,6 +17,8 @@ func GrammarFilterVariablesMatch(intent string, variablesByPhrase VariablesByPhr
 
 func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.CacheManager) bool {
 	switch intent {
+	case consts.GRAMMAR_INTENT_FILTER_BY_PROGRAM:
+		return filterByProgramMatch(vMap)
 	case consts.GRAMMAR_INTENT_FILTER_BY_SOURCE:
 		return filterBySourceMatch(vMap)
 	case consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM:
@@ -30,6 +32,44 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 	default:
 		return true
 	}
+}
+
+func filterByProgramMatch(vMap map[string][]string) bool {
+	hasVarText := false
+	hasVarProgram := false
+	hasVarContentType := false
+	for variable, values := range vMap {
+		if variable == consts.VAR_TEXT {
+			if hasVarText || len(values) != 1 { //  Disable if we have more than one $Text appereance or value
+				log.Warningf("Number of $Text appearances or values in 'by_program' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarText = true
+		}
+		if variable == consts.VAR_PROGRAM {
+			if hasVarProgram || len(values) != 1 { //  Disable if we have more than one $Program appereance or value
+				log.Warningf("Number of $Program appearances or values in 'by_program' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarProgram = true
+		}
+		if variable == consts.VAR_CONTENT_TYPE {
+			if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
+				log.Warningf("Number of $ContentType appearances or values in 'by_program' rule is not 1. Values: %+v", values)
+				return false
+			}
+			if values[0] != consts.VAR_CT_PROGRAMS {
+				log.Warningf("$ContentType value in 'by_program' rule should be 'programs'. We have: %v.", values[0])
+				return false
+			}
+			hasVarContentType = true
+		}
+	}
+	if !(hasVarProgram && hasVarText) {
+		log.Warningf("Filter intent by program must have one appearance of $Text and one appearance of $Program")
+		return false
+	}
+	return true
 }
 
 func filterBySourceMatch(vMap map[string][]string) bool {

@@ -530,6 +530,7 @@ const (
 
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE       = "by_content_type"
 	GRAMMAR_INTENT_FILTER_BY_SOURCE             = "by_source"
+	GRAMMAR_INTENT_FILTER_BY_PROGRAM            = "by_program"
 	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM = "source_position_without_term"
 
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
