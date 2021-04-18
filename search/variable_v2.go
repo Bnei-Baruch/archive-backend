@@ -114,7 +114,7 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 	}
 	variables[consts.VAR_HOLIDAYS] = holidayTranslations
 	// Generate source position variables
-	positionTranslations, err := GenerateSourcePositionVariables(db)
+	positionTranslations, err := GeneratePositionVariables(db)
 	if err != nil {
 		return nil, err
 	}
@@ -327,9 +327,12 @@ func LoadVariableTranslationsFromFile(variableFile string, variableName string) 
 	return translations, nil
 }
 
-func GenerateSourcePositionVariables(db *sql.DB) (TranslationsV2, error) {
+func GeneratePositionVariables(db *sql.DB) (TranslationsV2, error) {
 	translations := make(TranslationsV2)
-	query := `select max(position) from sources`
+	query := `select max(p.max) from
+		(select max(position) from sources s
+		union
+		select max(position) from collections_content_units) as p`
 	var max int
 	err := queries.Raw(db, query).QueryRow().Scan(&max)
 	if err != nil {
