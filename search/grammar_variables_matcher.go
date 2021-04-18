@@ -1,6 +1,8 @@
 package search
 
 import (
+	"strconv"
+
 	log "github.com/Sirupsen/logrus"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
@@ -19,6 +21,8 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 	switch intent {
 	case consts.GRAMMAR_INTENT_FILTER_BY_PROGRAM:
 		return filterByProgramMatch(vMap)
+	case consts.GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM:
+		return programPositionWithoutTermMatch(vMap, cm)
 	case consts.GRAMMAR_INTENT_FILTER_BY_SOURCE:
 		return filterBySourceMatch(vMap)
 	case consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM:
@@ -70,6 +74,49 @@ func filterByProgramMatch(vMap map[string][]string) bool {
 		return false
 	}
 	return true
+}
+
+func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheManager) bool {
+	varPosition := ""
+	varProgramCollection := ""
+	varDivType := ""
+	for variable, values := range vMap {
+		if variable == consts.VAR_POSITION {
+			if varPosition != "" || len(values) != 1 { //  Disable if we have more than one $Position appereance or value
+				log.Warningf("Number of $Position appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				return false
+			}
+			varPosition = values[0]
+		}
+		if variable == consts.VAR_PROGRAM {
+			if varProgramCollection != "" || len(values) != 1 { //  Disable if we have more than one $Source appereance or value
+				// TBD consider support for multiple $Source values
+				log.Warningf("Number of $Program appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				return false
+			}
+			varProgramCollection = values[0]
+		}
+		if variable == consts.VAR_DIVISION_TYPE {
+			if varDivType != "" || len(values) != 1 { //  Disable if we have more than one $DivisionType appereance or value
+				log.Warningf("Number of $DivisionType appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				return false
+			}
+			varDivType = values[0]
+		}
+	}
+	if varPosition == "" || varProgramCollection == "" {
+		log.Warningf("Intent of program by position must have one appearance of $Position and one appearance of $Program")
+		return false
+	}
+	if _, ok := consts.ES_GRAMMAR_PROGRAM_SUPPORTED_DIV_TYPES[varDivType]; !ok {
+		return false
+	}
+	if _, err := strconv.Atoi(varPosition); err != nil {
+		// Letter as position is not supported for programs, only for sources.
+		return false
+	}
+	c := cm.SearchStats().GetProgramByCollectionAndPosition(varProgramCollection, varPosition)
+	return c != nil
 }
 
 func filterBySourceMatch(vMap map[string][]string) bool {

@@ -147,15 +147,18 @@ type SearchStatsCache interface {
 	// Some of the sources (consts.NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION) are restricted from these functions so you should not use them for general porpuses.
 	GetSourceByPositionAndParent(parent string, position string, sourceTypeIds []int64) *string
 	GetSourceParentAndPosition(source string, getSourceTypeIds bool) (*string, *string, []int64, error)
+
+	GetProgramByCollectionAndPosition(collection_uid string, position string) *string
 }
 
 type SearchStatsCacheImpl struct {
-	mdb                        *sql.DB
-	tags                       ClassByTypeStats
-	sources                    ClassByTypeStats
-	conventions                map[string]map[string]int
-	holidayYears               map[string]map[string]int
-	sourcesByPositionAndParent map[string]string
+	mdb                             *sql.DB
+	tags                            ClassByTypeStats
+	sources                         ClassByTypeStats
+	conventions                     map[string]map[string]int
+	holidayYears                    map[string]map[string]int
+	sourcesByPositionAndParent      map[string]string
+	programsByCollectionAndPosition map[string]string
 }
 
 func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
@@ -240,6 +243,14 @@ func (ssc *SearchStatsCacheImpl) GetSourceParentAndPosition(source string, getSo
 	return parent, position, typeIds, nil
 }
 
+func (ssc *SearchStatsCacheImpl) GetProgramByCollectionAndPosition(collection_uid string, position string) *string {
+	key := fmt.Sprintf("%v-%v", collection_uid, position)
+	if program_uid, ok := ssc.programsByCollectionAndPosition[key]; ok {
+		return &program_uid
+	}
+	return nil
+}
+
 func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, count int, cts ...string) bool {
 	var stats ClassByTypeStats
 	switch class {
@@ -282,7 +293,11 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	}
 	ssc.sourcesByPositionAndParent, err = ssc.loadSourcesByPositionAndParent()
 	if err != nil {
-		return errors.Wrap(err, "Load source max position.")
+		return errors.Wrap(err, "Load source position map.")
+	}
+	ssc.programsByCollectionAndPosition, err = ssc.loadProgramsByCollectionAndPosition()
+	if err != nil {
+		return errors.Wrap(err, "Load program position map.")
 	}
 	return nil
 }
@@ -469,6 +484,35 @@ func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]st
 		}
 		key := fmt.Sprintf("%v-%v-%v", parent_uid, position, type_id)
 		ret[key] = source_uid
+	}
+	return ret, nil
+}
+
+func (ssc *SearchStatsCacheImpl) loadProgramsByCollectionAndPosition() (map[string]string, error) {
+	queryMask := `select c.uid as collection_uid, ccu.position, cu.uid as program_uid
+		from collections c
+		join collections_content_units ccu on c.id = ccu.collection_id
+		join content_units cu on cu.id = ccu.content_unit_id
+		where cu.published = true and cu.secure = 0
+		and c.published = true and c.secure = 0 
+		and c.type_id = %d`
+	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID)
+	rows, err := queries.Raw(ssc.mdb, query).Query()
+	if err != nil {
+		return nil, errors.Wrap(err, "queries.Raw")
+	}
+	defer rows.Close()
+	ret := map[string]string{}
+	for rows.Next() {
+		var collection_uid string
+		var position int
+		var program_uid string
+		err = rows.Scan(&collection_uid, &position, &program_uid)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		key := fmt.Sprintf("%v-%v", collection_uid, position)
+		ret[key] = program_uid
 	}
 	return ret, nil
 }

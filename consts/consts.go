@@ -851,6 +851,11 @@ var ES_GRAMMAR_DIVT_TYPE_TO_SOURCE_TYPES = map[string][]int64{
 	VAR_DIV_NUMBER:  []int64{SRC_TYPE_CHAPTER, SRC_TYPE_ARTICLE, SRC_TYPE_LETTER},
 }
 
+var ES_GRAMMAR_PROGRAM_SUPPORTED_DIV_TYPES = map[string]bool{
+	VAR_DIV_CHAPTER: true,
+	VAR_DIV_NUMBER:  true,
+}
+
 var NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION = []string{
 	SRC_LETTERS_RABASH, SRC_ARTICLES_RABASH, SRC_ARTICLES_BAAL_SULAM, // Children 'position' value of these sources are not according to their actual chapter
 }
