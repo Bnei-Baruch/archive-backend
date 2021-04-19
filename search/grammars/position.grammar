@@ -6,6 +6,7 @@ en,program_position_without_term => $Program $Position
 en,program_position_without_term => $Program $DivisionType $Position
 en,program_position_without_term => $ContentType $Program $Position
 en,program_position_without_term => $ContentType $Program $DivisionType $Position
+en,program_position_without_term => $Program $ContentType $Position
 
 he,source_position_without_term => $Source $Position
 he,source_position_without_term => $Source $DivisionType $Position
@@ -15,6 +16,7 @@ he,program_position_without_term => $Program $Position
 he,program_position_without_term => $Program $DivisionType $Position
 he,program_position_without_term => $ContentType $Program $Position
 he,program_position_without_term => $ContentType $Program $DivisionType $Position
+he,program_position_without_term => $Program $ContentType $Position
 
 ru,source_position_without_term => $Source $Position
 ru,source_position_without_term => $Source $DivisionType $Position
@@ -24,3 +26,4 @@ ru,program_position_without_term => $Program $Position
 ru,program_position_without_term => $Program $DivisionType $Position
 ru,program_position_without_term => $ContentType $Program $Position
 ru,program_position_without_term => $ContentType $Program $DivisionType $Position
+ru,program_position_without_term => $Program $ContentType $Position
