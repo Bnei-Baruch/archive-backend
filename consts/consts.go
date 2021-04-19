@@ -537,6 +537,7 @@ const (
 	GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM = "program_position_without_term"
 
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
+	GRAMMAR_GENERATED_CU_HIT     = "grammar_generated_content_unit_hit"
 	GRAMMAR_GENERATED_SOURCE_HIT = "grammar_generated_source_hit"
 
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS            = "lessons"
@@ -679,7 +680,7 @@ const (
 	VAR_CONTENT_TYPE        = "$ContentType"
 	VAR_SOURCE              = "$Source"
 	VAR_POSITION            = "$Position"
-	VAR_DIVISION_TYPE       = "$DivType"
+	VAR_DIVISION_TYPE       = "$DivisionType"
 	VAR_PROGRAM             = "$Program"
 
 	// $ContentType variable values
@@ -854,6 +855,31 @@ var ES_GRAMMAR_DIVT_TYPE_TO_SOURCE_TYPES = map[string][]int64{
 var ES_GRAMMAR_PROGRAM_SUPPORTED_DIV_TYPES = map[string]bool{
 	VAR_DIV_CHAPTER: true,
 	VAR_DIV_NUMBER:  true,
+}
+
+// Note: Suggest is not indexed anyway for rules with "free text" variables.
+var ES_SUGGEST_SUPPORTED_GRAMMAR_RULES = map[string]bool{
+	GRAMMAR_INTENT_LANDING_PAGE_LESSONS:            true,
+	GRAMMAR_INTENT_LANDING_PAGE_VIRTUAL_LESSONS:    true,
+	GRAMMAR_INTENT_LANDING_PAGE_LECTURES:           true,
+	GRAMMAR_INTENT_LANDING_PAGE_WOMEN_LESSONS:      true,
+	GRAMMAR_INTENT_LANDING_PAGE_RABASH_LESSONS:     true,
+	GRAMMAR_INTENT_LANDING_PAGE_LESSON_SERIES:      true,
+	GRAMMAR_INTENT_LANDING_PAGE_PRORGRAMS:          true,
+	GRAMMAR_INTENT_LANDING_PAGE_CLIPS:              true,
+	GRAMMAR_INTENT_LANDING_PAGE_LIBRARY:            true,
+	GRAMMAR_INTENT_LANDING_PAGE_GROUP_ARTICLES:     true,
+	GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS:        true,
+	GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS:           true,
+	GRAMMAR_INTENT_LANDING_PAGE_UNITY_DAYS:         true,
+	GRAMMAR_INTENT_LANDING_PAGE_FRIENDS_GATHERINGS: true,
+	GRAMMAR_INTENT_LANDING_PAGE_MEALS:              true,
+	GRAMMAR_INTENT_LANDING_PAGE_TOPICS:             true,
+	GRAMMAR_INTENT_LANDING_PAGE_BLOG:               true,
+	GRAMMAR_INTENT_LANDING_PAGE_TWITTER:            true,
+	GRAMMAR_INTENT_LANDING_PAGE_ARTICLES:           true,
+	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS:          true,
+	GRAMMAR_INTENT_LANDING_PAGE_HELP:               true,
 }
 
 var NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION = []string{
