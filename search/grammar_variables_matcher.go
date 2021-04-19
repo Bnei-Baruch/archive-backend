@@ -77,10 +77,18 @@ func filterByProgramMatch(vMap map[string][]string) bool {
 }
 
 func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheManager) bool {
+	varContentType := ""
 	varPosition := ""
 	varProgramCollection := ""
 	varDivType := ""
 	for variable, values := range vMap {
+		if variable == consts.VAR_CONTENT_TYPE {
+			if varContentType != "" || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
+				log.Warningf("Number of $ContentType appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				return false
+			}
+			varContentType = values[0]
+		}
 		if variable == consts.VAR_POSITION {
 			if varPosition != "" || len(values) != 1 { //  Disable if we have more than one $Position appereance or value
 				log.Warningf("Number of $Position appearances or values in 'by_position' rule is not 1. Values: %+v", values)
@@ -89,8 +97,7 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 			varPosition = values[0]
 		}
 		if variable == consts.VAR_PROGRAM {
-			if varProgramCollection != "" || len(values) != 1 { //  Disable if we have more than one $Source appereance or value
-				// TBD consider support for multiple $Source values
+			if varProgramCollection != "" || len(values) != 1 { //  Disable if we have more than one $Program appereance or value
 				log.Warningf("Number of $Program appearances or values in 'by_position' rule is not 1. Values: %+v", values)
 				return false
 			}
@@ -108,8 +115,13 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 		log.Warningf("Intent of program by position must have one appearance of $Position and one appearance of $Program")
 		return false
 	}
-	if _, ok := consts.ES_GRAMMAR_PROGRAM_SUPPORTED_DIV_TYPES[varDivType]; !ok {
+	if varContentType != "" && varContentType != consts.VAR_CT_PROGRAMS {
 		return false
+	}
+	if varDivType != "" {
+		if val, ok := consts.ES_GRAMMAR_PROGRAM_SUPPORTED_DIV_TYPES[varDivType]; !ok || !val {
+			return false
+		}
 	}
 	if _, err := strconv.Atoi(varPosition); err != nil {
 		// Letter as position is not supported for programs, only for sources.

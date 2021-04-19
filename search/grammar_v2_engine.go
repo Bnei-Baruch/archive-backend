@@ -240,7 +240,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 				return nil, nil, err
 			} else {
 				singleHitIntents = append(singleHitIntents, languageSingleHitIntents...)
-				if languageFilterIntents != nil && len(languageFilterIntents) > 0 {
+				if len(languageFilterIntents) > 0 {
 					intentToAdd := languageFilterIntents[0]
 					log.Infof("Optional intent: %+v.", intentToAdd)
 					if len(languageFilterIntents) > 1 {
@@ -483,6 +483,41 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Score:        score,
 						Explanation:  hit.Explanation,
 					}})
+			} else if rule.Intent == consts.GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM {
+				log.Infof("GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM %+v", rule)
+				filterValues := e.VariableMapToFilterValues(vMap, language)
+				var programCollection string
+				var position string
+				for _, fv := range filterValues {
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM] {
+						programCollection = fv.Value
+					}
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_POSITION] {
+						position = fv.Value
+					}
+					if programCollection != "" && position != "" {
+						break
+					}
+				}
+				programUid := e.cache.SearchStats().GetProgramByCollectionAndPosition(programCollection, position)
+				if programUid == nil {
+					return nil, nil, errors.New(fmt.Sprintf("Relevant program content unit is not found by collection '%v' and position '%v'.", programCollection, position))
+				}
+				singleHit, err := e.contentUnitHitFromSql(*programUid, language)
+				if err != nil {
+					return nil, nil, err
+				}
+				var expl elastic.SearchExplanation
+				if hit.Explanation != nil {
+					expl = *hit.Explanation
+				}
+				singleProgramIntent := GrammarIntent{
+					Score:           score,
+					Explanation:     &expl,
+					SingleHit:       singleHit,
+					SingleHitMdbUid: programUid,
+				}
+				singleHitIntents = append(singleHitIntents, Intent{"", language, singleProgramIntent})
 			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
 				filterIntents = append(filterIntents, Intent{
 					Type:     consts.GRAMMAR_TYPE_FILTER,
@@ -737,6 +772,45 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *stri
 		Index:  consts.GRAMMAR_LP_SINGLE_COLLECTION,
 	}
 	return hit, &mdbUID, nil
+}
+
+func (e *ESEngine) contentUnitHitFromSql(uid string, language string) (*elastic.SearchHit, error) {
+	var title string
+	var properties json.RawMessage
+	var effectiveDate es.EffectiveDate
+
+	queryMask := `select cu.properties, cun.name
+		from content_units cu join content_unit_i18n cun on cu.id = cun.content_unit_id
+		where cu.uid = '%s' and cun.language = '%s'`
+	query := fmt.Sprintf(queryMask, uid, language)
+	err := e.mdb.QueryRow(query).Scan(&properties, &title)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(properties, &effectiveDate)
+	if err != nil {
+		return nil, err
+	}
+
+	result := es.Result{
+		EffectiveDate: effectiveDate.EffectiveDate,
+		MDB_UID:       uid,
+		ResultType:    consts.ES_RESULT_TYPE_UNITS,
+		Title:         title,
+	}
+
+	resultJson, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+
+	hit := &elastic.SearchHit{
+		Source: (*json.RawMessage)(&resultJson),
+		Type:   "result",
+		Index:  consts.GRAMMAR_GENERATED_CU_HIT,
+	}
+	return hit, nil
 }
 
 func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position *string, leafPrefixType *consts.PositionIndexType) (string, error) {
