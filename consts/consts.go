@@ -801,6 +801,11 @@ var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{
 }
 
 const (
+	PROGRAM_COLLECTION_HAPITARON = "MvD8Dk2S"
+	PROGRAM_COLLECTION_NEW_LIFE  = "zf4lLwyI"
+)
+
+const (
 	SRC_SHAMATI                               = "qMUUn22b"
 	SRC_NONE_ELSE_BESIDE_HIM                  = "hFeGidcS"
 	SRC_PEACE_ARCTICLE                        = "28Cmp7gl"

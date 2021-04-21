@@ -495,8 +495,11 @@ func (ssc *SearchStatsCacheImpl) loadProgramsByCollectionAndPosition() (map[stri
 		join content_units cu on cu.id = ccu.content_unit_id
 		where cu.published = true and cu.secure = 0
 		and c.published = true and c.secure = 0 
-		and c.type_id = %d`
-	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID)
+		and c.type_id = %d
+		and c.uid in ('%s','%s')`
+	// The numeration of 'position' values is inconsistent for most programs so currently we able to handle only 2 program collections.
+	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID,
+		consts.PROGRAM_COLLECTION_HAPITARON, consts.PROGRAM_COLLECTION_NEW_LIFE)
 	rows, err := queries.Raw(ssc.mdb, query).Query()
 	if err != nil {
 		return nil, errors.Wrap(err, "queries.Raw")
@@ -510,6 +513,11 @@ func (ssc *SearchStatsCacheImpl) loadProgramsByCollectionAndPosition() (map[stri
 		err = rows.Scan(&collection_uid, &position, &program_uid)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		if collection_uid == consts.PROGRAM_COLLECTION_NEW_LIFE && position <= 2 {
+			position++
+		} else if collection_uid == consts.PROGRAM_COLLECTION_HAPITARON {
+			position--
 		}
 		key := fmt.Sprintf("%v-%v", collection_uid, position)
 		ret[key] = program_uid
