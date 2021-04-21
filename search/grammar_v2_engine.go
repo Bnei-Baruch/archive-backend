@@ -285,7 +285,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 				}
 			}
 			if text != "" && (contentType != "" || programCollection != "" || len(sources) > 0) {
-				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Sources are '%+v'.", contentType, text, sources)
+				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Program collection is '%s', Sources are '%+v'.", contentType, text, programCollection, sources)
 				requests := []*elastic.SearchRequest{}
 				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 				if err != nil {
