@@ -202,10 +202,10 @@ func (ssc *SearchStatsCacheImpl) IsSourceWithEnoughUnits(uid string, count int, 
 }
 
 func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, position string, sourceTypeIds []int64) *string {
-	if sourceTypeIds == nil || len(sourceTypeIds) == 0 {
+	if len(sourceTypeIds) == 0 {
 		sourceTypeIds = consts.ALL_SRC_TYPES
 	}
-	for typeId := range sourceTypeIds {
+	for _, typeId := range sourceTypeIds {
 		// Key structure: parent of the requested source (like book name) - position of the requested source child (like chapter or part number) - source type (book, volume, article, etc...)
 		key := fmt.Sprintf("%v-%v-%v", parent, position, typeId)
 		if src, ok := ssc.sourcesByPositionAndParent[key]; ok {
