@@ -390,10 +390,14 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
 	minScoreByLandingPage := make(map[string]float64)
-	addPositionWithoutTerm := true
+	queryTermHasDigit := utils.HasDigit(query.Term)
+	// We should consider "program with position without term" intents only if we have a chapter as part of the query
+	// since quering the program name without chapter will return many intents that irrelevant for us.
+	addProgramPositionWithoutTerm := queryTermHasDigit
+	addSourcePositionWithoutTerm := true
 	for filterKey := range query.Filters {
 		if _, ok := consts.AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS[filterKey]; !ok {
-			addPositionWithoutTerm = false
+			addSourcePositionWithoutTerm = false
 			break
 		}
 	}
@@ -458,13 +462,9 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
 			if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
 				ctBoost := consts.CONTENT_TYPE_INTENTS_BOOST
-				runes := []rune(query.Term)
-				for _, c := range runes {
-					if c > '0' && c <= '9' {
-						// Disable 'by content type' priorty boost if the query contains a number
-						ctBoost = 1
-						break
-					}
+				if queryTermHasDigit {
+					// Disable 'by content type' priorty boost if the query contains a number
+					ctBoost = 1
 				}
 				filterIntents = append(filterIntents, Intent{
 					Type:     consts.GRAMMAR_TYPE_FILTER,
@@ -484,6 +484,9 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Explanation:  hit.Explanation,
 					}})
 			} else if rule.Intent == consts.GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM {
+				if !addProgramPositionWithoutTerm {
+					continue
+				}
 				log.Infof("GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM %+v", rule)
 				filterValues := e.VariableMapToFilterValues(vMap, language)
 				var programCollection string
@@ -518,6 +521,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					SingleHitMdbUid: programUid,
 				}
 				singleHitIntents = append(singleHitIntents, Intent{"", language, singleProgramIntent})
+				addProgramPositionWithoutTerm = false // We add results only one time for this rule type
 			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
 				filterIntents = append(filterIntents, Intent{
 					Type:     consts.GRAMMAR_TYPE_FILTER,
@@ -528,7 +532,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Explanation:  hit.Explanation,
 					}})
 			} else if rule.Intent == consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
-				if !addPositionWithoutTerm {
+				if !addSourcePositionWithoutTerm {
 					continue
 				}
 				log.Infof("GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM %+v", rule)
@@ -577,7 +581,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					return nil, nil, err
 				}
 				singleHitIntents = append(singleHitIntents, intents...)
-				addPositionWithoutTerm = false // We add results only one time for this rule type
+				addSourcePositionWithoutTerm = false // We add results only one time for this rule type
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {
