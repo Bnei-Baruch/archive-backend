@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/pkg/errors"
 )
@@ -228,6 +229,15 @@ func SumAndMax(values []int) (int, int) {
 func Contains(list []interface{}, elem interface{}) bool {
 	for _, t := range list {
 		if t == elem {
+			return true
+		}
+	}
+	return false
+}
+
+func HasDigit(term string) bool {
+	for _, r := range term {
+		if unicode.IsDigit(r) {
 			return true
 		}
 	}
