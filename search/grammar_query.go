@@ -120,22 +120,24 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 	}
 	var searchSources bool
 	_, isSectionSources := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]
-	searchSources = len(filters) == 0 || isSectionSources // Search for sources only on the main section (without filters) or on the sources section.
-	if contentType != "" {
-		// by content type filter
-		if len(filters) > 0 {
-			return nil, fmt.Errorf("Attempt to assign extra filters for filtering by content type operation.") // Consider to support this.
+	if contentType != "" || len(sources) > 0 {
+		searchSources = len(filters) == 0 || isSectionSources // Search for sources only on the main section (without filters) or on the sources section.
+		if contentType != "" {
+			// by content type filter
+			if len(filters) > 0 {
+				return nil, fmt.Errorf("Attempt to assign extra filters for filtering by content type operation.") // Consider to support this.
+			}
+			filters, _ = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]
+			_, enableSourcesSearch := consts.CT_VARIABLES_ENABLE_SOURCES_SEARCH[contentType]
+			if len(filters) == 0 && !enableSourcesSearch {
+				return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES and not in CT_VARIABLES_ENABLE_SOURCES_SEARCH.", contentType)
+			}
+			searchSources = searchSources && enableSourcesSearch
 		}
-		filters, _ = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]
-		_, enableSourcesSearch := consts.CT_VARIABLES_ENABLE_SOURCES_SEARCH[contentType]
-		if len(filters) == 0 && !enableSourcesSearch {
-			return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES and not in CT_VARIABLES_ENABLE_SOURCES_SEARCH.", contentType)
+		if len(sources) > 0 {
+			// by source filter
+			filters[consts.FILTERS[consts.FILTERS[consts.FILTER_SOURCE]]] = sources
 		}
-		searchSources = searchSources && enableSourcesSearch
-	}
-	if len(sources) > 0 {
-		// by source filter
-		filters[consts.FILTERS[consts.FILTERS[consts.FILTER_SOURCE]]] = sources
 	}
 	if programCollection != "" {
 		// by program
