@@ -517,7 +517,7 @@ func (ssc *SearchStatsCacheImpl) loadProgramsByCollectionAndPosition() (map[stri
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
 		if collection_uid == consts.PROGRAM_COLLECTION_NEW_LIFE {
-			if val, err := strconv.Atoi(name); err != nil {
+			if val, err := strconv.Atoi(name); err == nil {
 				position = val
 			} else {
 				fmt.Printf("The value '%v' of column 'name' from 'collections_content_units' was expected to be numeric and present the chapter number for New Life program.\n", name)
