@@ -489,7 +489,7 @@ func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]st
 }
 
 func (ssc *SearchStatsCacheImpl) loadProgramsByCollectionAndPosition() (map[string]string, error) {
-	queryMask := `select c.uid as collection_uid, ccu.position, cu.uid as program_uid
+	queryMask := `select c.uid as collection_uid, ccu.position, ccu.name, cu.uid as program_uid
 		from collections c
 		join collections_content_units ccu on c.id = ccu.collection_id
 		join content_units cu on cu.id = ccu.content_unit_id
@@ -498,6 +498,7 @@ func (ssc *SearchStatsCacheImpl) loadProgramsByCollectionAndPosition() (map[stri
 		and c.type_id = %d
 		and c.uid in ('%s','%s')`
 	// The numeration of 'position' values is inconsistent for most programs so currently we able to handle only 2 program collections.
+	// For 'new life' programs we handle the 'name' column as chapter number instead of 'position'.
 	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID,
 		consts.PROGRAM_COLLECTION_HAPITARON, consts.PROGRAM_COLLECTION_NEW_LIFE)
 	rows, err := queries.Raw(ssc.mdb, query).Query()
@@ -509,13 +510,19 @@ func (ssc *SearchStatsCacheImpl) loadProgramsByCollectionAndPosition() (map[stri
 	for rows.Next() {
 		var collection_uid string
 		var position int
+		var name string
 		var program_uid string
-		err = rows.Scan(&collection_uid, &position, &program_uid)
+		err = rows.Scan(&collection_uid, &position, &name, &program_uid)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
-		if collection_uid == consts.PROGRAM_COLLECTION_NEW_LIFE && position <= 2 {
-			position++
+		if collection_uid == consts.PROGRAM_COLLECTION_NEW_LIFE {
+			if val, err := strconv.Atoi(name); err != nil {
+				position = val
+			} else {
+				fmt.Printf("The value '%v' of column 'name' from 'collections_content_units' was expected to be numeric and present the chapter number for New Life program.\n", name)
+				continue
+			}
 		} else if collection_uid == consts.PROGRAM_COLLECTION_HAPITARON {
 			position--
 		}
