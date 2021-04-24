@@ -393,10 +393,8 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	queryTermIsNumber, queryTermHasDigit := utils.HasNumeric(query.Term)
 	// In case our query is numeric only, we ignore intents of "program\source position without term" to avoid irrelavnt results.
 	// Also we support "program with position without term" intents only if we have a numeric chapter as part of the query.
-	// For "source position without term" intents we do allow queries without numeric chapter if the language is Hebrew
-	// since the chapter may be presented by letters. Anyway we ignore all grammar rules except landing pages if our query is identical to source name (in SearchGrammarsV2 func).
 	addProgramPositionWithoutTerm := !queryTermIsNumber && queryTermHasDigit
-	addSourcePositionWithoutTerm := !queryTermIsNumber && (language == consts.LANG_HEBREW || queryTermHasDigit)
+	addSourcePositionWithoutTerm := !queryTermIsNumber
 	if addSourcePositionWithoutTerm {
 		for filterKey := range query.Filters {
 			if _, ok := consts.AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS[filterKey]; !ok {
