@@ -235,11 +235,16 @@ func Contains(list []interface{}, elem interface{}) bool {
 	return false
 }
 
-func HasDigit(term string) bool {
+// Return values: 1. Whole term is numeric. 2. At least part of the term is numeric.
+func HasNumeric(term string) (bool, bool) {
+	allIsDigit := true
+	hasDigit := false
 	for _, r := range term {
 		if unicode.IsDigit(r) {
-			return true
+			hasDigit = true
+		} else {
+			allIsDigit = false
 		}
 	}
-	return false
+	return allIsDigit, hasDigit
 }
