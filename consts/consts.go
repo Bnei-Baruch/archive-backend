@@ -377,7 +377,7 @@ var FILTERS = map[string]string{
 	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
 	FILTER_SECTION_SOURCES:           "filter_section_sources",
 	FILTER_LANGUAGE:                  "media_language",
-	FILTER_COLLECTION:                "collection", //  internally used age by grammar. Not available in frontend.
+	FILTER_COLLECTION:                "collection", //  Internally used by grammar. Not available in frontend.
 }
 
 // ElasticSearch 'es'
