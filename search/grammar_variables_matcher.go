@@ -50,6 +50,10 @@ func filterByProgramMatch(vMap map[string][]string) bool {
 				log.Warningf("Number of $Text appearances or values in 'by_program' rule is not 1. Values: %+v", values)
 				return false
 			}
+			if _, err := strconv.Atoi(values[0]); err == nil {
+				log.Warningf("$Text (%v) is numeric in 'by_program' rule. Should not trigger.", values[0])
+				return false
+			}
 			hasVarText = true
 		}
 		if variable == consts.VAR_PROGRAM {
