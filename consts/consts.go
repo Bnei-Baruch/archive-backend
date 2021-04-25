@@ -530,11 +530,12 @@ const (
 	GRAMMAR_TYPE_LANDING_PAGE   = "landing-page"
 	GRAMMAR_TYPE_CLASSIFICATION = "classification"
 
-	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE        = "by_content_type"
-	GRAMMAR_INTENT_FILTER_BY_SOURCE              = "by_source"
-	GRAMMAR_INTENT_FILTER_BY_PROGRAM             = "by_program"
-	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM  = "source_position_without_term"
-	GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM = "program_position_without_term"
+	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE         = "by_content_type"
+	GRAMMAR_INTENT_FILTER_BY_SOURCE               = "by_source"
+	GRAMMAR_INTENT_FILTER_BY_PROGRAM              = "by_program"
+	GRAMMAR_INTENT_FILTER_BY_PROGRAM_WITHOUT_TERM = "by_program_without_term"
+	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM   = "source_position_without_term"
+	GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM  = "program_position_without_term"
 
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 	GRAMMAR_GENERATED_CU_HIT     = "grammar_generated_content_unit_hit"
@@ -664,6 +665,11 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	},
 
 	GRAMMAR_INTENT_FILTER_BY_PROGRAM: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIDEO_PROGRAM_CHAPTER},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIDEO_PROGRAM},
+	},
+
+	GRAMMAR_INTENT_FILTER_BY_PROGRAM_WITHOUT_TERM: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIDEO_PROGRAM_CHAPTER},
 		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIDEO_PROGRAM},
 	},

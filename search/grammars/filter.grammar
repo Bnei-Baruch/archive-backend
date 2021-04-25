@@ -49,6 +49,10 @@ en,by_program => $ContentType $Program about the $Text
 en,by_program => $Text $ContentType $Program
 en,by_program => $Text from $ContentType $Program
 
+en,by_program_without_term => $Program
+en,by_program_without_term => $ContentType $Program
+en,by_program_without_term => $Program $ContentType
+
 he,by_content_type => $ContentType $Text
 he,by_content_type => $ContentType בנושא $Text
 he,by_content_type => $ContentType אודות $Text
@@ -87,6 +91,10 @@ he,by_program => $ContentType $Program אודות $Text
 he,by_program => $ContentType $Program על $Text
 he,by_program => $Text מתוך $ContentType $Program
 he,by_program => $Text $ContentType $Program
+
+he,by_program_without_term => $Program
+he,by_program_without_term => $ContentType $Program
+he,by_program_without_term => $Program $ContentType
 
 es,by_content_type => $ContentType $Text
 es,by_content_type => $ContentType de $Text
@@ -160,6 +168,10 @@ es,by_program => $ContentType $Program acerca de la $Text
 es,by_program => $Text $ContentType $Program
 es,by_program => $Text del $ContentType $Program
 es,by_program => $Text en el $ContentType $Program
+
+es,by_program_without_term => $Program
+es,by_program_without_term => $ContentType $Program
+es,by_program_without_term => $Program $ContentType
 
 ru,by_content_type => $ContentType $Text
 ru,by_content_type => $ContentType по теме $Text
@@ -257,8 +269,6 @@ ru,by_source => труды $Source разъясняющие $Text
 ru,by_source => труды $Source разъясняющий $Text
 
 ru,by_program => $Program $Text
-
-ru,by_program => $Program $Text
 ru,by_program => $Program по теме $Text
 ru,by_program => $Program на тему $Text
 ru,by_program => $Program о $Text
@@ -276,3 +286,7 @@ ru,by_program => $ContentType $Program по $Text
 ru,by_program => $ContentType $Program об $Text
 ru,by_program => $Text $ContentType $Program
 ru,by_program => $Text из $ContentType $Program
+
+ru,by_program_without_term => $Program
+ru,by_program_without_term => $ContentType $Program
+ru,by_program_without_term => $Program $ContentType

@@ -23,6 +23,8 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 		return filterByProgramMatch(vMap)
 	case consts.GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM:
 		return programPositionWithoutTermMatch(vMap, cm)
+	case consts.GRAMMAR_INTENT_FILTER_BY_PROGRAM_WITHOUT_TERM:
+		return filterByProgramWithoutTermMatch(vMap)
 	case consts.GRAMMAR_INTENT_FILTER_BY_SOURCE:
 		return filterBySourceMatch(vMap)
 	case consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM:
@@ -77,17 +79,20 @@ func filterByProgramMatch(vMap map[string][]string) bool {
 }
 
 func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheManager) bool {
-	varContentType := ""
+	hasContentType := false
 	varPosition := ""
 	varProgramCollection := ""
 	varDivType := ""
 	for variable, values := range vMap {
 		if variable == consts.VAR_CONTENT_TYPE {
-			if varContentType != "" || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
+			if hasContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
 				log.Warningf("Number of $ContentType appearances or values in 'by_position' rule is not 1. Values: %+v", values)
 				return false
 			}
-			varContentType = values[0]
+			if values[0] != consts.VAR_CT_PROGRAMS {
+				return false
+			}
+			hasContentType = true
 		}
 		if variable == consts.VAR_POSITION {
 			if varPosition != "" || len(values) != 1 { //  Disable if we have more than one $Position appereance or value
@@ -115,9 +120,6 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 		log.Warningf("Intent of program by position must have one appearance of $Position and one appearance of $Program")
 		return false
 	}
-	if varContentType != "" && varContentType != consts.VAR_CT_PROGRAMS {
-		return false
-	}
 	if varDivType != "" {
 		if val, ok := consts.ES_GRAMMAR_PROGRAM_SUPPORTED_DIV_TYPES[varDivType]; !ok || !val {
 			return false
@@ -129,6 +131,36 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 	}
 	c := cm.SearchStats().GetProgramByCollectionAndPosition(varProgramCollection, varPosition)
 	return c != nil
+}
+
+func filterByProgramWithoutTermMatch(vMap map[string][]string) bool {
+	hasVarProgram := false
+	hasVarContentType := false
+	for variable, values := range vMap {
+		if variable == consts.VAR_PROGRAM {
+			if hasVarProgram || len(values) != 1 { //  Disable if we have more than one $Program appereance or value
+				log.Warningf("Number of $Program appearances or values in 'by_program_without_term' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarProgram = true
+		}
+		if variable == consts.VAR_CONTENT_TYPE {
+			if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
+				log.Warningf("Number of $ContentType appearances or values in 'by_program_without_term' rule is not 1. Values: %+v", values)
+				return false
+			}
+			if values[0] != consts.VAR_CT_PROGRAMS {
+				log.Warningf("$ContentType value in 'by_program_without_term' rule should be 'programs'. We have: %v.", values[0])
+				return false
+			}
+			hasVarContentType = true
+		}
+	}
+	if !hasVarProgram {
+		log.Warningf("Filter intent 'by program without term' must have one appearance $Program")
+		return false
+	}
+	return true
 }
 
 func filterBySourceMatch(vMap map[string][]string) bool {
