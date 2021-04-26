@@ -495,8 +495,13 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 		sort.Stable(bySourceFirst(unique))
 	}
 
-	// Filter by relevant page.
-	unique = unique[from:utils.Min(from+size, len(unique))]
+	if from >= len(unique) {
+		// Edge case when we cannot calculate totalHits correctly due to many duplications of grammar and regular results (that we filter out only when loading a specific page).
+		unique = []*elastic.SearchHit{}
+	} else {
+		// Filter by relevant page.
+		unique = unique[from:utils.Min(from+size, len(unique))]
+	}
 
 	// Take arbitrary result to use as base and set it's hits.
 	// TODO: Rewrite this to be cleaner.
