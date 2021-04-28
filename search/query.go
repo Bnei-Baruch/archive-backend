@@ -209,14 +209,14 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 func addMustNotSeries(q Query) *elastic.BoolQuery {
 	if filters, ok := q.Filters[consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]]; ok {
 		for _, f := range filters {
-			if f == consts.CT_COMBINED_LESSONS_SERIES {
+			if f == consts.CT_LESSONS_SERIES {
 				return nil
 			}
 		}
 	}
 	//remove from results lesson series collections
 	fCollections := elastic.NewTermsQuery(consts.ES_RESULT_TYPE, consts.ES_RESULT_TYPE_COLLECTIONS)
-	fSeries := elastic.NewTermsQuery("filter_values", fmt.Sprintf("%s:%s", consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES], consts.CT_COMBINED_LESSONS_SERIES))
+	fSeries := elastic.NewTermsQuery("filter_values", fmt.Sprintf("%s:%s", consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES], consts.CT_LESSONS_SERIES))
 	return elastic.NewBoolQuery().Filter(fCollections, fSeries)
 }
 
