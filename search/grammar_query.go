@@ -2,6 +2,7 @@ package search
 
 import (
 	"fmt"
+	"sort"
 
 	"gopkg.in/olivere/elastic.v6"
 
@@ -124,10 +125,10 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 		searchSources = len(filters) == 0 || isSectionSources // Search for sources only on the main section (without filters) or on the sources section.
 		if contentType != "" {
 			// by content type filter
-			if len(filters) > 0 {
-				return nil, fmt.Errorf("Attempt to assign extra filters for filtering by content type operation.") // Consider to support this.
+			if len(filters) > 0 && !hasCommonFilter(filters, consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]) {
+				return nil, fmt.Errorf("No common query filters with filters by content type operation.")
 			}
-			filters, _ = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]
+			filters, _ = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType] // We ovveride the given query filters. Consider merging filters.
 			_, enableSourcesSearch := consts.CT_VARIABLES_ENABLE_SOURCES_SEARCH[contentType]
 			if len(filters) == 0 && !enableSourcesSearch {
 				return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES and not in CT_VARIABLES_ENABLE_SOURCES_SEARCH.", contentType)
@@ -245,4 +246,17 @@ func chooseRule(query *Query, rules []string) string {
 		}
 	}
 	return rules[maxIndex]
+}
+
+func hasCommonFilter(a map[string][]string, b map[string][]string) bool {
+	for filterName, values := range a {
+		sort.Strings(values)
+		if grammarValues, ok := b[filterName]; ok {
+			sort.Strings(grammarValues)
+			if len(utils.IntersectSortedStringSlices(values, grammarValues)) > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }

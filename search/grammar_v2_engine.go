@@ -229,6 +229,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	}
 
 	start := time.Now()
+	filterIntentsByLanguage := map[string][]Intent{}
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
@@ -240,21 +241,31 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 				return nil, nil, err
 			} else {
 				singleHitIntents = append(singleHitIntents, languageSingleHitIntents...)
-				if len(languageFilterIntents) > 0 {
-					intentToAdd := languageFilterIntents[0]
-					log.Infof("Optional intent: %+v.", intentToAdd)
-					if len(languageFilterIntents) > 1 {
-						for i := 1; i < len(languageFilterIntents); i++ {
-							log.Infof("Optional intent: %+v.", languageFilterIntents[i])
-							if languageFilterIntents[i].Value.(GrammarIntent).Score > intentToAdd.Value.(GrammarIntent).Score {
-								intentToAdd = languageFilterIntents[i]
-							}
-						}
-						log.Infof("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported. Intent with max score is selected (with special boost for 'by_content_type' intents): %+v.", language, len(languageFilterIntents), intentToAdd)
-					}
-					filterIntents = append(filterIntents, intentToAdd)
+				if _, ok := filterIntentsByLanguage[language]; !ok {
+					filterIntentsByLanguage[language] = []Intent{}
 				}
+				filterIntentsByLanguage[language] = append(filterIntentsByLanguage[language], languageFilterIntents...)
 			}
+		}
+	}
+	for lang, intentsByLang := range filterIntentsByLanguage {
+		if len(intentsByLang) > 0 {
+			normalizedIntents, err := e.normailizeFilterIntentScores(intentsByLang)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "normailizeFilterIntentScores")
+			}
+			intentToAdd := normalizedIntents[0]
+			log.Infof("Optional filter intent: %+v.", intentToAdd)
+			if len(normalizedIntents) > 1 {
+				for i := 1; i < len(normalizedIntents); i++ {
+					log.Infof("Optional filter intent: %+v.", normalizedIntents[i])
+					if normalizedIntents[i].Value.(GrammarIntent).Score > intentToAdd.Value.(GrammarIntent).Score {
+						intentToAdd = normalizedIntents[i]
+					}
+				}
+				log.Infof("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported. Intent with max score is selected (with special boost for 'by_content_type' intents):\n %+v.", lang, len(normalizedIntents), intentToAdd)
+			}
+			filterIntents = append(filterIntents, intentToAdd)
 		}
 	}
 	elapsed := time.Since(start)
@@ -421,17 +432,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			if !filterExist {
 				return nil, nil, errors.New(fmt.Sprintf("Filters not found for intent: [%s]", rule.Intent))
 			}
-			common := false
-			for filterName, values := range query.Filters {
-				sort.Strings(values)
-				if grammarValues, ok := filters[filterName]; ok {
-					sort.Strings(grammarValues)
-					if len(utils.IntersectSortedStringSlices(values, grammarValues)) > 0 {
-						common = true
-						break
-					}
-				}
-			}
+			common := hasCommonFilter(query.Filters, filters)
 			if !common {
 				// No matching filter found, should not trigger intent.
 				log.Infof("No common filters for intent [%s]: %+v vs %+v", rule.Intent, query.Filters, filters)
@@ -526,10 +527,8 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				singleHitIntents = append(singleHitIntents, Intent{"", language, singleProgramIntent})
 				addProgramPositionWithoutTerm = false // We add results only one time for this rule type
 			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_PROGRAM_WITHOUT_TERM {
-				vMap[consts.VAR_TEXT] = nil // Remove free text value in order to make a search without term
-				vMap[consts.VAR_CONTENT_TYPE] = nil
 				filterIntents = append(filterIntents, Intent{
-					Type:     consts.GRAMMAR_TYPE_FILTER,
+					Type:     consts.GRAMMAR_TYPE_FILTER_WITHOUT_TERM,
 					Language: language,
 					Value: GrammarIntent{
 						FilterValues: e.VariableMapToFilterValues(vMap, language),
@@ -1051,4 +1050,50 @@ func (e *ESEngine) sourceUidByTerm(term string, languages []string) (*string, st
 		}
 	}
 	return nil, "", false
+}
+
+func (e *ESEngine) normailizeFilterIntentScores(intents []Intent) ([]Intent, error) {
+	var maxScoreForNoFreeTextIntents *float64
+	var minScoreForNoFreeTextIntents *float64
+	var maxScoreForFreeTextIntents *float64
+	for _, intent := range intents {
+		if intentValue, ok := intent.Value.(GrammarIntent); ok {
+			if intent.Type == consts.GRAMMAR_TYPE_FILTER_WITHOUT_TERM {
+				if maxScoreForNoFreeTextIntents == nil || intentValue.Score > *maxScoreForNoFreeTextIntents {
+					maxScoreForNoFreeTextIntents = &intentValue.Score
+				} else if minScoreForNoFreeTextIntents == nil || intentValue.Score < *minScoreForNoFreeTextIntents {
+					minScoreForNoFreeTextIntents = &intentValue.Score
+				}
+			} else if intent.Type == consts.GRAMMAR_TYPE_FILTER {
+				if maxScoreForFreeTextIntents == nil || intentValue.Score > *maxScoreForFreeTextIntents {
+					*maxScoreForFreeTextIntents = intentValue.Score
+				}
+			} else {
+				return nil, errors.Errorf("Intent type [%s] is not filter.", intent.Type)
+			}
+		} else {
+			return nil, errors.New("Intent value type is not GrammarIntent.")
+		}
+	}
+	for i := range intents {
+		var hasVarCT bool
+		if intents[i].Type == consts.GRAMMAR_TYPE_FILTER_WITHOUT_TERM {
+			intentValue, _ := intents[i].Value.(GrammarIntent)
+			for _, fv := range intentValue.FilterValues {
+				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
+					hasVarCT = true
+					break
+				}
+			}
+			score := ((intentValue.Score - *minScoreForNoFreeTextIntents) / (*maxScoreForNoFreeTextIntents - *minScoreForNoFreeTextIntents)) * *maxScoreForFreeTextIntents
+			if hasVarCT {
+				score += 0.01
+			} else {
+				score -= 0.01
+			}
+			intentValue.Score = score
+			intents[i].Value = intentValue
+		}
+	}
+	return intents, nil
 }
