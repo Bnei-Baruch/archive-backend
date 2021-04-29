@@ -1066,7 +1066,7 @@ func (e *ESEngine) normailizeFilterIntentScores(intents []Intent) ([]Intent, err
 				}
 			} else if intent.Type == consts.GRAMMAR_TYPE_FILTER {
 				if maxScoreForFreeTextIntents == nil || intentValue.Score > *maxScoreForFreeTextIntents {
-					*maxScoreForFreeTextIntents = intentValue.Score
+					maxScoreForFreeTextIntents = &intentValue.Score
 				}
 			} else {
 				return nil, errors.Errorf("Intent type [%s] is not filter.", intent.Type)
@@ -1074,6 +1074,9 @@ func (e *ESEngine) normailizeFilterIntentScores(intents []Intent) ([]Intent, err
 		} else {
 			return nil, errors.New("Intent value type is not GrammarIntent.")
 		}
+	}
+	if maxScoreForNoFreeTextIntents == nil || maxScoreForFreeTextIntents == nil {
+		return intents, nil
 	}
 	for i := range intents {
 		var hasVarCT bool
