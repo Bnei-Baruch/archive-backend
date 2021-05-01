@@ -11,7 +11,9 @@ import (
 )
 
 const (
-	GRAMMAR_BOOST = 100.0
+	GRAMMAR_BOOST = 1.0
+
+	GRAMMAR_BOOST_KEYWORD = 3.0
 
 	GRAMMAR_SUGGEST_SIZE = 30
 
@@ -35,6 +37,7 @@ func createGrammarQuery(q *Query) elastic.Query {
 	if simpleQuery(q) != "" {
 		boolQuery = boolQuery.Should(
 			elastic.NewDisMaxQuery().Query(
+				elastic.NewMatchPhraseQuery("grammar_rule.rules.keyword", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST_KEYWORD),
 				elastic.NewMatchPhraseQuery("grammar_rule.rules.language", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
 				elastic.NewMatchPhraseQuery("grammar_rule.rules", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
 			),
