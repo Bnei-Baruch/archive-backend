@@ -212,7 +212,7 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 // filterOutCUSources - optional list of sources for which we want to filter out the CU's that connected to those sources
 //	(in order to avoid duplication between carousel and regular results).
 // titlesOnly - limit our search only to title fields: title, full_title and description in case we search for intent sources. Used for intent search.
-func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, titlesOnly bool) (elastic.Query, error) {
+func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, titlesOnly bool, filterOutByCollection *string) (elastic.Query, error) {
 	boolQuery := elastic.NewBoolQuery().Must(
 		elastic.NewConstantScoreQuery(
 			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(resultTypes)...),
@@ -229,6 +229,10 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 			innerBoolQuery := elastic.NewBoolQuery().Filter(sourceForMustNotQuery, rtForMustNotQuery)
 			boolQuery.MustNot(innerBoolQuery)
 		}
+	}
+	if filterOutByCollection != nil {
+		tq := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.ES_UID_TYPE_COLLECTION, *filterOutByCollection))
+		boolQuery.MustNot(tq)
 	}
 	//  We append description for intent sources search because the description is commonly used as subtitle
 	appendDecription := !titlesOnly || (len(resultTypes) == 1 && resultTypes[0] == consts.ES_RESULT_TYPE_SOURCES)
@@ -543,7 +547,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchReque
 		}
 	}
 
-	resultsQuery, err := createResultsQuery(options.resultTypes, options.query, options.docIds, options.filterOutCUSources, options.titlesOnly)
+	resultsQuery, err := createResultsQuery(options.resultTypes, options.query, options.docIds, options.filterOutCUSources, options.titlesOnly, options.filterOutByCollection)
 	if err != nil {
 		fmt.Printf("Error creating results query: %s", err.Error())
 		return nil, err

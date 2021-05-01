@@ -53,4 +53,6 @@ type SearchRequestOptions struct {
 	includeTypedUidsFromContentUnits bool
 	// If not nil, set how long a search is allowed to take, e.g. "1s" or "500ms". Note: Not always respected by ES.
 	Timeout *string
+	// Collection UID by which the content will be filtered out.
+	filterOutByCollection *string
 }
