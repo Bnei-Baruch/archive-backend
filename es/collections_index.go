@@ -230,6 +230,9 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 			indexErrors.ShouldIndex(i18n.Language)
 			typedUIDs := append([]string{KeyValue(consts.ES_UID_TYPE_COLLECTION, c.UID)},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
+			if programCollectionUID, ok := consts.ARTICLE_COLLECTION_TO_PROGRAM_COLLECTION[c.UID]; ok {
+				typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_COLLECTION, programCollectionUID))
+			}
 			filterValues := append(
 				[]string{KeyValue("collections_content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
 				KeyValues("content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))...,
