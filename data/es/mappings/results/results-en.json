@@ -141,6 +141,14 @@
                         ]
                     }
                 }, 
+                "normalizer": {
+                    "case_insensitive_normalizer": {
+                        "filter": [
+                            "lowercase"
+                        ], 
+                        "type": "custom"
+                    }
+                }, 
                 "analyzer": {
                     "english_synonym": {
                         "filter": [
