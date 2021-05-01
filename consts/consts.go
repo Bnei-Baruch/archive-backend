@@ -335,7 +335,7 @@ const (
 	// Consider making a carusele and not limiting.
 	MAX_MATCHES_PER_GRAMMAR_INTENT                  = 3
 	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM = 200
-	CONTENT_TYPE_INTENTS_BOOST                      = 6.0 // For priority between several filter intent types
+	CONTENT_TYPE_INTENTS_BOOST                      = 8.0 // For priority between several filter intent types
 )
 
 const (
