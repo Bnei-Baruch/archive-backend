@@ -577,7 +577,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	grammarsSingleHitIntentsChannel := make(chan []Intent, 1)
 	grammarsFilterIntentsChannel := make(chan []Intent, 1)
 	grammarsFilteredResultsByLangChannel := make(chan map[string]FilteredSearchResult)
-	grammarProgramCollectionUidChannel := make(chan *string, 1)
 	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 
 	var resultTypes []string
@@ -601,7 +600,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				grammarsSingleHitIntentsChannel <- []Intent{}
 				grammarsFilterIntentsChannel <- []Intent{}
 				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
-				grammarProgramCollectionUidChannel <- nil
 			}
 		}()
 		if singleHitIntents, filterIntents, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
@@ -609,23 +607,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			grammarsSingleHitIntentsChannel <- []Intent{}
 			grammarsFilterIntentsChannel <- []Intent{}
 			grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
-			grammarProgramCollectionUidChannel <- nil
 		} else {
-			var grammarProgramCollectionUid *string
-			for _, fi := range filterIntents {
-				if grammarProgramCollectionUid != nil {
-					break
-				}
-				if fi.Type == consts.GRAMMAR_TYPE_FILTER_WITHOUT_TERM {
-					for _, fv := range fi.Value.(GrammarIntent).FilterValues {
-						if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM] {
-							grammarProgramCollectionUid = &fv.Value
-							break
-						}
-					}
-				}
-			}
-			grammarProgramCollectionUidChannel <- grammarProgramCollectionUid
 			grammarsSingleHitIntentsChannel <- singleHitIntents
 			grammarsFilterIntentsChannel <- filterIntents
 			filtersCopy := map[string][]string{}
@@ -705,21 +687,19 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 		}
 	}
-	grammarProgramCollectionUid := <-grammarProgramCollectionUidChannel
 	multiSearchService := e.esc.MultiSearch()
 	requests, err := NewResultsSearchRequests(
 		SearchRequestOptions{
-			resultTypes:           resultTypes,
-			index:                 "",
-			query:                 query,
-			sortBy:                sortBy,
-			from:                  0,
-			size:                  from + size,
-			preference:            preference,
-			useHighlight:          false,
-			partialHighlight:      false,
-			filterOutCUSources:    filterOutCUSources,
-			filterOutByCollection: grammarProgramCollectionUid})
+			resultTypes:        resultTypes,
+			index:              "",
+			query:              query,
+			sortBy:             sortBy,
+			from:               0,
+			size:               from + size,
+			preference:         preference,
+			useHighlight:       false,
+			partialHighlight:   false,
+			filterOutCUSources: filterOutCUSources})
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do on creating requests.")
 	}
