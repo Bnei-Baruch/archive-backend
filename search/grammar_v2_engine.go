@@ -1058,15 +1058,22 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncremen
 			return nil, nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
 		}
 		if haveHits(currentResults) {
+			var currentMaxScore *float64
+			for _, hit := range currentResults.Hits.Hits {
+				hitIdsMap[hit.Id] = true
+				if hit.Score != nil {
+					if scoreIncrement != nil {
+						*hit.Score += *scoreIncrement
+					}
+					if currentMaxScore == nil || *hit.Score > *currentMaxScore {
+						currentMaxScore = hit.Score
+					}
+				}
+			}
+			currentResults.Hits.MaxScore = currentMaxScore
 			if currentResults.Hits.MaxScore != nil &&
 				(maxScore == nil || *currentResults.Hits.MaxScore > *maxScore) {
 				maxScore = currentResults.Hits.MaxScore
-			}
-			for _, hit := range currentResults.Hits.Hits {
-				hitIdsMap[hit.Id] = true
-				if scoreIncrement != nil && hit.Score != nil {
-					*hit.Score += *scoreIncrement
-				}
 			}
 			results = append(results, currentResults)
 		}
