@@ -351,7 +351,12 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 				}
 				if len(requests) > 0 {
 					// All search requests here are for the same language
-					results, hitIdsMap, maxScore, err := e.filterSearch(requests)
+					var scoreIncrement *float64
+					if searchWithoutTerm {
+						incr := consts.SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS
+						scoreIncrement = &incr
+					}
+					results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement)
 					if err != nil {
 						return nil, err
 					}
@@ -1033,7 +1038,7 @@ func retrieveTextVarValues(str string) []string {
 
 // Results search according to grammar based filter (currently by content types and free text).
 // Return: Results, Unique list of hit id's as a map, Max score
-func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
+func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncrement *float64) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
 	results := []*elastic.SearchResult{}
 	hitIdsMap := map[string]bool{}
 	var maxScore *float64
@@ -1059,6 +1064,9 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.S
 			}
 			for _, hit := range currentResults.Hits.Hits {
 				hitIdsMap[hit.Id] = true
+				if scoreIncrement != nil && hit.Score != nil {
+					*hit.Score += *scoreIncrement
+				}
 			}
 			results = append(results, currentResults)
 		}
