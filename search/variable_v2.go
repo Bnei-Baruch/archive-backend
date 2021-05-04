@@ -222,9 +222,12 @@ func LoadSourceNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 func LoadProgramNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 	translations := make(TranslationsV2)
 
+	// Ignoring program names that identical to topic names
 	queryMask := `select cn.language, c.uid, cn.name
 	from collections c join collection_i18n cn on c.id=cn.collection_id
-	where published = true and secure = 0 and c.type_id = %d`
+	left join tag_i18n tn on cn.language = tn.language and cn.name = tn.label
+	where tn.tag_id is null
+	and c.published = true and c.secure = 0 and c.type_id = %d`
 	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID)
 
 	rows, err := queries.Raw(db, query).Query()
