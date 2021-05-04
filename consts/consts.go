@@ -690,6 +690,7 @@ const (
 	VAR_POSITION            = "$Position"
 	VAR_DIVISION_TYPE       = "$DivisionType"
 	VAR_PROGRAM             = "$Program"
+	VAR_RESTRICTED          = "$Restricted" // Search terms that privent triggering grammar engine.
 
 	// $ContentType variable values
 

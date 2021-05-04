@@ -155,7 +155,11 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	if query.Term != "" && len(query.ExactTerms) > 0 {
 		// Will never match any grammar for query having simple terms and exact terms.
 		// This is not acurate but an edge case. Need to better think of query representation.
-		log.Infof("Both term and exact terms are defined, should not trigger: [%s] [%s]", query.Term, strings.Join(query.ExactTerms, " - "))
+		log.Infof("Both term and exact terms are defined, should not trigger grammar: [%s] [%s]", query.Term, strings.Join(query.ExactTerms, " - "))
+		return singleHitIntents, filterIntents, nil
+	}
+	if e.isTermRestricted(query.Term, query.LanguageOrder) {
+		log.Infof("Term is restricted, should not trigger grammar: [%s]", query.Term)
 		return singleHitIntents, filterIntents, nil
 	}
 	searchLandingPagesOnly := false
@@ -1103,4 +1107,20 @@ func (e *ESEngine) sourceUidByTerm(term string, languages []string) (*string, st
 		}
 	}
 	return nil, "", false
+}
+
+func (e *ESEngine) isTermRestricted(term string, languages []string) bool {
+	termLC := strings.ToLower(term)
+	for _, language := range languages {
+		varsByLang := e.variables[consts.VAR_RESTRICTED][language]
+		for _, v := range varsByLang {
+			for _, resTerm := range v {
+				identical := termLC == strings.ToLower(resTerm)
+				if identical {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
