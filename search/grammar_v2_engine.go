@@ -1115,8 +1115,7 @@ func (e *ESEngine) isTermRestricted(term string, languages []string) bool {
 		varsByLang := e.variables[consts.VAR_RESTRICTED][language]
 		for _, v := range varsByLang {
 			for _, resTerm := range v {
-				identical := termLC == strings.ToLower(resTerm)
-				if identical {
+				if termLC == strings.ToLower(resTerm) {
 					return true
 				}
 			}
