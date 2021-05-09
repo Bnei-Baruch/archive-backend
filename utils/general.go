@@ -248,3 +248,34 @@ func HasNumeric(term string) (bool, bool) {
 	}
 	return allIsDigit, hasDigit
 }
+
+func Filter(list []interface{}, test func(interface{}) bool) ([]interface{}, []interface{}) {
+	passed := []interface{}{}
+	rest := []interface{}{}
+	for _, item := range list {
+		if test(item) {
+			passed = append(passed, item)
+		} else {
+			rest = append(rest, item)
+		}
+	}
+	return passed, rest
+}
+
+func MaxByValue(list []interface{}, value func(interface{}) float64) interface{} {
+	if len(list) == 0 {
+		return nil
+	}
+	sort.SliceStable(list, func(i, j int) bool {
+		return value(list[i]) > value(list[j])
+	})
+	return list[0]
+}
+
+func First(list []interface{}, test func(interface{}) bool) interface{} {
+	filtered, _ := Filter(list, test)
+	if len(filtered) > 0 {
+		return filtered[0]
+	}
+	return nil
+}
