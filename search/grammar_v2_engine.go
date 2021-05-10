@@ -258,7 +258,9 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 			if err != nil {
 				return nil, nil, err
 			}
-			filterIntents = append(filterIntents, *intentToAdd)
+			if intentToAdd != nil {
+				filterIntents = append(filterIntents, *intentToAdd)
+			}
 		}
 	}
 	elapsed := time.Since(start)
@@ -1097,34 +1099,44 @@ func (e *ESEngine) selectFilterIntent(intents []Intent) (*Intent, error) {
 	intentsWithoutTerm, intentsWithTerm := utils.Filter(grammarIntents, func(v interface{}) bool {
 		return v.(Intent).Type == consts.GRAMMAR_TYPE_FILTER_WITHOUT_TERM
 	})
-	maxWithoutTermIs := utils.MaxByValue(intentsWithoutTerm, func(v interface{}) float64 {
-		return v.(Intent).Value.(GrammarIntent).Score
+	mapByProgram := utils.GroupBy(intentsWithoutTerm, func(v interface{}) interface{} {
+		uid := getFilterValue(v.(Intent).Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM])
+		if uid == nil {
+			return "no_program"
+		}
+		return *uid
 	})
-	if maxWithoutTermIs != nil {
-		maxWithoutTermT := interface{}(maxWithoutTermIs).(Intent)
-		maxWithoutTerm = &maxWithoutTermT
+	if len(mapByProgram) > 1 {
+		log.Infof("More than one program collection found in intents without term. Ignoring intents without term.")
+	} else {
+		maxWithoutTermIs := utils.MaxByValue(intentsWithoutTerm, func(v interface{}) float64 {
+			return v.(Intent).Value.(GrammarIntent).Score
+		})
+		if maxWithoutTermIs != nil {
+			maxWithoutTermT := interface{}(maxWithoutTermIs).(Intent)
+			maxWithoutTerm = &maxWithoutTermT
+		}
 	}
 	maxWithTermIs := utils.MaxByValue(intentsWithTerm, func(v interface{}) float64 {
 		return v.(Intent).Value.(GrammarIntent).Score
 	})
 	if maxWithTermIs != nil {
 		maxWithTermT := interface{}(maxWithTermIs).(Intent)
-		maxWithoutTerm = &maxWithTermT
+		maxWithTerm = &maxWithTermT
 	}
-
 	if maxWithTerm != nil || maxWithoutTerm != nil {
 		if maxWithTerm == nil {
 			selected = maxWithoutTerm
 		} else if maxWithoutTerm == nil {
 			selected = maxWithTerm
 		} else {
-			intentWithTermCT := getContentTypeValue(maxWithTerm.Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE])
-			intentWithoutTermCT := getContentTypeValue(maxWithoutTerm.Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE])
+			intentWithTermCT := getFilterValue(maxWithTerm.Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE])
+			intentWithoutTermCT := getFilterValue(maxWithoutTerm.Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE])
 			if intentWithTermCT != nil && intentWithoutTermCT != nil {
 				if *intentWithTermCT == *intentWithoutTermCT {
 					// If for both intent types (with term and without term) we have the same content type value,
 					// we select the intent without term.
-					// E.g. query "programs new life" has "by content type" intent and "by program" intent, we select "by program".
+					// E.g. query "programs new life" has "by content type" intent and "by program without term" intent, we select "by program without term".
 					selected = maxWithoutTerm
 				} else {
 					selected = maxWithTerm
@@ -1135,10 +1147,13 @@ func (e *ESEngine) selectFilterIntent(intents []Intent) (*Intent, error) {
 		}
 		log.Infof("SELECTED FILTER INTENT:\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", selected.Type, selected.Value.(GrammarIntent).Score, selected.Value.(GrammarIntent).FilterValues)
 	}
+	if selected == nil {
+		log.Infof("No intent to select.")
+	}
 	return selected, nil
 }
 
-func getContentTypeValue(filterValues []FilterValue, filterName string) *string {
+func getFilterValue(filterValues []FilterValue, filterName string) *string {
 	filter := utils.First(utils.Is(filterValues), func(v interface{}) bool {
 		return v.(FilterValue).Name == filterName
 	})
