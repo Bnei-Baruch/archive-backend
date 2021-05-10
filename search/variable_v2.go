@@ -225,7 +225,7 @@ func LoadProgramNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 	// Ignoring program names that identical to topic names
 	queryMask := `select cn.language, c.uid, cn.name
 	from collections c join collection_i18n cn on c.id=cn.collection_id
-	left join tag_i18n tn on cn.language = tn.language and cn.name like (tn.label || '%%')
+	left join tag_i18n tn on cn.language = tn.language and cn.name like ('%%' || tn.label || '%%')
 	where tn.tag_id is null
 	and c.published = true and c.secure = 0 and c.type_id = %d`
 	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID)
