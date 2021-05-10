@@ -262,6 +262,14 @@ func Filter(list []interface{}, test func(interface{}) bool) ([]interface{}, []i
 	return passed, rest
 }
 
+func Select(list []interface{}, newValue func(interface{}) interface{}) []interface{} {
+	ret := []interface{}{}
+	for _, item := range list {
+		ret = append(ret, newValue(item))
+	}
+	return ret
+}
+
 func MaxByValue(list []interface{}, value func(interface{}) float64) interface{} {
 	if len(list) == 0 {
 		return nil
@@ -278,4 +286,16 @@ func First(list []interface{}, test func(interface{}) bool) interface{} {
 		return filtered[0]
 	}
 	return nil
+}
+
+func GroupBy(list []interface{}, value func(interface{}) interface{}) map[interface{}][]interface{} {
+	ret := map[interface{}][]interface{}{}
+	for _, item := range list {
+		key := value(item)
+		if _, ok := ret[key]; !ok {
+			ret[key] = []interface{}{}
+		}
+		ret[key] = append(ret[key], item)
+	}
+	return ret
 }
