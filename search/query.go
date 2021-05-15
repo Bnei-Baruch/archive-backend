@@ -515,7 +515,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 }
 
 func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchRequest, error) {
-	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "effective_date")
+	fetchSourceContext := elastic.NewFetchSourceContext(true).Include("mdb_uid", "result_type", "effective_date", "filter_values")
 
 	titleAdded := false
 	fullTitleAdded := false
