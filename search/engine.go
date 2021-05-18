@@ -730,12 +730,49 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// Responses are ordered by language by index, i.e., for languages [bg, ru, en].
 	// We want the first matching language that has at least any result.
 	var maxRegularScore *float64 // max score for regular result - not intent, grammar or tweet
+	programCUScoresOfGrammarFilterCollection := []float64{}
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
 			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
 		if haveHits(currentResults) {
+
+			if len(filterIntents) > 0 {
+				var programCollectionUid *string
+				for _, fi := range filterIntents {
+					if intentValue, ok := fi.Value.(GrammarIntent); ok {
+						freeText := getFilterValue(intentValue.FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_TEXT])
+						if freeText == nil {
+							programCollectionUid = getFilterValue(intentValue.FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM])
+							if programCollectionUid != nil {
+								break
+							}
+						}
+					}
+				}
+				if programCollectionUid != nil {
+					for _, hit := range currentResults.Hits.Hits {
+						if hit.Score == nil {
+							continue
+						}
+						var src es.Result
+						err = json.Unmarshal(*hit.Source, &src)
+						if err != nil {
+							log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Uid)
+							continue
+						}
+						if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
+							if utils.Contains(utils.Is(src.FilterValues), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *programCollectionUid)) {
+								programCUScoresOfGrammarFilterCollection = append(programCUScoresOfGrammarFilterCollection, *hit.Score)
+								// TBT
+								// Better not to delete untill we know that we have actuall results from filtered search
+							}
+						}
+					}
+				}
+			}
+
 			if currentResults.Hits.MaxScore != nil {
 				if maxRegularScore == nil {
 					maxRegularScore = new(float64)
@@ -778,6 +815,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	filteredByLang := <-grammarsFilteredResultsByLangChannel
+	// TBD -  work with programCUScoresOfGrammarFilterCollection
 	// Loop over grammar filtered results to apply the score logic for combination with regular results
 	for lang, filtered := range filteredByLang {
 		if _, ok := resultsByLang[lang]; !ok {
