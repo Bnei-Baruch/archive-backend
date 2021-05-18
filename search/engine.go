@@ -56,6 +56,7 @@ type FilteredSearchResult struct {
 	HitIdsMap                map[string]bool
 	Results                  []*elastic.SearchResult
 	MaxScore                 *float64
+	ProgramCollection        *string
 }
 
 type TimeLogMap struct {
@@ -730,7 +731,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// Responses are ordered by language by index, i.e., for languages [bg, ru, en].
 	// We want the first matching language that has at least any result.
 	var maxRegularScore *float64 // max score for regular result - not intent, grammar or tweet
-	programCUScoresOfGrammarFilterCollection := []float64{}
+	programsToReplaceWithGrammarResults := []struct {
+		hitUid string
+		score float64
+	}{}
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
@@ -764,13 +768,23 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						}
 						if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
 							if utils.Contains(utils.Is(src.FilterValues), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *programCollectionUid)) {
-								programCUScoresOfGrammarFilterCollection = append(programCUScoresOfGrammarFilterCollection, *hit.Score)
-								// TBT
-								// Better not to delete untill we know that we have actuall results from filtered search
+								programsToReplaceWithGrammarResults = append(programsToReplaceWithGrammarResults,
+								struct{
+									hitUid string
+									score float64
+								}{
+									hit.Uid,
+									*hit.Score,
+								})
 							}
 						}
 					}
 				}
+			}
+			if len(programsToReplaceWithGrammarResults) > 0 {
+				sort.SliceStable(programsToReplaceWithGrammarResults, func(i, j int) bool {
+					return programsToReplaceWithGrammarResults[i].score > programsToReplaceWithGrammarResults[j].score
+				})
 			}
 
 			if currentResults.Hits.MaxScore != nil {
@@ -815,7 +829,38 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	filteredByLang := <-grammarsFilteredResultsByLangChannel
-	// TBD -  work with programCUScoresOfGrammarFilterCollection
+	// TBD -  work with programsToReplaceWithGrammarResults:
+	var programToReplaceIndex int
+	if len(programsToReplaceWithGrammarResults) > 0 {
+			for lang, filtered := range filteredByLang {
+				if _, ok := resultsByLang[lang]; !ok {
+					resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+				}
+				for _, result := range filtered.Results {
+					if filtered.ProgramCollection != nil {
+						for _, hit := range result.Hits.Hits {
+							var src es.Result
+							err = json.Unmarshal(*hit.Source, &src)
+							if err != nil {
+								log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Uid)
+								continue
+							}
+							if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
+								if utils.Contains(utils.Is(src.FilterValues), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *filtered.ProgramCollection)) {
+									if programToReplaceIndex < len(programsToReplaceWithGrammarResults) {
+										hit.Score = &programsToReplaceWithGrammarResults[programToReplaceIndex].score
+										programToReplaceIndex++
+									} else {
+										zero := 0.0
+										hit.Score = &zero
+									}
+								}
+							}
+						}
+				}
+			}
+		}
+	}
 	// Loop over grammar filtered results to apply the score logic for combination with regular results
 	for lang, filtered := range filteredByLang {
 		if _, ok := resultsByLang[lang]; !ok {
@@ -889,6 +934,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
 						if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
 							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM
+						}
+						// Assign results score to zero if the results are to be replaced by program grammar
+						for i:=0; i<=programToReplaceIndex; i++ {
+							if hit.Uid == programsToReplaceWithGrammarResults[i].hitUid {
+								zero := 0.0
+								hit.Score = &zero
+							}
 						}
 						if !filteredByLang[lang].PreserveTermForHighlight {
 							// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.

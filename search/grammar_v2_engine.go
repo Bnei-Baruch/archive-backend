@@ -317,13 +317,17 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 					if err != nil {
 						return nil, err
 					}
-					resultsByLang[intent.Language] = FilteredSearchResult{
+					resultByLang := FilteredSearchResult{
 						Results:                  results,
 						Term:                     text,
 						PreserveTermForHighlight: programCollection != "",
 						HitIdsMap:                hitIdsMap,
 						MaxScore:                 maxScore,
 					}
+					if programCollection != "" {
+						resultByLang.ProgramCollection = &programCollection
+					}
+					resultsByLang[intent.Language] = resultByLang
 					if len(results) > 0 {
 						// we assume that there is no need to make the search for other languages if a results found for one language
 						break
