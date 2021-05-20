@@ -49,6 +49,7 @@ const (
 	CT_VIDEO_PROGRAM_CHAPTER = "VIDEO_PROGRAM_CHAPTER"
 	CT_VIRTUAL_LESSON        = "VIRTUAL_LESSON"
 	CT_WOMEN_LESSON          = "WOMEN_LESSON"
+	CT_SOURCE                = "SOURCE"
 
 	// Content types for additional Elastic results
 	SCT_BLOG_POST = "R_BLOG_POST"
