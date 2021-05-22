@@ -829,7 +829,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	filteredByLang := <-grammarsFilteredResultsByLangChannel
-	// TBD -  work with programsToReplaceWithGrammarResults:
 	var programToReplaceIndex int
 	if len(programsToReplaceWithGrammarResults) > 0 {
 			for lang, filtered := range filteredByLang {
@@ -849,6 +848,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 								if utils.Contains(utils.Is(src.FilterValues), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *filtered.ProgramCollection)) {
 									if programToReplaceIndex < len(programsToReplaceWithGrammarResults) {
 										hit.Score = &programsToReplaceWithGrammarResults[programToReplaceIndex].score
+										// TBD update hit explanation
 										programToReplaceIndex++
 									} else {
 										zero := 0.0
@@ -936,10 +936,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM
 						}
 						// Assign results score to zero if the results are to be replaced by program grammar
-						for i:=0; i<=programToReplaceIndex; i++ {
-							if hit.Uid == programsToReplaceWithGrammarResults[i].hitUid {
-								zero := 0.0
-								hit.Score = &zero
+						if len(programsToReplaceWithGrammarResults) > 0 {
+							for i:=0; i<=programToReplaceIndex; i++ {
+								if hit.Uid == programsToReplaceWithGrammarResults[i].hitUid {
+									zero := 0.0
+									hit.Score = &zero
+								}
 							}
 						}
 						if !filteredByLang[lang].PreserveTermForHighlight {
