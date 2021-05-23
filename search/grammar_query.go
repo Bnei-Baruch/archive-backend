@@ -187,8 +187,7 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 					preference:                       preference,
 					useHighlight:                     false,
 					partialHighlight:                 false,
-					filterOutCUSources:               []string{},
-					includeTypedUidsFromContentUnits: true})
+					filterOutCUSources:               []string{}})
 			if err != nil {
 				return nil, err
 			}

@@ -767,7 +767,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							continue
 						}
 						if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
-							if utils.Contains(utils.Is(src.FilterValues), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *programCollectionUid)) {
+							if utils.Contains(utils.Is(src.TypedUids), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *programCollectionUid)) {
 								programsToReplaceWithGrammarResults = append(programsToReplaceWithGrammarResults,
 								struct{
 									hitUid string
