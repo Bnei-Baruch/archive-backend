@@ -479,7 +479,7 @@ type SearchHit struct {
 	Index          string                         `json:"_index"`          // index name
 	Type           string                         `json:"_type"`           // type meta field
 	Id             string                         `json:"_id"`             // external or internal
-	Uid            string                         `json:"_uid"`            // uid meta field (see MapperService.java for all meta fields)
+	Uid            string                         `json:"_uid"`            // uid meta field (see MapperService.java for all meta fields). Deprecated in ES 6.
 	Routing        string                         `json:"_routing"`        // routing meta field
 	Parent         string                         `json:"_parent"`         // parent meta field
 	Version        *int64                         `json:"_version"`        // version number, when Version is set to true in SearchService

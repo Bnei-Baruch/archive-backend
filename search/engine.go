@@ -552,7 +552,7 @@ func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string) []*
 					unique = append(unique, hit)
 				}
 			} else {
-				log.Warnf("Unable to unmarshal source for hit ''%s.", hit.Uid)
+				log.Warnf("Unable to unmarshal source for hit ''%s.", hit.Id)
 				unique = append(unique, hit)
 			}
 		} else {
@@ -732,7 +732,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// We want the first matching language that has at least any result.
 	var maxRegularScore *float64 // max score for regular result - not intent, grammar or tweet
 	programsToReplaceWithGrammarResults := []struct {
-		hitUid string
+		hitId string
 		score float64
 	}{}
 	for i, currentResults := range mr.Responses {
@@ -763,19 +763,19 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						var src es.Result
 						err = json.Unmarshal(*hit.Source, &src)
 						if err != nil {
-							log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Uid)
+							log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
 							continue
 						}
 						if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
 							if utils.Contains(utils.Is(src.TypedUids), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *programCollectionUid)) {
 								programsToReplaceWithGrammarResults = append(programsToReplaceWithGrammarResults,
-								struct{
-									hitUid string
-									score float64
-								}{
-									hit.Uid,
-									*hit.Score,
-								})
+									struct {
+										hitId string
+										score float64
+									}{
+										hit.Id,
+										*hit.Score,
+									})
 							}
 						}
 					}
@@ -831,32 +831,32 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	filteredByLang := <-grammarsFilteredResultsByLangChannel
 	var programToReplaceIndex int
 	if len(programsToReplaceWithGrammarResults) > 0 {
-			for lang, filtered := range filteredByLang {
-				if _, ok := resultsByLang[lang]; !ok {
-					resultsByLang[lang] = make([]*elastic.SearchResult, 0)
-				}
-				for _, result := range filtered.Results {
-					if filtered.ProgramCollection != nil {
-						for _, hit := range result.Hits.Hits {
-							var src es.Result
-							err = json.Unmarshal(*hit.Source, &src)
-							if err != nil {
-								log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Uid)
-								continue
-							}
-							if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
-								if utils.Contains(utils.Is(src.FilterValues), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *filtered.ProgramCollection)) {
-									if programToReplaceIndex < len(programsToReplaceWithGrammarResults) {
-										hit.Score = &programsToReplaceWithGrammarResults[programToReplaceIndex].score
-										// TBD update hit explanation
-										programToReplaceIndex++
-									} else {
-										zero := 0.0
-										hit.Score = &zero
-									}
+		for lang, filtered := range filteredByLang {
+			if _, ok := resultsByLang[lang]; !ok {
+				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+			}
+			for _, result := range filtered.Results {
+				if filtered.ProgramCollection != nil {
+					for _, hit := range result.Hits.Hits {
+						var src es.Result
+						err = json.Unmarshal(*hit.Source, &src)
+						if err != nil {
+							log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
+							continue
+						}
+						if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
+							if utils.Contains(utils.Is(src.TypedUids), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *filtered.ProgramCollection)) {
+								if programToReplaceIndex < len(programsToReplaceWithGrammarResults) {
+									hit.Score = &programsToReplaceWithGrammarResults[programToReplaceIndex].score
+									// TBD update hit explanation
+									programToReplaceIndex++
+								} else {
+									zero := 0.0
+									hit.Score = &zero
 								}
 							}
 						}
+					}
 				}
 			}
 		}
@@ -874,13 +874,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				var src es.Result
 				err = json.Unmarshal(*hit.Source, &src)
 				if err != nil {
-					log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Uid)
+					log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
 					continue
 				}
 				if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
 					hitSources, err := es.KeyValuesToValues(consts.ES_UID_TYPE_SOURCE, src.TypedUids)
 					if err != nil {
-						log.Errorf("ESEngine.DoSearch - cannot read TypedUids for hit '%v'.", hit.Uid)
+						log.Errorf("ESEngine.DoSearch - cannot read TypedUids for hit '%v'.", hit.Id)
 						continue
 					}
 					sort.Strings(hitSources)
@@ -928,21 +928,23 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 		}
 		for _, result := range resultsByLang[lang] {
-			for _, hit := range result.Hits.Hits {
+			for hi, hit := range result.Hits.Hits {
 				if hit.Score != nil {
+					if len(programsToReplaceWithGrammarResults) > 0 {
+						// Assign results score to zero if the results are to be replaced by program grammar
+						for i := 0; i < programToReplaceIndex; i++ {
+							if hit.Id == programsToReplaceWithGrammarResults[i].hitId {
+								zero := 0.0
+								hit.Score = &zero
+								result.Hits.Hits[hi] = hit
+								break
+							}
+						}
+					}
 					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
 						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
 						if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
 							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM
-						}
-						// Assign results score to zero if the results are to be replaced by program grammar
-						if len(programsToReplaceWithGrammarResults) > 0 {
-							for i:=0; i<=programToReplaceIndex; i++ {
-								if hit.Uid == programsToReplaceWithGrammarResults[i].hitUid {
-									zero := 0.0
-									hit.Score = &zero
-								}
-							}
 						}
 						if !filteredByLang[lang].PreserveTermForHighlight {
 							// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
