@@ -732,8 +732,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// We want the first matching language that has at least any result.
 	var maxRegularScore *float64 // max score for regular result - not intent, grammar or tweet
 	programsToReplaceWithGrammarResults := []struct {
-		hitId string
-		score float64
+		hitId        string
+		score        float64
+		grammarHitId *string
 	}{}
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
@@ -770,11 +771,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							if utils.Contains(utils.Is(src.TypedUids), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *programCollectionUid)) {
 								programsToReplaceWithGrammarResults = append(programsToReplaceWithGrammarResults,
 									struct {
-										hitId string
-										score float64
+										hitId        string
+										score        float64
+										grammarHitId *string
 									}{
 										hit.Id,
 										*hit.Score,
+										nil,
 									})
 							}
 						}
@@ -785,6 +788,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				sort.SliceStable(programsToReplaceWithGrammarResults, func(i, j int) bool {
 					return programsToReplaceWithGrammarResults[i].score > programsToReplaceWithGrammarResults[j].score
 				})
+			}
+			for _, p := range programsToReplaceWithGrammarResults {
+				log.Infof("Program to replace with grammar result: %+v", p)
 			}
 
 			if currentResults.Hits.MaxScore != nil {
@@ -835,8 +841,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			if _, ok := resultsByLang[lang]; !ok {
 				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 			}
-			for _, result := range filtered.Results {
-				if filtered.ProgramCollection != nil {
+			if filtered.ProgramCollection != nil {
+				for _, result := range filtered.Results {
 					for _, hit := range result.Hits.Hits {
 						var src es.Result
 						err = json.Unmarshal(*hit.Source, &src)
@@ -848,6 +854,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							if utils.Contains(utils.Is(src.TypedUids), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *filtered.ProgramCollection)) {
 								if programToReplaceIndex < len(programsToReplaceWithGrammarResults) {
 									hit.Score = &programsToReplaceWithGrammarResults[programToReplaceIndex].score
+									programsToReplaceWithGrammarResults[programToReplaceIndex].grammarHitId = &hit.Id
 									// TBD update hit explanation
 									programToReplaceIndex++
 								} else {
@@ -919,24 +926,31 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				// To minimize this gap, we add +10 to the formula.
 				// e.g. search of term "ביטול קטעי מקור" without adding 10 bring the relevant result in position #4. With adding 10, the relevant result is the first.
 				for _, hit := range result.Hits.Hits {
-					if hit.Score != nil {
-						*hit.Score *= boost
-						maxScore = math.Max(*hit.Score, maxScore)
+					replaced := false
+					for _, p := range programsToReplaceWithGrammarResults {
+						if p.grammarHitId != nil && *p.grammarHitId == hit.Id {
+							replaced = true
+							break
+						}
 					}
+					if !replaced && hit.Score != nil {
+						*hit.Score *= boost
+					}
+					maxScore = math.Max(*hit.Score, maxScore)
 					result.Hits.MaxScore = &maxScore
 				}
 			}
 		}
 		for _, result := range resultsByLang[lang] {
-			for hi, hit := range result.Hits.Hits {
+			for _, hit := range result.Hits.Hits {
 				if hit.Score != nil {
 					if len(programsToReplaceWithGrammarResults) > 0 {
 						// Assign results score to zero if the results are to be replaced by program grammar
 						for i := 0; i < programToReplaceIndex; i++ {
 							if hit.Id == programsToReplaceWithGrammarResults[i].hitId {
+								log.Infof("Setting zero score for %s.", hit.Id)
 								zero := 0.0
 								hit.Score = &zero
-								result.Hits.Hits[hi] = hit
 								break
 							}
 						}
@@ -1129,17 +1143,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					log.Errorf("ESEngine.DoSearch - cannot unmarshal source.")
 					continue
 				}
+				src.TypedUids = nil // Client has no need for TypedUids list
 				if src.ResultType == consts.ES_RESULT_TYPE_SOURCES {
 					//  Replace title with full title
 					if src.FullTitle != "" {
 						src.Title = src.FullTitle
 						src.FullTitle = ""
-						nsrc, err := json.Marshal(src)
-						if err != nil {
-							log.Errorf("ESEngine.DoSearch - cannot marshal source with title correction.")
-							continue
-						}
-						hit.Source = (*json.RawMessage)(&nsrc)
 					}
 					if hit.Highlight != nil {
 						if ft, ok := hit.Highlight["full_title"]; ok {
@@ -1150,6 +1159,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						}
 					}
 				}
+				nsrc, err := json.Marshal(src)
+				if err != nil {
+					log.Errorf("ESEngine.DoSearch - cannot marshal source with title correction.")
+					continue
+				}
+				hit.Source = (*json.RawMessage)(&nsrc)
 			}
 
 			//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
