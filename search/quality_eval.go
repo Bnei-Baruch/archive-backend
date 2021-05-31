@@ -1305,7 +1305,7 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 		join collections_content_units ccu on cu.id = ccu.content_unit_id
 		join collections c on c.id = ccu.collection_id
 		where cu.published IS TRUE and cu.secure = 0
-			and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+			and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d)
 		and c.uid = '%s'
 		order by ccu.position desc
 			limit 1`
@@ -1317,8 +1317,8 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
 		collectionUID)
 
 	row := queries.Raw(db, query).QueryRow()
@@ -1339,7 +1339,7 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 		left join content_units_sources cus on cus.content_unit_id = cu.id
 		left join sources s on s.id = cus.source_id
 		where cu.published IS TRUE and cu.secure = 0
-		and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+		and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d)
 		%s
 		order by (cu.properties->>'film_date')::date desc
 		limit 1`
