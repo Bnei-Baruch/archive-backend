@@ -1045,13 +1045,13 @@ func WriteVsGoldenHTML(vsGoldenHtml string, records [][]string, goldenRecords []
 				</tr>`,
 				goodStyle, tdStyle, quality,
 				goodStyle, tdStyle,
-				100*counters[1]/totalCounters[1],                                                                           // Weighted percentage.
+				100*counters[1]/totalCounters[1], // Weighted percentage.
 				diffToHtml(100*counters[1]/totalCounters[1]-100*counters[3]/totalCounters[3], false /*round*/, true /*%*/), // Weighted percentage diff.
 				tdStyle,
-				100*counters[0]/totalCounters[0],                                                                           // Unique Percentage.
+				100*counters[0]/totalCounters[0], // Unique Percentage.
 				diffToHtml(100*counters[0]/totalCounters[0]-100*counters[2]/totalCounters[2], false /*round*/, true /*%*/), // Unique percentage diff.
 				tdStyle,
-				(int)(counters[0]),                                               // Unique.
+				(int)(counters[0]), // Unique.
 				diffToHtml(counters[0]-counters[2], true /*round*/, false /*%*/), // Unique diff.
 			))
 		}
@@ -1305,7 +1305,7 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 		join collections_content_units ccu on cu.id = ccu.content_unit_id
 		join collections c on c.id = ccu.collection_id
 		where cu.published IS TRUE and cu.secure = 0
-			and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+			and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d)
 		and c.uid = '%s'
 		order by ccu.position desc
 			limit 1`
@@ -1318,6 +1318,7 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
 		collectionUID)
 
 	row := queries.Raw(db, query).QueryRow()
@@ -1338,7 +1339,7 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 		left join content_units_sources cus on cus.content_unit_id = cu.id
 		left join sources s on s.id = cus.source_id
 		where cu.published IS TRUE and cu.secure = 0
-		and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+		and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d)
 		%s
 		order by (cu.properties->>'film_date')::date desc
 		limit 1`
@@ -1401,6 +1402,7 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
 		filterByUidQuery)
 
 	row := queries.Raw(db, query).QueryRow()
