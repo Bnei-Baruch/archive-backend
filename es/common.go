@@ -18,7 +18,7 @@ import (
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -136,6 +136,19 @@ func Suffixes(escapedTitle string) []string {
 	for i, _ := range parts {
 		ret = append(ret, strings.Join(parts[i:], " "))
 	}
+	return ret
+}
+
+func ConcateFirstToLast(strings []string) string {
+	if len(strings) == 0 {
+		return ""
+	}
+	first := html.UnescapeString(strings[0])
+	if len(strings) == 1 {
+		return first
+	}
+	last := html.UnescapeString(strings[len(strings)-1])
+	ret := fmt.Sprintf("%s %s", first, last)
 	return ret
 }
 
@@ -293,6 +306,15 @@ func DumpDB(mdb *sql.DB, title string) error {
 	fmt.Printf("\n\nSOURCES\n-------------\n\n")
 	for i, source := range sources {
 		fmt.Printf("%d: %+v\n", i, source)
+	}
+
+	si8ns, err := mdbmodels.SourceI18ns(mdb).All()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n\nSOURCE_I18N\n-------------\n\n")
+	for i, si8n := range si8ns {
+		fmt.Printf("%d: %+v\n", i, si8n)
 	}
 
 	tags, err := mdbmodels.Tags(mdb).All()

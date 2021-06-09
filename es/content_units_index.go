@@ -16,7 +16,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/integration"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -49,11 +49,12 @@ func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_RESEARCH_MATERIAL].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KTAIM_NIVCHARIM].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
 	})
 }
 
 func defaultContentUnitSql() string {
-	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d, %d)",
+	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d)",
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
@@ -63,6 +64,7 @@ func defaultContentUnitSql() string {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_RESEARCH_MATERIAL].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KTAIM_NIVCHARIM].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
 	)
 }
 
@@ -302,7 +304,6 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 				TypedUids:    typedUids,
 				FilterValues: filterValues,
 				Title:        i18n.Name.String,
-				TitleSuggest: Suffixes(i18n.Name.String),
 			}
 
 			if i18n.Description.Valid && i18n.Description.String != "" {
@@ -317,7 +318,8 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 					continue
 				}
 				if filmDate, ok := props["film_date"]; ok {
-					val, err := time.Parse("2006-01-02", filmDate.(string))
+					dateStr := strings.Split(filmDate.(string), "T")[0] // remove the 'time' part
+					val, err := time.Parse("2006-01-02", dateStr)
 					indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("time.Parse film_date %s", cu.UID))
 					if err != nil {
 						continue
@@ -329,6 +331,10 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 			if val, ok := indexData.Sources[cu.UID]; ok {
 				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.ES_UID_TYPE_SOURCE, val)...)
 				unit.TypedUids = append(unit.TypedUids, KeyValues(consts.ES_UID_TYPE_SOURCE, val)...)
+				//  We dont add TitleSuggest to CU with source
+				unit.TitleSuggest = SuggestField{[]string{}, float64(0)}
+			} else {
+				unit.TitleSuggest = SuggestField{Suffixes(i18n.Name.String), float64(1)}
 			}
 			if val, ok := indexData.Tags[cu.UID]; ok {
 				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.ES_UID_TYPE_TAG, val)...)

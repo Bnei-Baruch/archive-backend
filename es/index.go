@@ -421,6 +421,7 @@ type ScrollResult struct {
 	MdbUid     string
 	Id         string
 	ResultType string
+	ScrollId   string
 }
 
 func (index *BaseIndex) Scroll(indexName string, elasticScope elastic.Query) ([]ScrollResult, error) {
@@ -431,7 +432,7 @@ func (index *BaseIndex) Scroll(indexName string, elasticScope elastic.Query) ([]
 			for _, h := range searchResult.Hits.Hits {
 				result := Result{}
 				json.Unmarshal(*h.Source, &result)
-				ret = append(ret, ScrollResult{MdbUid: result.MDB_UID, Id: h.Id, ResultType: result.ResultType})
+				ret = append(ret, ScrollResult{MdbUid: result.MDB_UID, Id: h.Id, ResultType: result.ResultType, ScrollId: searchResult.ScrollId})
 			}
 		}
 		var err error
@@ -479,6 +480,7 @@ func (index *BaseIndex) RemoveFromIndexQuery(elasticScope elastic.Query) (map[st
 			if _, ok := removed[scrollResult.ResultType]; !ok {
 				removed[scrollResult.ResultType] = make(map[string]bool)
 			}
+			index.esc.ClearScroll(scrollResult.ScrollId)
 			removed[scrollResult.ResultType][scrollResult.MdbUid] = true
 		}
 		if shouldRemoveCount > 0 {

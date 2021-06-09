@@ -11,7 +11,10 @@
 #   https://www.elastic.co/guide/en/elasticsearch/guide/current/hunspell.html
 #   To install download: he_IL.aff, he_IL.dic, settings.yml files from
 #   https://github.com/elastic/hunspell/tree/master/dicts/he_IL
-#   and put under: elasticsearch-6.3.0/config/hunspell/he_IL
+#   and put under: elasticsearch-6.X.X/config/hunspell/he_IL
+#   Additional dictionary terms are managed in .delta.dic files located in search/hunspell directory of the repo.
+#   Copy these files into corresponding folders inside elasticsearch-6.X.X/config/hunspell/
+#   For Hebrew dictionary files, the supported format is ISO 8859-8.
 #
 #
 # Deprecated plugins (already not in use):
@@ -119,6 +122,41 @@ LANGUAGE_ANALYZER = {
     AMHARIC: "standard",
 }
 
+LanguageAnalyzerWithoutSynonyms  = {
+    ENGLISH: "english",
+    HEBREW: "he",
+    RUSSIAN: "russian",
+    SPANISH: "spanish",
+    ITALIAN: "italian",
+    GERMAN: "german",
+    DUTCH: "dutch",
+    FRENCH: "french",
+    PORTUGUESE: "portuguese",
+    TURKISH: "turkish",
+    POLISH: "standard",
+    ARABIC: "arabic",
+    HUNGARIAN: "hungarian",
+    FINNISH: "finnish",
+    LITHUANIAN: "lithuanian",
+    JAPANESE: "cjk",
+    BULGARIAN: "bulgarian",
+    GEORGIAN: "standard",
+    NORWEGIAN: "norwegian",
+    SWEDISH: "swedish",
+    CROATIAN: "standard",
+    CHINESE: "cjk",
+    PERSIAN: "persian",
+    ROMANIAN: "romanian",
+    HINDI: "hindi",
+    UKRAINIAN: "standard",
+    MACEDONIAN: "standard",
+    SLOVENIAN: "standard",
+    LATVIAN: "latvian",
+    SLOVAK: "standard",
+    CZECH: "czech",
+    AMHARIC: "standard",
+}
+
 SYNONYM_GRAPH_FILTER_IMP = {
     "type": "synonym_graph",
     "tokenizer": "keyword",
@@ -152,6 +190,15 @@ LANGUAGE_ANALYZER_IMP = {
             "char_filter": [
                 "quotes"
             ]
+        },
+        "he": {
+          "tokenizer": "standard",
+          "filter": [
+            "he_IL"
+          ],
+          "char_filter": [
+            "quotes"
+          ]
         }
     },
     RUSSIAN: {
@@ -291,11 +338,23 @@ SETTINGS = {
                 "quotes": {
                     "type": "mapping",
                     "mappings": [
+                        "\\u0027\\u0027=>\\u0029",
+                        "\\u0091\\u0091=>\\u0029",
+                        "\\u0092\\u0092=>\\u0029",
+                        "\\u2018\\u2018=>\\u0029",
+                        "\\u2019\\u2019=>\\u0029",
+                        "\\u201B\\u201B=>\\u0029",
+                        "\\u05F3\\u05F3=>\\u0029",
+                        "\\u059C\\u059C=>\\u0029",
+                        "\\u059D\\u059D=>\\u0029",
                         "\\u0091=>\\u0027",
                         "\\u0092=>\\u0027",
                         "\\u2018=>\\u0027",
                         "\\u2019=>\\u0027",
                         "\\u201B=>\\u0027",
+                        "\\u05F3=>\\u0027",
+                        "\\u059C=>\\u0027",
+                        "\\u059D=>\\u0027",
                         "\\u0022=>",
                         "\\u201C=>",
                         "\\u201D=>",
@@ -551,15 +610,21 @@ SEARCH_LOGS_TEMPLATE = {
 }
 
 GRAMMARS_TEMPLATE = {
-    # "settings": {
-    #   "index": {
-    #     "number_of_shards": 1,
-    #     "number_of_replicas": 0,
-    #   },
-    # },
-    "settings": SETTINGS,
-    "mappings": {
-        "grammars": {
+     "settings": SETTINGS,
+      "mappings": {
+         "grammars": {
+         "dynamic": "strict",
+    "properties": {
+    # Percolator query for matching rules with $Text variable
+              "query": {
+    "type": "percolator"
+    },
+        # Text query from user. Assigned only in query time. Must be defined in index for percolator functionality.
+               "search_text": {
+                "type": "text",
+                "analyzer": lambda lang: LanguageAnalyzerWithoutSynonyms[lang]
+              },
+              "grammar_rule": {
             "dynamic": "strict",
             "properties": {
                 # Hit type, e.g., "landing-page" or other grammars later on..
@@ -603,8 +668,10 @@ GRAMMARS_TEMPLATE = {
                 },
             }
         }
+    }}
     }
 }
+
 
 
 def resolve(lang, value):

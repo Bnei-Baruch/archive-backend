@@ -3,37 +3,49 @@
         "grammars": {
             "dynamic": "strict", 
             "properties": {
-                "hit_type": {
-                    "type": "keyword"
-                }, 
-                "rules": {
-                    "fields": {
-                        "language": {
+                "grammar_rule": {
+                    "dynamic": "strict", 
+                    "properties": {
+                        "hit_type": {
+                            "type": "keyword"
+                        }, 
+                        "rules": {
+                            "fields": {
+                                "language": {
+                                    "type": "text", 
+                                    "analyzer": "dutch"
+                                }
+                            }, 
                             "type": "text", 
-                            "analyzer": "dutch"
-                        }
-                    }, 
-                    "type": "text", 
-                    "analyzer": "standard"
-                }, 
-                "variables": {
-                    "type": "keyword"
-                }, 
-                "intent": {
-                    "type": "keyword"
-                }, 
-                "values": {
-                    "type": "keyword"
-                }, 
-                "rules_suggest": {
-                    "fields": {
-                        "language": {
+                            "analyzer": "standard"
+                        }, 
+                        "variables": {
+                            "type": "keyword"
+                        }, 
+                        "intent": {
+                            "type": "keyword"
+                        }, 
+                        "values": {
+                            "type": "keyword"
+                        }, 
+                        "rules_suggest": {
+                            "fields": {
+                                "language": {
+                                    "type": "completion", 
+                                    "analyzer": "dutch"
+                                }
+                            }, 
                             "type": "completion", 
-                            "analyzer": "dutch"
+                            "analyzer": "standard"
                         }
-                    }, 
-                    "type": "completion", 
-                    "analyzer": "standard"
+                    }
+                }, 
+                "query": {
+                    "type": "percolator"
+                }, 
+                "search_text": {
+                    "type": "text", 
+                    "analyzer": "dutch"
                 }
             }
         }
@@ -46,11 +58,23 @@
                     "quotes": {
                         "type": "mapping", 
                         "mappings": [
+                            "\\u0027\\u0027=>\\u0029", 
+                            "\\u0091\\u0091=>\\u0029", 
+                            "\\u0092\\u0092=>\\u0029", 
+                            "\\u2018\\u2018=>\\u0029", 
+                            "\\u2019\\u2019=>\\u0029", 
+                            "\\u201B\\u201B=>\\u0029", 
+                            "\\u05F3\\u05F3=>\\u0029", 
+                            "\\u059C\\u059C=>\\u0029", 
+                            "\\u059D\\u059D=>\\u0029", 
                             "\\u0091=>\\u0027", 
                             "\\u0092=>\\u0027", 
                             "\\u2018=>\\u0027", 
                             "\\u2019=>\\u0027", 
                             "\\u201B=>\\u0027", 
+                            "\\u05F3=>\\u0027", 
+                            "\\u059C=>\\u0027", 
+                            "\\u059D=>\\u0027", 
                             "\\u0022=>", 
                             "\\u201C=>", 
                             "\\u201D=>", 

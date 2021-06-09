@@ -15,17 +15,23 @@ import (
 func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, preference string) (map[string]*elastic.SearchResult, error) {
 	tweetsByLang := make(map[string]*elastic.SearchResult)
 	mssTweets := e.esc.MultiSearch()
-	mssTweets.Add(NewResultsSearchRequests(
+	requests, err := NewResultsSearchRequests(
+		// Inside the carousel, the tweets are always sorted by relevance.
+		//The EffectiveDate of the carousel itself will be equal to the EffectiveDate of the most relevant tweet.
 		SearchRequestOptions{
 			resultTypes:      []string{consts.ES_RESULT_TYPE_TWEETS},
 			index:            "",
 			query:            query,
-			sortBy:           sortBy,
+			sortBy:           consts.SORT_BY_RELEVANCE,
 			from:             0,
 			size:             consts.TWEETS_SEARCH_COUNT,
 			preference:       preference,
 			useHighlight:     false,
-			partialHighlight: false})...)
+			partialHighlight: false})
+	if err != nil {
+		return nil, err
+	}
+	mssTweets.Add(requests...)
 
 	beforeTweetsSearch := time.Now()
 	mr, err := mssTweets.Do(context.TODO())
@@ -65,19 +71,6 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 	//  Set the score as the highest score of all hits per language.
 
 	for _, result := range resultsByLang {
-
-		var maxScore float64
-		for _, hit := range result.Hits.Hits {
-
-			if hit.Score == nil {
-				return nil, errors.Errorf("hit score is nil for hit: %s", hit.Uid)
-			}
-
-			if *hit.Score > maxScore {
-				maxScore = *hit.Score
-			}
-		}
-
 		hitsClone := *result.Hits
 
 		innerHitsMap := make(map[string]*elastic.SearchHitInnerHits)
@@ -86,14 +79,15 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 		}
 
 		hit := &elastic.SearchHit{
+			Source:    result.Hits.Hits[0].Source,
 			Type:      hitType,
-			Score:     &maxScore,
+			Score:     result.Hits.Hits[0].Score,
 			InnerHits: innerHitsMap,
 		}
 
 		result.Hits.Hits = []*elastic.SearchHit{hit}
 		result.Hits.TotalHits = 1
-		result.Hits.MaxScore = &maxScore
+		result.Hits.MaxScore = result.Hits.Hits[0].Score
 	}
 
 	return resultsByLang, nil

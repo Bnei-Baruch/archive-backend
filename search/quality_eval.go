@@ -175,6 +175,7 @@ const (
 	FILTER_NAME_SOURCE       = "source"
 	FILTER_NAME_TOPIC        = "topic"
 	FILTER_NAME_CONTENT_TYPE = "contentType"
+	FILTER_NAME_HOLIDAYS     = "holidays"
 	PREFIX_LATEST            = "[latest]"
 	BLOG_OR_TWEET_MARK       = "blog_or_tweet"
 )
@@ -354,10 +355,10 @@ type HitSource struct {
 }
 
 func HitSourcesEqual(a, b HitSource) bool {
-    if a.Score == float64(0) && a.Score == b.Score {
-        // All zero score are the same.
-        return true
-    }
+	if a.Score == float64(0) && a.Score == b.Score {
+		// All zero score are the same.
+		return true
+	}
 	if a.MdbUid != b.MdbUid ||
 		a.ResultType != b.ResultType ||
 		a.LandingPage != b.LandingPage ||
@@ -439,9 +440,13 @@ func ParseExpectation(e string, db *sql.DB) Expectation {
 	landingPage := path.Join(contentUnitOrCollection, uidOrSection)
 	subSection := ""
 	t := ET_NOT_SET
-	if _, ok := LANDING_PAGES[landingPage]; q == "" && !takeLatest && ok {
+	if _, ok := LANDING_PAGES[landingPage]; !takeLatest && ok {
 		t = ET_LANDING_PAGE
-		uidOrSection = landingPage
+		if q == "" {
+			uidOrSection = landingPage
+		} else {
+			subSection = landingPage
+		}
 	} else if _, ok := LANDING_PAGES[uidOrSection]; q == "" && !takeLatest && ok {
 		t = ET_LANDING_PAGE
 	} else {
@@ -699,7 +704,8 @@ func EvaluateQuery(q EvalQuery, serverUrl string, skipExpectations bool) EvalRes
 					}
 					if HitMatchesExpectation(hit, hitSource, q.Expectations[i]) {
 						rank = j + 1
-						if j <= 2 {
+						//set good if first 3 are till 3 place in results, or 4 and 5 are till 5 place
+						if j <= 2 || (i > 2 && j <= 4) {
 							sq = SQ_GOOD
 						} else {
 							sq = SQ_REGULAR
@@ -1300,7 +1306,7 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 		join collections_content_units ccu on cu.id = ccu.content_unit_id
 		join collections c on c.id = ccu.collection_id
 		where cu.published IS TRUE and cu.secure = 0
-			and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+			and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d)
 		and c.uid = '%s'
 		order by ccu.position desc
 			limit 1`
@@ -1313,6 +1319,7 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
 		collectionUID)
 
 	row := queries.Raw(db, query).QueryRow()
@@ -1333,7 +1340,7 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 		left join content_units_sources cus on cus.content_unit_id = cu.id
 		left join sources s on s.id = cus.source_id
 		where cu.published IS TRUE and cu.secure = 0
-		and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)
+		and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d)
 		%s
 		order by (cu.properties->>'film_date')::date desc
 		limit 1`
@@ -1396,6 +1403,7 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
 		filterByUidQuery)
 
 	row := queries.Raw(db, query).QueryRow()

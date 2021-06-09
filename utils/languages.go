@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"fmt"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/abadojack/whatlanggo"
 	"golang.org/x/text/language"
@@ -176,4 +178,50 @@ func DetectLanguage(text string, interfaceLanguage string, acceptLanguage string
 
 	log.Debug("DetectLanguage: using default language")
 	return consts.SEARCH_LANG_ORDER[interfaceLanguage]
+}
+
+func NumberInHebrew(n int) string {
+
+	switch n {
+	case 16:
+		return "טז"
+	case 15:
+		return "טו"
+	}
+
+	var ret string
+	for n >= 400 {
+		ret = fmt.Sprintf("%s%s", ret, "ת")
+		n -= 400
+	}
+	if n >= 300 {
+		ret = fmt.Sprintf("%s%s", ret, "ש")
+		n -= 300
+	}
+	if n >= 200 {
+		ret = fmt.Sprintf("%s%s", ret, "ר")
+		n -= 200
+	}
+	if n >= 100 {
+		ret = fmt.Sprintf("%s%s", ret, "ק")
+		n -= 100
+	}
+	switch n {
+	case 16:
+		ret = fmt.Sprintf("%s%s", ret, "טז")
+	case 15:
+		ret = fmt.Sprintf("%s%s", ret, "טו")
+	default:
+		if n >= 10 {
+			runes := []rune("יכלמנסעפצ")
+			ret = fmt.Sprintf("%s%c", ret, runes[(n/10)-1])
+			n %= 10
+		}
+		if n > 0 {
+			runes := []rune("אבגדהוזחט")
+			ret = fmt.Sprintf("%s%c", ret, runes[(n%10)-1])
+		}
+	}
+
+	return ret
 }

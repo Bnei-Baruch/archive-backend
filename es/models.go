@@ -12,6 +12,10 @@ type ResultType struct {
 	ResultType string `json:"result_type"`
 }
 
+type MdbUid struct {
+	MDB_UID string `json:"mdb_uid"`
+}
+
 // For full description see make.py RESULTS TEMPLATE.
 type Result struct {
 	// Document type.
@@ -32,5 +36,10 @@ type Result struct {
 	EffectiveDate *utils.Date `json:"effective_date,omitempty"`
 
 	// Suggest field for autocomplete.
-	TitleSuggest []string `json:"title_suggest"`
+	TitleSuggest SuggestField `json:"title_suggest"`
+}
+
+type SuggestField struct {
+	Input  []string `json:"input"`
+	Weight float64  `json:"weight"`
 }

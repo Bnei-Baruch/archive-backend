@@ -31,6 +31,13 @@ import (
 
 var SECURE_PUBLISHED_MOD = qm.Where(fmt.Sprintf("secure=%d AND published IS TRUE", consts.SEC_PUBLIC))
 
+type firstRowsType struct {
+	id           int64
+	uid          string
+	content_type string
+	film_date    time.Time
+}
+
 func CollectionsHandler(c *gin.Context) {
 	r := CollectionsRequest{
 		WithUnits: true,
@@ -290,7 +297,8 @@ func LessonsHandler(c *gin.Context) {
 
 	if utils.IsEmpty(r.Authors) &&
 		utils.IsEmpty(r.Sources) &&
-		utils.IsEmpty(r.Tags) {
+		utils.IsEmpty(r.Tags) &&
+		r.MediaLanguage == "" {
 		if r.OrderBy == "" {
 			r.OrderBy = "(properties->>'film_date')::date desc, (properties->>'number')::int desc, created_at desc"
 		}
@@ -321,11 +329,12 @@ func LessonsHandler(c *gin.Context) {
 			ContentTypesFilter: ContentTypesFilter{
 				ContentTypes: []string{consts.CT_LESSON_PART},
 			},
-			ListRequest:     r.ListRequest,
-			DateRangeFilter: r.DateRangeFilter,
-			SourcesFilter:   r.SourcesFilter,
-			TagsFilter:      r.TagsFilter,
-			WithFiles:       withFiles,
+			ListRequest:         r.ListRequest,
+			DateRangeFilter:     r.DateRangeFilter,
+			SourcesFilter:       r.SourcesFilter,
+			TagsFilter:          r.TagsFilter,
+			WithFiles:           withFiles,
+			MediaLanguageFilter: r.MediaLanguageFilter,
 		}
 		resp, err := handleContentUnits(c.MustGet("MDB_DB").(*sql.DB), cur)
 		concludeRequest(c, resp, err)
@@ -453,6 +462,8 @@ func SearchHandler(c *gin.Context) {
 		//  temp. disable typo suggestion for other interface languages than english, russian and hebrew
 		(c.Query("language") == consts.LANG_ENGLISH || c.Query("language") == consts.LANG_RUSSIAN || c.Query("language") == consts.LANG_HEBREW)
 
+	timeoutForHighlight := viper.GetDuration("elasticsearch.timeout-for-highlight")
+
 	res, err := se.DoSearch(
 		context.TODO(),
 		query,
@@ -461,13 +472,17 @@ func SearchHandler(c *gin.Context) {
 		size,
 		preference,
 		checkTypo,
+		timeoutForHighlight,
 	)
 	if err == nil {
 		// TODO: How does this slows the search query? Consider logging in parallel.
-		err := logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
-		if err != nil {
-			log.Warnf("Error logging search: %+v %+v", err, res)
+		if !query.Deb {
+			err = logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
+			if err != nil {
+				log.Warnf("Error logging search: %+v %+v", err, res)
+			}
 		}
+
 		for _, hit := range res.SearchResult.Hits.Hits {
 			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
 				// Move Tweets from innerHits to Source, to make client more consistent (work with source only).
@@ -701,6 +716,10 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
+	appendCollectionSourceFilterMods(&mods, r.SourcesFilter)
+	if err := appendCollectionTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 
 	// count query
 	var total int64
@@ -833,6 +852,37 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	return resp, nil
 }
 
+func handleCollectionWOCUs(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
+
+	c, err := mdbmodels.Collections(db,
+		SECURE_PUBLISHED_MOD,
+		qm.Where("uid = ?", r.UID)).
+		One()
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, NewNotFoundError()
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+
+	// collection
+	cl, err := mdbToC(c)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// collection i18n
+	ci18nsMap, err := loadCI18ns(db, r.Language, []int64{c.ID})
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	if i18ns, ok := ci18nsMap[c.ID]; ok {
+		setCI18n(cl, r.Language, i18ns)
+	}
+	return cl, nil
+}
+
 func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 
 	c, err := mdbmodels.Collections(db,
@@ -909,31 +959,130 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 }
 
 func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpError) {
+	const queryTemplate = `
+WITH CUs AS (
+	SELECT ct.id as type_id, uid, cu_id AS id, film_date
+	FROM ( VALUES (%d), (%d), (%d), (%d), (%d), (%d), (%d) ) ct(id)
+	INNER JOIN LATERAL (
+		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+		FROM content_units cu
+		WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
+		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC 
+		FETCH FIRST 4 ROWS ONLY
+	) t ON true
+), LESSON_COLLs AS (
+	SELECT ct.id as type_id, uid, cu_id AS id, film_date
+	FROM ( VALUES (%d), (%d) ) ct(id)
+	INNER JOIN LATERAL (
+		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+		FROM collections c
+		WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
+		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
+		FETCH FIRST 3 ROWS ONLY
+	) t ON true
+), COLs AS (
+	SELECT ct.id as type_id, uid, cu_id AS id, film_date
+	FROM ( VALUES (%d), (%d) ) ct(id)
+	INNER JOIN LATERAL (
+		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
+		FROM collections c
+		WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
+		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
+		FETCH FIRST 1 ROWS ONLY
+	) t ON true
+)
+(
+	SELECT * FROM CUs
+) UNION (
+	SELECT * FROM COLs
+) UNION (
+	SELECT * FROM LESSON_COLLs
+)
+order by type_id, film_date desc
+`
+	query := fmt.Sprintf(queryTemplate,
+		// CUs
+		// row #1: CT_WOMEN_LESSON, CT_VIRTUAL_LESSON x 1
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIRTUAL_LESSON].ID,
+		// row #2: CT_VIDEO_PROGRAM_CHAPTER x 4
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM_CHAPTER].ID,
+		// row #3: CT_CLIP x 4
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
+		// row #4: CT_ARTICLE x 4
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID,
+		// row #5: CT_FRIENDS_GATHERING, CT_MEAL x 1
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
 
-	// CU ids query
-	const query = `SELECT DISTINCT ON (type_id) id
-FROM content_units
-WHERE secure = 0 AND published IS TRUE
-ORDER BY type_id, (coalesce(properties ->> 'film_date', created_at :: TEXT)) :: DATE DESC, created_at DESC;`
+		// Collections (lessons): CT_LESSONS_SERIES x 2, CT_DAILY_LESSON x 3
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSONS_SERIES].ID,
+		// Collections: CT_CONGRESS, CT_HOLIDAY x 1
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID,
+	)
 	rows, err := queries.Raw(db, query).Query()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 	defer rows.Close()
 
-	cuIDs := make([]int64, 0)
+	firstRows := map[string][]firstRowsType{}
 	for rows.Next() {
-		var myId int64
-		err := rows.Scan(&myId)
+		var (
+			type_id   int64
+			id        int64
+			uid       string
+			film_date time.Time
+		)
+		err = rows.Scan(&type_id, &uid, &id, &film_date)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
-		cuIDs = append(cuIDs, myId)
+		name := mdb.CONTENT_TYPE_REGISTRY.ByID[type_id].Name
+		_, ok := firstRows[name]
+		if !ok {
+			firstRows[name] = []firstRowsType{}
+		}
+		firstRows[name] = append(firstRows[name], firstRowsType{
+			id:           id,
+			uid:          uid,
+			content_type: name,
+			film_date:    film_date,
+		})
 	}
-	if err := rows.Err(); err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, NewInternalError(err)
 	}
-
+	cuIDs := make([]int64, 0)
+	if _, ok := firstRows[consts.CT_WOMEN_LESSON]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_WOMEN_LESSON][0].id)
+	}
+	if _, ok := firstRows[consts.CT_VIRTUAL_LESSON]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_VIRTUAL_LESSON][0].id)
+	}
+	if _, ok := firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER]; ok {
+		for _, r := range firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	if _, ok := firstRows[consts.CT_CLIP]; ok {
+		for _, r := range firstRows[consts.CT_CLIP][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	if _, ok := firstRows[consts.CT_ARTICLE]; ok {
+		for _, r := range firstRows[consts.CT_ARTICLE][0:4] {
+			cuIDs = append(cuIDs, r.id)
+		}
+	}
+	if _, ok := firstRows[consts.CT_MEAL]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_MEAL][0].id)
+	}
+	if _, ok := firstRows[consts.CT_FRIENDS_GATHERING]; ok {
+		cuIDs = append(cuIDs, firstRows[consts.CT_FRIENDS_GATHERING][0].id)
+	}
 	// data query
 	units, err := mdbmodels.ContentUnits(db,
 		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
@@ -947,6 +1096,74 @@ ORDER BY type_id, (coalesce(properties ->> 'film_date', created_at :: TEXT)) :: 
 	cus, ex := prepareCUs(db, units, r.Language)
 	if ex != nil {
 		return nil, ex
+	}
+
+	//last Collections: CONGRESS, HOLIDAY, LECTURE_SERIES
+	cIDs := make([]int64, 0)
+	cs := make([]firstRowsType, 0)
+	if _, ok := firstRows[consts.CT_CONGRESS]; ok {
+		cIDs = append(cIDs, firstRows[consts.CT_CONGRESS][0].id)
+		cs = append(cs, firstRows[consts.CT_CONGRESS][0])
+	}
+	if _, ok := firstRows[consts.CT_HOLIDAY]; ok {
+		cIDs = append(cIDs, firstRows[consts.CT_HOLIDAY][0].id)
+		cs = append(cs, firstRows[consts.CT_HOLIDAY][0])
+	}
+	if _, ok := firstRows[consts.CT_LESSONS_SERIES]; ok {
+		// The first one is always on HomePage
+		for _, r := range firstRows[consts.CT_LESSONS_SERIES][0:2] {
+			cIDs = append(cIDs, r.id)
+			cs = append(cs, r)
+		}
+	}
+
+	var lastNumber int
+	var lastDate time.Time
+
+	if _, ok := firstRows[consts.CT_DAILY_LESSON]; ok {
+		// The first one is always on HomePage
+		lastNumber = 1
+		lastDate = firstRows[consts.CT_DAILY_LESSON][0].film_date
+		for _, r := range firstRows[consts.CT_DAILY_LESSON][1:3] {
+			cIDs = append(cIDs, r.id)
+			cs = append(cs, r)
+		}
+	}
+
+	ci18nsMap, err := loadCI18ns(db, r.Language, cIDs)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	for _, x := range cs {
+		u := &ContentUnit{
+			mdbID:       x.id,
+			ID:          x.uid,
+			ContentType: x.content_type,
+			FilmDate:    &utils.Date{Time: x.film_date},
+		}
+		if x.content_type == consts.CT_DAILY_LESSON {
+			if x.film_date == lastDate {
+				lastNumber++
+			} else {
+				lastNumber = 1
+				lastDate = x.film_date
+			}
+			u.NameInCollection = fmt.Sprintf("%d", lastNumber)
+		}
+		if i18ns, ok := ci18nsMap[x.id]; ok {
+			for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+				li18n, ok := i18ns[l]
+				if ok {
+					if u.Name == "" && li18n.Name.Valid {
+						u.Name = li18n.Name.String
+					}
+					if u.Description == "" && li18n.Description.Valid {
+						u.Description = li18n.Description.String
+					}
+				}
+			}
+		}
+		cus = append(cus, u)
 	}
 
 	return cus, nil
@@ -1168,8 +1385,6 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		return nil, NewInternalError(err)
 	}
 
-	// Generally, this field is not reliable in terms of DB cleanups.
-	// Implemented for special case of BLOG_POST (audio version / declamation) only.
 	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1206,6 +1421,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		"CollectionsContentUnits",
 		"CollectionsContentUnits.Collection",
 	}
+	if r.WithTags {
+		loadTables = append(loadTables, "Tags")
+	}
 	if r.WithDerivations {
 		loadTables = append(loadTables,
 			"SourceContentUnitDerivations",
@@ -1225,6 +1443,16 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	cus, ex := prepareCUs(db, units, r.Language)
 	if ex != nil {
 		return nil, ex
+	}
+	// tags
+	for idx, unit := range units {
+		cu := cus[idx]
+		if r.WithTags && len(unit.R.Tags) > 0 {
+			cu.tagIDs = make([]int64, len(unit.R.Tags))
+			for i, x := range unit.R.Tags {
+				cu.tagIDs[i] = x.ID
+			}
+		}
 	}
 
 	if r.WithDerivations {
@@ -1552,6 +1780,91 @@ FROM idsGroupedByType
 		LatestContentUnits: cus,
 		Counts:             counts,
 	}, nil
+}
+
+// translate tag.keys (UIDs of tags) to their translation
+func handleTagsTranslationByID(db *sql.DB, r BaseRequest, uids []string) ([]string, *HttpError) {
+	if len(uids) == 0 {
+		return []string{}, nil
+	}
+	q := fmt.Sprintf(`
+		SELECT
+			coalesce((SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = '%s'),
+					 (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'en'),
+					 (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'he'))
+			AS label
+		FROM tags t
+		WHERE t.uid IN (`,
+		r.Language)
+	args := make([]string, len(uids))
+	for i := range uids {
+		args[i] = fmt.Sprintf("$%d", i+1)
+	}
+	q += strings.Join(args, ",") + ")"
+	rows, err := queries.Raw(db, q, utils.ConvertArgsString(uids)...).Query()
+	if err != nil {
+		return []string{}, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	// Iterate rows, build tags
+	tags := []string{}
+	var label string
+	for rows.Next() {
+		err = rows.Scan(&label)
+		if err != nil {
+			return []string{}, NewInternalError(err)
+		}
+		tags = append(tags, label)
+	}
+	return tags, nil
+
+}
+
+// Convert tag.keys (IDs of tags) to their translation
+func handleTagsTranslation(db *sql.DB, r BaseRequest, tags map[int64]string) *HttpError {
+	ids := make([]int64, len(tags))
+	i := 0
+	for k := range tags {
+		ids[i] = k
+		i++
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	q := fmt.Sprintf(`
+		SELECT t.id,
+			coalesce((SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = '%s'),
+					 (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'en'),
+					 (SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'he'))
+			AS label
+		FROM tags t
+		WHERE t.id IN (`,
+		r.Language)
+	args := make([]string, len(ids))
+	for i := range ids {
+		args[i] = fmt.Sprintf("$%d", i+1)
+	}
+	q += strings.Join(args, ",") + ")"
+	var (
+		id    int64
+		label string
+	)
+	rows, err := queries.Raw(db, q, utils.ConvertArgsInt64(ids)...).Query()
+	if err != nil {
+		return NewInternalError(err)
+	}
+	defer rows.Close()
+
+	// Iterate rows, build tags
+	for rows.Next() {
+		err = rows.Scan(&id, &label)
+		if err != nil {
+			return NewInternalError(err)
+		}
+		tags[id] = label
+	}
+	return nil
 }
 
 func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError) {
@@ -2005,6 +2318,31 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
 }
 
+func appendCollectionSourceFilterMods(mods *[]qm.QueryMod, f SourcesFilter) {
+	if len(f.Sources) != 0 {
+		*mods = append(*mods, qm.WhereIn("properties->>'source' in ?", utils.ConvertArgsString(f.Sources)...))
+	}
+}
+
+func appendCollectionTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
+	if len(f.Tags) == 0 {
+		return nil
+	}
+	//use Raw query because of need to use operator ?
+	var ids pq.Int64Array
+	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
+	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
+	if err != nil {
+		return err
+	}
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods, qm.WhereIn("id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+	return nil
+}
+
 func appendDateRangeFilterModsTwitter(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "tweet_at")
 }
@@ -2269,9 +2607,13 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 	if len(f.MediaLanguage) == 0 {
 		return nil
 	}
-
-	*mods = append(*mods, qm.Where("properties->>'original_language' = ?", f.MediaLanguage))
-
+	//TODO: this query should be optimized ASAP and before we do that clients should use it as little as possible
+	*mods = append(*mods,
+		qm.WhereIn(`(id in ( SELECT DISTINCT cu.id FROM content_units cu 
+			INNER JOIN files f 
+			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
+			AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))`, f.MediaLanguage),
+	)
 	return nil
 }
 
@@ -2301,6 +2643,7 @@ func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 		DefaultLanguage: props.DefaultLanguage,
 		HolidayID:       props.HolidayTag,
 		SourceID:        props.Source,
+		TagIDs:          props.Tags,
 		Number:          props.Number,
 	}
 

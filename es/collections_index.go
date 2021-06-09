@@ -15,7 +15,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -35,14 +35,15 @@ type CollectionsIndex struct {
 }
 
 func defaultCollectionsSql() string {
-	return fmt.Sprintf("c.secure = 0 AND c.published IS TRUE AND c.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)",
+	return fmt.Sprintf("c.secure = 0 AND c.published IS TRUE AND c.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d)",
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SPECIAL_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIPS].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSONS_SERIES].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONGS].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOKS].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID, // we use grammar for holiday collections search
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
 	)
 }
 
@@ -211,7 +212,8 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 				continue
 			}
 			if filmDate, ok := props["film_date"]; ok {
-				val, err := time.Parse("2006-01-02", filmDate.(string))
+				dateStr := strings.Split(filmDate.(string), "T")[0] // remove the 'time' part
+				val, err := time.Parse("2006-01-02", dateStr)
 				indexErrors.DocumentError("", err, fmt.Sprintf("time.Parse film_date %s", cu.UID))
 				if err != nil {
 					continue
@@ -240,7 +242,7 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 				TypedUids:    typedUIDs,
 				FilterValues: filterValues,
 				Title:        i18n.Name.String,
-				TitleSuggest: Suffixes(i18n.Name.String),
+				TitleSuggest: SuggestField{Suffixes(i18n.Name.String), float64(consts.ES_COLLECTIONS_SUGGEST_DEFAULT_WEIGHT)},
 			}
 			if effectiveDate != nil {
 				collection.EffectiveDate = effectiveDate

@@ -30,7 +30,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -100,12 +100,14 @@ type Source struct {
 	Name    string `json:"name"`
 
 	// Deprecated fields (since we use 'Result Template' in order to index the sources):
-	Description string   `json:"description"`
-	Content     string   `json:"content"`
-	Sources     []string `json:"sources"`
-	Authors     []string `json:"authors"`
-	PathNames   []string `json:"path_names"`
-	FullName    []string `json:"full_name"`
+	Description string     `json:"description"`
+	Content     string     `json:"content"`
+	Sources     []string   `json:"sources"`
+	Authors     []string   `json:"authors"`
+	PathNames   []string   `json:"path_names"`
+	FullName    []string   `json:"full_name"`
+	ParentID    null.Int64 `json:"parent_id"`
+	Position    null.Int   `json:"position"`
 }
 
 func (suite *IndexerSuite) SetupSuite() {
@@ -825,14 +827,27 @@ func removeTag(id int64) error {
 	return mdbmodels.Tags(common.DB, qm.WhereIn("id = ?", id)).DeleteAll()
 }
 
-func updateSource(source Source, lang string) (string, error) {
+//Return values: MDB_UID - key of the source in string interpretation
+//				 MDB_ID - key of the source in int64 interpretation
+func updateSource(source Source, lang string) (string, int64, error) {
 	var mdbSource mdbmodels.Source
 	if source.MDB_UID != "" {
 		s, err := mdbmodels.Sources(common.DB, qm.Where("uid = ?", source.MDB_UID)).One()
 		if err != nil {
-			return "", err
+			return "", 0, err
 		}
 		mdbSource = *s
+		if source.Position.Valid {
+			mdbSource.Position = source.Position
+		}
+
+		if source.ParentID.Valid {
+			mdbSource.ParentID = source.ParentID
+		}
+
+		if err := mdbSource.Update(common.DB); err != nil {
+			return "", 0, err
+		}
 	} else {
 		mdbSource = mdbmodels.Source{
 			UID:    utils.GenerateUID(8),
@@ -842,8 +857,15 @@ func updateSource(source Source, lang string) (string, error) {
 		if source.Description != "" {
 			mdbSource.Description = null.NewString(source.Description, source.Description != "")
 		}
+		if source.ParentID.Valid {
+			mdbSource.ParentID = source.ParentID
+		}
+		if source.Position.Valid {
+			mdbSource.Position = source.Position
+		}
+
 		if err := mdbSource.Insert(common.DB); err != nil {
-			return "", err
+			return "", 0, err
 		}
 	}
 	var mdbSourceI18n mdbmodels.SourceI18n
@@ -854,10 +876,10 @@ func updateSource(source Source, lang string) (string, error) {
 			Language: lang,
 		}
 		if err := mdbSourceI18n.Insert(common.DB); err != nil {
-			return "", err
+			return "", 0, err
 		}
 	} else if err != nil {
-		return "", err
+		return "", 0, err
 	} else {
 		mdbSourceI18n = *source18np
 	}
@@ -868,7 +890,7 @@ func updateSource(source Source, lang string) (string, error) {
 		mdbSourceI18n.Description = null.NewString(source.Description, source.Description != "")
 	}
 	if err := mdbSourceI18n.Update(common.DB); err != nil {
-		return "", err
+		return "", 0, err
 	}
 
 	// Add folder for source files
@@ -876,11 +898,11 @@ func updateSource(source Source, lang string) (string, error) {
 	if _, err := os.Stat(uidPath); os.IsNotExist(err) {
 		err = os.MkdirAll(uidPath, os.FileMode(0775))
 		if err != nil {
-			return "", err
+			return "", 0, err
 		}
 	}
 
-	return mdbSource.UID, nil
+	return mdbSource.UID, mdbSource.ID, nil
 }
 
 func updateSourceFileContent(uid string, lang string) error {
@@ -1159,11 +1181,11 @@ func (suite *IndexerSuite) rt(id int64) {
 }
 
 //update source
-func (suite *IndexerSuite) us(source Source, lang string) string {
+func (suite *IndexerSuite) us(source Source, lang string) (string, int64) {
 	r := require.New(suite.T())
-	uid, err := updateSource(source, lang)
+	uid, id, err := updateSource(source, lang)
 	r.Nil(err)
-	return uid
+	return uid, id
 }
 
 //update source file content

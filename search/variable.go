@@ -63,7 +63,7 @@ func MakeVariables(variablesDir string, esc *elastic.Client, tc *TokensCache) (V
 		//}
 
 		// Convention Location
-		conventionLocationVariable := MakeFileVariable("$ConventionLocation", lang, translations)
+		conventionLocationVariable := MakeFileVariable(consts.VAR_CONVENTION_LOCATION, lang, translations)
 		if conventionLocationVariable != nil {
 			variables[lang][conventionLocationVariable.Name()] = &conventionLocationVariable
 		}
