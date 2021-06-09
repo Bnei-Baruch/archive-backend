@@ -122,7 +122,7 @@ LANGUAGE_ANALYZER = {
     AMHARIC: "standard",
 }
 
-LanguageAnalyzerWithoutSynonyms  = {
+LANGUAGE_ANALYZER_WITHOUT_SYNONYMS = {
     ENGLISH: "english",
     HEBREW: "he",
     RUSSIAN: "russian",
@@ -192,13 +192,13 @@ LANGUAGE_ANALYZER_IMP = {
             ]
         },
         "he": {
-          "tokenizer": "standard",
-          "filter": [
-            "he_IL"
-          ],
-          "char_filter": [
-            "quotes"
-          ]
+            "tokenizer": "standard",
+            "filter": [
+                "he_IL"
+            ],
+            "char_filter": [
+                "quotes"
+            ]
         }
     },
     RUSSIAN: {
@@ -426,7 +426,7 @@ RESULTS_TEMPLATE = {
                     "fields": {
                         "language": {
                             "type": "text",
-                            "analyzer": lambda lang: LANGUAGE_ANALYZER[lang],
+                            "analyzer": lambda x: LANGUAGE_ANALYZER[x],
                         }
                     }
                 },
@@ -436,7 +436,7 @@ RESULTS_TEMPLATE = {
                     "fields": {
                         "language": {
                             "type": "text",
-                            "analyzer": lambda lang: LANGUAGE_ANALYZER[lang],
+                            "analyzer": lambda x: LANGUAGE_ANALYZER[x],
                         }
                     }
                 },
@@ -446,7 +446,7 @@ RESULTS_TEMPLATE = {
                     "fields": {
                         "language": {
                             "type": "text",
-                            "analyzer": lambda lang: LANGUAGE_ANALYZER[lang],
+                            "analyzer": lambda x: LANGUAGE_ANALYZER[x],
                         },
                     },
                 },
@@ -456,7 +456,7 @@ RESULTS_TEMPLATE = {
                     "fields": {
                         "language": {
                             "type": "text",
-                            "analyzer": lambda lang: LANGUAGE_ANALYZER[lang],
+                            "analyzer": lambda x: LANGUAGE_ANALYZER[x],
                         },
                     },
                 },
@@ -610,74 +610,74 @@ SEARCH_LOGS_TEMPLATE = {
 }
 
 GRAMMARS_TEMPLATE = {
-     "settings": SETTINGS,
-      "mappings": {
-         "grammars": {
-         "dynamic": "strict",
-    "properties": {
-    # Percolator query for matching rules with $Text variable
-              "query": {
-    "type": "percolator"
-    },
-        # Text query from user. Assigned only in query time. Must be defined in index for percolator functionality.
-               "search_text": {
-                "type": "text",
-                "analyzer": lambda lang: LanguageAnalyzerWithoutSynonyms[lang]
-              },
-              "grammar_rule": {
+    "settings": SETTINGS,
+    "mappings": {
+        "grammars": {
             "dynamic": "strict",
             "properties": {
-                # Hit type, e.g., "landing-page" or other grammars later on..
-                "hit_type": {
-                    "type": "keyword",
+                # Percolator query for matching rules with $Text variable
+                "query": {
+                    "type": "percolator"
                 },
-                # Intent, e.g., which landing page, "conventions" or "lessons".
-                "intent": {
-                    "type": "keyword",
-                },
-                # Set of variables for a grammar rule, e.g., [congress $Year $ConventionLocation]
-                # will lead to two keywords: ['$Year', '$ConventionLocation']
-                "variables": {
-                    "type": "keyword",
-                },
-                # One value for each variable, e.g., "2019" for $Year or "Bulgaria" for $ConventionLocation.
-                "values": {
-                    "type": "keyword",
-                },
-                # Grammar rule: [congress $Year $ConventionLocation] or [$Year $ConventionLocation congress]
-                "rules": {
+                # Text query from user. Assigned only in query time. Must be defined in index for percolator functionality.
+                "search_text": {
                     "type": "text",
-                    "analyzer": "standard",
-                    "fields": {
-                        "language": {
+                    "analyzer": lambda x: LANGUAGE_ANALYZER_WITHOUT_SYNONYMS[x]
+                },
+                "grammar_rule": {
+                    "dynamic": "strict",
+                    "properties": {
+                        # Hit type, e.g., "landing-page" or other grammars later on..
+                        "hit_type": {
+                            "type": "keyword",
+                        },
+                        # Intent, e.g., which landing page, "conventions" or "lessons".
+                        "intent": {
+                            "type": "keyword",
+                        },
+                        # Set of variables for a grammar rule, e.g., [congress $Year $ConventionLocation]
+                        # will lead to two keywords: ['$Year', '$ConventionLocation']
+                        "variables": {
+                            "type": "keyword",
+                        },
+                        # One value for each variable, e.g., "2019" for $Year or "Bulgaria" for $ConventionLocation.
+                        "values": {
+                            "type": "keyword",
+                        },
+                        # Grammar rule: [congress $Year $ConventionLocation] or [$Year $ConventionLocation congress]
+                        "rules": {
                             "type": "text",
-                            "analyzer": lambda x: LANGUAGE_ANALYZER[x],
-                        }
-                    }
-                },
-                # Suggest field for autocomplete.
-                "rules_suggest": {
-                    "type": "completion",
-                    "analyzer": "standard",
-                    "fields": {
-                        "language": {
+                            "analyzer": "standard",
+                            "fields": {
+                                "language": {
+                                    "type": "text",
+                                    "analyzer": lambda x: LANGUAGE_ANALYZER[x],
+                                }
+                            }
+                        },
+                        # Suggest field for autocomplete.
+                        "rules_suggest": {
                             "type": "completion",
-                            "analyzer": lambda x: LANGUAGE_ANALYZER[x],
-                        }
+                            "analyzer": "standard",
+                            "fields": {
+                                "language": {
+                                    "type": "completion",
+                                    "analyzer": lambda x: LANGUAGE_ANALYZER[x],
+                                }
+                            }
+                        },
                     }
-                },
+                }
             }
         }
-    }}
     }
 }
 
 
-
 def resolve(lang, value):
     if isinstance(value, dict):
-        l = [(k, resolve(lang, v)) for (k, v) in value.iteritems()]
-        return dict([(k, v) for k, v in l if v is not None])
+        vals = [(k, resolve(lang, v)) for (k, v) in value.iteritems()]
+        return dict([(k, v) for k, v in vals if v is not None])
     elif isinstance(value, list):
         return [x for x in [resolve(lang, v) for v in value] if x is not None]
     elif callable(value):
@@ -687,11 +687,13 @@ def resolve(lang, value):
 
 
 if __name__ == "__main__":
-    for lang in LANG_GROUPS[ALL]:
-        with open(os.path.join('..', '..', 'data', 'es', 'mappings', 'results', 'results-%s.json' % lang), 'w') as f:
-            json.dump(resolve(lang, RESULTS_TEMPLATE), f, indent=4)
-        with open(os.path.join('..', '..', 'data', 'es', 'mappings', 'grammars', 'grammars-%s.json' % lang), 'w') as f:
-            json.dump(resolve(lang, GRAMMARS_TEMPLATE), f, indent=4)
+    for language in LANG_GROUPS[ALL]:
+        with open(os.path.join('..', '..', 'data', 'es', 'mappings', 'results', 'results-%s.json' % language),
+                  'w') as f:
+            json.dump(resolve(language, RESULTS_TEMPLATE), f, indent=4)
+        with open(os.path.join('..', '..', 'data', 'es', 'mappings', 'grammars', 'grammars-%s.json' % language),
+                  'w') as f:
+            json.dump(resolve(language, GRAMMARS_TEMPLATE), f, indent=4)
     # Without languages
     with open(os.path.join('..', '..', 'data', 'es', 'mappings', 'search_logs.json'), 'w') as f:
         json.dump(resolve('xx', SEARCH_LOGS_TEMPLATE), f, indent=4)
