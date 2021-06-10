@@ -1067,6 +1067,9 @@ func (e *ESEngine) sourceUidByTerm(term string, languages []string) (*string, st
 }
 
 func (e *ESEngine) isTermRestricted(term string, languages []string) bool {
+	// Here we are checking if the given term exists in the list of terms that are restricted from being processed in the grammar engine.
+	// It might be better to tokenize this list of terms and make the check using Elastic. However this could make the check less accurate and restrict terms that should not be restricted.
+	// The option of tokenization was not tested and we should consider testing it.
 	termLC := strings.ToLower(term)
 	for _, language := range languages {
 		varsByLang := e.variables[consts.VAR_RESTRICTED][language]
