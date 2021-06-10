@@ -375,6 +375,14 @@ SETTINGS = {
             #       "languageset": BeiderMorseLanguageset,
             #     },
             # },
+            "normalizer": {
+                    "case_insensitive_normalizer": {
+                        "type": "custom",
+                        "filter": [
+                            "lowercase"
+                        ]
+                    }
+                }
         },
     },
 }
@@ -654,6 +662,10 @@ GRAMMARS_TEMPLATE = {
                                 "language": {
                                     "type": "text",
                                     "analyzer": lambda lang: LanguageAnalyzer[lang],
+                                },
+                                "keyword": {
+                                    "type": "keyword",
+                                    "normalizer": "case_insensitive_normalizer",
                                 }
                             }
                         },

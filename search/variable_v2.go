@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 
 	log "github.com/Sirupsen/logrus"
@@ -113,7 +114,7 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 	}
 	variables[consts.VAR_HOLIDAYS] = holidayTranslations
 	// Generate source position variables
-	positionTranslations, err := GenerateSourcePositionVariables(db)
+	positionTranslations, err := GeneratePositionVariables(db)
 	if err != nil {
 		return nil, err
 	}
@@ -146,6 +147,36 @@ func LoadVariablesTranslationsV2(variablesDir string) (VariablesV2, error) {
 				finalPhrases = append(finalPhrases, uniquePhrase)
 			}
 			variables[consts.VAR_SOURCE][lang][sourceUID] = finalPhrases
+		}
+	}
+	// Load program name variables from DB
+	programNamesTranslationsFromDB, err := LoadProgramNameTranslationsFromDB(db)
+	if err != nil {
+		return nil, err
+	}
+	// Combine program name variables from DB with program name variables from file
+	if _, ok := variables[consts.VAR_PROGRAM]; !ok {
+		variables[consts.VAR_PROGRAM] = make(TranslationsV2)
+	}
+	for lang, translations := range programNamesTranslationsFromDB {
+		if _, ok := variables[consts.VAR_PROGRAM][lang]; !ok {
+			variables[consts.VAR_PROGRAM][lang] = make(map[string][]string)
+		}
+		for collectionUID, phrasesFromDB := range translations {
+			uniquePhrases := map[string]bool{}
+			for _, phrase := range phrasesFromDB {
+				uniquePhrases[phrase] = true
+			}
+			if phrasesFromFile, ok := variables[consts.VAR_PROGRAM][lang][collectionUID]; ok {
+				for _, phrase := range phrasesFromFile {
+					uniquePhrases[phrase] = true
+				}
+			}
+			finalPhrases := []string{}
+			for uniquePhrase := range uniquePhrases {
+				finalPhrases = append(finalPhrases, uniquePhrase)
+			}
+			variables[consts.VAR_PROGRAM][lang][collectionUID] = finalPhrases
 		}
 	}
 	return variables, nil
@@ -181,6 +212,41 @@ func LoadSourceNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 			translations[lang] = make(map[string][]string)
 		}
 		translations[lang][uid] = []string{phrase}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows.Err()")
+	}
+	return translations, nil
+}
+
+func LoadProgramNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
+	translations := make(TranslationsV2)
+
+	// Ignoring program names that identical to topic names
+	queryMask := `select cn.language, c.uid, cn.name
+	from collections c join collection_i18n cn on c.id=cn.collection_id
+	left join tag_i18n tn on cn.language = tn.language and cn.name like ('%%' || tn.label || '%%')
+	where tn.tag_id is null
+	and c.published = true and c.secure = 0 and c.type_id = %d`
+	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID)
+
+	rows, err := queries.Raw(db, query).Query()
+	if err != nil {
+		return nil, errors.Wrap(err, "Unable to retrieve program name translations from DB.")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var lang string
+		var collectionUid string
+		var phrase string
+		err := rows.Scan(&lang, &collectionUid, &phrase)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		if _, ok := translations[lang]; !ok {
+			translations[lang] = make(map[string][]string)
+		}
+		translations[lang][collectionUid] = []string{phrase}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, errors.Wrap(err, "rows.Err()")
@@ -264,9 +330,12 @@ func LoadVariableTranslationsFromFile(variableFile string, variableName string) 
 	return translations, nil
 }
 
-func GenerateSourcePositionVariables(db *sql.DB) (TranslationsV2, error) {
+func GeneratePositionVariables(db *sql.DB) (TranslationsV2, error) {
 	translations := make(TranslationsV2)
-	query := `select max(position) from sources`
+	query := `select max(p.max) from
+		(select max(position) from sources s
+		union
+		select max(position) from collections_content_units) as p`
 	var max int
 	err := queries.Raw(db, query).QueryRow().Scan(&max)
 	if err != nil {

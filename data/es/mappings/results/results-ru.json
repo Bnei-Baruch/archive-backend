@@ -137,6 +137,14 @@
                         ]
                     }
                 }, 
+                "normalizer": {
+                    "case_insensitive_normalizer": {
+                        "filter": [
+                            "lowercase"
+                        ], 
+                        "type": "custom"
+                    }
+                }, 
                 "analyzer": {
                     "russian_synonym": {
                         "filter": [

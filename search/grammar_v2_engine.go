@@ -155,7 +155,11 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	if query.Term != "" && len(query.ExactTerms) > 0 {
 		// Will never match any grammar for query having simple terms and exact terms.
 		// This is not acurate but an edge case. Need to better think of query representation.
-		log.Infof("Both term and exact terms are defined, should not trigger: [%s] [%s]", query.Term, strings.Join(query.ExactTerms, " - "))
+		log.Infof("Both term and exact terms are defined, should not trigger grammar: [%s] [%s]", query.Term, strings.Join(query.ExactTerms, " - "))
+		return singleHitIntents, filterIntents, nil
+	}
+	if e.isTermRestricted(query.Term, query.LanguageOrder) {
+		log.Infof("Term is restricted, should not trigger grammar: [%s]", query.Term)
 		return singleHitIntents, filterIntents, nil
 	}
 	searchLandingPagesOnly := false
@@ -229,6 +233,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	}
 
 	start := time.Now()
+	filterIntentsByLanguage := map[string][]Intent{}
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
@@ -240,20 +245,21 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 				return nil, nil, err
 			} else {
 				singleHitIntents = append(singleHitIntents, languageSingleHitIntents...)
-				if languageFilterIntents != nil && len(languageFilterIntents) > 0 {
-					intentToAdd := languageFilterIntents[0]
-					log.Infof("Optional intent: %+v.", intentToAdd)
-					if len(languageFilterIntents) > 1 {
-						for i := 1; i < len(languageFilterIntents); i++ {
-							log.Infof("Optional intent: %+v.", languageFilterIntents[i])
-							if languageFilterIntents[i].Value.(GrammarIntent).Score > intentToAdd.Value.(GrammarIntent).Score {
-								intentToAdd = languageFilterIntents[i]
-							}
-						}
-						log.Infof("Number of filter intents for language '%v' is %v but only 1 filter intent is currently supported. Intent with max score is selected (with special boost for 'by_content_type' intents): %+v.", language, len(languageFilterIntents), intentToAdd)
-					}
-					filterIntents = append(filterIntents, intentToAdd)
+				if _, ok := filterIntentsByLanguage[language]; !ok {
+					filterIntentsByLanguage[language] = []Intent{}
 				}
+				filterIntentsByLanguage[language] = append(filterIntentsByLanguage[language], languageFilterIntents...)
+			}
+		}
+	}
+	for _, intentsByLang := range filterIntentsByLanguage {
+		if len(intentsByLang) > 0 {
+			intentToAdd, err := e.selectFilterIntent(intentsByLang)
+			if err != nil {
+				return nil, nil, err
+			}
+			if intentToAdd != nil {
+				filterIntents = append(filterIntents, *intentToAdd)
 			}
 		}
 	}
@@ -271,6 +277,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 		if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
 			var contentType string
 			var text string
+			var programCollection string
 			sources := []string{}
 			for _, fv := range intentValue.FilterValues {
 				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
@@ -279,18 +286,21 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 					text = fv.Value
 				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
 					sources = append(sources, fv.Value)
+				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM] {
+					programCollection = fv.Value
 				}
 			}
-			if text != "" && (contentType != "" || len(sources) > 0) {
-				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Sources are '%+v'.", contentType, text, sources)
+			searchWithoutTerm := text == ""
+			if contentType != "" || programCollection != "" || len(sources) > 0 {
+				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Program collection is '%s', Sources are '%+v'.", contentType, text, programCollection, sources)
 				requests := []*elastic.SearchRequest{}
-				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 				if err != nil {
 					return nil, err
 				}
 				requests = append(requests, textValSearchRequests...)
-				if contentType != consts.VAR_CT_ARTICLES {
-					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				if !searchWithoutTerm && contentType != consts.VAR_CT_ARTICLES {
+					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 					if err != nil {
 						return nil, err
 					}
@@ -298,17 +308,26 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 				}
 				if len(requests) > 0 {
 					// All search requests here are for the same language
-					results, hitIdsMap, maxScore, err := e.filterSearch(requests)
+					var scoreIncrement *float64
+					if searchWithoutTerm {
+						incr := consts.SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS
+						scoreIncrement = &incr
+					}
+					results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement)
 					if err != nil {
 						return nil, err
 					}
-					resultsByLang[intent.Language] = FilteredSearchResult{
-						Results:     results,
-						Term:        text,
-						ContentType: contentType,
-						HitIdsMap:   hitIdsMap,
-						MaxScore:    maxScore,
+					resultByLang := FilteredSearchResult{
+						Results:                  results,
+						Term:                     text,
+						PreserveTermForHighlight: programCollection != "",
+						HitIdsMap:                hitIdsMap,
+						MaxScore:                 maxScore,
 					}
+					if programCollection != "" {
+						resultByLang.ProgramCollection = &programCollection
+					}
+					resultsByLang[intent.Language] = resultByLang
 					if len(results) > 0 {
 						// we assume that there is no need to make the search for other languages if a results found for one language
 						break
@@ -387,11 +406,17 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
 	minScoreByLandingPage := make(map[string]float64)
-	addPositionWithoutTerm := true
-	for filterKey := range query.Filters {
-		if _, ok := consts.AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS[filterKey]; !ok {
-			addPositionWithoutTerm = false
-			break
+	queryTermIsNumber, queryTermHasDigit := utils.HasNumeric(query.Term)
+	// In case our query is numeric only, we ignore intents of "program\source position without term" to avoid irrelavnt results.
+	// Also we support "program with position without term" intents only if we have a numeric chapter as part of the query.
+	addProgramPositionWithoutTerm := !queryTermIsNumber && queryTermHasDigit
+	addSourcePositionWithoutTerm := !queryTermIsNumber
+	if addSourcePositionWithoutTerm {
+		for filterKey := range query.Filters {
+			if _, ok := consts.AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS[filterKey]; !ok {
+				addSourcePositionWithoutTerm = false
+				break
+			}
 		}
 	}
 	for _, hit := range result.Hits.Hits {
@@ -411,17 +436,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			if !filterExist {
 				return nil, nil, errors.New(fmt.Sprintf("Filters not found for intent: [%s]", rule.Intent))
 			}
-			common := false
-			for filterName, values := range query.Filters {
-				sort.Strings(values)
-				if grammarValues, ok := filters[filterName]; ok {
-					sort.Strings(grammarValues)
-					if len(utils.IntersectSortedStringSlices(values, grammarValues)) > 0 {
-						common = true
-						break
-					}
-				}
-			}
+			common := hasCommonFilter(query.Filters, filters)
 			if !common {
 				// No matching filter found, should not trigger intent.
 				log.Infof("No common filters for intent [%s]: %+v vs %+v", rule.Intent, query.Filters, filters)
@@ -455,13 +470,9 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
 			if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
 				ctBoost := consts.CONTENT_TYPE_INTENTS_BOOST
-				runes := []rune(query.Term)
-				for _, c := range runes {
-					if c > '0' && c <= '9' {
-						// Disable 'by content type' priorty boost if the query contains a number
-						ctBoost = 1
-						break
-					}
+				if queryTermHasDigit {
+					// Disable 'by content type' priorty boost if the query contains a number
+					ctBoost = 1
 				}
 				filterIntents = append(filterIntents, Intent{
 					Type:     consts.GRAMMAR_TYPE_FILTER,
@@ -469,6 +480,63 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					Value: GrammarIntent{
 						FilterValues: e.VariableMapToFilterValues(vMap, language),
 						Score:        score * ctBoost,
+						Explanation:  hit.Explanation,
+					}})
+			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_PROGRAM {
+				filterIntents = append(filterIntents, Intent{
+					Type:     consts.GRAMMAR_TYPE_FILTER,
+					Language: language,
+					Value: GrammarIntent{
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score,
+						Explanation:  hit.Explanation,
+					}})
+			} else if rule.Intent == consts.GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM {
+				if !addProgramPositionWithoutTerm {
+					continue
+				}
+				log.Infof("GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM %+v", rule)
+				filterValues := e.VariableMapToFilterValues(vMap, language)
+				var programCollection string
+				var position string
+				for _, fv := range filterValues {
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM] {
+						programCollection = fv.Value
+					}
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_POSITION] {
+						position = fv.Value
+					}
+					if programCollection != "" && position != "" {
+						break
+					}
+				}
+				programUid := e.cache.SearchStats().GetProgramByCollectionAndPosition(programCollection, position)
+				if programUid == nil {
+					return nil, nil, errors.New(fmt.Sprintf("Relevant program content unit is not found by collection '%v' and position '%v'.", programCollection, position))
+				}
+				singleHit, err := e.contentUnitHitFromSql(*programUid, language)
+				if err != nil {
+					return nil, nil, err
+				}
+				var expl elastic.SearchExplanation
+				if hit.Explanation != nil {
+					expl = *hit.Explanation
+				}
+				singleProgramIntent := GrammarIntent{
+					Score:           score,
+					Explanation:     &expl,
+					SingleHit:       singleHit,
+					SingleHitMdbUid: programUid,
+				}
+				singleHitIntents = append(singleHitIntents, Intent{"", language, singleProgramIntent})
+				addProgramPositionWithoutTerm = false // We add results only one time for this rule type
+			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_PROGRAM_WITHOUT_TERM {
+				filterIntents = append(filterIntents, Intent{
+					Type:     consts.GRAMMAR_TYPE_FILTER_WITHOUT_TERM,
+					Language: language,
+					Value: GrammarIntent{
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score,
 						Explanation:  hit.Explanation,
 					}})
 			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_SOURCE {
@@ -481,7 +549,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						Explanation:  hit.Explanation,
 					}})
 			} else if rule.Intent == consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
-				if !addPositionWithoutTerm {
+				if !addSourcePositionWithoutTerm {
 					continue
 				}
 				log.Infof("GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM %+v", rule)
@@ -530,7 +598,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					return nil, nil, err
 				}
 				singleHitIntents = append(singleHitIntents, intents...)
-				addPositionWithoutTerm = false // We add results only one time for this rule type
+				addSourcePositionWithoutTerm = false // We add results only one time for this rule type
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {
@@ -727,6 +795,45 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *stri
 	return hit, &mdbUID, nil
 }
 
+func (e *ESEngine) contentUnitHitFromSql(uid string, language string) (*elastic.SearchHit, error) {
+	var title string
+	var properties json.RawMessage
+	var effectiveDate es.EffectiveDate
+
+	queryMask := `select cu.properties, cun.name
+		from content_units cu join content_unit_i18n cun on cu.id = cun.content_unit_id
+		where cu.uid = '%s' and cun.language = '%s'`
+	query := fmt.Sprintf(queryMask, uid, language)
+	err := e.mdb.QueryRow(query).Scan(&properties, &title)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(properties, &effectiveDate)
+	if err != nil {
+		return nil, err
+	}
+
+	result := es.Result{
+		EffectiveDate: effectiveDate.EffectiveDate,
+		MDB_UID:       uid,
+		ResultType:    consts.ES_RESULT_TYPE_UNITS,
+		Title:         title,
+	}
+
+	resultJson, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+
+	hit := &elastic.SearchHit{
+		Source: (*json.RawMessage)(&resultJson),
+		Type:   "result",
+		Index:  consts.GRAMMAR_GENERATED_CU_HIT,
+	}
+	return hit, nil
+}
+
 func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position *string, leafPrefixType *consts.PositionIndexType) (string, error) {
 	queryMask := `with recursive sourcesPath as (
 		select s.id, s.uid, s.parent_id, sn.name from source_i18n sn
@@ -892,7 +999,7 @@ func retrieveTextVarValues(str string) []string {
 
 // Results search according to grammar based filter (currently by content types and free text).
 // Return: Results, Unique list of hit id's as a map, Max score
-func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
+func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncrement *float64) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
 	results := []*elastic.SearchResult{}
 	hitIdsMap := map[string]bool{}
 	var maxScore *float64
@@ -912,12 +1019,22 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest) ([]*elastic.S
 			return nil, nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
 		}
 		if haveHits(currentResults) {
+			var currentMaxScore *float64
+			for _, hit := range currentResults.Hits.Hits {
+				hitIdsMap[hit.Id] = true
+				if hit.Score != nil {
+					if scoreIncrement != nil {
+						*hit.Score += *scoreIncrement
+					}
+					if currentMaxScore == nil || *hit.Score > *currentMaxScore {
+						currentMaxScore = hit.Score
+					}
+				}
+			}
+			currentResults.Hits.MaxScore = currentMaxScore
 			if currentResults.Hits.MaxScore != nil &&
 				(maxScore == nil || *currentResults.Hits.MaxScore > *maxScore) {
 				maxScore = currentResults.Hits.MaxScore
-			}
-			for _, hit := range currentResults.Hits.Hits {
-				hitIdsMap[hit.Id] = true
 			}
 			results = append(results, currentResults)
 		}
@@ -947,4 +1064,109 @@ func (e *ESEngine) sourceUidByTerm(term string, languages []string) (*string, st
 		}
 	}
 	return nil, "", false
+}
+
+func (e *ESEngine) isTermRestricted(term string, languages []string) bool {
+	// Here we are checking if the given term exists in the list of terms that are restricted from being processed in the grammar engine.
+	// It might be better to tokenize this list of terms and make the check using Elastic. However this could make the check less accurate and restrict terms that should not be restricted.
+	// The option of tokenization was not tested and we should consider testing it.
+	termLC := strings.ToLower(term)
+	for _, language := range languages {
+		varsByLang := e.variables[consts.VAR_RESTRICTED][language]
+		for _, v := range varsByLang {
+			for _, resTerm := range v {
+				if termLC == strings.ToLower(resTerm) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (e *ESEngine) selectFilterIntent(intents []Intent) (*Intent, error) {
+	var selected *Intent
+	// Intent with max score of filter intents with search term.
+	var maxWithTerm *Intent
+	// Intent with max score of filter intents without search term.
+	var maxWithoutTerm *Intent
+	grammarIntents, nonGrammarIntents := utils.Filter(utils.Is(intents), func(v interface{}) bool {
+		_, ok := v.(Intent).Value.(GrammarIntent)
+		return ok
+	})
+	if len(nonGrammarIntents) > 0 {
+		return nil, errors.New("Non grammar intents sent to selectFilterIntent.")
+	}
+	// Print optional intents for debug info
+	log.Info("Optional Intents:")
+	for i, intentIs := range grammarIntents {
+		intent := intentIs.(Intent)
+		log.Infof("#%d\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Value.(GrammarIntent).FilterValues)
+	}
+	intentsWithoutTerm, intentsWithTerm := utils.Filter(grammarIntents, func(v interface{}) bool {
+		return v.(Intent).Type == consts.GRAMMAR_TYPE_FILTER_WITHOUT_TERM
+	})
+	mapByProgram := utils.GroupBy(intentsWithoutTerm, func(v interface{}) interface{} {
+		uid := getFilterValue(v.(Intent).Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM])
+		if uid == nil {
+			return "no_program"
+		}
+		return *uid
+	})
+	if len(mapByProgram) > 1 {
+		log.Infof("More than one program collection found in intents without term. Ignoring intents without term.")
+	} else {
+		maxWithoutTermIs := utils.MaxByValue(intentsWithoutTerm, func(v interface{}) float64 {
+			return v.(Intent).Value.(GrammarIntent).Score
+		})
+		if maxWithoutTermIs != nil {
+			maxWithoutTermT := interface{}(maxWithoutTermIs).(Intent)
+			maxWithoutTerm = &maxWithoutTermT
+		}
+	}
+	maxWithTermIs := utils.MaxByValue(intentsWithTerm, func(v interface{}) float64 {
+		return v.(Intent).Value.(GrammarIntent).Score
+	})
+	if maxWithTermIs != nil {
+		maxWithTermT := interface{}(maxWithTermIs).(Intent)
+		maxWithTerm = &maxWithTermT
+	}
+	if maxWithTerm != nil || maxWithoutTerm != nil {
+		if maxWithTerm == nil {
+			selected = maxWithoutTerm
+		} else if maxWithoutTerm == nil {
+			selected = maxWithTerm
+		} else {
+			intentWithTermCT := getFilterValue(maxWithTerm.Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE])
+			intentWithoutTermCT := getFilterValue(maxWithoutTerm.Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE])
+			if intentWithTermCT != nil && intentWithoutTermCT != nil {
+				if *intentWithTermCT == *intentWithoutTermCT {
+					// If for both intent types (with term and without term) we have the same content type value,
+					// we select the intent without term.
+					// E.g. query "programs new life" has "by content type" intent and "by program without term" intent, we select "by program without term".
+					selected = maxWithoutTerm
+				} else {
+					selected = maxWithTerm
+				}
+			} else {
+				selected = maxWithTerm
+			}
+		}
+		log.Infof("SELECTED FILTER INTENT:\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", selected.Type, selected.Value.(GrammarIntent).Score, selected.Value.(GrammarIntent).FilterValues)
+	}
+	if selected == nil {
+		log.Infof("No intent to select.")
+	}
+	return selected, nil
+}
+
+func getFilterValue(filterValues []FilterValue, filterName string) *string {
+	filter := utils.First(utils.Is(filterValues), func(v interface{}) bool {
+		return v.(FilterValue).Name == filterName
+	})
+	if filter == nil {
+		return nil
+	}
+	val := filter.(FilterValue).Value
+	return &val
 }

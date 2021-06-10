@@ -14,6 +14,10 @@
                                 "language": {
                                     "type": "text", 
                                     "analyzer": "standard"
+                                }, 
+                                "keyword": {
+                                    "normalizer": "case_insensitive_normalizer", 
+                                    "type": "keyword"
                                 }
                             }, 
                             "type": "text", 
@@ -80,6 +84,14 @@
                             "\\u201D=>", 
                             "\\u05F4=>"
                         ]
+                    }
+                }, 
+                "normalizer": {
+                    "case_insensitive_normalizer": {
+                        "filter": [
+                            "lowercase"
+                        ], 
+                        "type": "custom"
                     }
                 }
             }, 
