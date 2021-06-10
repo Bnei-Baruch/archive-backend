@@ -252,8 +252,8 @@ func chooseRule(query *Query, rules []string) string {
 
 func hasCommonFilter(a map[string][]string, b map[string][]string) bool {
 	for filterName, values := range a {
-		sort.Strings(values)
 		if grammarValues, ok := b[filterName]; ok {
+			sort.Strings(values)
 			sort.Strings(grammarValues)
 			if len(utils.IntersectSortedStringSlices(values, grammarValues)) > 0 {
 				return true
