@@ -1152,6 +1152,12 @@ func (e *ESEngine) selectFilterIntents(intents []Intent) ([]Intent, error) {
 			log.Infof("#%d\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Value.(GrammarIntent).FilterValues)
 		}
 	}
+	if len(selected) > consts.MAX_GRAMMAR_INTENTS_FOR_FILTER_SEARCH {
+		sort.SliceStable(selected, func(i, j int) bool {
+			return selected[i].Value.(GrammarIntent).Score > selected[j].Value.(GrammarIntent).Score
+		})
+		selected = selected[:consts.MAX_GRAMMAR_INTENTS_FOR_FILTER_SEARCH]
+	}
 	return selected, nil
 }
 

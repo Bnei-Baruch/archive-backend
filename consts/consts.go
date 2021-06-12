@@ -338,6 +338,7 @@ const (
 	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM = 200
 	CONTENT_TYPE_INTENTS_BOOST                      = 8.0 // For priority between several filter intent types
 	SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS = 200.0
+	MAX_GRAMMAR_INTENTS_FOR_FILTER_SEARCH           = 4
 )
 
 const (
