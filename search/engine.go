@@ -611,11 +611,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		} else {
 			grammarsSingleHitIntentsChannel <- singleHitIntents
 			grammarsFilterIntentsChannel <- filterIntents
-			filtersCopy := map[string][]string{}
-			for k, v := range query.Filters {
-				filtersCopy[k] = v
-			}
-			if filtered, err := e.SearchByFilterIntents(filterIntents, filtersCopy, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
+			if filtered, err := e.SearchByFilterIntents(filterIntents, query.Filters, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
 				log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
 				grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
 			} else {
@@ -841,7 +837,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			if _, ok := resultsByLang[lang]; !ok {
 				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 			}
-			for _,fr := range filtered {
+			for _, fr := range filtered {
 				if fr.ProgramCollection != nil {
 					for _, result := range fr.Results {
 						for _, hit := range result.Hits.Hits {
@@ -920,7 +916,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		//  since we we are not checking identification in all results but only in the results we received according to page filter.
 		// Ideal solution for these issues is to handle all score calculations for both types within a single elastic query.
 		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
-			for _,fr := range filtered {
+			for _, fr := range filtered {
 				for _, result := range fr.Results {
 					var maxScore float64
 					boost := ((*maxRegularScore * 0.9) + 10) / *fr.MaxScore
@@ -961,7 +957,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							}
 						}
 					}
-					for _,fr := range filtered{
+					for _, fr := range filtered {
 						if _, hasId := fr.HitIdsMap[hit.Id]; hasId {
 							log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
 							if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
@@ -976,7 +972,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				}
 			}
 		}
-		for _,fr := range filtered {
+		for _, fr := range filtered {
 			resultsByLang[lang] = append(resultsByLang[lang], fr.Results...)
 		}
 	}
@@ -1048,7 +1044,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			term := query.Term
 			for _, lang := range highlightsLangs {
 				if filtered, ok := filteredByLang[lang]; ok {
-					for _,fr := range filtered {
+					for _, fr := range filtered {
 						if _, hasId := fr.HitIdsMap[h.Id]; hasId {
 							// set highlight search term as the grammar filter search term
 							term = fr.Term

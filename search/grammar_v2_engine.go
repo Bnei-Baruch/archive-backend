@@ -311,7 +311,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 						incr := consts.SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS
 						scoreIncrement = &incr
 					}
-					results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement)
+					results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement) // TBD do it inside goroutene
 					if err != nil {
 						return nil, err
 					}
@@ -1002,7 +1002,8 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncremen
 	multiSearchFilteredService.Add(requests...)
 	beforeFilterSearch := time.Now()
 	mr, err := multiSearchFilteredService.Do(context.TODO())
-	e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
+	e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO) // TBC differentiate calls to filterSearch under single request
+
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
 	}
@@ -1167,7 +1168,7 @@ func getFilterValue(filterValues []FilterValue, filterName string) *string {
 
 func interfaceSliceToIntentSlice(slice []interface{}) []Intent {
 	ret := []Intent{}
-	for _,e := range slice {
+	for _, e := range slice {
 		ret = append(ret, e.(Intent))
 	}
 	return ret
