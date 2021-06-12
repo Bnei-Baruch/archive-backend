@@ -269,10 +269,10 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 }
 
 // Search according to grammar based filter.
-func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[string][]string, originalSearchTerm string, from int, size int, sortBy string, resultTypes []string, preference string, deb bool) (map[string]FilteredSearchResult, error) {
-	resultsByLang := map[string]FilteredSearchResult{}
+func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[string][]string, originalSearchTerm string, from int, size int, sortBy string, resultTypes []string, preference string, deb bool) (map[string][]FilteredSearchResult, error) {
+	resultsByLang := map[string][]FilteredSearchResult{}
 	for _, intent := range filterIntents {
-		if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
+		if intentValue, ok := intent.Value.(GrammarIntent); ok {
 			var contentType string
 			var text string
 			var programCollection string
@@ -325,11 +325,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 					if programCollection != "" {
 						resultByLang.ProgramCollection = &programCollection
 					}
-					resultsByLang[intent.Language] = resultByLang
-					if len(results) > 0 {
-						// we assume that there is no need to make the search for other languages if a results found for one language
-						break
-					}
+					resultsByLang[intent.Language] = append(resultsByLang[intent.Language], resultByLang)
 				}
 			}
 		} else {
