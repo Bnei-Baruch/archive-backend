@@ -315,17 +315,19 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 					if err != nil {
 						return nil, err
 					}
-					resultByLang := FilteredSearchResult{
-						Results:                  results,
-						Term:                     text,
-						PreserveTermForHighlight: programCollection != "",
-						HitIdsMap:                hitIdsMap,
-						MaxScore:                 maxScore,
+					if maxScore != nil && *maxScore > 0 {
+						resultByLang := FilteredSearchResult{
+							Results:                  results,
+							Term:                     text,
+							PreserveTermForHighlight: programCollection != "",
+							HitIdsMap:                hitIdsMap,
+							MaxScore:                 maxScore,
+						}
+						if programCollection != "" {
+							resultByLang.ProgramCollection = &programCollection
+						}
+						resultsByLang[intent.Language] = append(resultsByLang[intent.Language], resultByLang)
 					}
-					if programCollection != "" {
-						resultByLang.ProgramCollection = &programCollection
-					}
-					resultsByLang[intent.Language] = append(resultsByLang[intent.Language], resultByLang)
 				}
 			}
 		} else {
