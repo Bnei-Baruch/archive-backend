@@ -305,29 +305,38 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 					requests = append(requests, fullTermSearchRequests...)
 				}
 				if len(requests) > 0 {
-					// All search requests here are for the same language
-					var scoreIncrement *float64
-					if searchWithoutTerm {
-						incr := consts.SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS
-						scoreIncrement = &incr
-					}
-					results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement) // TBD do it inside goroutene
-					if err != nil {
-						return nil, err
-					}
-					if maxScore != nil && *maxScore > 0 {
-						resultByLang := FilteredSearchResult{
-							Results:                  results,
-							Term:                     text,
-							PreserveTermForHighlight: programCollection != "",
-							HitIdsMap:                hitIdsMap,
-							MaxScore:                 maxScore,
+
+					go func() {
+						defer func() {
+							if err := recover(); err != nil {
+								log.Errorf("SearchByFilterIntents panic: %+v", err)
+							}
+						}()
+						// All search requests here are for the same language
+						var scoreIncrement *float64
+						if searchWithoutTerm {
+							incr := consts.SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS
+							scoreIncrement = &incr
 						}
-						if programCollection != "" {
-							resultByLang.ProgramCollection = &programCollection
+						results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement)
+						if err != nil {
+							log.Errorf("FilterSearch error: %+v", err)
+							return
 						}
-						resultsByLang[intent.Language] = append(resultsByLang[intent.Language], resultByLang)
-					}
+						if maxScore != nil && *maxScore > 0 {
+							resultByLang := FilteredSearchResult{
+								Results:                  results,
+								Term:                     text,
+								PreserveTermForHighlight: programCollection != "",
+								HitIdsMap:                hitIdsMap,
+								MaxScore:                 maxScore,
+							}
+							if programCollection != "" {
+								resultByLang.ProgramCollection = &programCollection
+							}
+							resultsByLang[intent.Language] = append(resultsByLang[intent.Language], resultByLang)
+						}
+					}()
 				}
 			}
 		} else {
