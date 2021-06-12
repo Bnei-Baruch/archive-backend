@@ -254,13 +254,11 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	}
 	for _, intentsByLang := range filterIntentsByLanguage {
 		if len(intentsByLang) > 0 {
-			intentToAdd, err := e.selectFilterIntent(intentsByLang)
+			intentsToAdd, err := e.selectFilterIntents(intentsByLang)
 			if err != nil {
 				return nil, nil, err
 			}
-			if intentToAdd != nil {
-				filterIntents = append(filterIntents, *intentToAdd)
-			}
+			filterIntents = append(filterIntents, intentsToAdd...)
 		}
 	}
 	elapsed := time.Since(start)
@@ -469,7 +467,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			// For now solve by normalizing very small scores.
 			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
 			if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
-				ctBoost := consts.CONTENT_TYPE_INTENTS_BOOST
+				ctBoost := consts.CONTENT_TYPE_INTENTS_BOOST // Since now we handle multiple filter intents, consider to remove this boost
 				if queryTermHasDigit {
 					// Disable 'by content type' priorty boost if the query contains a number
 					ctBoost = 1
@@ -997,7 +995,7 @@ func retrieveTextVarValues(str string) []string {
 	return textVarValues
 }
 
-// Results search according to grammar based filter (currently by content types and free text).
+// Results search according to grammar based filter.
 // Return: Results, Unique list of hit id's as a map, Max score
 func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncrement *float64) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
 	results := []*elastic.SearchResult{}
@@ -1084,8 +1082,8 @@ func (e *ESEngine) isTermRestricted(term string, languages []string) bool {
 	return false
 }
 
-func (e *ESEngine) selectFilterIntent(intents []Intent) (*Intent, error) {
-	var selected *Intent
+func (e *ESEngine) selectFilterIntents(intents []Intent) ([]Intent, error) {
+	var selected []Intent
 	// Intent with max score of filter intents with search term.
 	var maxWithTerm *Intent
 	// Intent with max score of filter intents without search term.
@@ -1133,9 +1131,9 @@ func (e *ESEngine) selectFilterIntent(intents []Intent) (*Intent, error) {
 	}
 	if maxWithTerm != nil || maxWithoutTerm != nil {
 		if maxWithTerm == nil {
-			selected = maxWithoutTerm
+			selected = []Intent{*maxWithoutTerm}
 		} else if maxWithoutTerm == nil {
-			selected = maxWithTerm
+			selected = interfaceSliceToIntentSlice(intentsWithTerm)
 		} else {
 			intentWithTermCT := getFilterValue(maxWithTerm.Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE])
 			intentWithoutTermCT := getFilterValue(maxWithoutTerm.Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE])
@@ -1144,18 +1142,18 @@ func (e *ESEngine) selectFilterIntent(intents []Intent) (*Intent, error) {
 					// If for both intent types (with term and without term) we have the same content type value,
 					// we select the intent without term.
 					// E.g. query "programs new life" has "by content type" intent and "by program without term" intent, we select "by program without term".
-					selected = maxWithoutTerm
+					selected = []Intent{*maxWithoutTerm}
 				} else {
-					selected = maxWithTerm
+					selected = interfaceSliceToIntentSlice(intentsWithTerm)
 				}
 			} else {
-				selected = maxWithTerm
+				selected = interfaceSliceToIntentSlice(intentsWithTerm)
 			}
 		}
-		log.Infof("SELECTED FILTER INTENT:\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", selected.Type, selected.Value.(GrammarIntent).Score, selected.Value.(GrammarIntent).FilterValues)
-	}
-	if selected == nil {
-		log.Infof("No intent to select.")
+		log.Info("SELECTED Intents:")
+		for i, intent := range selected {
+			log.Infof("#%d\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Value.(GrammarIntent).FilterValues)
+		}
 	}
 	return selected, nil
 }
@@ -1169,4 +1167,12 @@ func getFilterValue(filterValues []FilterValue, filterName string) *string {
 	}
 	val := filter.(FilterValue).Value
 	return &val
+}
+
+func interfaceSliceToIntentSlice(slice []interface{}) []Intent {
+	ret := []Intent{}
+	for _,e := range slice {
+		ret = append(ret, e.(Intent))
+	}
+	return ret
 }
