@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -271,6 +272,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 // Search according to grammar based filter.
 func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[string][]string, originalSearchTerm string, from int, size int, sortBy string, resultTypes []string, preference string, deb bool) (map[string][]FilteredSearchResult, error) {
 	resultsByLang := map[string][]FilteredSearchResult{}
+	var wg sync.WaitGroup
 	for _, intent := range filterIntents {
 		if intentValue, ok := intent.Value.(GrammarIntent); ok {
 			var contentType string
@@ -305,12 +307,13 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 					requests = append(requests, fullTermSearchRequests...)
 				}
 				if len(requests) > 0 {
-
+					wg.Add(1)
 					go func() {
 						defer func() {
 							if err := recover(); err != nil {
 								log.Errorf("SearchByFilterIntents panic: %+v", err)
 							}
+							wg.Done()
 						}()
 						// All search requests here are for the same language
 						var scoreIncrement *float64
@@ -343,6 +346,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 			return nil, errors.Errorf("FilterSearch error. Intent is not GrammarIntent. Intent: %+v", intent)
 		}
 	}
+	wg.Wait()
 	return resultsByLang, nil
 }
 
