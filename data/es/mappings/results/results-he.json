@@ -134,6 +134,14 @@
                         ]
                     }
                 }, 
+                "normalizer": {
+                    "case_insensitive_normalizer": {
+                        "filter": [
+                            "lowercase"
+                        ], 
+                        "type": "custom"
+                    }
+                }, 
                 "analyzer": {
                     "hebrew_synonym": {
                         "filter": [

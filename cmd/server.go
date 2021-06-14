@@ -40,7 +40,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 
 	// cors
 	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowHeaders = append(corsConfig.AllowHeaders, "Authorization")
+	corsConfig.AllowHeaders = append(corsConfig.AllowHeaders, "Authorization", "X-Request-ID")
 	corsConfig.AllowAllOrigins = true
 
 	// Setup gin

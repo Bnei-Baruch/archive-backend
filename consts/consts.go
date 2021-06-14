@@ -49,6 +49,7 @@ const (
 	CT_VIDEO_PROGRAM_CHAPTER = "VIDEO_PROGRAM_CHAPTER"
 	CT_VIRTUAL_LESSON        = "VIRTUAL_LESSON"
 	CT_WOMEN_LESSON          = "WOMEN_LESSON"
+	CT_SOURCE                = "SOURCE"
 
 	// Content types for additional Elastic results
 	SCT_BLOG_POST = "R_BLOG_POST"
@@ -335,7 +336,8 @@ const (
 	// Consider making a carusele and not limiting.
 	MAX_MATCHES_PER_GRAMMAR_INTENT                  = 3
 	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM = 200
-	CONTENT_TYPE_INTENTS_BOOST                      = 4.0 // For priority between several filter intent types
+	CONTENT_TYPE_INTENTS_BOOST                      = 8.0 // For priority between several filter intent types
+	SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS = 200.0
 )
 
 const (
@@ -361,6 +363,7 @@ const (
 	FILTER_COLLECTIONS_CONTENT_TYPES = "collections_content_types"
 	FILTER_SECTION_SOURCES           = "filter_section_sources"
 	FILTER_LANGUAGE                  = "media_language"
+	FILTER_COLLECTION                = "collection"
 )
 
 // Use to identify and map request filters
@@ -376,6 +379,7 @@ var FILTERS = map[string]string{
 	FILTER_COLLECTIONS_CONTENT_TYPES: "collections_content_type",
 	FILTER_SECTION_SOURCES:           "filter_section_sources",
 	FILTER_LANGUAGE:                  "media_language",
+	FILTER_COLLECTION:                "collection", //  Internally used by grammar. Not available in frontend.
 }
 
 // ElasticSearch 'es'
@@ -525,15 +529,20 @@ var INTENT_HIT_TYPE_BY_CT = map[string]string{
 const (
 	GRAMMAR_INDEX = "grammar"
 
-	GRAMMAR_TYPE_FILTER         = "filter"
-	GRAMMAR_TYPE_LANDING_PAGE   = "landing-page"
-	GRAMMAR_TYPE_CLASSIFICATION = "classification"
+	GRAMMAR_TYPE_FILTER              = "filter"
+	GRAMMAR_TYPE_FILTER_WITHOUT_TERM = "filter_without_term"
+	GRAMMAR_TYPE_LANDING_PAGE        = "landing-page"
+	GRAMMAR_TYPE_CLASSIFICATION      = "classification"
 
-	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE       = "by_content_type"
-	GRAMMAR_INTENT_FILTER_BY_SOURCE             = "by_source"
-	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM = "source_position_without_term"
+	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE         = "by_content_type"
+	GRAMMAR_INTENT_FILTER_BY_SOURCE               = "by_source"
+	GRAMMAR_INTENT_FILTER_BY_PROGRAM              = "by_program"
+	GRAMMAR_INTENT_FILTER_BY_PROGRAM_WITHOUT_TERM = "by_program_without_term"
+	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM   = "source_position_without_term"
+	GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM  = "program_position_without_term"
 
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
+	GRAMMAR_GENERATED_CU_HIT     = "grammar_generated_content_unit_hit"
 	GRAMMAR_GENERATED_SOURCE_HIT = "grammar_generated_source_hit"
 
 	GRAMMAR_INTENT_LANDING_PAGE_LESSONS            = "lessons"
@@ -642,6 +651,11 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON, CT_VIDEO_PROGRAM},
 	},
 
+	GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIDEO_PROGRAM_CHAPTER},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIDEO_PROGRAM},
+	},
+
 	// Filters
 
 	GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE: nil,
@@ -652,6 +666,16 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 			CT_WOMEN_LESSON, CT_EVENT_PART, CT_FRIENDS_GATHERING, CT_MEAL},
 		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON, CT_VIDEO_PROGRAM, CT_VIRTUAL_LESSONS, CT_LECTURE_SERIES, CT_LECTURE_SERIES,
 			CT_CONGRESS, CT_HOLIDAY, CT_UNITY_DAY, CT_FRIENDS_GATHERINGS, CT_MEALS},
+	},
+
+	GRAMMAR_INTENT_FILTER_BY_PROGRAM: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIDEO_PROGRAM_CHAPTER},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIDEO_PROGRAM},
+	},
+
+	GRAMMAR_INTENT_FILTER_BY_PROGRAM_WITHOUT_TERM: map[string][]string{
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIDEO_PROGRAM_CHAPTER},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIDEO_PROGRAM},
 	},
 }
 
@@ -666,7 +690,9 @@ const (
 	VAR_CONTENT_TYPE        = "$ContentType"
 	VAR_SOURCE              = "$Source"
 	VAR_POSITION            = "$Position"
-	VAR_DIVISION_TYPE       = "$DivType"
+	VAR_DIVISION_TYPE       = "$DivisionType"
+	VAR_PROGRAM             = "$Program"
+	VAR_RESTRICTED          = "$Restricted" // Search terms that privent triggering grammar engine.
 
 	// $ContentType variable values
 
@@ -751,6 +777,7 @@ var VARIABLE_TO_FILTER = map[string]string{
 	VAR_CONTENT_TYPE:        "content_type",
 	VAR_SOURCE:              "source",
 	VAR_POSITION:            "position",
+	VAR_PROGRAM:             "program",
 }
 
 // Latency log
@@ -783,6 +810,23 @@ var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{
 	LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO,
 	LAT_DOSEARCH_GRAMMARS_MULTISEARCHFILTERDO,
 }
+
+const (
+	PROGRAM_COLLECTION_HAPITARON            = "MvD8Dk2S"
+	PROGRAM_COLLECTION_NEW_LIFE             = "zf4lLwyI"
+	PROGRAM_COLLECTION_WRITERS_MEETING      = "CwdCR0xR"
+	PROGRAM_COLLECTION_EL_MUNDO             = "t9oGIcN5"
+	PROGRAM_COLLECTION_NASHIM_BEOLAM_HADASH = "2v7UzleG"
+	PROGRAM_COLLECTION_GLOBAL_PERSPECTIVES  = "n0xqPUd0"
+	PROGRAM_COLLECTION_NEWS_IN_RUSSIAN      = "SmssHWWs"
+
+	ARTICLE_COLLECTION_NEW_LIFE             = "suS7S4KN"
+	ARTICLE_COLLECTION_WRITERS_MEETING      = "dHLMoKlp"
+	ARTICLE_COLLECTION_EL_MUNDO             = "QjclHot5"
+	ARTICLE_COLLECTION_NASHIM_BEOLAM_HADASH = "Rqd7RNhm"
+	ARTICLE_COLLECTION_GLOBAL_PERSPECTIVES  = "1UDYTmy3"
+	ARTICLE_COLLECTION_NEWS_IN_RUSSIAN      = "xW7rPwDd"
+)
 
 const (
 	SRC_SHAMATI                               = "qMUUn22b"
@@ -836,6 +880,36 @@ var ES_GRAMMAR_DIVT_TYPE_TO_SOURCE_TYPES = map[string][]int64{
 	VAR_DIV_NUMBER:  []int64{SRC_TYPE_CHAPTER, SRC_TYPE_ARTICLE, SRC_TYPE_LETTER},
 }
 
+var ES_GRAMMAR_PROGRAM_SUPPORTED_DIV_TYPES = map[string]bool{
+	VAR_DIV_CHAPTER: true,
+	VAR_DIV_NUMBER:  true,
+}
+
+// Note: Suggest is not indexed anyway for rules with "free text" variables.
+var ES_SUGGEST_SUPPORTED_GRAMMAR_RULES = map[string]bool{
+	GRAMMAR_INTENT_LANDING_PAGE_LESSONS:            true,
+	GRAMMAR_INTENT_LANDING_PAGE_VIRTUAL_LESSONS:    true,
+	GRAMMAR_INTENT_LANDING_PAGE_LECTURES:           true,
+	GRAMMAR_INTENT_LANDING_PAGE_WOMEN_LESSONS:      true,
+	GRAMMAR_INTENT_LANDING_PAGE_RABASH_LESSONS:     true,
+	GRAMMAR_INTENT_LANDING_PAGE_LESSON_SERIES:      true,
+	GRAMMAR_INTENT_LANDING_PAGE_PRORGRAMS:          true,
+	GRAMMAR_INTENT_LANDING_PAGE_CLIPS:              true,
+	GRAMMAR_INTENT_LANDING_PAGE_LIBRARY:            true,
+	GRAMMAR_INTENT_LANDING_PAGE_GROUP_ARTICLES:     true,
+	GRAMMAR_INTENT_LANDING_PAGE_CONVENTIONS:        true,
+	GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS:           true,
+	GRAMMAR_INTENT_LANDING_PAGE_UNITY_DAYS:         true,
+	GRAMMAR_INTENT_LANDING_PAGE_FRIENDS_GATHERINGS: true,
+	GRAMMAR_INTENT_LANDING_PAGE_MEALS:              true,
+	GRAMMAR_INTENT_LANDING_PAGE_TOPICS:             true,
+	GRAMMAR_INTENT_LANDING_PAGE_BLOG:               true,
+	GRAMMAR_INTENT_LANDING_PAGE_TWITTER:            true,
+	GRAMMAR_INTENT_LANDING_PAGE_ARTICLES:           true,
+	GRAMMAR_INTENT_LANDING_PAGE_DOWNLOADS:          true,
+	GRAMMAR_INTENT_LANDING_PAGE_HELP:               true,
+}
+
 var NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION = []string{
 	SRC_LETTERS_RABASH, SRC_ARTICLES_RABASH, SRC_ARTICLES_BAAL_SULAM, // Children 'position' value of these sources are not according to their actual chapter
 }
@@ -844,4 +918,13 @@ var NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION = []string{
 // Also we avoid adding names of article summaries and campus material to avoid confusion with the original sources.
 var SOURCE_PARENTS_NOT_TO_INCLUDE_IN_VARIABLE_VALUES = []string{
 	SRC_RABASH_ASSORTED_NOTES, SRC_BAAL_SULAM_ARTICLES_LETTERS_SUMMARIES, SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU, SRC_CONNECTING_TO_THE_SOURCE,
+}
+
+var ARTICLE_COLLECTION_TO_PROGRAM_COLLECTION = map[string]string{
+	ARTICLE_COLLECTION_NEW_LIFE:             PROGRAM_COLLECTION_NEW_LIFE,
+	ARTICLE_COLLECTION_WRITERS_MEETING:      PROGRAM_COLLECTION_WRITERS_MEETING,
+	ARTICLE_COLLECTION_EL_MUNDO:             PROGRAM_COLLECTION_EL_MUNDO,
+	ARTICLE_COLLECTION_NASHIM_BEOLAM_HADASH: PROGRAM_COLLECTION_NASHIM_BEOLAM_HADASH,
+	ARTICLE_COLLECTION_GLOBAL_PERSPECTIVES:  PROGRAM_COLLECTION_GLOBAL_PERSPECTIVES,
+	ARTICLE_COLLECTION_NEWS_IN_RUSSIAN:      PROGRAM_COLLECTION_NEWS_IN_RUSSIAN,
 }

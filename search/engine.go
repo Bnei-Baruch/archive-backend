@@ -51,11 +51,12 @@ type ClassificationIntent struct {
 }
 
 type FilteredSearchResult struct {
-	Term        string
-	ContentType string
-	HitIdsMap   map[string]bool
-	Results     []*elastic.SearchResult
-	MaxScore    *float64
+	Term                     string
+	PreserveTermForHighlight bool //Use the term as highlight term even if we have same hit result from regular search
+	HitIdsMap                map[string]bool
+	Results                  []*elastic.SearchResult
+	MaxScore                 *float64
+	ProgramCollection        *string
 }
 
 type TimeLogMap struct {
@@ -495,8 +496,13 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 		sort.Stable(bySourceFirst(unique))
 	}
 
-	// Filter by relevant page.
-	unique = unique[from:utils.Min(from+size, len(unique))]
+	if from >= len(unique) {
+		// Edge case when we cannot calculate totalHits correctly due to many duplications of grammar and regular results (that we filter out only when loading a specific page).
+		unique = []*elastic.SearchHit{}
+	} else {
+		// Filter by relevant page.
+		unique = unique[from:utils.Min(from+size, len(unique))]
+	}
 
 	// Take arbitrary result to use as base and set it's hits.
 	// TODO: Rewrite this to be cleaner.
@@ -546,7 +552,7 @@ func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string) []*
 					unique = append(unique, hit)
 				}
 			} else {
-				log.Warnf("Unable to unmarshal source for hit ''%s.", hit.Uid)
+				log.Warnf("Unable to unmarshal source for hit ''%s.", hit.Id)
 				unique = append(unique, hit)
 			}
 		} else {
@@ -698,7 +704,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 		}
 	}
-
 	multiSearchService := e.esc.MultiSearch()
 	requests, err := NewResultsSearchRequests(
 		SearchRequestOptions{
@@ -742,12 +747,68 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// Responses are ordered by language by index, i.e., for languages [bg, ru, en].
 	// We want the first matching language that has at least any result.
 	var maxRegularScore *float64 // max score for regular result - not intent, grammar or tweet
+	programsToReplaceWithGrammarResults := []struct {
+		hitId        string
+		score        float64
+		grammarHitId *string
+	}{}
 	for i, currentResults := range mr.Responses {
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
 			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
 		if haveHits(currentResults) {
+
+			if len(filterIntents) > 0 {
+				var programCollectionUid *string
+				for _, fi := range filterIntents {
+					if intentValue, ok := fi.Value.(GrammarIntent); ok {
+						freeText := getFilterValue(intentValue.FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_TEXT])
+						if freeText == nil {
+							programCollectionUid = getFilterValue(intentValue.FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM])
+							if programCollectionUid != nil {
+								break
+							}
+						}
+					}
+				}
+				if programCollectionUid != nil {
+					for _, hit := range currentResults.Hits.Hits {
+						if hit.Score == nil {
+							continue
+						}
+						var src es.Result
+						err = json.Unmarshal(*hit.Source, &src)
+						if err != nil {
+							log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
+							continue
+						}
+						if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
+							if utils.Contains(utils.Is(src.TypedUids), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *programCollectionUid)) {
+								programsToReplaceWithGrammarResults = append(programsToReplaceWithGrammarResults,
+									struct {
+										hitId        string
+										score        float64
+										grammarHitId *string
+									}{
+										hit.Id,
+										*hit.Score,
+										nil,
+									})
+							}
+						}
+					}
+				}
+			}
+			if len(programsToReplaceWithGrammarResults) > 0 {
+				sort.SliceStable(programsToReplaceWithGrammarResults, func(i, j int) bool {
+					return programsToReplaceWithGrammarResults[i].score > programsToReplaceWithGrammarResults[j].score
+				})
+			}
+			for _, p := range programsToReplaceWithGrammarResults {
+				log.Infof("Program to replace with grammar result: %+v", p)
+			}
+
 			if currentResults.Hits.MaxScore != nil {
 				if maxRegularScore == nil {
 					maxRegularScore = new(float64)
@@ -798,6 +859,39 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	filteredByLang := <-grammarsFilteredResultsByLangChannel
+	var programToReplaceIndex int
+	if len(programsToReplaceWithGrammarResults) > 0 {
+		for lang, filtered := range filteredByLang {
+			if _, ok := resultsByLang[lang]; !ok {
+				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+			}
+			if filtered.ProgramCollection != nil {
+				for _, result := range filtered.Results {
+					for _, hit := range result.Hits.Hits {
+						var src es.Result
+						err = json.Unmarshal(*hit.Source, &src)
+						if err != nil {
+							log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
+							continue
+						}
+						if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
+							if utils.Contains(utils.Is(src.TypedUids), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *filtered.ProgramCollection)) {
+								if programToReplaceIndex < len(programsToReplaceWithGrammarResults) {
+									hit.Score = &programsToReplaceWithGrammarResults[programToReplaceIndex].score
+									programsToReplaceWithGrammarResults[programToReplaceIndex].grammarHitId = &hit.Id
+									// TBD update hit explanation
+									programToReplaceIndex++
+								} else {
+									zero := 0.0
+									hit.Score = &zero
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 	// Loop over grammar filtered results to apply the score logic for combination with regular results
 	for lang, filtered := range filteredByLang {
 		if _, ok := resultsByLang[lang]; !ok {
@@ -811,13 +905,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				var src es.Result
 				err = json.Unmarshal(*hit.Source, &src)
 				if err != nil {
-					log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Uid)
+					log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
 					continue
 				}
 				if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
 					hitSources, err := es.KeyValuesToValues(consts.ES_UID_TYPE_SOURCE, src.TypedUids)
 					if err != nil {
-						log.Errorf("ESEngine.DoSearch - cannot read TypedUids for hit '%v'.", hit.Uid)
+						log.Errorf("ESEngine.DoSearch - cannot read TypedUids for hit '%v'.", hit.Id)
 						continue
 					}
 					sort.Strings(hitSources)
@@ -856,10 +950,17 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				// To minimize this gap, we add +10 to the formula.
 				// e.g. search of term "ביטול קטעי מקור" without adding 10 bring the relevant result in position #4. With adding 10, the relevant result is the first.
 				for _, hit := range result.Hits.Hits {
-					if hit.Score != nil {
-						*hit.Score *= boost
-						maxScore = math.Max(*hit.Score, maxScore)
+					replaced := false
+					for _, p := range programsToReplaceWithGrammarResults {
+						if p.grammarHitId != nil && *p.grammarHitId == hit.Id {
+							replaced = true
+							break
+						}
 					}
+					if !replaced && hit.Score != nil {
+						*hit.Score *= boost
+					}
+					maxScore = math.Max(*hit.Score, maxScore)
 					result.Hits.MaxScore = &maxScore
 				}
 			}
@@ -867,13 +968,26 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		for _, result := range resultsByLang[lang] {
 			for _, hit := range result.Hits.Hits {
 				if hit.Score != nil {
+					if len(programsToReplaceWithGrammarResults) > 0 {
+						// Assign results score to zero if the results are to be replaced by program grammar
+						for i := 0; i < programToReplaceIndex; i++ {
+							if hit.Id == programsToReplaceWithGrammarResults[i].hitId {
+								log.Infof("Setting zero score for %s.", hit.Id)
+								zero := 0.0
+								hit.Score = &zero
+								break
+							}
+						}
+					}
 					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
 						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
 						if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
 							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM
 						}
-						// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
-						delete(filtered.HitIdsMap, hit.Id)
+						if !filteredByLang[lang].PreserveTermForHighlight {
+							// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
+							delete(filtered.HitIdsMap, hit.Id)
+						}
 					}
 				}
 			}
@@ -1054,17 +1168,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					log.Errorf("ESEngine.DoSearch - cannot unmarshal source.")
 					continue
 				}
+				src.TypedUids = nil // Client has no need for TypedUids list
 				if src.ResultType == consts.ES_RESULT_TYPE_SOURCES {
 					//  Replace title with full title
 					if src.FullTitle != "" {
 						src.Title = src.FullTitle
 						src.FullTitle = ""
-						nsrc, err := json.Marshal(src)
-						if err != nil {
-							log.Errorf("ESEngine.DoSearch - cannot marshal source with title correction.")
-							continue
-						}
-						hit.Source = (*json.RawMessage)(&nsrc)
 					}
 					if hit.Highlight != nil {
 						if ft, ok := hit.Highlight["full_title"]; ok {
@@ -1075,6 +1184,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						}
 					}
 				}
+				nsrc, err := json.Marshal(src)
+				if err != nil {
+					log.Errorf("ESEngine.DoSearch - cannot marshal source with title correction.")
+					continue
+				}
+				hit.Source = (*json.RawMessage)(&nsrc)
 			}
 
 			//  Temp. workround until client could handle null values in Highlight fields (WIP by David)

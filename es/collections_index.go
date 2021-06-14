@@ -35,7 +35,7 @@ type CollectionsIndex struct {
 }
 
 func defaultCollectionsSql() string {
-	return fmt.Sprintf("c.secure = 0 AND c.published IS TRUE AND c.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d)",
+	return fmt.Sprintf("c.secure = 0 AND c.published IS TRUE AND c.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d)",
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SPECIAL_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIPS].ID,
@@ -43,6 +43,7 @@ func defaultCollectionsSql() string {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOKS].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID, // we use grammar for holiday collections search
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
 	)
 }
 
@@ -246,15 +247,12 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 			indexErrors.ShouldIndex(i18n.Language)
 			typedUIDs := append([]string{KeyValue(consts.ES_UID_TYPE_COLLECTION, c.UID)},
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
-			typedUIDs = append([]string{
-				KeyValue(consts.ES_UID_TYPE_COLLECTION, c.UID),
-			},
-				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
-
+			if programCollectionUID, ok := consts.ARTICLE_COLLECTION_TO_PROGRAM_COLLECTION[c.UID]; ok {
+				typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_COLLECTION, programCollectionUID))
+			}
 			if source != "" {
 				typedUIDs = append(typedUIDs, KeyValue("source", source))
 			}
-
 			filterValues := append(
 				[]string{KeyValue("collections_content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
 				KeyValues("content_type", contentUnitsContentTypes(c.R.CollectionsContentUnits))...,

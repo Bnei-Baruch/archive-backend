@@ -2,6 +2,7 @@ package search
 
 import (
 	"fmt"
+	"sort"
 
 	"gopkg.in/olivere/elastic.v6"
 
@@ -11,6 +12,8 @@ import (
 
 const (
 	GRAMMAR_BOOST = 100.0
+
+	GRAMMAR_BOOST_KEYWORD = 300.0
 
 	GRAMMAR_SUGGEST_SIZE = 30
 
@@ -34,6 +37,7 @@ func createGrammarQuery(q *Query) elastic.Query {
 	if simpleQuery(q) != "" {
 		boolQuery = boolQuery.Should(
 			elastic.NewDisMaxQuery().Query(
+				elastic.NewMatchPhraseQuery("grammar_rule.rules.keyword", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST_KEYWORD),
 				elastic.NewMatchPhraseQuery("grammar_rule.rules.language", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
 				elastic.NewMatchPhraseQuery("grammar_rule.rules", simpleQuery(q)).Slop(SLOP).Boost(GRAMMAR_BOOST),
 			),
@@ -111,31 +115,37 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 		Preference(preference)
 }
 
-func NewFilteredResultsSearchRequest(text string, filters map[string][]string, contentType string, sources []string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
-	if contentType == "" && len(sources) == 0 {
-		return nil, fmt.Errorf("No contentType and sources provided for NewFilteredResultsSearchRequest().")
+func NewFilteredResultsSearchRequest(text string, filters map[string][]string, contentType string, programCollection string, sources []string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
+	if contentType == "" && programCollection == "" && len(sources) == 0 {
+		return nil, fmt.Errorf("No contentType or programCollection or sources provided for NewFilteredResultsSearchRequest().")
 	}
 	if contentType != "" && len(sources) > 0 {
 		return nil, fmt.Errorf("Filter by source and content type combination is not currently supported.")
 	}
 	var searchSources bool
 	_, isSectionSources := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]
-	searchSources = len(filters) == 0 || isSectionSources // Search for sources only on the main section (without filters) or on the sources section.
-	if contentType != "" {
-		// by content type filter
-		if len(filters) > 0 {
-			return nil, fmt.Errorf("Attempt to assign extra filters for filtering by content type operation.") // Consider to support this.
+	if contentType != "" || len(sources) > 0 {
+		searchSources = len(filters) == 0 || isSectionSources // Search for sources only on the main section (without filters) or on the sources section.
+		if contentType != "" {
+			// by content type filter
+			if len(filters) > 0 && !hasCommonFilter(filters, consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]) {
+				return nil, fmt.Errorf("No common query filters with filters by content type operation.")
+			}
+			filters, _ = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType] // We ovveride the given query filters. Consider merging filters.
+			_, enableSourcesSearch := consts.CT_VARIABLES_ENABLE_SOURCES_SEARCH[contentType]
+			if len(filters) == 0 && !enableSourcesSearch {
+				return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES and not in CT_VARIABLES_ENABLE_SOURCES_SEARCH.", contentType)
+			}
+			searchSources = searchSources && enableSourcesSearch
 		}
-		filters, _ = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]
-		_, enableSourcesSearch := consts.CT_VARIABLES_ENABLE_SOURCES_SEARCH[contentType]
-		if len(filters) == 0 && !enableSourcesSearch {
-			return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES and not in CT_VARIABLES_ENABLE_SOURCES_SEARCH.", contentType)
+		if len(sources) > 0 {
+			// by source filter
+			filters[consts.FILTERS[consts.FILTERS[consts.FILTER_SOURCE]]] = sources
 		}
-		searchSources = searchSources && enableSourcesSearch
 	}
-	if len(sources) > 0 {
-		// by source filter
-		filters[consts.FILTERS[consts.FILTERS[consts.FILTER_SOURCE]]] = sources
+	if programCollection != "" {
+		// by program
+		filters[consts.FILTERS[consts.FILTERS[consts.FILTER_COLLECTION]]] = []string{programCollection}
 	}
 	requests := []*elastic.SearchRequest{}
 	if searchSources {
@@ -177,8 +187,7 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 					preference:                       preference,
 					useHighlight:                     false,
 					partialHighlight:                 false,
-					filterOutCUSources:               []string{},
-					includeTypedUidsFromContentUnits: true})
+					filterOutCUSources:               []string{}})
 			if err != nil {
 				return nil, err
 			}
@@ -239,4 +248,17 @@ func chooseRule(query *Query, rules []string) string {
 		}
 	}
 	return rules[maxIndex]
+}
+
+func hasCommonFilter(a map[string][]string, b map[string][]string) bool {
+	for filterName, values := range a {
+		if grammarValues, ok := b[filterName]; ok {
+			sort.Strings(values)
+			sort.Strings(grammarValues)
+			if len(utils.IntersectSortedStringSlices(values, grammarValues)) > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
