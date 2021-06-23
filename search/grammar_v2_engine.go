@@ -317,11 +317,14 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 						}()
 						// All search requests here are for the same language
 						var scoreIncrement *float64
+						var scoreMultiplication *float64
 						if searchWithoutTerm {
 							incr := consts.SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS
 							scoreIncrement = &incr
+						} else {
+							scoreMultiplication = &intentValue.Score
 						}
-						results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement, &intentValue.Score)
+						results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement, scoreMultiplication)
 						if err != nil {
 							log.Errorf("FilterSearch error: %+v", err)
 							return
