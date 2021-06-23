@@ -321,7 +321,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 							incr := consts.SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS
 							scoreIncrement = &incr
 						}
-						results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement)
+						results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement, &intentValue.Score)
 						if err != nil {
 							log.Errorf("FilterSearch error: %+v", err)
 							return
@@ -1008,7 +1008,7 @@ func retrieveTextVarValues(str string) []string {
 
 // Results search according to grammar based filter.
 // Return: Results, Unique list of hit id's as a map, Max score
-func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncrement *float64) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
+func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncrement *float64, scoreMultiplication *float64) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
 	results := []*elastic.SearchResult{}
 	hitIdsMap := map[string]bool{}
 	var maxScore *float64
@@ -1033,6 +1033,9 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncremen
 			for _, hit := range currentResults.Hits.Hits {
 				hitIdsMap[hit.Id] = true
 				if hit.Score != nil {
+					if scoreMultiplication != nil {
+						*hit.Score *= *scoreMultiplication
+					}
 					if scoreIncrement != nil {
 						*hit.Score += *scoreIncrement
 					}
