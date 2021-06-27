@@ -916,10 +916,20 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		//  since we we are not checking identification in all results but only in the results we received according to page filter.
 		// Ideal solution for these issues is to handle all score calculations for both types within a single elastic query.
 		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
+			var filteredMaxScore float64
+			for _, fr := range filtered {
+				for _, result := range fr.Results {
+					for _, hit := range result.Hits.Hits {
+						if hit.Score != nil {
+							filteredMaxScore = math.Max(*hit.Score, filteredMaxScore)
+						}
+					}
+				}
+			}
 			for _, fr := range filtered {
 				for _, result := range fr.Results {
 					var maxScore float64
-					boost := ((*maxRegularScore * 0.9) + 10) / *fr.MaxScore
+					boost := ((*maxRegularScore * 0.9) + 10) / filteredMaxScore
 					// Why we add +10 to the formula:
 					// In some cases we have several regular results with a very close scores that above 90% of the maxRegularScore.
 					// Since the top score for the best 'filter grammar' result is 90% of the maxRegularScore,
