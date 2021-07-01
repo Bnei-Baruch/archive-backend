@@ -250,6 +250,21 @@ func contentUnitsScopeBySource(mdb *sql.DB, sourceUID string) ([]string, error) 
 	return uids, nil
 }
 
+func contentUnitsScopeByTag(mdb *sql.DB, tagUID string) ([]string, error) {
+	cus, err := mdbmodels.ContentUnits(mdb,
+		qm.InnerJoin("content_units_tags AS cut ON cut.content_unit_id = id"),
+		qm.InnerJoin("tags AS t ON t.id = cut.tag_id"),
+		qm.Where("t.uid = ?", tagUID)).All()
+	if err != nil {
+		return []string{}, err
+	}
+	uids := make([]string, 0)
+	for i, cu := range cus {
+		uids[i] = cu.UID
+	}
+	return uids, nil
+}
+
 // DEBUG FUNCTIONS
 
 func DumpDB(mdb *sql.DB, title string) error {
