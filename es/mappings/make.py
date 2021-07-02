@@ -410,21 +410,21 @@ LanguageAnalyzerImp = {
                 # solved we have to apply synonym before hunspell.
                 "synonym_graph",
                 "he_IL",
+                "hebrew_stop",
             ],
             "char_filter": [
                 "quotes"
             ],
-            "stopwords": HEB_STOPWORDS
         },
         "he": {
           "tokenizer": "standard",
           "filter": [
-            "he_IL"
+            "he_IL",
+            "hebrew_stop",
           ],
           "char_filter": [
             "quotes"
           ],
-          "stopwords": HEB_STOPWORDS
         }
     },
     RUSSIAN: {
@@ -468,6 +468,10 @@ LanguageFiltersImp = {
         "synonym_graph": SynonymGraphFilterImp
     },
     HEBREW: {
+        "hebrew_stop": {
+            "type":      "stop",
+            "stopwords": HEB_STOPWORDS
+        },
         "he_IL": {
             "type": "hunspell",
             "locale": "he_IL",
