@@ -1340,7 +1340,7 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 		left join content_units_sources cus on cus.content_unit_id = cu.id
 		left join sources s on s.id = cus.source_id
 		where cu.published IS TRUE and cu.secure = 0
-		and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d)
+		and cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d, %d)
 		%s
 		order by (cu.properties->>'film_date')::date desc
 		limit 1`
