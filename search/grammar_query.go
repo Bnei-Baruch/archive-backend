@@ -123,6 +123,11 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 		return nil, fmt.Errorf("Filter by source and content type combination is not currently supported.")
 	}
 	var searchSources bool
+	filtersCopy := map[string][]string{}
+	for k, v := range filters {
+		filtersCopy[k] = v
+	}
+	filters = filtersCopy // Reassign pointer to a copy in order to keep the original query filters
 	_, isSectionSources := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]
 	if contentType != "" || len(sources) > 0 {
 		searchSources = len(filters) == 0 || isSectionSources // Search for sources only on the main section (without filters) or on the sources section.
@@ -178,16 +183,16 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 		if len(filters) > 0 {
 			nonSourceRequests, err := NewResultsSearchRequests(
 				SearchRequestOptions{
-					resultTypes:                      resultTypes,
-					index:                            "",
-					query:                            Query{Term: text, Filters: filters, LanguageOrder: []string{language}, Deb: deb},
-					sortBy:                           sortBy,
-					from:                             0,
-					size:                             from + size,
-					preference:                       preference,
-					useHighlight:                     false,
-					partialHighlight:                 false,
-					filterOutCUSources:               []string{}})
+					resultTypes:        resultTypes,
+					index:              "",
+					query:              Query{Term: text, Filters: filters, LanguageOrder: []string{language}, Deb: deb},
+					sortBy:             sortBy,
+					from:               0,
+					size:               from + size,
+					preference:         preference,
+					useHighlight:       false,
+					partialHighlight:   false,
+					filterOutCUSources: []string{}})
 			if err != nil {
 				return nil, err
 			}

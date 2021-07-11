@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -254,13 +255,11 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 	}
 	for _, intentsByLang := range filterIntentsByLanguage {
 		if len(intentsByLang) > 0 {
-			intentToAdd, err := e.selectFilterIntent(intentsByLang)
+			intentsToAdd, err := e.selectFilterIntents(intentsByLang)
 			if err != nil {
 				return nil, nil, err
 			}
-			if intentToAdd != nil {
-				filterIntents = append(filterIntents, *intentToAdd)
-			}
+			filterIntents = append(filterIntents, intentsToAdd...)
 		}
 	}
 	elapsed := time.Since(start)
@@ -271,10 +270,11 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 }
 
 // Search according to grammar based filter.
-func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[string][]string, originalSearchTerm string, from int, size int, sortBy string, resultTypes []string, preference string, deb bool) (map[string]FilteredSearchResult, error) {
-	resultsByLang := map[string]FilteredSearchResult{}
+func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[string][]string, originalSearchTerm string, from int, size int, sortBy string, resultTypes []string, preference string, deb bool) (map[string][]FilteredSearchResult, error) {
+	resultsByLang := map[string][]FilteredSearchResult{}
+	var wg sync.WaitGroup
 	for _, intent := range filterIntents {
-		if intentValue, ok := filterIntents[0].Value.(GrammarIntent); ok {
+		if intentValue, ok := intent.Value.(GrammarIntent); ok {
 			var contentType string
 			var text string
 			var programCollection string
@@ -307,37 +307,49 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 					requests = append(requests, fullTermSearchRequests...)
 				}
 				if len(requests) > 0 {
-					// All search requests here are for the same language
-					var scoreIncrement *float64
-					if searchWithoutTerm {
-						incr := consts.SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS
-						scoreIncrement = &incr
-					}
-					results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement)
-					if err != nil {
-						return nil, err
-					}
-					resultByLang := FilteredSearchResult{
-						Results:                  results,
-						Term:                     text,
-						PreserveTermForHighlight: programCollection != "",
-						HitIdsMap:                hitIdsMap,
-						MaxScore:                 maxScore,
-					}
-					if programCollection != "" {
-						resultByLang.ProgramCollection = &programCollection
-					}
-					resultsByLang[intent.Language] = resultByLang
-					if len(results) > 0 {
-						// we assume that there is no need to make the search for other languages if a results found for one language
-						break
-					}
+					wg.Add(1)
+					go func() {
+						defer func() {
+							if err := recover(); err != nil {
+								log.Errorf("SearchByFilterIntents panic: %+v", err)
+							}
+							wg.Done()
+						}()
+						// All search requests here are for the same language
+						var scoreIncrement *float64
+						var scoreMultiplication *float64
+						if searchWithoutTerm {
+							incr := consts.SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS
+							scoreIncrement = &incr
+						} else {
+							scoreMultiplication = &intentValue.Score
+						}
+						results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement, scoreMultiplication)
+						if err != nil {
+							log.Errorf("FilterSearch error: %+v", err)
+							return
+						}
+						if maxScore != nil && *maxScore > 0 {
+							resultByLang := FilteredSearchResult{
+								Results:                  results,
+								Term:                     text,
+								PreserveTermForHighlight: programCollection != "",
+								HitIdsMap:                hitIdsMap,
+								MaxScore:                 maxScore,
+							}
+							if programCollection != "" {
+								resultByLang.ProgramCollection = &programCollection
+							}
+							resultsByLang[intent.Language] = append(resultsByLang[intent.Language], resultByLang)
+						}
+					}()
 				}
 			}
 		} else {
 			return nil, errors.Errorf("FilterSearch error. Intent is not GrammarIntent. Intent: %+v", intent)
 		}
 	}
+	wg.Wait()
 	return resultsByLang, nil
 }
 
@@ -469,7 +481,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			// For now solve by normalizing very small scores.
 			// log.Infof("Intent: %+v score: %.2f %.2f %.2f", vMap, *hit.Score, (float64(4) / float64(4+len(vMap))), score)
 			if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_CONTENT_TYPE {
-				ctBoost := consts.CONTENT_TYPE_INTENTS_BOOST
+				ctBoost := consts.CONTENT_TYPE_INTENTS_BOOST // Since now we handle multiple filter intents, consider to remove this boost
 				if queryTermHasDigit {
 					// Disable 'by content type' priorty boost if the query contains a number
 					ctBoost = 1
@@ -997,9 +1009,9 @@ func retrieveTextVarValues(str string) []string {
 	return textVarValues
 }
 
-// Results search according to grammar based filter (currently by content types and free text).
+// Results search according to grammar based filter.
 // Return: Results, Unique list of hit id's as a map, Max score
-func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncrement *float64) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
+func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncrement *float64, scoreMultiplication *float64) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
 	results := []*elastic.SearchResult{}
 	hitIdsMap := map[string]bool{}
 	var maxScore *float64
@@ -1008,7 +1020,8 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncremen
 	multiSearchFilteredService.Add(requests...)
 	beforeFilterSearch := time.Now()
 	mr, err := multiSearchFilteredService.Do(context.TODO())
-	e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
+	e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO) // TBC differentiate calls to filterSearch under single request
+
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
 	}
@@ -1023,6 +1036,9 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncremen
 			for _, hit := range currentResults.Hits.Hits {
 				hitIdsMap[hit.Id] = true
 				if hit.Score != nil {
+					if scoreMultiplication != nil {
+						*hit.Score *= *scoreMultiplication
+					}
 					if scoreIncrement != nil {
 						*hit.Score += *scoreIncrement
 					}
@@ -1084,8 +1100,8 @@ func (e *ESEngine) isTermRestricted(term string, languages []string) bool {
 	return false
 }
 
-func (e *ESEngine) selectFilterIntent(intents []Intent) (*Intent, error) {
-	var selected *Intent
+func (e *ESEngine) selectFilterIntents(intents []Intent) ([]Intent, error) {
+	var selected []Intent
 	// Intent with max score of filter intents with search term.
 	var maxWithTerm *Intent
 	// Intent with max score of filter intents without search term.
@@ -1133,9 +1149,9 @@ func (e *ESEngine) selectFilterIntent(intents []Intent) (*Intent, error) {
 	}
 	if maxWithTerm != nil || maxWithoutTerm != nil {
 		if maxWithTerm == nil {
-			selected = maxWithoutTerm
+			selected = []Intent{*maxWithoutTerm}
 		} else if maxWithoutTerm == nil {
-			selected = maxWithTerm
+			selected = interfaceSliceToIntentSlice(intentsWithTerm)
 		} else {
 			intentWithTermCT := getFilterValue(maxWithTerm.Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE])
 			intentWithoutTermCT := getFilterValue(maxWithoutTerm.Value.(GrammarIntent).FilterValues, consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE])
@@ -1144,18 +1160,24 @@ func (e *ESEngine) selectFilterIntent(intents []Intent) (*Intent, error) {
 					// If for both intent types (with term and without term) we have the same content type value,
 					// we select the intent without term.
 					// E.g. query "programs new life" has "by content type" intent and "by program without term" intent, we select "by program without term".
-					selected = maxWithoutTerm
+					selected = []Intent{*maxWithoutTerm}
 				} else {
-					selected = maxWithTerm
+					selected = interfaceSliceToIntentSlice(intentsWithTerm)
 				}
 			} else {
-				selected = maxWithTerm
+				selected = interfaceSliceToIntentSlice(intentsWithTerm)
 			}
 		}
-		log.Infof("SELECTED FILTER INTENT:\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", selected.Type, selected.Value.(GrammarIntent).Score, selected.Value.(GrammarIntent).FilterValues)
+		log.Info("SELECTED Intents:")
+		for i, intent := range selected {
+			log.Infof("#%d\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Value.(GrammarIntent).FilterValues)
+		}
 	}
-	if selected == nil {
-		log.Infof("No intent to select.")
+	if len(selected) > consts.MAX_GRAMMAR_INTENTS_FOR_FILTER_SEARCH {
+		sort.SliceStable(selected, func(i, j int) bool {
+			return selected[i].Value.(GrammarIntent).Score > selected[j].Value.(GrammarIntent).Score
+		})
+		selected = selected[:consts.MAX_GRAMMAR_INTENTS_FOR_FILTER_SEARCH]
 	}
 	return selected, nil
 }
@@ -1169,4 +1191,12 @@ func getFilterValue(filterValues []FilterValue, filterName string) *string {
 	}
 	val := filter.(FilterValue).Value
 	return &val
+}
+
+func interfaceSliceToIntentSlice(slice []interface{}) []Intent {
+	ret := []Intent{}
+	for _, e := range slice {
+		ret = append(ret, e.(Intent))
+	}
+	return ret
 }
