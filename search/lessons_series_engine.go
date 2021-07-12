@@ -58,9 +58,9 @@ func combineBySource(byLang map[string]*elastic.SearchResult) map[string]*elasti
 	for l, r := range byLang {
 		hitByS := make(map[string]*elastic.SearchHit)
 		for _, h := range r.Hits.Hits {
-			key := getHitSourceKey(h)
-			if _, ok := hitByS[key]; !ok && key != "" {
-				hitByS[key] = h
+			suid := getHitSourceUID(h)
+			if _, ok := hitByS[suid]; !ok && suid != "" {
+				hitByS[suid] = h
 			}
 		}
 
@@ -86,7 +86,7 @@ func combineBySource(byLang map[string]*elastic.SearchResult) map[string]*elasti
 	return byLang
 }
 
-func getHitSourceKey(hit *elastic.SearchHit) string {
+func getHitSourceUID(hit *elastic.SearchHit) string {
 	var res es.Result
 	if err := json.Unmarshal(*hit.Source, &res); err != nil {
 		return ""

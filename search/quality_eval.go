@@ -6,7 +6,6 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"github.com/Bnei-Baruch/archive-backend/es"
 	"io"
 	"io/ioutil"
 	"math"
@@ -29,10 +28,11 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries"
+
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
-	"github.com/Bnei-Baruch/sqlboiler/queries"
 )
 
 const (
@@ -1481,12 +1481,6 @@ func evalResultToHitSources(result EvalResult) ([]HitSource, error) {
 				hitSource.ContentType = hit.Type
 				hitSource.ResultType = hit.Type
 				hitSource.MdbUid = hit.Uid
-
-				var res es.Result
-				if err := json.Unmarshal(*hit.Source, &res); err == nil {
-					hitSource.Title = res.Title
-				}
-
 			} else {
 				if hit.Score != nil {
 					hitSource.Score = *hit.Score
