@@ -3,6 +3,7 @@ package es
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -41,7 +42,7 @@ func (index *LikutimIndex) ReindexAll() error {
 		return err
 	}
 	// SQL to always match any likutim
-	sqlScope := fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id = %d", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID)
+	sqlScope := fmt.Sprintf("secure = 0 AND published IS TRUE AND type_id = %d", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID)
 	return indexErrors.Join(index.addToIndexSql(sqlScope), "").CheckErrors(LANGUAGES_MAX_FAILURE, DOCUMENT_MAX_FAILIRE_RATIO, "LikutimIndex")
 }
 
@@ -74,17 +75,13 @@ func (index *LikutimIndex) addToIndex(scope Scope, removedUIDs []string) *IndexE
 	for i, uid := range uids {
 		quoted[i] = fmt.Sprintf("'%s'", uid)
 	}
-	sqlScope := fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id = %d", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID)
+	sqlScope := fmt.Sprintf("secure = 0 AND published IS TRUE AND type_id = %d", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID)
 	return indexErrors.Join(index.addToIndexSql(sqlScope), fmt.Sprintf("Failed adding to index: %+v", sqlScope))
 }
 
 func (index *LikutimIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	indexErrors := MakeIndexErrors()
-	var count int
-	err := mdbmodels.NewQuery(index.db,
-		qm.Select("COUNT(1)"),
-		qm.From("content_units as cu"),
-		qm.Where(sqlScope)).QueryRow().Scan(&count)
+	count, err := mdbmodels.ContentUnits(index.db, qm.Where(sqlScope)).Count()
 	if err != nil {
 		return indexErrors.SetError(errors.Wrapf(err, "Failed fetching content_units with sql scope: %s", sqlScope))
 	}
@@ -99,8 +96,8 @@ func (index *LikutimIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	go func() {
 		offset := 0
 		limit := utils.MaxInt(10, utils.MinInt(250, (int)(count/10)))
-		for offset < count {
-			tasks <- OffsetLimitJob{offset, limit, count}
+		for offset < int(count) {
+			tasks <- OffsetLimitJob{offset, limit, int(count)}
 			tasksCount += 1
 			offset += limit
 		}
@@ -184,23 +181,26 @@ func (index *LikutimIndex) bulkIndexUnits(bulk OffsetLimitJob, sqlScope string) 
 	// Index each document in its language index
 	for lang, results := range i18nMap {
 		indexName := index.IndexName(lang)
-
-		bulkService := elastic.NewBulkService(index.esc).Index(indexName)
 		for _, result := range results {
 			indexErrors.ShouldIndex(lang)
-			bulkService.Add(elastic.NewBulkIndexRequest().Index(indexName).Type("result").Doc(result))
-		}
-		bulkRes, e := bulkService.Do(context.TODO())
-		if e != nil {
-			indexErrors.LanguageError(lang, e, fmt.Sprintf("Results Index - bulkIndexUnits %s %+v.", indexName, sqlScope))
-			continue
-		}
-		for _, itemMap := range bulkRes.Items {
-			for _, res := range itemMap {
-				if res.Result == "created" {
-					indexErrors.Indexed(lang)
-				}
+			vBytes, err := json.Marshal(result)
+			log.Debugf("Likutim Index - Add likutim %s to index %s", string(vBytes), indexName)
+			resp, err := index.esc.Index().
+				Index(indexName).
+				Type("result").
+				BodyJson(result).
+				Do(context.TODO())
+			indexErrors.DocumentError(lang, err, fmt.Sprintf("Index likutim %s %s", indexName, result.MDB_UID))
+			if err != nil {
+				return indexErrors
 			}
+			errNotCreated := (error)(nil)
+			if resp.Result != "created" {
+				errNotCreated = errors.New(fmt.Sprintf("Not created: tweet %s %s", indexName, result.MDB_UID))
+			} else {
+				indexErrors.Indexed(lang)
+			}
+			indexErrors.DocumentError(lang, errNotCreated, "TweeterIndex")
 		}
 	}
 	indexErrors.PrintIndexCounts(fmt.Sprintf("ContentUnitIndex %d - %d / %d", bulk.Offset, bulk.Offset+bulk.Limit, bulk.Total))
@@ -211,18 +211,26 @@ func (index *LikutimIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, indexData
 	indexErrors := MakeIndexErrors()
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
+	files, err := mdbmodels.Files(index.db, qm.Where("secure = 0 AND published IS TRUE AND content_unit_id = ?", cu.ID)).All()
+	if err != nil {
+		indexErrors.SetError(err)
+	}
 	for _, i18n := range cu.R.ContentUnitI18ns {
 		if i18n.Name.Valid && strings.TrimSpace(i18n.Name.String) != "" {
-			typedUids := []string{KeyValue(consts.ES_UID_TYPE_LIKUTIM, cu.UID)}
-
-			unit := Result{
-				ResultType: index.resultType,
-				IndexDate:  &utils.Date{Time: time.Now()},
-				MDB_UID:    cu.UID,
-				TypedUids:  typedUids,
-				Title:      i18n.Name.String,
+			content, err := index.getContent(files, i18n.Language)
+			if err != nil {
+				indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("LikutimIndex, unit uid: %s", cu.UID))
 			}
-
+			unit := Result{
+				ResultType:   index.resultType,
+				IndexDate:    &utils.Date{Time: time.Now()},
+				MDB_UID:      cu.UID,
+				TypedUids:    []string{KeyValue(consts.ES_UID_TYPE_LIKUTIM, cu.UID)},
+				Title:        i18n.Name.String,
+				Content:      content,
+				TitleSuggest: SuggestField{[]string{}, float64(0)},
+			}
+			unit.FilterValues = append(unit.FilterValues, KeyValues(consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], []string{consts.CT_LIKUTIM})...)
 			if val, ok := indexData.Tags[cu.UID]; ok {
 				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.ES_UID_TYPE_TAG, val)...)
 				unit.TypedUids = append(unit.TypedUids, KeyValues(consts.ES_UID_TYPE_TAG, val)...)
@@ -233,4 +241,25 @@ func (index *LikutimIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, indexData
 	}
 
 	return i18nMap, indexErrors
+}
+func (index *LikutimIndex) getContent(files []*mdbmodels.File, lang string) (string, error) {
+
+	var file *mdbmodels.File
+	for _, f := range files {
+		if !f.Language.Valid || lang != f.Language.String {
+			continue
+		}
+		ex := strings.Split(f.Name, ".")[1]
+		if ex == "docx" {
+			file = f
+		}
+		if file == nil && ex == "doc" {
+			file = f
+		}
+	}
+	if file == nil {
+		return "", errors.New(fmt.Sprint("No .docx or .doc"))
+	}
+
+	return DocText(file.UID)
 }

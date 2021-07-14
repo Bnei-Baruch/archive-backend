@@ -22,7 +22,7 @@ func TestLikutimIndexer(t *testing.T) {
 	suite.Run(t, new(LikutimIndexerSuite))
 }
 
-func (suite *UnitsIndexerSuite) TestLikutimIndex() {
+func (suite *LikutimIndexerSuite) TestLikutimIndex() {
 	fmt.Printf("\n\n\n--- TEST Likutim INDEX ---\n\n\n")
 
 	r := require.New(suite.T())
@@ -44,7 +44,7 @@ func (suite *UnitsIndexerSuite) TestLikutimIndex() {
 	indexNameEn := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_ENGLISH, "test-date")
 	indexNameHe := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_HEBREW, "test-date")
 	indexNameRu := es.IndexName("test", consts.ES_RESULTS_INDEX, consts.LANG_RUSSIAN, "test-date")
-	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_UNITS}, common.DB, esc)
+	indexer, err := es.MakeIndexer("test", "test-date", []string{consts.ES_RESULT_TYPE_LIKUTIM}, common.DB, esc)
 	r.Nil(err)
 
 	// Index existing DB data.
