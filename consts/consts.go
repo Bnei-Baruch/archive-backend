@@ -50,6 +50,7 @@ const (
 	CT_VIRTUAL_LESSON        = "VIRTUAL_LESSON"
 	CT_WOMEN_LESSON          = "WOMEN_LESSON"
 	CT_SOURCE                = "SOURCE"
+	CT_LIKUTIM               = "LIKUTIM"
 
 	// Content types for additional Elastic results
 	SCT_BLOG_POST = "R_BLOG_POST"
@@ -338,6 +339,7 @@ const (
 	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM = 200
 	CONTENT_TYPE_INTENTS_BOOST                      = 8.0 // For priority between several filter intent types
 	SCORE_INCREMENT_FOR_SEARCH_WITHOUT_TERM_RESULTS = 200.0
+	MAX_GRAMMAR_INTENTS_FOR_FILTER_SEARCH           = 4
 )
 
 const (
@@ -841,6 +843,7 @@ const (
 	SRC_BAAL_SULAM_ARTICLES_LETTERS_SUMMARIES = "QUBP2DYe"
 	SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU         = "8Y0f8Jg9"
 	SRC_CONNECTING_TO_THE_SOURCE              = "wWm6fbn4"
+	SRC_ZOHAR_FOR_ALL_VOL_12                  = "oau8jvcD"
 )
 
 var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
@@ -913,10 +916,12 @@ var NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION = []string{
 	SRC_LETTERS_RABASH, SRC_ARTICLES_RABASH, SRC_ARTICLES_BAAL_SULAM, // Children 'position' value of these sources are not according to their actual chapter
 }
 
-// We avoid adding source names from Rabash Assorted notes because many of them are similar to concepts or topics and less known as names of Rabash sources.
-// Also we avoid adding names of article summaries and campus material to avoid confusion with the original sources.
+// Source names that we avoid adding:
+// 1. Zohar For All vol.12 chapter names (that are actually general topic names).
+// 2. Source names from Rabash Assorted notes because many of them are similar to concepts or topics and less known as names of Rabash sources.
+// 3. Article summaries and campus material to avoid confusion with the original sources.
 var SOURCE_PARENTS_NOT_TO_INCLUDE_IN_VARIABLE_VALUES = []string{
-	SRC_RABASH_ASSORTED_NOTES, SRC_BAAL_SULAM_ARTICLES_LETTERS_SUMMARIES, SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU, SRC_CONNECTING_TO_THE_SOURCE,
+	SRC_RABASH_ASSORTED_NOTES, SRC_ZOHAR_FOR_ALL_VOL_12, SRC_BAAL_SULAM_ARTICLES_LETTERS_SUMMARIES, SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU, SRC_CONNECTING_TO_THE_SOURCE,
 }
 
 var ARTICLE_COLLECTION_TO_PROGRAM_COLLECTION = map[string]string{

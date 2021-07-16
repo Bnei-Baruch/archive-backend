@@ -577,7 +577,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	suggestChannel := make(chan null.String)
 	grammarsSingleHitIntentsChannel := make(chan []Intent, 1)
 	grammarsFilterIntentsChannel := make(chan []Intent, 1)
-	grammarsFilteredResultsByLangChannel := make(chan map[string]FilteredSearchResult)
+	grammarsFilteredResultsByLangChannel := make(chan map[string][]FilteredSearchResult)
 	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 
 	var resultTypes []string
@@ -600,24 +600,20 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
 				grammarsSingleHitIntentsChannel <- []Intent{}
 				grammarsFilterIntentsChannel <- []Intent{}
-				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
+				grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
 			}
 		}()
 		if singleHitIntents, filterIntents, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
 			grammarsSingleHitIntentsChannel <- []Intent{}
 			grammarsFilterIntentsChannel <- []Intent{}
-			grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
+			grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
 		} else {
 			grammarsSingleHitIntentsChannel <- singleHitIntents
 			grammarsFilterIntentsChannel <- filterIntents
-			filtersCopy := map[string][]string{}
-			for k, v := range query.Filters {
-				filtersCopy[k] = v
-			}
-			if filtered, err := e.SearchByFilterIntents(filterIntents, filtersCopy, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
+			if filtered, err := e.SearchByFilterIntents(filterIntents, query.Filters, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
 				log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
-				grammarsFilteredResultsByLangChannel <- map[string]FilteredSearchResult{}
+				grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
 			} else {
 				grammarsFilteredResultsByLangChannel <- filtered
 			}
@@ -841,25 +837,27 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			if _, ok := resultsByLang[lang]; !ok {
 				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 			}
-			if filtered.ProgramCollection != nil {
-				for _, result := range filtered.Results {
-					for _, hit := range result.Hits.Hits {
-						var src es.Result
-						err = json.Unmarshal(*hit.Source, &src)
-						if err != nil {
-							log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
-							continue
-						}
-						if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
-							if utils.Contains(utils.Is(src.TypedUids), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *filtered.ProgramCollection)) {
-								if programToReplaceIndex < len(programsToReplaceWithGrammarResults) {
-									hit.Score = &programsToReplaceWithGrammarResults[programToReplaceIndex].score
-									programsToReplaceWithGrammarResults[programToReplaceIndex].grammarHitId = &hit.Id
-									// TBD update hit explanation
-									programToReplaceIndex++
-								} else {
-									zero := 0.0
-									hit.Score = &zero
+			for _, fr := range filtered {
+				if fr.ProgramCollection != nil {
+					for _, result := range fr.Results {
+						for _, hit := range result.Hits.Hits {
+							var src es.Result
+							err = json.Unmarshal(*hit.Source, &src)
+							if err != nil {
+								log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
+								continue
+							}
+							if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
+								if utils.Contains(utils.Is(src.TypedUids), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *fr.ProgramCollection)) {
+									if programToReplaceIndex < len(programsToReplaceWithGrammarResults) {
+										hit.Score = &programsToReplaceWithGrammarResults[programToReplaceIndex].score
+										programsToReplaceWithGrammarResults[programToReplaceIndex].grammarHitId = &hit.Id
+										// TBD update hit explanation
+										programToReplaceIndex++
+									} else {
+										zero := 0.0
+										hit.Score = &zero
+									}
 								}
 							}
 						}
@@ -873,40 +871,42 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
-		for _, result := range filtered.Results {
-			sort.Strings(filterOutCUSources)
-			withoutCarouselDuplications := []*elastic.SearchHit{}
-			var maxScore float64
-			for _, hit := range result.Hits.Hits {
-				var src es.Result
-				err = json.Unmarshal(*hit.Source, &src)
-				if err != nil {
-					log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
-					continue
-				}
-				if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
-					hitSources, err := es.KeyValuesToValues(consts.ES_UID_TYPE_SOURCE, src.TypedUids)
+		for _, fr := range filtered {
+			for _, result := range fr.Results {
+				sort.Strings(filterOutCUSources)
+				withoutCarouselDuplications := []*elastic.SearchHit{}
+				var maxScore float64
+				for _, hit := range result.Hits.Hits {
+					var src es.Result
+					err = json.Unmarshal(*hit.Source, &src)
 					if err != nil {
-						log.Errorf("ESEngine.DoSearch - cannot read TypedUids for hit '%v'.", hit.Id)
+						log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
 						continue
 					}
-					sort.Strings(hitSources)
-					if len(utils.IntersectSortedStringSlices(hitSources, filterOutCUSources)) > 0 {
-						// We remove the hits we recieved from 'filter grammar' that are duplicate the existed items inside carousels
-						log.Infof("Remove CU hit from 'filter grammar' that duplicates carousels source: %v", src.MDB_UID)
-					} else {
-						if hit.Score != nil {
-							maxScore = math.Max(*hit.Score, maxScore)
+					if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
+						hitSources, err := es.KeyValuesToValues(consts.ES_UID_TYPE_SOURCE, src.TypedUids)
+						if err != nil {
+							log.Errorf("ESEngine.DoSearch - cannot read TypedUids for hit '%v'.", hit.Id)
+							continue
 						}
+						sort.Strings(hitSources)
+						if len(utils.IntersectSortedStringSlices(hitSources, filterOutCUSources)) > 0 {
+							// We remove the hits we recieved from 'filter grammar' that are duplicate the existed items inside carousels
+							log.Infof("Remove CU hit from 'filter grammar' that duplicates carousels source: %v", src.MDB_UID)
+						} else {
+							if hit.Score != nil {
+								maxScore = math.Max(*hit.Score, maxScore)
+							}
+							withoutCarouselDuplications = append(withoutCarouselDuplications, hit)
+						}
+					} else {
 						withoutCarouselDuplications = append(withoutCarouselDuplications, hit)
 					}
-				} else {
-					withoutCarouselDuplications = append(withoutCarouselDuplications, hit)
 				}
+				result.Hits.Hits = withoutCarouselDuplications
+				result.Hits.MaxScore = &maxScore
+				result.Hits.TotalHits = int64(len(withoutCarouselDuplications))
 			}
-			result.Hits.Hits = withoutCarouselDuplications
-			result.Hits.MaxScore = &maxScore
-			result.Hits.TotalHits = int64(len(withoutCarouselDuplications))
 		}
 		// Note:
 		// Below we handle 2 result types from a different elastic queries: grammar based results and regular results.
@@ -916,28 +916,40 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		//  since we we are not checking identification in all results but only in the results we received according to page filter.
 		// Ideal solution for these issues is to handle all score calculations for both types within a single elastic query.
 		if maxRegularScore != nil && *maxRegularScore >= 15 { // if we have big enough regular scores, we should increase or decrease the filtered results scores
-			for _, result := range filtered.Results {
-				var maxScore float64
-				boost := ((*maxRegularScore * 0.9) + 10) / *filtered.MaxScore
-				// Why we add +10 to the formula:
-				// In some cases we have several regular results with a very close scores that above 90% of the maxRegularScore.
-				// Since the top score for the best 'filter grammar' result is 90% of the maxRegularScore,
-				//	we have cases where the best 'filter grammar' result will be below the high regular results with a VERY SMALL GAP between them.
-				// To minimize this gap, we add +10 to the formula.
-				// e.g. search of term "ביטול קטעי מקור" without adding 10 bring the relevant result in position #4. With adding 10, the relevant result is the first.
-				for _, hit := range result.Hits.Hits {
-					replaced := false
-					for _, p := range programsToReplaceWithGrammarResults {
-						if p.grammarHitId != nil && *p.grammarHitId == hit.Id {
-							replaced = true
-							break
+			var filteredMaxScore float64
+			for _, fr := range filtered {
+				for _, result := range fr.Results {
+					for _, hit := range result.Hits.Hits {
+						if hit.Score != nil {
+							filteredMaxScore = math.Max(*hit.Score, filteredMaxScore)
 						}
 					}
-					if !replaced && hit.Score != nil {
-						*hit.Score *= boost
+				}
+			}
+			for _, fr := range filtered {
+				for _, result := range fr.Results {
+					var maxScore float64
+					boost := ((*maxRegularScore * 0.9) + 10) / filteredMaxScore
+					// Why we add +10 to the formula:
+					// In some cases we have several regular results with a very close scores that above 90% of the maxRegularScore.
+					// Since the top score for the best 'filter grammar' result is 90% of the maxRegularScore,
+					//	we have cases where the best 'filter grammar' result will be below the high regular results with a VERY SMALL GAP between them.
+					// To minimize this gap, we add +10 to the formula.
+					// e.g. search of term "ביטול קטעי מקור" without adding 10 bring the relevant result in position #4. With adding 10, the relevant result is the first.
+					for _, hit := range result.Hits.Hits {
+						replaced := false
+						for _, p := range programsToReplaceWithGrammarResults {
+							if p.grammarHitId != nil && *p.grammarHitId == hit.Id {
+								replaced = true
+								break
+							}
+						}
+						if !replaced && hit.Score != nil {
+							*hit.Score *= boost
+						}
+						maxScore = math.Max(*hit.Score, maxScore)
+						result.Hits.MaxScore = &maxScore
 					}
-					maxScore = math.Max(*hit.Score, maxScore)
-					result.Hits.MaxScore = &maxScore
 				}
 			}
 		}
@@ -955,20 +967,24 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							}
 						}
 					}
-					if _, hasId := filtered.HitIdsMap[hit.Id]; hasId {
-						log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
-						if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
-							*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM
-						}
-						if !filteredByLang[lang].PreserveTermForHighlight {
-							// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
-							delete(filtered.HitIdsMap, hit.Id)
+					for _, fr := range filtered {
+						if _, hasId := fr.HitIdsMap[hit.Id]; hasId {
+							log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
+							if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
+								*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM
+							}
+							if !fr.PreserveTermForHighlight {
+								// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
+								delete(fr.HitIdsMap, hit.Id)
+							}
 						}
 					}
 				}
 			}
 		}
-		resultsByLang[lang] = append(resultsByLang[lang], filtered.Results...)
+		for _, fr := range filtered {
+			resultsByLang[lang] = append(resultsByLang[lang], fr.Results...)
+		}
 	}
 
 	var currentLang string
@@ -1038,10 +1054,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			term := query.Term
 			for _, lang := range highlightsLangs {
 				if filtered, ok := filteredByLang[lang]; ok {
-					if _, hasId := filtered.HitIdsMap[h.Id]; hasId {
-						// set highlight search term as the grammar filter search term
-						term = filteredByLang[lang].Term
-						break
+					for _, fr := range filtered {
+						if _, hasId := fr.HitIdsMap[h.Id]; hasId {
+							// set highlight search term as the grammar filter search term
+							term = fr.Term
+							break
+						}
 					}
 				}
 			}

@@ -28,6 +28,7 @@ en,DVSS0xAR => Baal HaSulam Letters
 en,qMUUn22b => Baal HaSulam Shamati
 
 en,2bscFWf4 => matan tora
+en,28Cmp7gl => article the peace
 
 es,xtKmrbb9 => Estudio de las diez Sefirot
 es,xtKmrbb9 => Estudio de las eser Sefirot
@@ -100,7 +101,11 @@ he,xtKmrbb9 => בעל הסולם > תלמוד עשר הספירות
 he,b8SHlrfH => הרב"ש > אגרות
 
 ru,xtKmrbb9 => Учение Десяти Сфирот
+ru,xtKmrbb9 => учени Десяти Сфирот
 ru,xtKmrbb9 => Талмуд Десяти Сфирот
+ru,xtKmrbb9 => Талмуд 10 Сфирот
+ru,xtKmrbb9 => Учение 10 Сфирот
+ru,xtKmrbb9 => учени 10 Сфирот
 ru,xtKmrbb9 => ТЕС
 ru,xtKmrbb9 => ТЭС
 ru,xtKmrbb9 => ТААС
@@ -111,9 +116,11 @@ ru,AwGBQX2L => Зохар
 
 ru,rb => Рабаш
 ru,rb => Рабаша
+ru,rb => труды Рабаша
 
 ru,bs => Бааль Сулам
 ru,bs => Бааль Сулама
+ru,bs => труды Бааль Сулама
 
 ru,DVSS0xAR => Бааль Сулам Письма
 ru,DVSS0xAR => Бааль Сулам Письмо
