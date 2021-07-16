@@ -75,15 +75,19 @@ func (index *LikutimIndex) addToIndex(scope Scope, removedUIDs []string) *IndexE
 	for i, uid := range uids {
 		quoted[i] = fmt.Sprintf("'%s'", uid)
 	}
-	sqlScope := fmt.Sprintf("secure = 0 AND published IS TRUE AND type_id = %d", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID)
+	sqlScope := fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id = %d AND cu.uid IN (%s)", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID, strings.Join(quoted, ","))
 	return indexErrors.Join(index.addToIndexSql(sqlScope), fmt.Sprintf("Failed adding to index: %+v", sqlScope))
 }
 
 func (index *LikutimIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	indexErrors := MakeIndexErrors()
-	count, err := mdbmodels.ContentUnits(index.db, qm.Where(sqlScope)).Count()
+	var count int
+	err := mdbmodels.NewQuery(index.db,
+		qm.Select("COUNT(1)"),
+		qm.From("content_units as cu"),
+		qm.Where(sqlScope)).QueryRow().Scan(&count)
 	if err != nil {
-		return indexErrors.SetError(errors.Wrapf(err, "Failed fetching content_units with sql scope: %s", sqlScope))
+		return indexErrors.SetError(errors.Wrapf(err, "Failed count likutim with sql scope: %s", sqlScope))
 	}
 
 	log.Debugf("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
@@ -124,14 +128,14 @@ func (index *LikutimIndex) addToIndexSql(sqlScope string) *IndexErrors {
 func (index *LikutimIndex) removeFromIndex(scope Scope) (map[string][]string, *IndexErrors) {
 	typedUids := make([]string, 0)
 	if scope.ContentUnitUID != "" {
-		typedUids = append(typedUids, KeyValue(consts.ES_UID_TYPE_CONTENT_UNIT, scope.ContentUnitUID))
+		typedUids = append(typedUids, KeyValue(consts.ES_UID_TYPE_LIKUTIM, scope.ContentUnitUID))
 	}
 	indexErrors := MakeIndexErrors()
 	if scope.FileUID != "" {
 		typedUids = append(typedUids, KeyValue(consts.ES_UID_TYPE_FILE, scope.FileUID))
 		moreUIDs, err := contentUnitsScopeByFile(index.db, scope.FileUID)
 		indexErrors.SetError(err)
-		typedUids = append(typedUids, KeyValues(consts.ES_UID_TYPE_CONTENT_UNIT, moreUIDs)...)
+		typedUids = append(typedUids, KeyValues(consts.ES_UID_TYPE_LIKUTIM, moreUIDs)...)
 	}
 	if scope.TagUID != "" {
 		typedUids = append(typedUids, KeyValue(consts.ES_UID_TYPE_TAG, scope.TagUID))
@@ -196,11 +200,11 @@ func (index *LikutimIndex) bulkIndexUnits(bulk OffsetLimitJob, sqlScope string) 
 			}
 			errNotCreated := (error)(nil)
 			if resp.Result != "created" {
-				errNotCreated = errors.New(fmt.Sprintf("Not created: tweet %s %s", indexName, result.MDB_UID))
+				errNotCreated = errors.New(fmt.Sprintf("Not created: likutim %s %s", indexName, result.MDB_UID))
 			} else {
 				indexErrors.Indexed(lang)
 			}
-			indexErrors.DocumentError(lang, errNotCreated, "TweeterIndex")
+			indexErrors.DocumentError(lang, errNotCreated, "LikutimIndex")
 		}
 	}
 	indexErrors.PrintIndexCounts(fmt.Sprintf("ContentUnitIndex %d - %d / %d", bulk.Offset, bulk.Offset+bulk.Limit, bulk.Total))

@@ -32,12 +32,26 @@ func (suite *LikutimIndexerSuite) TestLikutimIndex() {
 
 	fmt.Printf("\n\n\nAdding content units.\n\n")
 	cu1UID := suite.ucu(ContentUnit{Name: "something", ContentType: consts.CT_LIKUTIM}, consts.LANG_ENGLISH, true, true)
+	fileHe1 := mdbmodels.File{ID: 1, Name: "heb_o_rav_bs-shamati-038-irat-ashem_2016-09-16_lesson.doc", UID: "8awHBfjU", Language: null.String{consts.LANG_HEBREW, true}, Secure: 0, Published: true}
+	fileRu1 := mdbmodels.File{ID: 6, Name: "heb_o_rb_ahana_siba-leastara_tes-09_avodat-ashem_002.doc", UID: "JlJ0WMHJ", Language: null.String{consts.LANG_RUSSIAN, true}, Secure: 0, Published: true}
+	fileEn1 := mdbmodels.File{ID: 2, Name: "eng_t_rav_2017-06-09_kitei-makor_mi-ichud-le-hafatza_n1_p1.docx", UID: "frnHYhIw", Language: null.String{consts.LANG_ENGLISH, true}, Secure: 0, Published: true}
+	_ = suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, fileHe1, true)
+	_ = suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_RUSSIAN, fileRu1, true)
+	_ = suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, fileEn1, true)
 	suite.ucu(ContentUnit{MDB_UID: cu1UID, Name: "משהוא"}, consts.LANG_HEBREW, true, true)
 	suite.ucu(ContentUnit{MDB_UID: cu1UID, Name: "чтото"}, consts.LANG_RUSSIAN, true, true)
+
 	cu2UID := suite.ucu(ContentUnit{Name: "something else", ContentType: consts.CT_LIKUTIM}, consts.LANG_ENGLISH, true, true)
+	fileEn2 := mdbmodels.File{ID: 3, Name: "eng_o_rav_2020-12-24_art_on-jewish-unity-no-6.docx", UID: "QrtIVYJA", Language: null.String{consts.LANG_ENGLISH, true}, Secure: 0, Published: true}
+	_ = suite.ucuf(ContentUnit{MDB_UID: cu2UID}, consts.LANG_ENGLISH, fileEn2, true)
+
 	cuNotLikutimUID := suite.ucu(ContentUnit{Name: "not likutim", ContentType: consts.CT_LESSON_PART}, consts.LANG_ENGLISH, true, true)
 	cuNotPublishedUID := suite.ucu(ContentUnit{Name: "not published"}, consts.LANG_ENGLISH, false, true)
+	fileEnNotPublished := mdbmodels.File{ID: 4, Name: "heb_o_rav_achana_2014-05-28_lesson.doc", UID: "bBBIDCiy", Language: null.String{consts.LANG_ENGLISH, true}, Secure: 0, Published: true}
+	_ = suite.ucuf(ContentUnit{MDB_UID: cuNotPublishedUID}, consts.LANG_ENGLISH, fileEnNotPublished, true)
 	cuNotSecureUID := suite.ucu(ContentUnit{Name: "not secured"}, consts.LANG_ENGLISH, true, false)
+	fileEnNotSecure := mdbmodels.File{ID: 5, Name: "heb_o_rb_ahana_eih-lilmod_tes-15_avodat-ashem_.doc", UID: "lRBwElZ9", Language: null.String{consts.LANG_ENGLISH, true}, Secure: 0, Published: true}
+	_ = suite.ucuf(ContentUnit{MDB_UID: cuNotSecureUID}, consts.LANG_ENGLISH, fileEnNotSecure, true)
 	UIDs := []string{cu1UID, cu2UID, cuNotLikutimUID, cuNotPublishedUID, cuNotSecureUID}
 
 	fmt.Printf("\n\n\nReindexing everything.\n\n")
@@ -53,21 +67,6 @@ func (suite *LikutimIndexerSuite) TestLikutimIndex() {
 
 	fmt.Println("Validate we have 2 searchable content units.")
 	suite.validateNames(indexNameEn, indexer, []string{"something", "something else"})
-
-	fmt.Println("Add a file to content unit and validate.")
-	transcriptContent := "1234"
-	suite.serverResponses["/doc2text/dEvgPVpr"] = transcriptContent
-	file := mdbmodels.File{ID: 1, Name: "heb_o_rav_2017-05-25_lesson_achana_n1_p0.doc", UID: "dEvgPVpr", Language: null.String{"he", true}, Secure: 0, Published: true}
-	f1UID := suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, true)
-	r.Nil(indexer.FileUpdate(f1UID))
-	suite.validateNames(indexNameEn, indexer, []string{"something", "something else"})
-	suite.validateContentUnitFiles(indexNameHe, indexer, null.Int{len(transcriptContent), true})
-	fmt.Println("Remove a file from content unit and validate.")
-	suite.ucuf(ContentUnit{MDB_UID: cu1UID}, consts.LANG_HEBREW, file, false)
-	r.Nil(indexer.FileUpdate(f1UID))
-	r.Nil(es.DumpDB(common.DB, "DumpDB"))
-	r.Nil(es.DumpIndexes(esc, "DumpIndexes", consts.ES_RESULT_TYPE_LIKUTIM))
-	suite.validateContentUnitFiles(indexNameHe, indexer, null.Int{-1, false})
 
 	fmt.Println("Add a tag to content unit and validate.")
 	suite.ucut(ContentUnit{MDB_UID: cu1UID}, consts.LANG_ENGLISH, mdbmodels.Tag{Pattern: null.String{"ibur", true}, ID: 1, UID: "L2jMWyce"}, true)
@@ -113,8 +112,11 @@ func (suite *LikutimIndexerSuite) TestLikutimIndex() {
 
 	fmt.Println("Validate adding content unit incrementally.")
 	var cu3UID string
-	cu3UID = suite.ucu(ContentUnit{Name: "third something"}, consts.LANG_ENGLISH, true, true)
+	cu3UID = suite.ucu(ContentUnit{Name: "third something", ContentType: consts.CT_LIKUTIM}, consts.LANG_ENGLISH, true, true)
 	UIDs = append(UIDs, cu3UID)
+	fileEn3 := mdbmodels.File{ID: 7, Name: "heb_o_rb_ahana_zadik-o-rasha_tes-09_avodat-ashem_013.doc", UID: "ajY7njZt", Language: null.String{consts.LANG_ENGLISH, true}, Secure: 0, Published: true}
+	_ = suite.ucuf(ContentUnit{MDB_UID: cu3UID}, consts.LANG_ENGLISH, fileEn3, true)
+
 	r.Nil(indexer.ContentUnitUpdate(cu3UID))
 	suite.validateNames(indexNameEn, indexer,
 		[]string{"something", "something else", "third something"})
@@ -138,9 +140,6 @@ func (suite *LikutimIndexerSuite) TestLikutimIndex() {
 	r.Nil(deleteContentUnits(UIDs))
 	r.Nil(indexer.ReindexAll(esc))
 	suite.validateNames(indexNameEn, indexer, []string{})
-
-	//fmt.Println("Restore docx-folder path to original.")
-	//mdb.DocFolder = originalDocxPath
 
 	// Remove test indexes.
 	r.Nil(indexer.DeleteIndexes())
