@@ -685,6 +685,7 @@ const (
 	// Variable types
 
 	VAR_YEAR                = "$Year"
+	VAR_DATE                = "$Date"
 	VAR_CONVENTION_LOCATION = "$ConventionLocation"
 	VAR_TEXT                = "$Text"
 	VAR_HOLIDAYS            = "$Holidays"
@@ -772,6 +773,7 @@ var CT_VARIABLES_ENABLE_SOURCES_SEARCH = map[string]bool{
 // Variable name to frontend filter name mapping.
 var VARIABLE_TO_FILTER = map[string]string{
 	VAR_YEAR:                "year",
+	VAR_DATE:                "date",
 	VAR_CONVENTION_LOCATION: "location",
 	VAR_TEXT:                "text",
 	VAR_HOLIDAYS:            "holidays",

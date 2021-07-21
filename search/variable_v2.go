@@ -44,6 +44,102 @@ func MakeYearVariablesV2() map[string][]string {
 	return ret
 }
 
+func MakeDateVariables(lang string) (map[string][]string, error) {
+
+	ret := make(map[string][]string)
+	start := time.Date(START_YEAR, time.Month(1), 1, 0, 0, 0, 0, time.UTC)
+	end := time.Now()
+	for d := start; d.After(end) == false; d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+		values := []string{}
+
+		res, err := utils.FormatDate(d, "yyyy-mm-dd", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "dd.mm.yyyy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "dd.mm.yy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "dd/mm/yyyy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "dd/mm/yy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "dd-mm-yyyy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "dd-mm-yy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "mm-dd-yyyy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "mm-dd-yy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "mm.dd.yyyy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "mm.dd.yy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "mm/dd/yyyy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		res, err = utils.FormatDate(d, "mm/dd/yy", nil)
+		if err != nil {
+			return ret, err
+		}
+		values = append(values, res...)
+
+		// TBD Limit by language with map
+		// TBD Apr 23 '16 (year with ')
+		// TBD  "28 августа 2017 г.". (with г.)
+
+		ret[dateStr] = values
+	}
+	return ret, nil
+}
+
 func YearScorePenalty(vMap map[string][]string) float64 {
 	if yearStrs, ok := vMap[consts.VAR_YEAR]; ok {
 		maxRet := 0.0
