@@ -34,13 +34,7 @@ func MakeSourcesIndex(namespace string, indexDate string, db *sql.DB, esc *elast
 
 type SourcesIndex struct {
 	BaseIndex
-	Progress    uint64
-	filesByCuId map[string][]*FileData
-}
-
-type FileData struct {
-	cuUid string
-	mdbmodels.File
+	Progress uint64
 }
 
 func (index *SourcesIndex) ReindexAll() error {
@@ -294,10 +288,7 @@ func (index *SourcesIndex) fetchDocx(cuUid string, lang string) (string, error) 
 	var file *mdbmodels.File
 	for _, f := range files {
 		ex := strings.Split(f.Name, ".")[1]
-		if ex == "docx" {
-			file = f
-		}
-		if file == nil && ex == "doc" {
+		if ex == "docx" || ex == "doc" {
 			file = f
 		}
 	}
