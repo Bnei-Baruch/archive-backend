@@ -4,7 +4,6 @@
 package models
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -14,7 +13,7 @@ import (
 	"time"
 
 	"github.com/friendsofgo/errors"
-	"github.com/volatiletech/null"
+	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
@@ -132,8 +131,6 @@ type (
 	// PlaylistItemSlice is an alias for a slice of pointers to PlaylistItem.
 	// This should almost always be used instead of []PlaylistItem.
 	PlaylistItemSlice []*PlaylistItem
-	// PlaylistItemHook is the signature for custom PlaylistItem hook methods
-	PlaylistItemHook func(context.Context, boil.ContextExecutor, *PlaylistItem) error
 
 	playlistItemQuery struct {
 		*queries.Query
@@ -161,183 +158,13 @@ var (
 	_ = qmhelper.Where
 )
 
-var playlistItemBeforeInsertHooks []PlaylistItemHook
-var playlistItemBeforeUpdateHooks []PlaylistItemHook
-var playlistItemBeforeDeleteHooks []PlaylistItemHook
-var playlistItemBeforeUpsertHooks []PlaylistItemHook
-
-var playlistItemAfterInsertHooks []PlaylistItemHook
-var playlistItemAfterSelectHooks []PlaylistItemHook
-var playlistItemAfterUpdateHooks []PlaylistItemHook
-var playlistItemAfterDeleteHooks []PlaylistItemHook
-var playlistItemAfterUpsertHooks []PlaylistItemHook
-
-// doBeforeInsertHooks executes all "before insert" hooks.
-func (o *PlaylistItem) doBeforeInsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range playlistItemBeforeInsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doBeforeUpdateHooks executes all "before Update" hooks.
-func (o *PlaylistItem) doBeforeUpdateHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range playlistItemBeforeUpdateHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doBeforeDeleteHooks executes all "before Delete" hooks.
-func (o *PlaylistItem) doBeforeDeleteHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range playlistItemBeforeDeleteHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doBeforeUpsertHooks executes all "before Upsert" hooks.
-func (o *PlaylistItem) doBeforeUpsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range playlistItemBeforeUpsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterInsertHooks executes all "after Insert" hooks.
-func (o *PlaylistItem) doAfterInsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range playlistItemAfterInsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterSelectHooks executes all "after Select" hooks.
-func (o *PlaylistItem) doAfterSelectHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range playlistItemAfterSelectHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterUpdateHooks executes all "after Update" hooks.
-func (o *PlaylistItem) doAfterUpdateHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range playlistItemAfterUpdateHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterDeleteHooks executes all "after Delete" hooks.
-func (o *PlaylistItem) doAfterDeleteHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range playlistItemAfterDeleteHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterUpsertHooks executes all "after Upsert" hooks.
-func (o *PlaylistItem) doAfterUpsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range playlistItemAfterUpsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// AddPlaylistItemHook registers your hook function for all future operations.
-func AddPlaylistItemHook(hookPoint boil.HookPoint, playlistItemHook PlaylistItemHook) {
-	switch hookPoint {
-	case boil.BeforeInsertHook:
-		playlistItemBeforeInsertHooks = append(playlistItemBeforeInsertHooks, playlistItemHook)
-	case boil.BeforeUpdateHook:
-		playlistItemBeforeUpdateHooks = append(playlistItemBeforeUpdateHooks, playlistItemHook)
-	case boil.BeforeDeleteHook:
-		playlistItemBeforeDeleteHooks = append(playlistItemBeforeDeleteHooks, playlistItemHook)
-	case boil.BeforeUpsertHook:
-		playlistItemBeforeUpsertHooks = append(playlistItemBeforeUpsertHooks, playlistItemHook)
-	case boil.AfterInsertHook:
-		playlistItemAfterInsertHooks = append(playlistItemAfterInsertHooks, playlistItemHook)
-	case boil.AfterSelectHook:
-		playlistItemAfterSelectHooks = append(playlistItemAfterSelectHooks, playlistItemHook)
-	case boil.AfterUpdateHook:
-		playlistItemAfterUpdateHooks = append(playlistItemAfterUpdateHooks, playlistItemHook)
-	case boil.AfterDeleteHook:
-		playlistItemAfterDeleteHooks = append(playlistItemAfterDeleteHooks, playlistItemHook)
-	case boil.AfterUpsertHook:
-		playlistItemAfterUpsertHooks = append(playlistItemAfterUpsertHooks, playlistItemHook)
-	}
-}
-
 // One returns a single playlistItem record from the query.
-func (q playlistItemQuery) One(ctx context.Context, exec boil.ContextExecutor) (*PlaylistItem, error) {
+func (q playlistItemQuery) One(exec boil.Executor) (*PlaylistItem, error) {
 	o := &PlaylistItem{}
 
 	queries.SetLimit(q.Query, 1)
 
-	err := q.Bind(ctx, exec, o)
+	err := q.Bind(nil, exec, o)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
@@ -345,41 +172,29 @@ func (q playlistItemQuery) One(ctx context.Context, exec boil.ContextExecutor) (
 		return nil, errors.Wrap(err, "models: failed to execute a one query for playlist_item")
 	}
 
-	if err := o.doAfterSelectHooks(ctx, exec); err != nil {
-		return o, err
-	}
-
 	return o, nil
 }
 
 // All returns all PlaylistItem records from the query.
-func (q playlistItemQuery) All(ctx context.Context, exec boil.ContextExecutor) (PlaylistItemSlice, error) {
+func (q playlistItemQuery) All(exec boil.Executor) (PlaylistItemSlice, error) {
 	var o []*PlaylistItem
 
-	err := q.Bind(ctx, exec, &o)
+	err := q.Bind(nil, exec, &o)
 	if err != nil {
 		return nil, errors.Wrap(err, "models: failed to assign all query results to PlaylistItem slice")
-	}
-
-	if len(playlistItemAfterSelectHooks) != 0 {
-		for _, obj := range o {
-			if err := obj.doAfterSelectHooks(ctx, exec); err != nil {
-				return o, err
-			}
-		}
 	}
 
 	return o, nil
 }
 
 // Count returns the count of all PlaylistItem records in the query.
-func (q playlistItemQuery) Count(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (q playlistItemQuery) Count(exec boil.Executor) (int64, error) {
 	var count int64
 
 	queries.SetSelect(q.Query, nil)
 	queries.SetCount(q.Query)
 
-	err := q.Query.QueryRowContext(ctx, exec).Scan(&count)
+	err := q.Query.QueryRow(exec).Scan(&count)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: failed to count playlist_item rows")
 	}
@@ -388,14 +203,14 @@ func (q playlistItemQuery) Count(ctx context.Context, exec boil.ContextExecutor)
 }
 
 // Exists checks if the row exists in the table.
-func (q playlistItemQuery) Exists(ctx context.Context, exec boil.ContextExecutor) (bool, error) {
+func (q playlistItemQuery) Exists(exec boil.Executor) (bool, error) {
 	var count int64
 
 	queries.SetSelect(q.Query, nil)
 	queries.SetCount(q.Query)
 	queries.SetLimit(q.Query, 1)
 
-	err := q.Query.QueryRowContext(ctx, exec).Scan(&count)
+	err := q.Query.QueryRow(exec).Scan(&count)
 	if err != nil {
 		return false, errors.Wrap(err, "models: failed to check if playlist_item exists")
 	}
@@ -419,7 +234,7 @@ func (o *PlaylistItem) Playlist(mods ...qm.QueryMod) playlistQuery {
 
 // LoadPlaylist allows an eager lookup of values, cached into the
 // loaded structs of the objects. This is for an N-1 relationship.
-func (playlistItemL) LoadPlaylist(ctx context.Context, e boil.ContextExecutor, singular bool, maybePlaylistItem interface{}, mods queries.Applicator) error {
+func (playlistItemL) LoadPlaylist(e boil.Executor, singular bool, maybePlaylistItem interface{}, mods queries.Applicator) error {
 	var slice []*PlaylistItem
 	var object *PlaylistItem
 
@@ -466,7 +281,7 @@ func (playlistItemL) LoadPlaylist(ctx context.Context, e boil.ContextExecutor, s
 		mods.Apply(query)
 	}
 
-	results, err := query.QueryContext(ctx, e)
+	results, err := query.Query(e)
 	if err != nil {
 		return errors.Wrap(err, "failed to eager load Playlist")
 	}
@@ -481,14 +296,6 @@ func (playlistItemL) LoadPlaylist(ctx context.Context, e boil.ContextExecutor, s
 	}
 	if err = results.Err(); err != nil {
 		return errors.Wrap(err, "error occurred during iteration of eager loaded relations for playlist")
-	}
-
-	if len(playlistItemAfterSelectHooks) != 0 {
-		for _, obj := range resultSlice {
-			if err := obj.doAfterSelectHooks(ctx, e); err != nil {
-				return err
-			}
-		}
 	}
 
 	if len(resultSlice) == 0 {
@@ -524,10 +331,10 @@ func (playlistItemL) LoadPlaylist(ctx context.Context, e boil.ContextExecutor, s
 // SetPlaylist of the playlistItem to the related item.
 // Sets o.R.Playlist to related.
 // Adds o to related.R.PlaylistItems.
-func (o *PlaylistItem) SetPlaylist(ctx context.Context, exec boil.ContextExecutor, insert bool, related *Playlist) error {
+func (o *PlaylistItem) SetPlaylist(exec boil.Executor, insert bool, related *Playlist) error {
 	var err error
 	if insert {
-		if err = related.Insert(ctx, exec, boil.Infer()); err != nil {
+		if err = related.Insert(exec, boil.Infer()); err != nil {
 			return errors.Wrap(err, "failed to insert into foreign table")
 		}
 	}
@@ -539,12 +346,11 @@ func (o *PlaylistItem) SetPlaylist(ctx context.Context, exec boil.ContextExecuto
 	)
 	values := []interface{}{related.ID, o.ID}
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, updateQuery)
-		fmt.Fprintln(writer, values)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, updateQuery)
+		fmt.Fprintln(boil.DebugWriter, values)
 	}
-	if _, err = exec.ExecContext(ctx, updateQuery, values...); err != nil {
+	if _, err = exec.Exec(updateQuery, values...); err != nil {
 		return errors.Wrap(err, "failed to update local table")
 	}
 
@@ -576,7 +382,7 @@ func PlaylistItems(mods ...qm.QueryMod) playlistItemQuery {
 
 // FindPlaylistItem retrieves a single record by ID with an executor.
 // If selectCols is empty Find will return all columns.
-func FindPlaylistItem(ctx context.Context, exec boil.ContextExecutor, iD int64, selectCols ...string) (*PlaylistItem, error) {
+func FindPlaylistItem(exec boil.Executor, iD int64, selectCols ...string) (*PlaylistItem, error) {
 	playlistItemObj := &PlaylistItem{}
 
 	sel := "*"
@@ -589,7 +395,7 @@ func FindPlaylistItem(ctx context.Context, exec boil.ContextExecutor, iD int64, 
 
 	q := queries.Raw(query, iD)
 
-	err := q.Bind(ctx, exec, playlistItemObj)
+	err := q.Bind(nil, exec, playlistItemObj)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
@@ -597,25 +403,17 @@ func FindPlaylistItem(ctx context.Context, exec boil.ContextExecutor, iD int64, 
 		return nil, errors.Wrap(err, "models: unable to select from playlist_item")
 	}
 
-	if err = playlistItemObj.doAfterSelectHooks(ctx, exec); err != nil {
-		return playlistItemObj, err
-	}
-
 	return playlistItemObj, nil
 }
 
 // Insert a single record using an executor.
 // See boil.Columns.InsertColumnSet documentation to understand column list inference for inserts.
-func (o *PlaylistItem) Insert(ctx context.Context, exec boil.ContextExecutor, columns boil.Columns) error {
+func (o *PlaylistItem) Insert(exec boil.Executor, columns boil.Columns) error {
 	if o == nil {
 		return errors.New("models: no playlist_item provided for insertion")
 	}
 
 	var err error
-
-	if err := o.doBeforeInsertHooks(ctx, exec); err != nil {
-		return err
-	}
 
 	nzDefaults := queries.NonZeroDefaultSet(playlistItemColumnsWithDefault, o)
 
@@ -658,16 +456,15 @@ func (o *PlaylistItem) Insert(ctx context.Context, exec boil.ContextExecutor, co
 	value := reflect.Indirect(reflect.ValueOf(o))
 	vals := queries.ValuesFromMapping(value, cache.valueMapping)
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.query)
-		fmt.Fprintln(writer, vals)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, cache.query)
+		fmt.Fprintln(boil.DebugWriter, vals)
 	}
 
 	if len(cache.retMapping) != 0 {
-		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
+		err = exec.QueryRow(cache.query, vals...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
 	} else {
-		_, err = exec.ExecContext(ctx, cache.query, vals...)
+		_, err = exec.Exec(cache.query, vals...)
 	}
 
 	if err != nil {
@@ -680,17 +477,14 @@ func (o *PlaylistItem) Insert(ctx context.Context, exec boil.ContextExecutor, co
 		playlistItemInsertCacheMut.Unlock()
 	}
 
-	return o.doAfterInsertHooks(ctx, exec)
+	return nil
 }
 
 // Update uses an executor to update the PlaylistItem.
 // See boil.Columns.UpdateColumnSet documentation to understand column list inference for updates.
 // Update does not automatically update the record in case of default values. Use .Reload() to refresh the records.
-func (o *PlaylistItem) Update(ctx context.Context, exec boil.ContextExecutor, columns boil.Columns) (int64, error) {
+func (o *PlaylistItem) Update(exec boil.Executor, columns boil.Columns) (int64, error) {
 	var err error
-	if err = o.doBeforeUpdateHooks(ctx, exec); err != nil {
-		return 0, err
-	}
 	key := makeCacheKey(columns, nil)
 	playlistItemUpdateCacheMut.RLock()
 	cache, cached := playlistItemUpdateCache[key]
@@ -721,13 +515,12 @@ func (o *PlaylistItem) Update(ctx context.Context, exec boil.ContextExecutor, co
 
 	values := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), cache.valueMapping)
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.query)
-		fmt.Fprintln(writer, values)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, cache.query)
+		fmt.Fprintln(boil.DebugWriter, values)
 	}
 	var result sql.Result
-	result, err = exec.ExecContext(ctx, cache.query, values...)
+	result, err = exec.Exec(cache.query, values...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to update playlist_item row")
 	}
@@ -743,14 +536,14 @@ func (o *PlaylistItem) Update(ctx context.Context, exec boil.ContextExecutor, co
 		playlistItemUpdateCacheMut.Unlock()
 	}
 
-	return rowsAff, o.doAfterUpdateHooks(ctx, exec)
+	return rowsAff, nil
 }
 
 // UpdateAll updates all rows with the specified column values.
-func (q playlistItemQuery) UpdateAll(ctx context.Context, exec boil.ContextExecutor, cols M) (int64, error) {
+func (q playlistItemQuery) UpdateAll(exec boil.Executor, cols M) (int64, error) {
 	queries.SetUpdate(q.Query, cols)
 
-	result, err := q.Query.ExecContext(ctx, exec)
+	result, err := q.Query.Exec(exec)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to update all for playlist_item")
 	}
@@ -764,7 +557,7 @@ func (q playlistItemQuery) UpdateAll(ctx context.Context, exec boil.ContextExecu
 }
 
 // UpdateAll updates all rows with the specified column values, using an executor.
-func (o PlaylistItemSlice) UpdateAll(ctx context.Context, exec boil.ContextExecutor, cols M) (int64, error) {
+func (o PlaylistItemSlice) UpdateAll(exec boil.Executor, cols M) (int64, error) {
 	ln := int64(len(o))
 	if ln == 0 {
 		return 0, nil
@@ -794,12 +587,11 @@ func (o PlaylistItemSlice) UpdateAll(ctx context.Context, exec boil.ContextExecu
 		strmangle.SetParamNames("\"", "\"", 1, colNames),
 		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), len(colNames)+1, playlistItemPrimaryKeyColumns, len(o)))
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, args...)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, args...)
 	}
-	result, err := exec.ExecContext(ctx, sql, args...)
+	result, err := exec.Exec(sql, args...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to update all in playlistItem slice")
 	}
@@ -813,13 +605,9 @@ func (o PlaylistItemSlice) UpdateAll(ctx context.Context, exec boil.ContextExecu
 
 // Upsert attempts an insert using an executor, and does an update or ignore on conflict.
 // See boil.Columns documentation for how to properly use updateColumns and insertColumns.
-func (o *PlaylistItem) Upsert(ctx context.Context, exec boil.ContextExecutor, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
+func (o *PlaylistItem) Upsert(exec boil.Executor, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
 	if o == nil {
 		return errors.New("models: no playlist_item provided for upsert")
-	}
-
-	if err := o.doBeforeUpsertHooks(ctx, exec); err != nil {
-		return err
 	}
 
 	nzDefaults := queries.NonZeroDefaultSet(playlistItemColumnsWithDefault, o)
@@ -900,18 +688,17 @@ func (o *PlaylistItem) Upsert(ctx context.Context, exec boil.ContextExecutor, up
 		returns = queries.PtrsFromMapping(value, cache.retMapping)
 	}
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.query)
-		fmt.Fprintln(writer, vals)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, cache.query)
+		fmt.Fprintln(boil.DebugWriter, vals)
 	}
 	if len(cache.retMapping) != 0 {
-		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(returns...)
+		err = exec.QueryRow(cache.query, vals...).Scan(returns...)
 		if err == sql.ErrNoRows {
 			err = nil // Postgres doesn't return anything when there's no update
 		}
 	} else {
-		_, err = exec.ExecContext(ctx, cache.query, vals...)
+		_, err = exec.Exec(cache.query, vals...)
 	}
 	if err != nil {
 		return errors.Wrap(err, "models: unable to upsert playlist_item")
@@ -923,29 +710,24 @@ func (o *PlaylistItem) Upsert(ctx context.Context, exec boil.ContextExecutor, up
 		playlistItemUpsertCacheMut.Unlock()
 	}
 
-	return o.doAfterUpsertHooks(ctx, exec)
+	return nil
 }
 
 // Delete deletes a single PlaylistItem record with an executor.
 // Delete will match against the primary key column to find the record to delete.
-func (o *PlaylistItem) Delete(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (o *PlaylistItem) Delete(exec boil.Executor) (int64, error) {
 	if o == nil {
 		return 0, errors.New("models: no PlaylistItem provided for delete")
-	}
-
-	if err := o.doBeforeDeleteHooks(ctx, exec); err != nil {
-		return 0, err
 	}
 
 	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), playlistItemPrimaryKeyMapping)
 	sql := "DELETE FROM \"playlist_item\" WHERE \"id\"=$1"
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, args...)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, args...)
 	}
-	result, err := exec.ExecContext(ctx, sql, args...)
+	result, err := exec.Exec(sql, args...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to delete from playlist_item")
 	}
@@ -955,22 +737,18 @@ func (o *PlaylistItem) Delete(ctx context.Context, exec boil.ContextExecutor) (i
 		return 0, errors.Wrap(err, "models: failed to get rows affected by delete for playlist_item")
 	}
 
-	if err := o.doAfterDeleteHooks(ctx, exec); err != nil {
-		return 0, err
-	}
-
 	return rowsAff, nil
 }
 
 // DeleteAll deletes all matching rows.
-func (q playlistItemQuery) DeleteAll(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (q playlistItemQuery) DeleteAll(exec boil.Executor) (int64, error) {
 	if q.Query == nil {
 		return 0, errors.New("models: no playlistItemQuery provided for delete all")
 	}
 
 	queries.SetDelete(q.Query)
 
-	result, err := q.Query.ExecContext(ctx, exec)
+	result, err := q.Query.Exec(exec)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to delete all from playlist_item")
 	}
@@ -984,17 +762,9 @@ func (q playlistItemQuery) DeleteAll(ctx context.Context, exec boil.ContextExecu
 }
 
 // DeleteAll deletes all rows in the slice, using an executor.
-func (o PlaylistItemSlice) DeleteAll(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (o PlaylistItemSlice) DeleteAll(exec boil.Executor) (int64, error) {
 	if len(o) == 0 {
 		return 0, nil
-	}
-
-	if len(playlistItemBeforeDeleteHooks) != 0 {
-		for _, obj := range o {
-			if err := obj.doBeforeDeleteHooks(ctx, exec); err != nil {
-				return 0, err
-			}
-		}
 	}
 
 	var args []interface{}
@@ -1006,12 +776,11 @@ func (o PlaylistItemSlice) DeleteAll(ctx context.Context, exec boil.ContextExecu
 	sql := "DELETE FROM \"playlist_item\" WHERE " +
 		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 1, playlistItemPrimaryKeyColumns, len(o))
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, args)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, args)
 	}
-	result, err := exec.ExecContext(ctx, sql, args...)
+	result, err := exec.Exec(sql, args...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to delete all from playlistItem slice")
 	}
@@ -1021,21 +790,13 @@ func (o PlaylistItemSlice) DeleteAll(ctx context.Context, exec boil.ContextExecu
 		return 0, errors.Wrap(err, "models: failed to get rows affected by deleteall for playlist_item")
 	}
 
-	if len(playlistItemAfterDeleteHooks) != 0 {
-		for _, obj := range o {
-			if err := obj.doAfterDeleteHooks(ctx, exec); err != nil {
-				return 0, err
-			}
-		}
-	}
-
 	return rowsAff, nil
 }
 
 // Reload refetches the object from the database
 // using the primary keys with an executor.
-func (o *PlaylistItem) Reload(ctx context.Context, exec boil.ContextExecutor) error {
-	ret, err := FindPlaylistItem(ctx, exec, o.ID)
+func (o *PlaylistItem) Reload(exec boil.Executor) error {
+	ret, err := FindPlaylistItem(exec, o.ID)
 	if err != nil {
 		return err
 	}
@@ -1046,7 +807,7 @@ func (o *PlaylistItem) Reload(ctx context.Context, exec boil.ContextExecutor) er
 
 // ReloadAll refetches every row with matching primary key column values
 // and overwrites the original object slice with the newly updated slice.
-func (o *PlaylistItemSlice) ReloadAll(ctx context.Context, exec boil.ContextExecutor) error {
+func (o *PlaylistItemSlice) ReloadAll(exec boil.Executor) error {
 	if o == nil || len(*o) == 0 {
 		return nil
 	}
@@ -1063,7 +824,7 @@ func (o *PlaylistItemSlice) ReloadAll(ctx context.Context, exec boil.ContextExec
 
 	q := queries.Raw(sql, args...)
 
-	err := q.Bind(ctx, exec, &slice)
+	err := q.Bind(nil, exec, &slice)
 	if err != nil {
 		return errors.Wrap(err, "models: unable to reload all in PlaylistItemSlice")
 	}
@@ -1074,16 +835,15 @@ func (o *PlaylistItemSlice) ReloadAll(ctx context.Context, exec boil.ContextExec
 }
 
 // PlaylistItemExists checks if the PlaylistItem row exists.
-func PlaylistItemExists(ctx context.Context, exec boil.ContextExecutor, iD int64) (bool, error) {
+func PlaylistItemExists(exec boil.Executor, iD int64) (bool, error) {
 	var exists bool
 	sql := "select exists(select 1 from \"playlist_item\" where \"id\"=$1 limit 1)"
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, iD)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, iD)
 	}
-	row := exec.QueryRowContext(ctx, sql, iD)
+	row := exec.QueryRow(sql, iD)
 
 	err := row.Scan(&exists)
 	if err != nil {

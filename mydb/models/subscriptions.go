@@ -4,7 +4,6 @@
 package models
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -14,7 +13,7 @@ import (
 	"time"
 
 	"github.com/friendsofgo/errors"
-	"github.com/volatiletech/null"
+	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
@@ -98,8 +97,6 @@ type (
 	// SubscriptionSlice is an alias for a slice of pointers to Subscription.
 	// This should almost always be used instead of []Subscription.
 	SubscriptionSlice []*Subscription
-	// SubscriptionHook is the signature for custom Subscription hook methods
-	SubscriptionHook func(context.Context, boil.ContextExecutor, *Subscription) error
 
 	subscriptionQuery struct {
 		*queries.Query
@@ -127,183 +124,13 @@ var (
 	_ = qmhelper.Where
 )
 
-var subscriptionBeforeInsertHooks []SubscriptionHook
-var subscriptionBeforeUpdateHooks []SubscriptionHook
-var subscriptionBeforeDeleteHooks []SubscriptionHook
-var subscriptionBeforeUpsertHooks []SubscriptionHook
-
-var subscriptionAfterInsertHooks []SubscriptionHook
-var subscriptionAfterSelectHooks []SubscriptionHook
-var subscriptionAfterUpdateHooks []SubscriptionHook
-var subscriptionAfterDeleteHooks []SubscriptionHook
-var subscriptionAfterUpsertHooks []SubscriptionHook
-
-// doBeforeInsertHooks executes all "before insert" hooks.
-func (o *Subscription) doBeforeInsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range subscriptionBeforeInsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doBeforeUpdateHooks executes all "before Update" hooks.
-func (o *Subscription) doBeforeUpdateHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range subscriptionBeforeUpdateHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doBeforeDeleteHooks executes all "before Delete" hooks.
-func (o *Subscription) doBeforeDeleteHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range subscriptionBeforeDeleteHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doBeforeUpsertHooks executes all "before Upsert" hooks.
-func (o *Subscription) doBeforeUpsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range subscriptionBeforeUpsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterInsertHooks executes all "after Insert" hooks.
-func (o *Subscription) doAfterInsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range subscriptionAfterInsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterSelectHooks executes all "after Select" hooks.
-func (o *Subscription) doAfterSelectHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range subscriptionAfterSelectHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterUpdateHooks executes all "after Update" hooks.
-func (o *Subscription) doAfterUpdateHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range subscriptionAfterUpdateHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterDeleteHooks executes all "after Delete" hooks.
-func (o *Subscription) doAfterDeleteHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range subscriptionAfterDeleteHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterUpsertHooks executes all "after Upsert" hooks.
-func (o *Subscription) doAfterUpsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range subscriptionAfterUpsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// AddSubscriptionHook registers your hook function for all future operations.
-func AddSubscriptionHook(hookPoint boil.HookPoint, subscriptionHook SubscriptionHook) {
-	switch hookPoint {
-	case boil.BeforeInsertHook:
-		subscriptionBeforeInsertHooks = append(subscriptionBeforeInsertHooks, subscriptionHook)
-	case boil.BeforeUpdateHook:
-		subscriptionBeforeUpdateHooks = append(subscriptionBeforeUpdateHooks, subscriptionHook)
-	case boil.BeforeDeleteHook:
-		subscriptionBeforeDeleteHooks = append(subscriptionBeforeDeleteHooks, subscriptionHook)
-	case boil.BeforeUpsertHook:
-		subscriptionBeforeUpsertHooks = append(subscriptionBeforeUpsertHooks, subscriptionHook)
-	case boil.AfterInsertHook:
-		subscriptionAfterInsertHooks = append(subscriptionAfterInsertHooks, subscriptionHook)
-	case boil.AfterSelectHook:
-		subscriptionAfterSelectHooks = append(subscriptionAfterSelectHooks, subscriptionHook)
-	case boil.AfterUpdateHook:
-		subscriptionAfterUpdateHooks = append(subscriptionAfterUpdateHooks, subscriptionHook)
-	case boil.AfterDeleteHook:
-		subscriptionAfterDeleteHooks = append(subscriptionAfterDeleteHooks, subscriptionHook)
-	case boil.AfterUpsertHook:
-		subscriptionAfterUpsertHooks = append(subscriptionAfterUpsertHooks, subscriptionHook)
-	}
-}
-
 // One returns a single subscription record from the query.
-func (q subscriptionQuery) One(ctx context.Context, exec boil.ContextExecutor) (*Subscription, error) {
+func (q subscriptionQuery) One(exec boil.Executor) (*Subscription, error) {
 	o := &Subscription{}
 
 	queries.SetLimit(q.Query, 1)
 
-	err := q.Bind(ctx, exec, o)
+	err := q.Bind(nil, exec, o)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
@@ -311,41 +138,29 @@ func (q subscriptionQuery) One(ctx context.Context, exec boil.ContextExecutor) (
 		return nil, errors.Wrap(err, "models: failed to execute a one query for subscriptions")
 	}
 
-	if err := o.doAfterSelectHooks(ctx, exec); err != nil {
-		return o, err
-	}
-
 	return o, nil
 }
 
 // All returns all Subscription records from the query.
-func (q subscriptionQuery) All(ctx context.Context, exec boil.ContextExecutor) (SubscriptionSlice, error) {
+func (q subscriptionQuery) All(exec boil.Executor) (SubscriptionSlice, error) {
 	var o []*Subscription
 
-	err := q.Bind(ctx, exec, &o)
+	err := q.Bind(nil, exec, &o)
 	if err != nil {
 		return nil, errors.Wrap(err, "models: failed to assign all query results to Subscription slice")
-	}
-
-	if len(subscriptionAfterSelectHooks) != 0 {
-		for _, obj := range o {
-			if err := obj.doAfterSelectHooks(ctx, exec); err != nil {
-				return o, err
-			}
-		}
 	}
 
 	return o, nil
 }
 
 // Count returns the count of all Subscription records in the query.
-func (q subscriptionQuery) Count(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (q subscriptionQuery) Count(exec boil.Executor) (int64, error) {
 	var count int64
 
 	queries.SetSelect(q.Query, nil)
 	queries.SetCount(q.Query)
 
-	err := q.Query.QueryRowContext(ctx, exec).Scan(&count)
+	err := q.Query.QueryRow(exec).Scan(&count)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: failed to count subscriptions rows")
 	}
@@ -354,14 +169,14 @@ func (q subscriptionQuery) Count(ctx context.Context, exec boil.ContextExecutor)
 }
 
 // Exists checks if the row exists in the table.
-func (q subscriptionQuery) Exists(ctx context.Context, exec boil.ContextExecutor) (bool, error) {
+func (q subscriptionQuery) Exists(exec boil.Executor) (bool, error) {
 	var count int64
 
 	queries.SetSelect(q.Query, nil)
 	queries.SetCount(q.Query)
 	queries.SetLimit(q.Query, 1)
 
-	err := q.Query.QueryRowContext(ctx, exec).Scan(&count)
+	err := q.Query.QueryRow(exec).Scan(&count)
 	if err != nil {
 		return false, errors.Wrap(err, "models: failed to check if subscriptions exists")
 	}
@@ -377,7 +192,7 @@ func Subscriptions(mods ...qm.QueryMod) subscriptionQuery {
 
 // FindSubscription retrieves a single record by ID with an executor.
 // If selectCols is empty Find will return all columns.
-func FindSubscription(ctx context.Context, exec boil.ContextExecutor, iD int64, selectCols ...string) (*Subscription, error) {
+func FindSubscription(exec boil.Executor, iD int64, selectCols ...string) (*Subscription, error) {
 	subscriptionObj := &Subscription{}
 
 	sel := "*"
@@ -390,7 +205,7 @@ func FindSubscription(ctx context.Context, exec boil.ContextExecutor, iD int64, 
 
 	q := queries.Raw(query, iD)
 
-	err := q.Bind(ctx, exec, subscriptionObj)
+	err := q.Bind(nil, exec, subscriptionObj)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
@@ -398,25 +213,17 @@ func FindSubscription(ctx context.Context, exec boil.ContextExecutor, iD int64, 
 		return nil, errors.Wrap(err, "models: unable to select from subscriptions")
 	}
 
-	if err = subscriptionObj.doAfterSelectHooks(ctx, exec); err != nil {
-		return subscriptionObj, err
-	}
-
 	return subscriptionObj, nil
 }
 
 // Insert a single record using an executor.
 // See boil.Columns.InsertColumnSet documentation to understand column list inference for inserts.
-func (o *Subscription) Insert(ctx context.Context, exec boil.ContextExecutor, columns boil.Columns) error {
+func (o *Subscription) Insert(exec boil.Executor, columns boil.Columns) error {
 	if o == nil {
 		return errors.New("models: no subscriptions provided for insertion")
 	}
 
 	var err error
-
-	if err := o.doBeforeInsertHooks(ctx, exec); err != nil {
-		return err
-	}
 
 	nzDefaults := queries.NonZeroDefaultSet(subscriptionColumnsWithDefault, o)
 
@@ -459,16 +266,15 @@ func (o *Subscription) Insert(ctx context.Context, exec boil.ContextExecutor, co
 	value := reflect.Indirect(reflect.ValueOf(o))
 	vals := queries.ValuesFromMapping(value, cache.valueMapping)
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.query)
-		fmt.Fprintln(writer, vals)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, cache.query)
+		fmt.Fprintln(boil.DebugWriter, vals)
 	}
 
 	if len(cache.retMapping) != 0 {
-		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
+		err = exec.QueryRow(cache.query, vals...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
 	} else {
-		_, err = exec.ExecContext(ctx, cache.query, vals...)
+		_, err = exec.Exec(cache.query, vals...)
 	}
 
 	if err != nil {
@@ -481,17 +287,14 @@ func (o *Subscription) Insert(ctx context.Context, exec boil.ContextExecutor, co
 		subscriptionInsertCacheMut.Unlock()
 	}
 
-	return o.doAfterInsertHooks(ctx, exec)
+	return nil
 }
 
 // Update uses an executor to update the Subscription.
 // See boil.Columns.UpdateColumnSet documentation to understand column list inference for updates.
 // Update does not automatically update the record in case of default values. Use .Reload() to refresh the records.
-func (o *Subscription) Update(ctx context.Context, exec boil.ContextExecutor, columns boil.Columns) (int64, error) {
+func (o *Subscription) Update(exec boil.Executor, columns boil.Columns) (int64, error) {
 	var err error
-	if err = o.doBeforeUpdateHooks(ctx, exec); err != nil {
-		return 0, err
-	}
 	key := makeCacheKey(columns, nil)
 	subscriptionUpdateCacheMut.RLock()
 	cache, cached := subscriptionUpdateCache[key]
@@ -522,13 +325,12 @@ func (o *Subscription) Update(ctx context.Context, exec boil.ContextExecutor, co
 
 	values := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), cache.valueMapping)
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.query)
-		fmt.Fprintln(writer, values)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, cache.query)
+		fmt.Fprintln(boil.DebugWriter, values)
 	}
 	var result sql.Result
-	result, err = exec.ExecContext(ctx, cache.query, values...)
+	result, err = exec.Exec(cache.query, values...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to update subscriptions row")
 	}
@@ -544,14 +346,14 @@ func (o *Subscription) Update(ctx context.Context, exec boil.ContextExecutor, co
 		subscriptionUpdateCacheMut.Unlock()
 	}
 
-	return rowsAff, o.doAfterUpdateHooks(ctx, exec)
+	return rowsAff, nil
 }
 
 // UpdateAll updates all rows with the specified column values.
-func (q subscriptionQuery) UpdateAll(ctx context.Context, exec boil.ContextExecutor, cols M) (int64, error) {
+func (q subscriptionQuery) UpdateAll(exec boil.Executor, cols M) (int64, error) {
 	queries.SetUpdate(q.Query, cols)
 
-	result, err := q.Query.ExecContext(ctx, exec)
+	result, err := q.Query.Exec(exec)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to update all for subscriptions")
 	}
@@ -565,7 +367,7 @@ func (q subscriptionQuery) UpdateAll(ctx context.Context, exec boil.ContextExecu
 }
 
 // UpdateAll updates all rows with the specified column values, using an executor.
-func (o SubscriptionSlice) UpdateAll(ctx context.Context, exec boil.ContextExecutor, cols M) (int64, error) {
+func (o SubscriptionSlice) UpdateAll(exec boil.Executor, cols M) (int64, error) {
 	ln := int64(len(o))
 	if ln == 0 {
 		return 0, nil
@@ -595,12 +397,11 @@ func (o SubscriptionSlice) UpdateAll(ctx context.Context, exec boil.ContextExecu
 		strmangle.SetParamNames("\"", "\"", 1, colNames),
 		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), len(colNames)+1, subscriptionPrimaryKeyColumns, len(o)))
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, args...)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, args...)
 	}
-	result, err := exec.ExecContext(ctx, sql, args...)
+	result, err := exec.Exec(sql, args...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to update all in subscription slice")
 	}
@@ -614,13 +415,9 @@ func (o SubscriptionSlice) UpdateAll(ctx context.Context, exec boil.ContextExecu
 
 // Upsert attempts an insert using an executor, and does an update or ignore on conflict.
 // See boil.Columns documentation for how to properly use updateColumns and insertColumns.
-func (o *Subscription) Upsert(ctx context.Context, exec boil.ContextExecutor, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
+func (o *Subscription) Upsert(exec boil.Executor, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
 	if o == nil {
 		return errors.New("models: no subscriptions provided for upsert")
-	}
-
-	if err := o.doBeforeUpsertHooks(ctx, exec); err != nil {
-		return err
 	}
 
 	nzDefaults := queries.NonZeroDefaultSet(subscriptionColumnsWithDefault, o)
@@ -701,18 +498,17 @@ func (o *Subscription) Upsert(ctx context.Context, exec boil.ContextExecutor, up
 		returns = queries.PtrsFromMapping(value, cache.retMapping)
 	}
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.query)
-		fmt.Fprintln(writer, vals)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, cache.query)
+		fmt.Fprintln(boil.DebugWriter, vals)
 	}
 	if len(cache.retMapping) != 0 {
-		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(returns...)
+		err = exec.QueryRow(cache.query, vals...).Scan(returns...)
 		if err == sql.ErrNoRows {
 			err = nil // Postgres doesn't return anything when there's no update
 		}
 	} else {
-		_, err = exec.ExecContext(ctx, cache.query, vals...)
+		_, err = exec.Exec(cache.query, vals...)
 	}
 	if err != nil {
 		return errors.Wrap(err, "models: unable to upsert subscriptions")
@@ -724,29 +520,24 @@ func (o *Subscription) Upsert(ctx context.Context, exec boil.ContextExecutor, up
 		subscriptionUpsertCacheMut.Unlock()
 	}
 
-	return o.doAfterUpsertHooks(ctx, exec)
+	return nil
 }
 
 // Delete deletes a single Subscription record with an executor.
 // Delete will match against the primary key column to find the record to delete.
-func (o *Subscription) Delete(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (o *Subscription) Delete(exec boil.Executor) (int64, error) {
 	if o == nil {
 		return 0, errors.New("models: no Subscription provided for delete")
-	}
-
-	if err := o.doBeforeDeleteHooks(ctx, exec); err != nil {
-		return 0, err
 	}
 
 	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), subscriptionPrimaryKeyMapping)
 	sql := "DELETE FROM \"subscriptions\" WHERE \"id\"=$1"
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, args...)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, args...)
 	}
-	result, err := exec.ExecContext(ctx, sql, args...)
+	result, err := exec.Exec(sql, args...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to delete from subscriptions")
 	}
@@ -756,22 +547,18 @@ func (o *Subscription) Delete(ctx context.Context, exec boil.ContextExecutor) (i
 		return 0, errors.Wrap(err, "models: failed to get rows affected by delete for subscriptions")
 	}
 
-	if err := o.doAfterDeleteHooks(ctx, exec); err != nil {
-		return 0, err
-	}
-
 	return rowsAff, nil
 }
 
 // DeleteAll deletes all matching rows.
-func (q subscriptionQuery) DeleteAll(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (q subscriptionQuery) DeleteAll(exec boil.Executor) (int64, error) {
 	if q.Query == nil {
 		return 0, errors.New("models: no subscriptionQuery provided for delete all")
 	}
 
 	queries.SetDelete(q.Query)
 
-	result, err := q.Query.ExecContext(ctx, exec)
+	result, err := q.Query.Exec(exec)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to delete all from subscriptions")
 	}
@@ -785,17 +572,9 @@ func (q subscriptionQuery) DeleteAll(ctx context.Context, exec boil.ContextExecu
 }
 
 // DeleteAll deletes all rows in the slice, using an executor.
-func (o SubscriptionSlice) DeleteAll(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (o SubscriptionSlice) DeleteAll(exec boil.Executor) (int64, error) {
 	if len(o) == 0 {
 		return 0, nil
-	}
-
-	if len(subscriptionBeforeDeleteHooks) != 0 {
-		for _, obj := range o {
-			if err := obj.doBeforeDeleteHooks(ctx, exec); err != nil {
-				return 0, err
-			}
-		}
 	}
 
 	var args []interface{}
@@ -807,12 +586,11 @@ func (o SubscriptionSlice) DeleteAll(ctx context.Context, exec boil.ContextExecu
 	sql := "DELETE FROM \"subscriptions\" WHERE " +
 		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 1, subscriptionPrimaryKeyColumns, len(o))
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, args)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, args)
 	}
-	result, err := exec.ExecContext(ctx, sql, args...)
+	result, err := exec.Exec(sql, args...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to delete all from subscription slice")
 	}
@@ -822,21 +600,13 @@ func (o SubscriptionSlice) DeleteAll(ctx context.Context, exec boil.ContextExecu
 		return 0, errors.Wrap(err, "models: failed to get rows affected by deleteall for subscriptions")
 	}
 
-	if len(subscriptionAfterDeleteHooks) != 0 {
-		for _, obj := range o {
-			if err := obj.doAfterDeleteHooks(ctx, exec); err != nil {
-				return 0, err
-			}
-		}
-	}
-
 	return rowsAff, nil
 }
 
 // Reload refetches the object from the database
 // using the primary keys with an executor.
-func (o *Subscription) Reload(ctx context.Context, exec boil.ContextExecutor) error {
-	ret, err := FindSubscription(ctx, exec, o.ID)
+func (o *Subscription) Reload(exec boil.Executor) error {
+	ret, err := FindSubscription(exec, o.ID)
 	if err != nil {
 		return err
 	}
@@ -847,7 +617,7 @@ func (o *Subscription) Reload(ctx context.Context, exec boil.ContextExecutor) er
 
 // ReloadAll refetches every row with matching primary key column values
 // and overwrites the original object slice with the newly updated slice.
-func (o *SubscriptionSlice) ReloadAll(ctx context.Context, exec boil.ContextExecutor) error {
+func (o *SubscriptionSlice) ReloadAll(exec boil.Executor) error {
 	if o == nil || len(*o) == 0 {
 		return nil
 	}
@@ -864,7 +634,7 @@ func (o *SubscriptionSlice) ReloadAll(ctx context.Context, exec boil.ContextExec
 
 	q := queries.Raw(sql, args...)
 
-	err := q.Bind(ctx, exec, &slice)
+	err := q.Bind(nil, exec, &slice)
 	if err != nil {
 		return errors.Wrap(err, "models: unable to reload all in SubscriptionSlice")
 	}
@@ -875,16 +645,15 @@ func (o *SubscriptionSlice) ReloadAll(ctx context.Context, exec boil.ContextExec
 }
 
 // SubscriptionExists checks if the Subscription row exists.
-func SubscriptionExists(ctx context.Context, exec boil.ContextExecutor, iD int64) (bool, error) {
+func SubscriptionExists(exec boil.Executor, iD int64) (bool, error) {
 	var exists bool
 	sql := "select exists(select 1 from \"subscriptions\" where \"id\"=$1 limit 1)"
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, iD)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, iD)
 	}
-	row := exec.QueryRowContext(ctx, sql, iD)
+	row := exec.QueryRow(sql, iD)
 
 	err := row.Scan(&exists)
 	if err != nil {

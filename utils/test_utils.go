@@ -15,7 +15,7 @@ import (
 
 type TestDBManager struct {
 	DB     *sql.DB
-	myDB   *sql.DB
+	MyDB   *sql.DB
 	testDB string
 }
 
@@ -34,9 +34,9 @@ func (m *TestDBManager) InitTestMyDB() error {
 	if err != nil {
 		return err
 	}
-	m.myDB = db
+	m.MyDB = db
 	// Run migrations
-	return m.runMigrations(m.myDB)
+	return m.runMigrations(m.MyDB)
 }
 
 func (m *TestDBManager) initTestDB(url, template, name string) (*sql.DB, error) {
@@ -63,9 +63,26 @@ func (m *TestDBManager) initTestDB(url, template, name string) (*sql.DB, error) 
 	return db, nil
 }
 
-func (m *TestDBManager) DestroyTestDB() error {
+func (m *TestDBManager) DestroyTestMDB() error {
 	// Close temp DB
 	err := m.DB.Close()
+	if err != nil {
+		return err
+	}
+
+	// Connect to MDB
+	db, err := sql.Open("postgres", viper.GetString("test.mdb-url"))
+	if err != nil {
+		return err
+	}
+
+	// Drop test DB
+	_, err = db.Exec("DROP DATABASE " + m.testDB)
+	return err
+}
+func (m *TestDBManager) DestroyTestMyDB() error {
+	// Close temp DB
+	err := m.MyDB.Close()
 	if err != nil {
 		return err
 	}

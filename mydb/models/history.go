@@ -4,7 +4,6 @@
 package models
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -14,7 +13,7 @@ import (
 	"time"
 
 	"github.com/friendsofgo/errors"
-	"github.com/volatiletech/null"
+	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
@@ -225,8 +224,6 @@ type (
 	// HistorySlice is an alias for a slice of pointers to History.
 	// This should almost always be used instead of []History.
 	HistorySlice []*History
-	// HistoryHook is the signature for custom History hook methods
-	HistoryHook func(context.Context, boil.ContextExecutor, *History) error
 
 	historyQuery struct {
 		*queries.Query
@@ -254,183 +251,13 @@ var (
 	_ = qmhelper.Where
 )
 
-var historyBeforeInsertHooks []HistoryHook
-var historyBeforeUpdateHooks []HistoryHook
-var historyBeforeDeleteHooks []HistoryHook
-var historyBeforeUpsertHooks []HistoryHook
-
-var historyAfterInsertHooks []HistoryHook
-var historyAfterSelectHooks []HistoryHook
-var historyAfterUpdateHooks []HistoryHook
-var historyAfterDeleteHooks []HistoryHook
-var historyAfterUpsertHooks []HistoryHook
-
-// doBeforeInsertHooks executes all "before insert" hooks.
-func (o *History) doBeforeInsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range historyBeforeInsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doBeforeUpdateHooks executes all "before Update" hooks.
-func (o *History) doBeforeUpdateHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range historyBeforeUpdateHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doBeforeDeleteHooks executes all "before Delete" hooks.
-func (o *History) doBeforeDeleteHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range historyBeforeDeleteHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doBeforeUpsertHooks executes all "before Upsert" hooks.
-func (o *History) doBeforeUpsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range historyBeforeUpsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterInsertHooks executes all "after Insert" hooks.
-func (o *History) doAfterInsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range historyAfterInsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterSelectHooks executes all "after Select" hooks.
-func (o *History) doAfterSelectHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range historyAfterSelectHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterUpdateHooks executes all "after Update" hooks.
-func (o *History) doAfterUpdateHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range historyAfterUpdateHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterDeleteHooks executes all "after Delete" hooks.
-func (o *History) doAfterDeleteHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range historyAfterDeleteHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// doAfterUpsertHooks executes all "after Upsert" hooks.
-func (o *History) doAfterUpsertHooks(ctx context.Context, exec boil.ContextExecutor) (err error) {
-	if boil.HooksAreSkipped(ctx) {
-		return nil
-	}
-
-	for _, hook := range historyAfterUpsertHooks {
-		if err := hook(ctx, exec, o); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// AddHistoryHook registers your hook function for all future operations.
-func AddHistoryHook(hookPoint boil.HookPoint, historyHook HistoryHook) {
-	switch hookPoint {
-	case boil.BeforeInsertHook:
-		historyBeforeInsertHooks = append(historyBeforeInsertHooks, historyHook)
-	case boil.BeforeUpdateHook:
-		historyBeforeUpdateHooks = append(historyBeforeUpdateHooks, historyHook)
-	case boil.BeforeDeleteHook:
-		historyBeforeDeleteHooks = append(historyBeforeDeleteHooks, historyHook)
-	case boil.BeforeUpsertHook:
-		historyBeforeUpsertHooks = append(historyBeforeUpsertHooks, historyHook)
-	case boil.AfterInsertHook:
-		historyAfterInsertHooks = append(historyAfterInsertHooks, historyHook)
-	case boil.AfterSelectHook:
-		historyAfterSelectHooks = append(historyAfterSelectHooks, historyHook)
-	case boil.AfterUpdateHook:
-		historyAfterUpdateHooks = append(historyAfterUpdateHooks, historyHook)
-	case boil.AfterDeleteHook:
-		historyAfterDeleteHooks = append(historyAfterDeleteHooks, historyHook)
-	case boil.AfterUpsertHook:
-		historyAfterUpsertHooks = append(historyAfterUpsertHooks, historyHook)
-	}
-}
-
 // One returns a single history record from the query.
-func (q historyQuery) One(ctx context.Context, exec boil.ContextExecutor) (*History, error) {
+func (q historyQuery) One(exec boil.Executor) (*History, error) {
 	o := &History{}
 
 	queries.SetLimit(q.Query, 1)
 
-	err := q.Bind(ctx, exec, o)
+	err := q.Bind(nil, exec, o)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
@@ -438,41 +265,29 @@ func (q historyQuery) One(ctx context.Context, exec boil.ContextExecutor) (*Hist
 		return nil, errors.Wrap(err, "models: failed to execute a one query for history")
 	}
 
-	if err := o.doAfterSelectHooks(ctx, exec); err != nil {
-		return o, err
-	}
-
 	return o, nil
 }
 
 // All returns all History records from the query.
-func (q historyQuery) All(ctx context.Context, exec boil.ContextExecutor) (HistorySlice, error) {
+func (q historyQuery) All(exec boil.Executor) (HistorySlice, error) {
 	var o []*History
 
-	err := q.Bind(ctx, exec, &o)
+	err := q.Bind(nil, exec, &o)
 	if err != nil {
 		return nil, errors.Wrap(err, "models: failed to assign all query results to History slice")
-	}
-
-	if len(historyAfterSelectHooks) != 0 {
-		for _, obj := range o {
-			if err := obj.doAfterSelectHooks(ctx, exec); err != nil {
-				return o, err
-			}
-		}
 	}
 
 	return o, nil
 }
 
 // Count returns the count of all History records in the query.
-func (q historyQuery) Count(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (q historyQuery) Count(exec boil.Executor) (int64, error) {
 	var count int64
 
 	queries.SetSelect(q.Query, nil)
 	queries.SetCount(q.Query)
 
-	err := q.Query.QueryRowContext(ctx, exec).Scan(&count)
+	err := q.Query.QueryRow(exec).Scan(&count)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: failed to count history rows")
 	}
@@ -481,14 +296,14 @@ func (q historyQuery) Count(ctx context.Context, exec boil.ContextExecutor) (int
 }
 
 // Exists checks if the row exists in the table.
-func (q historyQuery) Exists(ctx context.Context, exec boil.ContextExecutor) (bool, error) {
+func (q historyQuery) Exists(exec boil.Executor) (bool, error) {
 	var count int64
 
 	queries.SetSelect(q.Query, nil)
 	queries.SetCount(q.Query)
 	queries.SetLimit(q.Query, 1)
 
-	err := q.Query.QueryRowContext(ctx, exec).Scan(&count)
+	err := q.Query.QueryRow(exec).Scan(&count)
 	if err != nil {
 		return false, errors.Wrap(err, "models: failed to check if history exists")
 	}
@@ -504,7 +319,7 @@ func Histories(mods ...qm.QueryMod) historyQuery {
 
 // FindHistory retrieves a single record by ID with an executor.
 // If selectCols is empty Find will return all columns.
-func FindHistory(ctx context.Context, exec boil.ContextExecutor, iD int64, selectCols ...string) (*History, error) {
+func FindHistory(exec boil.Executor, iD int64, selectCols ...string) (*History, error) {
 	historyObj := &History{}
 
 	sel := "*"
@@ -517,7 +332,7 @@ func FindHistory(ctx context.Context, exec boil.ContextExecutor, iD int64, selec
 
 	q := queries.Raw(query, iD)
 
-	err := q.Bind(ctx, exec, historyObj)
+	err := q.Bind(nil, exec, historyObj)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
@@ -525,31 +340,21 @@ func FindHistory(ctx context.Context, exec boil.ContextExecutor, iD int64, selec
 		return nil, errors.Wrap(err, "models: unable to select from history")
 	}
 
-	if err = historyObj.doAfterSelectHooks(ctx, exec); err != nil {
-		return historyObj, err
-	}
-
 	return historyObj, nil
 }
 
 // Insert a single record using an executor.
 // See boil.Columns.InsertColumnSet documentation to understand column list inference for inserts.
-func (o *History) Insert(ctx context.Context, exec boil.ContextExecutor, columns boil.Columns) error {
+func (o *History) Insert(exec boil.Executor, columns boil.Columns) error {
 	if o == nil {
 		return errors.New("models: no history provided for insertion")
 	}
 
 	var err error
-	if !boil.TimestampsAreSkipped(ctx) {
-		currTime := time.Now().In(boil.GetLocation())
+	currTime := time.Now().In(boil.GetLocation())
 
-		if o.CreatedAt.IsZero() {
-			o.CreatedAt = currTime
-		}
-	}
-
-	if err := o.doBeforeInsertHooks(ctx, exec); err != nil {
-		return err
+	if o.CreatedAt.IsZero() {
+		o.CreatedAt = currTime
 	}
 
 	nzDefaults := queries.NonZeroDefaultSet(historyColumnsWithDefault, o)
@@ -593,16 +398,15 @@ func (o *History) Insert(ctx context.Context, exec boil.ContextExecutor, columns
 	value := reflect.Indirect(reflect.ValueOf(o))
 	vals := queries.ValuesFromMapping(value, cache.valueMapping)
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.query)
-		fmt.Fprintln(writer, vals)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, cache.query)
+		fmt.Fprintln(boil.DebugWriter, vals)
 	}
 
 	if len(cache.retMapping) != 0 {
-		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
+		err = exec.QueryRow(cache.query, vals...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
 	} else {
-		_, err = exec.ExecContext(ctx, cache.query, vals...)
+		_, err = exec.Exec(cache.query, vals...)
 	}
 
 	if err != nil {
@@ -615,17 +419,14 @@ func (o *History) Insert(ctx context.Context, exec boil.ContextExecutor, columns
 		historyInsertCacheMut.Unlock()
 	}
 
-	return o.doAfterInsertHooks(ctx, exec)
+	return nil
 }
 
 // Update uses an executor to update the History.
 // See boil.Columns.UpdateColumnSet documentation to understand column list inference for updates.
 // Update does not automatically update the record in case of default values. Use .Reload() to refresh the records.
-func (o *History) Update(ctx context.Context, exec boil.ContextExecutor, columns boil.Columns) (int64, error) {
+func (o *History) Update(exec boil.Executor, columns boil.Columns) (int64, error) {
 	var err error
-	if err = o.doBeforeUpdateHooks(ctx, exec); err != nil {
-		return 0, err
-	}
 	key := makeCacheKey(columns, nil)
 	historyUpdateCacheMut.RLock()
 	cache, cached := historyUpdateCache[key]
@@ -656,13 +457,12 @@ func (o *History) Update(ctx context.Context, exec boil.ContextExecutor, columns
 
 	values := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), cache.valueMapping)
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.query)
-		fmt.Fprintln(writer, values)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, cache.query)
+		fmt.Fprintln(boil.DebugWriter, values)
 	}
 	var result sql.Result
-	result, err = exec.ExecContext(ctx, cache.query, values...)
+	result, err = exec.Exec(cache.query, values...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to update history row")
 	}
@@ -678,14 +478,14 @@ func (o *History) Update(ctx context.Context, exec boil.ContextExecutor, columns
 		historyUpdateCacheMut.Unlock()
 	}
 
-	return rowsAff, o.doAfterUpdateHooks(ctx, exec)
+	return rowsAff, nil
 }
 
 // UpdateAll updates all rows with the specified column values.
-func (q historyQuery) UpdateAll(ctx context.Context, exec boil.ContextExecutor, cols M) (int64, error) {
+func (q historyQuery) UpdateAll(exec boil.Executor, cols M) (int64, error) {
 	queries.SetUpdate(q.Query, cols)
 
-	result, err := q.Query.ExecContext(ctx, exec)
+	result, err := q.Query.Exec(exec)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to update all for history")
 	}
@@ -699,7 +499,7 @@ func (q historyQuery) UpdateAll(ctx context.Context, exec boil.ContextExecutor, 
 }
 
 // UpdateAll updates all rows with the specified column values, using an executor.
-func (o HistorySlice) UpdateAll(ctx context.Context, exec boil.ContextExecutor, cols M) (int64, error) {
+func (o HistorySlice) UpdateAll(exec boil.Executor, cols M) (int64, error) {
 	ln := int64(len(o))
 	if ln == 0 {
 		return 0, nil
@@ -729,12 +529,11 @@ func (o HistorySlice) UpdateAll(ctx context.Context, exec boil.ContextExecutor, 
 		strmangle.SetParamNames("\"", "\"", 1, colNames),
 		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), len(colNames)+1, historyPrimaryKeyColumns, len(o)))
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, args...)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, args...)
 	}
-	result, err := exec.ExecContext(ctx, sql, args...)
+	result, err := exec.Exec(sql, args...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to update all in history slice")
 	}
@@ -748,20 +547,14 @@ func (o HistorySlice) UpdateAll(ctx context.Context, exec boil.ContextExecutor, 
 
 // Upsert attempts an insert using an executor, and does an update or ignore on conflict.
 // See boil.Columns documentation for how to properly use updateColumns and insertColumns.
-func (o *History) Upsert(ctx context.Context, exec boil.ContextExecutor, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
+func (o *History) Upsert(exec boil.Executor, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
 	if o == nil {
 		return errors.New("models: no history provided for upsert")
 	}
-	if !boil.TimestampsAreSkipped(ctx) {
-		currTime := time.Now().In(boil.GetLocation())
+	currTime := time.Now().In(boil.GetLocation())
 
-		if o.CreatedAt.IsZero() {
-			o.CreatedAt = currTime
-		}
-	}
-
-	if err := o.doBeforeUpsertHooks(ctx, exec); err != nil {
-		return err
+	if o.CreatedAt.IsZero() {
+		o.CreatedAt = currTime
 	}
 
 	nzDefaults := queries.NonZeroDefaultSet(historyColumnsWithDefault, o)
@@ -842,18 +635,17 @@ func (o *History) Upsert(ctx context.Context, exec boil.ContextExecutor, updateO
 		returns = queries.PtrsFromMapping(value, cache.retMapping)
 	}
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.query)
-		fmt.Fprintln(writer, vals)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, cache.query)
+		fmt.Fprintln(boil.DebugWriter, vals)
 	}
 	if len(cache.retMapping) != 0 {
-		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(returns...)
+		err = exec.QueryRow(cache.query, vals...).Scan(returns...)
 		if err == sql.ErrNoRows {
 			err = nil // Postgres doesn't return anything when there's no update
 		}
 	} else {
-		_, err = exec.ExecContext(ctx, cache.query, vals...)
+		_, err = exec.Exec(cache.query, vals...)
 	}
 	if err != nil {
 		return errors.Wrap(err, "models: unable to upsert history")
@@ -865,29 +657,24 @@ func (o *History) Upsert(ctx context.Context, exec boil.ContextExecutor, updateO
 		historyUpsertCacheMut.Unlock()
 	}
 
-	return o.doAfterUpsertHooks(ctx, exec)
+	return nil
 }
 
 // Delete deletes a single History record with an executor.
 // Delete will match against the primary key column to find the record to delete.
-func (o *History) Delete(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (o *History) Delete(exec boil.Executor) (int64, error) {
 	if o == nil {
 		return 0, errors.New("models: no History provided for delete")
-	}
-
-	if err := o.doBeforeDeleteHooks(ctx, exec); err != nil {
-		return 0, err
 	}
 
 	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), historyPrimaryKeyMapping)
 	sql := "DELETE FROM \"history\" WHERE \"id\"=$1"
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, args...)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, args...)
 	}
-	result, err := exec.ExecContext(ctx, sql, args...)
+	result, err := exec.Exec(sql, args...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to delete from history")
 	}
@@ -897,22 +684,18 @@ func (o *History) Delete(ctx context.Context, exec boil.ContextExecutor) (int64,
 		return 0, errors.Wrap(err, "models: failed to get rows affected by delete for history")
 	}
 
-	if err := o.doAfterDeleteHooks(ctx, exec); err != nil {
-		return 0, err
-	}
-
 	return rowsAff, nil
 }
 
 // DeleteAll deletes all matching rows.
-func (q historyQuery) DeleteAll(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (q historyQuery) DeleteAll(exec boil.Executor) (int64, error) {
 	if q.Query == nil {
 		return 0, errors.New("models: no historyQuery provided for delete all")
 	}
 
 	queries.SetDelete(q.Query)
 
-	result, err := q.Query.ExecContext(ctx, exec)
+	result, err := q.Query.Exec(exec)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to delete all from history")
 	}
@@ -926,17 +709,9 @@ func (q historyQuery) DeleteAll(ctx context.Context, exec boil.ContextExecutor) 
 }
 
 // DeleteAll deletes all rows in the slice, using an executor.
-func (o HistorySlice) DeleteAll(ctx context.Context, exec boil.ContextExecutor) (int64, error) {
+func (o HistorySlice) DeleteAll(exec boil.Executor) (int64, error) {
 	if len(o) == 0 {
 		return 0, nil
-	}
-
-	if len(historyBeforeDeleteHooks) != 0 {
-		for _, obj := range o {
-			if err := obj.doBeforeDeleteHooks(ctx, exec); err != nil {
-				return 0, err
-			}
-		}
 	}
 
 	var args []interface{}
@@ -948,12 +723,11 @@ func (o HistorySlice) DeleteAll(ctx context.Context, exec boil.ContextExecutor) 
 	sql := "DELETE FROM \"history\" WHERE " +
 		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 1, historyPrimaryKeyColumns, len(o))
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, args)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, args)
 	}
-	result, err := exec.ExecContext(ctx, sql, args...)
+	result, err := exec.Exec(sql, args...)
 	if err != nil {
 		return 0, errors.Wrap(err, "models: unable to delete all from history slice")
 	}
@@ -963,21 +737,13 @@ func (o HistorySlice) DeleteAll(ctx context.Context, exec boil.ContextExecutor) 
 		return 0, errors.Wrap(err, "models: failed to get rows affected by deleteall for history")
 	}
 
-	if len(historyAfterDeleteHooks) != 0 {
-		for _, obj := range o {
-			if err := obj.doAfterDeleteHooks(ctx, exec); err != nil {
-				return 0, err
-			}
-		}
-	}
-
 	return rowsAff, nil
 }
 
 // Reload refetches the object from the database
 // using the primary keys with an executor.
-func (o *History) Reload(ctx context.Context, exec boil.ContextExecutor) error {
-	ret, err := FindHistory(ctx, exec, o.ID)
+func (o *History) Reload(exec boil.Executor) error {
+	ret, err := FindHistory(exec, o.ID)
 	if err != nil {
 		return err
 	}
@@ -988,7 +754,7 @@ func (o *History) Reload(ctx context.Context, exec boil.ContextExecutor) error {
 
 // ReloadAll refetches every row with matching primary key column values
 // and overwrites the original object slice with the newly updated slice.
-func (o *HistorySlice) ReloadAll(ctx context.Context, exec boil.ContextExecutor) error {
+func (o *HistorySlice) ReloadAll(exec boil.Executor) error {
 	if o == nil || len(*o) == 0 {
 		return nil
 	}
@@ -1005,7 +771,7 @@ func (o *HistorySlice) ReloadAll(ctx context.Context, exec boil.ContextExecutor)
 
 	q := queries.Raw(sql, args...)
 
-	err := q.Bind(ctx, exec, &slice)
+	err := q.Bind(nil, exec, &slice)
 	if err != nil {
 		return errors.Wrap(err, "models: unable to reload all in HistorySlice")
 	}
@@ -1016,16 +782,15 @@ func (o *HistorySlice) ReloadAll(ctx context.Context, exec boil.ContextExecutor)
 }
 
 // HistoryExists checks if the History row exists.
-func HistoryExists(ctx context.Context, exec boil.ContextExecutor, iD int64) (bool, error) {
+func HistoryExists(exec boil.Executor, iD int64) (bool, error) {
 	var exists bool
 	sql := "select exists(select 1 from \"history\" where \"id\"=$1 limit 1)"
 
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, iD)
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, sql)
+		fmt.Fprintln(boil.DebugWriter, iD)
 	}
-	row := exec.QueryRowContext(ctx, sql, iD)
+	row := exec.QueryRow(sql, iD)
 
 	err := row.Scan(&exists)
 	if err != nil {

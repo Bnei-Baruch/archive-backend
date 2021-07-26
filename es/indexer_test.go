@@ -164,7 +164,7 @@ func (suite *IndexerSuite) TearDownSuite() {
 	// Close connections.
 	common.Shutdown()
 	// Drop test database.
-	suite.Require().Nil(suite.DestroyTestDB())
+	suite.Require().Nil(suite.DestroyTestMDB())
 }
 
 type ESLogAdapter struct{ *testing.T }

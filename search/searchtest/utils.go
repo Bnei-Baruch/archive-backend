@@ -44,7 +44,7 @@ func (suite *SearchSuite) TearDownSuite() {
 	// Close connections.
 	common.Shutdown()
 	// Drop test database.
-	suite.Require().Nil(suite.DestroyTestDB())
+	suite.Require().Nil(suite.DestroyTestMDB())
 }
 
 func (suite *SearchSuite) SetupTest() {

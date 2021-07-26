@@ -10,10 +10,10 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/volatiletech/null"
 	"github.com/volatiletech/sqlboiler/boil"
 	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/gin-gonic/gin.v1"
-	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mydb/models"
@@ -498,8 +498,8 @@ func handleSubscribe(tx *sql.Tx, uids subscribeRequest, kcId string) ([]*models.
 
 	for _, id := range uids.ContentTypes {
 		s := models.Subscription{
-			AccountID:      kcId,
-			ContentUnitUID: null.Int64{Int64: id, Valid: true},
+			AccountID:       kcId,
+			ContentUnitType: null.Int64{Int64: id, Valid: true},
 		}
 		if err := s.Insert(tx, boil.Infer()); err != nil {
 			return nil, NewInternalError(err)

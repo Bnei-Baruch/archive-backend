@@ -49,7 +49,7 @@ func (suite *QualityEvalSuite) TearDownSuite() {
 	// Close connections.
 	common.Shutdown()
 	// Drop test database.
-	suite.Require().Nil(suite.DestroyTestDB())
+	suite.Require().Nil(suite.DestroyTestMDB())
 }
 
 // In order for 'go test' to run this suite, we need to create
