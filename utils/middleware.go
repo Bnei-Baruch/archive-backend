@@ -1,14 +1,19 @@
 package utils
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+
+	"github.com/coreos/go-oidc/oidc"
+
 	"github.com/pkg/errors"
 	"gopkg.in/gin-gonic/gin.v1"
 	"gopkg.in/go-playground/validator.v8"
@@ -154,5 +159,37 @@ func ErrorHandlingMiddleware() gin.HandlerFunc {
 					gin.H{"status": "error", "error": "Internal Server Error"})
 			}
 		}
+	}
+}
+
+func EnvMiddleware(tokenVerifiers *oidc.IDTokenVerifier) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Set("TOKEN_VERIFIERS", tokenVerifiers)
+		c.Next()
+	}
+}
+
+func AuthenticationMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenVerifier, exist := c.Get("TOKEN_VERIFIERS")
+		if !exist {
+			_ = c.AbortWithError(http.StatusBadRequest, errors.New("token verifier is not configured")).SetType(gin.ErrorTypePublic)
+			return
+		}
+
+		authHeader := strings.Split(strings.TrimSpace(c.Request.Header.Get("Authorization")), " ")
+		if len(authHeader) == 2 || strings.ToLower(authHeader[0]) == "bearer" {
+			// Authorization header provided, let's verify.
+			verifier := tokenVerifier.(*oidc.IDTokenVerifier)
+			token, err := verifier.Verify(context.TODO(), authHeader[1])
+			if err != nil {
+				c.AbortWithError(http.StatusBadRequest, err).SetType(gin.ErrorTypePublic)
+				return
+			}
+
+			// ID Token is verified.
+			c.Set("KC_ID", token.Subject)
+		}
+		c.Next()
 	}
 }

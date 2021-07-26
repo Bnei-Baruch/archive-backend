@@ -34,7 +34,7 @@ type QualityEvalSuite struct {
 func (suite *QualityEvalSuite) SetupSuite() {
 	rand.Seed(1234)
 	utils.InitConfig("", "../")
-	err := suite.InitTestDB()
+	err := suite.InitTestMDB()
 	if err != nil {
 		panic(err)
 	}

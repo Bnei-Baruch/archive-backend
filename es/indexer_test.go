@@ -112,7 +112,7 @@ type Source struct {
 
 func (suite *IndexerSuite) SetupSuite() {
 	utils.InitConfig("", "../")
-	err := suite.InitTestDB()
+	err := suite.InitTestMDB()
 	if err != nil {
 		panic(err)
 	}

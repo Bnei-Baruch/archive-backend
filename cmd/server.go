@@ -1,7 +1,11 @@
 package cmd
 
 import (
+	"context"
+	"net/http"
+
 	log "github.com/Sirupsen/logrus"
+	"github.com/coreos/go-oidc/oidc"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stvp/rollbar"
@@ -41,13 +45,23 @@ func serverFn(cmd *cobra.Command, args []string) {
 	// cors
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowHeaders = append(corsConfig.AllowHeaders, "Authorization", "X-Request-ID")
+	corsConfig.AllowMethods = append(corsConfig.AllowMethods, http.MethodDelete)
 	corsConfig.AllowAllOrigins = true
+	// Authentication
+	tokenVerifier := new(oidc.IDTokenVerifier)
+	issuer := viper.GetString("authentication.issuer")
+	oidcProvider, err := oidc.NewProvider(context.TODO(), issuer)
+	utils.Must(err)
+	tokenVerifier = oidcProvider.Verifier(&oidc.Config{
+		SkipClientIDCheck: true,
+	})
 
 	// Setup gin
 	gin.SetMode(viper.GetString("server.mode"))
 	router := gin.New()
 	router.Use(
 		utils.LoggerMiddleware(),
+		utils.EnvMiddleware(tokenVerifier),
 		utils.DataStoresMiddleware(common.DB, common.ESC, common.LOGGER, common.CACHE /*common.GRAMMARS,*/, common.TOKENS_CACHE, common.CMS, common.VARIABLES),
 		utils.ErrorHandlingMiddleware(),
 		cors.New(corsConfig),

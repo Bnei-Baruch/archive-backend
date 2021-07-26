@@ -29,7 +29,7 @@ type SearchSuite struct {
 func (suite *SearchSuite) SetupSuite() {
 	suite.IndexName = "test_token"
 	utils.InitConfig("", "../")
-	err := suite.InitTestDB()
+	err := suite.InitTestMDB()
 	if err != nil {
 		panic(err)
 	}

@@ -6,6 +6,8 @@ import (
 
 	"github.com/spf13/viper"
 	"gopkg.in/gin-gonic/gin.v1"
+
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 func SetupRoutes(router *gin.Engine) {
@@ -92,6 +94,24 @@ func SetupRoutes(router *gin.Engine) {
 		cms.GET("/sourceIndex/:id", CMSSourceIndex)
 		cms.GET("/topics", CMSTopics)
 		cms.GET("/images/*path", CMSImage)
+	}
+
+	my := router.Group("/my", utils.AuthenticationMiddleware())
+	{
+		my.GET("/playlists", MyPlaylistListHandler)
+		my.POST("/playlists", MyPlaylistListHandler)
+		my.PATCH("/playlists/:id", MyPlaylistHandler)
+		my.DELETE("/playlists/:id", MyPlaylistHandler)
+		my.POST("/playlists/:id/units", MyPlaylistHandler)
+		my.DELETE("/playlists/:id/units", MyPlaylistItemHandler)
+		my.GET("/likes", MyLikesHandler)
+		my.POST("/likes", MyLikesHandler)
+		my.DELETE("/likes", MyLikesHandler)
+		my.GET("/subscriptions", MySubscriptionHandler)
+		my.POST("/subscriptions", MySubscriptionHandler)
+		my.DELETE("/subscriptions", MySubscriptionHandler)
+		my.GET("/subscriptions", MyHistoryHandler)
+		my.DELETE("/subscriptions", MyHistoryHandler)
 	}
 
 	//router.GET("/_recover", func(c *gin.Context) {

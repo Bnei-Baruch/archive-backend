@@ -15,33 +15,52 @@ import (
 
 type TestDBManager struct {
 	DB     *sql.DB
+	myDB   *sql.DB
 	testDB string
 }
 
-func (m *TestDBManager) InitTestDB() error {
-	m.testDB = fmt.Sprintf("test_%s", strings.ToLower(GenerateName(10)))
-
-	// Open connection to RDBMS
-	db, err := sql.Open("postgres", viper.GetString("test.mdb-url"))
-	if err != nil {
-		return err
-	}
-
-	// Create a new temporary test database
-	if _, err := db.Exec("CREATE DATABASE " + m.testDB); err != nil {
-		return err
-	}
-
-	// Close first connection and connect to temp database
-	db.Close()
-	db, err = sql.Open("postgres", fmt.Sprintf(viper.GetString("test.url-template"), m.testDB))
+func (m *TestDBManager) InitTestMDB() error {
+	db, err := m.initTestDB(viper.GetString("test.mdb-url"), viper.GetString("test.url-template"), "mdb")
 	if err != nil {
 		return err
 	}
 	m.DB = db
-
 	// Run migrations
-	return m.runMigrations(db)
+	return m.runMigrations(m.DB)
+}
+
+func (m *TestDBManager) InitTestMyDB() error {
+	db, err := m.initTestDB(viper.GetString("test.mydb-url"), viper.GetString("test.mydb-url"), "mydb")
+	if err != nil {
+		return err
+	}
+	m.myDB = db
+	// Run migrations
+	return m.runMigrations(m.myDB)
+}
+
+func (m *TestDBManager) initTestDB(url, template, name string) (*sql.DB, error) {
+	m.testDB = fmt.Sprintf("test_%s_%s", name, strings.ToLower(GenerateName(10)))
+
+	// Open connection to RDBMS
+	db, err := sql.Open("postgres", url)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new temporary test database
+	if _, err := db.Exec("CREATE DATABASE " + m.testDB); err != nil {
+		return nil, err
+	}
+
+	// Close first connection and connect to temp database
+	db.Close()
+	db, err = sql.Open("postgres", fmt.Sprintf(template, m.testDB))
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
 }
 
 func (m *TestDBManager) DestroyTestDB() error {
