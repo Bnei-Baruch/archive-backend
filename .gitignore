@@ -6,7 +6,7 @@ bindata.go
 *.swp
 *.log
 config.toml
-*sqlboiler.toml
+**/*sqlboiler.toml
 **/rambler.json
 *.dump.sql
 _vendor-*/
