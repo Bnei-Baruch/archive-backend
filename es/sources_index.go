@@ -34,7 +34,13 @@ func MakeSourcesIndex(namespace string, indexDate string, db *sql.DB, esc *elast
 
 type SourcesIndex struct {
 	BaseIndex
-	Progress uint64
+	Progress    uint64
+	filesByCuId map[string][]*FileData
+}
+
+type FileData struct {
+	cuUid string
+	mdbmodels.File
 }
 
 func (index *SourcesIndex) ReindexAll() error {
