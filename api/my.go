@@ -8,12 +8,11 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/viper"
-	"github.com/volatiletech/null"
-	"github.com/volatiletech/sqlboiler/boil"
-	"github.com/volatiletech/sqlboiler/queries/qm"
 	"gopkg.in/gin-gonic/gin.v1"
+	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mydb/models"
@@ -264,12 +263,12 @@ func handleGetPlaylists(tx *sql.Tx, p ListRequest, kcId string) (*playlistsRespo
 	if err := appendMyListMods(&mods, p); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	pl, err := models.Playlists(mods...).All(tx)
+	pl, err := models.Playlists(tx, mods...).All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 
-	total, err := models.Playlists(qm.Where("account_id = ?", kcId)).Count(tx)
+	total, err := models.Playlists(tx, qm.Where("account_id = ?", kcId)).Count()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -288,7 +287,7 @@ func handleCreatePlaylist(tx *sql.Tx, p models.Playlist, kcId string) (*models.P
 		Parameters: p.Parameters,
 		Public:     p.Public,
 	}
-	if err := pl.Insert(tx, boil.Infer()); err != nil {
+	if err := pl.Insert(tx); err != nil {
 		return nil, NewInternalError(err)
 	}
 
@@ -296,7 +295,7 @@ func handleCreatePlaylist(tx *sql.Tx, p models.Playlist, kcId string) (*models.P
 }
 
 func handleUpdatePlaylist(tx *sql.Tx, id int64, kcId string, np models.Playlist) (*models.Playlist, *HttpError) {
-	p, err := models.Playlists(qm.Where("id = ?", id)).One(tx)
+	p, err := models.Playlists(tx, qm.Where("id = ?", id)).One()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -315,7 +314,7 @@ func handleUpdatePlaylist(tx *sql.Tx, id int64, kcId string, np models.Playlist)
 		p.Public = np.Public
 	}
 
-	_, err = p.Update(tx, boil.Infer())
+	err = p.Update(tx)
 	if kcId != p.AccountID {
 		return nil, NewInternalError(err)
 	}
@@ -326,7 +325,7 @@ func handleUpdatePlaylist(tx *sql.Tx, id int64, kcId string, np models.Playlist)
 	if params != nil {
 		p.Parameters = null.JSONFrom(params)
 	}
-	_, err = p.Update(tx, boil.Infer())
+	err = p.Update(tx)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -334,7 +333,7 @@ func handleUpdatePlaylist(tx *sql.Tx, id int64, kcId string, np models.Playlist)
 }
 
 func handleDeletePlaylist(tx *sql.Tx, id int64, kcId string) (*int64, *HttpError) {
-	p, err := models.Playlists(qm.Where("id = ?", id)).One(tx)
+	p, err := models.Playlists(tx, qm.Where("id = ?", id)).One()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -343,7 +342,7 @@ func handleDeletePlaylist(tx *sql.Tx, id int64, kcId string) (*int64, *HttpError
 		err := errors.New("not acceptable")
 		return nil, NewHttpError(http.StatusNotAcceptable, err, gin.ErrorTypePrivate)
 	}
-	_, err = p.Delete(tx)
+	err = p.Delete(tx)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -351,10 +350,10 @@ func handleDeletePlaylist(tx *sql.Tx, id int64, kcId string) (*int64, *HttpError
 }
 
 func handleAddToPlaylist(tx *sql.Tx, id int64, uids []string, kcId string) (models.PlaylistItemSlice, *HttpError) {
-	pl, err := models.Playlists(
+	pl, err := models.Playlists(tx,
 		qm.Load("PlaylistItems"),
 		qm.Where("id = ?", id),
-	).One(tx)
+	).One()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -378,7 +377,7 @@ func handleAddToPlaylist(tx *sql.Tx, id int64, uids []string, kcId string) (mode
 
 	for _, nuid := range uids {
 		item := models.PlaylistItem{PlaylistID: id, ContentUnitUID: nuid}
-		_, err = item.Update(tx, boil.Infer())
+		err = item.Update(tx)
 		return nil, NewInternalError(err)
 	}
 	err = pl.R.PlaylistItems.ReloadAll(tx)
@@ -389,16 +388,16 @@ func handleAddToPlaylist(tx *sql.Tx, id int64, uids []string, kcId string) (mode
 }
 
 func handleDeleteFromPlaylist(tx *sql.Tx, id int64, ids []int64, kcId string) ([]*models.PlaylistItem, *HttpError) {
-	plis, err := models.PlaylistItems(
+	plis, err := models.PlaylistItems(tx,
 		qm.From("playlist_item as pli"),
 		qm.Load("PlaylistItems"),
 		qm.InnerJoin("playlist pl ON  pl.id = pli.playlist_id"),
 		qm.Where("pl.account_id = ? AND pl.id = ? AND pli.id IN (?)", kcId, id, utils.ConvertArgsInt64(ids)),
-	).All(tx)
+	).All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
-	if _, err := plis.DeleteAll(tx); err != nil {
+	if err := plis.DeleteAll(tx); err != nil {
 		return nil, NewInternalError(err)
 	}
 
@@ -408,7 +407,7 @@ func handleDeleteFromPlaylist(tx *sql.Tx, id int64, ids []int64, kcId string) ([
 func handleGetLikes(tx *sql.Tx, kcId string, param ListRequest) (*likesResponse, *HttpError) {
 	mods := []qm.QueryMod{qm.Where("account_id = ?", kcId)}
 
-	total, err := models.Likes(mods...).Count(tx)
+	total, err := models.Likes(tx, mods...).Count()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -416,7 +415,7 @@ func handleGetLikes(tx *sql.Tx, kcId string, param ListRequest) (*likesResponse,
 	if err := appendMyListMods(&mods, param); err != nil {
 		return nil, NewInternalError(err)
 	}
-	ls, err := models.Likes(mods...).All(tx)
+	ls, err := models.Likes(tx, mods...).All()
 
 	if err != nil {
 		return nil, NewInternalError(err)
@@ -436,7 +435,7 @@ func handleAddLike(tx *sql.Tx, uids []string, kcId string) ([]*models.Like, *Htt
 			AccountID:      kcId,
 			ContentUnitUID: uid,
 		}
-		if err := l.Insert(tx, boil.Infer()); err != nil {
+		if err := l.Insert(tx); err != nil {
 			return nil, NewInternalError(err)
 		}
 		likes = append(likes, &l)
@@ -445,15 +444,15 @@ func handleAddLike(tx *sql.Tx, uids []string, kcId string) ([]*models.Like, *Htt
 }
 
 func handleRemoveLikes(tx *sql.Tx, ids []int64, kcId string) ([]*models.Like, *HttpError) {
-	ls, err := models.Likes(
+	ls, err := models.Likes(tx,
 		qm.WhereIn("id in (?)", utils.ConvertArgsInt64(ids)...),
 		qm.Where("account_id = ?", kcId),
-	).All(tx)
+	).All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 
-	if _, err := ls.DeleteAll(tx); err != nil {
+	if err := ls.DeleteAll(tx); err != nil {
 		return nil, NewInternalError(err)
 	}
 	return ls, nil
@@ -462,7 +461,7 @@ func handleRemoveLikes(tx *sql.Tx, ids []int64, kcId string) ([]*models.Like, *H
 func handleGetSubscriptions(tx *sql.Tx, kcId string, param ListRequest) (*subscriptionsResponse, *HttpError) {
 	mods := []qm.QueryMod{qm.Where("account_id = ?", kcId)}
 
-	total, err := models.Subscriptions(mods...).Count(tx)
+	total, err := models.Subscriptions(tx, mods...).Count()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -470,7 +469,7 @@ func handleGetSubscriptions(tx *sql.Tx, kcId string, param ListRequest) (*subscr
 	if err := appendMyListMods(&mods, param); err != nil {
 		return nil, NewInternalError(err)
 	}
-	subs, err := models.Subscriptions(mods...).All(tx)
+	subs, err := models.Subscriptions(tx, mods...).All()
 
 	if err != nil {
 		return nil, NewInternalError(err)
@@ -490,7 +489,7 @@ func handleSubscribe(tx *sql.Tx, uids subscribeRequest, kcId string) ([]*models.
 			AccountID:    kcId,
 			CollectionID: null.String{String: uid, Valid: true},
 		}
-		if err := s.Insert(tx, boil.Infer()); err != nil {
+		if err := s.Insert(tx); err != nil {
 			return nil, NewInternalError(err)
 		}
 		subs = append(subs, &s)
@@ -501,7 +500,7 @@ func handleSubscribe(tx *sql.Tx, uids subscribeRequest, kcId string) ([]*models.
 			AccountID:       kcId,
 			ContentUnitType: null.Int64{Int64: id, Valid: true},
 		}
-		if err := s.Insert(tx, boil.Infer()); err != nil {
+		if err := s.Insert(tx); err != nil {
 			return nil, NewInternalError(err)
 		}
 		subs = append(subs, &s)
@@ -510,14 +509,14 @@ func handleSubscribe(tx *sql.Tx, uids subscribeRequest, kcId string) ([]*models.
 }
 
 func handleUnsubscribe(tx *sql.Tx, ids []int64, kcId string) ([]*models.Subscription, *HttpError) {
-	subs, err := models.Subscriptions(
+	subs, err := models.Subscriptions(tx,
 		qm.WhereIn("id in (?)", utils.ConvertArgsInt64(ids)...),
 		qm.Where("account_id = ?", kcId),
-	).All(tx)
+	).All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
-	if _, err := subs.DeleteAll(tx); err != nil {
+	if err := subs.DeleteAll(tx); err != nil {
 		return nil, NewInternalError(err)
 	}
 	return subs, nil
@@ -526,7 +525,7 @@ func handleUnsubscribe(tx *sql.Tx, ids []int64, kcId string) ([]*models.Subscrip
 func handleGetHistory(tx *sql.Tx, kcId string, param ListRequest) (*subscriptionsResponse, *HttpError) {
 	mods := []qm.QueryMod{qm.Where("account_id = ?", kcId)}
 
-	total, err := models.Subscriptions(mods...).Count(tx)
+	total, err := models.Subscriptions(tx, mods...).Count()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -534,7 +533,7 @@ func handleGetHistory(tx *sql.Tx, kcId string, param ListRequest) (*subscription
 	if err := appendMyListMods(&mods, param); err != nil {
 		return nil, NewInternalError(err)
 	}
-	subs, err := models.Subscriptions(mods...).All(tx)
+	subs, err := models.Subscriptions(tx, mods...).All()
 
 	if err != nil {
 		return nil, NewInternalError(err)
@@ -548,14 +547,14 @@ func handleGetHistory(tx *sql.Tx, kcId string, param ListRequest) (*subscription
 }
 
 func handleDeleteHistory(tx *sql.Tx, ids []int64, kcId string) ([]*models.Subscription, *HttpError) {
-	subs, err := models.Subscriptions(
+	subs, err := models.Subscriptions(tx,
 		qm.WhereIn("id in (?)", utils.ConvertArgsInt64(ids)...),
 		qm.Where("account_id = ?", kcId),
-	).All(tx)
+	).All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
-	if _, err := subs.DeleteAll(tx); err != nil {
+	if err := subs.DeleteAll(tx); err != nil {
 		return nil, NewInternalError(err)
 	}
 	return subs, nil
