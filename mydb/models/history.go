@@ -22,31 +22,31 @@ import (
 
 // History is an object representing the database table.
 type History struct {
-	ID              int64       `boil:"id" json:"id" toml:"id" yaml:"id"`
-	AccountID       string      `boil:"account_id" json:"account_id" toml:"account_id" yaml:"account_id"`
-	UID             null.String `boil:"uid" json:"uid,omitempty" toml:"uid" yaml:"uid,omitempty"`
-	ContentUnitType null.Int64  `boil:"content_unit_type" json:"content_unit_type,omitempty" toml:"content_unit_type" yaml:"content_unit_type,omitempty"`
-	EventType       int64       `boil:"event_type" json:"event_type" toml:"event_type" yaml:"event_type"`
-	CreatedAt       time.Time   `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
+	ID          int64       `boil:"id" json:"id" toml:"id" yaml:"id"`
+	AccountID   string      `boil:"account_id" json:"account_id" toml:"account_id" yaml:"account_id"`
+	ChronicleID string      `boil:"chronicle_id" json:"chronicle_id" toml:"chronicle_id" yaml:"chronicle_id"`
+	UID         null.String `boil:"uid" json:"uid,omitempty" toml:"uid" yaml:"uid,omitempty"`
+	Data        null.JSON   `boil:"data" json:"data,omitempty" toml:"data" yaml:"data,omitempty"`
+	CreatedAt   time.Time   `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
 
 	R *historyR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L historyL  `boil:"-" json:"-" toml:"-" yaml:"-"`
 }
 
 var HistoryColumns = struct {
-	ID              string
-	AccountID       string
-	UID             string
-	ContentUnitType string
-	EventType       string
-	CreatedAt       string
+	ID          string
+	AccountID   string
+	ChronicleID string
+	UID         string
+	Data        string
+	CreatedAt   string
 }{
-	ID:              "id",
-	AccountID:       "account_id",
-	UID:             "uid",
-	ContentUnitType: "content_unit_type",
-	EventType:       "event_type",
-	CreatedAt:       "created_at",
+	ID:          "id",
+	AccountID:   "account_id",
+	ChronicleID: "chronicle_id",
+	UID:         "uid",
+	Data:        "data",
+	CreatedAt:   "created_at",
 }
 
 // historyR is where relationships are stored.
@@ -57,8 +57,8 @@ type historyR struct {
 type historyL struct{}
 
 var (
-	historyColumns               = []string{"id", "account_id", "uid", "content_unit_type", "event_type", "created_at"}
-	historyColumnsWithoutDefault = []string{"account_id", "uid", "content_unit_type", "event_type"}
+	historyColumns               = []string{"id", "account_id", "chronicle_id", "uid", "data", "created_at"}
+	historyColumnsWithoutDefault = []string{"account_id", "chronicle_id", "uid", "data"}
 	historyColumnsWithDefault    = []string{"id", "created_at"}
 	historyPrimaryKeyColumns     = []string{"id"}
 )
