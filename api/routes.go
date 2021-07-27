@@ -110,8 +110,8 @@ func SetupRoutes(router *gin.Engine) {
 		my.GET("/subscriptions", MySubscriptionHandler)
 		my.POST("/subscriptions", MySubscriptionHandler)
 		my.DELETE("/subscriptions", MySubscriptionHandler)
-		my.GET("/subscriptions", MyHistoryHandler)
-		my.DELETE("/subscriptions", MyHistoryHandler)
+		my.GET("/history", MyHistoryHandler)
+		my.DELETE("/history", MyHistoryHandler)
 	}
 
 	//router.GET("/_recover", func(c *gin.Context) {

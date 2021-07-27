@@ -14,6 +14,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/api"
 	"github.com/Bnei-Baruch/archive-backend/common"
+	"github.com/Bnei-Baruch/archive-backend/mydb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/Bnei-Baruch/archive-backend/version"
 )
@@ -74,6 +75,8 @@ func serverFn(cmd *cobra.Command, args []string) {
 		router.Run(viper.GetString("server.bind-address"))
 	}
 
+	chronicles := mydb.Chronicles{}
+	chronicles.Run()
 	// This would be reasonable once we'll have graceful shutdown implemented
 	// if len(rollbar.Token) > 0 {
 	// 	rollbar.Wait()
