@@ -212,7 +212,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 							continue
 						}
 
-						log.Infof("values set: %+v", variableValues)
+						log.Infof("values set for intent '%s': %+v", intent, variableValues)
 						assignedRules := []string(nil)
 						for i := range rules {
 							var assignedRule string
@@ -262,7 +262,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 							percolatorQuery = elastic.NewQueryStringQuery(queryStr).Field("search_text")
 						} else {
 							percolatorQuery = elastic.MatchNoneQuery{}
-							if intent != consts.GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM {
+							if val, ok := consts.ES_SUGGEST_SUPPORTED_GRAMMAR_RULES[intent]; ok && val {
 								for i := range assignedRules {
 									assignedRulesSuggest = append(assignedRulesSuggest, assignedRules[i])
 								}
@@ -271,8 +271,8 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 										log.Infof("NNN: %+v", assignedRulesSuggest[i])
 									}
 								}
+								log.Infof("Rules suggest: [%s]", strings.Join(assignedRulesSuggest, "|"))
 							}
-							log.Infof("Rules suggest: [%s]", strings.Join(assignedRulesSuggest, "|"))
 						}
 						rule := GrammarRule{
 							HitType:      grammar.HitType,

@@ -1,5 +1,6 @@
 en,programs => program
 en,programs => programs
+en,programs => TV Series
 
 en,articles => article
 en,articles => articles
@@ -25,6 +26,7 @@ en,sources => library
 en,books_titles => book
 en,books_titles => books
 en,books_titles => writings
+en,books_titles => writings of
 
 en,meals => meal
 en,meals => meals
@@ -138,6 +140,8 @@ ru,programs => программа
 ru,programs => программы
 ru,programs => передача
 ru,programs => передачи
+ru,programs => тв-передача
+ru,programs => тв передача
 
 ru,articles => статья
 ru,articles => статьи
@@ -152,6 +156,7 @@ ru,lessons => урок рава
 ru,lessons => уроки рава
 ru,lessons => урок с равом
 ru,lessons => уроки с равом
+ru,lessons => УУ
 
 ru,clips => клипы
 ru,clips => клип

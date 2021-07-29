@@ -149,17 +149,13 @@
 ארצות הברית	ארהב
 תורכיה	טורקיה
 
-#Added by Yuri at 16.02.20 (not in spreadsheet)
+# Not in spreadsheet:
 בא	בוא
 ישיבת חברים	ישיבת החברים
 נגיף	וירוס
-
-#Added by Yuri at 30.03.20 (not in spreadsheet)
 איגרת	אגרת
-#Added by Eran at 12.06.20 (not in spreadsheet)
 תיאטרון	תאטרון
 10	עשר
-
-# Added by Yuri at 23.09.20 (not in spreadsheet)
 # Used for the search of Rabash Assorted Notes
 רשומה	רשומות
+אירן	איראן

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/pkg/errors"
 )
@@ -232,4 +233,69 @@ func Contains(list []interface{}, elem interface{}) bool {
 		}
 	}
 	return false
+}
+
+// Return values: 1. Whole term is numeric. 2. At least part of the term is numeric.
+func HasNumeric(term string) (bool, bool) {
+	allIsDigit := true
+	hasDigit := false
+	for _, r := range term {
+		if unicode.IsDigit(r) {
+			hasDigit = true
+		} else {
+			allIsDigit = false
+		}
+	}
+	return allIsDigit, hasDigit
+}
+
+func Filter(list []interface{}, test func(interface{}) bool) ([]interface{}, []interface{}) {
+	passed := []interface{}{}
+	rest := []interface{}{}
+	for _, item := range list {
+		if test(item) {
+			passed = append(passed, item)
+		} else {
+			rest = append(rest, item)
+		}
+	}
+	return passed, rest
+}
+
+func Select(list []interface{}, newValue func(interface{}) interface{}) []interface{} {
+	ret := []interface{}{}
+	for _, item := range list {
+		ret = append(ret, newValue(item))
+	}
+	return ret
+}
+
+func MaxByValue(list []interface{}, value func(interface{}) float64) interface{} {
+	if len(list) == 0 {
+		return nil
+	}
+	sort.SliceStable(list, func(i, j int) bool {
+		return value(list[i]) > value(list[j])
+	})
+	return list[0]
+}
+
+func First(list []interface{}, test func(interface{}) bool) interface{} {
+	filtered, _ := Filter(list, test)
+	if len(filtered) > 0 {
+		return filtered[0]
+	}
+	return nil
+}
+
+func GroupBy(list []interface{}, value func(interface{}) interface{}) map[interface{}][]interface{} {
+	ret := map[interface{}][]interface{}{}
+	for _, item := range list {
+		key := value(item)
+		if _, ok := ret[key]; !ok {
+			ret[key] = []interface{}{}
+		}
+		ret[key] = append(ret[key], item)
+	}
+	return ret
 }

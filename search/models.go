@@ -47,10 +47,6 @@ type SearchRequestOptions struct {
 	//  so the 'description' field will be included only when this field is true and resultTypes contains only 'sources'.
 	// This field is used for classification intents (carousel) search and grammar filter for 'books'.
 	titlesOnly bool
-	// Setting the following field to 'true' will include 'typed_uids' values for results of type 'content units'.
-	// We use this data for a further filtering out of hits recieved from 'grammar filter' search that duplicates the carousel items.
-	// Since the search for 'grammar filter' is async. to  classification intents (carousel) search, we don't have yet the data for filterOutCUSources fild.
-	includeTypedUidsFromContentUnits bool
 	// If not nil, set how long a search is allowed to take, e.g. "1s" or "500ms". Note: Not always respected by ES.
 	Timeout *string
 }

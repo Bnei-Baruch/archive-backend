@@ -121,6 +121,14 @@
                             "\\u05F4=>"
                         ]
                     }
+                }, 
+                "normalizer": {
+                    "case_insensitive_normalizer": {
+                        "filter": [
+                            "lowercase"
+                        ], 
+                        "type": "custom"
+                    }
                 }
             }, 
             "number_of_shards": 1
