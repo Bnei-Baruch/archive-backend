@@ -50,7 +50,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 	corsConfig.AllowAllOrigins = true
 	// Authentication
 	tokenVerifier := new(oidc.IDTokenVerifier)
-	issuer := viper.GetString("authentication.issuer")
+	issuer := viper.GetString("personal.issuer")
 	oidcProvider, err := oidc.NewProvider(context.TODO(), issuer)
 	utils.Must(err)
 	tokenVerifier = oidcProvider.Verifier(&oidc.Config{
@@ -70,13 +70,13 @@ func serverFn(cmd *cobra.Command, args []string) {
 
 	api.SetupRoutes(router)
 
+	chronicles := mydb.Chronicles{}
+	chronicles.Run()
 	log.Infoln("Running application")
 	if cmd != nil {
 		router.Run(viper.GetString("server.bind-address"))
 	}
 
-	chronicles := mydb.Chronicles{}
-	chronicles.Run()
 	// This would be reasonable once we'll have graceful shutdown implemented
 	// if len(rollbar.Token) > 0 {
 	// 	rollbar.Wait()

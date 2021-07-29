@@ -4,7 +4,6 @@ import (
 	"database/sql"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/volatiletech/sqlboiler/boil"
 	"gopkg.in/gin-gonic/gin.v1"
 
 	models2 "github.com/Bnei-Baruch/archive-backend/mydb/models"
@@ -60,7 +59,7 @@ func (suite *MyRestSuite) TestLikesList() {
 	}
 
 	likes[1].AccountID = "new_account_id"
-	suite.NotNil(likes[1].Insert(suite.tx, boil.Infer()))
+	suite.NotNil(likes[1].Insert(suite.tx))
 	resp, err = handleGetLikes(suite.tx, suite.kcId, req)
 	suite.Require().Nil(err)
 	suite.EqualValues(9, resp.Total, "total")
@@ -103,7 +102,7 @@ func (suite *MyRestSuite) createDummyLike(n int64) []*models2.Like {
 	for _, l := range likes {
 		l.ContentUnitUID = utils.GenerateUID(8)
 		l.AccountID = suite.kcId
-		utils.Must(l.Insert(suite.tx, boil.Infer()))
+		utils.Must(l.Insert(suite.tx))
 	}
 	return likes
 }

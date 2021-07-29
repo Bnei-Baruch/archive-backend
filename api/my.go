@@ -34,7 +34,7 @@ type subscriptionsResponse struct {
 	ListResponse
 }
 type historyResponse struct {
-	History []*models.Subscription `json:"subscriptions"`
+	History []*models.History `json:"history"`
 	ListResponse
 }
 
@@ -522,10 +522,10 @@ func handleUnsubscribe(tx *sql.Tx, ids []int64, kcId string) ([]*models.Subscrip
 	return subs, nil
 }
 
-func handleGetHistory(tx *sql.Tx, kcId string, param ListRequest) (*subscriptionsResponse, *HttpError) {
+func handleGetHistory(tx *sql.Tx, kcId string, param ListRequest) (*historyResponse, *HttpError) {
 	mods := []qm.QueryMod{qm.Where("account_id = ?", kcId)}
 
-	total, err := models.Subscriptions(tx, mods...).Count()
+	total, err := models.Histories(tx, mods...).Count()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -533,15 +533,15 @@ func handleGetHistory(tx *sql.Tx, kcId string, param ListRequest) (*subscription
 	if err := appendMyListMods(&mods, param); err != nil {
 		return nil, NewInternalError(err)
 	}
-	subs, err := models.Subscriptions(tx, mods...).All()
+	hisory, err := models.Histories(tx, mods...).All()
 
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 
-	res := subscriptionsResponse{
-		Subscriptions: subs,
-		ListResponse:  ListResponse{Total: total},
+	res := historyResponse{
+		History:      hisory,
+		ListResponse: ListResponse{Total: total},
 	}
 	return &res, nil
 }
@@ -564,7 +564,7 @@ func handleDeleteHistory(tx *sql.Tx, ids []int64, kcId string) ([]*models.Subscr
 
 func openTransaction() (*sql.DB, *sql.Tx, error) {
 	log.Info("open connection to My DB")
-	db, err := sql.Open("postgres", viper.GetString("mdb.url"))
+	db, err := sql.Open("postgres", viper.GetString("personal.db"))
 	if err != nil {
 		return nil, nil, err
 	}

@@ -68,7 +68,7 @@ CREATE TABLE history
     id           BIGSERIAL PRIMARY KEY,
     account_id   VARCHAR(36)                                NOT NULL,
     chronicle_id VARCHAR(64)                                NOT NULL,
-    uid          VARCHAR(8) NULL,
+    unit_uid          VARCHAR(8) NULL,
     data         JSONB,
     created_at   TIMESTAMP WITH TIME ZONE DEFAULT now_utc() NOT NULL
 );
@@ -103,8 +103,8 @@ INDEX IF NOT EXISTS history_created_at_idx
     ON history USING BTREE (created_at);
 
 CREATE
-INDEX IF NOT EXISTS history_account_id_uid_created_at_idx
-    ON history USING BTREE (account_id, uid, created_at);
+INDEX IF NOT EXISTS history_account_id_unit_uid_created_at_idx
+    ON history USING BTREE (account_id, unit_uid, created_at);
 
 
 -- rambler down
@@ -123,7 +123,7 @@ INDEX IF EXISTS history_account_id_idx;
 DROP
 INDEX IF EXISTS history_created_at_idx;
 DROP
-INDEX IF EXISTS history_account_id_uid_created_at_idx;
+INDEX IF EXISTS history_account_id_unit_uid_created_at_idx;
 
 
 DROP TABLE IF EXISTS playlist;
