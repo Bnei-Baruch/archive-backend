@@ -51,91 +51,22 @@ func MakeDateVariables(lang string) (map[string][]string, error) {
 	end := time.Now()
 	for d := start; d.After(end) == false; d = d.AddDate(0, 0, 1) {
 		dateStr := d.Format("2006-01-02")
-		values := []string{}
-
-		res, err := utils.FormatDate(d, "yyyy-mm-dd", nil)
-		if err != nil {
-			return ret, err
+		formats, langDefined := consts.GRAMMAR_DATE_FORMATS_BY_LANGUAGE[lang]
+		monthNames, hasMonthNames := consts.GRAMMAR_MONTH_NAMES_BY_LANGUAGE[lang]
+		if !langDefined {
+			formats = consts.GRAMMAR_ALL_DATE_FORMATS
 		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "dd.mm.yyyy", nil)
-		if err != nil {
-			return ret, err
+		for _, df := range formats {
+			if hasMonthNames {
+				values, err := utils.FormatDateWithMonthNames(d, df, monthNames)
+				if err != nil {
+					return nil, err
+				}
+				ret[dateStr] = values
+			} else {
+				ret[dateStr] = utils.FormatDate(d, df)
+			}
 		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "dd.mm.yy", nil)
-		if err != nil {
-			return ret, err
-		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "dd/mm/yyyy", nil)
-		if err != nil {
-			return ret, err
-		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "dd/mm/yy", nil)
-		if err != nil {
-			return ret, err
-		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "dd-mm-yyyy", nil)
-		if err != nil {
-			return ret, err
-		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "dd-mm-yy", nil)
-		if err != nil {
-			return ret, err
-		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "mm-dd-yyyy", nil)
-		if err != nil {
-			return ret, err
-		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "mm-dd-yy", nil)
-		if err != nil {
-			return ret, err
-		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "mm.dd.yyyy", nil)
-		if err != nil {
-			return ret, err
-		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "mm.dd.yy", nil)
-		if err != nil {
-			return ret, err
-		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "mm/dd/yyyy", nil)
-		if err != nil {
-			return ret, err
-		}
-		values = append(values, res...)
-
-		res, err = utils.FormatDate(d, "mm/dd/yy", nil)
-		if err != nil {
-			return ret, err
-		}
-		values = append(values, res...)
-
-		// TBD Limit by language with map
-		// TBD Apr 23 '16 (year with ')
-		// TBD  "28 августа 2017 г.". (with г.)
-
-		ret[dateStr] = values
 	}
 	return ret, nil
 }

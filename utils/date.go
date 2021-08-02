@@ -9,10 +9,25 @@ import (
 	"github.com/pkg/errors"
 )
 
-func FormatDate(d time.Time, format string, monthNames [][]string) ([]string, error) {
-	if monthNames != nil && len(monthNames) != 12 { //<-- TBD !!!
+func FormatDateWithMonthNames(d time.Time, format string, monthNames [][]string) ([]string, error) {
+	if monthNames == nil {
+		return nil, errors.New("monthNames is nil.")
+	}
+	if monthNames == nil && len(monthNames) != 12 {
 		return nil, errors.New("monthNames length is not 12.")
 	}
+	valuesWithMonthNames := []string{}
+	values := FormatDate(d, format)
+	for _, val := range values {
+		specificMonthNames := monthNames[d.Month()-1]
+		for _, monthName := range specificMonthNames {
+			valuesWithMonthNames = append(valuesWithMonthNames, strings.Replace(val, "MMMM", monthName, 1))
+		}
+	}
+	return valuesWithMonthNames, nil
+}
+
+func FormatDate(d time.Time, format string) []string {
 	values := []string{}
 	fd := func() string {
 		val := strings.Replace(format, "yyyy", strconv.Itoa(d.Year()), 1)
@@ -39,5 +54,5 @@ func FormatDate(d time.Time, format string, monthNames [][]string) ([]string, er
 		val = strings.Replace(format, "mm", fmt.Sprintf("%d", d.Month()), 1)
 		values = append(values, val)
 	}
-	return values, nil
+	return values
 }
