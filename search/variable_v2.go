@@ -29,7 +29,8 @@ type TranslationsV2 = map[string]map[string][]string
 type VariablesV2 = map[string]TranslationsV2
 
 const (
-	START_YEAR = 1996
+	START_YEAR                                = 1996
+	YEARS_APPENDAGE_FOR_MAKING_DATE_VARIABLES = 10
 )
 
 func MakeYearVariablesV2() map[string][]string {
@@ -48,7 +49,7 @@ func MakeDateVariables(lang string) (map[string][]string, error) {
 
 	ret := make(map[string][]string)
 	start := time.Date(START_YEAR, time.Month(1), 1, 0, 0, 0, 0, time.UTC)
-	end := time.Now()
+	end := time.Now().AddDate(YEARS_APPENDAGE_FOR_MAKING_DATE_VARIABLES, 0, 0)
 	for d := start; d.After(end) == false; d = d.AddDate(0, 0, 1) {
 		dateStr := d.Format("2006-01-02")
 		formats, langDefined := consts.GRAMMAR_DATE_FORMATS_BY_LANGUAGE[lang]
