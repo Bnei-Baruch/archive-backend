@@ -134,6 +134,13 @@ https://www.python.org/downloads/
         C:\Users\[USER]\go\src\github.com\Bnei-Baruch\archive-backend>python C:\Users\[USER]\go\src\github.com\Bnei-Baruch\archive-backend\es\mappings\make.py
         ```
     2. Repeat any time make.py is changed and executed.
+   
+
+   *Note* on MacOS I run it from the es/mappings folder
+   ```shell
+   $ cd es/mappings
+   $ python make.py
+   ```
 
 ## License
 
