@@ -935,7 +935,7 @@ var ARTICLE_COLLECTION_TO_PROGRAM_COLLECTION = map[string]string{
 	ARTICLE_COLLECTION_NEWS_IN_RUSSIAN:      PROGRAM_COLLECTION_NEWS_IN_RUSSIAN,
 }
 
-var GRAMMAR_ALL_DATE_FORMATS = []string{
+var GRAMMAR_ALL_DATE_FORMATS_WITH_YEAR = []string{
 	"yyyy-mm-dd",
 	"dd.mm.yyyy",
 	"dd.mm.yy",
@@ -967,7 +967,21 @@ var GRAMMAR_ALL_DATE_FORMATS = []string{
 	"dd de MMMM de yy",    // Spanish
 }
 
-var GRAMMAR_DATE_FORMATS_BY_LANGUAGE = map[string][]string{
+var GRAMMAR_ALL_DATE_FORMATS_WITHOUT_YEAR = []string{
+	"dd.mm",
+	"dd/mm",
+	"mm.dd",
+	"mm/dd",
+	"dd-mm",
+	"mm-dd",
+	"MMMM dd",
+	"dd MMMM",
+	"MMMM ddst",
+	"ddst MMMM",
+	"dd de MMMM", // Spanish
+}
+
+var GRAMMAR_DATE_FORMATS_BY_LANGUAGE_WITH_YEAR = map[string][]string{
 	LANG_HEBREW: []string{
 		"yyyy-mm-dd",
 		"dd.mm.yyyy",
@@ -1040,6 +1054,47 @@ var GRAMMAR_DATE_FORMATS_BY_LANGUAGE = map[string][]string{
 		"dn. dd MMMM yy r.",
 		"dd MMMM yyyy r.",
 		"dn. dd MMMM yyyy r.",
+	},
+}
+
+var GRAMMAR_DATE_FORMATS_BY_LANGUAGE_WITHOUT_YEAR = map[string][]string{
+	LANG_HEBREW: []string{
+		"dd.mm",
+		"dd/mm",
+		"dd-mm",
+		"dd MMMM",
+	},
+	LANG_RUSSIAN: []string{
+		"dd.mm",
+		"dd/mm",
+		"dd-mm",
+		"dd MMMM",
+	},
+	LANG_ENGLISH: []string{
+		"dd.mm",
+		"dd/mm",
+		"dd-mm",
+		"mm-dd",
+		"mm.dd",
+		"mm/dd",
+		"MMMM dd",
+		"dd MMMM",
+		"MMMM ddst",
+		"ddst MMMM",
+	},
+	LANG_SPANISH: []string{
+		"dd.mm",
+		"dd/mm",
+		"dd-mm",
+		"dd MMMM",
+		"dd de MMMM",
+	},
+	LANG_POLISH: []string{
+		"dd.mm",
+		"dd/mm",
+		"dd-mm",
+		"dd MMMM",
+		"dn. dd MMMM",
 	},
 }
 

@@ -46,27 +46,47 @@ func MakeYearVariablesV2() map[string][]string {
 }
 
 func MakeDateVariables(lang string) (map[string][]string, error) {
-
 	ret := make(map[string][]string)
 	start := time.Date(START_YEAR, time.Month(1), 1, 0, 0, 0, 0, time.UTC)
 	end := time.Now().AddDate(YEARS_APPENDAGE_FOR_MAKING_DATE_VARIABLES, 0, 0)
-	for d := start; d.After(end) == false; d = d.AddDate(0, 0, 1) {
-		dateStr := d.Format("2006-01-02")
-		formats, langDefined := consts.GRAMMAR_DATE_FORMATS_BY_LANGUAGE[lang]
-		monthNames, hasMonthNames := consts.GRAMMAR_MONTH_NAMES_BY_LANGUAGE[lang]
-		if !langDefined {
-			formats = consts.GRAMMAR_ALL_DATE_FORMATS
-		}
+	monthNames, hasMonthNames := consts.GRAMMAR_MONTH_NAMES_BY_LANGUAGE[lang]
+	createDateValues := func(d time.Time, formats []string) ([]string, error) {
+		ret := []string{}
 		for _, df := range formats {
 			if hasMonthNames {
 				values, err := utils.FormatDateWithMonthNames(d, df, monthNames)
 				if err != nil {
 					return nil, err
 				}
-				ret[dateStr] = values
+				ret = append(ret, values...)
 			} else {
-				ret[dateStr] = utils.FormatDate(d, df)
+				ret = append(ret, utils.FormatDate(d, df)...)
 			}
+		}
+		return ret, nil
+	}
+	formatsWithYear, langDefined := consts.GRAMMAR_DATE_FORMATS_BY_LANGUAGE_WITH_YEAR[lang]
+	if !langDefined {
+		formatsWithYear = consts.GRAMMAR_ALL_DATE_FORMATS_WITH_YEAR
+	}
+	formatsWithoutYear, langDefined := consts.GRAMMAR_DATE_FORMATS_BY_LANGUAGE_WITHOUT_YEAR[lang]
+	if !langDefined {
+		formatsWithoutYear = consts.GRAMMAR_ALL_DATE_FORMATS_WITHOUT_YEAR
+	}
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+		values, err := createDateValues(d, formatsWithYear)
+		if err != nil {
+			return nil, err
+		}
+		ret[dateStr] = values
+		if d.After(time.Now().AddDate(-1, 0, 0)) {
+			// If current date is within the last year, we will append date formats that without a year to the variable values
+			values, err := createDateValues(d, formatsWithoutYear)
+			if err != nil {
+				return nil, err
+			}
+			ret[dateStr] = append(ret[dateStr], values...)
 		}
 	}
 	return ret, nil
