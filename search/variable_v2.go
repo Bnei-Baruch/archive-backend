@@ -81,7 +81,7 @@ func MakeDateVariables(lang string) (map[string][]string, error) {
 		}
 		ret[dateStr] = values
 		if d.After(time.Now().AddDate(-1, 0, 0)) {
-			// If current date is within the last year, we will append date formats that without a year to the variable values
+			// If the date is within the last year, we will append date formats that without a year to the variable values
 			values, err := createDateValues(d, formatsWithoutYear)
 			if err != nil {
 				return nil, err
