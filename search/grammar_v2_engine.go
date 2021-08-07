@@ -278,6 +278,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 			var contentType string
 			var text string
 			var programCollection string
+			var date string
 			sources := []string{}
 			for _, fv := range intentValue.FilterValues {
 				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
@@ -288,19 +289,21 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 					sources = append(sources, fv.Value)
 				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM] {
 					programCollection = fv.Value
+				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_DATE] {
+					date = fv.Value
 				}
 			}
 			searchWithoutTerm := text == ""
-			if contentType != "" || programCollection != "" || len(sources) > 0 {
-				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Program collection is '%s', Sources are '%+v'.", contentType, text, programCollection, sources)
+			if contentType != "" || programCollection != "" || date != "" || len(sources) > 0 {
+				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Program collection is '%s', Date is %v, Sources are '%+v'.", contentType, text, programCollection, date, sources)
 				requests := []*elastic.SearchRequest{}
-				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, date, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 				if err != nil {
 					return nil, err
 				}
 				requests = append(requests, textValSearchRequests...)
 				if !searchWithoutTerm && contentType != consts.VAR_CT_ARTICLES {
-					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, date, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 					if err != nil {
 						return nil, err
 					}
