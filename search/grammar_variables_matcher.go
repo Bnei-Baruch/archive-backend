@@ -35,6 +35,8 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 		return landingPageConventionsMatch(vMap, cm)
 	case consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS:
 		return landingPageHolidaysMatch(vMap, cm)
+	case consts.GRAMMAR_INTENT_FILTER_BY_DATE:
+		return filterByDateMatch(vMap)
 	default:
 		return true
 	}
@@ -309,4 +311,38 @@ func landingPageHolidaysMatch(vMap map[string][]string, cm cache.CacheManager) b
 		return false
 	}
 	return cm.SearchStats().DoesHolidayExist(holiday, year)
+}
+
+func filterByDateMatch(vMap map[string][]string) bool {
+	hasVarText := false
+	hasVarContentType := false
+	hasVarDate := false
+	for variable, values := range vMap {
+		if variable == consts.VAR_TEXT {
+			if hasVarText || len(values) != 1 { //  Disable if we have more than one $Text appereance or value
+				log.Warningf("Number of $Text appearances or values in 'by_date' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarText = true
+		}
+		if variable == consts.VAR_CONTENT_TYPE {
+			if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
+				log.Warningf("Number of $ContentType appearances or values in 'by_date' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarContentType = true
+		}
+		if variable == consts.VAR_DATE {
+			if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $Date appereance or value
+				log.Warningf("Number of $Date appearances or values in 'by_date' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarDate = true
+		}
+	}
+	if !hasVarDate {
+		log.Warningf("Filter intent by date must have one appearance of $Date.")
+		return false
+	}
+	return true
 }

@@ -611,6 +611,30 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				}
 				singleHitIntents = append(singleHitIntents, intents...)
 				addSourcePositionWithoutTerm = false // We add results only one time for this rule type
+			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_DATE {
+				var dateStr string
+				filterValues := e.VariableMapToFilterValues(vMap, language)
+				for _, fv := range filterValues {
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_DATE] {
+						dateStr = fv.Value
+					}
+				}
+				date, err := time.Parse("2006-01-02", dateStr)
+				if err != nil {
+					return nil, nil, err
+				}
+				if date.After(time.Now()) {
+					// Future date
+					continue
+				}
+				filterIntents = append(filterIntents, Intent{
+					Type:     consts.GRAMMAR_TYPE_FILTER,
+					Language: language,
+					Value: GrammarIntent{
+						FilterValues: filterValues,
+						Score:        score,
+						Explanation:  hit.Explanation,
+					}})
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {
