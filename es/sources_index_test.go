@@ -25,7 +25,7 @@ func TestSourcesIndexer(t *testing.T) {
 
 func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 
-	es.SetUnzipUrl("test.unzip-url")
+	es.SetUnzipUrl("elasticsearch.unzip-url")
 	fmt.Printf("\n\n\n--- TEST SOURCES INDEX ---\n\n\n")
 
 	r := require.New(suite.T())
