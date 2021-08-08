@@ -27,15 +27,15 @@ cd ${BASE_DIR}
 
 ./archive-backend eval --server=${BACKEND} --eval_set=${RECALL_SET_DIR}/he.recall.csv --flat_report="${REPORT_FILE_HE}" >>"${LOG_FILE_HE}" 2>&1
 if [ $? -ne 0 ]; then
-  mail -s "Daily Eval: Error." kolmanv@gmail.com -- -r "mdb@bbdomain.org" -a "${LOG_FILE_HE}"
+  (uuencode "${LOG_FILE_HE}" eval_he.log) | mail -s "Daily Eval: Error." kolmanv@gmail.com yurihechter@gmail.com
 fi
 ./archive-backend eval --server=${BACKEND} --eval_set=${RECALL_SET_DIR}/ru.recall.csv --flat_report="${REPORT_FILE_RU}" >>"${LOG_FILE_RU}" 2>&1
 if [ $? -ne 0 ]; then
-  mail -s "Daily Eval: Error." kolmanv@gmail.com -- -r "mdb@bbdomain.org" -a "${LOG_FILE_RU}"
+  (uuencode "${LOG_FILE_RU}" eval_ru.log) | mail -s "Daily Eval: Error." kolmanv@gmail.com yurihechter@gmail.com
 fi
 ./archive-backend eval --server=${BACKEND} --eval_set=${RECALL_SET_DIR}/en.recall.csv --flat_report="${REPORT_FILE_EN}" >>"${LOG_FILE_EN}" 2>&1
 if [ $? -ne 0 ]; then
-  mail -s "Daily Eval: Error." kolmanv@gmail.com -- -r "mdb@bbdomain.org" -a "${LOG_FILE_EN}"
+  (uuencode "${LOG_FILE_EN}" eval_en.log) | mail -s "Daily Eval: Error." kolmanv@gmail.com yurihechter@gmail.com
 fi
 
 ./archive-backend vs_golden_html \
@@ -44,7 +44,7 @@ fi
   --vs_golden_html="${HTML_FILE}" >>"${LOG_FILE_HTML}" 2>&1
 
 if [ $? -ne 0 ]; then
-  mail -s "Daily Eval: Error." kolmanv@gmail.com -- -r "mdb@bbdomain.org" -a "${LOG_FILE_HTML}"
+  (uuencode "${LOG_FILE_HTML}" eval_html.log) | mail -s "Daily Eval: Error." kolmanv@gmail.com yurihechter@gmail.com
 fi
 
 # Cleanup old logs (older then week).
@@ -53,14 +53,6 @@ find ${LOGS_DIR} -name "eval_ru_*.log" -type f -mtime +7 -exec rm -f {} \;
 find ${LOGS_DIR} -name "eval_en_*.log" -type f -mtime +7 -exec rm -f {} \;
 find ${LOGS_DIR} -name "eval_report_*.log" -type f -mtime +7 -exec rm -f {} \;
 
-mail -s "Daily Eval: Done." kolmanv@gmail.com edoshor@gmail.com eranminuchin@gmail.com yurihechter@gmail.com alex.mizrachi@gmail.com -- \
-  -r "mdb@bbdomain.org" \
-  -a "${REPORT_FILE_HE}" \
-  -a "${REPORT_FILE_RU}" \
-  -a "${REPORT_FILE_EN}" \
-  -a "${LOG_FILE_HE}" \
-  -a "${LOG_FILE_RU}" \
-  -a "${LOG_FILE_EN}" \
-  -a "${LOG_FILE_HTML}" <"${HTML_FILE}"
+cat "${HTML_FILE}" | mail -s "Daily Eval: Done.\nContent-Type: text/html" kolmanv@gmail.com edoshor@gmail.com eranminuchin@gmail.com yurihechter@gmail.com alex.mizrachi@gmail.com
 
 exit 0

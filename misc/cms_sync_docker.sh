@@ -22,6 +22,6 @@ if [ "$WARNINGS" = "0" ]; then
   exit 0
 fi
 
-echo "Errors in cms sync" | mail -s "ERROR: CMS sync" edoshor@gmail.com -- -r "mdb@bbdomain.org" -a "${LOG_FILE}"
+(uuencode "${LOG_FILE}" cms_sync.log;) | mail -s "ERROR: CMS sync" edoshor@gmail.com
 cleanup
 exit 1

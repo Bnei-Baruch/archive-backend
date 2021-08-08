@@ -23,6 +23,6 @@ if [ "${SANITY_OK}" = "1" ]; then
   exit 0
 fi
 
-echo "Sanity failed." | mail -s "ERROR: Search sanity." edoshor@gmail.com kolmanv@gmail.com yurihechter@gmail.com -- -r "mdb@bbdomain.org" -a "${LOG_FILE}" -a "${FLAT_REPORT_FILE}"
+(uuencode "${LOG_FILE}" eval_sanity.log; uuencode "${FLAT_REPORT_FILE}" eval_sanity.flat.report) | mail -s "ERROR: Search sanity." edoshor@gmail.com kolmanv@gmail.com yurihechter@gmail.com
 cleanup
 exit 1
