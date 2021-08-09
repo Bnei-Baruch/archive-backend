@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -13,14 +14,15 @@ func FormatDateWithMonthNames(d time.Time, format string, monthNames [][]string)
 	if monthNames == nil {
 		return nil, errors.New("monthNames is nil.")
 	}
-	if monthNames == nil && len(monthNames) != 12 {
-		return nil, errors.New("monthNames length is not 12.")
-	}
 	valuesWithMonthNames := []string{}
 	values := FormatDate(d, format)
 	for _, val := range values {
-		specificMonthNames := monthNames[d.Month()-1]
-		for _, monthName := range specificMonthNames {
+		log.Printf("len(monthNames): %d, val: %v, d: %v, d.Month(): %v, d.Month() as num: %d, d.Month()-1: %v", len(monthNames), val, d, d.Month(), d.Month(), (d.Month() - 1))
+		for i := range monthNames {
+			if len(monthNames[i]) != 12 {
+				return nil, errors.New("Month names length is not 12.")
+			}
+			monthName := monthNames[i][d.Month()-1]
 			valuesWithMonthNames = append(valuesWithMonthNames, strings.Replace(val, "MMMM", monthName, 1))
 		}
 	}
