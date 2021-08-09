@@ -121,7 +121,14 @@ func MakeVariablesV2(variablesDir string) (VariablesV2, error) {
 	years := MakeYearVariablesV2()
 	variables[consts.VAR_YEAR] = make(TranslationsV2)
 	variables[consts.VAR_TEXT] = make(TranslationsV2)
+	variables[consts.VAR_DATE] = make(TranslationsV2)
 	for _, lang := range consts.ALL_KNOWN_LANGS {
+		dates, err := MakeDateVariables(lang)
+		if err != nil {
+			return nil, err
+		}
+		// Date
+		variables[consts.VAR_DATE][lang] = dates
 		// Year
 		variables[consts.VAR_YEAR][lang] = years
 		// Special free text variable. Proceeded with percolator search.
