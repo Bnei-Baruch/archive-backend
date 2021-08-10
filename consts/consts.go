@@ -944,6 +944,8 @@ var ARTICLE_COLLECTION_TO_PROGRAM_COLLECTION = map[string]string{
 }
 
 var GRAMMAR_ALL_DATE_FORMATS_WITH_YEAR = []string{
+	"ddmmyyyy",
+	"mmddyyyy",
 	"yyyy-mm-dd",
 	"dd.mm.yyyy",
 	"dd.mm.yy",
@@ -962,10 +964,12 @@ var GRAMMAR_ALL_DATE_FORMATS_WITH_YEAR = []string{
 	"MMMM dd 'yy",
 	"dd MMMM yyyy",
 	"dd MMMM yy",
-	"MMMM ddst yyyy",
-	"MMMM ddst yy",
-	"ddst MMMM yyyy",
-	"ddst MMMM yy",
+	"MMMM dd yyyy",
+	"MMMM dd yy",
+	"dd MMMM yyyy",
+	"dd MMMM yy",
+	"dd of MMMM yyyy",
+	"dd of MMMM yy",
 	"dd MMMM yy г.",       // Russian
 	"dd MMMM yy r.",       // Polish
 	"dn. dd MMMM yy r.",   // Polish
@@ -984,14 +988,15 @@ var GRAMMAR_ALL_DATE_FORMATS_WITHOUT_YEAR = []string{
 	"mm-dd",
 	"MMMM dd",
 	"dd MMMM",
-	"MMMM ddst",
-	"ddst MMMM",
+	"dd of MMMM",
+	"dd of MMMM",
 	"dd de MMMM", // Spanish
 }
 
 var GRAMMAR_DATE_FORMATS_BY_LANGUAGE_WITH_YEAR = map[string][]string{
 	LANG_HEBREW: []string{
 		"yyyy-mm-dd",
+		"ddmmyyyy",
 		"dd.mm.yyyy",
 		"dd.mm.yy",
 		"dd/mm/yyyy",
@@ -1003,6 +1008,7 @@ var GRAMMAR_DATE_FORMATS_BY_LANGUAGE_WITH_YEAR = map[string][]string{
 	},
 	LANG_RUSSIAN: []string{
 		"yyyy-mm-dd",
+		"ddmmyyyy",
 		"dd.mm.yyyy",
 		"dd.mm.yy",
 		"dd/mm/yyyy",
@@ -1015,6 +1021,8 @@ var GRAMMAR_DATE_FORMATS_BY_LANGUAGE_WITH_YEAR = map[string][]string{
 	},
 	LANG_ENGLISH: []string{
 		"yyyy-mm-dd",
+		"ddmmyyyy",
+		"mmddyyyy",
 		"dd.mm.yyyy",
 		"dd.mm.yy",
 		"dd/mm/yyyy",
@@ -1031,13 +1039,12 @@ var GRAMMAR_DATE_FORMATS_BY_LANGUAGE_WITH_YEAR = map[string][]string{
 		"MMMM dd yy",
 		"dd MMMM yyyy",
 		"dd MMMM yy",
-		"MMMM ddst yyyy",
-		"MMMM ddst yy",
-		"ddst MMMM yyyy",
-		"ddst MMMM yy",
+		"dd of MMMM yyyy",
+		"dd of MMMM yy",
 	},
 	LANG_SPANISH: []string{
 		"yyyy-mm-dd",
+		"ddmmyyyy",
 		"dd.mm.yyyy",
 		"dd.mm.yy",
 		"dd/mm/yyyy",
@@ -1050,6 +1057,7 @@ var GRAMMAR_DATE_FORMATS_BY_LANGUAGE_WITH_YEAR = map[string][]string{
 	},
 	LANG_POLISH: []string{
 		"yyyy-mm-dd",
+		"ddmmyyyy",
 		"dd.mm.yyyy",
 		"dd.mm.yy",
 		"dd/mm/yyyy",
@@ -1087,8 +1095,8 @@ var GRAMMAR_DATE_FORMATS_BY_LANGUAGE_WITHOUT_YEAR = map[string][]string{
 		"mm/dd",
 		"MMMM dd",
 		"dd MMMM",
-		"MMMM ddst",
-		"ddst MMMM",
+		"dd of MMMM yyyy",
+		"dd of MMMM yy",
 	},
 	LANG_SPANISH: []string{
 		"dd.mm",

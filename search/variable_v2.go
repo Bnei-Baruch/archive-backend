@@ -54,13 +54,13 @@ func MakeDateVariables(lang string) (map[string][]string, error) {
 		ret := []string{}
 		for _, df := range formats {
 			if hasMonthNames {
-				values, err := utils.FormatDateWithMonthNames(d, df, monthNames)
+				values, err := utils.FormatDateWithMonthNames(d, df, monthNames, lang)
 				if err != nil {
 					return nil, err
 				}
 				ret = append(ret, values...)
 			} else {
-				ret = append(ret, utils.FormatDate(d, df)...)
+				ret = append(ret, utils.FormatDate(d, df, false, true)...)
 			}
 		}
 		return ret, nil
