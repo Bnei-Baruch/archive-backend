@@ -53,6 +53,7 @@ find ${LOGS_DIR} -name "eval_ru_*.log" -type f -mtime +7 -exec rm -f {} \;
 find ${LOGS_DIR} -name "eval_en_*.log" -type f -mtime +7 -exec rm -f {} \;
 find ${LOGS_DIR} -name "eval_report_*.log" -type f -mtime +7 -exec rm -f {} \;
 
-cat "${HTML_FILE}" | mail -s "Daily Eval: Done.\nContent-Type: text/html" kolmanv@gmail.com edoshor@gmail.com eranminuchin@gmail.com yurihechter@gmail.com alex.mizrachi@gmail.com
+mail -s "$(echo -e "Daily Eval: Done.\nContent-Type: text/html")" \
+  kolmanv@gmail.com edoshor@gmail.com eranminuchin@gmail.com yurihechter@gmail.com alex.mizrachi@gmail.com < ${HTML_FILE}
 
 exit 0
