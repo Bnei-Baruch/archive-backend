@@ -82,6 +82,16 @@ func ContentUnitsHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func CountContentUnitsHandler(c *gin.Context) {
+	var r ContentUnitsRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	resp, err := handleCountContentUnits(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err)
+}
+
 func ContentUnitHandler(c *gin.Context) {
 	var r BaseRequest
 	if c.Bind(&r) != nil {
@@ -1535,6 +1545,51 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		ContentUnits: cus,
 	}
 
+	return resp, nil
+}
+
+func handleCountContentUnits(db *sql.DB, r ContentUnitsRequest) (*ListResponse, *HttpError) {
+	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD, qm.Select("count(DISTINCT id)")}
+
+	// filters
+	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendSourcesFilterMods(db, &mods, r.SourcesFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			return nil, e
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendCollectionsFilterMods(db, &mods, r.CollectionsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	total, err := mdbmodels.ContentUnits(db, mods...).Count()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	resp := &ListResponse{Total: total}
 	return resp, nil
 }
 
