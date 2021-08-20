@@ -68,9 +68,6 @@ func InitConfigFolder(configKey string, value *string) (string, error) {
 func IsWindows() bool {
 	return runtime.GOOS == "windows"
 }
-func SetUnzipUrl(name string) {
-	unzipUrl = viper.GetString(name)
-}
 
 func InitVars() {
 	if IsWindows() {

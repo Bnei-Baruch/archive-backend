@@ -24,8 +24,6 @@ func TestSourcesIndexer(t *testing.T) {
 }
 
 func (suite *SourcesIndexerSuite) TestSourcesIndex() {
-
-	es.SetUnzipUrl("elasticsearch.unzip-url")
 	fmt.Printf("\n\n\n--- TEST SOURCES INDEX ---\n\n\n")
 
 	r := require.New(suite.T())
@@ -42,10 +40,10 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	source1UID, source1ID := suite.us(Source{Name: "test-name-1"}, consts.LANG_ENGLISH)
 	fileHe := mdbmodels.File{ID: 1, Name: "heb_o_rav_bs-shamati-038-irat-ashem_2016-09-16_lesson.doc", UID: "8awHBfjU", Language: null.String{consts.LANG_HEBREW, true}, Secure: 0, Published: true}
 	fileEn := mdbmodels.File{ID: 2, Name: "eng_t_rav_2017-06-09_kitei-makor_mi-ichud-le-hafatza_n1_p1.docx", UID: "frnHYhIw", Language: null.String{consts.LANG_ENGLISH, true}, Secure: 0, Published: true}
-	fContentHe, err := es.DocText(fileHe.UID)
-	r.Nil(err)
-	fContentEn, err := es.DocText(fileEn.UID)
-	r.Nil(err)
+	fContentHe := "TEST CONTENT HE"
+	fContentEn := "TEST CONTENT EN"
+	suite.serverResponses["/doc2text/8awHBfjU"] = fContentHe
+	suite.serverResponses["/doc2text/frnHYhIw"] = fContentEn
 	suite.ucuf(ContentUnit{Name: "test-name-1", ContentType: consts.CT_SOURCE, UIDForCreate: source1UID}, consts.LANG_HEBREW, fileHe, true)
 	suite.ucuf(ContentUnit{MDB_UID: source1UID}, consts.LANG_ENGLISH, fileEn, true)
 
@@ -99,6 +97,8 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	fmt.Println("Validate adding source with file and author and and validate.")
 	suite.asa(Source{MDB_UID: source2UID}, consts.LANG_ENGLISH, mdbmodels.Author{Name: "Test Name 2", ID: 5, Code: "t3"}, true, true)
 	suite.asa(Source{MDB_UID: source2UID}, consts.LANG_HEBREW, mdbmodels.Author{Name: "שם נוסף לבדיקה", ID: 6, Code: "t4"}, true, true)
+	fContentEn2 := "TEST CONTENT EN 2"
+	suite.serverResponses["/doc2text/QrtIVYJA"] = fContentEn2
 	fileHe2 := mdbmodels.File{ID: 3, Name: "heb_o_rav_achana_2014-05-28_lesson.doc", UID: "bBBIDCiy", Language: null.String{consts.LANG_HEBREW, true}, Secure: 0, Published: true}
 	fileEn2 := mdbmodels.File{ID: 4, Name: "eng_o_rav_2020-12-24_art_on-jewish-unity-no-6.docx", UID: "QrtIVYJA", Language: null.String{consts.LANG_ENGLISH, true}, Secure: 0, Published: true}
 	suite.ucuf(ContentUnit{Name: "test-name-2", ContentType: consts.CT_SOURCE, UIDForCreate: source2UID}, consts.LANG_HEBREW, fileHe2, true)
@@ -107,8 +107,6 @@ func (suite *SourcesIndexerSuite) TestSourcesIndex() {
 	suite.validateNames(indexNameEn, indexer, []string{"test-name-1", "test-name-2"})
 	suite.validateFullNames(indexNameEn, indexer, []string{"Test Name > test-name-1", "Test Name 2 > test-name-2"})
 
-	fContentEn2, err := es.DocText(fileEn2.UID)
-	r.Nil(err)
 	suite.validateSourceFile(indexNameEn, indexer, map[string]string{
 		source1UID: fContentEn,
 		source2UID: fContentEn2,
