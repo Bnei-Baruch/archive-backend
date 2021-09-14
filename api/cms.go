@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/gin-gonic/gin.v1"
@@ -48,6 +49,20 @@ func CMSBanner(c *gin.Context) {
 	filePattern := fmt.Sprintf("%sactive/banners/%%s", assets)
 	fileName, err := handleItemRequest(filePattern, id)
 	concludeRequestFile(c, fileName, err)
+}
+
+func CMSBanners(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		err := fmt.Errorf("id must be supplied")
+		concludeRequestFile(c, "", NewBadRequestError(err))
+		return
+	}
+
+	assets := c.MustGet("CMS").(*CMSParams).Assets
+	filePattern := fmt.Sprintf("%sactive/banners/%%s-*", assets)
+	fileNames, err := handleItemsRequest(filePattern, id)
+	concludeRequestFiles(c, fileNames, err)
 }
 
 func CMSSource(c *gin.Context) {
@@ -148,4 +163,35 @@ func concludeRequestFile(c *gin.Context, fileName string, err *HttpError) {
 	} else {
 		err.Abort(c)
 	}
+}
+
+func handleItemsRequest(filePattern string, language string) ([]string, *HttpError) {
+	for _, lang := range consts.I18N_LANG_ORDER[language] {
+		pattern := fmt.Sprintf(filePattern, lang)
+		if files, err := filepath.Glob(pattern); err == nil {
+			return files, nil
+		}
+	}
+
+	return nil, NewNotFoundError()
+}
+
+// responds with File(s) content or aborts the request with the given error.
+func concludeRequestFiles(c *gin.Context, fileNames []string, err *HttpError) {
+	if err != nil || len(fileNames) == 0 {
+		err.Abort(c)
+	}
+
+	content := make([]string, len(fileNames))
+	var (
+		data []byte
+		errr error
+	)
+	for _, file := range fileNames {
+		if data, errr = os.ReadFile(file); errr != nil {
+			c.String(http.StatusOK, "[]")
+		}
+		content = append(content, string(data))
+	}
+	c.String(http.StatusOK, "[%s]", strings.Join(content, ","))
 }
