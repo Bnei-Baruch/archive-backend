@@ -190,7 +190,7 @@ func concludeRequestFiles(c *gin.Context, fileNames []string, err *HttpError) {
 	)
 	for idx, file := range fileNames {
 		if data, errr = os.ReadFile(file); errr != nil {
-			err.Abort(c)
+			NewHttpError(http.StatusNotFound, errr, gin.ErrorTypePublic).Abort(c)
 			return
 		}
 		content[idx] = string(data)
