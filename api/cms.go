@@ -180,6 +180,7 @@ func handleItemsRequest(filePattern string, language string) ([]string, *HttpErr
 func concludeRequestFiles(c *gin.Context, fileNames []string, err *HttpError) {
 	if err != nil || len(fileNames) == 0 {
 		err.Abort(c)
+		return
 	}
 
 	content := make([]string, len(fileNames))
@@ -187,11 +188,12 @@ func concludeRequestFiles(c *gin.Context, fileNames []string, err *HttpError) {
 		data []byte
 		errr error
 	)
-	for _, file := range fileNames {
+	for idx, file := range fileNames {
 		if data, errr = os.ReadFile(file); errr != nil {
-			c.String(http.StatusOK, "[]")
+			err.Abort(c)
+			return
 		}
-		content = append(content, string(data))
+		content[idx] = string(data)
 	}
 	c.String(http.StatusOK, "[%s]", strings.Join(content, ","))
 }

@@ -88,7 +88,7 @@ func SetupRoutes(router *gin.Engine) {
 	{
 		cms.GET("/persons/:id", CMSPerson)
 		cms.GET("/banners/:id", CMSBanner)
-		cms.GET("/banners-x/:id", CMSBanners)
+		cms.GET("/banners-list/:id", CMSBanners)
 		cms.GET("/sources/:id", CMSSource)
 		cms.GET("/sourceIndex/:id", CMSSourceIndex)
 		cms.GET("/topics", CMSTopics)
