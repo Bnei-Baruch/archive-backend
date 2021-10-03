@@ -14,6 +14,7 @@ import (
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/integration"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
@@ -27,12 +28,14 @@ func MakeLikutimIndex(namespace string, indexDate string, db *sql.DB, esc *elast
 	li.indexDate = indexDate
 	li.db = db
 	li.esc = esc
+	li.assetsService = integration.NewAssetsService(unzipUrl)
 	return li
 }
 
 type LikutimIndex struct {
 	BaseIndex
-	Progress uint64
+	Progress      uint64
+	assetsService integration.AssetsService
 }
 
 func (index *LikutimIndex) ReindexAll() error {
@@ -265,5 +268,5 @@ func (index *LikutimIndex) getContent(files []*mdbmodels.File, lang string) (str
 		return "", errors.New(fmt.Sprint("No .docx or .doc"))
 	}
 
-	return DocText(file.UID)
+	return index.assetsService.Doc2Text(file.UID)
 }
