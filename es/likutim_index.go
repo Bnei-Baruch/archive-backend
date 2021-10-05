@@ -222,6 +222,9 @@ func (index *LikutimIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, indexData
 	if err != nil {
 		indexErrors.SetError(err)
 	}
+	if files == nil {
+		return i18nMap, indexErrors
+	}
 	for _, i18n := range cu.R.ContentUnitI18ns {
 		if i18n.Name.Valid && strings.TrimSpace(i18n.Name.String) != "" {
 			content, err := index.getContent(files, i18n.Language)
@@ -257,10 +260,7 @@ func (index *LikutimIndex) getContent(files []*mdbmodels.File, lang string) (str
 			continue
 		}
 		ex := strings.Split(f.Name, ".")[1]
-		if ex == "docx" {
-			file = f
-		}
-		if file == nil && ex == "doc" {
+		if ex == "docx" || ex == "doc" {
 			file = f
 		}
 	}
