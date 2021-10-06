@@ -1098,9 +1098,10 @@ order by type_id, film_date desc
 		return nil, ex
 	}
 
-	//last Collections: CONGRESS, HOLIDAY, LECTURE_SERIES
+	//last Collections: CONGRESS, HOLIDAY
 	cIDs := make([]int64, 0)
 	cs := make([]firstRowsType, 0)
+
 	if _, ok := firstRows[consts.CT_CONGRESS]; ok {
 		cIDs = append(cIDs, firstRows[consts.CT_CONGRESS][0].id)
 		cs = append(cs, firstRows[consts.CT_CONGRESS][0])
@@ -1109,24 +1110,24 @@ order by type_id, film_date desc
 		cIDs = append(cIDs, firstRows[consts.CT_HOLIDAY][0].id)
 		cs = append(cs, firstRows[consts.CT_HOLIDAY][0])
 	}
+
+	//last Collections: LESSONS_SERIES
+	clsIDs := make([]int64, 0)
+	cls := make([]firstRowsType, 0)
 	if _, ok := firstRows[consts.CT_LESSONS_SERIES]; ok {
 		// The first one is always on HomePage
 		for _, r := range firstRows[consts.CT_LESSONS_SERIES][0:2] {
 			cIDs = append(cIDs, r.id)
-			cs = append(cs, r)
+			clsIDs = append(clsIDs, r.id)
 		}
 	}
 
-	var lastNumber int
-	var lastDate time.Time
-
 	if _, ok := firstRows[consts.CT_DAILY_LESSON]; ok {
 		// The first one is always on HomePage
-		lastNumber = 1
-		lastDate = firstRows[consts.CT_DAILY_LESSON][0].film_date
 		for _, r := range firstRows[consts.CT_DAILY_LESSON][1:3] {
 			cIDs = append(cIDs, r.id)
-			cs = append(cs, r)
+			clsIDs = append(clsIDs, r.id)
+			cls = append(cls, r)
 		}
 	}
 
@@ -1134,6 +1135,9 @@ order by type_id, film_date desc
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
+
+	ct := make([]*ContentUnit, 0)
+
 	for _, x := range cs {
 		u := &ContentUnit{
 			mdbID:       x.id,
@@ -1141,16 +1145,41 @@ order by type_id, film_date desc
 			ContentType: x.content_type,
 			FilmDate:    &utils.Date{Time: x.film_date},
 		}
-		if x.content_type == consts.CT_DAILY_LESSON {
-			if x.film_date == lastDate {
-				lastNumber++
-			} else {
-				lastNumber = 1
-				lastDate = x.film_date
-			}
-			u.NameInCollection = fmt.Sprintf("%d", lastNumber)
+		ct = append(ct, u)
+	}
+
+	// data query
+	cols, err := mdbmodels.Collections(db, qm.WhereIn("id IN ?", utils.ConvertArgsInt64(clsIDs)...)).All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	for _, x := range cols {
+		u := &ContentUnit{
+			mdbID:       x.ID,
+			ID:          x.UID,
+			ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[x.TypeID].Name,
+			Collections: map[string]*Collection{},
 		}
-		if i18ns, ok := ci18nsMap[x.id]; ok {
+
+		for _, d := range cls {
+			if d.id == x.ID {
+				u.FilmDate = &utils.Date{Time: d.film_date}
+			}
+		}
+
+		c, err := mdbToC(x)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		u.Collections[coKeyInCu(x.UID, c.Name)] = c
+		if u.ContentType == consts.CT_DAILY_LESSON {
+			u.NameInCollection = fmt.Sprintf("%d", c.Number)
+		}
+		ct = append(ct, u)
+	}
+
+	for _, u := range ct {
+		if i18ns, ok := ci18nsMap[u.mdbID]; ok {
 			for _, l := range consts.I18N_LANG_ORDER[r.Language] {
 				li18n, ok := i18ns[l]
 				if ok {
@@ -1589,8 +1618,7 @@ func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]
 				setCI18n(cc, language, i18ns)
 			}
 
-			// Dirty hack for unique mapping - needs to parse in client...
-			key := fmt.Sprintf("%s____%s", cl.UID, ccu.Name)
+			key := coKeyInCu(cl.UID, ccu.Name)
 			cu.Collections[key] = cc
 		}
 
@@ -2887,6 +2915,11 @@ func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error)
 		ids[idx] = xu.ID
 	}
 	return
+}
+
+// Dirty hack for unique mapping - needs to parse in client...
+func coKeyInCu(uid, name string) string {
+	return fmt.Sprintf("%s____%s", uid, name)
 }
 
 func EvalQueryHandler(c *gin.Context) {
