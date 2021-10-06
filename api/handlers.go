@@ -1171,9 +1171,10 @@ order by type_id, film_date desc
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
-		u.Collections[coKeyInCu(x.UID, c.Name)] = c
 		if u.ContentType == consts.CT_DAILY_LESSON {
 			u.NameInCollection = fmt.Sprintf("%d", c.Number)
+		} else {
+			u.Collections[coKeyInCu(x.UID, c.Name)] = c
 		}
 		ct = append(ct, u)
 	}
