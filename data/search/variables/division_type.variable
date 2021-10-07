@@ -1,0 +1,27 @@
+en,article => article
+en,chapter => chapter
+en,volume => volume
+en,volume => vol
+en,volume => vol.
+en,part => part
+en,number => number
+en,number => n.
+en,number => num
+
+he,article => מאמר
+he,chapter => פרק
+he,volume => כרך
+he,part => חלק
+he,number => מספר
+he,number => מס
+
+ru,article => статья
+ru,article => стаття
+ru,chapter => глава
+ru,chapter => г.
+ru,volume => том
+ru,volume => т.
+ru,part => часть
+ru,part => ч.
+ru,number => номер
+ru,number => н.

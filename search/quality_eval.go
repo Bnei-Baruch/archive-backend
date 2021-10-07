@@ -31,6 +31,7 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
@@ -1742,10 +1743,10 @@ func ReadEvalSets(glob string) (map[string][]EvalQuery, error) {
 }
 
 func EvalSearchDataQuerySetsDiff(language, baseServerUrl, expServerUrl string, diffsLimit int32) ([]ResultsDiffs, error) {
-	searchDataFolder := viper.GetString("test.search-data")
 	if diffsLimit <= 0 {
 		diffsLimit = 200
 	}
+	searchDataFolder := es.DataFolder("search")
 	if evalSets, err := ReadEvalSets(path.Join(searchDataFolder, fmt.Sprintf("%s*.weighted_queries.csv", language))); err != nil {
 		return nil, err
 	} else {
