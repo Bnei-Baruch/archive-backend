@@ -1,7 +1,7 @@
 code.sajari.com/docconv v1.1.0 h1:vcc69M326KbddtkW0g6tSKxisMeoOTwf6bCCyy1+Fwc=
 code.sajari.com/docconv v1.1.0/go.mod h1:rRyb1UrvKoNRs4QS0n4syP7TTacbUymJJ+TajH/rkXY=
-github.com/Bnei-Baruch/sqlboiler v2.6.1+incompatible h1:HtGfnExo3u0EOuxwMB9D+CK8DOIdplYUkzDjyfHVtuA=
-github.com/Bnei-Baruch/sqlboiler v2.6.1+incompatible/go.mod h1:3b1gK4UEu/d5pgR34yZggyhCaG9yPvqyF6xSIDwfbtk=
+github.com/Bnei-Baruch/sqlboiler v2.6.2-0.20211007015741-a68172410883+incompatible h1:XlTiGOQ3N+TY/T1Zxo9/MlSFcYpfIYk02O69D/pTkeU=
+github.com/Bnei-Baruch/sqlboiler v2.6.2-0.20211007015741-a68172410883+incompatible/go.mod h1:3b1gK4UEu/d5pgR34yZggyhCaG9yPvqyF6xSIDwfbtk=
 github.com/DataDog/datadog-go v2.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3tL4fMGNddJ+vMq1mwgfaqoQ=
 github.com/JalfResi/justext v0.0.0-20170829062021-c0282dea7198 h1:8P+AjBhGByCuCX2zTkAf6UY+dj0JczX+t6cSdCSyvfw=
 github.com/JalfResi/justext v0.0.0-20170829062021-c0282dea7198/go.mod h1:0SURuH1rsE8aVWvutuMZghRNrNrYEUzibzJfhEYR8L0=
@@ -167,8 +167,6 @@ github.com/stvp/rollbar v0.4.1-0.20160527211111-3eb4713e2655/go.mod h1:/fyFC854G
 github.com/tv42/httpunix v0.0.0-20150427012821-b75d8614f926/go.mod h1:9ESjWnEqriFuLhtthL60Sar/7RFoluCcXsuvEwTV5KM=
 github.com/volatiletech/inflect v0.0.0-20170731032912-e7201282ae8d h1:gI4/tqP6lCY5k6Sg+4k9qSoBXmPwG+xXgMpK7jivD4M=
 github.com/volatiletech/inflect v0.0.0-20170731032912-e7201282ae8d/go.mod h1:jspfvgf53t5NLUT4o9L1IX0kIBNKamGq1tWc/MgWK9Q=
-github.com/volatiletech/sqlboiler v2.7.4+incompatible h1:sWESKMTJgTRcJD7RqX8okS7Cne26izk+69nqSv/ZxBo=
-github.com/volatiletech/sqlboiler v2.7.4+incompatible/go.mod h1:jLfDkkHWPbS2cWRLkyC20vQWaIQsASEY7gM7zSo11Yw=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 go.etcd.io/bbolt v1.3.6 h1:/ecaJf0sk1l4l6V4awd65v2C3ILy7MSj+s/x1ADCIMU=

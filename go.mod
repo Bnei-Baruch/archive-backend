@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	code.sajari.com/docconv v1.1.0
-	github.com/Bnei-Baruch/sqlboiler v2.6.1+incompatible
+	github.com/Bnei-Baruch/sqlboiler v2.6.2-0.20211007015741-a68172410883+incompatible
 	github.com/JalfResi/justext v0.0.0-20170829062021-c0282dea7198 // indirect
 	github.com/PuerkitoBio/goquery v1.5.0 // indirect
 	github.com/Sirupsen/logrus v0.11.5-0.20170308203635-1deb2db2a6ff
@@ -44,7 +44,6 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/stvp/rollbar v0.4.1-0.20160527211111-3eb4713e2655
 	github.com/volatiletech/inflect v0.0.0-20170731032912-e7201282ae8d // indirect
-	github.com/volatiletech/sqlboiler v2.7.4+incompatible // indirect
 	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110
 	golang.org/x/text v0.3.3
 	gopkg.in/DATA-DOG/go-sqlmock.v1 v1.3.0 // indirect
