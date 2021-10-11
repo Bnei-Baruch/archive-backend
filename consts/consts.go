@@ -934,6 +934,8 @@ var ARTICLE_COLLECTION_TO_PROGRAM_COLLECTION = map[string]string{
 }
 
 var PERMITTED_UNIT_CT_FOR_DERIVED_FILTER = map[string]bool{
-	CT_LIKUTIM: true,
-	CT_SOURCE:  true,
+	CT_LIKUTIM:     true,
+	CT_SOURCE:      true,
+	CT_KITEI_MAKOR: true,
+	CT_SONG:        true,
 }
