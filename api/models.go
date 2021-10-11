@@ -45,6 +45,10 @@ type ContentTypesFilter struct {
 	ContentTypes []string `json:"content_types" form:"content_type" binding:"omitempty"`
 }
 
+type DerivedTypesFilter struct {
+	DerivedTypes []string `json:"derived_types" form:"derived_types" binding:"omitempty"`
+}
+
 type SourcesFilter struct {
 	Authors []string `json:"authors" form:"author" binding:"omitempty"`
 	Sources []string `json:"sources" form:"source" binding:"omitempty,dive,len=8"`
@@ -132,6 +136,7 @@ type ContentUnitsRequest struct {
 	PublishersFilter
 	PersonsFilter
 	MediaLanguageFilter
+	DerivedTypesFilter
 	WithFiles       bool `json:"with_files" form:"with_files"`
 	WithDerivations bool `json:"with_derivations" form:"with_derivations"`
 	WithTags        bool `json:"with_tags" form:"with_tags"`
@@ -148,6 +153,7 @@ type LessonsRequest struct {
 	SourcesFilter
 	TagsFilter
 	MediaLanguageFilter
+	DerivedTypesFilter
 }
 
 type PublishersRequest struct {
