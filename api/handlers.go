@@ -1388,7 +1388,7 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 		return nil, NewInternalError(err)
 	}
 	if err := appendDerivedTypesFilterMods(&mods, r.DerivedTypesFilter); err != nil {
-		return nil, NewInternalError(err)
+		return nil, NewBadRequestError(err)
 	}
 
 	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
