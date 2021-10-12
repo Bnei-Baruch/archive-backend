@@ -2108,7 +2108,7 @@ func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *Ht
 	for i := range respCUs.ContentUnits {
 		cu := respCUs.ContentUnits[i]
 		switch cu.ContentType {
-		case consts.CT_LESSON_PART:
+		case consts.CT_LESSON_PART, consts.CT_KTAIM_NIVCHARIM:
 			lpCUs[cu.ID] = cu
 		case consts.CT_KITEI_MAKOR, consts.CT_LELO_MIKUD:
 			derivedCUs[cu.ID] = cu
