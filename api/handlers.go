@@ -298,6 +298,8 @@ func LessonsHandler(c *gin.Context) {
 	if utils.IsEmpty(r.Authors) &&
 		utils.IsEmpty(r.Sources) &&
 		utils.IsEmpty(r.Tags) &&
+		utils.IsEmpty(r.Tags) &&
+		utils.IsEmpty(r.DerivedTypes) &&
 		r.MediaLanguage == "" {
 		if r.OrderBy == "" {
 			r.OrderBy = "(properties->>'film_date')::date desc, (properties->>'number')::int desc, created_at desc"
@@ -335,6 +337,7 @@ func LessonsHandler(c *gin.Context) {
 			TagsFilter:          r.TagsFilter,
 			WithFiles:           withFiles,
 			MediaLanguageFilter: r.MediaLanguageFilter,
+			DerivedTypesFilter:  r.DerivedTypesFilter,
 		}
 		resp, err := handleContentUnits(c.MustGet("MDB_DB").(*sql.DB), cur)
 		concludeRequest(c, resp, err)
@@ -1384,6 +1387,9 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendDerivedTypesFilterMods(&mods, r.DerivedTypesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 
 	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
 		return nil, NewInternalError(err)
@@ -2310,6 +2316,32 @@ func appendContentTypesFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) err
 	}
 
 	*mods = append(*mods, qm.WhereIn("type_id IN ?", a...))
+
+	return nil
+}
+
+func appendDerivedTypesFilterMods(mods *[]qm.QueryMod, f DerivedTypesFilter) error {
+	if utils.IsEmpty(f.DerivedTypes) {
+		return nil
+	}
+
+	a := make([]interface{}, len(f.DerivedTypes))
+	for i, x := range f.DerivedTypes {
+		ct, ok := mdb.CONTENT_TYPE_REGISTRY.ByName[strings.ToUpper(x)]
+		if !ok {
+			return errors.Errorf("Unknown derive content type: %s", x)
+		}
+		if _, ok := consts.PERMITTED_UNIT_CT_FOR_DERIVED_FILTER[ct.Name]; !ok {
+			return errors.Errorf("Not permitted content type filter value: %s", x)
+		}
+		a[i] = ct.ID
+	}
+	q := `id IN (
+		SELECT cud.source_id FROM content_units cu 
+		INNER JOIN content_unit_derivations cud ON cu.id = cud.derived_id 
+		WHERE cu.type_id = ?
+	)`
+	*mods = append(*mods, qm.WhereIn(q, a...))
 
 	return nil
 }
