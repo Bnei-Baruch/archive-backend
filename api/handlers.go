@@ -2331,7 +2331,7 @@ func appendDerivedTypesFilterMods(mods *[]qm.QueryMod, f DerivedTypesFilter) err
 		if !ok {
 			return errors.Errorf("Unknown derive content type: %s", x)
 		}
-		if _, p := consts.PERMITTED_UNIT_CT_FOR_DERIVED_FILTER[ct.Name]; !p {
+		if _, ok := consts.PERMITTED_UNIT_CT_FOR_DERIVED_FILTER[ct.Name]; !ok {
 			return errors.Errorf("Not permitted content type filter value: %s", x)
 		}
 		a[i] = ct.ID
@@ -2341,8 +2341,7 @@ func appendDerivedTypesFilterMods(mods *[]qm.QueryMod, f DerivedTypesFilter) err
 		INNER JOIN content_unit_derivations cud ON cu.id = cud.derived_id 
 		WHERE cu.type_id = ?
 	)`
-	*mods = append(*mods,
-		qm.WhereIn(q, a...))
+	*mods = append(*mods, qm.WhereIn(q, a...))
 
 	return nil
 }
