@@ -1128,15 +1128,15 @@ order by type_id, film_date desc
 	}
 
 	//collections data query
-	cols, err := mdbmodels.Collections(db,
+	csmdb, err := mdbmodels.Collections(db,
 		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cIDs)...),
 		qm.Load("CollectionI18ns")).
 		All()
 	if err != nil {
 		return nil, nil, NewInternalError(err)
 	}
-	cos := make([]*Collection, len(cols))
-	for i, x := range cols {
+	cs := make([]*Collection, len(csmdb))
+	for i, x := range csmdb {
 		c, err := mdbToC(x)
 		if err != nil {
 			return nil, nil, NewInternalError(err)
@@ -1154,10 +1154,10 @@ order by type_id, film_date desc
 				}
 			}
 		}
-		cos[i] = c
+		cs[i] = c
 	}
 
-	return cus, cos, nil
+	return cus, cs, nil
 }
 
 func handleContentUnitsFull(db *sql.DB, r ContentUnitsRequest, mediaTypes []string, languages []string) (cuResp *ContentUnitsResponse, err error) {
