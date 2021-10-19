@@ -174,6 +174,7 @@ type HierarchyRequest struct {
 type HomeResponse struct {
 	LatestDailyLesson  *Collection    `json:"latest_daily_lesson"`
 	LatestContentUnits []*ContentUnit `json:"latest_units"`
+	LatestCollections  []*Collection  `json:"latest_cos"`
 	Banner             *Banner        `json:"banner"`
 }
 

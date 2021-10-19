@@ -584,7 +584,7 @@ func HomePageHandler(c *gin.Context) {
 		return
 	}
 
-	latestCUs, err := handleLatestContentUnits(c.MustGet("MDB_DB").(*sql.DB), r)
+	latestCUs, latestCOs, err := handleLatestContentUnits(c.MustGet("MDB_DB").(*sql.DB), r)
 	if err != nil {
 		NewBadRequestError(err).Abort(c)
 		return
@@ -599,6 +599,7 @@ func HomePageHandler(c *gin.Context) {
 	resp := HomeResponse{
 		LatestDailyLesson:  latestLesson,
 		LatestContentUnits: latestCUs,
+		LatestCollections:  latestCOs,
 		Banner:             banner,
 	}
 
@@ -961,7 +962,7 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 	return cl, nil
 }
 
-func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, *HttpError) {
+func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, []*Collection, *HttpError) {
 	const queryTemplate = `
 WITH CUs AS (
 	SELECT ct.id as type_id, uid, cu_id AS id, film_date
@@ -1027,7 +1028,7 @@ order by type_id, film_date desc
 	)
 	rows, err := queries.Raw(db, query).Query()
 	if err != nil {
-		return nil, NewInternalError(err)
+		return nil, nil, NewInternalError(err)
 	}
 	defer rows.Close()
 
@@ -1041,7 +1042,7 @@ order by type_id, film_date desc
 		)
 		err = rows.Scan(&type_id, &uid, &id, &film_date)
 		if err != nil {
-			return nil, NewInternalError(err)
+			return nil, nil, NewInternalError(err)
 		}
 		name := mdb.CONTENT_TYPE_REGISTRY.ByID[type_id].Name
 		_, ok := firstRows[name]
@@ -1056,7 +1057,7 @@ order by type_id, film_date desc
 		})
 	}
 	if err = rows.Err(); err != nil {
-		return nil, NewInternalError(err)
+		return nil, nil, NewInternalError(err)
 	}
 	cuIDs := make([]int64, 0)
 	if _, ok := firstRows[consts.CT_WOMEN_LESSON]; ok {
@@ -1092,36 +1093,30 @@ order by type_id, film_date desc
 		qm.Load("CollectionsContentUnits", "CollectionsContentUnits.Collection")).
 		All()
 	if err != nil {
-		return nil, NewInternalError(err)
+		return nil, nil, NewInternalError(err)
 	}
 
 	// response
 	cus, ex := prepareCUs(db, units, r.Language)
 	if ex != nil {
-		return nil, ex
+		return nil, nil, ex
 	}
 
-	//last Collections: CONGRESS, HOLIDAY
+	//last Collections: CONGRESS, HOLIDAY, LESSONS_SERIES, CT_DAILY_LESSON
+	//TODO: it is possible that will be duplicates. last DAILY_LESSON is same as CONGRESS...
 	cIDs := make([]int64, 0)
-	cs := make([]firstRowsType, 0)
 
 	if _, ok := firstRows[consts.CT_CONGRESS]; ok {
 		cIDs = append(cIDs, firstRows[consts.CT_CONGRESS][0].id)
-		cs = append(cs, firstRows[consts.CT_CONGRESS][0])
-	}
-	if _, ok := firstRows[consts.CT_HOLIDAY]; ok {
-		cIDs = append(cIDs, firstRows[consts.CT_HOLIDAY][0].id)
-		cs = append(cs, firstRows[consts.CT_HOLIDAY][0])
 	}
 
-	//last Collections: LESSONS_SERIES
-	clsIDs := make([]int64, 0)
-	cls := make([]firstRowsType, 0)
+	if _, ok := firstRows[consts.CT_HOLIDAY]; ok {
+		cIDs = append(cIDs, firstRows[consts.CT_HOLIDAY][0].id)
+	}
+
 	if _, ok := firstRows[consts.CT_LESSONS_SERIES]; ok {
-		// The first one is always on HomePage
 		for _, r := range firstRows[consts.CT_LESSONS_SERIES][0:2] {
 			cIDs = append(cIDs, r.id)
-			clsIDs = append(clsIDs, r.id)
 		}
 	}
 
@@ -1129,77 +1124,40 @@ order by type_id, film_date desc
 		// The first one is always on HomePage
 		for _, r := range firstRows[consts.CT_DAILY_LESSON][1:3] {
 			cIDs = append(cIDs, r.id)
-			clsIDs = append(clsIDs, r.id)
-			cls = append(cls, r)
 		}
 	}
 
-	ci18nsMap, err := loadCI18ns(db, r.Language, cIDs)
+	//collections data query
+	cols, err := mdbmodels.Collections(db,
+		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cIDs)...),
+		qm.Load("CollectionI18ns")).
+		All()
 	if err != nil {
-		return nil, NewInternalError(err)
+		return nil, nil, NewInternalError(err)
 	}
-
-	ct := make([]*ContentUnit, 0)
-
-	for _, x := range cs {
-		u := &ContentUnit{
-			mdbID:       x.id,
-			ID:          x.uid,
-			ContentType: x.content_type,
-			FilmDate:    &utils.Date{Time: x.film_date},
-		}
-		ct = append(ct, u)
-	}
-
-	// data query
-	cols, err := mdbmodels.Collections(db, qm.WhereIn("id IN ?", utils.ConvertArgsInt64(clsIDs)...)).All()
-	if err != nil {
-		return nil, NewInternalError(err)
-	}
-	for _, x := range cols {
-		u := &ContentUnit{
-			mdbID:       x.ID,
-			ID:          x.UID,
-			ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[x.TypeID].Name,
-			Collections: map[string]*Collection{},
-		}
-
-		for _, d := range cls {
-			if d.id == x.ID {
-				u.FilmDate = &utils.Date{Time: d.film_date}
-			}
-		}
-
+	cos := make([]*Collection, len(cols))
+	for i, x := range cols {
 		c, err := mdbToC(x)
 		if err != nil {
-			return nil, NewInternalError(err)
+			return nil, nil, NewInternalError(err)
 		}
-		if u.ContentType == consts.CT_DAILY_LESSON {
-			u.NameInCollection = fmt.Sprintf("%d", c.Number)
-		} else {
-			u.Collections[coKeyInCu(x.UID, c.Name)] = c
-		}
-		ct = append(ct, u)
-	}
 
-	for _, u := range ct {
-		if i18ns, ok := ci18nsMap[u.mdbID]; ok {
-			for _, l := range consts.I18N_LANG_ORDER[r.Language] {
-				li18n, ok := i18ns[l]
-				if ok {
-					if u.Name == "" && li18n.Name.Valid {
-						u.Name = li18n.Name.String
+		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+			for _, i18n := range x.R.CollectionI18ns {
+				if l == i18n.Language {
+					if i18n.Name.Valid {
+						c.Name = i18n.Name.String
 					}
-					if u.Description == "" && li18n.Description.Valid {
-						u.Description = li18n.Description.String
+					if i18n.Description.Valid {
+						c.Description = i18n.Description.String
 					}
 				}
 			}
 		}
-		cus = append(cus, u)
+		cos[i] = c
 	}
 
-	return cus, nil
+	return cus, cos, nil
 }
 
 func handleContentUnitsFull(db *sql.DB, r ContentUnitsRequest, mediaTypes []string, languages []string) (cuResp *ContentUnitsResponse, err error) {
