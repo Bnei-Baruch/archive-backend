@@ -15,7 +15,6 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/collections", CollectionsHandler)
 	router.GET("/collections/:uid", CollectionHandler)
 	router.GET("/content_units", ContentUnitsHandler)
-	router.GET("/count_cu", CountContentUnitsHandler)
 	router.GET("/content_units/:uid", ContentUnitHandler)
 	router.GET("/lessons", LessonsHandler)
 	router.POST("/lessons", LessonsHandler)

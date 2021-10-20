@@ -183,9 +183,14 @@ type TagsDashboardResponse struct {
 	Counts               map[string]int `json:"counts"`
 }
 
+type StatsCUClassRequest struct {
+	ContentUnitsRequest
+	CountOnly bool `json:"count_only" form:"count_only"`
+}
 type StatsCUClassResponse struct {
 	Sources map[string]int `json:"sources"`
 	Tags    map[string]int `json:"tags"`
+	Total   int64          `json:"total"`
 }
 
 type TweetsRequest struct {
