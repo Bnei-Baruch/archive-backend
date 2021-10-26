@@ -1144,13 +1144,15 @@ order by type_id, film_date desc
 
 		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
 			for _, i18n := range x.R.CollectionI18ns {
-				if l == i18n.Language {
-					if i18n.Name.Valid {
-						c.Name = i18n.Name.String
-					}
-					if i18n.Description.Valid {
-						c.Description = i18n.Description.String
-					}
+				if l != i18n.Language {
+					continue
+				}
+
+				if i18n.Name.Valid && c.Name == "" {
+					c.Name = i18n.Name.String
+				}
+				if i18n.Description.Valid && c.Description == "" {
+					c.Description = i18n.Description.String
 				}
 			}
 		}
