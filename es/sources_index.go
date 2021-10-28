@@ -21,6 +21,7 @@ import (
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/integration"
 	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
@@ -33,12 +34,14 @@ func MakeSourcesIndex(namespace string, indexDate string, db *sql.DB, esc *elast
 	si.indexDate = indexDate
 	si.db = db
 	si.esc = esc
+	si.assetsService = integration.NewAssetsService(unzipUrl)
 	return si
 }
 
 type SourcesIndex struct {
 	BaseIndex
-	Progress uint64
+	Progress      uint64
+	assetsService integration.AssetsService
 }
 
 func (index *SourcesIndex) ReindexAll() error {
@@ -301,6 +304,29 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 	return "", errors.New("SourcesIndex.getDocxPath - Docx not found in index.json.")
 }
 
+func (index *SourcesIndex) fetchDocx(cuUid string, lang string) (string, error) {
+	files, err := mdbmodels.Files(index.db,
+		qm.InnerJoin("content_units cu ON cu.id = content_unit_id"),
+		qm.Where("cu.uid = ? AND language = ?", cuUid, lang),
+	).All()
+	if err != nil {
+		return "", err
+	}
+
+	var file *mdbmodels.File
+	for _, f := range files {
+		ex := strings.Split(f.Name, ".")[1]
+		if ex == "docx" || ex == "doc" {
+			file = f
+		}
+	}
+	if file == nil {
+		return "", errors.New(fmt.Sprintf("No .docx or .doc for unit: %s", cuUid))
+	}
+
+	return index.assetsService.Doc2Text(file.UID)
+}
+
 func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []string, parentIds []int64, authorsByLanguage map[string][]string) *IndexErrors {
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
@@ -317,17 +343,14 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				FilterValues: KeyValues(consts.ES_UID_TYPE_SOURCE, parents),
 				TypedUids:    []string{KeyValue(consts.ES_UID_TYPE_SOURCE, mdbSource.UID)},
 			}
-			fPath, missingSourceFileErr := index.getDocxPath(mdbSource.UID, i18n.Language)
-			// Ignore err here as if missing source for a language in very common and is ok.
-			if missingSourceFileErr == nil {
-				// Found docx.
-				content, parseErr := ParseDocx(fPath)
-				indexErrors.DocumentError(i18n.Language, parseErr, fmt.Sprintf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language))
-				if parseErr == nil {
-					source.Content = content
-					allLanguages = append(allLanguages, i18n.Language)
-				}
+
+			if content, err := index.fetchDocx(mdbSource.UID, i18n.Language); err == nil {
+				source.Content = content
+				allLanguages = append(allLanguages, i18n.Language)
+			} else {
+				indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language))
 			}
+
 			// Find parents...
 			findParentsErr := (error)(nil)
 			for _, i := range parentIds {
