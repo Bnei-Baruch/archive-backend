@@ -307,8 +307,7 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 func (index *SourcesIndex) fetchDocx(cuUid string, lang string) (string, error) {
 	queryMask := `select f.uid from files f
 	join content_units cu ON cu.id = f.content_unit_id
-	left join files_storages fs on fs.file_id = f.id 
-	where fs.storage_id is not null and cu.published IS TRUE and cu.secure = %d and f.secure = %d and f.published IS TRUE
+	where cu.published IS TRUE and cu.secure = %d and f.secure = %d and f.published IS TRUE and f.removed_at IS NULL
 	and f.name like '%%.doc%%'
 	and cu.uid = '%s' AND language = '%s'`
 	query := fmt.Sprintf(queryMask,
