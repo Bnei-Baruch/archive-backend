@@ -305,26 +305,27 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 }
 
 func (index *SourcesIndex) fetchDocx(cuUid string, lang string) (string, error) {
-	files, err := mdbmodels.Files(index.db,
-		qm.InnerJoin("content_units cu ON cu.id = content_unit_id"),
-		qm.Where("cu.uid = ? AND language = ?", cuUid, lang),
-	).All()
+	queryMask := `select f.uid from files f
+	join content_units cu ON cu.id = f.content_unit_id
+	left join files_storages fs on fs.file_id = f.id 
+	where fs.storage_id is not null and cu.published IS TRUE and cu.secure = %d and f.secure = %d and f.published IS TRUE
+	and f.name like '%%.doc%%'
+	and cu.uid = '%s' AND language = '%s'`
+	query := fmt.Sprintf(queryMask,
+		consts.SEC_PUBLIC,
+		consts.SEC_PUBLIC,
+		cuUid,
+		lang)
+	var fileUID string
+	err := queries.Raw(index.db, query).QueryRow().Scan(&fileUID)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			// Missing source. Do not count this as error.
+			return "", nil
+		}
 		return "", err
 	}
-
-	var file *mdbmodels.File
-	for _, f := range files {
-		ex := strings.Split(f.Name, ".")[1]
-		if ex == "docx" || ex == "doc" {
-			file = f
-		}
-	}
-	if file == nil {
-		return "", errors.New(fmt.Sprintf("No .docx or .doc for unit: %s", cuUid))
-	}
-
-	return index.assetsService.Doc2Text(file.UID)
+	return index.assetsService.Doc2Text(fileUID)
 }
 
 func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []string, parentIds []int64, authorsByLanguage map[string][]string) *IndexErrors {
@@ -345,8 +346,10 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 			}
 
 			if content, err := index.fetchDocx(mdbSource.UID, i18n.Language); err == nil {
-				source.Content = content
-				allLanguages = append(allLanguages, i18n.Language)
+				if content != "" {
+					source.Content = content
+					allLanguages = append(allLanguages, i18n.Language)
+				}
 			} else {
 				indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language))
 			}
