@@ -448,8 +448,9 @@ func addContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (strin
 		mdbContentUnit = *cup
 	} else {
 		mdbContentUnit = mdbmodels.ContentUnit{
-			UID:    utils.GenerateUID(8),
-			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
+			UID:       utils.GenerateUID(8),
+			TypeID:    mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
+			Published: true,
 		}
 		if cu.UIDForCreate != "" {
 			mdbContentUnit.UID = cu.UIDForCreate
