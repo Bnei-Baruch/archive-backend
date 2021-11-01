@@ -634,7 +634,7 @@ func SemiQuasiDataHandler(c *gin.Context) {
 }
 
 func StatsCUClassHandler(c *gin.Context) {
-	var r ContentUnitsRequest
+	var r StatsCUClassRequest
 	if c.Bind(&r) != nil {
 		return
 	}
@@ -1886,7 +1886,7 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 	return sqd, nil
 }
 
-func handleStatsCUClass(db *sql.DB, r ContentUnitsRequest) (*StatsCUClassResponse, *HttpError) {
+func handleStatsCUClass(db *sql.DB, r StatsCUClassRequest) (*StatsCUClassResponse, *HttpError) {
 	mods := []qm.QueryMod{
 		qm.Select("id"),
 		SECURE_PUBLISHED_MOD,
@@ -1925,15 +1925,21 @@ func handleStatsCUClass(db *sql.DB, r ContentUnitsRequest) (*StatsCUClassRespons
 		return nil, NewInternalError(err)
 	}
 
-	q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
-
 	var err error
 	resp := NewStatsCUClassResponse()
-	resp.Tags, resp.Sources, err = GetFiltersStats(db, q, args)
-	if err != nil {
-		return nil, NewInternalError(err)
-	}
 
+	if r.CountOnly {
+		resp.Total, err = mdbmodels.ContentUnits(db, mods...).Count()
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+	} else {
+		q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
+		resp.Tags, resp.Sources, err = GetFiltersStats(db, q, args)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+	}
 	return resp, nil
 }
 
