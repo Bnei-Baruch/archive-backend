@@ -120,9 +120,13 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 			varDivType = values[0]
 		}
 	}
-	if varPosition == "" || varProgramCollection == "" {
-		log.Warningf("Intent of program by position must have one appearance of $Position and one appearance of $Program")
+	if varPosition == "" {
+		log.Warningf("Intent of program by position must have one appearance of $Position")
 		return false
+	}
+	if varProgramCollection == "" {
+		// Assuming the user is looking for new life program
+		varProgramCollection = consts.PROGRAM_COLLECTION_NEW_LIFE
 	}
 	if varDivType != "" {
 		if val, ok := consts.ES_GRAMMAR_PROGRAM_SUPPORTED_DIV_TYPES[varDivType]; !ok || !val {
