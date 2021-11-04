@@ -522,6 +522,10 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						break
 					}
 				}
+				if programCollection == "" {
+					// Assuming the user is looking for new life program
+					programCollection = consts.PROGRAM_COLLECTION_NEW_LIFE
+				}
 				programUid := e.cache.SearchStats().GetProgramByCollectionAndPosition(programCollection, position)
 				if programUid == nil {
 					return nil, nil, errors.New(fmt.Sprintf("Relevant program content unit is not found by collection '%v' and position '%v'.", programCollection, position))
