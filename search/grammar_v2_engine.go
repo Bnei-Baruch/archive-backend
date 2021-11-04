@@ -419,9 +419,9 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	intentsCount := make(map[string][]Intent)
 	minScoreByLandingPage := make(map[string]float64)
 	queryTermIsNumber, queryTermHasDigit := utils.HasNumeric(query.Term)
-	// In case our query is numeric only, we ignore intents of "program\source position without term" to avoid irrelavnt results.
+	// In case our query is numeric only, we ignore intents of "source position without term" to avoid irrelavnt results.
 	// Also we support "program with position without term" intents only if we have a numeric chapter as part of the query.
-	addProgramPositionWithoutTerm := !queryTermIsNumber && queryTermHasDigit
+	addProgramPositionWithoutTerm := queryTermHasDigit
 	addSourcePositionWithoutTerm := !queryTermIsNumber
 	if addSourcePositionWithoutTerm {
 		for filterKey := range query.Filters {

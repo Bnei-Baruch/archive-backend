@@ -144,6 +144,7 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 func filterByProgramWithoutTermMatch(vMap map[string][]string) bool {
 	hasVarProgram := false
 	hasVarContentType := false
+	hasVarPosition := false
 	for variable, values := range vMap {
 		if variable == consts.VAR_PROGRAM {
 			if hasVarProgram || len(values) != 1 { //  Disable if we have more than one $Program appereance or value
@@ -151,6 +152,13 @@ func filterByProgramWithoutTermMatch(vMap map[string][]string) bool {
 				return false
 			}
 			hasVarProgram = true
+		}
+		if variable == consts.VAR_POSITION {
+			if hasVarPosition || len(values) != 1 { //  Disable if we have more than one $Position appereance or value
+				log.Warningf("Number of $Position appearances or values in 'by_program_without_term' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarPosition = true
 		}
 		if variable == consts.VAR_CONTENT_TYPE {
 			if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
@@ -164,8 +172,8 @@ func filterByProgramWithoutTermMatch(vMap map[string][]string) bool {
 			hasVarContentType = true
 		}
 	}
-	if !hasVarProgram {
-		log.Warningf("Filter intent 'by program without term' must have one appearance $Program")
+	if !hasVarProgram && !hasVarPosition {
+		log.Warningf("Filter intent 'by program without term' must have one appearance of $Program or $Position")
 		return false
 	}
 	return true
