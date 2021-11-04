@@ -363,8 +363,8 @@ func SearchHandler(c *gin.Context) {
 		query.Deb = true
 	}
 	log.Debugf("Parsed Query: %#v", query)
-	if len(query.Term) == 0 && len(query.Filters) == 0 && len(query.ExactTerms) == 0 {
-		NewBadRequestError(errors.New("Can't search with no terms and no filters.")).Abort(c)
+	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
+		NewBadRequestError(errors.New("Can't search with no terms.")).Abort(c)
 		return
 	}
 
