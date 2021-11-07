@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -13,9 +14,58 @@ import (
 	null "gopkg.in/volatiletech/null.v6"
 )
 
+type QueryFormatter struct {
+	pattern string
+	sources map[int]string
+}
+
+func (f *QueryFormatter) ToRequest(s string) string {
+	if len(f.pattern) > 0 {
+		stringSplit := strings.Split(s, ` `)
+		result := make([]string, 0)
+		f.sources = make(map[int]string)
+
+		for i, word := range stringSplit {
+			if res, err := regexp.MatchString(f.pattern, word); err == nil && res {
+				f.sources[i] = word
+			} else {
+				result = append(result, word)
+			}
+		}
+
+		s = strings.Join(result, ` `)
+	}
+
+	return s
+}
+
+func (f *QueryFormatter) ToResponse(s string) string {
+	if len(f.sources) > 0 {
+		stringSplit := strings.Split(s, ` `)
+		result := make([]string, len(stringSplit)+len(f.sources))
+
+		for i, source := range f.sources {
+			result[i] = source
+		}
+
+		var item string
+		for i, res := range result {
+			if res == `` {
+				item, stringSplit = stringSplit[0], stringSplit[1:]
+				result[i] = item
+			}
+		}
+
+		s = strings.Join(result, ` `)
+	}
+
+	return s
+}
+
 func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.String, error) {
 	srv := e.esc.Search()
 	suggestText := null.String{"", false}
+	queryFormatter := QueryFormatter{pattern: `^\d+$`}
 
 	if _, err := strconv.Atoi(query.Term); err == nil {
 		//  ignore numbers
@@ -90,6 +140,8 @@ func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.Str
 		addMaxEdits = true
 	}
 
+	checkTerm = queryFormatter.ToRequest(checkTerm)
+
 	suggester := elastic.NewPhraseSuggester("pharse-suggest").
 		Text(checkTerm).
 		Field(suggestorField).
@@ -127,6 +179,7 @@ func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.Str
 			if considerGrammarTextValue {
 				suggested = strings.Replace(query.Term, checkTerm, suggested, -1)
 			}
+			suggested = queryFormatter.ToResponse(suggested)
 			suggestText = null.String{suggested, true}
 		}
 	}
