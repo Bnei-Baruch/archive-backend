@@ -133,6 +133,9 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 		// Letter as position is not supported for programs, only for sources.
 		return false
 	}
+	if varProgramCollection == "" {
+		return true
+	}
 	c := cm.SearchStats().GetProgramByCollectionAndPosition(varProgramCollection, varPosition)
 	return c != nil
 }
@@ -168,8 +171,8 @@ func filterByProgramWithoutTermMatch(vMap map[string][]string) bool {
 			hasVarContentType = true
 		}
 	}
-	if !hasVarProgram && !hasVarPosition {
-		log.Warningf("Filter intent 'by program without term' must have one appearance of $Program or $Position")
+	if !hasVarProgram {
+		log.Warningf("Filter intent 'by program without term' must have one appearance of $Program")
 		return false
 	}
 	return true
