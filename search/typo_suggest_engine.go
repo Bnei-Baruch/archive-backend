@@ -21,7 +21,7 @@ type QueryFormatter struct {
 
 func (f *QueryFormatter) ToRequest(s string) string {
 	if len(f.pattern) > 0 {
-		stringSplit := strings.Split(s, ` `)
+		stringSplit := strings.Fields(s)
 		result := make([]string, 0)
 		f.sources = make(map[int]string)
 
@@ -41,7 +41,7 @@ func (f *QueryFormatter) ToRequest(s string) string {
 
 func (f *QueryFormatter) ToResponse(s string) string {
 	if len(f.sources) > 0 {
-		stringSplit := strings.Split(s, ` `)
+		stringSplit := strings.Fields(s)
 		result := make([]string, len(stringSplit)+len(f.sources))
 
 		for i, source := range f.sources {
