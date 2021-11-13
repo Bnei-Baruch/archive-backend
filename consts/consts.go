@@ -120,6 +120,9 @@ const (
 	LANG_AMHARIC    = "am"
 	LANG_MULTI      = "zz"
 	LANG_UNKNOWN    = "xx"
+
+	//suggest constant terms patterns
+	TERMS_PATTERN_DIGITS = `(?:^|\s|\(|\/)(\d+)(\b)`
 )
 
 var ALL_KNOWN_LANGS = [...]string{

@@ -14,49 +14,34 @@ import (
 	null "gopkg.in/volatiletech/null.v6"
 )
 
-type QueryFormatter struct {
+type ConstantTerms struct {
 	pattern string
-	sources map[int]string
+	terms   []string
 }
 
-func (f *QueryFormatter) ToRequest(s string) string {
-	if len(f.pattern) > 0 {
-		stringSplit := strings.Fields(s)
-		result := make([]string, 0)
-		f.sources = make(map[int]string)
+func (c *ConstantTerms) RememberTerms(s string) string {
+	if len(c.pattern) > 0 {
+		t := regexp.MustCompile(c.pattern).FindAllStringSubmatch(s, -1)
 
-		for i, word := range stringSplit {
-			if res, err := regexp.MatchString(f.pattern, word); err == nil && res {
-				f.sources[i] = word
-			} else {
-				result = append(result, word)
-			}
+		for _, match := range t {
+			c.terms = append(c.terms, match[1])
 		}
-
-		s = strings.Join(result, ` `)
 	}
 
 	return s
 }
 
-func (f *QueryFormatter) ToResponse(s string) string {
-	if len(f.sources) > 0 {
-		stringSplit := strings.Fields(s)
-		result := make([]string, len(stringSplit)+len(f.sources))
+func (c *ConstantTerms) ReplaceTerms(s string) string {
+	if len(c.terms) > 0 {
+		terms := strings.Fields(s)
 
-		for i, source := range f.sources {
-			result[i] = source
-		}
-
-		var item string
-		for i, res := range result {
-			if res == `` {
-				item, stringSplit = stringSplit[0], stringSplit[1:]
-				result[i] = item
+		for i, term := range terms {
+			if res, err := regexp.MatchString(c.pattern, term); err == nil && res && len(c.terms) > 0 {
+				terms[i], c.terms = c.terms[0], c.terms[1:]
 			}
 		}
 
-		s = strings.Join(result, ` `)
+		s = strings.Join(terms, ` `)
 	}
 
 	return s
@@ -65,7 +50,7 @@ func (f *QueryFormatter) ToResponse(s string) string {
 func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.String, error) {
 	srv := e.esc.Search()
 	suggestText := null.String{"", false}
-	queryFormatter := QueryFormatter{pattern: `^\d+$`}
+	constantTerms := ConstantTerms{pattern: consts.TERMS_PATTERN_DIGITS}
 
 	if _, err := strconv.Atoi(query.Term); err == nil {
 		//  ignore numbers
@@ -140,7 +125,7 @@ func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.Str
 		addMaxEdits = true
 	}
 
-	checkTerm = queryFormatter.ToRequest(checkTerm)
+	checkTerm = constantTerms.RememberTerms(checkTerm)
 
 	suggester := elastic.NewPhraseSuggester("pharse-suggest").
 		Text(checkTerm).
@@ -176,10 +161,10 @@ func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.Str
 	if sp, ok := r.Suggest["pharse-suggest"]; ok {
 		if len(sp) > 0 && sp[0].Options != nil && len(sp[0].Options) > 0 {
 			suggested := sp[0].Options[0].Text
+			suggested = constantTerms.ReplaceTerms(suggested)
 			if considerGrammarTextValue {
 				suggested = strings.Replace(query.Term, checkTerm, suggested, -1)
 			}
-			suggested = queryFormatter.ToResponse(suggested)
 			suggestText = null.String{suggested, true}
 		}
 	}
