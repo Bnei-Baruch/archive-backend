@@ -19,16 +19,19 @@ type ConstantTerms struct {
 	terms   []string
 }
 
-func (c *ConstantTerms) RememberTerms(s string) string {
+func (c *ConstantTerms) RememberTerms(s string) {
 	if len(c.pattern) > 0 {
-		t := regexp.MustCompile(c.pattern).FindAllStringSubmatch(s, -1)
+		rg, err := regexp.Compile(c.pattern)
+		if err != nil {
+			return
+		}
+
+		t := rg.FindAllStringSubmatch(s, -1)
 
 		for _, match := range t {
 			c.terms = append(c.terms, match[1])
 		}
 	}
-
-	return s
 }
 
 func (c *ConstantTerms) ReplaceTerms(s string) string {
@@ -125,7 +128,7 @@ func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.Str
 		addMaxEdits = true
 	}
 
-	checkTerm = constantTerms.RememberTerms(checkTerm)
+	constantTerms.RememberTerms(checkTerm)
 
 	suggester := elastic.NewPhraseSuggester("pharse-suggest").
 		Text(checkTerm).

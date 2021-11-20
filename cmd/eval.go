@@ -408,12 +408,19 @@ func checkConstantTerms(request string, response string) bool {
 		requestConstantTerms  []string
 		responseConstantTerms []string
 	)
-	matches = regexp.MustCompile(consts.TERMS_PATTERN_DIGITS).FindAllStringSubmatch(request, -1)
+	rg, err := regexp.Compile(consts.TERMS_PATTERN_DIGITS)
+
+	if err != nil {
+		log.Errorf("Invalid pattern '%s'", consts.TERMS_PATTERN_DIGITS)
+		return false
+	}
+
+	matches = rg.FindAllStringSubmatch(request, -1)
 	for _, match := range matches {
 		requestConstantTerms = append(requestConstantTerms, match[1])
 	}
 
-	matches = regexp.MustCompile(consts.TERMS_PATTERN_DIGITS).FindAllStringSubmatch(response, -1)
+	matches = rg.FindAllStringSubmatch(response, -1)
 	for _, match := range matches {
 		responseConstantTerms = append(responseConstantTerms, match[1])
 	}
