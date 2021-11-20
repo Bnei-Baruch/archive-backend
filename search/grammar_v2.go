@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -59,7 +58,7 @@ func VariablesFromString(vars string) []string {
 
 func ReadGrammarFileV2(grammarFile string) (GrammarsV2, error) {
 	re := regexp.MustCompile(`^(.*).grammar$`)
-	matches := re.FindStringSubmatch(path.Base(grammarFile))
+	matches := re.FindStringSubmatch(filepath.Base(grammarFile))
 	if len(matches) != 2 {
 		return nil, errors.New(fmt.Sprintf("Bad gramamr file: %s, expected: <hit-type>.grammar", grammarFile))
 	}

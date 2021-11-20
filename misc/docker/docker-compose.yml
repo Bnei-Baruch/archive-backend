@@ -13,8 +13,9 @@ services:
 
   db:
     image: postgres:9
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_DB: mdb
+      POSTGRES_PASSWORD: password
     ports:
       - 5432:5432
