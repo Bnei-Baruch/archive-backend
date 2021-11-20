@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -102,7 +101,7 @@ func LoadVariablesTranslations(variablesDir string, esc *elastic.Client, tc *Tok
 
 	translations := make(Translations)
 	for _, variableFile := range matches {
-		basename := path.Base(variableFile)
+		basename := filepath.Base(variableFile)
 		variable := fmt.Sprintf("$%s", snakeCaseToCamelCase(basename[:len(basename)-len(suffix)-1]))
 		variableTranslations, err := LoadVariableTranslations(variableFile, variable, esc, tc)
 		if err != nil {

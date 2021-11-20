@@ -21,6 +21,7 @@ import (
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/integration"
 	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
@@ -33,12 +34,14 @@ func MakeSourcesIndex(namespace string, indexDate string, db *sql.DB, esc *elast
 	si.indexDate = indexDate
 	si.db = db
 	si.esc = esc
+	si.assetsService = integration.NewAssetsService(unzipUrl)
 	return si
 }
 
 type SourcesIndex struct {
 	BaseIndex
-	Progress uint64
+	Progress      uint64
+	assetsService integration.AssetsService
 }
 
 func (index *SourcesIndex) ReindexAll() error {
@@ -301,6 +304,29 @@ func (index *SourcesIndex) getDocxPath(uid string, lang string) (string, error) 
 	return "", errors.New("SourcesIndex.getDocxPath - Docx not found in index.json.")
 }
 
+func (index *SourcesIndex) fetchDocx(cuUid string, lang string) (string, error) {
+	queryMask := `select f.uid from files f
+	join content_units cu ON cu.id = f.content_unit_id
+	where cu.published IS TRUE and cu.secure = %d and f.secure = %d and f.published IS TRUE and f.removed_at IS NULL
+	and f.name like '%%.doc%%'
+	and cu.uid = '%s' AND language = '%s'`
+	query := fmt.Sprintf(queryMask,
+		consts.SEC_PUBLIC,
+		consts.SEC_PUBLIC,
+		cuUid,
+		lang)
+	var fileUID string
+	err := queries.Raw(index.db, query).QueryRow().Scan(&fileUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Missing source. Do not count this as error.
+			return "", nil
+		}
+		return "", err
+	}
+	return index.assetsService.Doc2Text(fileUID)
+}
+
 func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []string, parentIds []int64, authorsByLanguage map[string][]string) *IndexErrors {
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
@@ -317,17 +343,16 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 				FilterValues: KeyValues(consts.ES_UID_TYPE_SOURCE, parents),
 				TypedUids:    []string{KeyValue(consts.ES_UID_TYPE_SOURCE, mdbSource.UID)},
 			}
-			fPath, missingSourceFileErr := index.getDocxPath(mdbSource.UID, i18n.Language)
-			// Ignore err here as if missing source for a language in very common and is ok.
-			if missingSourceFileErr == nil {
-				// Found docx.
-				content, parseErr := ParseDocx(fPath)
-				indexErrors.DocumentError(i18n.Language, parseErr, fmt.Sprintf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language))
-				if parseErr == nil {
+
+			if content, err := index.fetchDocx(mdbSource.UID, i18n.Language); err == nil {
+				if content != "" {
 					source.Content = content
 					allLanguages = append(allLanguages, i18n.Language)
 				}
+			} else {
+				indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("SourcesIndex.indexSource - Error parsing docx for source %s and language %s.  Skipping indexing.", mdbSource.UID, i18n.Language))
 			}
+
 			// Find parents...
 			findParentsErr := (error)(nil)
 			for _, i := range parentIds {
