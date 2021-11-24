@@ -720,7 +720,9 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	appendCollectionSourceFilterMods(&mods, r.SourcesFilter)
+	if err := appendCollectionSourceFilterMods(db, &mods, r.SourcesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 	if err := appendCollectionTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
@@ -2345,10 +2347,20 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
 }
 
-func appendCollectionSourceFilterMods(mods *[]qm.QueryMod, f SourcesFilter) {
-	if len(f.Sources) != 0 {
-		*mods = append(*mods, qm.WhereIn("properties->>'source' in ?", utils.ConvertArgsString(f.Sources)...))
+func appendCollectionSourceFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
+	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
+		return nil
 	}
+	_, uids, err := prepareNestedSources(exec, f)
+	if err != nil {
+		return err
+	}
+	if uids == nil || len(uids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods, qm.WhereIn("properties->>'source' in ?", utils.ConvertArgsString(uids)...))
+	}
+	return nil
 }
 
 func appendCollectionTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
@@ -2402,7 +2414,22 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
 	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
 		return nil
 	}
+	ids, _, err := prepareNestedSources(exec, f)
+	if err != nil {
+		return err
+	}
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods,
+			qm.InnerJoin("content_units_sources cus ON id = cus.content_unit_id"),
+			qm.WhereIn("cus.source_id in ?", utils.ConvertArgsInt64(ids)...))
+	}
 
+	return nil
+}
+
+func prepareNestedSources(exec boil.Executor, f SourcesFilter) (pq.Int64Array, pq.StringArray, error) {
 	// slice of all source ids we want
 	sourceUids := make([]string, 0)
 
@@ -2410,7 +2437,7 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
 	if !utils.IsEmpty(f.Authors) {
 		for _, x := range f.Authors {
 			if _, ok := mdb.AUTHOR_REGISTRY.ByCode[strings.ToLower(x)]; !ok {
-				return NewBadRequestError(errors.Errorf("Unknown author: %s", x))
+				return nil, nil, NewBadRequestError(errors.Errorf("Unknown author: %s", x))
 			}
 		}
 
@@ -2421,7 +2448,7 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
               WHERE a.code = ANY($1)`
 		err := queries.Raw(exec, q, pq.Array(f.Authors)).QueryRow().Scan(&uids)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		sourceUids = append(sourceUids, uids...)
 	}
@@ -2431,26 +2458,16 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
 
 	// find all nested source_uids
 	q := `WITH RECURSIVE rec_sources AS (
-          SELECT s.id FROM sources s WHERE s.uid = ANY($1)
+          SELECT s.id, s.uid FROM sources s WHERE s.uid = ANY($1)
           UNION
-          SELECT s.id FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
+          SELECT s.id, s.uid FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
           )
           SELECT array_agg(distinct id) FROM rec_sources`
 	var ids pq.Int64Array
-	err := queries.Raw(exec, q, pq.Array(sourceUids)).QueryRow().Scan(&ids)
-	if err != nil {
-		return err
-	}
+	var uids pq.StringArray
+	err := queries.Raw(exec, q, pq.Array(sourceUids)).QueryRow().Scan(&ids, &uids)
+	return ids, uids, err
 
-	if ids == nil || len(ids) == 0 {
-		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
-	} else {
-		*mods = append(*mods,
-			qm.InnerJoin("content_units_sources cus ON id = cus.content_unit_id"),
-			qm.WhereIn("cus.source_id in ?", utils.ConvertArgsInt64(ids)...))
-	}
-
-	return nil
 }
 
 func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
