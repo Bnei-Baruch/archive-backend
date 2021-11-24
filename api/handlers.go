@@ -2367,17 +2367,20 @@ func appendCollectionTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f T
 	if len(f.Tags) == 0 {
 		return nil
 	}
-	//use Raw query because of need to use operator ?
-	var ids pq.Int64Array
-	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
-	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
+	_, uids, err := prepareNestedTagIds(exec, f)
 	if err != nil {
 		return err
 	}
-	if ids == nil || len(ids) == 0 {
+	//use Raw query because of need to use operator ?
+	var cIDs pq.Int64Array
+	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
+	if err := queries.Raw(exec, q, uids).QueryRow().Scan(&cIDs); err != nil {
+		return err
+	}
+	if cIDs == nil || len(cIDs) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
-		*mods = append(*mods, qm.WhereIn("id in ?", utils.ConvertArgsInt64(ids)...))
+		*mods = append(*mods, qm.WhereIn("id in ?", utils.ConvertArgsInt64(cIDs)...))
 	}
 	return nil
 }
@@ -2462,32 +2465,22 @@ func prepareNestedSources(exec boil.Executor, f SourcesFilter) (pq.Int64Array, p
           UNION
           SELECT s.id, s.uid FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
           )
-          SELECT array_agg(distinct id) FROM rec_sources`
+          SELECT array_agg(distinct id), array_agg(uid) FROM rec_sources`
+
 	var ids pq.Int64Array
 	var uids pq.StringArray
 	err := queries.Raw(exec, q, pq.Array(sourceUids)).QueryRow().Scan(&ids, &uids)
 	return ids, uids, err
-
 }
 
 func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
 	if len(f.Tags) == 0 {
 		return nil
 	}
-
-	// Find all nested tag_ids.
-	q := `WITH RECURSIVE rec_tags AS (
-            SELECT t.id FROM tags t WHERE t.uid = ANY($1)
-            UNION
-            SELECT t.id FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
-          )
-          SELECT array_agg(distinct id) FROM rec_tags`
-	var ids pq.Int64Array
-	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
+	ids, _, err := prepareNestedTagIds(exec, f)
 	if err != nil {
 		return err
 	}
-
 	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
@@ -2497,6 +2490,19 @@ func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter)
 	}
 
 	return nil
+}
+
+func prepareNestedTagIds(exec boil.Executor, f TagsFilter) (pq.Int64Array, pq.StringArray, error) {
+	q := `WITH RECURSIVE rec_tags AS (
+            SELECT t.id, t.uid FROM tags t WHERE t.uid = ANY($1)
+            UNION
+            SELECT t.id, t.uid FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
+          )
+          SELECT array_agg(distinct id),  array_agg(uid) FROM rec_tags`
+	var ids pq.Int64Array
+	var uids pq.StringArray
+	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids, &uids)
+	return ids, uids, err
 }
 
 func appendGenresProgramsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f GenresProgramsFilter) error {
