@@ -162,7 +162,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 		bulkService := elastic.NewBulkService(esc).Index(name)
 		log.Infof("Indexing %d intents for %s.", len(grammarsByIntent), lang)
 		for intent, grammar := range grammarsByIntent {
-			log.Infof("Indexing %d variable sets for intet \"%s\".", len(grammar.Patterns), intent)
+			log.Infof("Indexing %d variable sets for intent \"%s\".", len(grammar.Patterns), intent)
 			for variablesSetAsString, rules := range grammar.Patterns {
 				if variablesSetAsString == "" {
 					assignedRulesSuggest := []string{}
