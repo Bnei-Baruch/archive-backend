@@ -940,7 +940,7 @@ func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string
 			ResultType:  consts.ES_RESULT_TYPE_SOURCES,
 			MDB_UID:     source,
 			ContentType: consts.CT_LESSON_PART,
-			Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_LESSON_PART),
+			Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.CLASSIFICATION_FROM_GRAMMAR_INTENTS_MIN_UNITS, consts.CT_LESSON_PART),
 			Score:       &ciScore,
 			Explanation: explanation,
 			Title:       title, // Actually this value is generated in client for classification intent results.
@@ -952,7 +952,7 @@ func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string
 			ResultType:  consts.ES_RESULT_TYPE_SOURCES,
 			MDB_UID:     source,
 			ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER,
-			Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_VIDEO_PROGRAM_CHAPTER),
+			Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.CLASSIFICATION_FROM_GRAMMAR_INTENTS_MIN_UNITS, consts.CT_VIDEO_PROGRAM_CHAPTER),
 			Score:       &ciScore,
 			Explanation: explanation,
 			Title:       title, // Actually this value is generated in client for classification intent results.
