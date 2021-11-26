@@ -335,7 +335,7 @@ const (
 	API_MAX_PAGE_SIZE                         = 1000
 	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
 	// We display the carousels generated from Grammar Engine even if we have just one unit inside
-	//  since the regular results might not return results at all based on the given query.
+	// since the regular results might not return results at all based on the given query.
 	CLASSIFICATION_FROM_GRAMMAR_INTENTS_MIN_UNITS = 1
 	// Consider making a carusele and not limiting.
 	MAX_MATCHES_PER_GRAMMAR_INTENT                  = 3
