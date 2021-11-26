@@ -134,7 +134,7 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 		return false
 	}
 	if varProgramCollection == "" {
-		return true
+		varProgramCollection = consts.PROGRAM_COLLECTION_NEW_LIFE
 	}
 	c := cm.SearchStats().GetProgramByCollectionAndPosition(varProgramCollection, varPosition)
 	return c != nil
