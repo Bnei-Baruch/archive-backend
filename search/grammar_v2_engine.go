@@ -278,6 +278,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 			var contentType string
 			var text string
 			var programCollection string
+			var mediaLanguage string
 			sources := []string{}
 			for _, fv := range intentValue.FilterValues {
 				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
@@ -288,19 +289,21 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 					sources = append(sources, fv.Value)
 				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM] {
 					programCollection = fv.Value
+				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_LANGUAGE] {
+					mediaLanguage = fv.Value
 				}
 			}
 			searchWithoutTerm := text == ""
-			if contentType != "" || programCollection != "" || len(sources) > 0 {
+			if contentType != "" || programCollection != "" || len(sources) > 0 || mediaLanguage != "" {
 				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Program collection is '%s', Sources are '%+v'.", contentType, text, programCollection, sources)
 				requests := []*elastic.SearchRequest{}
-				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, mediaLanguage, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 				if err != nil {
 					return nil, err
 				}
 				requests = append(requests, textValSearchRequests...)
 				if !searchWithoutTerm && contentType != consts.VAR_CT_ARTICLES {
-					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, sources, mediaLanguage, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 					if err != nil {
 						return nil, err
 					}
@@ -615,6 +618,15 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				}
 				singleHitIntents = append(singleHitIntents, intents...)
 				addSourcePositionWithoutTerm = false // We add results only one time for this rule type
+			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_LANG {
+				filterIntents = append(filterIntents, Intent{
+					Type:     consts.GRAMMAR_TYPE_FILTER,
+					Language: language,
+					Value: GrammarIntent{
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score,
+						Explanation:  hit.Explanation,
+					}})
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {
@@ -909,6 +921,7 @@ func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position
 	return ret, nil
 }
 
+// TODO: [Kirill] - do we need to add by language here as well?
 func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string][]string, language string, title string, score float64, explanation elastic.SearchExplanation) ([]Intent, error) {
 	var getLessonCI bool
 	var getProgramCI bool
