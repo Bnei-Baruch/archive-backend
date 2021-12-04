@@ -277,14 +277,8 @@ func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, minCount *i
 	if h, ok := stats[uid]; ok {
 		for i := range cts {
 			if c, ok := h[cts[i]]; ok {
-				minOk := minCount == nil
-				maxOk := maxCount == nil
-				if minCount != nil {
-					minOk = c >= *minCount
-				}
-				if maxCount != nil {
-					maxOk = c <= *maxCount
-				}
+				minOk := minCount == nil || c >= *minCount
+				maxOk := maxCount == nil || c <= *maxCount
 				if minOk && maxOk {
 					return true
 				}
