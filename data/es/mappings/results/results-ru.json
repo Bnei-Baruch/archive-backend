@@ -56,6 +56,10 @@
                 }, 
                 "content": {
                     "fields": {
+                        "suggest": {
+                            "type": "text", 
+                            "analyzer": "typo_suggest"
+                        }, 
                         "language": {
                             "type": "text", 
                             "analyzer": "russian_synonym"
@@ -98,6 +102,11 @@
                     "russian_stemmer": {
                         "type": "stemmer", 
                         "language": "russian"
+                    }, 
+                    "shingle": {
+                        "min_shingle_size": 2, 
+                        "type": "shingle", 
+                        "max_shingle_size": 3
                     }, 
                     "synonym_graph": {
                         "synonyms": [], 
@@ -146,6 +155,13 @@
                     }
                 }, 
                 "analyzer": {
+                    "typo_suggest": {
+                        "filter": [
+                            "lowercase", 
+                            "shingle"
+                        ], 
+                        "tokenizer": "standard"
+                    }, 
                     "russian_synonym": {
                         "filter": [
                             "lowercase", 

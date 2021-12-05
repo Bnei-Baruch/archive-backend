@@ -111,20 +111,20 @@ func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.Str
 		candidateField2.SetValid("content")
 		addMaxEdits = true
 	} else if hasRussian {
-		suggestorField = "content"
-		candidateField1.SetValid("content.language")
-		candidateField2.SetValid("title.language")
+		suggestorField = "content.suggest"
+		candidateField1.SetValid("content")
+		//candidateField2.SetValid("title.language")
 		addMaxEdits = false
 	} else if hasEnglish {
-		suggestorField = "content.language"
-		candidateField1.SetValid("content.language")
-		candidateField2 = null.StringFromPtr(nil)
+		suggestorField = "content.suggest"
+		candidateField1.SetValid("content")
+		//candidateField2 = null.StringFromPtr(nil)
 		addMaxEdits = true
 	} else {
 		//  default settings for all languages
-		suggestorField = "content.language"
-		candidateField1.SetValid("content.language")
-		candidateField2 = null.StringFromPtr(nil)
+		suggestorField = "content.suggest"
+		candidateField1.SetValid("content")
+		//candidateField2 = null.StringFromPtr(nil)
 		addMaxEdits = true
 	}
 
@@ -134,9 +134,13 @@ func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.Str
 		Text(checkTerm).
 		Field(suggestorField).
 		Size(1).
-		GramSize(1).
+		GramSize(3).
 		Confidence(1).
-		SmoothingModel(elastic.NewLaplaceSmoothingModel(0.7))
+		MaxErrors(3).
+		SmoothingModel(elastic.NewLaplaceSmoothingModel(0.7)).
+		CollateQuery(`{"match":{"{{field_name}}" : {"query": "{{suggestion}}","operator": "and"}}}`).
+		CollateParams(map[string]interface{}{"field_name": "content"}).
+		CollatePrune(false)
 
 	if candidateField1.Valid {
 		can1 := elastic.NewDirectCandidateGenerator(candidateField1.String).SuggestMode("popular")

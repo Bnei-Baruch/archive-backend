@@ -56,6 +56,10 @@
                 }, 
                 "content": {
                     "fields": {
+                        "suggest": {
+                            "type": "text", 
+                            "analyzer": "typo_suggest"
+                        }, 
                         "language": {
                             "type": "text", 
                             "analyzer": "hebrew_synonym"
@@ -95,6 +99,11 @@
             "number_of_replicas": 0, 
             "analysis": {
                 "filter": {
+                    "shingle": {
+                        "min_shingle_size": 2, 
+                        "type": "shingle", 
+                        "max_shingle_size": 3
+                    }, 
                     "he_IL": {
                         "locale": "he_IL", 
                         "type": "hunspell", 
@@ -143,9 +152,15 @@
                     }
                 }, 
                 "analyzer": {
-                    "hebrew_synonym": {
+                    "typo_suggest": {
                         "filter": [
-                            "synonym_graph", 
+                            "lowercase", 
+                            "shingle"
+                        ], 
+                        "tokenizer": "standard"
+                    }, 
+                    "he": {
+                        "filter": [
                             "he_IL"
                         ], 
                         "char_filter": [
@@ -153,8 +168,9 @@
                         ], 
                         "tokenizer": "standard"
                     }, 
-                    "he": {
+                    "hebrew_synonym": {
                         "filter": [
+                            "synonym_graph", 
                             "he_IL"
                         ], 
                         "char_filter": [

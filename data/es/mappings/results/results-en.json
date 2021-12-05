@@ -56,6 +56,10 @@
                 }, 
                 "content": {
                     "fields": {
+                        "suggest": {
+                            "type": "text", 
+                            "analyzer": "typo_suggest"
+                        }, 
                         "language": {
                             "type": "text", 
                             "analyzer": "english_synonym"
@@ -95,6 +99,15 @@
             "number_of_replicas": 0, 
             "analysis": {
                 "filter": {
+                    "shingle": {
+                        "min_shingle_size": 2, 
+                        "type": "shingle", 
+                        "max_shingle_size": 3
+                    }, 
+                    "english_stemmer": {
+                        "type": "stemmer", 
+                        "language": "english"
+                    }, 
                     "english_stop": {
                         "stopwords": "_english_", 
                         "type": "stop"
@@ -103,10 +116,6 @@
                         "synonyms": [], 
                         "type": "synonym_graph", 
                         "tokenizer": "keyword"
-                    }, 
-                    "english_stemmer": {
-                        "type": "stemmer", 
-                        "language": "english"
                     }, 
                     "english_possessive_stemmer": {
                         "type": "stemmer", 
@@ -150,6 +159,13 @@
                     }
                 }, 
                 "analyzer": {
+                    "typo_suggest": {
+                        "filter": [
+                            "lowercase", 
+                            "shingle"
+                        ], 
+                        "tokenizer": "standard"
+                    }, 
                     "english_synonym": {
                         "filter": [
                             "english_possessive_stemmer", 

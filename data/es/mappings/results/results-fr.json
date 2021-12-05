@@ -56,6 +56,10 @@
                 }, 
                 "content": {
                     "fields": {
+                        "suggest": {
+                            "type": "text", 
+                            "analyzer": "typo_suggest"
+                        }, 
                         "language": {
                             "type": "text", 
                             "analyzer": "french"
@@ -94,6 +98,13 @@
         "index": {
             "number_of_replicas": 0, 
             "analysis": {
+                "filter": {
+                    "shingle": {
+                        "min_shingle_size": 2, 
+                        "type": "shingle", 
+                        "max_shingle_size": 3
+                    }
+                }, 
                 "char_filter": {
                     "quotes": {
                         "type": "mapping", 
@@ -128,6 +139,15 @@
                             "lowercase"
                         ], 
                         "type": "custom"
+                    }
+                }, 
+                "analyzer": {
+                    "typo_suggest": {
+                        "filter": [
+                            "lowercase", 
+                            "shingle"
+                        ], 
+                        "tokenizer": "standard"
                     }
                 }
             }, 
