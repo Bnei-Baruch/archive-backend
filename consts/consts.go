@@ -120,6 +120,9 @@ const (
 	LANG_AMHARIC    = "am"
 	LANG_MULTI      = "zz"
 	LANG_UNKNOWN    = "xx"
+
+	//suggest constant terms patterns
+	TERMS_PATTERN_DIGITS = `(?:^|\s|\(|\/)(\d+)(\b)`
 )
 
 var ALL_KNOWN_LANGS = [...]string{
@@ -329,11 +332,14 @@ const (
 	INTENTS_SEARCH_DEFAULT_COUNT              = 10
 	INTENTS_SEARCH_BY_FILTER_GRAMMAR_COUNT    = 2
 	TWEETS_SEARCH_COUNT                       = 20
-	INTENTS_MIN_UNITS                         = 3
+	INTENTS_MIN_UNITS                         = 3 // Min. units from Intent Engine (not grammar) to display the carousel
 	MAX_CLASSIFICATION_INTENTS                = 3
 	API_DEFAULT_PAGE_SIZE                     = 50
 	API_MAX_PAGE_SIZE                         = 1000
 	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
+	// We display the carousels generated from Grammar Engine even if we have just one unit inside
+	// since the regular results might not return results at all based on the given query.
+	CLASSIFICATION_FROM_GRAMMAR_INTENTS_MIN_UNITS = 1
 	// Consider making a carusele and not limiting.
 	MAX_MATCHES_PER_GRAMMAR_INTENT                  = 3
 	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM = 200
