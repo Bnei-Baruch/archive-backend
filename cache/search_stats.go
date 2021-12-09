@@ -13,124 +13,14 @@ import (
 	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
-type Histogram map[string]int
-
-func (h Histogram) Increment(k string, v int) {
-	h[k] += v
-}
-
-func (h Histogram) Merge(other Histogram) {
-	for k, v := range other {
-		h.Increment(k, v)
-	}
-}
-
-type StatsNode struct {
-	id       int64
-	parentID int64
-	uid      string
-	children []int64
-	hist     Histogram
-}
-
-type StatsTree struct {
-	byID map[int64]*StatsNode
-}
-
-func NewStatsTree() *StatsTree {
-	st := new(StatsTree)
-	st.byID = make(map[int64]*StatsNode)
-	return st
-}
-
-// accumulate merge Histograms bottom up so that
-// parent nodes's Histogram will be the overall sum of its children.
-// We do that in code because we don't really know how to do that with SQL.
-func (st *StatsTree) accumulate() {
-	// compute children since next step rely on it for correction
-	for k, v := range st.byID {
-		if v.parentID != 0 {
-			parent := st.byID[v.parentID]
-			parent.children = append(parent.children, k)
-		}
-	}
-
-	// put all leaf nodes in s
-	s := make([]int64, 0)
-	for k, v := range st.byID {
-		if len(v.children) == 0 {
-			s = append(s, k)
-		}
-	}
-
-	// while we have some nodes to merge
-	for len(s) > 0 {
-		// loop through this generation of nodes
-		// merge parents histograms and collect next generation
-		parents := make(map[int64]bool)
-		for i := range s {
-			node := st.byID[s[i]]
-			if node.parentID != 0 {
-				p := st.byID[node.parentID] // get parent
-				parents[p.id] = true        // add to next gen of
-				p.hist.Merge(node.hist)     // merge parent histogram with that of child
-			}
-		}
-
-		// convert next generation of nodes map to slice (parents of current generation)
-		s = make([]int64, len(parents))
-		i := 0
-		for k := range parents {
-			s[i] = k
-			i++
-		}
-	}
-}
-
-// flatten return a flat uid => Histogram lookup table.
-// It's usually the only interesting result to use
-// as the tree structure is not really needed once accumulated.
-func (st *StatsTree) flatten() map[string]Histogram {
-	byUID := make(map[string]Histogram, len(st.byID))
-	for _, v := range st.byID {
-		byUID[v.uid] = v.hist
-	}
-	return byUID
-}
-
-func (st *StatsTree) insert(id, parentID int64, uid string, ct string, cnt int) {
-	node, ok := st.byID[id]
-	if !ok {
-		node = new(StatsNode)
-		node.id = id
-		node.parentID = parentID
-		node.uid = uid
-		node.hist = make(Histogram)
-		st.byID[id] = node
-	}
-	if ct != "" {
-		node.hist.Increment(ct, cnt)
-	}
-}
-
-type ClassByTypeStats map[string]Histogram
-
-func (s ClassByTypeStats) dump() {
-	fmt.Printf("%d entries\n", len(s))
-	for k, v := range s {
-		fmt.Printf("%s\t\t%+v\n", k, v)
-	}
-}
-
 type SearchStatsCache interface {
-	Provider
+	Refresh(sources, tags ClassByTypeStats) error
 	IsTagWithUnits(uid string, cts ...string) bool
 	IsTagWithEnoughUnits(uid string, count int, cts ...string) bool
 	IsSourceWithUnits(uid string, cts ...string) bool
@@ -172,7 +62,7 @@ func (ssc *SearchStatsCacheImpl) DoesHolidayExist(holiday string, year string) b
 }
 
 func (ssc *SearchStatsCacheImpl) DoesHolidaySingle(holiday string, year string) bool {
-	//fmt.Printf("Holidays count for %s %s - %d\n", holiday, year, ssc.holidayYears[holiday][year])
+	//fmt.Printf("Holidays count for %s %s - %d\n", holiday, year, search.holidayYears[holiday][year])
 	return ssc.holidayYears[holiday][year] == 1
 }
 
@@ -181,7 +71,7 @@ func (ssc *SearchStatsCacheImpl) DoesConventionExist(location string, year strin
 }
 
 func (ssc *SearchStatsCacheImpl) DoesConventionSingle(location string, year string) bool {
-	//fmt.Printf("Conventions count for %s %s - %d\n", location, year, ssc.conventions[year][location])
+	//fmt.Printf("Conventions count for %s %s - %d\n", location, year, search.conventions[year][location])
 	return ssc.conventions[year][location] == 1
 }
 
@@ -273,16 +163,11 @@ func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, count int, 
 	return false
 }
 
-func (ssc *SearchStatsCacheImpl) String() string {
-	return "SearchStatsCacheImpl"
-}
-
-func (ssc *SearchStatsCacheImpl) Refresh() error {
+func (ssc *SearchStatsCacheImpl) Refresh(sources, tags ClassByTypeStats) error {
 	var err error
-	ssc.tags, ssc.sources, err = ssc.load()
-	if err != nil {
-		return errors.Wrap(err, "Load tags and sources stats.")
-	}
+	ssc.tags = tags
+	ssc.sources = sources
+
 	ssc.conventions, err = ssc.refreshConventions()
 	if err != nil {
 		return errors.Wrap(err, "Load conventions stats.")
@@ -386,76 +271,6 @@ func (ssc *SearchStatsCacheImpl) refreshConventions() (map[string]map[string]int
 		}
 	}
 	return ret, nil
-}
-
-func (ssc *SearchStatsCacheImpl) load() (ClassByTypeStats, ClassByTypeStats, error) {
-	rows, err := queries.Raw(ssc.mdb, `select
-  t.id,
-  t.parent_id,
-  concat('t', t.uid),
-  cu.type_id,
-  count(cu.id)
-from tags t
-  left join content_units_tags cut on t.id = cut.tag_id
-  left join (select * from content_units where content_units.secure = 0 and content_units.published is true) as cu on cut.content_unit_id = cu.id
-group by t.id, cu.type_id
-union
-select
-  s.id,
-  s.parent_id,
-  concat('s', s.uid),
-  cu.type_id,
-  count(cu.id)
-from sources s
-  left join content_units_sources cus on s.id = cus.source_id
-  left join (select * from content_units where content_units.secure = 0 and content_units.published is true) as cu on cus.content_unit_id = cu.id
-group by s.id, cu.type_id;`).Query()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "queries.Raw")
-	}
-	defer rows.Close()
-
-	// TODO: take authors into consideration
-
-	tags := NewStatsTree()
-	sources := NewStatsTree()
-	var tmp *StatsTree
-	for rows.Next() {
-		var k string
-		var id int64
-		var typeID, parentID null.Int64
-		var count int
-		err = rows.Scan(&id, &parentID, &k, &typeID, &count)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "rows.Scan")
-		}
-
-		if k[0] == 't' {
-			tmp = tags
-		} else if k[0] == 's' {
-			tmp = sources
-		}
-
-		var ctName = ""
-		if typeID.Valid {
-			ct, ok := mdb.CONTENT_TYPE_REGISTRY.ByID[typeID.Int64]
-			if ok {
-				ctName = ct.Name
-			} else {
-				continue
-			}
-		}
-
-		tmp.insert(id, parentID.Int64, k[1:], ctName, count)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, errors.Wrap(err, "rows.Err()")
-	}
-
-	tags.accumulate()
-	sources.accumulate()
-
-	return tags.flatten(), sources.flatten(), nil
 }
 
 func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]string, error) {
