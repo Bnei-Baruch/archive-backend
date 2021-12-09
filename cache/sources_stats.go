@@ -22,25 +22,25 @@ type SourcesStatsCacheImpl struct {
 }
 
 func NewSourcesStatsCacheImpl(mdb *sql.DB) SourcesStatsCache {
-	ssc := new(SourcesStatsCacheImpl)
-	ssc.mdb = mdb
-	return ssc
+	stats := new(SourcesStatsCacheImpl)
+	stats.mdb = mdb
+	return stats
 }
 
-func (ssc *SourcesStatsCacheImpl) Refresh() error {
-	err := ssc.load()
+func (s *SourcesStatsCacheImpl) Refresh() error {
+	err := s.load()
 	return errors.Wrap(err, "Load tags and sources stats.")
 }
 
-func (ssc *SourcesStatsCacheImpl) GetHistogram() ClassByTypeStats {
-	return ssc.tree.flatten()
+func (s *SourcesStatsCacheImpl) GetHistogram() ClassByTypeStats {
+	return s.tree.flatten()
 }
 
-func (ssc *SourcesStatsCacheImpl) GetChildren(rootUIDs []string) ([]string, []int64) {
+func (s *SourcesStatsCacheImpl) GetChildren(rootUIDs []string) ([]string, []int64) {
 	chs := make([]*StatsNode, 0)
 	for _, rootUID := range rootUIDs {
-		root := ssc.tree.byUID[rootUID]
-		chs = append(chs, ssc.getAllChildren(root)...)
+		root := s.tree.byUID[rootUID]
+		chs = append(chs, s.getAllChildren(root)...)
 	}
 	uids := make([]string, len(chs))
 	ids := make([]int64, len(chs))
@@ -51,7 +51,7 @@ func (ssc *SourcesStatsCacheImpl) GetChildren(rootUIDs []string) ([]string, []in
 	return uids, ids
 }
 
-func (ssc *SourcesStatsCacheImpl) getAllChildren(root *StatsNode) []*StatsNode {
+func (s *SourcesStatsCacheImpl) getAllChildren(root *StatsNode) []*StatsNode {
 	if root == nil {
 		return make([]*StatsNode, 0)
 	}
@@ -60,14 +60,14 @@ func (ssc *SourcesStatsCacheImpl) getAllChildren(root *StatsNode) []*StatsNode {
 		return result
 	}
 	for _, id := range root.children {
-		ch := ssc.tree.byID[id]
-		result = append(result, ssc.getAllChildren(ch)...)
+		ch := s.tree.byID[id]
+		result = append(result, s.getAllChildren(ch)...)
 	}
 	return result
 }
 
-func (ssc *SourcesStatsCacheImpl) load() error {
-	rows, err := queries.Raw(ssc.mdb, `
+func (s *SourcesStatsCacheImpl) load() error {
+	rows, err := queries.Raw(s.mdb, `
 	SELECT
 		s.id, s.parent_id, s.uid, cu.type_id, COUNT(cu.id)
 	FROM sources s
@@ -111,6 +111,6 @@ func (ssc *SourcesStatsCacheImpl) load() error {
 
 	sources.accumulate()
 	sources.flatten()
-	ssc.tree = sources
+	s.tree = sources
 	return nil
 }

@@ -22,25 +22,25 @@ type TagsStatsCacheImpl struct {
 }
 
 func NewTagsStatsCacheImpl(mdb *sql.DB) TagsStatsCache {
-	ssc := new(TagsStatsCacheImpl)
-	ssc.mdb = mdb
-	return ssc
+	stats := new(TagsStatsCacheImpl)
+	stats.mdb = mdb
+	return stats
 }
 
-func (ssc *TagsStatsCacheImpl) Refresh() error {
-	err := ssc.load()
+func (s *TagsStatsCacheImpl) Refresh() error {
+	err := s.load()
 	return errors.Wrap(err, "Load tags and sources stats.")
 }
 
-func (ssc *TagsStatsCacheImpl) GetHistogram() ClassByTypeStats {
-	return ssc.tree.flatten()
+func (s *TagsStatsCacheImpl) GetHistogram() ClassByTypeStats {
+	return s.tree.flatten()
 }
 
-func (ssc *TagsStatsCacheImpl) GetChildren(rootUIDs []string) ([]string, []int64) {
+func (s *TagsStatsCacheImpl) GetChildren(rootUIDs []string) ([]string, []int64) {
 	chs := make([]*StatsNode, 0)
 	for _, rootUID := range rootUIDs {
-		root := ssc.tree.byUID[rootUID]
-		chs = append(chs, ssc.getAllChildren(root)...)
+		root := s.tree.byUID[rootUID]
+		chs = append(chs, s.getAllChildren(root)...)
 	}
 	uids := make([]string, len(chs))
 	ids := make([]int64, len(chs))
@@ -51,7 +51,7 @@ func (ssc *TagsStatsCacheImpl) GetChildren(rootUIDs []string) ([]string, []int64
 	return uids, ids
 }
 
-func (ssc *TagsStatsCacheImpl) getAllChildren(root *StatsNode) []*StatsNode {
+func (s *TagsStatsCacheImpl) getAllChildren(root *StatsNode) []*StatsNode {
 	if root == nil {
 		return make([]*StatsNode, 0)
 	}
@@ -60,14 +60,14 @@ func (ssc *TagsStatsCacheImpl) getAllChildren(root *StatsNode) []*StatsNode {
 		return result
 	}
 	for _, id := range root.children {
-		ch := ssc.tree.byID[id]
-		result = append(result, ssc.getAllChildren(ch)...)
+		ch := s.tree.byID[id]
+		result = append(result, s.getAllChildren(ch)...)
 	}
 	return result
 }
 
-func (ssc *TagsStatsCacheImpl) load() error {
-	rows, err := queries.Raw(ssc.mdb, `
+func (s *TagsStatsCacheImpl) load() error {
+	rows, err := queries.Raw(s.mdb, `
 		SELECT
 			t.id, t.parent_id, t.uid, cu.type_id, COUNT(cu.id) 
 		FROM tags t
@@ -111,6 +111,6 @@ func (ssc *TagsStatsCacheImpl) load() error {
 
 	tags.accumulate()
 	tags.flatten()
-	ssc.tree = tags
+	s.tree = tags
 	return nil
 }
