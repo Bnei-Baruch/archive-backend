@@ -12,7 +12,7 @@ import (
 
 type TagsStatsCache interface {
 	Refresh() error
-	GetChildren(uid string) []string
+	GetChildren(rootUIDs []string) ([]string, []int64)
 	GetHistogram() ClassByTypeStats
 }
 
@@ -36,22 +36,32 @@ func (ssc *TagsStatsCacheImpl) GetHistogram() ClassByTypeStats {
 	return ssc.tree.flatten()
 }
 
-func (ssc *TagsStatsCacheImpl) GetChildren(rootUID string) []string {
-	root := ssc.tree.byUID[rootUID]
-	return ssc.getAllChildren(root, []string{})
+func (ssc *TagsStatsCacheImpl) GetChildren(rootUIDs []string) ([]string, []int64) {
+	chs := make([]*StatsNode, 0)
+	for _, rootUID := range rootUIDs {
+		root := ssc.tree.byUID[rootUID]
+		chs = append(chs, ssc.getAllChildren(root)...)
+	}
+	uids := make([]string, len(chs))
+	ids := make([]int64, len(chs))
+	for i, ch := range chs {
+		uids[i] = ch.uid
+		ids[i] = ch.id
+	}
+	return uids, ids
 }
 
-func (ssc *TagsStatsCacheImpl) getAllChildren(root *StatsNode, result []string) []string {
+func (ssc *TagsStatsCacheImpl) getAllChildren(root *StatsNode) []*StatsNode {
 	if root == nil {
-		return result
+		return make([]*StatsNode, 0)
 	}
-	result = append(result, root.uid)
+	result := []*StatsNode{root}
 	if root.children == nil {
 		return result
 	}
 	for _, id := range root.children {
 		ch := ssc.tree.byID[id]
-		ssc.getAllChildren(ch, result)
+		result = append(result, ssc.getAllChildren(ch)...)
 	}
 	return result
 }
@@ -74,11 +84,11 @@ func (ssc *TagsStatsCacheImpl) load() error {
 
 	tags := NewStatsTree()
 	for rows.Next() {
-		var k string
+		var uid string
 		var id int64
 		var typeID, parentID null.Int64
 		var count int
-		err = rows.Scan(&id, &parentID, &k, &typeID, &count)
+		err = rows.Scan(&id, &parentID, &uid, &typeID, &count)
 		if err != nil {
 			return errors.Wrap(err, "rows.Scan")
 		}
@@ -93,7 +103,7 @@ func (ssc *TagsStatsCacheImpl) load() error {
 			}
 		}
 
-		tags.insert(id, parentID.Int64, k[1:], ctName, count)
+		tags.insert(id, parentID.Int64, uid, ctName, count)
 	}
 	if err := rows.Err(); err != nil {
 		return errors.Wrap(err, "rows.Err()")

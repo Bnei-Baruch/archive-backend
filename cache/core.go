@@ -9,6 +9,8 @@ import (
 
 type CacheManager interface {
 	SearchStats() SearchStatsCache
+	SourcesStats() SourcesStatsCache
+	TagsStats() TagsStatsCache
 	Close()
 }
 
