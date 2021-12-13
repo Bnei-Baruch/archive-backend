@@ -528,7 +528,6 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 		}
 		scoreQuery.Add(elastic.NewTermsQuery("result_type", resultType), elastic.NewWeightFactorFunction(weight))
 	}
-
 	// Reduce score for clips.
 	scoreQuery.Add(elastic.NewTermsQuery("filter_values", es.KeyValue("content_type", consts.CT_CLIP)), elastic.NewWeightFactorFunction(0.7))
 	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query).MinScore(MIN_SCORE_FOR_RESULTS)).ScoreMode("sum").MaxBoost(100.0).
@@ -545,9 +544,6 @@ func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchReque
 	//	This is a generic imp. that supports searching tweets together with other results.
 	//	Currently we are not searching for tweets together with other results but in parallel.
 	for _, rt := range options.resultTypes {
-		if rt == consts.ES_RESULT_TYPE_COLLECTIONS {
-			fetchSourceContext.Include("typed_uids")
-		}
 		if rt == consts.ES_RESULT_TYPE_TWEETS && !contentAdded {
 			fetchSourceContext.Include("content")
 			contentAdded = true
