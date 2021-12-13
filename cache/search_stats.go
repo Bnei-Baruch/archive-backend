@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/spf13/viper"
 
 	"github.com/Bnei-Baruch/archive-backend/es"
 
@@ -20,7 +23,7 @@ import (
 )
 
 type SearchStatsCache interface {
-	Refresh(sources, tags ClassByTypeStats) error
+	Provider
 	IsTagWithUnits(uid string, cts ...string) bool
 	IsTagWithEnoughUnits(uid string, count int, cts ...string) bool
 	IsSourceWithUnits(uid string, cts ...string) bool
@@ -51,12 +54,27 @@ type SearchStatsCacheImpl struct {
 	holidayYears                    map[string]map[string]int
 	sourcesByPositionAndParent      map[string]string
 	programsByCollectionAndPosition map[string]string
+	interval                        int64
 }
 
-func NewSearchStatsCacheImpl(mdb *sql.DB) SearchStatsCache {
+func NewSearchStatsCacheImpl(mdb *sql.DB, sources, tags ClassByTypeStats) SearchStatsCache {
 	ssc := new(SearchStatsCacheImpl)
 	ssc.mdb = mdb
+	ssc.sources = sources
+	ssc.tags = tags
+	// Convert time.Duration to int64
+	// So we would have refresh intervals in integer multiple of a second
+	viper.SetDefault("cache.refresh-search-stats", 5*time.Minute)
+	ssc.interval = int64(viper.GetDuration("cache.refresh-search-stats").Truncate(time.Second).Seconds())
 	return ssc
+}
+
+func (ssc *SearchStatsCacheImpl) Interval() int64 {
+	return ssc.interval
+}
+
+func (ssc *SearchStatsCacheImpl) String() string {
+	return "SearchStatsCacheImpl"
 }
 
 func (ssc *SearchStatsCacheImpl) DoesHolidayExist(holiday string, year string) bool {
@@ -179,10 +197,8 @@ func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, minCount *i
 	return false
 }
 
-func (ssc *SearchStatsCacheImpl) Refresh(sources, tags ClassByTypeStats) error {
+func (ssc *SearchStatsCacheImpl) Refresh() error {
 	var err error
-	ssc.tags = tags
-	ssc.sources = sources
 
 	ssc.conventions, err = ssc.refreshConventions()
 	if err != nil {

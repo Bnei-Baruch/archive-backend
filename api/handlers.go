@@ -2380,17 +2380,17 @@ func appendCollectionTagsFilterMods(cm cache.CacheManager, exec boil.Executor, m
 	if len(f.Tags) == 0 {
 		return nil
 	}
-	uids, _ := cm.TagsStats().GetChildren(f.Tags)
+	uids, _ := cm.TagsStats().GetTree().GetChildren(f.Tags)
 	//use Raw query because of need to use operator ?
-	var cIDs pq.Int64Array
+	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
-	if err := queries.Raw(exec, q, pq.Array(uids)).QueryRow().Scan(&cIDs); err != nil {
+	if err := queries.Raw(exec, q, pq.Array(uids)).QueryRow().Scan(&ids); err != nil {
 		return err
 	}
-	if cIDs == nil || len(cIDs) == 0 {
+	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
-		*mods = append(*mods, qm.WhereIn("id in ?", utils.ConvertArgsInt64(cIDs)...))
+		*mods = append(*mods, qm.WhereIn("id in ?", utils.ConvertArgsInt64(ids)...))
 	}
 	return nil
 }
@@ -2454,22 +2454,17 @@ func prepareNestedSources(cm cache.CacheManager, exec boil.Executor, f SourcesFi
 			}
 		}
 
-		var uids pq.StringArray
-		q := `SELECT array_agg(DISTINCT s.uid)
-              FROM authors a INNER JOIN authors_sources "as" ON a.id = "as".author_id
-              INNER JOIN sources s ON "as".source_id = s.id
-              WHERE a.code = ANY($1)`
-		err := queries.Raw(exec, q, pq.Array(f.Authors)).QueryRow().Scan(&uids)
-		if err != nil {
-			return nil, nil, err
-		}
-		sourceUids = append(sourceUids, uids...)
+		roots := cm.AuthorsStats().GetSources(f.Authors)
+		sourceUids = append(sourceUids, roots...)
 	}
 
 	// blend in requested sources
 	sourceUids = append(sourceUids, f.Sources...)
 
-	uids, ids := cm.SourcesStats().GetChildren(sourceUids)
+	uids, ids := cm.SourcesStats().GetTree().GetChildren(sourceUids)
+
+	uids = utils.ClearDuplicateString(uids)
+	ids = utils.ClearDuplicateInt64(ids)
 
 	return ids, uids, nil
 }
@@ -2478,13 +2473,13 @@ func appendTagsFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.
 	if len(f.Tags) == 0 {
 		return nil
 	}
-	_, ids := cm.TagsStats().GetChildren(f.Tags)
+	_, ids := cm.TagsStats().GetTree().GetChildren(f.Tags)
 	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
 		*mods = append(*mods,
 			qm.InnerJoin("content_units_tags cut ON id = cut.content_unit_id"),
-			qm.WhereIn("cut.tag_id in ?", pq.Array(ids)))
+			qm.WhereIn("cut.tag_id in ?", utils.ConvertArgsInt64(ids)...))
 	}
 
 	return nil

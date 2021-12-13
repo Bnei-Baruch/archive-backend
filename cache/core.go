@@ -4,12 +4,25 @@ import (
 	"database/sql"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
+
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
+
+type Refreshable interface {
+	Refresh() error
+	Interval() int64
+}
+
+type Provider interface {
+	Refreshable
+	String() string
+}
 
 type CacheManager interface {
 	SearchStats() SearchStatsCache
 	SourcesStats() SourcesStatsCache
+	AuthorsStats() AuthorsStatsCache
 	TagsStats() TagsStatsCache
 	Close()
 }
@@ -17,25 +30,27 @@ type CacheManager interface {
 type CacheManagerImpl struct {
 	search           SearchStatsCache
 	sources          SourcesStatsCache
+	authors          AuthorsStatsCache
 	tags             TagsStatsCache
 	ticker           *time.Ticker
 	ticks            int64
 	refreshIntervals map[string]int64
+	providers        []Provider
 }
 
-func NewCacheManagerImpl(mdb *sql.DB, refreshIntervals map[string]time.Duration) CacheManager {
+func NewCacheManagerImpl(mdb *sql.DB) CacheManager {
 	cm := new(CacheManagerImpl)
-	// Convert time.Duration to int64
-	// So we would have refresh intervals in integer multiple of a second
-	cm.refreshIntervals = make(map[string]int64, len(refreshIntervals))
-	for k, v := range refreshIntervals {
-		cm.refreshIntervals[k] = int64(v.Truncate(time.Second).Seconds())
-	}
-
 	cm.sources = NewSourcesStatsCacheImpl(mdb)
 	cm.tags = NewTagsStatsCacheImpl(mdb)
-	cm.search = NewSearchStatsCacheImpl(mdb)
+	cm.authors = NewAuthorsStatsCacheImpl(mdb)
+	cm.providers = []Provider{cm.sources, cm.tags, cm.authors}
 	cm.refresh()
+	cm.search = NewSearchStatsCacheImpl(mdb, cm.sources.GetTree().flatten(), cm.tags.GetTree().flatten())
+	cm.providers = append(cm.providers, cm.search)
+	if err := cm.search.Refresh(); err != nil {
+		log.Errorf("Refresh %s: %s", cm.search, err.Error())
+		utils.LogError(err)
+	}
 
 	cm.ticker = time.NewTicker(time.Second)
 	go func() {
@@ -55,6 +70,9 @@ func (cm *CacheManagerImpl) Close() {
 func (cm *CacheManagerImpl) SourcesStats() SourcesStatsCache {
 	return cm.sources
 }
+func (cm *CacheManagerImpl) AuthorsStats() AuthorsStatsCache {
+	return cm.authors
+}
 
 func (cm *CacheManagerImpl) TagsStats() TagsStatsCache {
 	return cm.tags
@@ -65,18 +83,13 @@ func (cm *CacheManagerImpl) SearchStats() SearchStatsCache {
 }
 
 func (cm *CacheManagerImpl) refresh() {
-	if cm.ticks%cm.refreshIntervals["TagAndSourcesStats"] == 0 {
-		if err := cm.sources.Refresh(); err != nil {
-			utils.LogError(err)
+	for _, p := range cm.providers {
+		if cm.ticks%p.Interval() != 0 {
+			continue
 		}
-
-		if err := cm.tags.Refresh(); err != nil {
-			utils.LogError(err)
-		}
-	}
-
-	if cm.ticks%cm.refreshIntervals["SearchStats"] == 0 {
-		if err := cm.search.Refresh(cm.sources.GetHistogram(), cm.tags.GetHistogram()); err != nil {
+		log.Infof("Refreshing %s", p)
+		if err := p.Refresh(); err != nil {
+			log.Errorf("Refresh %s: %s", p, err.Error())
 			utils.LogError(err)
 		}
 	}

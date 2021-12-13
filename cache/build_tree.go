@@ -27,6 +27,36 @@ type StatsTree struct {
 	byUID map[string]*StatsNode
 }
 
+func (st *StatsTree) GetChildren(rootUIDs []string) ([]string, []int64) {
+	chs := make([]*StatsNode, 0)
+	for _, rootUID := range rootUIDs {
+		root := st.byUID[rootUID]
+		chs = append(chs, st.getAllChildren(root)...)
+	}
+	uids := make([]string, len(chs))
+	ids := make([]int64, len(chs))
+	for i, ch := range chs {
+		uids[i] = ch.uid
+		ids[i] = ch.id
+	}
+	return uids, ids
+}
+
+func (st *StatsTree) getAllChildren(root *StatsNode) []*StatsNode {
+	if root == nil {
+		return make([]*StatsNode, 0)
+	}
+	result := []*StatsNode{root}
+	if root.children == nil {
+		return result
+	}
+	for _, id := range root.children {
+		ch := st.byID[id]
+		result = append(result, st.getAllChildren(ch)...)
+	}
+	return result
+}
+
 func NewStatsTree() *StatsTree {
 	st := new(StatsTree)
 	st.byID = make(map[int64]*StatsNode)

@@ -2,68 +2,53 @@ package cache
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 )
 
 type TagsStatsCache interface {
-	Refresh() error
-	GetChildren(rootUIDs []string) ([]string, []int64)
-	GetHistogram() ClassByTypeStats
+	Provider
+	GetTree() *StatsTree
 }
 
 type TagsStatsCacheImpl struct {
-	mdb  *sql.DB
-	tree *StatsTree
+	mdb      *sql.DB
+	tree     *StatsTree
+	interval int64
+}
+
+func (s *TagsStatsCacheImpl) Interval() int64 {
+	return s.interval
+}
+
+func (s *TagsStatsCacheImpl) String() string {
+	return "TagsStatsCacheImpl"
 }
 
 func NewTagsStatsCacheImpl(mdb *sql.DB) TagsStatsCache {
 	stats := new(TagsStatsCacheImpl)
 	stats.mdb = mdb
+	// Convert time.Duration to int64
+	// So we would have refresh intervals in integer multiple of a second
+	viper.SetDefault("cache.refresh-sources-and-tags", 24*time.Hour)
+	stats.interval = int64(viper.GetDuration("cache.refresh-search-stats").Truncate(time.Second).Seconds())
+	stats.tree = NewStatsTree()
 	return stats
+}
+
+func (s *TagsStatsCacheImpl) GetTree() *StatsTree {
+	return s.tree
 }
 
 func (s *TagsStatsCacheImpl) Refresh() error {
 	err := s.load()
-	return errors.Wrap(err, "Load tags and sources stats.")
-}
-
-func (s *TagsStatsCacheImpl) GetHistogram() ClassByTypeStats {
-	return s.tree.flatten()
-}
-
-func (s *TagsStatsCacheImpl) GetChildren(rootUIDs []string) ([]string, []int64) {
-	chs := make([]*StatsNode, 0)
-	for _, rootUID := range rootUIDs {
-		root := s.tree.byUID[rootUID]
-		chs = append(chs, s.getAllChildren(root)...)
-	}
-	uids := make([]string, len(chs))
-	ids := make([]int64, len(chs))
-	for i, ch := range chs {
-		uids[i] = ch.uid
-		ids[i] = ch.id
-	}
-	return uids, ids
-}
-
-func (s *TagsStatsCacheImpl) getAllChildren(root *StatsNode) []*StatsNode {
-	if root == nil {
-		return make([]*StatsNode, 0)
-	}
-	result := []*StatsNode{root}
-	if root.children == nil {
-		return result
-	}
-	for _, id := range root.children {
-		ch := s.tree.byID[id]
-		result = append(result, s.getAllChildren(ch)...)
-	}
-	return result
+	return errors.Wrap(err, "Load tags stats.")
 }
 
 func (s *TagsStatsCacheImpl) load() error {
@@ -82,7 +67,6 @@ func (s *TagsStatsCacheImpl) load() error {
 	}
 	defer rows.Close()
 
-	tags := NewStatsTree()
 	for rows.Next() {
 		var uid string
 		var id int64
@@ -103,14 +87,13 @@ func (s *TagsStatsCacheImpl) load() error {
 			}
 		}
 
-		tags.insert(id, parentID.Int64, uid, ctName, count)
+		s.tree.insert(id, parentID.Int64, uid, ctName, count)
 	}
 	if err := rows.Err(); err != nil {
 		return errors.Wrap(err, "rows.Err()")
 	}
 
-	tags.accumulate()
-	tags.flatten()
-	s.tree = tags
+	s.tree.accumulate()
+	s.tree.flatten()
 	return nil
 }

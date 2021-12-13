@@ -81,12 +81,7 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	//GRAMMARS, err = search.MakeGrammars(viper.GetString("elasticsearch.grammars"), esc, TOKENS_CACHE, VARIABLES)
 	//utils.Must(err)
 
-	viper.SetDefault("cache.refresh-search-stats", 5*time.Minute)
-	refreshIntervals := map[string]time.Duration{
-		"SearchStats":        viper.GetDuration("cache.refresh-search-stats"),
-		"TagAndSourcesStats": viper.GetDuration("cache.refresh-sources-and-tags"),
-	}
-	CACHE = cache.NewCacheManagerImpl(DB, refreshIntervals)
+	CACHE = cache.NewCacheManagerImpl(DB)
 
 	return clock
 }
