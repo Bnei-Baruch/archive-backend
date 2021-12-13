@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
-	"strings"
-	"time"
 )
 
 func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*elastic.SearchResult, error) {
@@ -56,16 +57,20 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 
 func combineBySource(byLang map[string]*elastic.SearchResult) map[string]*elastic.SearchResult {
 	for l, r := range byLang {
-		hitByS := make(map[string]*elastic.SearchHit)
+		hitBySource := make(map[string]*elastic.SearchHit)
+		hitsWithoutSource := []*elastic.SearchHit{}
 		for _, h := range r.Hits.Hits {
 			suid := getHitSourceUID(h)
-			if _, ok := hitByS[suid]; !ok && suid != "" {
-				hitByS[suid] = h
+			if suid == "" {
+				hitsWithoutSource = append(hitsWithoutSource, h)
+			} else if _, ok := hitBySource[suid]; !ok {
+				hitBySource[suid] = h
 			}
 		}
 
 		byLang[l].Hits = new(elastic.SearchHits)
-		for k, h := range hitByS {
+		byLang[l].Hits.Hits = hitsWithoutSource
+		for k, h := range hitBySource {
 			newH := &elastic.SearchHit{
 				Source:      h.Source,
 				Type:        consts.SEARCH_RESULT_LESSONS_SERIES,
@@ -111,5 +116,6 @@ func getHitSourceUID(hit *elastic.SearchHit) string {
 	for k, _ := range keys {
 		list = append(list, k)
 	}
-	return strings.Join(list, "_")
+	ret := strings.Join(list, "_")
+	return ret
 }
