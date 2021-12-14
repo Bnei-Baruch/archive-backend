@@ -2380,7 +2380,7 @@ func appendCollectionTagsFilterMods(cm cache.CacheManager, exec boil.Executor, m
 	if len(f.Tags) == 0 {
 		return nil
 	}
-	uids, _ := cm.TagsStats().GetTree().GetChildren(f.Tags)
+	uids, _ := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
 	//use Raw query because of need to use operator ?
 	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
@@ -2461,10 +2461,7 @@ func prepareNestedSources(cm cache.CacheManager, exec boil.Executor, f SourcesFi
 	// blend in requested sources
 	sourceUids = append(sourceUids, f.Sources...)
 
-	uids, ids := cm.SourcesStats().GetTree().GetChildren(sourceUids)
-
-	uids = utils.ClearDuplicateString(uids)
-	ids = utils.ClearDuplicateInt64(ids)
+	uids, ids := cm.SourcesStats().GetTree().GetUniqueChildren(sourceUids)
 
 	return ids, uids, nil
 }
@@ -2473,7 +2470,7 @@ func appendTagsFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.
 	if len(f.Tags) == 0 {
 		return nil
 	}
-	_, ids := cm.TagsStats().GetTree().GetChildren(f.Tags)
+	_, ids := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
 	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {

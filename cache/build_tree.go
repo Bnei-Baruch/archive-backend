@@ -1,6 +1,10 @@
 package cache
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/Bnei-Baruch/archive-backend/utils"
+)
 
 type Histogram map[string]int
 
@@ -27,6 +31,10 @@ type StatsTree struct {
 	byUID map[string]*StatsNode
 }
 
+func (st *StatsTree) GetUniqueChildren(rootUIDs []string) ([]string, []int64) {
+	uids, ids := st.GetChildren(rootUIDs)
+	return utils.ClearDuplicateString(uids), utils.ClearDuplicateInt64(ids)
+}
 func (st *StatsTree) GetChildren(rootUIDs []string) ([]string, []int64) {
 	chs := make([]*StatsNode, 0)
 	for _, rootUID := range rootUIDs {

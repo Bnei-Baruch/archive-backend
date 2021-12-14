@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/spf13/viper"
 
 	"github.com/Bnei-Baruch/archive-backend/es"
 
@@ -54,7 +51,6 @@ type SearchStatsCacheImpl struct {
 	holidayYears                    map[string]map[string]int
 	sourcesByPositionAndParent      map[string]string
 	programsByCollectionAndPosition map[string]string
-	interval                        int64
 }
 
 func NewSearchStatsCacheImpl(mdb *sql.DB, sources, tags ClassByTypeStats) SearchStatsCache {
@@ -62,15 +58,7 @@ func NewSearchStatsCacheImpl(mdb *sql.DB, sources, tags ClassByTypeStats) Search
 	ssc.mdb = mdb
 	ssc.sources = sources
 	ssc.tags = tags
-	// Convert time.Duration to int64
-	// So we would have refresh intervals in integer multiple of a second
-	viper.SetDefault("cache.refresh-search-stats", 5*time.Minute)
-	ssc.interval = int64(viper.GetDuration("cache.refresh-search-stats").Truncate(time.Second).Seconds())
 	return ssc
-}
-
-func (ssc *SearchStatsCacheImpl) Interval() int64 {
-	return ssc.interval
 }
 
 func (ssc *SearchStatsCacheImpl) String() string {

@@ -2,11 +2,9 @@ package cache
 
 import (
 	"database/sql"
-	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -18,13 +16,8 @@ type TagsStatsCache interface {
 }
 
 type TagsStatsCacheImpl struct {
-	mdb      *sql.DB
-	tree     *StatsTree
-	interval int64
-}
-
-func (s *TagsStatsCacheImpl) Interval() int64 {
-	return s.interval
+	mdb  *sql.DB
+	tree *StatsTree
 }
 
 func (s *TagsStatsCacheImpl) String() string {
@@ -34,10 +27,6 @@ func (s *TagsStatsCacheImpl) String() string {
 func NewTagsStatsCacheImpl(mdb *sql.DB) TagsStatsCache {
 	stats := new(TagsStatsCacheImpl)
 	stats.mdb = mdb
-	// Convert time.Duration to int64
-	// So we would have refresh intervals in integer multiple of a second
-	viper.SetDefault("cache.refresh-sources-and-tags", 24*time.Hour)
-	stats.interval = int64(viper.GetDuration("cache.refresh-search-stats").Truncate(time.Second).Seconds())
 	stats.tree = NewStatsTree()
 	return stats
 }

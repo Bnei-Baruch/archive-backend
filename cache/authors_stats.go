@@ -2,12 +2,10 @@ package cache
 
 import (
 	"database/sql"
-	"time"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 )
@@ -18,9 +16,8 @@ type AuthorsStatsCache interface {
 }
 
 type AuthorsStatsCacheImpl struct {
-	mdb      *sql.DB
-	byCode   map[string][]string
-	interval int64
+	mdb    *sql.DB
+	byCode map[string][]string
 }
 
 func NewAuthorsStatsCacheImpl(mdbDB *sql.DB) AuthorsStatsCache {
@@ -30,15 +27,7 @@ func NewAuthorsStatsCacheImpl(mdbDB *sql.DB) AuthorsStatsCache {
 	for c, _ := range mdb.AUTHOR_REGISTRY.ByCode {
 		stats.byCode[c] = make([]string, 0)
 	}
-	// Convert time.Duration to int64
-	// So we would have refresh intervals in integer multiple of a second
-	viper.SetDefault("cache.refresh-sources-and-tags", 24*time.Hour)
-	stats.interval = int64(viper.GetDuration("cache.refresh-search-stats").Truncate(time.Second).Seconds())
 	return stats
-}
-
-func (s *AuthorsStatsCacheImpl) Interval() int64 {
-	return s.interval
 }
 
 func (s *AuthorsStatsCacheImpl) String() string {
