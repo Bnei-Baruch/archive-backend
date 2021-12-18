@@ -483,7 +483,7 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	}
 
 	// Keep only unique results by MDB_UID (additional results with a duplicate MDB_UID might be added by Grammar).
-	unique := uniqueHitsByMdbUid(concatenated, []string{consts.INTENT_INDEX_TAG, consts.INTENT_INDEX_SOURCE})
+	unique := uniqueHitsByMdbUid(concatenated, []string{consts.INTENT_INDEX_TAG, consts.INTENT_INDEX_SOURCE}, []string{"lessons-series"})
 
 	// Apply sorting.
 	if sortBy == consts.SORT_BY_RELEVANCE {
@@ -532,12 +532,12 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	return result, nil
 }
 
-func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string) []*elastic.SearchHit {
+func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string, typesToIgnore []string) []*elastic.SearchHit {
 	unique := make([]*elastic.SearchHit, 0)
 	mdbMap := make(map[string]*elastic.SearchHit)
 	for _, hit := range hits {
 		var mdbUid es.MdbUid
-		if hit.Score != nil && !utils.Contains(utils.Is(indexesToIgnore), hit.Index) {
+		if hit.Score != nil && !utils.Contains(utils.Is(indexesToIgnore), hit.Index) && !utils.Contains(utils.Is(typesToIgnore), hit.Type) {
 			if err := json.Unmarshal(*hit.Source, &mdbUid); err == nil {
 				if mdbUid.MDB_UID != "" {
 					// Uncomment for debug
