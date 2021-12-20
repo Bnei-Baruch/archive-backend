@@ -344,7 +344,10 @@ def set_up_backend(name):
         (returncode, stdout, stderr) = run_command(['mkdir', '%s/data/es' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        (returncode, stdout, stderr) = run_command(['cp', './search/eval.html', '%s/search' % backend_dir(name)])
+        (returncode, stdout, stderr) = run_command(['mkdir', '%s/search' % backend_dir(name)])
+        if returncode != 0:
+            return 'stderr: %s, stdout: %s' % (stderr, stdout)
+        (returncode, stdout, stderr) = run_command(['cp', './search/eval.html', '%s/search/' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
         demos[name]['backend_port'] = get_backend_port()
