@@ -78,12 +78,12 @@ http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.h
 
 ![alt text](https://image.prntscr.com/image/PzmaOTOMQX2Bds_Dv_cXSA.png)
 
-3. Download Elasticsearch 6.8.2 from
-https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.2.zip
+3. Download Elasticsearch 6.8.21 from
+https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.21.zip
 
-    Extract it to C:\elasticsearch-6.8.2
+    Extract it to C:\elasticsearch-6.8.21
 
-    If Elasticsearch keep crashing, consider adding these lines to **jvm.options** file in C:\elasticsearch-6.8.2\config
+    If Elasticsearch keep crashing, consider adding these lines to **jvm.options** file in C:\elasticsearch-6.8.21\config
 
     * -Xms2g
     * -Xmx2g
@@ -133,16 +133,14 @@ https://www.python.org/downloads/
         ```Shell
         C:\Users\[USER]\go\src\github.com\Bnei-Baruch\archive-backend>python C:\Users\[USER]\go\src\github.com\Bnei-Baruch\archive-backend\es\mappings\make.py
         ```
-    2. From the root path of the project, type:
-        ```Shell
-        go-bindata -debug data/...
-        ```
-    3. Edit bindata.go file (located in the root folder) and replace "package main" with "package bindata".
-    4. Move the modified bindata.go file to /bindata folder (delete old bindata.go from /bindata if exist and make sure the bindata.go is not exist any more in the root folder).
-    5. Repeat this steps any time make.py is changed and executed.
-## Install go-bindata
+    2. Repeat any time make.py is changed and executed.
+   
 
-go get -u github.com/jteeuwen/go-bindata/...
+   *Note* on MacOS I run it from the es/mappings folder
+   ```shell
+   $ cd es/mappings
+   $ python make.py
+   ```
 
 ## License
 

@@ -56,6 +56,7 @@ type Collection struct {
 
 type ContentUnit struct {
 	MDB_UID                 string      `json:"mdb_uid"`
+	UIDForCreate            string      `json:"uid_for_create"`
 	TypedUIDs               []string    `json:"typed_uids"`
 	Name                    string      `json:"name,omitempty"`
 	Description             string      `json:"description,omitempty"`
@@ -447,8 +448,12 @@ func addContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (strin
 		mdbContentUnit = *cup
 	} else {
 		mdbContentUnit = mdbmodels.ContentUnit{
-			UID:    utils.GenerateUID(8),
-			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
+			UID:       utils.GenerateUID(8),
+			TypeID:    mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
+			Published: true,
+		}
+		if cu.UIDForCreate != "" {
+			mdbContentUnit.UID = cu.UIDForCreate
 		}
 		if err := mdbContentUnit.Insert(common.DB); err != nil {
 			return "", err
@@ -894,27 +899,19 @@ func updateSource(source Source, lang string) (string, int64, error) {
 	}
 
 	// Add folder for source files
-	folder, err := es.SourcesFolder()
-	if err != nil {
-		return "", 0, err
-	}
-	uidPath := path.Join(folder, mdbSource.UID)
+	uidPath := path.Join(es.SourcesFolder(), mdbSource.UID)
 	if _, err := os.Stat(uidPath); os.IsNotExist(err) {
 		err = os.MkdirAll(uidPath, os.FileMode(0775))
 		if err != nil {
 			return "", 0, err
 		}
 	}
-	return mdbSource.UID, mdbSource.ID, nil
 
+	return mdbSource.UID, mdbSource.ID, nil
 }
 
 func updateSourceFileContent(uid string, lang string) error {
-	folder, err := es.SourcesFolder()
-	if err != nil {
-		return err
-	}
-	uidPath := path.Join(folder, uid)
+	uidPath := path.Join(es.SourcesFolder(), uid)
 	jsonPath := path.Join(uidPath, "index.json")
 	contentFileName := fmt.Sprintf("sample-content-%s.docx", lang)
 	contentPath := path.Join(uidPath, contentFileName)

@@ -422,9 +422,9 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	intentsCount := make(map[string][]Intent)
 	minScoreByLandingPage := make(map[string]float64)
 	queryTermIsNumber, queryTermHasDigit := utils.HasNumeric(query.Term)
-	// In case our query is numeric only, we ignore intents of "program\source position without term" to avoid irrelavnt results.
+	// In case our query is numeric only, we ignore intents of "source position without term" to avoid irrelavnt results.
 	// Also we support "program with position without term" intents only if we have a numeric chapter as part of the query.
-	addProgramPositionWithoutTerm := !queryTermIsNumber && queryTermHasDigit
+	addProgramPositionWithoutTerm := queryTermHasDigit
 	addSourcePositionWithoutTerm := !queryTermIsNumber
 	if addSourcePositionWithoutTerm {
 		for filterKey := range query.Filters {
@@ -524,6 +524,10 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 					if programCollection != "" && position != "" {
 						break
 					}
+				}
+				if programCollection == "" {
+					// Assuming the user is looking for new life program
+					programCollection = consts.PROGRAM_COLLECTION_NEW_LIFE
 				}
 				programUid := e.cache.SearchStats().GetProgramByCollectionAndPosition(programCollection, position)
 				if programUid == nil {
@@ -873,6 +877,53 @@ func (e *ESEngine) contentUnitHitFromSql(uid string, language string) (*elastic.
 	return hit, nil
 }
 
+// return: hit result, hit mdb uid, error
+func (e *ESEngine) contentUnitHitBySourceFromSql(sourceUid string, contentType string, language string) (*elastic.SearchHit, string, error) {
+	var title string
+	var uid string
+	var properties json.RawMessage
+	var effectiveDate es.EffectiveDate
+
+	contentTypeId := mdb.CONTENT_TYPE_REGISTRY.ByName[contentType].ID
+
+	queryMask := `select cu.uid, cu.properties, cun.name
+		from content_units cu join content_unit_i18n cun on cu.id = cun.content_unit_id
+		join content_units_sources cus on cu.id = cus.content_unit_id
+		join sources s on s.id = cus.source_id
+		where cu.secure = %d and published IS TRUE
+		and s.uid = '%s' and cu.type_id = %d and cun.language = '%s'
+		limit 1`
+	query := fmt.Sprintf(queryMask, consts.SEC_PUBLIC, sourceUid, contentTypeId, language)
+	err := e.mdb.QueryRow(query).Scan(&uid, &properties, &title)
+	if err != nil {
+		return nil, "", err
+	}
+
+	err = json.Unmarshal(properties, &effectiveDate)
+	if err != nil {
+		return nil, "", err
+	}
+
+	result := es.Result{
+		EffectiveDate: effectiveDate.EffectiveDate,
+		MDB_UID:       uid,
+		ResultType:    consts.ES_RESULT_TYPE_UNITS,
+		Title:         title,
+	}
+
+	resultJson, err := json.Marshal(result)
+	if err != nil {
+		return nil, "", err
+	}
+
+	hit := &elastic.SearchHit{
+		Source: (*json.RawMessage)(&resultJson),
+		Type:   "result",
+		Index:  consts.GRAMMAR_GENERATED_CU_HIT,
+	}
+	return hit, uid, nil
+}
+
 func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position *string, leafPrefixType *consts.PositionIndexType) (string, error) {
 	queryMask := `with recursive sourcesPath as (
 		select s.id, s.uid, s.parent_id, sn.name from source_i18n sn
@@ -959,28 +1010,66 @@ func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string
 	ciScore := score * 0.98 // lower classification intents score to display the source above them
 	intents := []Intent{}
 	if getLessonCI {
-		lessonsIntent := ClassificationIntent{
-			ResultType:  consts.ES_RESULT_TYPE_SOURCES,
-			MDB_UID:     source,
-			ContentType: consts.CT_LESSON_PART,
-			Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_LESSON_PART),
-			Score:       &ciScore,
-			Explanation: explanation,
-			Title:       title, // Actually this value is generated in client for classification intent results.
+		isEnoughUnits := e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.CLASSIFICATION_FROM_GRAMMAR_INTENTS_MIN_UNITS, consts.CT_LESSON_PART)
+		isOneUnit := e.cache.SearchStats().IsSourceHasSingleUnit(source, consts.CT_LESSON_PART)
+		if isEnoughUnits {
+			if isOneUnit {
+				singleHit, mdbUid, err := e.contentUnitHitBySourceFromSql(source, consts.CT_LESSON_PART, language)
+				if err != nil {
+					return nil, err
+				}
+				sliScore := ciScore * 0.98 // lower single lesson intents score to display the classification intents above them
+				singleLessonIntent := GrammarIntent{
+					Score:           sliScore,
+					Explanation:     &explanation,
+					SingleHit:       singleHit,
+					SingleHitMdbUid: &mdbUid,
+				}
+				intents = append(intents, Intent{"", language, singleLessonIntent})
+			} else {
+				lessonsCarouselIntent := ClassificationIntent{
+					ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+					MDB_UID:     source,
+					ContentType: consts.CT_LESSON_PART,
+					Exist:       true,
+					Score:       &ciScore,
+					Explanation: explanation,
+					Title:       title, // Actually this value is generated in client for classification intent results.
+				}
+				intents = append(intents, Intent{consts.INTENT_TYPE_SOURCE, language, lessonsCarouselIntent})
+			}
 		}
-		intents = append(intents, Intent{consts.INTENT_TYPE_SOURCE, language, lessonsIntent})
 	}
 	if getProgramCI {
-		programsIntent := ClassificationIntent{
-			ResultType:  consts.ES_RESULT_TYPE_SOURCES,
-			MDB_UID:     source,
-			ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER,
-			Exist:       e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.INTENTS_MIN_UNITS, consts.CT_VIDEO_PROGRAM_CHAPTER),
-			Score:       &ciScore,
-			Explanation: explanation,
-			Title:       title, // Actually this value is generated in client for classification intent results.
+		isEnoughUnits := e.cache.SearchStats().IsSourceWithEnoughUnits(source, consts.CLASSIFICATION_FROM_GRAMMAR_INTENTS_MIN_UNITS, consts.CT_VIDEO_PROGRAM_CHAPTER)
+		isOneUnit := e.cache.SearchStats().IsSourceHasSingleUnit(source, consts.CT_VIDEO_PROGRAM_CHAPTER)
+		if isEnoughUnits {
+			if isOneUnit {
+				singleHit, mdbUid, err := e.contentUnitHitBySourceFromSql(source, consts.CT_VIDEO_PROGRAM_CHAPTER, language)
+				if err != nil {
+					return nil, err
+				}
+				spiScore := ciScore * 0.98 // lower single program intents score to display the classification intents above them
+				singleProgramIntent := GrammarIntent{
+					Score:           spiScore,
+					Explanation:     &explanation,
+					SingleHit:       singleHit,
+					SingleHitMdbUid: &mdbUid,
+				}
+				intents = append(intents, Intent{"", language, singleProgramIntent})
+			} else {
+				programsCarouselIntent := ClassificationIntent{
+					ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+					MDB_UID:     source,
+					ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER,
+					Exist:       true,
+					Score:       &ciScore,
+					Explanation: explanation,
+					Title:       title, // Actually this value is generated in client for classification intent results.
+				}
+				intents = append(intents, Intent{consts.INTENT_TYPE_SOURCE, language, programsCarouselIntent})
+			}
 		}
-		intents = append(intents, Intent{consts.INTENT_TYPE_SOURCE, language, programsIntent})
 	}
 	if getSourceGI {
 		srcResult := es.Result{

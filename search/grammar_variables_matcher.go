@@ -122,8 +122,8 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 			varDivType = values[0]
 		}
 	}
-	if varPosition == "" || varProgramCollection == "" {
-		log.Warningf("Intent of program by position must have one appearance of $Position and one appearance of $Program")
+	if varPosition == "" {
+		log.Warningf("Intent of program by position must have one appearance of $Position")
 		return false
 	}
 	if varDivType != "" {
@@ -135,6 +135,9 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 		// Letter as position is not supported for programs, only for sources.
 		return false
 	}
+	if varProgramCollection == "" {
+		varProgramCollection = consts.PROGRAM_COLLECTION_NEW_LIFE
+	}
 	c := cm.SearchStats().GetProgramByCollectionAndPosition(varProgramCollection, varPosition)
 	return c != nil
 }
@@ -142,6 +145,7 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 func filterByProgramWithoutTermMatch(vMap map[string][]string) bool {
 	hasVarProgram := false
 	hasVarContentType := false
+	hasVarPosition := false
 	for variable, values := range vMap {
 		if variable == consts.VAR_PROGRAM {
 			if hasVarProgram || len(values) != 1 { //  Disable if we have more than one $Program appereance or value
@@ -149,6 +153,13 @@ func filterByProgramWithoutTermMatch(vMap map[string][]string) bool {
 				return false
 			}
 			hasVarProgram = true
+		}
+		if variable == consts.VAR_POSITION {
+			if hasVarPosition || len(values) != 1 { //  Disable if we have more than one $Position appereance or value
+				log.Warningf("Number of $Position appearances or values in 'by_program_without_term' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarPosition = true
 		}
 		if variable == consts.VAR_CONTENT_TYPE {
 			if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
@@ -163,7 +174,7 @@ func filterByProgramWithoutTermMatch(vMap map[string][]string) bool {
 		}
 	}
 	if !hasVarProgram {
-		log.Warningf("Filter intent 'by program without term' must have one appearance $Program")
+		log.Warningf("Filter intent 'by program without term' must have one appearance of $Program")
 		return false
 	}
 	return true
