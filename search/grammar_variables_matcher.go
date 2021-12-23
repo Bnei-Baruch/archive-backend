@@ -344,7 +344,7 @@ func filterByDateMatch(vMap map[string][]string) bool {
 			hasVarContentType = true
 		}
 		if variable == consts.VAR_DATE {
-			if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $Date appereance or value
+			if hasVarDate || len(values) != 1 { //  Disable if we have more than one $Date appereance or value
 				log.Warningf("Number of $Date appearances or values in 'by_date' rule is not 1. Values: %+v", values)
 				return false
 			}
