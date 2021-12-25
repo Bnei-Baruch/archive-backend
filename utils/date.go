@@ -37,7 +37,11 @@ func FormatDate(d time.Time, format string, addOrdinal bool, addDayZeroPrefix bo
 	values := []string{}
 	fd := func() string {
 		val := strings.Replace(format, "yyyy", strconv.Itoa(d.Year()), 1)
-		val = strings.Replace(val, "yy", strconv.Itoa(d.Year()%100), 1)
+		shortYear := strconv.Itoa(d.Year() % 100)
+		if len(shortYear) == 1 {
+			shortYear = fmt.Sprintf("0%s", shortYear)
+		}
+		val = strings.Replace(val, "yy", shortYear, 1)
 		return val
 	}
 	val := fd()
