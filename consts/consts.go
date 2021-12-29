@@ -404,7 +404,8 @@ const ES_RESULT_TYPE_TWEETS = "tweets"
 
 // Result of many tweets in one hit
 const SEARCH_RESULT_TWEETS_MANY = "tweets_many"
-const SEARCH_RESULT_LESSONS_SERIES = "lessons_series"
+const SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE = "lessons_series_by_source"
+const SEARCH_RESULT_LESSONS_SERIES_BY_TAG = "lessons_series_by_tag"
 
 // Typed UIDs and Filter
 const ES_UID_TYPE_CONTENT_UNIT = "content_unit"

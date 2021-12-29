@@ -1477,7 +1477,7 @@ func evalResultToHitSources(result EvalResult) ([]HitSource, error) {
 					}
 					hitSource.CarrouselHitSources = append(hitSource.CarrouselHitSources, carrouselHitSource)
 				}
-			} else if hit.Type == consts.SEARCH_RESULT_LESSONS_SERIES {
+			} else if hit.Type == consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE || hit.Type == consts.SEARCH_RESULT_LESSONS_SERIES_BY_TAG {
 				hitSource.Score = *hit.Score
 				hitSource.ContentType = hit.Type
 				hitSource.ResultType = hit.Type

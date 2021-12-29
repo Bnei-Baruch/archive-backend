@@ -81,7 +81,7 @@ func combineBySourceOrTag(byLang map[string]*elastic.SearchResult) map[string]*e
 		for k, h := range hitBySource {
 			newH := &elastic.SearchHit{
 				Source:      h.Source,
-				Type:        consts.SEARCH_RESULT_LESSONS_SERIES,
+				Type:        consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE,
 				Score:       h.Score,
 				Uid:         k,
 				Explanation: h.Explanation,
@@ -92,10 +92,10 @@ func combineBySourceOrTag(byLang map[string]*elastic.SearchResult) map[string]*e
 			byLang[l].Hits.TotalHits++
 			byLang[l].Hits.Hits = append(byLang[l].Hits.Hits, newH)
 		}
-		for k, h := range hitByTag { //TBT
+		for k, h := range hitByTag {
 			newH := &elastic.SearchHit{
 				Source:      h.Source,
-				Type:        consts.SEARCH_RESULT_LESSONS_SERIES,
+				Type:        consts.SEARCH_RESULT_LESSONS_SERIES_BY_TAG,
 				Score:       h.Score,
 				Uid:         k,
 				Explanation: h.Explanation,
