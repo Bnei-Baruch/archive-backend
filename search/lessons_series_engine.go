@@ -52,25 +52,47 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 		}
 	}
 
-	return combineBySource(byLang), nil
+	return combineBySourceOrTag(byLang), nil
 }
 
-func combineBySource(byLang map[string]*elastic.SearchResult) map[string]*elastic.SearchResult {
+func combineBySourceOrTag(byLang map[string]*elastic.SearchResult) map[string]*elastic.SearchResult {
 	for l, r := range byLang {
 		hitBySource := make(map[string]*elastic.SearchHit)
-		hitsWithoutSource := []*elastic.SearchHit{}
+		hitByTag := make(map[string]*elastic.SearchHit)
+		hitsWithoutSourceOrTag := []*elastic.SearchHit{}
+		var maxScore *float64
 		for _, h := range r.Hits.Hits {
-			suid := getHitSourceUID(h)
-			if suid == "" {
-				hitsWithoutSource = append(hitsWithoutSource, h)
-			} else if _, ok := hitBySource[suid]; !ok {
+			suid, tuid := getHitSourceAndTag(h)
+			if suid != "" {
 				hitBySource[suid] = h
+			} else if tuid != "" {
+				hitByTag[tuid] = h
+			} else {
+				hitsWithoutSourceOrTag = append(hitsWithoutSourceOrTag, h)
+				if maxScore == nil || *h.Score > *maxScore {
+					maxScore = h.Score
+				}
 			}
 		}
 
 		byLang[l].Hits = new(elastic.SearchHits)
-		byLang[l].Hits.Hits = hitsWithoutSource
+		byLang[l].Hits.MaxScore = maxScore
+		byLang[l].Hits.Hits = hitsWithoutSourceOrTag
 		for k, h := range hitBySource {
+			newH := &elastic.SearchHit{
+				Source:      h.Source,
+				Type:        consts.SEARCH_RESULT_LESSONS_SERIES,
+				Score:       h.Score,
+				Uid:         k,
+				Explanation: h.Explanation,
+			}
+			if byLang[l].Hits.MaxScore == nil || *h.Score > *byLang[l].Hits.MaxScore {
+				byLang[l].Hits.MaxScore = h.Score
+			}
+			byLang[l].Hits.TotalHits++
+			byLang[l].Hits.Hits = append(byLang[l].Hits.Hits, newH)
+		}
+		for k, h := range hitByTag { //TBT
 			newH := &elastic.SearchHit{
 				Source:      h.Source,
 				Type:        consts.SEARCH_RESULT_LESSONS_SERIES,
@@ -91,31 +113,40 @@ func combineBySource(byLang map[string]*elastic.SearchResult) map[string]*elasti
 	return byLang
 }
 
-func getHitSourceUID(hit *elastic.SearchHit) string {
+func getHitSourceAndTag(hit *elastic.SearchHit) (string, string) {
 	var res es.Result
 	if err := json.Unmarshal(*hit.Source, &res); err != nil {
-		return ""
+		return "", ""
 	}
-	keys := make(map[string]bool)
+	tagKeys := make(map[string]bool)
+	srcKeys := make(map[string]bool)
 
 	if res.ResultType != consts.ES_RESULT_TYPE_COLLECTIONS {
-		return ""
+		return "", ""
 	}
-
 	for _, tId := range res.TypedUids {
 		l := strings.Split(tId, ":")
-		if l[0] != consts.ES_UID_TYPE_SOURCE || l[1] == "" {
-			continue
+		if l[0] == consts.ES_UID_TYPE_TAG && l[1] != "" {
+			if _, ok := tagKeys[l[1]]; !ok { // avoid duplicates
+				tagKeys[l[1]] = true
+			}
 		}
-		//clear from duplicates
-		if _, ok := keys[l[1]]; !ok {
-			keys[l[1]] = true
+		if l[0] == consts.ES_UID_TYPE_SOURCE && l[1] != "" {
+			if _, ok := srcKeys[l[1]]; !ok { // avoid duplicates
+				srcKeys[l[1]] = true
+			}
 		}
 	}
-	var list []string
-	for k, _ := range keys {
-		list = append(list, k)
+	var srcList []string
+	for k := range srcKeys {
+		srcList = append(srcList, k)
 	}
-	ret := strings.Join(list, "_")
-	return ret
+	var tagList []string
+	for k := range tagKeys {
+		tagList = append(tagList, k)
+	}
+	src := strings.Join(srcList, "_")
+	tag := strings.Join(tagList, "_")
+
+	return src, tag
 }

@@ -199,19 +199,27 @@ func contentUnitsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentU
 	return ret
 }
 
-func collectionSource(c *mdbmodels.Collection) string {
+func collectionSourceAndTags(c *mdbmodels.Collection) (string, []string, error) {
+	src := ""
+	tags := []string{}
 	if !c.Properties.Valid {
-		return ""
+		return src, tags, errors.Errorf("collectionSourceAndTags - Collection properties not valid.")
 	}
 	var props map[string]interface{}
 	err := json.Unmarshal(c.Properties.JSON, &props)
 	if err != nil {
-		return ""
+		return src, tags, errors.Wrap(err, "collectionSourceAndTags")
 	}
 	if s, ok := props[consts.ES_UID_TYPE_SOURCE]; ok {
-		return s.(string)
+		src = s.(string)
 	}
-	return ""
+	if t, ok := props["tags"]; ok {
+		itags := t.([]interface{})
+		for _, tagName := range itags {
+			tags = append(tags, tagName.(string))
+		}
+	}
+	return src, tags, nil
 }
 
 func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexErrors {
@@ -240,7 +248,10 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 			}
 		}
 	}
-	source := collectionSource(c)
+	src, tags, err := collectionSourceAndTags(c)
+	if err != nil {
+		log.Error(err)
+	}
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
 	for _, i18n := range c.R.CollectionI18ns {
@@ -251,8 +262,13 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 			if programCollectionUID, ok := consts.ARTICLE_COLLECTION_TO_PROGRAM_COLLECTION[c.UID]; ok {
 				typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_COLLECTION, programCollectionUID))
 			}
-			if source != "" {
-				typedUIDs = append(typedUIDs, KeyValue("source", source))
+			if src != "" {
+				typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_SOURCE, src))
+			}
+			if len(tags) > 0 {
+				for _, tag := range tags {
+					typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_TAG, tag))
+				}
 			}
 			filterValues := append(
 				[]string{KeyValue("collections_content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},
