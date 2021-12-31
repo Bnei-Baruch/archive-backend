@@ -18,21 +18,24 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 	mss := e.esc.MultiSearch()
 
 	filter := map[string][]string{consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]: {consts.CT_LESSONS_SERIES}}
-	req, err := NewResultsSearchRequest(
-		SearchRequestOptions{
-			resultTypes:      []string{consts.ES_RESULT_TYPE_COLLECTIONS},
-			index:            "",
-			query:            Query{Term: query.Term, Filters: filter, LanguageOrder: query.LanguageOrder, Deb: query.Deb},
-			sortBy:           consts.SORT_BY_RELEVANCE,
-			from:             0,
-			size:             100,
-			preference:       preference,
-			useHighlight:     false,
-			partialHighlight: false})
-	if err != nil {
-		return nil, err
+	for _, language := range query.LanguageOrder {
+		index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, language)
+		req, err := NewResultsSearchRequest(
+			SearchRequestOptions{
+				resultTypes:      []string{consts.ES_RESULT_TYPE_COLLECTIONS},
+				index:            index,
+				query:            Query{Term: query.Term, Filters: filter, LanguageOrder: query.LanguageOrder, Deb: query.Deb},
+				sortBy:           consts.SORT_BY_RELEVANCE,
+				from:             0,
+				size:             100,
+				preference:       preference,
+				useHighlight:     false,
+				partialHighlight: false})
+		if err != nil {
+			return nil, err
+		}
+		mss.Add(req)
 	}
-	mss.Add(req)
 	before := time.Now()
 	mr, err := mss.Do(context.TODO())
 
