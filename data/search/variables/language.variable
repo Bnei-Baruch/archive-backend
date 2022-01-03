@@ -1,5 +1,11 @@
-en,english => in english
-ru,russian => по русски
-ru,russian => на русском
-he,hebrew  => בעברית
-es,spanish => en español
+en,en => in english
+en,en => english
+ru,ru => по русски
+ru,ru => на русском
+ru,ru => русский
+ru,ru => русски
+ru,ru => русском
+he,he => בעברית
+he,he => עברית
+es,es => en español
+es,es => español

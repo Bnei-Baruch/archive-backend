@@ -295,7 +295,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 			}
 			searchWithoutTerm := text == ""
 			if contentType != "" || programCollection != "" || len(sources) > 0 || mediaLanguage != "" {
-				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Program collection is '%s', Sources are '%+v'.", contentType, text, programCollection, sources)
+				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Program collection is '%s', Sources are '%+v', Media Language '%s'.", contentType, text, programCollection, sources, mediaLanguage)
 				requests := []*elastic.SearchRequest{}
 				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, mediaLanguage, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 				if err != nil {
@@ -1134,7 +1134,7 @@ func (e *ESEngine) selectFilterIntents(intents []Intent) ([]Intent, error) {
 	log.Info("Optional Intents:")
 	for i, intentIs := range grammarIntents {
 		intent := intentIs.(Intent)
-		log.Infof("#%d\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Value.(GrammarIntent).FilterValues)
+		log.Infof("#%d\nType: '%s',\nScore:%v,\nLanguage:%s,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Language, intent.Value.(GrammarIntent).FilterValues)
 	}
 	intentsWithoutTerm, intentsWithTerm := utils.Filter(grammarIntents, func(v interface{}) bool {
 		return v.(Intent).Type == consts.GRAMMAR_TYPE_FILTER_WITHOUT_TERM
@@ -1187,7 +1187,7 @@ func (e *ESEngine) selectFilterIntents(intents []Intent) ([]Intent, error) {
 		}
 		log.Info("SELECTED Intents:")
 		for i, intent := range selected {
-			log.Infof("#%d\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Value.(GrammarIntent).FilterValues)
+			log.Infof("#%d\nType: '%s',\nScore:%v,\nLanguage:%s,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Language, intent.Value.(GrammarIntent).FilterValues)
 		}
 	}
 	if len(selected) > consts.MAX_GRAMMAR_INTENTS_FOR_FILTER_SEARCH {
