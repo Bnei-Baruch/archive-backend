@@ -579,6 +579,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	grammarsFilterIntentsChannel := make(chan []Intent, 1)
 	grammarsFilteredResultsByLangChannel := make(chan map[string][]FilteredSearchResult)
 	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
+	seriesLangChannel := make(chan map[string]*elastic.SearchResult)
 
 	var resultTypes []string
 	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
@@ -636,9 +637,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
-	filterIntents := <-grammarsFilterIntentsChannel
-
-	seriesLangChannel := make(chan map[string]*elastic.SearchResult)
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -653,6 +651,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			seriesLangChannel <- byLang
 		}
 	}()
+
+	filterIntents := <-grammarsFilterIntentsChannel
 
 	if checkTypo {
 		go func() {
