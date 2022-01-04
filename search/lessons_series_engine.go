@@ -9,6 +9,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 )
@@ -16,7 +17,7 @@ import (
 func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*elastic.SearchResult, error) {
 	byLang := make(map[string]*elastic.SearchResult)
 	mss := e.esc.MultiSearch()
-
+	_, queryTermHasDigit := utils.HasNumeric(query.Term)
 	filter := map[string][]string{consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]: {consts.CT_LESSONS_SERIES}}
 	for _, language := range query.LanguageOrder {
 		index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, language)
@@ -55,6 +56,10 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 		}
 	}
 
+	if queryTermHasDigit {
+		// When the query has a number, we assume that the user is looking for a specific collection and we avoid grouping.
+		return byLang, nil
+	}
 	return combineBySourceOrTag(byLang), nil
 }
 
