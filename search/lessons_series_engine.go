@@ -72,9 +72,13 @@ func combineBySourceOrTag(byLang map[string]*elastic.SearchResult) map[string]*e
 		for _, h := range r.Hits.Hits {
 			suid, tuid := getHitSourceAndTag(h)
 			if suid != "" {
-				hitBySource[suid] = h
+				if val, hasKey := hitBySource[suid]; !hasKey || (h.Score != nil && *h.Score > *val.Score) {
+					hitBySource[suid] = h
+				}
 			} else if tuid != "" {
-				hitByTag[tuid] = h
+				if val, hasKey := hitByTag[tuid]; !hasKey || (h.Score != nil && *h.Score > *val.Score) {
+					hitByTag[tuid] = h
+				}
 			} else {
 				hitsWithoutSourceOrTag = append(hitsWithoutSourceOrTag, h)
 				if maxScore == nil || *h.Score > *maxScore {
