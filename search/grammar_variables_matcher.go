@@ -328,6 +328,7 @@ func filterByLanguageMatch(vMap map[string][]string) bool {
 	hasVarContentType := false
 	hasVarSource := false
 	hasVarProgram := false
+	hasVarLanguage := false
 
 	for variable, values := range vMap {
 		if variable == consts.VAR_CONTENT_TYPE {
@@ -351,10 +352,17 @@ func filterByLanguageMatch(vMap map[string][]string) bool {
 			}
 			hasVarProgram = true
 		}
+		if variable == consts.VAR_LANGUAGE {
+			if hasVarLanguage || len(values) != 1 {
+				log.Warningf("Number of $Language appearances or values in 'by_lang' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarLanguage = true
+		}
 	}
 
-	if !(hasVarProgram || hasVarContentType || hasVarSource) {
-		log.Warningf("Filter intent by language must have at least one appearance either of $Source, or $ContentType, or $Program")
+	if !(hasVarProgram || hasVarContentType || hasVarSource || hasVarLanguage) {
+		log.Warningf("Filter intent by language must have at least one appearance either of $Source, or $ContentType, or $Program, or $Language")
 		return false
 	}
 	return true

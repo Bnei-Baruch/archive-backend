@@ -921,7 +921,6 @@ func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position
 	return ret, nil
 }
 
-// TODO: [Kirill] - do we need to add by language here as well?
 func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string][]string, language string, title string, score float64, explanation elastic.SearchExplanation) ([]Intent, error) {
 	var getLessonCI bool
 	var getProgramCI bool
