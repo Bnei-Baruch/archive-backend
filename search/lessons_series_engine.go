@@ -25,7 +25,7 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 			SearchRequestOptions{
 				resultTypes:      []string{consts.ES_RESULT_TYPE_COLLECTIONS},
 				index:            index,
-				query:            Query{Term: query.Term, Filters: filter, LanguageOrder: query.LanguageOrder, Deb: query.Deb},
+				query:            Query{Term: query.Term, ExactTerms: query.ExactTerms, Filters: filter, LanguageOrder: query.LanguageOrder, Deb: query.Deb},
 				sortBy:           consts.SORT_BY_RELEVANCE,
 				from:             0,
 				size:             100,
