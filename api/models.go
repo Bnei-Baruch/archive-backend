@@ -140,6 +140,7 @@ type ContentUnitsRequest struct {
 	WithFiles       bool `json:"with_files" form:"with_files"`
 	WithDerivations bool `json:"with_derivations" form:"with_derivations"`
 	WithTags        bool `json:"with_tags" form:"with_tags"`
+	WithSources     bool `json:"with_sources" form:"with_sources"`
 }
 
 type ContentUnitsResponse struct {
@@ -323,8 +324,8 @@ type ContentUnit struct {
 	OriginalLanguage string                 `json:"original_language,omitempty"`
 	Files            []*File                `json:"files,omitempty"`
 	Collections      map[string]*Collection `json:"collections,omitempty"`
-	Sources          []string               `json:"sources,omitempty"`
-	Tags             []string               `json:"tags,omitempty"`
+	Sources          []string               `json:"sources"`
+	Tags             []string               `json:"tags"`
 	tagIDs           []int64
 	Publishers       []string                `json:"publishers,omitempty"`
 	SourceUnits      map[string]*ContentUnit `json:"source_units,omitempty"`
