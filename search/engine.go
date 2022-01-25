@@ -483,7 +483,7 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	}
 
 	// Keep only unique results by MDB_UID (additional results with a duplicate MDB_UID might be added by Grammar).
-	unique := uniqueHitsByMdbUid(concatenated, []string{consts.INTENT_INDEX_TAG, consts.INTENT_INDEX_SOURCE}, []string{"lessons-series"})
+	unique := uniqueHitsByMdbUid(concatenated, []string{consts.INTENT_INDEX_TAG, consts.INTENT_INDEX_SOURCE}, []string{consts.HT_LESSONS_SERIES})
 
 	// Apply sorting.
 	if sortBy == consts.SORT_BY_RELEVANCE {

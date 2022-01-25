@@ -74,6 +74,9 @@ const (
 	SRC_TYPE_LETTER     = 9
 	SRC_TYPE_ITEM       = 10
 
+	// Hit Types
+	HT_LESSONS_SERIES = "lessons-series"
+
 	// Security levels
 	SEC_PUBLIC    = int16(0)
 	SEC_SENSITIVE = int16(1)
