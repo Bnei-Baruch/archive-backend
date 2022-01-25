@@ -324,8 +324,8 @@ type ContentUnit struct {
 	OriginalLanguage string                 `json:"original_language,omitempty"`
 	Files            []*File                `json:"files,omitempty"`
 	Collections      map[string]*Collection `json:"collections,omitempty"`
-	Sources          []string               `json:"sources"`
-	Tags             []string               `json:"tags"`
+	Sources          []string               `json:"sources,omitempty"`
+	Tags             []string               `json:"tags,omitempty"`
 	tagIDs           []int64
 	Publishers       []string                `json:"publishers,omitempty"`
 	SourceUnits      map[string]*ContentUnit `json:"source_units,omitempty"`
