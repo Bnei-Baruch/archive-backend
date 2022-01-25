@@ -213,7 +213,7 @@ func collectionSourceAndTags(c *mdbmodels.Collection) (string, []string, error) 
 	if s, ok := props[consts.ES_UID_TYPE_SOURCE]; ok {
 		src = s.(string)
 	}
-	if t, ok := props["tags"]; ok {
+	if t, ok := props[consts.ES_UID_TYPE_TAGS]; ok {
 		itags := t.([]interface{})
 		for _, tagName := range itags {
 			tags = append(tags, tagName.(string))
