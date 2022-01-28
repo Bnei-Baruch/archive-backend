@@ -78,12 +78,12 @@ http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.h
 
 ![alt text](https://image.prntscr.com/image/PzmaOTOMQX2Bds_Dv_cXSA.png)
 
-3. Download Elasticsearch 6.8.2 from
-https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.2.zip
+3. Download Elasticsearch 6.8.21 from
+https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.21.zip
 
-    Extract it to C:\elasticsearch-6.8.2
+    Extract it to C:\elasticsearch-6.8.21
 
-    If Elasticsearch keep crashing, consider adding these lines to **jvm.options** file in C:\elasticsearch-6.8.2\config
+    If Elasticsearch keep crashing, consider adding these lines to **jvm.options** file in C:\elasticsearch-6.8.21\config
 
     * -Xms2g
     * -Xmx2g
