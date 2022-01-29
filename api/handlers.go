@@ -2753,9 +2753,19 @@ func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]
 	}
 
 	// Load from DB
+	if language == "iw" {
+		language = "he"
+	}
+	var (
+		languages []string
+		exist     bool
+	)
+	if languages, exist = consts.I18N_LANG_ORDER[language]; !exist {
+		languages = consts.I18N_LANG_ORDER[""]
+	}
 	i18ns, err := mdbmodels.CollectionI18ns(db,
 		qm.WhereIn("collection_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
+		qm.AndIn("language in ?", utils.ConvertArgsString(languages)...)).
 		All()
 	if err != nil {
 		return nil, errors.Wrap(err, "Load collections i18ns from DB")
