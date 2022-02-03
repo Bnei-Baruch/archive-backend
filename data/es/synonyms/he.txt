@@ -164,3 +164,8 @@
 # Used for the search of Rabash Assorted Notes
 רשומה	רשומות
 אירן	איראן
+
+# Added by Yuri at 04.01.22 (not in spreadsheet)
+חכמת	חוכמת
+לחכמת	לחוכמת
+חכמה	חוכמה

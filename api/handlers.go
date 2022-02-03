@@ -1435,6 +1435,9 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 	if r.WithTags {
 		loadTables = append(loadTables, "Tags")
 	}
+	if r.WithSources {
+		loadTables = append(loadTables, "Sources")
+	}
 	if r.WithDerivations {
 		loadTables = append(loadTables,
 			"SourceContentUnitDerivations",
@@ -1460,8 +1463,16 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 		cu := cus[idx]
 		if r.WithTags && len(unit.R.Tags) > 0 {
 			cu.tagIDs = make([]int64, len(unit.R.Tags))
+			cu.Tags = make([]string, len(unit.R.Tags))
 			for i, x := range unit.R.Tags {
 				cu.tagIDs[i] = x.ID
+				cu.Tags[i] = x.UID
+			}
+		}
+		if r.WithSources && len(unit.R.Sources) > 0 {
+			cu.Sources = make([]string, len(unit.R.Sources))
+			for i, x := range unit.R.Sources {
+				cu.Sources[i] = x.UID
 			}
 		}
 	}
