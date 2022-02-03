@@ -316,6 +316,13 @@
                                                         hs.carrousel.map((oneHs) => hitSourceToHtml(oneHs)).join(''),
                                                     '</div>',
                                                 '</div>'].join('');
+                                    } else if (hs.result_type === 'lessons_series') {
+                                        return [
+                                            `<div>${hs.result_type}</div>`,
+                                            `<div></div>`,
+                                            `<div>${hs.mdb_uid}</div>`,
+                                            `<div>${hs.score}</div>`,
+                                        ].join('');
                                     } else {
                                         const titleOrContent = (hs) => hs.title || hs.content || '';
                                         return [

@@ -247,14 +247,14 @@ func (suite *EngineSuite) TestFilterOutDuplicateHits() {
 	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreL, Index: "I1"})
 	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreL, Index: "I1"})
 
-	expected := uniqueHitsByMdbUid(hits, []string{"I2", "I3"})
+	expected := uniqueHitsByMdbUid(hits, []string{"I2", "I3"}, []string{})
 	r.Equal(len(expected), 1)
 	r.Equal(*expected[0].Score, scoreM)
 
 	// Add another hit with uid A but with an ignored index
 
 	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreL, Index: "I2"})
-	expected = uniqueHitsByMdbUid(hits, []string{"I2", "I3"})
+	expected = uniqueHitsByMdbUid(hits, []string{"I2", "I3"}, []string{})
 	r.Equal(len(expected), 2)
 
 	// Add another 3 hits with uid B where one of the hits has an ignored index
@@ -262,7 +262,7 @@ func (suite *EngineSuite) TestFilterOutDuplicateHits() {
 	hits = append(hits, &elastic.SearchHit{Source: srcUidB, Score: &scoreL, Index: "I4"})
 	hits = append(hits, &elastic.SearchHit{Source: srcUidB, Score: &scoreL, Index: "I1"})
 	hits = append(hits, &elastic.SearchHit{Source: srcUidB, Score: &scoreH, Index: "I3"})
-	expected = uniqueHitsByMdbUid(hits, []string{"I2", "I3"})
+	expected = uniqueHitsByMdbUid(hits, []string{"I2", "I3"}, []string{})
 	r.Equal(len(expected), 4)
 
 	scores := make([]int, 0)

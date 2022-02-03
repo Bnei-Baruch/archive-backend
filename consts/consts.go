@@ -74,6 +74,9 @@ const (
 	SRC_TYPE_LETTER     = 9
 	SRC_TYPE_ITEM       = 10
 
+	// Hit Types
+	HT_LESSONS_SERIES = "lessons-series"
+
 	// Security levels
 	SEC_PUBLIC    = int16(0)
 	SEC_SENSITIVE = int16(1)
@@ -413,7 +416,7 @@ var FILTERS = map[string]string{
 	FILTER_SOURCE:                    "source",
 	FILTER_AUTHOR:                    "source",
 	FILTER_UNITS_CONTENT_TYPES:       "content_type",
-	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
+	FILTER_COLLECTIONS_CONTENT_TYPES: "collections_content_type",
 	FILTER_SECTION_SOURCES:           "filter_section_sources",
 	FILTER_LANGUAGE:                  "media_language",
 	FILTER_COLLECTION:                "collection", //  Internally used by grammar. Not available in frontend.
@@ -433,11 +436,14 @@ const ES_RESULT_TYPE_TWEETS = "tweets"
 
 // Result of many tweets in one hit
 const SEARCH_RESULT_TWEETS_MANY = "tweets_many"
+const SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE = "lessons_series_by_source"
+const SEARCH_RESULT_LESSONS_SERIES_BY_TAG = "lessons_series_by_tag"
 
 // Typed UIDs and Filter
 const ES_UID_TYPE_CONTENT_UNIT = "content_unit"
 const ES_UID_TYPE_FILE = "file"
 const ES_UID_TYPE_TAG = "tag"
+const ES_UID_TYPE_TAGS = "tags"
 const ES_UID_TYPE_COLLECTION = "collection"
 const ES_UID_TYPE_SOURCE = "source"
 const ES_UID_TYPE_TWEET = "tweet"
