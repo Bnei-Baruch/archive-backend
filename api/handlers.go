@@ -1834,28 +1834,32 @@ func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardRespon
 	SELECT DISTINCT cu.uid as uid 
 		FROM content_units cu
 		INNER JOIN content_units_tags cut ON cut.content_unit_id = cu.id
+		INNER JOIN content_unit_i18n cui18n ON cui18n.content_unit_id = cu.id
 		WHERE cut.tag_id IN (%[1]s)
 		AND cu.type_id IN (%[2]s)
+		AND cui18n.language = $1
 		AND cu.secure = 0 AND cu.published IS TRUE
-		OFFSET $1 
-		LIMIT $2
+		OFFSET $2 
+		LIMIT $3
 	) UNION ( 
 	SELECT DISTINCT cu.uid
 		FROM content_units cu
 		INNER JOIN content_units_tags cut ON cut.content_unit_id = cu.id
+		INNER JOIN content_unit_i18n cui18n ON cui18n.content_unit_id = cu.id
 		WHERE cut.tag_id IN (%[1]s)
 		AND cu.type_id IN (%[3]s)
+		AND cui18n.language = $1
 		AND cu.id = ANY(SELECT f.content_unit_id FROM files f WHERE f.type IN ('video', 'audio'))
 		AND cu.secure = 0 AND cu.published IS TRUE
-		OFFSET $1 
-		LIMIT $2 
+		OFFSET $2 
+		LIMIT $3 
 	)`,
 		utils.JoinInt64(tids, ","),
 		utils.JoinInt64(textCTids, ","),
 		utils.JoinInt64(mediaCTids, ","),
 	)
 
-	rows, err := queries.Raw(db, q, offset, limit).Query()
+	rows, err := queries.Raw(db, q, r.Language, offset, limit).Query()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1878,6 +1882,8 @@ func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardRespon
 	labels, err := mdbmodels.Labels(db,
 		qm.InnerJoin("label_tag lt ON lt.label_id = id"),
 		qm.WhereIn("lt.tag_id IN (?)", utils.ConvertArgsInt64(tids)...),
+		qm.InnerJoin("label_i18n i18n ON i18n.label_id = id"),
+		qm.WhereIn("i18n.language = ?", r.Language),
 		qm.Load("ContentUnit"),
 		qm.Limit(limit),
 		qm.Offset(offset),
