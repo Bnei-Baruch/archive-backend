@@ -111,18 +111,18 @@ func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.Str
 		candidateField2.SetValid("content")
 		addMaxEdits = true
 	} else if hasRussian {
-		suggestorField = "content.suggest"
+		suggestorField = "content.typo_suggest"
 		candidateField1.SetValid("content")
 		//candidateField2.SetValid("title.language")
 		addMaxEdits = false
 	} else if hasEnglish {
-		suggestorField = "content.suggest"
+		suggestorField = "content.typo_suggest"
 		candidateField1.SetValid("content")
 		//candidateField2 = null.StringFromPtr(nil)
 		addMaxEdits = true
 	} else {
 		//  default settings for all languages
-		suggestorField = "content.suggest"
+		suggestorField = "content.typo_suggest"
 		candidateField1.SetValid("content")
 		//candidateField2 = null.StringFromPtr(nil)
 		addMaxEdits = true

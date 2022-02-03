@@ -488,7 +488,7 @@ RESULTS_TEMPLATE = {
                             "type": "text",
                             "analyzer": lambda x: LANGUAGE_ANALYZER[x],
                         },
-                        "suggest": {
+                        "typo_suggest": {
                             "type": "text",
                             "analyzer": "typo_suggest",
                         },
