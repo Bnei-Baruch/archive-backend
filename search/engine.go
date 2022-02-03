@@ -483,7 +483,7 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	}
 
 	// Keep only unique results by MDB_UID (additional results with a duplicate MDB_UID might be added by Grammar).
-	unique := uniqueHitsByMdbUid(concatenated, []string{consts.INTENT_INDEX_TAG, consts.INTENT_INDEX_SOURCE})
+	unique := uniqueHitsByMdbUid(concatenated, []string{consts.INTENT_INDEX_TAG, consts.INTENT_INDEX_SOURCE}, []string{consts.HT_LESSONS_SERIES})
 
 	// Apply sorting.
 	if sortBy == consts.SORT_BY_RELEVANCE {
@@ -532,12 +532,12 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	return result, nil
 }
 
-func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string) []*elastic.SearchHit {
+func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string, typesToIgnore []string) []*elastic.SearchHit {
 	unique := make([]*elastic.SearchHit, 0)
 	mdbMap := make(map[string]*elastic.SearchHit)
 	for _, hit := range hits {
 		var mdbUid es.MdbUid
-		if hit.Score != nil && !utils.Contains(utils.Is(indexesToIgnore), hit.Index) {
+		if hit.Score != nil && !utils.Contains(utils.Is(indexesToIgnore), hit.Index) && !utils.Contains(utils.Is(typesToIgnore), hit.Type) {
 			if err := json.Unmarshal(*hit.Source, &mdbUid); err == nil {
 				if mdbUid.MDB_UID != "" {
 					// Uncomment for debug
@@ -579,6 +579,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	grammarsFilterIntentsChannel := make(chan []Intent, 1)
 	grammarsFilteredResultsByLangChannel := make(chan map[string][]FilteredSearchResult)
 	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
+	seriesLangChannel := make(chan map[string]*elastic.SearchResult)
 
 	var resultTypes []string
 	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
@@ -633,6 +634,21 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			tweetsByLangChannel <- map[string]*elastic.SearchResult{}
 		} else {
 			tweetsByLangChannel <- tweetsByLang
+		}
+	}()
+
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("ESEngine.DoSearch - Panic searching lesson series: %+v", err)
+				seriesLangChannel <- map[string]*elastic.SearchResult{}
+			}
+		}()
+		if byLang, err := e.LessonsSeries(query, preference); err != nil {
+			log.Errorf("ESEngine.DoSearch - Error searching lesson series: %+v", err)
+			seriesLangChannel <- map[string]*elastic.SearchResult{}
+		} else {
+			seriesLangChannel <- byLang
 		}
 	}()
 
@@ -828,6 +844,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
 		resultsByLang[lang] = append(resultsByLang[lang], tweets)
+	}
+
+	seriesByLang := <-seriesLangChannel
+	for lang, s := range seriesByLang {
+		if _, ok := resultsByLang[lang]; !ok {
+			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+		}
+		resultsByLang[lang] = append(resultsByLang[lang], s)
 	}
 
 	filteredByLang := <-grammarsFilteredResultsByLangChannel
@@ -1052,6 +1076,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 
 			term := query.Term
+
 			for _, lang := range highlightsLangs {
 				if filtered, ok := filteredByLang[lang]; ok {
 					for _, fr := range filtered {

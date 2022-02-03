@@ -28,11 +28,12 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 
+	"github.com/Bnei-Baruch/sqlboiler/queries"
+
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
-	"github.com/Bnei-Baruch/sqlboiler/queries"
 )
 
 const (
@@ -1476,6 +1477,11 @@ func evalResultToHitSources(result EvalResult) ([]HitSource, error) {
 					}
 					hitSource.CarrouselHitSources = append(hitSource.CarrouselHitSources, carrouselHitSource)
 				}
+			} else if hit.Type == consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE || hit.Type == consts.SEARCH_RESULT_LESSONS_SERIES_BY_TAG {
+				hitSource.Score = *hit.Score
+				hitSource.ContentType = hit.Type
+				hitSource.ResultType = hit.Type
+				hitSource.MdbUid = hit.Uid
 			} else {
 				if hit.Score != nil {
 					hitSource.Score = *hit.Score
