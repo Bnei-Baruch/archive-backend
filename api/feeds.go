@@ -11,6 +11,7 @@ import (
 
 	"gopkg.in/gin-gonic/gin.v1"
 
+	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/feeds"
 	"github.com/Bnei-Baruch/archive-backend/utils"
@@ -28,6 +29,7 @@ func FeedRusZohar(c *gin.Context) {
 		Copyright:   copyright,
 	}
 
+	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
 	cur := ContentUnitsRequest{
@@ -47,7 +49,7 @@ func FeedRusZohar(c *gin.Context) {
 
 	mediaTypes := []string{consts.MEDIA_MP3, consts.MEDIA_MP4}
 	languages := []string{consts.LANG_RUSSIAN, consts.LANG_HEBREW}
-	item, err := handleContentUnitsFull(db, cur, mediaTypes, languages)
+	item, err := handleContentUnitsFull(cm, db, cur, mediaTypes, languages)
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -201,8 +203,9 @@ func FeedWSXML(c *gin.Context) {
 		c.String(http.StatusOK, "<lessons />")
 		return
 	}
+	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	item, err := handleContentUnitsFull(db, cur, []string{}, []string{})
+	item, err := handleContentUnitsFull(cm, db, cur, []string{}, []string{})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.String(http.StatusOK, "<lessons />")
@@ -325,8 +328,9 @@ func FeedMorningLesson(c *gin.Context) {
 		mediaTypes = []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
 	}
 
+	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	item, err := handleContentUnitsFull(db, cur, mediaTypes, []string{})
+	item, err := handleContentUnitsFull(cm, db, cur, mediaTypes, []string{})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusOK, []string{})
@@ -406,6 +410,7 @@ func FeedRssPhp(c *gin.Context) {
 		Copyright:   copyright,
 	}
 
+	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
 	cur := ContentUnitsRequest{
@@ -427,7 +432,7 @@ func FeedRssPhp(c *gin.Context) {
 
 	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b}
 	languages := []string{config.Lang}
-	item, err := handleContentUnitsFull(db, cur, mediaTypes, languages)
+	item, err := handleContentUnitsFull(cm, db, cur, mediaTypes, languages)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			createFeed(feed, config.Lang, c)
@@ -474,6 +479,7 @@ func FeedRssVideo(c *gin.Context) {
 		Copyright:   copyright,
 	}
 
+	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
 	cur := ContentUnitsRequest{
@@ -491,7 +497,7 @@ func FeedRssVideo(c *gin.Context) {
 	}
 
 	mediaTypes := []string{consts.MEDIA_MP3a, consts.MEDIA_MP3b, consts.MEDIA_MP4}
-	item, err := handleContentUnitsFull(db, cur, mediaTypes, []string{})
+	item, err := handleContentUnitsFull(cm, db, cur, mediaTypes, []string{})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			createFeed(feed, config.Lang, c)
