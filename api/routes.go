@@ -34,6 +34,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/posts", BlogPostsHandler)
 	router.GET("/posts/:blog/:id", BlogPostHandler)
 	router.GET("/simple", SimpleModeHandler)
+	router.GET("/labels", LabelHandler)
 
 	if onlineEval := viper.GetBool("test.enable-online-eval"); onlineEval {
 		router.StaticFile("/eval.html", "./search/eval.html")

@@ -613,7 +613,6 @@ func RecentlyUpdatedHandler(c *gin.Context) {
 
 func TagDashboardHandler(c *gin.Context) {
 	var r TagDashboardRequest
-	r.N = 5
 	if c.Bind(&r) != nil {
 		return
 	}
@@ -704,6 +703,27 @@ func SimpleModeHandler(c *gin.Context) {
 	}
 
 	resp, err2 := handleSimpleMode(c.MustGet("MDB_DB").(*sql.DB), r)
+	concludeRequest(c, resp, err2)
+}
+
+func LabelHandler(c *gin.Context) {
+	var r LabelsRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	s, e, err := r.Range()
+	if err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+
+	if r.StartDate != "" && r.EndDate != "" && e.Equal(s) {
+		NewBadRequestError(errors.New("Start and end dates should equal")).Abort(c)
+		return
+	}
+
+	resp, err2 := handleLabels(c.MustGet("MDB_DB").(*sql.DB), r)
 	concludeRequest(c, resp, err2)
 }
 
@@ -1545,6 +1565,90 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	return resp, nil
 }
 
+func handleLabels(db *sql.DB, r LabelsRequest) (*LabelsResponse, *HttpError) {
+	mods := []qm.QueryMod{qm.Where(fmt.Sprintf("secure=%d", consts.SEC_PUBLIC))}
+
+	// filters
+	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendSourcesFilterMods(db, &mods, r.SourcesFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			return nil, e
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+	var total int64
+	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
+	err := mdbmodels.Labels(db, countMods...).QueryRow().Scan(&total)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	if total == 0 {
+		return NewLabelsResponse(), nil
+	}
+
+	// order, limit, offset
+	_, offset, err := appendListMods(&mods, r.ListRequest)
+	if err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if int64(offset) >= total {
+		return NewLabelsResponse(), nil
+	}
+
+	mods = append(mods, qm.Load("ContentUnit"))
+	// data query
+	lsmdb, err := mdbmodels.Labels(db, mods...).All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	ids := make([]int64, len(lsmdb))
+	for i, label := range lsmdb {
+		ids[i] = label.ID
+	}
+
+	// load i18ns
+	labelI18nsMap, err := loadLabelsI18ns(db, r.Language, ids)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	labels := make([]*Label, len(lsmdb))
+	for i, label := range lsmdb {
+		labels[i] = mdbToLabel(label)
+
+		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+			li18n, ok := labelI18nsMap[label.ID]
+			if !ok {
+				continue
+			}
+			i18n, ok := li18n[l]
+			if ok && labels[i].Name == "" && i18n.Name.Valid {
+				labels[i].Name = i18n.Name.String
+			}
+		}
+	}
+
+	resp := &LabelsResponse{
+		ListResponse: ListResponse{Total: total},
+		Labels:       labels,
+	}
+
+	return resp, nil
+}
+
 // units must be loaded with their CCUs loaded with their collections
 func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]*ContentUnit, *HttpError) {
 
@@ -1704,88 +1808,105 @@ ORDER BY max_film_date DESC`
 }
 
 func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
-	// CU ids query
-	q := `
-WITH idsPerTag AS (
-		SELECT DISTINCT cu.id
-		FROM tags t
-		INNER JOIN content_units_tags cut ON t.id = cut.tag_id
-		INNER JOIN content_units cu ON cut.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
-		WHERE t.id IN (
-			WITH RECURSIVE rec_tags AS (
-				SELECT t.id
-				FROM tags t
-				WHERE t.uid = $1
-				UNION
-				SELECT t.id
-				FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
-			)
-			SELECT DISTINCT id
-			FROM rec_tags
-		)
-), idsGroupedByType AS (
-	SELECT cu.type_id,
-			ARRAY_AGG(cu.id ORDER BY  
-				(coalesce(cu.properties ->> 'film_date', cu.created_at :: TEXT)) :: DATE DESC
-			) AS ids
-	FROM content_units cu
-	WHERE id IN (SELECT id FROM idsPerTag)
-	GROUP BY cu.type_id
-)
-SELECT type_id,
-       ids[0:$2] AS ids,
-       array_length(ids, 1) AS count
-FROM idsGroupedByType
-;`
+	//tids := []string{r.UID}
+	tids := []int64{251}
+	textCTids := make([]int64, len(consts.TEXT_TYPES))
+	for i, t := range consts.TEXT_TYPES {
+		textCTids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[t].ID
+	}
+	mediaCTids := make([]int64, len(consts.MEDIA_TYPES))
+	for i, t := range consts.MEDIA_TYPES {
+		mediaCTids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[t].ID
+	}
 
-	rows, err := queries.Raw(db, q, r.UID, r.N).Query()
+	var limit int
+	var offset int
+	if r.PageSize == 0 {
+		limit = consts.API_DEFAULT_PAGE_SIZE
+	} else {
+		limit = utils.Min(r.PageSize, consts.API_MAX_PAGE_SIZE)
+	}
+	if r.PageNumber > 1 {
+		offset = (r.PageNumber - 1) * limit
+	}
+
+	q := fmt.Sprintf(`(
+	SELECT DISTINCT cu.uid as uid 
+		FROM content_units cu
+		INNER JOIN content_units_tags cut ON cut.content_unit_id = cu.id
+		WHERE cut.tag_id IN (%[1]s)
+		AND cu.type_id IN (%[2]s)
+		AND cu.secure = 0 AND cu.published IS TRUE
+		OFFSET $1 
+		LIMIT $2
+	) UNION ( 
+	SELECT DISTINCT cu.uid
+		FROM content_units cu
+		INNER JOIN content_units_tags cut ON cut.content_unit_id = cu.id
+		WHERE cut.tag_id IN (%[1]s)
+		AND cu.type_id IN (%[3]s)
+		AND cu.id = ANY(SELECT f.content_unit_id FROM files f WHERE f.type IN ('video', 'audio'))
+		AND cu.secure = 0 AND cu.published IS TRUE
+		OFFSET $1 
+		LIMIT $2 
+	)`,
+		utils.JoinInt64(tids, ","),
+		utils.JoinInt64(textCTids, ","),
+		utils.JoinInt64(mediaCTids, ","),
+	)
+
+	rows, err := queries.Raw(db, q, offset, limit).Query()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 	defer rows.Close()
 
-	cuIDs := []int64{}
-	counts := map[string]int{}
+	cuUIDs := []string{}
 	for rows.Next() {
-		var typeId int64
-		var count int64
-		ids := []int64{}
-		err = rows.Scan(&typeId, pq.Array(&ids), &count)
+		var uid string
+		err = rows.Scan(&uid)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
-		counts[mdb.CONTENT_TYPE_REGISTRY.ByID[typeId].Name] = int(count)
 
-		cuIDs = append(cuIDs, ids...)
+		cuUIDs = append(cuUIDs, uid)
 	}
 	if err = rows.Err(); err != nil {
 		return nil, NewInternalError(err)
 	}
 
-	if len(cuIDs) == 0 {
-		return NewTagsDashboardResponse(), nil
-	}
-
-	// data query
-	units, err := mdbmodels.ContentUnits(db,
-		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
-		qm.OrderBy("(coalesce(properties->>'film_date', created_at::text))::date desc, created_at desc"),
-		qm.Load("CollectionsContentUnits", "CollectionsContentUnits.Collection")).
-		All()
+	labels, err := mdbmodels.Labels(db,
+		qm.InnerJoin("label_tag lt ON lt.label_id = id"),
+		qm.WhereIn("lt.tag_id IN (?)", utils.ConvertArgsInt64(tids)...),
+		qm.Load("ContentUnit"),
+		qm.Limit(limit),
+		qm.Offset(offset),
+	).All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 
-	// response
-	cus, ex := prepareCUs(db, units, r.Language)
-	if ex != nil {
-		return nil, ex
+	if len(cuUIDs) == 0 && len(labels) == 0 {
+		return NewTagsDashboardResponse(), nil
 	}
 
-	return &TagsDashboardResponse{
-		LatestContentUnits: cus,
-		Counts:             counts,
-	}, nil
+	items := make([]*TagsDashboardItem, 0)
+	for _, l := range labels {
+		item := &TagsDashboardItem{
+			LabelID:       l.UID,
+			ContentUnitID: l.R.ContentUnit.UID,
+		}
+		items = append(items, item)
+	}
+
+	for _, uid := range cuUIDs {
+		item := &TagsDashboardItem{
+			ContentUnitID: uid,
+		}
+		items = append(items, item)
+	}
+
+	return &TagsDashboardResponse{Items: items}, nil
 }
 
 // translate tag.keys (UIDs of tags) to their translation
@@ -2925,6 +3046,47 @@ func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error)
 		ids[idx] = xu.ID
 	}
 	return
+}
+
+func loadLabelsI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.LabelI18n, error) {
+	i18nsMap := make(map[int64]map[string]*mdbmodels.LabelI18n, len(ids))
+	if len(ids) == 0 {
+		return i18nsMap, nil
+	}
+
+	// Load from DB
+	i18ns, err := mdbmodels.LabelI18ns(db,
+		qm.WhereIn("label_id in ?", utils.ConvertArgsInt64(ids)...),
+		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
+		All()
+	if err != nil {
+		return nil, errors.Wrap(err, "Load content units i18ns from DB")
+	}
+
+	// Group by label and language
+	for _, x := range i18ns {
+		v, ok := i18nsMap[x.LabelID]
+		if !ok {
+			v = make(map[string]*mdbmodels.LabelI18n, 1)
+			i18nsMap[x.LabelID] = v
+		}
+		v[x.Language] = x
+	}
+
+	return i18nsMap, nil
+}
+
+func mdbToLabel(l *mdbmodels.Label) *Label {
+	label := &Label{
+		ID:         l.UID,
+		MediaType:  l.MediaType,
+		Properties: l.Properties,
+		CreatedAt:  l.CreatedAt,
+	}
+	if l.R.ContentUnit != nil {
+		label.ContentUnit = l.R.ContentUnit.UID
+	}
+	return label
 }
 
 // Dirty hack for unique mapping - needs to parse in client...

@@ -33,8 +33,8 @@ type ItemRequest struct {
 }
 
 type TagDashboardRequest struct {
-	ItemRequest
-	N int `json:"n" form:"n"`
+	ListRequest
+	UID string
 }
 
 type IDsFilter struct {
@@ -179,10 +179,13 @@ type HomeResponse struct {
 	Banner             *Banner        `json:"banner"`
 }
 
+type TagsDashboardItem struct {
+	LabelID       string `json:"label_id,omitempty"`
+	ContentUnitID string `json:"content_unit_id,required"`
+}
 type TagsDashboardResponse struct {
-	PromotedContentUnits []*ContentUnit `json:"promoted_units"`
-	LatestContentUnits   []*ContentUnit `json:"latest_units"`
-	Counts               map[string]int `json:"counts"`
+	ListResponse
+	Items []*TagsDashboardItem `json:"items"`
 }
 
 type StatsCUClassRequest struct {
@@ -258,6 +261,22 @@ type EvalSxSRequest struct {
 	Language      string `json:"language"`
 }
 
+type LabelsRequest struct {
+	ListRequest
+	IDsFilter
+	ContentTypesFilter
+	DateRangeFilter
+	SourcesFilter
+	TagsFilter
+	WithTags    bool `json:"with_tags" form:"with_tags"`
+	WithSources bool `json:"with_sources" form:"with_sources"`
+}
+
+type LabelsResponse struct {
+	ListResponse
+	Labels []*Label `json:"labels"`
+}
+
 func NewCollectionsResponse() *CollectionsResponse {
 	return &CollectionsResponse{Collections: make([]*Collection, 0)}
 }
@@ -279,10 +298,7 @@ func NewBlogPostsResponse() *BlogPostsResponse {
 }
 
 func NewTagsDashboardResponse() *TagsDashboardResponse {
-	return &TagsDashboardResponse{
-		PromotedContentUnits: make([]*ContentUnit, 0),
-		LatestContentUnits:   make([]*ContentUnit, 0),
-	}
+	return &TagsDashboardResponse{Items: make([]*TagsDashboardItem, 0)}
 }
 
 func NewStatsCUClassResponse() *StatsCUClassResponse {
@@ -290,6 +306,10 @@ func NewStatsCUClassResponse() *StatsCUClassResponse {
 		Sources: make(map[string]int),
 		Tags:    make(map[string]int),
 	}
+}
+
+func NewLabelsResponse() *LabelsResponse {
+	return &LabelsResponse{Labels: make([]*Label, 0)}
 }
 
 type Collection struct {
@@ -417,4 +437,13 @@ type BlogPost struct {
 	Title        string    `json:"title"`
 	Content      string    `json:"content"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+type Label struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	MediaType   string    `json:"media_type"`
+	Properties  null.JSON `json:"properties,omitempty"`
+	ContentUnit string    `json:"content_unit,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
 }

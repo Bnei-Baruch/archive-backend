@@ -162,6 +162,14 @@ func Join(l []interface{}, separator string) string {
 	return strings.Join(ret, separator)
 }
 
+func JoinInt64(l []int64, separator string) string {
+	var ret []string
+	for _, v := range l {
+		ret = append(ret, fmt.Sprintf("%d", v))
+	}
+	return strings.Join(ret, separator)
+}
+
 func PrintMap(m interface{}) (string, error) {
 	mValue := reflect.ValueOf(m)
 	if mValue.Kind() != reflect.Map {
