@@ -140,6 +140,7 @@ type ContentUnitsRequest struct {
 	WithFiles       bool `json:"with_files" form:"with_files"`
 	WithDerivations bool `json:"with_derivations" form:"with_derivations"`
 	WithTags        bool `json:"with_tags" form:"with_tags"`
+	WithSources     bool `json:"with_sources" form:"with_sources"`
 }
 
 type ContentUnitsResponse struct {

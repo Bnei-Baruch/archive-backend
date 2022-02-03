@@ -74,6 +74,9 @@ const (
 	SRC_TYPE_LETTER     = 9
 	SRC_TYPE_ITEM       = 10
 
+	// Hit Types
+	HT_LESSONS_SERIES = "lessons-series"
+
 	// Security levels
 	SEC_PUBLIC    = int16(0)
 	SEC_SENSITIVE = int16(1)
@@ -120,6 +123,9 @@ const (
 	LANG_AMHARIC    = "am"
 	LANG_MULTI      = "zz"
 	LANG_UNKNOWN    = "xx"
+
+	//suggest constant terms patterns
+	TERMS_PATTERN_DIGITS = `(?:^|\s|\(|\/)(\d+)(\b)`
 )
 
 var ALL_KNOWN_LANGS = [...]string{
@@ -329,11 +335,14 @@ const (
 	INTENTS_SEARCH_DEFAULT_COUNT              = 10
 	INTENTS_SEARCH_BY_FILTER_GRAMMAR_COUNT    = 2
 	TWEETS_SEARCH_COUNT                       = 20
-	INTENTS_MIN_UNITS                         = 3
+	INTENTS_MIN_UNITS                         = 3 // Min. units from Intent Engine (not grammar) to display the carousel
 	MAX_CLASSIFICATION_INTENTS                = 3
 	API_DEFAULT_PAGE_SIZE                     = 50
 	API_MAX_PAGE_SIZE                         = 1000
 	MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST = 100
+	// We display the carousels generated from Grammar Engine even if we have just one unit inside
+	// since the regular results might not return results at all based on the given query.
+	CLASSIFICATION_FROM_GRAMMAR_INTENTS_MIN_UNITS = 1
 	// Consider making a carusele and not limiting.
 	MAX_MATCHES_PER_GRAMMAR_INTENT                  = 3
 	FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM = 200
@@ -378,7 +387,7 @@ var FILTERS = map[string]string{
 	FILTER_SOURCE:                    "source",
 	FILTER_AUTHOR:                    "source",
 	FILTER_UNITS_CONTENT_TYPES:       "content_type",
-	FILTER_COLLECTIONS_CONTENT_TYPES: "collection_content_type",
+	FILTER_COLLECTIONS_CONTENT_TYPES: "collections_content_type",
 	FILTER_SECTION_SOURCES:           "filter_section_sources",
 	FILTER_LANGUAGE:                  "media_language",
 	FILTER_COLLECTION:                "collection", //  Internally used by grammar. Not available in frontend.
@@ -398,11 +407,14 @@ const ES_RESULT_TYPE_TWEETS = "tweets"
 
 // Result of many tweets in one hit
 const SEARCH_RESULT_TWEETS_MANY = "tweets_many"
+const SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE = "lessons_series_by_source"
+const SEARCH_RESULT_LESSONS_SERIES_BY_TAG = "lessons_series_by_tag"
 
 // Typed UIDs and Filter
 const ES_UID_TYPE_CONTENT_UNIT = "content_unit"
 const ES_UID_TYPE_FILE = "file"
 const ES_UID_TYPE_TAG = "tag"
+const ES_UID_TYPE_TAGS = "tags"
 const ES_UID_TYPE_COLLECTION = "collection"
 const ES_UID_TYPE_SOURCE = "source"
 const ES_UID_TYPE_TWEET = "tweet"

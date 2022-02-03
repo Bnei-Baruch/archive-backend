@@ -199,6 +199,29 @@ func contentUnitsTypedUIDs(collectionsContentUnits mdbmodels.CollectionsContentU
 	return ret
 }
 
+func collectionSourceAndTags(c *mdbmodels.Collection) (string, []string, error) {
+	src := ""
+	tags := []string{}
+	if !c.Properties.Valid {
+		return src, tags, errors.Errorf("collectionSourceAndTags - Collection properties not valid.")
+	}
+	var props map[string]interface{}
+	err := json.Unmarshal(c.Properties.JSON, &props)
+	if err != nil {
+		return src, tags, errors.Wrap(err, "collectionSourceAndTags")
+	}
+	if s, ok := props[consts.ES_UID_TYPE_SOURCE]; ok {
+		src = s.(string)
+	}
+	if t, ok := props[consts.ES_UID_TYPE_TAGS]; ok {
+		itags := t.([]interface{})
+		for _, tagName := range itags {
+			tags = append(tags, tagName.(string))
+		}
+	}
+	return src, tags, nil
+}
+
 func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexErrors {
 	indexErrors := MakeIndexErrors()
 	// Calculate effective date by choosing the last data of any of it's content units.
@@ -225,6 +248,10 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 			}
 		}
 	}
+	src, tags, err := collectionSourceAndTags(c)
+	if err != nil {
+		log.Error(err)
+	}
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
 	for _, i18n := range c.R.CollectionI18ns {
@@ -234,6 +261,14 @@ func (index *CollectionsIndex) indexCollection(c *mdbmodels.Collection) *IndexEr
 				contentUnitsTypedUIDs(c.R.CollectionsContentUnits)...)
 			if programCollectionUID, ok := consts.ARTICLE_COLLECTION_TO_PROGRAM_COLLECTION[c.UID]; ok {
 				typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_COLLECTION, programCollectionUID))
+			}
+			if src != "" {
+				typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_SOURCE, src))
+			}
+			if len(tags) > 0 {
+				for _, tag := range tags {
+					typedUIDs = append(typedUIDs, KeyValue(consts.ES_UID_TYPE_TAG, tag))
+				}
 			}
 			filterValues := append(
 				[]string{KeyValue("collections_content_type", mdb.CONTENT_TYPE_REGISTRY.ByID[c.TypeID].Name)},

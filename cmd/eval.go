@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -345,6 +346,7 @@ func testTypoSuggestFn(cmd *cobra.Command, args []string) {
 
 	falsePositiveCnt := 0
 	noSuggestForTypoCnt := 0
+	constantTermsError := 0
 
 	log.Info("*** CHECKING KNOWN TYPOS ***")
 
@@ -357,6 +359,10 @@ func testTypoSuggestFn(cmd *cobra.Command, args []string) {
 		} else {
 			noSuggestForTypoCnt++
 			log.Infof("No suggest for '%s'!", t)
+		}
+
+		if !checkConstantTerms(t, res.String) {
+			constantTermsError++
 		}
 	}
 
@@ -374,7 +380,64 @@ func testTypoSuggestFn(cmd *cobra.Command, args []string) {
 		} else {
 			log.Infof("No suggest for '%s'.", e.Query)
 		}
+
+		if !checkConstantTerms(e.Query, res.String) {
+			constantTermsError++
+		}
 	}
 
-	log.Infof("\n\nNot found suggests for known typos: %d from %d.\nProbable False Positive: %d from %d.", noSuggestForTypoCnt, len(typos), falsePositiveCnt, len(evalSet))
+	log.Infof(
+		"\n\nNot found suggests for known typos: %d from %d."+
+			"\nProbable False Positive: %d from %d."+
+			"\nConstant terms errors: %d.",
+		noSuggestForTypoCnt,
+		len(typos),
+		falsePositiveCnt,
+		len(evalSet),
+		constantTermsError,
+	)
+}
+
+func checkConstantTerms(request string, response string) bool {
+	if len(request) <= 0 || len(response) <= 0 {
+		return true
+	}
+
+	var (
+		matches               [][]string
+		requestConstantTerms  []string
+		responseConstantTerms []string
+	)
+	rg, err := regexp.Compile(consts.TERMS_PATTERN_DIGITS)
+
+	if err != nil {
+		log.Errorf("Invalid pattern '%s'", consts.TERMS_PATTERN_DIGITS)
+		return false
+	}
+
+	matches = rg.FindAllStringSubmatch(request, -1)
+	for _, match := range matches {
+		requestConstantTerms = append(requestConstantTerms, match[1])
+	}
+
+	matches = rg.FindAllStringSubmatch(response, -1)
+	for _, match := range matches {
+		responseConstantTerms = append(responseConstantTerms, match[1])
+	}
+
+	if len(requestConstantTerms) <= 0 {
+		return true
+	}
+
+	if len(responseConstantTerms) <= 0 {
+		return false
+	}
+
+	if strings.Join(requestConstantTerms, " ") == strings.Join(responseConstantTerms, " ") {
+		log.Infof("Correct constant terms for query request: '%s', response: '%s'", request, response)
+		return true
+	} else {
+		log.Errorf("Not correct constant terms for query request: '%s', response: '%s'", request, response)
+		return false
+	}
 }
