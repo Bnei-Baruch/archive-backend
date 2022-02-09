@@ -63,6 +63,10 @@ type DateRangeFilter struct {
 	EndDate   string `json:"end_date" form:"end_date" binding:"omitempty"`
 }
 
+type ContentUnitsFilter struct {
+	ContentUnitIDs []string `json:"content_units" form:"content_unit" binding:"omitempty"`
+}
+
 func (drf *DateRangeFilter) Range() (time.Time, time.Time, error) {
 	var err error
 	var s, e time.Time
@@ -265,12 +269,10 @@ type EvalSxSRequest struct {
 type LabelsRequest struct {
 	ListRequest
 	IDsFilter
-	ContentTypesFilter
 	DateRangeFilter
-	SourcesFilter
 	TagsFilter
-	WithTags    bool `json:"with_tags" form:"with_tags"`
-	WithSources bool `json:"with_sources" form:"with_sources"`
+	ContentUnitsFilter
+	WithTags bool `json:"with_tags" form:"with_tags"`
 }
 
 type LabelsResponse struct {
@@ -445,6 +447,7 @@ type Label struct {
 	Name        string    `json:"name"`
 	MediaType   string    `json:"media_type"`
 	Properties  null.JSON `json:"properties,omitempty"`
+	Author      string    `json:"author,required"`
 	ContentUnit string    `json:"content_unit,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }

@@ -22,28 +22,28 @@ import (
 
 // LabelI18n is an object representing the database table.
 type LabelI18n struct {
-	LabelID     int64       `boil:"label_id" json:"label_id" toml:"label_id" yaml:"label_id"`
-	Language    string      `boil:"language" json:"language" toml:"language" yaml:"language"`
-	Name        null.String `boil:"name" json:"name,omitempty" toml:"name" yaml:"name,omitempty"`
-	CreatedWith string      `boil:"created_with" json:"created_with" toml:"created_with" yaml:"created_with"`
-	CreatedAt   time.Time   `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
+	LabelID   int64       `boil:"label_id" json:"label_id" toml:"label_id" yaml:"label_id"`
+	Language  string      `boil:"language" json:"language" toml:"language" yaml:"language"`
+	Name      null.String `boil:"name" json:"name,omitempty" toml:"name" yaml:"name,omitempty"`
+	Author    string      `boil:"author" json:"author" toml:"author" yaml:"author"`
+	CreatedAt time.Time   `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
 
 	R *labelI18nR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L labelI18nL  `boil:"-" json:"-" toml:"-" yaml:"-"`
 }
 
 var LabelI18nColumns = struct {
-	LabelID     string
-	Language    string
-	Name        string
-	CreatedWith string
-	CreatedAt   string
+	LabelID   string
+	Language  string
+	Name      string
+	Author    string
+	CreatedAt string
 }{
-	LabelID:     "label_id",
-	Language:    "language",
-	Name:        "name",
-	CreatedWith: "created_with",
-	CreatedAt:   "created_at",
+	LabelID:   "label_id",
+	Language:  "language",
+	Name:      "name",
+	Author:    "author",
+	CreatedAt: "created_at",
 }
 
 // labelI18nR is where relationships are stored.
@@ -55,8 +55,8 @@ type labelI18nR struct {
 type labelI18nL struct{}
 
 var (
-	labelI18nColumns               = []string{"label_id", "language", "name", "created_with", "created_at"}
-	labelI18nColumnsWithoutDefault = []string{"label_id", "language", "name", "created_with"}
+	labelI18nColumns               = []string{"label_id", "language", "name", "author", "created_at"}
+	labelI18nColumnsWithoutDefault = []string{"label_id", "language", "name", "author"}
 	labelI18nColumnsWithDefault    = []string{"created_at"}
 	labelI18nPrimaryKeyColumns     = []string{"label_id", "language"}
 )

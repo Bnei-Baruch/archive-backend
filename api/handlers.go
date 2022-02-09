@@ -1591,22 +1591,18 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
-	}
-	if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
-		if e, ok := err.(*HttpError); ok {
-			return nil, e
-		} else {
-			return nil, NewInternalError(err)
-		}
 	}
 	if err := appendTagsFilterMods(cm, &mods, r.TagsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if len(r.ContentUnitIDs) > 0 {
+		mods = append(mods,
+			qm.WhereIn("content_unit_id in (SELECT cu.id FROM content_units cu WHERE cu.uid IN (?))", utils.ConvertArgsString(r.ContentUnitIDs)...),
+		)
+	}
+
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
 	err := mdbmodels.Labels(db, countMods...).QueryRow().Scan(&total)
@@ -1656,6 +1652,7 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 			i18n, ok := li18n[l]
 			if ok && labels[i].Name == "" && i18n.Name.Valid {
 				labels[i].Name = i18n.Name.String
+				labels[i].Author = i18n.Author
 			}
 		}
 	}
