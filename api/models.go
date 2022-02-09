@@ -184,8 +184,9 @@ type TagsDashboardItem struct {
 	ContentUnitID string `json:"content_unit_id,required"`
 }
 type TagsDashboardResponse struct {
-	ListResponse
-	Items []*TagsDashboardItem `json:"items"`
+	MediaTotal int64                `json:"media_total"`
+	TextTotal  int64                `json:"text_total"`
+	Items      []*TagsDashboardItem `json:"items"`
 }
 
 type StatsCUClassRequest struct {

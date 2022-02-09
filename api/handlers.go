@@ -628,7 +628,9 @@ func TagDashboardHandler(c *gin.Context) {
 
 	r.UID = c.Param("uid")
 
-	resp, err := handleTagDashboard(c.MustGet("MDB_DB").(*sql.DB), r)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err := HandleTagDashboard(cm, db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -736,7 +738,9 @@ func LabelHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err2 := handleLabels(c.MustGet("MDB_DB").(*sql.DB), r)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err2 := handleLabels(cm, db, r)
 	concludeRequest(c, resp, err2)
 }
 
@@ -1390,14 +1394,14 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendSourcesFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
+	if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
 		} else {
 			return nil, NewInternalError(err)
 		}
 	}
-	if err := appendTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
+	if err := appendTagsFilterMods(cm, &mods, r.TagsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
@@ -1580,7 +1584,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 	return resp, nil
 }
 
-func handleLabels(db *sql.DB, r LabelsRequest) (*LabelsResponse, *HttpError) {
+func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsResponse, *HttpError) {
 	mods := []qm.QueryMod{qm.Where(fmt.Sprintf("secure=%d", consts.SEC_PUBLIC))}
 
 	// filters
@@ -1593,14 +1597,14 @@ func handleLabels(db *sql.DB, r LabelsRequest) (*LabelsResponse, *HttpError) {
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendSourcesFilterMods(db, &mods, r.SourcesFilter); err != nil {
+	if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
 		} else {
 			return nil, NewInternalError(err)
 		}
 	}
-	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+	if err := appendTagsFilterMods(cm, &mods, r.TagsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 	var total int64
@@ -1822,31 +1826,55 @@ ORDER BY max_film_date DESC`
 	return data, nil
 }
 
-func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
-	//tids := []string{r.UID}
-	tids := []int64{251}
-	textCTids := make([]int64, len(consts.TEXT_TYPES))
-	for i, t := range consts.TEXT_TYPES {
-		textCTids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[t].ID
+type dashboardParams struct {
+	offset      int64
+	limit       int64
+	labelOffset int64
+	labelLimit  int64
+	total       int64
+	labelMods   []qm.QueryMod
+	ctIDs       []int64
+}
+
+func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
+
+	tids, _, err := prepareNestedTagIds(db, TagsFilter{Tags: []string{r.UID}})
+	if err != nil {
+		return nil, NewInternalError(err)
 	}
-	mediaCTids := make([]int64, len(consts.MEDIA_TYPES))
-	for i, t := range consts.MEDIA_TYPES {
-		mediaCTids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[t].ID
+	mods := []qm.QueryMod{
+		qm.InnerJoin("label_tag lt ON lt.label_id = id"),
+		qm.WhereIn("lt.tag_id IN ?", utils.ConvertArgsInt64(tids)...),
+		qm.InnerJoin("label_i18n i18n ON i18n.label_id = id"),
+		qm.WhereIn("i18n.language = ?", r.Language),
+		qm.Where("secure=?", consts.SEC_PUBLIC),
+	}
+	textParam := &dashboardParams{labelMods: append(mods, qm.Where("media_type = 'text'"))}
+	mediaParam := &dashboardParams{labelMods: append(mods, qm.Where("media_type != 'text'"))}
+
+	if r.PageSize == 0 {
+		r.PageSize = consts.API_DEFAULT_PAGE_SIZE
+	} else {
+		r.PageSize = utils.Min(r.PageSize, consts.API_MAX_PAGE_SIZE)
 	}
 
-	var limit int
-	var offset int
-	if r.PageSize == 0 {
-		limit = consts.API_DEFAULT_PAGE_SIZE
-	} else {
-		limit = utils.Min(r.PageSize, consts.API_MAX_PAGE_SIZE)
+	if err := prepareTagDashboardParams(db, textParam, r.ListRequest); err != nil {
+		return nil, NewInternalError(err)
 	}
-	if r.PageNumber > 1 {
-		offset = (r.PageNumber - 1) * limit
+	if err := prepareTagDashboardParams(db, mediaParam, r.ListRequest); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	for _, t := range consts.TEXT_TYPES {
+		textParam.ctIDs = append(textParam.ctIDs, mdb.CONTENT_TYPE_REGISTRY.ByName[t].ID)
+	}
+
+	for _, t := range consts.MEDIA_TYPES {
+		mediaParam.ctIDs = append(mediaParam.ctIDs, mdb.CONTENT_TYPE_REGISTRY.ByName[t].ID)
 	}
 
 	q := fmt.Sprintf(`(
-	SELECT DISTINCT cu.uid as uid 
+	SELECT DISTINCT cu.uid as uid, count(*) OVER() as count, 'T' as media_type 
 		FROM content_units cu
 		INNER JOIN content_units_tags cut ON cut.content_unit_id = cu.id
 		INNER JOIN content_unit_i18n cui18n ON cui18n.content_unit_id = cu.id
@@ -1854,10 +1882,10 @@ func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardRespon
 		AND cu.type_id IN (%[2]s)
 		AND cui18n.language = $1
 		AND cu.secure = 0 AND cu.published IS TRUE
-		OFFSET $2 
-		LIMIT $3
+		OFFSET $3 
+		LIMIT $2
 	) UNION ( 
-	SELECT DISTINCT cu.uid
+	SELECT DISTINCT cu.uid, count(*) OVER(), 'M'
 		FROM content_units cu
 		INNER JOIN content_units_tags cut ON cut.content_unit_id = cu.id
 		INNER JOIN content_unit_i18n cui18n ON cui18n.content_unit_id = cu.id
@@ -1866,26 +1894,35 @@ func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardRespon
 		AND cui18n.language = $1
 		AND cu.id = ANY(SELECT f.content_unit_id FROM files f WHERE f.type IN ('video', 'audio'))
 		AND cu.secure = 0 AND cu.published IS TRUE
-		OFFSET $2 
-		LIMIT $3 
+		OFFSET $5 
+		LIMIT $4 
 	)`,
 		utils.JoinInt64(tids, ","),
-		utils.JoinInt64(textCTids, ","),
-		utils.JoinInt64(mediaCTids, ","),
+		utils.JoinInt64(textParam.ctIDs, ","),
+		utils.JoinInt64(mediaParam.ctIDs, ","),
 	)
 
-	rows, err := queries.Raw(db, q, r.Language, offset, limit).Query()
+	rows, err := queries.Raw(db, q, r.Language, textParam.limit, textParam.offset, mediaParam.limit, mediaParam.offset).Query()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 	defer rows.Close()
 
 	cuUIDs := []string{}
+	var textCount int64 = 0
+	var mediaCount int64 = 0
 	for rows.Next() {
 		var uid string
-		err = rows.Scan(&uid)
+		var count int64
+		var mt string
+		err = rows.Scan(&uid, &count, &mt)
 		if err != nil {
 			return nil, NewInternalError(err)
+		}
+		if mt == "T" {
+			textCount = count
+		} else {
+			mediaCount = count
 		}
 
 		cuUIDs = append(cuUIDs, uid)
@@ -1894,15 +1931,15 @@ func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardRespon
 		return nil, NewInternalError(err)
 	}
 
-	labels, err := mdbmodels.Labels(db,
-		qm.InnerJoin("label_tag lt ON lt.label_id = id"),
-		qm.WhereIn("lt.tag_id IN (?)", utils.ConvertArgsInt64(tids)...),
-		qm.InnerJoin("label_i18n i18n ON i18n.label_id = id"),
-		qm.WhereIn("i18n.language = ?", r.Language),
+	updateDashboardLabelParam(textParam, textCount, r.ListRequest)
+	updateDashboardLabelParam(mediaParam, mediaCount, r.ListRequest)
+
+	mods = append(mods,
 		qm.Load("ContentUnit"),
-		qm.Limit(limit),
-		qm.Offset(offset),
-	).All()
+		qm.Limit(int(textParam.labelLimit)),
+		qm.Offset(int(textParam.labelOffset)),
+	)
+	labels, err := mdbmodels.Labels(db, mods...).All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1927,7 +1964,57 @@ func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardRespon
 		items = append(items, item)
 	}
 
-	return &TagsDashboardResponse{Items: items}, nil
+	resp := &TagsDashboardResponse{
+		MediaTotal: mediaCount + mediaParam.total,
+		TextTotal:  textCount + textParam.total,
+		Items:      items,
+	}
+	return resp, nil
+}
+
+//fetch half from labels and half from tags, if have, if no get from other
+func prepareTagDashboardParams(db *sql.DB, params *dashboardParams, r ListRequest) error {
+	total, err := mdbmodels.Labels(db, params.labelMods...).Count()
+	if err != nil {
+		return NewInternalError(err)
+	}
+	params.total = total
+	params.offset = int64(r.PageNumber * r.PageSize / 2)
+	if int(total) >= (r.PageNumber+1)*(r.PageSize/2) {
+		params.limit = int64(r.PageSize / 2)
+		return nil
+	}
+	if int(total) >= r.PageNumber*r.PageSize/2 {
+		params.limit = int64(r.PageSize) - (total - int64(r.PageNumber*r.PageSize/2))
+		return nil
+	}
+	params.limit = int64(r.PageSize)
+	if r.PageNumber == 0 {
+		params.offset = 0
+	} else {
+		params.offset = int64(r.PageNumber*r.PageSize) - total
+	}
+	return nil
+}
+
+func updateDashboardLabelParam(params *dashboardParams, total int64, r ListRequest) {
+	params.labelOffset = int64(r.PageNumber * r.PageSize / 2)
+	if int(total) >= (r.PageNumber+1)*r.PageSize/2 {
+		params.labelLimit = int64(r.PageSize / 2)
+		return
+	}
+
+	if int(total) >= r.PageNumber*r.PageSize/2 {
+		params.limit = int64(r.PageSize) - (total - int64(r.PageNumber*r.PageSize/2))
+		return
+	}
+
+	params.labelLimit = int64(r.PageSize)
+	if r.PageNumber == 0 {
+		params.labelOffset = 0
+	} else {
+		params.labelOffset = int64(r.PageNumber*r.PageSize) - total
+	}
 }
 
 // translate tag.keys (UIDs of tags) to their translation
@@ -2055,14 +2142,14 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendSourcesFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
+	if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
 		} else {
 			return nil, NewInternalError(err)
 		}
 	}
-	if err := appendTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
+	if err := appendTagsFilterMods(cm, &mods, r.TagsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
@@ -2502,7 +2589,7 @@ func appendCollectionSourceFilterMods(cm cache.CacheManager, exec boil.Executor,
 	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
 		return nil
 	}
-	_, uids, err := prepareNestedSources(cm, exec, f)
+	_, uids, err := prepareNestedSources(cm, f)
 	if err != nil {
 		return err
 	}
@@ -2522,7 +2609,7 @@ func appendCollectionTagsFilterMods(cm cache.CacheManager, exec boil.Executor, m
 	//use Raw query because of need to use operator ?
 	var cIDs pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
-	if err := queries.Raw(exec, q, pq.Array(uids)).QueryRow().Scan(&ids); err != nil {
+	if err := queries.Raw(exec, q, pq.Array(uids)).QueryRow().Scan(&cIDs); err != nil {
 		return err
 	}
 	if cIDs == nil || len(cIDs) == 0 {
@@ -2561,11 +2648,11 @@ func appendDRFBaseMods(mods *[]qm.QueryMod, f DateRangeFilter, field string) err
 	return nil
 }
 
-func appendSourcesFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
+func appendSourcesFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f SourcesFilter) error {
 	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
 		return nil
 	}
-	ids, _, err := prepareNestedSources(cm, exec, f)
+	ids, _, err := prepareNestedSources(cm, f)
 	if err != nil {
 		return err
 	}
@@ -2580,7 +2667,7 @@ func appendSourcesFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]
 	return nil
 }
 
-func prepareNestedSources(cm cache.CacheManager, exec boil.Executor, f SourcesFilter) ([]int64, []string, error) {
+func prepareNestedSources(cm cache.CacheManager, f SourcesFilter) ([]int64, []string, error) {
 	// slice of all source ids we want
 	sourceUids := make([]string, 0)
 
@@ -2604,7 +2691,7 @@ func prepareNestedSources(cm cache.CacheManager, exec boil.Executor, f SourcesFi
 	return ids, uids, nil
 }
 
-func appendTagsFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
+func appendTagsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilter) error {
 	if len(f.Tags) == 0 {
 		return nil
 	}
