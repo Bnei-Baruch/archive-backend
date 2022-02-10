@@ -265,7 +265,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 					if h.Score != nil && *h.Score > 0 {
 						intentValue.MaxScore = h.Score
 						if *intentValue.MaxScore < *intentValue.Score {
-							log.Warnf("ESEngine.AddIntents - Not expected score %f to be larger then max score %f for %s - %s.",
+							log.Warnf("ESEngine.AddIntents - Not expected score %f to be larger than max score %f for %s - %s.",
 								*intentValue.Score, *intentValue.MaxScore, intentValue.MDB_UID, intentValue.Title)
 						}
 						intents = append(intents, Intent{finalIntents[i].Type, finalIntents[i].Language, intentValue})

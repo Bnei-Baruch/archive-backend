@@ -135,6 +135,8 @@ type SearchStatsCache interface {
 	IsTagWithEnoughUnits(uid string, count int, cts ...string) bool
 	IsSourceWithUnits(uid string, cts ...string) bool
 	IsSourceWithEnoughUnits(uid string, count int, cts ...string) bool
+	IsTagHasSingleUnit(uid string, cts ...string) bool
+	IsSourceHasSingleUnit(uid string, cts ...string) bool
 
 	// |location| can be of: "Moscow" or "Russia|Moscow" or "Russia" or "" (empty for year constrain only)
 	// |year| is 4 digit year string, e.g., "1998", "2010" or "" (empty for location constrain only)
@@ -190,7 +192,7 @@ func (ssc *SearchStatsCacheImpl) IsTagWithUnits(uid string, cts ...string) bool 
 }
 
 func (ssc *SearchStatsCacheImpl) IsTagWithEnoughUnits(uid string, count int, cts ...string) bool {
-	return ssc.isClassWithUnits("tags", uid, count, cts...)
+	return ssc.isClassWithUnits("tags", uid, &count, nil, cts...)
 }
 
 func (ssc *SearchStatsCacheImpl) IsSourceWithUnits(uid string, cts ...string) bool {
@@ -198,7 +200,17 @@ func (ssc *SearchStatsCacheImpl) IsSourceWithUnits(uid string, cts ...string) bo
 }
 
 func (ssc *SearchStatsCacheImpl) IsSourceWithEnoughUnits(uid string, count int, cts ...string) bool {
-	return ssc.isClassWithUnits("sources", uid, count, cts...)
+	return ssc.isClassWithUnits("sources", uid, &count, nil, cts...)
+}
+
+func (ssc *SearchStatsCacheImpl) IsTagHasSingleUnit(uid string, cts ...string) bool {
+	one := 1
+	return ssc.isClassWithUnits("tags", uid, &one, &one, cts...)
+}
+
+func (ssc *SearchStatsCacheImpl) IsSourceHasSingleUnit(uid string, cts ...string) bool {
+	one := 1
+	return ssc.isClassWithUnits("sources", uid, &one, &one, cts...)
 }
 
 func (ssc *SearchStatsCacheImpl) GetSourceByPositionAndParent(parent string, position string, sourceTypeIds []int64) *string {
@@ -251,7 +263,7 @@ func (ssc *SearchStatsCacheImpl) GetProgramByCollectionAndPosition(collection_ui
 	return nil
 }
 
-func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, count int, cts ...string) bool {
+func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, minCount *int, maxCount *int, cts ...string) bool {
 	var stats ClassByTypeStats
 	switch class {
 	case "tags":
@@ -264,8 +276,12 @@ func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, count int, 
 
 	if h, ok := stats[uid]; ok {
 		for i := range cts {
-			if c, ok := h[cts[i]]; ok && c >= count {
-				return true
+			if c, ok := h[cts[i]]; ok {
+				minOk := minCount == nil || c >= *minCount
+				maxOk := maxCount == nil || c <= *maxCount
+				if minOk && maxOk {
+					return true
+				}
 			}
 		}
 	}
