@@ -114,6 +114,7 @@ func (s *LabelSuite) mkLabels(n int, mtype string, tag *mdbmodels.Tag) []*mdbmod
 			UID:           utils.GenerateUID(8),
 			MediaType:     mtype,
 			Secure:        0,
+			Published:     true,
 			ContentUnitID: cu.ID,
 		}
 
