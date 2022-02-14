@@ -28,6 +28,7 @@ type Label struct {
 	MediaType     string    `boil:"media_type" json:"media_type" toml:"media_type" yaml:"media_type"`
 	Properties    null.JSON `boil:"properties" json:"properties,omitempty" toml:"properties" yaml:"properties,omitempty"`
 	Secure        int16     `boil:"secure" json:"secure" toml:"secure" yaml:"secure"`
+	Published     bool      `boil:"published" json:"published" toml:"published" yaml:"published"`
 	CreatedAt     time.Time `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
 
 	R *labelR `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -41,6 +42,7 @@ var LabelColumns = struct {
 	MediaType     string
 	Properties    string
 	Secure        string
+	Published     string
 	CreatedAt     string
 }{
 	ID:            "id",
@@ -49,6 +51,7 @@ var LabelColumns = struct {
 	MediaType:     "media_type",
 	Properties:    "properties",
 	Secure:        "secure",
+	Published:     "published",
 	CreatedAt:     "created_at",
 }
 
@@ -63,9 +66,9 @@ type labelR struct {
 type labelL struct{}
 
 var (
-	labelColumns               = []string{"id", "uid", "content_unit_id", "media_type", "properties", "secure", "created_at"}
+	labelColumns               = []string{"id", "uid", "content_unit_id", "media_type", "properties", "secure", "published", "created_at"}
 	labelColumnsWithoutDefault = []string{"uid", "content_unit_id", "media_type", "properties"}
-	labelColumnsWithDefault    = []string{"id", "secure", "created_at"}
+	labelColumnsWithDefault    = []string{"id", "secure", "published", "created_at"}
 	labelPrimaryKeyColumns     = []string{"id"}
 )
 

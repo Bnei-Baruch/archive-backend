@@ -1585,7 +1585,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 }
 
 func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsResponse, *HttpError) {
-	mods := []qm.QueryMod{qm.Where(fmt.Sprintf("secure=%d", consts.SEC_PUBLIC))}
+	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
 	// filters
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
