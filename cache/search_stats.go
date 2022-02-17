@@ -502,6 +502,9 @@ func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]st
 		ret[key] = source_uid
 	}
 
+	// The query is intended for creating relations between parent to grandchild division
+	// (source to part while there is a volume in between) of the TES,
+	// having UID 'xtKmrbb9'
 	query = `select p.uid as parent_uid, gc.uid as source_uid, gc.type_id 
 	from sources p
 		join sources c on c.parent_id = p.id
