@@ -42,9 +42,9 @@ func (s *AuthorsStatsCacheImpl) Refresh() error {
 func (s *AuthorsStatsCacheImpl) load() error {
 	rows, err := queries.Raw(s.mdb, `
 		SELECT a.code, array_agg(DISTINCT s.uid) FROM authors_sources "as"
-			INNER JOIN sources s ON "as".source_id = s.id
 			INNER JOIN authors a ON "as".author_id = a.id
-		GROUP BY "as".author_id
+			INNER JOIN sources s ON "as".source_id = s.id
+		GROUP BY a.code
 	`).Query()
 	if err != nil {
 		return errors.Wrap(err, "queries.Raw")
