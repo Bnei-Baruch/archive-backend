@@ -36,7 +36,7 @@ func (s *AuthorsStatsCacheImpl) String() string {
 
 func (s *AuthorsStatsCacheImpl) Refresh() error {
 	err := s.load()
-	return errors.Wrap(err, "Load tags and sources stats.")
+	return errors.Wrap(err, "Load authors stats.")
 }
 
 func (s *AuthorsStatsCacheImpl) load() error {
@@ -54,7 +54,7 @@ func (s *AuthorsStatsCacheImpl) load() error {
 	for rows.Next() {
 		var code string
 		var uids pq.StringArray
-		err := rows.Scan(code, &uids)
+		err := rows.Scan(&code, &uids)
 		if err != nil {
 			return errors.Wrap(err, "rows.Scan")
 		}
