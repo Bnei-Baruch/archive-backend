@@ -27,8 +27,9 @@ type StatsNode struct {
 }
 
 type StatsTree struct {
-	byID  map[int64]*StatsNode
-	byUID map[string]*StatsNode
+	byID     map[int64]*StatsNode
+	byUID    map[string]*StatsNode
+	tempByID map[int64]*StatsNode
 }
 
 func (st *StatsTree) GetUniqueChildren(rootUIDs []string) ([]string, []int64) {
@@ -76,13 +77,16 @@ func NewStatsTree() *StatsTree {
 // parent nodes's Histogram will be the overall sum of its children.
 // We do that in code because we don't really know how to do that with SQL.
 func (st *StatsTree) accumulate() {
+	st.byID = make(map[int64]*StatsNode)
+	st.byUID = make(map[string]*StatsNode)
 	// compute children since next step rely on it for correction
-	for k, v := range st.byID {
+	for k, v := range st.tempByID {
 		if v.parentID != 0 {
-			parent := st.byID[v.parentID]
+			parent := st.tempByID[v.parentID]
 			parent.children = append(parent.children, k)
 		}
 
+		st.byID[k] = v
 		st.byUID[v.uid] = v
 	}
 
@@ -130,18 +134,22 @@ func (st *StatsTree) flatten() map[string]Histogram {
 }
 
 func (st *StatsTree) insert(id, parentID int64, uid string, ct string, cnt int) {
-	node, ok := st.byID[id]
+	node, ok := st.tempByID[id]
 	if !ok {
 		node = new(StatsNode)
 		node.id = id
 		node.parentID = parentID
 		node.uid = uid
 		node.hist = make(Histogram)
-		st.byID[id] = node
+		st.tempByID[id] = node
 	}
 	if ct != "" {
 		node.hist.Increment(ct, cnt)
 	}
+}
+
+func (st *StatsTree) resetTemp() {
+	st.tempByID = make(map[int64]*StatsNode)
 }
 
 type ClassByTypeStats map[string]Histogram
