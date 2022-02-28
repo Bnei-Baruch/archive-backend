@@ -520,7 +520,7 @@ func (tagL) LoadLabels(e boil.Executor, singular bool, maybeTag interface{}) err
 		one := new(Label)
 		var localJoinCol int64
 
-		err = results.Scan(&one.ID, &one.UID, &one.ContentUnitID, &one.MediaType, &one.Properties, &one.Secure, &one.Published, &one.CreatedAt, &localJoinCol)
+		err = results.Scan(&one.ID, &one.UID, &one.ContentUnitID, &one.MediaType, &one.Properties, &one.ApproveState, &one.CreatedAt, &localJoinCol)
 		if err = results.Err(); err != nil {
 			return errors.Wrap(err, "failed to plebian-bind eager loaded slice labels")
 		}

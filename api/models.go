@@ -33,8 +33,8 @@ type ItemRequest struct {
 }
 
 type TagDashboardRequest struct {
-	ListRequest
-	UID string
+	ItemRequest
+	N int `json:"n" form:"n"`
 }
 
 type IDsFilter struct {
@@ -183,14 +183,10 @@ type HomeResponse struct {
 	Banner             *Banner        `json:"banner"`
 }
 
-type TagsDashboardItem struct {
-	LabelID       string `json:"label_id,omitempty"`
-	ContentUnitID string `json:"content_unit_id,required"`
-}
 type TagsDashboardResponse struct {
-	MediaTotal int64                `json:"media_total"`
-	TextTotal  int64                `json:"text_total"`
-	Items      []*TagsDashboardItem `json:"items"`
+	PromotedContentUnits []*ContentUnit `json:"promoted_units"`
+	LatestContentUnits   []*ContentUnit `json:"latest_units"`
+	Counts               map[string]int `json:"counts"`
 }
 
 type StatsCUClassRequest struct {
@@ -301,7 +297,10 @@ func NewBlogPostsResponse() *BlogPostsResponse {
 }
 
 func NewTagsDashboardResponse() *TagsDashboardResponse {
-	return &TagsDashboardResponse{Items: make([]*TagsDashboardItem, 0)}
+	return &TagsDashboardResponse{
+		PromotedContentUnits: make([]*ContentUnit, 0),
+		LatestContentUnits:   make([]*ContentUnit, 0),
+	}
 }
 
 func NewStatsCUClassResponse() *StatsCUClassResponse {

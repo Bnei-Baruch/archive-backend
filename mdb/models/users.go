@@ -30,6 +30,8 @@ type User struct {
 	CreatedAt time.Time   `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
 	UpdatedAt null.Time   `boil:"updated_at" json:"updated_at,omitempty" toml:"updated_at" yaml:"updated_at,omitempty"`
 	DeletedAt null.Time   `boil:"deleted_at" json:"deleted_at,omitempty" toml:"deleted_at" yaml:"deleted_at,omitempty"`
+	AccountID null.String `boil:"account_id" json:"account_id,omitempty" toml:"account_id" yaml:"account_id,omitempty"`
+	Disabled  bool        `boil:"disabled" json:"disabled" toml:"disabled" yaml:"disabled"`
 
 	R *userR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L userL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -44,6 +46,8 @@ var UserColumns = struct {
 	CreatedAt string
 	UpdatedAt string
 	DeletedAt string
+	AccountID string
+	Disabled  string
 }{
 	ID:        "id",
 	Email:     "email",
@@ -53,12 +57,15 @@ var UserColumns = struct {
 	CreatedAt: "created_at",
 	UpdatedAt: "updated_at",
 	DeletedAt: "deleted_at",
+	AccountID: "account_id",
+	Disabled:  "disabled",
 }
 
 // userR is where relationships are stored.
 type userR struct {
 	CollectionI18ns  CollectionI18nSlice
 	ContentUnitI18ns ContentUnitI18nSlice
+	LabelI18ns       LabelI18nSlice
 	Operations       OperationSlice
 	PersonI18ns      PersonI18nSlice
 	PublisherI18ns   PublisherI18nSlice
@@ -69,9 +76,9 @@ type userR struct {
 type userL struct{}
 
 var (
-	userColumns               = []string{"id", "email", "name", "phone", "comments", "created_at", "updated_at", "deleted_at"}
-	userColumnsWithoutDefault = []string{"email", "name", "phone", "comments", "updated_at", "deleted_at"}
-	userColumnsWithDefault    = []string{"id", "created_at"}
+	userColumns               = []string{"id", "email", "name", "phone", "comments", "created_at", "updated_at", "deleted_at", "account_id", "disabled"}
+	userColumnsWithoutDefault = []string{"email", "name", "phone", "comments", "updated_at", "deleted_at", "account_id"}
+	userColumnsWithDefault    = []string{"id", "created_at", "disabled"}
 	userPrimaryKeyColumns     = []string{"id"}
 )
 
@@ -126,7 +133,7 @@ func (q userQuery) One() (*User, error) {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
 		}
-		return nil, errors.Wrap(err, "mdbmodels: failed to execute a one query for users")
+		return nil, errors.Wrap(err, "models: failed to execute a one query for users")
 	}
 
 	return o, nil
@@ -148,7 +155,7 @@ func (q userQuery) All() (UserSlice, error) {
 
 	err := q.Bind(&o)
 	if err != nil {
-		return nil, errors.Wrap(err, "mdbmodels: failed to assign all query results to User slice")
+		return nil, errors.Wrap(err, "models: failed to assign all query results to User slice")
 	}
 
 	return o, nil
@@ -173,7 +180,7 @@ func (q userQuery) Count() (int64, error) {
 
 	err := q.Query.QueryRow().Scan(&count)
 	if err != nil {
-		return 0, errors.Wrap(err, "mdbmodels: failed to count users rows")
+		return 0, errors.Wrap(err, "models: failed to count users rows")
 	}
 
 	return count, nil
@@ -198,7 +205,7 @@ func (q userQuery) Exists() (bool, error) {
 
 	err := q.Query.QueryRow().Scan(&count)
 	if err != nil {
-		return false, errors.Wrap(err, "mdbmodels: failed to check if users exists")
+		return false, errors.Wrap(err, "models: failed to check if users exists")
 	}
 
 	return count > 0, nil
@@ -251,6 +258,32 @@ func (o *User) ContentUnitI18ns(exec boil.Executor, mods ...qm.QueryMod) content
 
 	if len(queries.GetSelect(query.Query)) == 0 {
 		queries.SetSelect(query.Query, []string{"\"content_unit_i18n\".*"})
+	}
+
+	return query
+}
+
+// LabelI18nsG retrieves all the label_i18n's label i18n.
+func (o *User) LabelI18nsG(mods ...qm.QueryMod) labelI18nQuery {
+	return o.LabelI18ns(boil.GetDB(), mods...)
+}
+
+// LabelI18ns retrieves all the label_i18n's label i18n with an executor.
+func (o *User) LabelI18ns(exec boil.Executor, mods ...qm.QueryMod) labelI18nQuery {
+	var queryMods []qm.QueryMod
+	if len(mods) != 0 {
+		queryMods = append(queryMods, mods...)
+	}
+
+	queryMods = append(queryMods,
+		qm.Where("\"label_i18n\".\"user_id\"=?", o.ID),
+	)
+
+	query := LabelI18ns(exec, queryMods...)
+	queries.SetFrom(query.Query, "\"label_i18n\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"label_i18n\".*"})
 	}
 
 	return query
@@ -482,6 +515,71 @@ func (userL) LoadContentUnitI18ns(e boil.Executor, singular bool, maybeUser inte
 		for _, local := range slice {
 			if local.ID == foreign.UserID.Int64 {
 				local.R.ContentUnitI18ns = append(local.R.ContentUnitI18ns, foreign)
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
+// LoadLabelI18ns allows an eager lookup of values, cached into the
+// loaded structs of the objects.
+func (userL) LoadLabelI18ns(e boil.Executor, singular bool, maybeUser interface{}) error {
+	var slice []*User
+	var object *User
+
+	count := 1
+	if singular {
+		object = maybeUser.(*User)
+	} else {
+		slice = *maybeUser.(*[]*User)
+		count = len(slice)
+	}
+
+	args := make([]interface{}, count)
+	if singular {
+		if object.R == nil {
+			object.R = &userR{}
+		}
+		args[0] = object.ID
+	} else {
+		for i, obj := range slice {
+			if obj.R == nil {
+				obj.R = &userR{}
+			}
+			args[i] = obj.ID
+		}
+	}
+
+	query := fmt.Sprintf(
+		"select * from \"label_i18n\" where \"user_id\" in (%s)",
+		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
+	)
+	if boil.DebugMode {
+		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
+	}
+
+	results, err := e.Query(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to eager load label_i18n")
+	}
+	defer results.Close()
+
+	var resultSlice []*LabelI18n
+	if err = queries.Bind(results, &resultSlice); err != nil {
+		return errors.Wrap(err, "failed to bind eager loaded slice label_i18n")
+	}
+
+	if singular {
+		object.R.LabelI18ns = resultSlice
+		return nil
+	}
+
+	for _, foreign := range resultSlice {
+		for _, local := range slice {
+			if local.ID == foreign.UserID.Int64 {
+				local.R.LabelI18ns = append(local.R.LabelI18ns, foreign)
 				break
 			}
 		}
@@ -1185,6 +1283,227 @@ func (o *User) RemoveContentUnitI18ns(exec boil.Executor, related ...*ContentUni
 				o.R.ContentUnitI18ns[i] = o.R.ContentUnitI18ns[ln-1]
 			}
 			o.R.ContentUnitI18ns = o.R.ContentUnitI18ns[:ln-1]
+			break
+		}
+	}
+
+	return nil
+}
+
+// AddLabelI18nsG adds the given related objects to the existing relationships
+// of the user, optionally inserting them as new records.
+// Appends related to o.R.LabelI18ns.
+// Sets related.R.User appropriately.
+// Uses the global database handle.
+func (o *User) AddLabelI18nsG(insert bool, related ...*LabelI18n) error {
+	return o.AddLabelI18ns(boil.GetDB(), insert, related...)
+}
+
+// AddLabelI18nsP adds the given related objects to the existing relationships
+// of the user, optionally inserting them as new records.
+// Appends related to o.R.LabelI18ns.
+// Sets related.R.User appropriately.
+// Panics on error.
+func (o *User) AddLabelI18nsP(exec boil.Executor, insert bool, related ...*LabelI18n) {
+	if err := o.AddLabelI18ns(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddLabelI18nsGP adds the given related objects to the existing relationships
+// of the user, optionally inserting them as new records.
+// Appends related to o.R.LabelI18ns.
+// Sets related.R.User appropriately.
+// Uses the global database handle and panics on error.
+func (o *User) AddLabelI18nsGP(insert bool, related ...*LabelI18n) {
+	if err := o.AddLabelI18ns(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddLabelI18ns adds the given related objects to the existing relationships
+// of the user, optionally inserting them as new records.
+// Appends related to o.R.LabelI18ns.
+// Sets related.R.User appropriately.
+func (o *User) AddLabelI18ns(exec boil.Executor, insert bool, related ...*LabelI18n) error {
+	var err error
+	for _, rel := range related {
+		if insert {
+			rel.UserID.Int64 = o.ID
+			rel.UserID.Valid = true
+			if err = rel.Insert(exec); err != nil {
+				return errors.Wrap(err, "failed to insert into foreign table")
+			}
+		} else {
+			updateQuery := fmt.Sprintf(
+				"UPDATE \"label_i18n\" SET %s WHERE %s",
+				strmangle.SetParamNames("\"", "\"", 1, []string{"user_id"}),
+				strmangle.WhereClause("\"", "\"", 2, labelI18nPrimaryKeyColumns),
+			)
+			values := []interface{}{o.ID, rel.LabelID, rel.Language}
+
+			if boil.DebugMode {
+				fmt.Fprintln(boil.DebugWriter, updateQuery)
+				fmt.Fprintln(boil.DebugWriter, values)
+			}
+
+			if _, err = exec.Exec(updateQuery, values...); err != nil {
+				return errors.Wrap(err, "failed to update foreign table")
+			}
+
+			rel.UserID.Int64 = o.ID
+			rel.UserID.Valid = true
+		}
+	}
+
+	if o.R == nil {
+		o.R = &userR{
+			LabelI18ns: related,
+		}
+	} else {
+		o.R.LabelI18ns = append(o.R.LabelI18ns, related...)
+	}
+
+	for _, rel := range related {
+		if rel.R == nil {
+			rel.R = &labelI18nR{
+				User: o,
+			}
+		} else {
+			rel.R.User = o
+		}
+	}
+	return nil
+}
+
+// SetLabelI18nsG removes all previously related items of the
+// user replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.User's LabelI18ns accordingly.
+// Replaces o.R.LabelI18ns with related.
+// Sets related.R.User's LabelI18ns accordingly.
+// Uses the global database handle.
+func (o *User) SetLabelI18nsG(insert bool, related ...*LabelI18n) error {
+	return o.SetLabelI18ns(boil.GetDB(), insert, related...)
+}
+
+// SetLabelI18nsP removes all previously related items of the
+// user replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.User's LabelI18ns accordingly.
+// Replaces o.R.LabelI18ns with related.
+// Sets related.R.User's LabelI18ns accordingly.
+// Panics on error.
+func (o *User) SetLabelI18nsP(exec boil.Executor, insert bool, related ...*LabelI18n) {
+	if err := o.SetLabelI18ns(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetLabelI18nsGP removes all previously related items of the
+// user replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.User's LabelI18ns accordingly.
+// Replaces o.R.LabelI18ns with related.
+// Sets related.R.User's LabelI18ns accordingly.
+// Uses the global database handle and panics on error.
+func (o *User) SetLabelI18nsGP(insert bool, related ...*LabelI18n) {
+	if err := o.SetLabelI18ns(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetLabelI18ns removes all previously related items of the
+// user replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.User's LabelI18ns accordingly.
+// Replaces o.R.LabelI18ns with related.
+// Sets related.R.User's LabelI18ns accordingly.
+func (o *User) SetLabelI18ns(exec boil.Executor, insert bool, related ...*LabelI18n) error {
+	query := "update \"label_i18n\" set \"user_id\" = null where \"user_id\" = $1"
+	values := []interface{}{o.ID}
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, query)
+		fmt.Fprintln(boil.DebugWriter, values)
+	}
+
+	_, err := exec.Exec(query, values...)
+	if err != nil {
+		return errors.Wrap(err, "failed to remove relationships before set")
+	}
+
+	if o.R != nil {
+		for _, rel := range o.R.LabelI18ns {
+			rel.UserID.Valid = false
+			if rel.R == nil {
+				continue
+			}
+
+			rel.R.User = nil
+		}
+
+		o.R.LabelI18ns = nil
+	}
+	return o.AddLabelI18ns(exec, insert, related...)
+}
+
+// RemoveLabelI18nsG relationships from objects passed in.
+// Removes related items from R.LabelI18ns (uses pointer comparison, removal does not keep order)
+// Sets related.R.User.
+// Uses the global database handle.
+func (o *User) RemoveLabelI18nsG(related ...*LabelI18n) error {
+	return o.RemoveLabelI18ns(boil.GetDB(), related...)
+}
+
+// RemoveLabelI18nsP relationships from objects passed in.
+// Removes related items from R.LabelI18ns (uses pointer comparison, removal does not keep order)
+// Sets related.R.User.
+// Panics on error.
+func (o *User) RemoveLabelI18nsP(exec boil.Executor, related ...*LabelI18n) {
+	if err := o.RemoveLabelI18ns(exec, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemoveLabelI18nsGP relationships from objects passed in.
+// Removes related items from R.LabelI18ns (uses pointer comparison, removal does not keep order)
+// Sets related.R.User.
+// Uses the global database handle and panics on error.
+func (o *User) RemoveLabelI18nsGP(related ...*LabelI18n) {
+	if err := o.RemoveLabelI18ns(boil.GetDB(), related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemoveLabelI18ns relationships from objects passed in.
+// Removes related items from R.LabelI18ns (uses pointer comparison, removal does not keep order)
+// Sets related.R.User.
+func (o *User) RemoveLabelI18ns(exec boil.Executor, related ...*LabelI18n) error {
+	var err error
+	for _, rel := range related {
+		rel.UserID.Valid = false
+		if rel.R != nil {
+			rel.R.User = nil
+		}
+		if err = rel.Update(exec, "user_id"); err != nil {
+			return err
+		}
+	}
+	if o.R == nil {
+		return nil
+	}
+
+	for _, rel := range related {
+		for i, ri := range o.R.LabelI18ns {
+			if rel != ri {
+				continue
+			}
+
+			ln := len(o.R.LabelI18ns)
+			if ln > 1 && i < ln-1 {
+				o.R.LabelI18ns[i] = o.R.LabelI18ns[ln-1]
+			}
+			o.R.LabelI18ns = o.R.LabelI18ns[:ln-1]
 			break
 		}
 	}
@@ -2122,7 +2441,7 @@ func FindUser(exec boil.Executor, id int64, selectCols ...string) (*User, error)
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
 		}
-		return nil, errors.Wrap(err, "mdbmodels: unable to select from users")
+		return nil, errors.Wrap(err, "models: unable to select from users")
 	}
 
 	return userObj, nil
@@ -2166,7 +2485,7 @@ func (o *User) InsertP(exec boil.Executor, whitelist ...string) {
 // - All columns with a default, but non-zero are included (i.e. health = 75)
 func (o *User) Insert(exec boil.Executor, whitelist ...string) error {
 	if o == nil {
-		return errors.New("mdbmodels: no users provided for insertion")
+		return errors.New("models: no users provided for insertion")
 	}
 
 	var err error
@@ -2227,7 +2546,7 @@ func (o *User) Insert(exec boil.Executor, whitelist ...string) error {
 	}
 
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to insert into users")
+		return errors.Wrap(err, "models: unable to insert into users")
 	}
 
 	if !cached {
@@ -2285,7 +2604,7 @@ func (o *User) Update(exec boil.Executor, whitelist ...string) error {
 		)
 
 		if len(wl) == 0 {
-			return errors.New("mdbmodels: unable to update users, could not build whitelist")
+			return errors.New("models: unable to update users, could not build whitelist")
 		}
 
 		cache.query = fmt.Sprintf("UPDATE \"users\" SET %s WHERE %s",
@@ -2307,7 +2626,7 @@ func (o *User) Update(exec boil.Executor, whitelist ...string) error {
 
 	_, err = exec.Exec(cache.query, values...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to update users row")
+		return errors.Wrap(err, "models: unable to update users row")
 	}
 
 	if !cached {
@@ -2332,7 +2651,7 @@ func (q userQuery) UpdateAll(cols M) error {
 
 	_, err := q.Query.Exec()
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to update all for users")
+		return errors.Wrap(err, "models: unable to update all for users")
 	}
 
 	return nil
@@ -2365,7 +2684,7 @@ func (o UserSlice) UpdateAll(exec boil.Executor, cols M) error {
 	}
 
 	if len(cols) == 0 {
-		return errors.New("mdbmodels: update all requires at least one column argument")
+		return errors.New("models: update all requires at least one column argument")
 	}
 
 	colNames := make([]string, len(cols))
@@ -2395,7 +2714,7 @@ func (o UserSlice) UpdateAll(exec boil.Executor, cols M) error {
 
 	_, err := exec.Exec(sql, args...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to update all in user slice")
+		return errors.Wrap(err, "models: unable to update all in user slice")
 	}
 
 	return nil
@@ -2424,7 +2743,7 @@ func (o *User) UpsertP(exec boil.Executor, updateOnConflict bool, conflictColumn
 // Upsert attempts an insert using an executor, and does an update or ignore on conflict.
 func (o *User) Upsert(exec boil.Executor, updateOnConflict bool, conflictColumns []string, updateColumns []string, whitelist ...string) error {
 	if o == nil {
-		return errors.New("mdbmodels: no users provided for upsert")
+		return errors.New("models: no users provided for upsert")
 	}
 
 	nzDefaults := queries.NonZeroDefaultSet(userColumnsWithDefault, o)
@@ -2477,7 +2796,7 @@ func (o *User) Upsert(exec boil.Executor, updateOnConflict bool, conflictColumns
 			updateColumns,
 		)
 		if len(update) == 0 {
-			return errors.New("mdbmodels: unable to upsert users, could not build update column list")
+			return errors.New("models: unable to upsert users, could not build update column list")
 		}
 
 		conflict := conflictColumns
@@ -2520,7 +2839,7 @@ func (o *User) Upsert(exec boil.Executor, updateOnConflict bool, conflictColumns
 		_, err = exec.Exec(cache.query, vals...)
 	}
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to upsert users")
+		return errors.Wrap(err, "models: unable to upsert users")
 	}
 
 	if !cached {
@@ -2545,7 +2864,7 @@ func (o *User) DeleteP(exec boil.Executor) {
 // DeleteG will match against the primary key column to find the record to delete.
 func (o *User) DeleteG() error {
 	if o == nil {
-		return errors.New("mdbmodels: no User provided for deletion")
+		return errors.New("models: no User provided for deletion")
 	}
 
 	return o.Delete(boil.GetDB())
@@ -2564,7 +2883,7 @@ func (o *User) DeleteGP() {
 // Delete will match against the primary key column to find the record to delete.
 func (o *User) Delete(exec boil.Executor) error {
 	if o == nil {
-		return errors.New("mdbmodels: no User provided for delete")
+		return errors.New("models: no User provided for delete")
 	}
 
 	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), userPrimaryKeyMapping)
@@ -2577,7 +2896,7 @@ func (o *User) Delete(exec boil.Executor) error {
 
 	_, err := exec.Exec(sql, args...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to delete from users")
+		return errors.Wrap(err, "models: unable to delete from users")
 	}
 
 	return nil
@@ -2593,14 +2912,14 @@ func (q userQuery) DeleteAllP() {
 // DeleteAll deletes all matching rows.
 func (q userQuery) DeleteAll() error {
 	if q.Query == nil {
-		return errors.New("mdbmodels: no userQuery provided for delete all")
+		return errors.New("models: no userQuery provided for delete all")
 	}
 
 	queries.SetDelete(q.Query)
 
 	_, err := q.Query.Exec()
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to delete all from users")
+		return errors.Wrap(err, "models: unable to delete all from users")
 	}
 
 	return nil
@@ -2616,7 +2935,7 @@ func (o UserSlice) DeleteAllGP() {
 // DeleteAllG deletes all rows in the slice.
 func (o UserSlice) DeleteAllG() error {
 	if o == nil {
-		return errors.New("mdbmodels: no User slice provided for delete all")
+		return errors.New("models: no User slice provided for delete all")
 	}
 	return o.DeleteAll(boil.GetDB())
 }
@@ -2631,7 +2950,7 @@ func (o UserSlice) DeleteAllP(exec boil.Executor) {
 // DeleteAll deletes all rows in the slice, using an executor.
 func (o UserSlice) DeleteAll(exec boil.Executor) error {
 	if o == nil {
-		return errors.New("mdbmodels: no User slice provided for delete all")
+		return errors.New("models: no User slice provided for delete all")
 	}
 
 	if len(o) == 0 {
@@ -2654,7 +2973,7 @@ func (o UserSlice) DeleteAll(exec boil.Executor) error {
 
 	_, err := exec.Exec(sql, args...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to delete all from user slice")
+		return errors.Wrap(err, "models: unable to delete all from user slice")
 	}
 
 	return nil
@@ -2677,7 +2996,7 @@ func (o *User) ReloadP(exec boil.Executor) {
 // ReloadG refetches the object from the database using the primary keys.
 func (o *User) ReloadG() error {
 	if o == nil {
-		return errors.New("mdbmodels: no User provided for reload")
+		return errors.New("models: no User provided for reload")
 	}
 
 	return o.Reload(boil.GetDB())
@@ -2717,7 +3036,7 @@ func (o *UserSlice) ReloadAllP(exec boil.Executor) {
 // and overwrites the original object slice with the newly updated slice.
 func (o *UserSlice) ReloadAllG() error {
 	if o == nil {
-		return errors.New("mdbmodels: empty UserSlice provided for reload all")
+		return errors.New("models: empty UserSlice provided for reload all")
 	}
 
 	return o.ReloadAll(boil.GetDB())
@@ -2744,7 +3063,7 @@ func (o *UserSlice) ReloadAll(exec boil.Executor) error {
 
 	err := q.Bind(&users)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to reload all in UserSlice")
+		return errors.Wrap(err, "models: unable to reload all in UserSlice")
 	}
 
 	*o = users
@@ -2766,7 +3085,7 @@ func UserExists(exec boil.Executor, id int64) (bool, error) {
 
 	err := row.Scan(&exists)
 	if err != nil {
-		return false, errors.Wrap(err, "mdbmodels: unable to check if users exists")
+		return false, errors.Wrap(err, "models: unable to check if users exists")
 	}
 
 	return exists, nil
