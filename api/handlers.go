@@ -2586,7 +2586,7 @@ func appendCollectionSourceFilterMods(cm cache.CacheManager, exec boil.Executor,
 	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
 		return nil
 	}
-	_, uids, err := prepareNestedSources(cm, exec, f)
+	_, uids, err := prepareNestedSources(cm, f)
 	if err != nil {
 		return err
 	}
@@ -2604,15 +2604,15 @@ func appendCollectionTagsFilterMods(cm cache.CacheManager, exec boil.Executor, m
 	}
 	uids, _ := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
 	//use Raw query because of need to use operator ?
-	var cIDs pq.Int64Array
+	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
 	if err := queries.Raw(exec, q, pq.Array(uids)).QueryRow().Scan(&ids); err != nil {
 		return err
 	}
-	if cIDs == nil || len(cIDs) == 0 {
+	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
-		*mods = append(*mods, qm.WhereIn("id in ?", utils.ConvertArgsInt64(cIDs)...))
+		*mods = append(*mods, qm.WhereIn("id in ?", utils.ConvertArgsInt64(ids)...))
 	}
 	return nil
 }
