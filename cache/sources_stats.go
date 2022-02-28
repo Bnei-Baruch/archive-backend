@@ -36,6 +36,7 @@ func (s *SourcesStatsCacheImpl) GetTree() *StatsTree {
 }
 
 func (s *SourcesStatsCacheImpl) Refresh() error {
+	s.tree.resetTemp()
 	err := s.load()
 	return errors.Wrap(err, "Load sources stats.")
 }

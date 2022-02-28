@@ -36,6 +36,7 @@ func (s *TagsStatsCacheImpl) GetTree() *StatsTree {
 }
 
 func (s *TagsStatsCacheImpl) Refresh() error {
+	s.tree.resetTemp()
 	err := s.load()
 	return errors.Wrap(err, "Load tags stats.")
 }
