@@ -13,6 +13,7 @@ import (
 
 	"gopkg.in/gin-gonic/gin.v1"
 
+	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )
 
@@ -595,6 +596,7 @@ var CT = map[string]map[string]string{
 		"tr": "Seçilen Önemli Noktalar",
 	},
 }
+
 func FeedPodcast(c *gin.Context) {
 	var config feedConfig
 	(&config).getConfig(c)
@@ -642,6 +644,7 @@ func FeedPodcast(c *gin.Context) {
 		Items: make([]*podcastItem, 0),
 	}
 
+	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	cur := ContentUnitsRequest{
 		ListRequest: ListRequest{
@@ -658,7 +661,7 @@ func FeedPodcast(c *gin.Context) {
 	}
 
 	languages := []string{config.Lang}
-	item, err := handleContentUnitsFull(db, cur, mediaTypes, languages)
+	item, err := handleContentUnitsFull(cm, db, cur, mediaTypes, languages)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.XML(http.StatusOK, channel.CreateFeed())
@@ -712,6 +715,7 @@ func FeedCollections(c *gin.Context) {
 	var config feedConfig
 	(&config).getConfig(c)
 
+	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
 	//DF=[A]/V/X
@@ -786,13 +790,14 @@ func FeedCollections(c *gin.Context) {
 		cur.Tags = []string{config.TAG}
 	}
 	languages := []string{config.Lang}
-	renderContentUnits(db, cur, mediaTypes, languages, c, channel, href)
+	renderContentUnits(cm, db, cur, mediaTypes, languages, c, channel, href)
 }
 
 func FeedByContentType(c *gin.Context) {
 	var config feedConfig
 	(&config).getConfig(c)
 
+	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
 	//DF=[A]/V/X
@@ -877,11 +882,11 @@ func FeedByContentType(c *gin.Context) {
 		}
 	}
 	languages := []string{config.Lang}
-	renderContentUnits(db, cur, mediaTypes, languages, c, channel, href)
+	renderContentUnits(cm, db, cur, mediaTypes, languages, c, channel, href)
 }
 
-func renderContentUnits(db *sql.DB, cur ContentUnitsRequest, mediaTypes []string, languages []string, c *gin.Context, channel *podcastChannel, href string) {
-	item, err := handleContentUnitsFull(db, cur, mediaTypes, languages)
+func renderContentUnits(cm cache.CacheManager, db *sql.DB, cur ContentUnitsRequest, mediaTypes []string, languages []string, c *gin.Context, channel *podcastChannel, href string) {
+	item, err := handleContentUnitsFull(cm, db, cur, mediaTypes, languages)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.XML(http.StatusOK, channel.CreateFeed())

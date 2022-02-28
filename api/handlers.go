@@ -46,7 +46,9 @@ func CollectionsHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), r)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err := handleCollections(cm, db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -78,7 +80,9 @@ func ContentUnitsHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err := handleContentUnits(c.MustGet("MDB_DB").(*sql.DB), r)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err := handleContentUnits(cm, db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -312,7 +316,10 @@ func LessonsHandler(c *gin.Context) {
 			DateRangeFilter: r.DateRangeFilter,
 			WithUnits:       true,
 		}
-		resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), cr)
+
+		cm := c.MustGet("CACHE").(cache.CacheManager)
+		db := c.MustGet("MDB_DB").(*sql.DB)
+		resp, err := handleCollections(cm, db, cr)
 		concludeRequest(c, resp, err)
 	} else {
 		if r.OrderBy == "" {
@@ -339,7 +346,9 @@ func LessonsHandler(c *gin.Context) {
 			MediaLanguageFilter: r.MediaLanguageFilter,
 			DerivedTypesFilter:  r.DerivedTypesFilter,
 		}
-		resp, err := handleContentUnits(c.MustGet("MDB_DB").(*sql.DB), cur)
+		cm := c.MustGet("CACHE").(cache.CacheManager)
+		db := c.MustGet("MDB_DB").(*sql.DB)
+		resp, err := handleContentUnits(cm, db, cur)
 		concludeRequest(c, resp, err)
 	}
 }
@@ -639,7 +648,9 @@ func StatsCUClassHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err := handleStatsCUClass(c.MustGet("MDB_DB").(*sql.DB), r)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err := handleStatsCUClass(cm, db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -703,11 +714,13 @@ func SimpleModeHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err2 := handleSimpleMode(c.MustGet("MDB_DB").(*sql.DB), r)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err2 := handleSimpleMode(cm, db, r)
 	concludeRequest(c, resp, err2)
 }
 
-func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
+func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
 	// filters
@@ -720,8 +733,10 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	appendCollectionSourceFilterMods(&mods, r.SourcesFilter)
-	if err := appendCollectionTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+	if err := appendCollectionSourceFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendCollectionTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 
@@ -1162,9 +1177,9 @@ order by type_id, film_date desc
 	return cus, cs, nil
 }
 
-func handleContentUnitsFull(db *sql.DB, r ContentUnitsRequest, mediaTypes []string, languages []string) (cuResp *ContentUnitsResponse, err error) {
+func handleContentUnitsFull(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest, mediaTypes []string, languages []string) (cuResp *ContentUnitsResponse, err error) {
 	r.WithFiles = false
-	cuResp, herr := handleContentUnits(db, r)
+	cuResp, herr := handleContentUnits(cm, db, r)
 	if herr != nil {
 		err = herr.Err
 		return
@@ -1342,7 +1357,7 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 	return banner, nil
 }
 
-func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsResponse, *HttpError) {
+func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest) (*ContentUnitsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
 	// filters
@@ -1355,14 +1370,14 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendSourcesFilterMods(db, &mods, r.SourcesFilter); err != nil {
+	if err := appendSourcesFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
 		} else {
 			return nil, NewInternalError(err)
 		}
 	}
-	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+	if err := appendTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
@@ -1897,7 +1912,7 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 	return sqd, nil
 }
 
-func handleStatsCUClass(db *sql.DB, r StatsCUClassRequest) (*StatsCUClassResponse, *HttpError) {
+func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsCUClassResponse, *HttpError) {
 	mods := []qm.QueryMod{
 		qm.Select("id"),
 		SECURE_PUBLISHED_MOD,
@@ -1913,14 +1928,14 @@ func handleStatsCUClass(db *sql.DB, r StatsCUClassRequest) (*StatsCUClassRespons
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendSourcesFilterMods(db, &mods, r.SourcesFilter); err != nil {
+	if err := appendSourcesFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
 		} else {
 			return nil, NewInternalError(err)
 		}
 	}
-	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+	if err := appendTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
@@ -2077,7 +2092,7 @@ func handleBlogPosts(db *sql.DB, r BlogPostsRequest) (*BlogPostsResponse, *HttpE
 	return resp, nil
 }
 
-func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *HttpError) {
+func handleSimpleMode(cm cache.CacheManager, db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *HttpError) {
 	// use today if empty (or partially empty) date range was provided
 	if r.StartDate == "" {
 		r.StartDate = r.EndDate
@@ -2102,7 +2117,7 @@ func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *Ht
 		DateRangeFilter: r.DateRangeFilter,
 		WithFiles:       true,
 	}
-	respCUs, err := handleContentUnits(db, cur)
+	respCUs, err := handleContentUnits(cm, db, cur)
 	if err != nil {
 		return nil, err
 	}
@@ -2139,7 +2154,7 @@ func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *Ht
 		DateRangeFilter: r.DateRangeFilter,
 		WithUnits:       true,
 	}
-	resp, err := handleCollections(db, cr)
+	resp, err := handleCollections(cm, db, cr)
 	if err != nil {
 		return nil, err
 	}
@@ -2356,21 +2371,31 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
 }
 
-func appendCollectionSourceFilterMods(mods *[]qm.QueryMod, f SourcesFilter) {
-	if len(f.Sources) != 0 {
-		*mods = append(*mods, qm.WhereIn("properties->>'source' in ?", utils.ConvertArgsString(f.Sources)...))
+func appendCollectionSourceFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
+	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
+		return nil
 	}
+	_, uids, err := prepareNestedSources(cm, exec, f)
+	if err != nil {
+		return err
+	}
+	if uids == nil || len(uids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods, qm.WhereIn("properties->>'source' in ?", utils.ConvertArgsString(uids)...))
+	}
+	return nil
 }
 
-func appendCollectionTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
+func appendCollectionTagsFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
 	if len(f.Tags) == 0 {
 		return nil
 	}
+	uids, _ := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
 	//use Raw query because of need to use operator ?
 	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
-	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
-	if err != nil {
+	if err := queries.Raw(exec, q, pq.Array(uids)).QueryRow().Scan(&ids); err != nil {
 		return err
 	}
 	if ids == nil || len(ids) == 0 {
@@ -2409,50 +2434,14 @@ func appendDRFBaseMods(mods *[]qm.QueryMod, f DateRangeFilter, field string) err
 	return nil
 }
 
-func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
+func appendSourcesFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
 	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
 		return nil
 	}
-
-	// slice of all source ids we want
-	sourceUids := make([]string, 0)
-
-	// fetch source ids by authors
-	if !utils.IsEmpty(f.Authors) {
-		for _, x := range f.Authors {
-			if _, ok := mdb.AUTHOR_REGISTRY.ByCode[strings.ToLower(x)]; !ok {
-				return NewBadRequestError(errors.Errorf("Unknown author: %s", x))
-			}
-		}
-
-		var uids pq.StringArray
-		q := `SELECT array_agg(DISTINCT s.uid)
-              FROM authors a INNER JOIN authors_sources "as" ON a.id = "as".author_id
-              INNER JOIN sources s ON "as".source_id = s.id
-              WHERE a.code = ANY($1)`
-		err := queries.Raw(exec, q, pq.Array(f.Authors)).QueryRow().Scan(&uids)
-		if err != nil {
-			return err
-		}
-		sourceUids = append(sourceUids, uids...)
-	}
-
-	// blend in requested sources
-	sourceUids = append(sourceUids, f.Sources...)
-
-	// find all nested source_uids
-	q := `WITH RECURSIVE rec_sources AS (
-          SELECT s.id FROM sources s WHERE s.uid = ANY($1)
-          UNION
-          SELECT s.id FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
-          )
-          SELECT array_agg(distinct id) FROM rec_sources`
-	var ids pq.Int64Array
-	err := queries.Raw(exec, q, pq.Array(sourceUids)).QueryRow().Scan(&ids)
+	ids, _, err := prepareNestedSources(cm, exec, f)
 	if err != nil {
 		return err
 	}
-
 	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
@@ -2464,24 +2453,35 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
 	return nil
 }
 
-func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
+func prepareNestedSources(cm cache.CacheManager, exec boil.Executor, f SourcesFilter) ([]int64, []string, error) {
+	// slice of all source ids we want
+	sourceUids := make([]string, 0)
+
+	// fetch source ids by authors
+	if !utils.IsEmpty(f.Authors) {
+		for _, x := range f.Authors {
+			if _, ok := mdb.AUTHOR_REGISTRY.ByCode[strings.ToLower(x)]; !ok {
+				return nil, nil, NewBadRequestError(errors.Errorf("Unknown author: %s", x))
+			}
+		}
+
+		roots := cm.AuthorsStats().GetSources(f.Authors)
+		sourceUids = append(sourceUids, roots...)
+	}
+
+	// blend in requested sources
+	sourceUids = append(sourceUids, f.Sources...)
+
+	uids, ids := cm.SourcesStats().GetTree().GetUniqueChildren(sourceUids)
+
+	return ids, uids, nil
+}
+
+func appendTagsFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
 	if len(f.Tags) == 0 {
 		return nil
 	}
-
-	// Find all nested tag_ids.
-	q := `WITH RECURSIVE rec_tags AS (
-            SELECT t.id FROM tags t WHERE t.uid = ANY($1)
-            UNION
-            SELECT t.id FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
-          )
-          SELECT array_agg(distinct id) FROM rec_tags`
-	var ids pq.Int64Array
-	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
-	if err != nil {
-		return err
-	}
-
+	_, ids := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
 	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
