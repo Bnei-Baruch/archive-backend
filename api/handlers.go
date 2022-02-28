@@ -622,15 +622,15 @@ func RecentlyUpdatedHandler(c *gin.Context) {
 
 func TagDashboardHandler(c *gin.Context) {
 	var r TagDashboardRequest
-	r.N = 5
 	if c.Bind(&r) != nil {
 		return
 	}
 
 	r.UID = c.Param("uid")
 
+	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	resp, err := handleTagDashboard(db, r)
+	resp, err := HandleTagDashboard(cm, db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -1825,89 +1825,195 @@ ORDER BY max_film_date DESC`
 	return data, nil
 }
 
-func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
-	// CU ids query
-	q := `
-WITH idsPerTag AS (
-		SELECT DISTINCT cu.id
-		FROM tags t
-		INNER JOIN content_units_tags cut ON t.id = cut.tag_id
-		INNER JOIN content_units cu ON cut.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
-		WHERE t.id IN (
-			WITH RECURSIVE rec_tags AS (
-				SELECT t.id
-				FROM tags t
-				WHERE t.uid = $1
-				UNION
-				SELECT t.id
-				FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
-			)
-			SELECT DISTINCT id
-			FROM rec_tags
-		)
-), idsGroupedByType AS (
-	SELECT cu.type_id,
-			ARRAY_AGG(cu.id ORDER BY  
-				(coalesce(cu.properties ->> 'film_date', cu.created_at :: TEXT)) :: DATE DESC
-			) AS ids
-	FROM content_units cu
-	WHERE id IN (SELECT id FROM idsPerTag)
-	GROUP BY cu.type_id
-)
-SELECT type_id,
-       ids[0:$2] AS ids,
-       array_length(ids, 1) AS count
-FROM idsGroupedByType
-;`
+type dashboardParams struct {
+	offset      int64
+	limit       int64
+	labelOffset int64
+	labelLimit  int64
+	total       int64
+	labelMods   []qm.QueryMod
+	ctIDs       []int64
+}
 
-	rows, err := queries.Raw(db, q, r.UID, r.N).Query()
+func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
+
+	tids, _, err := prepareNestedTagIds(db, TagsFilter{Tags: []string{r.UID}})
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	mods := []qm.QueryMod{
+		qm.InnerJoin("label_tag lt ON lt.label_id = id"),
+		qm.WhereIn("lt.tag_id IN ?", utils.ConvertArgsInt64(tids)...),
+		qm.InnerJoin("label_i18n i18n ON i18n.label_id = id"),
+		qm.WhereIn("i18n.language = ?", r.Language),
+		qm.Where("secure=?", consts.SEC_PUBLIC),
+	}
+	textParam := &dashboardParams{labelMods: append(mods, qm.Where("media_type = 'text'"))}
+	mediaParam := &dashboardParams{labelMods: append(mods, qm.Where("media_type != 'text'"))}
+
+	if r.PageSize == 0 {
+		r.PageSize = consts.API_DEFAULT_PAGE_SIZE
+	} else {
+		r.PageSize = utils.Min(r.PageSize, consts.API_MAX_PAGE_SIZE)
+	}
+
+	if err := prepareTagDashboardParams(db, textParam, r.ListRequest); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := prepareTagDashboardParams(db, mediaParam, r.ListRequest); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	for _, t := range consts.TEXT_TYPES {
+		textParam.ctIDs = append(textParam.ctIDs, mdb.CONTENT_TYPE_REGISTRY.ByName[t].ID)
+	}
+
+	for _, t := range consts.MEDIA_TYPES {
+		mediaParam.ctIDs = append(mediaParam.ctIDs, mdb.CONTENT_TYPE_REGISTRY.ByName[t].ID)
+	}
+
+	q := fmt.Sprintf(`(
+	SELECT DISTINCT cu.uid as uid, count(*) OVER() as count, 'T' as media_type 
+		FROM content_units cu
+		INNER JOIN content_units_tags cut ON cut.content_unit_id = cu.id
+		INNER JOIN content_unit_i18n cui18n ON cui18n.content_unit_id = cu.id
+		WHERE cut.tag_id IN (%[1]s)
+		AND cu.type_id IN (%[2]s)
+		AND cui18n.language = $1
+		AND cu.secure = 0 AND cu.published IS TRUE
+		OFFSET $3 
+		LIMIT $2
+	) UNION ( 
+	SELECT DISTINCT cu.uid, count(*) OVER(), 'M'
+		FROM content_units cu
+		INNER JOIN content_units_tags cut ON cut.content_unit_id = cu.id
+		INNER JOIN content_unit_i18n cui18n ON cui18n.content_unit_id = cu.id
+		WHERE cut.tag_id IN (%[1]s)
+		AND cu.type_id IN (%[3]s)
+		AND cui18n.language = $1
+		AND cu.id = ANY(SELECT f.content_unit_id FROM files f WHERE f.type IN ('video', 'audio'))
+		AND cu.secure = 0 AND cu.published IS TRUE
+		OFFSET $5 
+		LIMIT $4 
+	)`,
+		utils.JoinInt64(tids, ","),
+		utils.JoinInt64(textParam.ctIDs, ","),
+		utils.JoinInt64(mediaParam.ctIDs, ","),
+	)
+
+	rows, err := queries.Raw(db, q, r.Language, textParam.limit, textParam.offset, mediaParam.limit, mediaParam.offset).Query()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 	defer rows.Close()
 
-	cuIDs := []int64{}
-	counts := map[string]int{}
+	cuUIDs := []string{}
+	var textCount int64 = 0
+	var mediaCount int64 = 0
 	for rows.Next() {
-		var typeId int64
+		var uid string
 		var count int64
-		ids := []int64{}
-		err = rows.Scan(&typeId, pq.Array(&ids), &count)
+		var mt string
+		err = rows.Scan(&uid, &count, &mt)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
-		counts[mdb.CONTENT_TYPE_REGISTRY.ByID[typeId].Name] = int(count)
+		if mt == "T" {
+			textCount = count
+		} else {
+			mediaCount = count
+		}
 
-		cuIDs = append(cuIDs, ids...)
+		cuUIDs = append(cuUIDs, uid)
 	}
 	if err = rows.Err(); err != nil {
 		return nil, NewInternalError(err)
 	}
 
-	if len(cuIDs) == 0 {
-		return NewTagsDashboardResponse(), nil
-	}
+	updateDashboardLabelParam(textParam, textCount, r.ListRequest)
+	updateDashboardLabelParam(mediaParam, mediaCount, r.ListRequest)
 
-	// data query
-	units, err := mdbmodels.ContentUnits(db,
-		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
-		qm.OrderBy("(coalesce(properties->>'film_date', created_at::text))::date desc, created_at desc"),
-		qm.Load("CollectionsContentUnits", "CollectionsContentUnits.Collection")).
-		All()
+	mods = append(mods,
+		qm.Load("ContentUnit"),
+		qm.Limit(int(textParam.labelLimit)),
+		qm.Offset(int(textParam.labelOffset)),
+	)
+	labels, err := mdbmodels.Labels(db, mods...).All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 
-	// response
-	cus, ex := prepareCUs(db, units, r.Language)
-	if ex != nil {
-		return nil, ex
+	if len(cuUIDs) == 0 && len(labels) == 0 {
+		return NewTagsDashboardResponse(), nil
 	}
 
-	return &TagsDashboardResponse{
-		LatestContentUnits: cus,
-		Counts:             counts,
-	}, nil
+	items := make([]*TagsDashboardItem, 0)
+	for _, l := range labels {
+		item := &TagsDashboardItem{
+			LabelID:       l.UID,
+			ContentUnitID: l.R.ContentUnit.UID,
+		}
+		items = append(items, item)
+	}
+
+	for _, uid := range cuUIDs {
+		item := &TagsDashboardItem{
+			ContentUnitID: uid,
+		}
+		items = append(items, item)
+	}
+
+	resp := &TagsDashboardResponse{
+		MediaTotal: mediaCount + mediaParam.total,
+		TextTotal:  textCount + textParam.total,
+		Items:      items,
+	}
+	return resp, nil
+}
+
+//fetch half from labels and half from tags, if have, if no get from other
+func prepareTagDashboardParams(db *sql.DB, params *dashboardParams, r ListRequest) error {
+	total, err := mdbmodels.Labels(db, params.labelMods...).Count()
+	if err != nil {
+		return NewInternalError(err)
+	}
+	params.total = total
+	params.offset = int64(r.PageNumber * r.PageSize / 2)
+	if int(total) >= (r.PageNumber+1)*(r.PageSize/2) {
+		params.limit = int64(r.PageSize / 2)
+		return nil
+	}
+	if int(total) >= r.PageNumber*r.PageSize/2 {
+		params.limit = int64(r.PageSize) - (total - int64(r.PageNumber*r.PageSize/2))
+		return nil
+	}
+	params.limit = int64(r.PageSize)
+	if r.PageNumber == 0 {
+		params.offset = 0
+	} else {
+		params.offset = int64(r.PageNumber*r.PageSize) - total
+	}
+	return nil
+}
+
+func updateDashboardLabelParam(params *dashboardParams, total int64, r ListRequest) {
+	params.labelOffset = int64(r.PageNumber * r.PageSize / 2)
+	if int(total) >= (r.PageNumber+1)*r.PageSize/2 {
+		params.labelLimit = int64(r.PageSize / 2)
+		return
+	}
+
+	if int(total) >= r.PageNumber*r.PageSize/2 {
+		params.limit = int64(r.PageSize) - (total - int64(r.PageNumber*r.PageSize/2))
+		return
+	}
+
+	params.labelLimit = int64(r.PageSize)
+	if r.PageNumber == 0 {
+		params.labelOffset = 0
+	} else {
+		params.labelOffset = int64(r.PageNumber*r.PageSize) - total
+	}
 }
 
 // translate tag.keys (UIDs of tags) to their translation
@@ -2598,6 +2704,19 @@ func appendTagsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilt
 	}
 
 	return nil
+}
+
+func prepareNestedTagIds(exec boil.Executor, f TagsFilter) (pq.Int64Array, pq.StringArray, error) {
+	q := `WITH RECURSIVE rec_tags AS (
+            SELECT t.id, t.uid FROM tags t WHERE t.uid = ANY($1)
+            UNION
+            SELECT t.id, t.uid FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
+          )
+          SELECT array_agg(distinct id),  array_agg(uid) FROM rec_tags`
+	var ids pq.Int64Array
+	var uids pq.StringArray
+	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids, &uids)
+	return ids, uids, err
 }
 
 func appendGenresProgramsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f GenresProgramsFilter) error {
