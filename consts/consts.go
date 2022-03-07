@@ -809,6 +809,7 @@ const (
 	LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO = "DoSearch.SearchGrammars.MultisearchGrammarsDo"
 	LAT_DOSEARCH_GRAMMARS_MULTISEARCHFILTERDO   = "DoSearch.SearchGrammars.MultisearchFilterDo"
 	LAT_DOSEARCH_GRAMMARS_RESULTSTOINTENTS      = "DoSearch.SearchGrammars.ResultsToIntents"
+	LAT_GET_SOURCE_COUNTS                       = "GetSourceCounts"
 )
 
 var LATENCY_LOG_OPERATIONS_FOR_SEARCH = []string{

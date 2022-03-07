@@ -1232,3 +1232,101 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 	return nil, errors.Wrap(err, "ESEngine.DoSearch - No responses from multi search.")
 }
+
+func (e *ESEngine) GetSourceCounts(ctx context.Context, query Query, sourceUIDs []string) (*FacetSearchResults, error) {
+	defer e.timeTrack(time.Now(), consts.LAT_GET_SOURCE_COUNTS)
+
+	index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, query.LanguageOrder[0])
+
+	options := CreateFacetAggregationOptions{
+		resultType: consts.ES_RESULT_TYPE_SOURCES,
+		sourceUIDs: sourceUIDs,
+	}
+
+	source, err := NewFacetSearchRequest(query, options)
+	if err != nil {
+		return nil, errors.Wrap(err, "ESEngine.GetSourceCounts - Error creating facet search source.")
+	}
+
+	searchResult, err := e.esc.Search(index).SearchSource(source).Do(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "ESEngine.GetSourceCounts - Error execute facet search request.")
+	}
+
+	if searchResult.Hits.TotalHits <= 0 {
+		log.Debugln("ESEngine.GetSourceCounts - No search results")
+		return nil, nil
+	}
+
+	agg := &searchResult.Aggregations
+
+	if agg == nil {
+		return nil, errors.New("ESEngine.GetSourceCounts - No search aggregations")
+	}
+
+	facetSearchResults, err := parceFacetAggregationsResult(agg, options)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "ESEngine.GetSourceCounts - Error parce facet search result.")
+	}
+
+	return facetSearchResults, nil
+}
+
+func parceFacetAggregationsResult(agg *elastic.Aggregations, options CreateFacetAggregationOptions) (*FacetSearchResults, error) {
+	r := new(FacetSearchResults)
+
+	if len(options.tagUIDs) > 0 {
+		tags, err := parceFacetAggregationForName(agg, "tags")
+		if err != nil {
+			return nil, err
+		}
+
+		r.Tags = tags
+	}
+
+	if len(options.contentTypeValues) > 0 {
+		contentTypes, err := parceFacetAggregationForName(agg, "contentTypes")
+		if err != nil {
+			return nil, err
+		}
+
+		r.ContentTypes = contentTypes
+	}
+
+	if len(options.mediaLanguageValues) > 0 {
+		mediaLanguages, err := parceFacetAggregationForName(agg, "mediaLanguages")
+		if err != nil {
+			return nil, err
+		}
+
+		r.MediaLanguages = mediaLanguages
+	}
+
+	if len(options.sourceUIDs) > 0 {
+		sources, err := parceFacetAggregationForName(agg, "sources")
+		if err != nil {
+			return nil, err
+		}
+
+		r.Sources = sources
+	}
+
+	return r, nil
+}
+
+func parceFacetAggregationForName(agg *elastic.Aggregations, aggName string) (map[string]int64, error) {
+	aggFilters, _ := agg.Filters(aggName)
+
+	if aggFilters == nil || len(aggFilters.NamedBuckets) <= 0 {
+		return nil, errors.New(fmt.Sprintf("Not found aggregations for %s", aggName))
+	}
+
+	result := map[string]int64{}
+
+	for name, data := range aggFilters.NamedBuckets {
+		result[name] = data.DocCount
+	}
+
+	return result, nil
+}

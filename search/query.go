@@ -226,31 +226,34 @@ func addMustNotSeries(q Query) *elastic.BoolQuery {
 // filterOutCUSources - optional list of sources for which we want to filter out the CU's that connected to those sources
 //	(in order to avoid duplication between carousel and regular results).
 // titlesOnly - limit our search only to title fields: title, full_title and description in case we search for intent sources. Used for intent search.
-func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, titlesOnly bool) (elastic.Query, error) {
+func createResultsQuery(options CreateResultQueryOptions) (elastic.Query, error) {
+	//func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, titlesOnly bool) (elastic.Query, error) {
+	q := options.q
+
 	boolQuery := elastic.NewBoolQuery().Must(
 		elastic.NewConstantScoreQuery(
-			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(resultTypes)...),
+			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(options.resultTypes)...),
 		).Boost(0.0),
 	)
-	if docIds != nil && len(docIds) > 0 {
-		idsQuery := elastic.NewIdsQuery().Ids(docIds...)
+	if options.docIds != nil && len(options.docIds) > 0 {
+		idsQuery := elastic.NewIdsQuery().Ids(options.docIds...)
 		boolQuery.Filter(idsQuery)
 	}
-	if len(filterOutCUSources) > 0 {
+	if len(options.filterOutCUSources) > 0 {
 		rtForMustNotQuery := elastic.NewTermsQuery(consts.ES_RESULT_TYPE, consts.ES_RESULT_TYPE_UNITS)
-		for _, src := range filterOutCUSources {
+		for _, src := range options.filterOutCUSources {
 			sourceForMustNotQuery := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.FILTER_SOURCE, src))
 			innerBoolQuery := elastic.NewBoolQuery().Filter(sourceForMustNotQuery, rtForMustNotQuery)
 			boolQuery.MustNot(innerBoolQuery)
 		}
 	}
 
-	if mustNot := addMustNotSeries(q); mustNot != nil {
+	if mustNot := addMustNotSeries(options.q); mustNot != nil {
 		boolQuery.MustNot(mustNot)
 	}
 
 	//  We append description for intent sources search because the description is commonly used as subtitle
-	appendDecription := !titlesOnly || (len(resultTypes) == 1 && resultTypes[0] == consts.ES_RESULT_TYPE_SOURCES)
+	appendDecription := !options.titlesOnly || (len(options.resultTypes) == 1 && options.resultTypes[0] == consts.ES_RESULT_TYPE_SOURCES)
 	if q.Term != "" {
 
 		constantScoreQueries := []elastic.Query{
@@ -262,7 +265,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 				elastic.NewMatchQuery("description.language", q.Term),
 			)
 		}
-		if !titlesOnly {
+		if !options.titlesOnly {
 			constantScoreQueries = append(constantScoreQueries,
 				elastic.NewMatchQuery("content.language", q.Term),
 			)
@@ -376,7 +379,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 			}
 			disMaxQueries = append(disMaxQueries, snq)
 		}
-		if !titlesOnly {
+		if !options.titlesOnly {
 			disMaxQueries = append(disMaxQueries,
 				// Language analyzed
 				elastic.NewMatchPhraseQuery("content.language", q.Term).Slop(SLOP),
@@ -440,7 +443,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 				elastic.NewMatchPhraseQuery("description", exactTerm),
 			)
 		}
-		if !titlesOnly {
+		if !options.titlesOnly {
 			constantScoreQueries = append(constantScoreQueries,
 				elastic.NewMatchPhraseQuery("content", exactTerm),
 			)
@@ -462,7 +465,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 				elastic.NewMatchPhraseQuery("description", exactTerm).Boost(STANDARD_BOOST*EXACT_BOOST*DESCRIPTION_BOOST),
 			)
 		}
-		if !titlesOnly {
+		if !options.titlesOnly {
 			disMaxQueries = append(disMaxQueries,
 				// Language analyzed, exact (no slop)
 				elastic.NewMatchPhraseQuery("content.language", exactTerm).Boost(EXACT_BOOST),
@@ -515,7 +518,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 		query = elastic.NewConstantScoreQuery(boolQuery).Boost(1.0)
 	}
 	scoreQuery := elastic.NewFunctionScoreQuery().ScoreMode("multiply")
-	for _, resultType := range resultTypes {
+	for _, resultType := range options.resultTypes {
 		weight := 1.0
 		if resultType == consts.ES_RESULT_TYPE_UNITS {
 			weight = 1.1
@@ -560,7 +563,15 @@ func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchReque
 		}
 	}
 
-	resultsQuery, err := createResultsQuery(options.resultTypes, options.query, options.docIds, options.filterOutCUSources, options.titlesOnly)
+	resultsQuery, err := createResultsQuery(
+		CreateResultQueryOptions{
+			resultTypes:        options.resultTypes,
+			q:                  options.query,
+			docIds:             options.docIds,
+			filterOutCUSources: options.filterOutCUSources,
+			titlesOnly:         options.titlesOnly,
+		},
+	)
 	if err != nil {
 		fmt.Printf("Error creating results query: %s", err.Error())
 		return nil, err
@@ -682,4 +693,64 @@ func NewResultsSuggestRequests(resultTypes []string, query Query, preference str
 		requests = append(requests, request)
 	}
 	return requests
+}
+
+func NewFacetSearchRequest(q Query, options CreateFacetAggregationOptions) (*elastic.SearchSource, error) {
+
+	resultQuery, err := createResultsQuery(
+		CreateResultQueryOptions{
+			resultTypes: []string{options.resultType},
+			q:           q,
+		},
+	)
+
+	if err != nil {
+		fmt.Printf("Error creating results query: %s", err.Error())
+		return nil, err
+	}
+
+	source := elastic.NewSearchSource().
+		Query(resultQuery).
+		FetchSource(false).
+		Size(0)
+
+	aggQueries := createFacetAggregationQueries(options)
+
+	for aggName, aqqQuery := range aggQueries {
+		source.Aggregation(aggName, aqqQuery)
+	}
+
+	return source, nil
+}
+
+func createFacetAggregationQueries(options CreateFacetAggregationOptions) map[string]elastic.Query {
+	queries := map[string]elastic.Query{}
+
+	if len(options.tagUIDs) > 0 {
+		queries["tags"] = createFacetAggregationQuery(options.tagUIDs)
+	}
+
+	if len(options.contentTypeValues) > 0 {
+		queries["contentTypes"] = createFacetAggregationQuery(options.contentTypeValues)
+	}
+
+	if len(options.mediaLanguageValues) > 0 {
+		queries["mediaLanguages"] = createFacetAggregationQuery(options.mediaLanguageValues)
+	}
+
+	if len(options.sourceUIDs) > 0 {
+		queries["sources"] = createFacetAggregationQuery(options.sourceUIDs)
+	}
+
+	return queries
+}
+
+func createFacetAggregationQuery(values []string) elastic.Query {
+	agg := elastic.NewFiltersAggregation()
+
+	for _, value := range values {
+		agg.FilterWithName(value, elastic.NewTermQuery("filter_values", value))
+	}
+
+	return agg
 }
