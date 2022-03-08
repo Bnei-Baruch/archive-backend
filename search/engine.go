@@ -1277,7 +1277,7 @@ func parceFacetAggregationsResult(agg *elastic.Aggregations, options CreateFacet
 	r := new(FacetSearchResults)
 
 	if len(options.tagUIDs) > 0 {
-		tags, err := parceFacetAggregationForName(agg, "tags")
+		tags, err := parceFacetAggregationForName(agg, consts.FILTER_TAG)
 		if err != nil {
 			return nil, err
 		}
@@ -1286,7 +1286,7 @@ func parceFacetAggregationsResult(agg *elastic.Aggregations, options CreateFacet
 	}
 
 	if len(options.contentTypeValues) > 0 {
-		contentTypes, err := parceFacetAggregationForName(agg, "contentTypes")
+		contentTypes, err := parceFacetAggregationForName(agg, consts.FILTER_UNITS_CONTENT_TYPES)
 		if err != nil {
 			return nil, err
 		}
@@ -1295,7 +1295,7 @@ func parceFacetAggregationsResult(agg *elastic.Aggregations, options CreateFacet
 	}
 
 	if len(options.mediaLanguageValues) > 0 {
-		mediaLanguages, err := parceFacetAggregationForName(agg, "mediaLanguages")
+		mediaLanguages, err := parceFacetAggregationForName(agg, consts.FILTER_LANGUAGE)
 		if err != nil {
 			return nil, err
 		}
@@ -1304,7 +1304,7 @@ func parceFacetAggregationsResult(agg *elastic.Aggregations, options CreateFacet
 	}
 
 	if len(options.sourceUIDs) > 0 {
-		sources, err := parceFacetAggregationForName(agg, "sources")
+		sources, err := parceFacetAggregationForName(agg, consts.FILTER_SOURCE)
 		if err != nil {
 			return nil, err
 		}

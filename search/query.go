@@ -727,29 +727,36 @@ func createFacetAggregationQueries(options CreateFacetAggregationOptions) map[st
 	queries := map[string]elastic.Query{}
 
 	if len(options.tagUIDs) > 0 {
-		queries["tags"] = createFacetAggregationQuery(options.tagUIDs)
+		queries[consts.FILTER_TAG] = createFacetAggregationQuery(options.tagUIDs, consts.FILTER_TAG)
 	}
 
 	if len(options.contentTypeValues) > 0 {
-		queries["contentTypes"] = createFacetAggregationQuery(options.contentTypeValues)
+		queries[consts.FILTER_COLLECTIONS_CONTENT_TYPES] = createFacetAggregationQuery(
+			options.contentTypeValues,
+			consts.FILTER_COLLECTIONS_CONTENT_TYPES,
+		)
 	}
 
 	if len(options.mediaLanguageValues) > 0 {
-		queries["mediaLanguages"] = createFacetAggregationQuery(options.mediaLanguageValues)
+		queries[consts.FILTER_LANGUAGE] = createFacetAggregationQuery(options.mediaLanguageValues, consts.FILTER_LANGUAGE)
 	}
 
 	if len(options.sourceUIDs) > 0 {
-		queries["sources"] = createFacetAggregationQuery(options.sourceUIDs)
+		queries[consts.FILTER_SOURCE] = createFacetAggregationQuery(options.sourceUIDs, consts.FILTER_SOURCE)
 	}
 
 	return queries
 }
 
-func createFacetAggregationQuery(values []string) elastic.Query {
+func createFacetAggregationQuery(values []string, filter string) elastic.Query {
 	agg := elastic.NewFiltersAggregation()
+	prefix := consts.FILTERS[filter]
 
 	for _, value := range values {
-		agg.FilterWithName(value, elastic.NewTermQuery("filter_values", value))
+		agg.FilterWithName(value, elastic.NewTermQuery(
+			"filter_values",
+			fmt.Sprintf("%s:%s", prefix, value),
+		))
 	}
 
 	return agg
