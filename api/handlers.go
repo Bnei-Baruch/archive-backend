@@ -1011,7 +1011,7 @@ WITH CUs AS (
 		FROM content_units cu
 		WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
 		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC 
-		FETCH FIRST 4 ROWS ONLY
+		FETCH FIRST 20 ROWS ONLY
 	) t ON true
 ), LESSON_COLLs AS (
 	SELECT ct.id as type_id, uid, cu_id AS id, film_date
@@ -1021,7 +1021,7 @@ WITH CUs AS (
 		FROM collections c
 		WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
 		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
-		FETCH FIRST 3 ROWS ONLY
+		FETCH FIRST 11 ROWS ONLY
 	) t ON true
 ), COLs AS (
 	SELECT ct.id as type_id, uid, cu_id AS id, film_date
@@ -1031,7 +1031,7 @@ WITH CUs AS (
 		FROM collections c
 		WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
 		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
-		FETCH FIRST 1 ROWS ONLY
+		FETCH FIRST 5 ROWS ONLY
 	) t ON true
 )
 (
@@ -1045,23 +1045,23 @@ order by type_id, film_date desc
 `
 	query := fmt.Sprintf(queryTemplate,
 		// CUs
-		// row #1: CT_WOMEN_LESSON, CT_VIRTUAL_LESSON x 1
+		// row #1: CT_WOMEN_LESSON, CT_VIRTUAL_LESSON x 10
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIRTUAL_LESSON].ID,
-		// row #2: CT_VIDEO_PROGRAM_CHAPTER x 4
+		// row #2: CT_VIDEO_PROGRAM_CHAPTER x 20
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM_CHAPTER].ID,
-		// row #3: CT_CLIP x 4
+		// row #3: CT_CLIP x 20
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-		// row #4: CT_ARTICLE x 4
+		// row #4: CT_ARTICLE x 20
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID,
-		// row #5: CT_FRIENDS_GATHERING, CT_MEAL x 1
+		// row #5: CT_FRIENDS_GATHERING, CT_MEAL x 5
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
 
-		// Collections (lessons): CT_LESSONS_SERIES x 2, CT_DAILY_LESSON x 3
+		// Collections (lessons): CT_LESSONS_SERIES x 10, CT_DAILY_LESSON x 1 + 10
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSONS_SERIES].ID,
-		// Collections: CT_CONGRESS, CT_HOLIDAY x 1
+		// Collections: CT_CONGRESS, CT_HOLIDAY x 5
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID,
 	)
@@ -1100,31 +1100,39 @@ order by type_id, film_date desc
 	}
 	cuIDs := make([]int64, 0)
 	if _, ok := firstRows[consts.CT_WOMEN_LESSON]; ok {
-		cuIDs = append(cuIDs, firstRows[consts.CT_WOMEN_LESSON][0].id)
+		for _, r := range firstRows[consts.CT_WOMEN_LESSON][0:5] {
+			cuIDs = append(cuIDs, r.id)
+		}
 	}
 	if _, ok := firstRows[consts.CT_VIRTUAL_LESSON]; ok {
-		cuIDs = append(cuIDs, firstRows[consts.CT_VIRTUAL_LESSON][0].id)
+		for _, r := range firstRows[consts.CT_VIRTUAL_LESSON][0:10] {
+			cuIDs = append(cuIDs, r.id)
+		}
 	}
 	if _, ok := firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER]; ok {
-		for _, r := range firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER][0:4] {
+		for _, r := range firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER][0:20] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_CLIP]; ok {
-		for _, r := range firstRows[consts.CT_CLIP][0:4] {
+		for _, r := range firstRows[consts.CT_CLIP][0:20] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_ARTICLE]; ok {
-		for _, r := range firstRows[consts.CT_ARTICLE][0:4] {
+		for _, r := range firstRows[consts.CT_ARTICLE][0:20] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_MEAL]; ok {
-		cuIDs = append(cuIDs, firstRows[consts.CT_MEAL][0].id)
+		for _, r := range firstRows[consts.CT_MEAL][0:5] {
+			cuIDs = append(cuIDs, r.id)
+		}
 	}
 	if _, ok := firstRows[consts.CT_FRIENDS_GATHERING]; ok {
-		cuIDs = append(cuIDs, firstRows[consts.CT_FRIENDS_GATHERING][0].id)
+		for _, r := range firstRows[consts.CT_FRIENDS_GATHERING][0:5] {
+			cuIDs = append(cuIDs, r.id)
+		}
 	}
 	// data query
 	units, err := mdbmodels.ContentUnits(db,
@@ -1146,22 +1154,26 @@ order by type_id, film_date desc
 	cIDs := make([]int64, 0)
 
 	if _, ok := firstRows[consts.CT_CONGRESS]; ok {
-		cIDs = append(cIDs, firstRows[consts.CT_CONGRESS][0].id)
+		for _, r := range firstRows[consts.CT_CONGRESS][0:5] {
+			cIDs = append(cIDs, r.id)
+		}
 	}
 
 	if _, ok := firstRows[consts.CT_HOLIDAY]; ok {
-		cIDs = append(cIDs, firstRows[consts.CT_HOLIDAY][0].id)
+		for _, r := range firstRows[consts.CT_HOLIDAY][0:5] {
+			cIDs = append(cIDs, r.id)
+		}
 	}
 
 	if _, ok := firstRows[consts.CT_LESSONS_SERIES]; ok {
-		for _, r := range firstRows[consts.CT_LESSONS_SERIES][0:2] {
+		for _, r := range firstRows[consts.CT_LESSONS_SERIES][0:10] {
 			cIDs = append(cIDs, r.id)
 		}
 	}
 
 	if _, ok := firstRows[consts.CT_DAILY_LESSON]; ok {
 		// The first one is always on HomePage
-		for _, r := range firstRows[consts.CT_DAILY_LESSON][1:3] {
+		for _, r := range firstRows[consts.CT_DAILY_LESSON][1:11] {
 			cIDs = append(cIDs, r.id)
 		}
 	}
