@@ -1589,7 +1589,6 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 		qm.Where("approve_state != ?", consts.APR_DECLINED),
 		qm.Where("\"content_units\".secure = 0 AND \"content_units\".published IS TRUE"),
 		qm.InnerJoin("content_units ON content_unit_id = \"content_units\".id"),
-		qm.Load("ContentUnit"),
 	}
 
 	// filters
