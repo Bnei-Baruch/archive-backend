@@ -1856,7 +1856,7 @@ func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 		qm.WhereIn("lt.tag_id IN ?", utils.ConvertArgsInt64(tids)...),
 		qm.InnerJoin("label_i18n i18n ON i18n.label_id = id"),
 		qm.WhereIn("i18n.language = ?", r.Language),
-		qm.Where("secure=?", consts.SEC_PUBLIC),
+		qm.Where("approve_state != ?", consts.APR_DECLINED),
 	}
 	textParam := &dashboardParams{labelMods: append(mods, qm.Where("media_type = 'text'"))}
 	mediaParam := &dashboardParams{labelMods: append(mods, qm.Where("media_type != 'text'"))}
