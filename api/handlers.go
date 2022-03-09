@@ -727,17 +727,6 @@ func LabelHandler(c *gin.Context) {
 		return
 	}
 
-	s, e, err := r.Range()
-	if err != nil {
-		NewBadRequestError(err).Abort(c)
-		return
-	}
-
-	if r.StartDate != "" && r.EndDate != "" && e.Equal(s) {
-		NewBadRequestError(errors.New("Start and end dates should equal")).Abort(c)
-		return
-	}
-
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	resp, err2 := handleLabels(cm, db, r)
@@ -1604,15 +1593,20 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 	}
 
 	// filters
-	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
-		return nil, NewBadRequestError(err)
+
+	if !utils.IsEmpty(r.IDs) {
+		mods = append(mods, qm.WhereIn("\"labels\".uid IN ?", utils.ConvertArgsString(r.IDs)...))
 	}
-	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
-		return nil, NewBadRequestError(err)
+
+	if !utils.IsEmpty(r.Tags) {
+		_, ids := cm.TagsStats().GetTree().GetUniqueChildren(r.Tags)
+		if ids != nil && len(ids) == 0 {
+			mods = append(mods,
+				qm.InnerJoin("labels_tags lt ON id = lt.label_id"),
+				qm.WhereIn("lt.tag_id in ?", utils.ConvertArgsInt64(ids)...))
+		}
 	}
-	if err := appendTagsFilterMods(cm, &mods, r.TagsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
+
 	if len(r.ContentUnitIDs) > 0 {
 		mods = append(mods,
 			qm.WhereIn("content_unit_id in (SELECT cu.id FROM content_units cu WHERE cu.uid IN (?))", utils.ConvertArgsString(r.ContentUnitIDs)...),
