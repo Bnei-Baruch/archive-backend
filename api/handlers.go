@@ -1585,7 +1585,12 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 }
 
 func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsResponse, *HttpError) {
-	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+	mods := []qm.QueryMod{
+		qm.Where("approve_state != ?", consts.APR_DECLINED),
+		qm.Where("\"content_units\".secure = 0 AND \"content_units\".published IS TRUE"),
+		qm.InnerJoin("content_units ON content_unit_id = \"content_units\".id"),
+		qm.Load("ContentUnit"),
+	}
 
 	// filters
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
@@ -1604,7 +1609,7 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 	}
 
 	var total int64
-	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
+	countMods := append([]qm.QueryMod{qm.Select("count(*)")}, mods...)
 	err := mdbmodels.Labels(db, countMods...).QueryRow().Scan(&total)
 	if err != nil {
 		return nil, NewInternalError(err)
@@ -1614,6 +1619,12 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 	}
 
 	// order, limit, offset
+	if r.OrderBy == "" {
+		r.OrderBy = "created_at"
+	}
+	if r.GroupBy == "" {
+		r.GroupBy = "\"labels\".id"
+	}
 	_, offset, err := appendListMods(&mods, r.ListRequest)
 	if err != nil {
 		return nil, NewBadRequestError(err)
@@ -3044,7 +3055,7 @@ func loadLabelsI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[st
 	i18ns, err := mdbmodels.LabelI18ns(db,
 		qm.WhereIn("label_id in ?", utils.ConvertArgsInt64(ids)...),
 		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...),
-		qm.Load("Users"),
+		qm.Load("User"),
 	).All()
 	if err != nil {
 		return nil, errors.Wrap(err, "Load content units i18ns from DB")
@@ -3074,9 +3085,6 @@ func mdbToLabel(l *mdbmodels.Label) *Label {
 		label.ContentUnit = l.R.ContentUnit.UID
 	}
 
-	if l.R.ContentUnit != nil {
-		label.ContentUnit = l.R.ContentUnit.UID
-	}
 	return label
 }
 
