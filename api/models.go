@@ -265,7 +265,6 @@ type EvalSxSRequest struct {
 type LabelsRequest struct {
 	ListRequest
 	IDsFilter
-	DateRangeFilter
 	TagsFilter
 	ContentUnitsFilter
 	WithTags bool `json:"with_tags" form:"with_tags"`
