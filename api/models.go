@@ -34,7 +34,10 @@ type ItemRequest struct {
 
 type TagDashboardRequest struct {
 	ListRequest
-	UID string
+	TagsFilter
+	DateRangeFilter
+	SourcesFilter
+	ContentTypesFilter
 }
 
 type IDsFilter struct {

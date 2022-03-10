@@ -626,8 +626,6 @@ func TagDashboardHandler(c *gin.Context) {
 		return
 	}
 
-	r.UID = c.Param("uid")
-
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	resp, err := HandleTagDashboard(cm, db, r)
@@ -1853,17 +1851,18 @@ type dashboardParams struct {
 
 func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
 
-	tids, _, err := prepareNestedTagIds(db, TagsFilter{Tags: []string{r.UID}})
-	if err != nil {
-		return nil, NewInternalError(err)
-	}
 	mods := []qm.QueryMod{
 		qm.InnerJoin("label_tag lt ON lt.label_id = id"),
-		qm.WhereIn("lt.tag_id IN ?", utils.ConvertArgsInt64(tids)...),
 		qm.InnerJoin("label_i18n i18n ON i18n.label_id = id"),
 		qm.WhereIn("i18n.language = ?", r.Language),
 		qm.Where("approve_state != ?", consts.APR_DECLINED),
 	}
+
+	_, tids := cm.TagsStats().GetTree().GetUniqueChildren(r.Tags)
+	if !utils.IsEmpty(r.Tags) {
+		mods = append(mods, qm.WhereIn("lt.tag_id IN ?", utils.ConvertArgsInt64(tids)...))
+	}
+
 	textParam := &dashboardParams{labelMods: append(mods, qm.Where("media_type = 'text'"))}
 	mediaParam := &dashboardParams{labelMods: append(mods, qm.Where("media_type != 'text'"))}
 
