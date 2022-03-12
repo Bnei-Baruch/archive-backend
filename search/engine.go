@@ -1264,7 +1264,7 @@ func (e *ESEngine) GetSourceCounts(ctx context.Context, query Query, sourceUIDs 
 		return nil, errors.New("ESEngine.GetSourceCounts - No search aggregations")
 	}
 
-	facetSearchResults, err := parceFacetAggregationsResult(agg, options)
+	facetSearchResults, err := parseFacetAggregationsResult(agg, options)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.GetSourceCounts - Error parce facet search result.")
@@ -1273,11 +1273,11 @@ func (e *ESEngine) GetSourceCounts(ctx context.Context, query Query, sourceUIDs 
 	return facetSearchResults, nil
 }
 
-func parceFacetAggregationsResult(agg *elastic.Aggregations, options CreateFacetAggregationOptions) (*FacetSearchResults, error) {
+func parseFacetAggregationsResult(agg *elastic.Aggregations, options CreateFacetAggregationOptions) (*FacetSearchResults, error) {
 	r := new(FacetSearchResults)
 
 	if len(options.tagUIDs) > 0 {
-		tags, err := parceFacetAggregationForName(agg, consts.FILTER_TAG)
+		tags, err := parseFacetAggregationForName(agg, consts.FILTER_TAG)
 		if err != nil {
 			return nil, err
 		}
@@ -1286,7 +1286,7 @@ func parceFacetAggregationsResult(agg *elastic.Aggregations, options CreateFacet
 	}
 
 	if len(options.contentTypeValues) > 0 {
-		contentTypes, err := parceFacetAggregationForName(agg, consts.FILTER_UNITS_CONTENT_TYPES)
+		contentTypes, err := parseFacetAggregationForName(agg, consts.FILTER_UNITS_CONTENT_TYPES)
 		if err != nil {
 			return nil, err
 		}
@@ -1295,7 +1295,7 @@ func parceFacetAggregationsResult(agg *elastic.Aggregations, options CreateFacet
 	}
 
 	if len(options.mediaLanguageValues) > 0 {
-		mediaLanguages, err := parceFacetAggregationForName(agg, consts.FILTER_LANGUAGE)
+		mediaLanguages, err := parseFacetAggregationForName(agg, consts.FILTER_LANGUAGE)
 		if err != nil {
 			return nil, err
 		}
@@ -1304,7 +1304,7 @@ func parceFacetAggregationsResult(agg *elastic.Aggregations, options CreateFacet
 	}
 
 	if len(options.sourceUIDs) > 0 {
-		sources, err := parceFacetAggregationForName(agg, consts.FILTER_SOURCE)
+		sources, err := parseFacetAggregationForName(agg, consts.FILTER_SOURCE)
 		if err != nil {
 			return nil, err
 		}
@@ -1315,7 +1315,7 @@ func parceFacetAggregationsResult(agg *elastic.Aggregations, options CreateFacet
 	return r, nil
 }
 
-func parceFacetAggregationForName(agg *elastic.Aggregations, aggName string) (map[string]int64, error) {
+func parseFacetAggregationForName(agg *elastic.Aggregations, aggName string) (map[string]int64, error) {
 	aggFilters, _ := agg.Filters(aggName)
 
 	if aggFilters == nil || len(aggFilters.NamedBuckets) <= 0 {

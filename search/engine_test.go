@@ -290,3 +290,39 @@ func (suite *EngineSuite) TestRetrieveTextVarValues() {
 	r.Equal(retrieveTextVarValues("aaa $bbb$ ccc $ddd"), []string{"aaa", "ccc"})
 
 }
+
+func (suite *EngineSuite) TestParseFacetAggregationForName() {
+	s := `{
+  "source" : {
+	"buckets" : {
+	  "111" : {
+		"doc_count" : 11
+	  },
+	  "222" : {
+		"doc_count" : 12
+	  }
+	}
+  }
+}`
+
+	aggs := new(elastic.Aggregations)
+	err := json.Unmarshal([]byte(s), &aggs)
+	if err != nil {
+		suite.T().Fatalf("expected no error decoding; got: %v", err)
+	}
+
+	m, err := parseFacetAggregationForName(aggs, consts.FILTER_SOURCE)
+	if err != nil {
+		suite.T().Fatalf("expected no error parsing; got: %v", err)
+	}
+
+	suite.Equal(len(m), 2, "count buckets")
+
+	count, ok := m["111"]
+	suite.Equal(ok, true, "111 bucket exist")
+	suite.Equal(count, int64(11), "docCount in bucket 111")
+
+	count, ok = m["222"]
+	suite.Equal(ok, true, "222 bucket exist")
+	suite.Equal(count, int64(12), "docCount in bucket 222")
+}

@@ -51,14 +51,6 @@ type SearchRequestOptions struct {
 	Timeout *string
 }
 
-type CreateResultQueryOptions struct {
-	resultTypes        []string
-	q                  Query
-	docIds             []string
-	filterOutCUSources []string
-	titlesOnly         bool
-}
-
 type CreateFacetAggregationOptions struct {
 	resultType          string
 	tagUIDs             []string
