@@ -1402,9 +1402,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 			return nil, NewInternalError(err)
 		}
 	}
-	if err := appendTagsFilterMods(cm, &mods, r.TagsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
+	appendTagsFilterMods(cm, &mods, r.TagsFilter)
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2058,9 +2056,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 			return nil, NewInternalError(err)
 		}
 	}
-	if err := appendTagsFilterMods(cm, &mods, r.TagsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
+	appendTagsFilterMods(cm, &mods, r.TagsFilter)
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2600,9 +2596,9 @@ func prepareNestedSources(cm cache.CacheManager, f SourcesFilter) ([]int64, []st
 	return ids, uids, nil
 }
 
-func appendTagsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilter) error {
+func appendTagsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilter) {
 	if len(f.Tags) == 0 {
-		return nil
+		return
 	}
 	_, ids := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
 	if ids == nil || len(ids) == 0 {
@@ -2612,8 +2608,6 @@ func appendTagsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilt
 			qm.InnerJoin("content_units_tags cut ON id = cut.content_unit_id"),
 			qm.WhereIn("cut.tag_id in ?", utils.ConvertArgsInt64(ids)...))
 	}
-
-	return nil
 }
 
 func appendGenresProgramsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f GenresProgramsFilter) error {
