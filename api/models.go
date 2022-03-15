@@ -200,10 +200,12 @@ type StatsCUClassRequest struct {
 	ContentUnitsRequest
 	CountOnly bool `json:"count_only" form:"count_only"`
 }
-type StatsCUClassResponse struct {
-	Sources map[string]int `json:"sources"`
-	Tags    map[string]int `json:"tags"`
-	Total   int64          `json:"total"`
+type StatsClassResponse struct {
+	Sources      map[string]int `json:"sources"`
+	Tags         map[string]int `json:"tags"`
+	Languages    map[string]int `json:"languages"`
+	ContentTypes map[string]int `json:"content_types"`
+	Total        int64          `json:"total"`
 }
 
 type TweetsRequest struct {
@@ -306,10 +308,12 @@ func NewTagsDashboardResponse() *TagsDashboardResponse {
 	return &TagsDashboardResponse{Items: make([]*TagsDashboardItem, 0)}
 }
 
-func NewStatsCUClassResponse() *StatsCUClassResponse {
-	return &StatsCUClassResponse{
-		Sources: make(map[string]int),
-		Tags:    make(map[string]int),
+func NewStatsClassResponse() *StatsClassResponse {
+	return &StatsClassResponse{
+		Sources:      make(map[string]int),
+		Tags:         make(map[string]int),
+		Languages:    make(map[string]int),
+		ContentTypes: make(map[string]int),
 	}
 }
 

@@ -653,6 +653,18 @@ func StatsCUClassHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func StatsLabelClassHandler(c *gin.Context) {
+	var r StatsCUClassRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err := handleStatsLabelClass(cm, db, r)
+	concludeRequest(c, resp, err)
+}
+
 func TweetsHandler(c *gin.Context) {
 	var r TweetsRequest
 	if c.Bind(&r) != nil {
@@ -1596,14 +1608,7 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 		mods = append(mods, qm.WhereIn("\"labels\".uid IN ?", utils.ConvertArgsString(r.IDs)...))
 	}
 
-	if !utils.IsEmpty(r.Tags) {
-		_, ids := cm.TagsStats().GetTree().GetUniqueChildren(r.Tags)
-		if ids != nil && len(ids) == 0 {
-			mods = append(mods,
-				qm.InnerJoin("labels_tags lt ON id = lt.label_id"),
-				qm.WhereIn("lt.tag_id in ?", utils.ConvertArgsInt64(ids)...))
-		}
-	}
+	appendTagsLabelsFilterMods(cm, &mods, r.TagsFilter)
 
 	if len(r.ContentUnitIDs) > 0 {
 		mods = append(mods,
@@ -2140,9 +2145,9 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 	return sqd, nil
 }
 
-func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsCUClassResponse, *HttpError) {
+func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsClassResponse, *HttpError) {
 	mods := []qm.QueryMod{
-		qm.Select("id"),
+		qm.Select("id", "type_id"),
 		SECURE_PUBLISHED_MOD,
 	}
 
@@ -2180,7 +2185,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 	}
 
 	var err error
-	resp := NewStatsCUClassResponse()
+	resp := NewStatsClassResponse()
 
 	if r.CountOnly {
 		resp.Total, err = mdbmodels.ContentUnits(db, mods...).Count()
@@ -2189,10 +2194,56 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 		}
 	} else {
 		q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
-		resp.Tags, resp.Sources, err = GetFiltersStats(db, q, args)
-		if err != nil {
+		fs := FilterCUStats{FilterStats{
+			DB:        db,
+			Scope:     q,
+			ScopeArgs: args,
+			Resp:      resp,
+		}}
+		if err = fs.GetStats(); err != nil {
 			return nil, NewInternalError(err)
 		}
+	}
+	return resp, nil
+}
+
+func handleStatsLabelClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsClassResponse, *HttpError) {
+	mods := []qm.QueryMod{
+		qm.Select("\"labels\".id as id", "cu.id as cuid", "cu.type_id as type_id", "cu.properties->>'source_id' as suid"),
+		qm.Where("\"labels\".approve_state != ?", consts.APR_DECLINED),
+		qm.Where("cu.secure = 0 AND cu.published IS TRUE"),
+		qm.InnerJoin("content_units cu ON \"labels\".content_unit_id = cu.id"),
+	}
+
+	// filters
+	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendSourcesLabelsFilterMods(cm, &mods, r.SourcesFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			return nil, e
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+
+	appendTagsLabelsFilterMods(cm, &mods, r.TagsFilter)
+
+	var err error
+	resp := NewStatsClassResponse()
+
+	q, args := queries.BuildQuery(mdbmodels.Labels(db, mods...).Query)
+	fs := FilterLabelStats{FilterStats{
+		DB:        db,
+		Scope:     q,
+		ScopeArgs: args,
+		Resp:      resp,
+	}}
+	if err = fs.GetStats(); err != nil {
+		return nil, NewInternalError(err)
 	}
 	return resp, nil
 }
@@ -2721,19 +2772,6 @@ func appendTagsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilt
 	return nil
 }
 
-func prepareNestedTagIds(exec boil.Executor, f TagsFilter) (pq.Int64Array, pq.StringArray, error) {
-	q := `WITH RECURSIVE rec_tags AS (
-            SELECT t.id, t.uid FROM tags t WHERE t.uid = ANY($1)
-            UNION
-            SELECT t.id, t.uid FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
-          )
-          SELECT array_agg(distinct id),  array_agg(uid) FROM rec_tags`
-	var ids pq.Int64Array
-	var uids pq.StringArray
-	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids, &uids)
-	return ids, uids, err
-}
-
 func appendGenresProgramsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f GenresProgramsFilter) error {
 	if len(f.Genres) == 0 && len(f.Programs) == 0 {
 		return nil
@@ -2893,6 +2931,42 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
 			AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))`, f.MediaLanguage),
 	)
+	return nil
+}
+
+//append Labels filters
+func appendContentTypesLabelsFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) {
+
+}
+
+func appendTagsLabelsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilter) {
+	if !utils.IsEmpty(f.Tags) {
+		return
+	}
+	_, ids := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
+	if ids != nil && len(ids) == 0 {
+		*mods = append(*mods,
+			qm.InnerJoin("labels_tags lt ON id = lt.label_id"),
+			qm.WhereIn("lt.tag_id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+}
+
+func appendSourcesLabelsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f SourcesFilter) error {
+	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
+		return nil
+	}
+	ids, _, err := prepareNestedSources(cm, f)
+	if err != nil {
+		return err
+	}
+	if ids == nil || len(ids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods,
+			qm.InnerJoin("content_units_sources cus ON cu.id = cus.content_unit_id"),
+			qm.WhereIn("cus.source_id in ?", utils.ConvertArgsInt64(ids)...))
+	}
+
 	return nil
 }
 
