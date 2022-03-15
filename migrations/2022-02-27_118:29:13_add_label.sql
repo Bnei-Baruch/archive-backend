@@ -8,8 +8,7 @@ CREATE TABLE labels
     content_unit_id BIGINT REFERENCES content_units ON DELETE CASCADE NOT NULL,
     media_type      VARCHAR(16)                                       NOT NULL,
     properties      JSONB                                             NULL,
-    secure          SMALLINT                                          NOT NULL DEFAULT 0,
-    published       BOOLEAN                                           NOT NULL DEFAULT FALSE,
+    approve_state   SMALLINT                                          NOT NULL DEFAULT 0,
     created_at      TIMESTAMP WITH TIME ZONE                          NOT NULL DEFAULT now_utc()
 );
 
@@ -29,7 +28,7 @@ CREATE TABLE label_i18n
     label_id   BIGINT REFERENCES labels (id) ON DELETE CASCADE NOT NULL,
     language   CHAR(2)                                         NOT NULL,
     name       TEXT,
-    author     VARCHAR                                         NOT NULL,
+    user_id    BIGINT REFERENCES users                         NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now_utc()      NOT NULL,
     PRIMARY KEY (label_id, language)
 );
