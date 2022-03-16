@@ -2036,6 +2036,148 @@ func updateDashboardLabelParam(params *dashboardParams, total int64, r ListReque
 	}
 }
 
+/*
+func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
+	_, tids := cm.TagsStats().GetTree().GetUniqueChildren(r.Tags)
+	if utils.IsEmpty(r.Tags) {
+		return NewTagsDashboardResponse(), nil
+	}
+
+	lMods := []qm.QueryMod{
+		qm.InnerJoin("label_tag lt ON lt.label_id = id"),
+		qm.InnerJoin("label_i18n i18n ON i18n.label_id = id"),
+		qm.WhereIn("i18n.language = ?", r.Language),
+		qm.Where("approve_state != ?", consts.APR_DECLINED),
+	}
+	cuMods := []qm.QueryMod{
+		SECURE_PUBLISHED_MOD,
+	}
+	appendTagsFilterMods(cm, &cuMods, r.TagsFilter)
+
+	textParam := &dashboardParams{labelMods: append(cuMods, qm.Where("media_type = 'text'"))}
+	mediaParam := &dashboardParams{labelMods: append(cuMods, qm.Where("media_type != 'text'"))}
+
+	if r.PageSize == 0 {
+		r.PageSize = consts.API_DEFAULT_PAGE_SIZE
+	} else {
+		r.PageSize = utils.Min(r.PageSize, consts.API_MAX_PAGE_SIZE)
+	}
+
+	if err := prepareTagDashboardParams(db, textParam, r.ListRequest); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := prepareTagDashboardParams(db, mediaParam, r.ListRequest); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	for _, t := range consts.TEXT_TYPES {
+		textParam.ctIDs = append(textParam.ctIDs, mdb.CONTENT_TYPE_REGISTRY.ByName[t].ID)
+	}
+
+	for _, t := range consts.MEDIA_TYPES {
+		mediaParam.ctIDs = append(mediaParam.ctIDs, mdb.CONTENT_TYPE_REGISTRY.ByName[t].ID)
+	}
+
+	q := fmt.Sprintf(`(
+	SELECT DISTINCT cu.uid as uid, count(*) OVER() as count, 'T' as media_type
+		FROM content_units cu
+		INNER JOIN content_units_tags cut ON cut.content_unit_id = cu.id
+		INNER JOIN content_unit_i18n cui18n ON cui18n.content_unit_id = cu.id
+		WHERE cut.tag_id IN (%[1]s)
+		AND cu.type_id IN (%[2]s)
+		AND cui18n.language = $1
+		AND cu.secure = 0 AND cu.published IS TRUE
+		OFFSET $3
+		LIMIT $2
+	) UNION (
+	SELECT DISTINCT cu.uid, count(*) OVER(), 'M'
+		FROM content_units cu
+		INNER JOIN content_units_tags cut ON cut.content_unit_id = cu.id
+		INNER JOIN content_unit_i18n cui18n ON cui18n.content_unit_id = cu.id
+		WHERE cut.tag_id IN (%[1]s)
+		AND cu.type_id IN (%[3]s)
+		AND cui18n.language = $1
+		AND cu.id = ANY(SELECT f.content_unit_id FROM files f WHERE f.type IN ('video', 'audio'))
+		AND cu.secure = 0 AND cu.published IS TRUE
+		OFFSET $5
+		LIMIT $4
+	)`,
+		utils.JoinInt64(tids, ","),
+		utils.JoinInt64(textParam.ctIDs, ","),
+		utils.JoinInt64(mediaParam.ctIDs, ","),
+	)
+
+	rows, err := queries.Raw(db, q, r.Language, textParam.limit, textParam.offset, mediaParam.limit, mediaParam.offset).Query()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	cuUIDs := []string{}
+	var textCount int64 = 0
+	var mediaCount int64 = 0
+	for rows.Next() {
+		var uid string
+		var count int64
+		var mt string
+		err = rows.Scan(&uid, &count, &mt)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		if mt == "T" {
+			textCount = count
+		} else {
+			mediaCount = count
+		}
+
+		cuUIDs = append(cuUIDs, uid)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	updateDashboardLabelParam(textParam, textCount, r.ListRequest)
+	updateDashboardLabelParam(mediaParam, mediaCount, r.ListRequest)
+
+	cuMods = append(cuMods,
+		qm.Load("ContentUnit"),
+		qm.Limit(int(textParam.labelLimit)),
+		qm.Offset(int(textParam.labelOffset)),
+	)
+	labels, err := mdbmodels.Labels(db, cuMods...).All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	if len(cuUIDs) == 0 && len(labels) == 0 {
+		return NewTagsDashboardResponse(), nil
+	}
+
+	items := make([]*TagsDashboardItem, 0)
+	for _, l := range labels {
+		item := &TagsDashboardItem{
+			LabelID:       l.UID,
+			ContentUnitID: l.R.ContentUnit.UID,
+		}
+		items = append(items, item)
+	}
+
+	for _, uid := range cuUIDs {
+		item := &TagsDashboardItem{
+			ContentUnitID: uid,
+		}
+		items = append(items, item)
+	}
+
+	resp := &TagsDashboardResponse{
+		MediaTotal: mediaCount + mediaParam.total,
+		TextTotal:  textCount + textParam.total,
+		Items:      items,
+	}
+	return resp, nil
+}
+*/
+
 // translate tag.keys (UIDs of tags) to their translation
 func handleTagsTranslationByID(db *sql.DB, r BaseRequest, uids []string) ([]string, *HttpError) {
 	if len(uids) == 0 {
