@@ -299,3 +299,27 @@ func GroupBy(list []interface{}, value func(interface{}) interface{}) map[interf
 	}
 	return ret
 }
+
+func ClearDuplicateString(list []string) []string {
+	m := make(map[string]bool, len(list))
+	ret := make([]string, 0)
+	for _, x := range list {
+		if _, ok := m[x]; !ok {
+			ret = append(ret, x)
+			m[x] = true
+		}
+	}
+	return ret
+}
+
+func ClearDuplicateInt64(list []int64) []int64 {
+	m := make(map[int64]bool, len(list))
+	ret := make([]int64, 0)
+	for _, x := range list {
+		if _, ok := m[x]; !ok {
+			ret = append(ret, x)
+			m[x] = true
+		}
+	}
+	return ret
+}

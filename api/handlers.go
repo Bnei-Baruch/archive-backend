@@ -46,7 +46,9 @@ func CollectionsHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), r)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err := handleCollections(cm, db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -78,7 +80,9 @@ func ContentUnitsHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err := handleContentUnits(c.MustGet("MDB_DB").(*sql.DB), r)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err := handleContentUnits(cm, db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -312,7 +316,10 @@ func LessonsHandler(c *gin.Context) {
 			DateRangeFilter: r.DateRangeFilter,
 			WithUnits:       true,
 		}
-		resp, err := handleCollections(c.MustGet("MDB_DB").(*sql.DB), cr)
+
+		cm := c.MustGet("CACHE").(cache.CacheManager)
+		db := c.MustGet("MDB_DB").(*sql.DB)
+		resp, err := handleCollections(cm, db, cr)
 		concludeRequest(c, resp, err)
 	} else {
 		if r.OrderBy == "" {
@@ -339,7 +346,9 @@ func LessonsHandler(c *gin.Context) {
 			MediaLanguageFilter: r.MediaLanguageFilter,
 			DerivedTypesFilter:  r.DerivedTypesFilter,
 		}
-		resp, err := handleContentUnits(c.MustGet("MDB_DB").(*sql.DB), cur)
+		cm := c.MustGet("CACHE").(cache.CacheManager)
+		db := c.MustGet("MDB_DB").(*sql.DB)
+		resp, err := handleContentUnits(cm, db, cur)
 		concludeRequest(c, resp, err)
 	}
 }
@@ -639,7 +648,9 @@ func StatsCUClassHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err := handleStatsCUClass(c.MustGet("MDB_DB").(*sql.DB), r)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err := handleStatsCUClass(cm, db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -703,11 +714,13 @@ func SimpleModeHandler(c *gin.Context) {
 		return
 	}
 
-	resp, err2 := handleSimpleMode(c.MustGet("MDB_DB").(*sql.DB), r)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err2 := handleSimpleMode(cm, db, r)
 	concludeRequest(c, resp, err2)
 }
 
-func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
+func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
 	// filters
@@ -720,8 +733,10 @@ func handleCollections(db *sql.DB, r CollectionsRequest) (*CollectionsResponse, 
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	appendCollectionSourceFilterMods(&mods, r.SourcesFilter)
-	if err := appendCollectionTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+	if err := appendCollectionSourceFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendCollectionTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 
@@ -972,7 +987,7 @@ WITH CUs AS (
 		FROM content_units cu
 		WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
 		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC 
-		FETCH FIRST 4 ROWS ONLY
+		FETCH FIRST 20 ROWS ONLY
 	) t ON true
 ), LESSON_COLLs AS (
 	SELECT ct.id as type_id, uid, cu_id AS id, film_date
@@ -982,7 +997,7 @@ WITH CUs AS (
 		FROM collections c
 		WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
 		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
-		FETCH FIRST 3 ROWS ONLY
+		FETCH FIRST 11 ROWS ONLY
 	) t ON true
 ), COLs AS (
 	SELECT ct.id as type_id, uid, cu_id AS id, film_date
@@ -992,7 +1007,7 @@ WITH CUs AS (
 		FROM collections c
 		WHERE secure = 0 AND published IS TRUE AND c.type_id = ct.id
 		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
-		FETCH FIRST 1 ROWS ONLY
+		FETCH FIRST 5 ROWS ONLY
 	) t ON true
 )
 (
@@ -1006,23 +1021,23 @@ order by type_id, film_date desc
 `
 	query := fmt.Sprintf(queryTemplate,
 		// CUs
-		// row #1: CT_WOMEN_LESSON, CT_VIRTUAL_LESSON x 1
+		// row #1: CT_WOMEN_LESSON, CT_VIRTUAL_LESSON x 10
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIRTUAL_LESSON].ID,
-		// row #2: CT_VIDEO_PROGRAM_CHAPTER x 4
+		// row #2: CT_VIDEO_PROGRAM_CHAPTER x 20
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM_CHAPTER].ID,
-		// row #3: CT_CLIP x 4
+		// row #3: CT_CLIP x 20
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-		// row #4: CT_ARTICLE x 4
+		// row #4: CT_ARTICLE x 20
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID,
-		// row #5: CT_FRIENDS_GATHERING, CT_MEAL x 1
+		// row #5: CT_FRIENDS_GATHERING, CT_MEAL x 5
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
 
-		// Collections (lessons): CT_LESSONS_SERIES x 2, CT_DAILY_LESSON x 3
+		// Collections (lessons): CT_LESSONS_SERIES x 10, CT_DAILY_LESSON x 1 + 10
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSONS_SERIES].ID,
-		// Collections: CT_CONGRESS, CT_HOLIDAY x 1
+		// Collections: CT_CONGRESS, CT_HOLIDAY x 5
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID,
 	)
@@ -1061,31 +1076,39 @@ order by type_id, film_date desc
 	}
 	cuIDs := make([]int64, 0)
 	if _, ok := firstRows[consts.CT_WOMEN_LESSON]; ok {
-		cuIDs = append(cuIDs, firstRows[consts.CT_WOMEN_LESSON][0].id)
+		for _, r := range firstRows[consts.CT_WOMEN_LESSON][0:5] {
+			cuIDs = append(cuIDs, r.id)
+		}
 	}
 	if _, ok := firstRows[consts.CT_VIRTUAL_LESSON]; ok {
-		cuIDs = append(cuIDs, firstRows[consts.CT_VIRTUAL_LESSON][0].id)
+		for _, r := range firstRows[consts.CT_VIRTUAL_LESSON][0:10] {
+			cuIDs = append(cuIDs, r.id)
+		}
 	}
 	if _, ok := firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER]; ok {
-		for _, r := range firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER][0:4] {
+		for _, r := range firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER][0:20] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_CLIP]; ok {
-		for _, r := range firstRows[consts.CT_CLIP][0:4] {
+		for _, r := range firstRows[consts.CT_CLIP][0:20] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_ARTICLE]; ok {
-		for _, r := range firstRows[consts.CT_ARTICLE][0:4] {
+		for _, r := range firstRows[consts.CT_ARTICLE][0:20] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_MEAL]; ok {
-		cuIDs = append(cuIDs, firstRows[consts.CT_MEAL][0].id)
+		for _, r := range firstRows[consts.CT_MEAL][0:5] {
+			cuIDs = append(cuIDs, r.id)
+		}
 	}
 	if _, ok := firstRows[consts.CT_FRIENDS_GATHERING]; ok {
-		cuIDs = append(cuIDs, firstRows[consts.CT_FRIENDS_GATHERING][0].id)
+		for _, r := range firstRows[consts.CT_FRIENDS_GATHERING][0:5] {
+			cuIDs = append(cuIDs, r.id)
+		}
 	}
 	// data query
 	units, err := mdbmodels.ContentUnits(db,
@@ -1107,22 +1130,26 @@ order by type_id, film_date desc
 	cIDs := make([]int64, 0)
 
 	if _, ok := firstRows[consts.CT_CONGRESS]; ok {
-		cIDs = append(cIDs, firstRows[consts.CT_CONGRESS][0].id)
+		for _, r := range firstRows[consts.CT_CONGRESS][0:5] {
+			cIDs = append(cIDs, r.id)
+		}
 	}
 
 	if _, ok := firstRows[consts.CT_HOLIDAY]; ok {
-		cIDs = append(cIDs, firstRows[consts.CT_HOLIDAY][0].id)
+		for _, r := range firstRows[consts.CT_HOLIDAY][0:5] {
+			cIDs = append(cIDs, r.id)
+		}
 	}
 
 	if _, ok := firstRows[consts.CT_LESSONS_SERIES]; ok {
-		for _, r := range firstRows[consts.CT_LESSONS_SERIES][0:2] {
+		for _, r := range firstRows[consts.CT_LESSONS_SERIES][0:10] {
 			cIDs = append(cIDs, r.id)
 		}
 	}
 
 	if _, ok := firstRows[consts.CT_DAILY_LESSON]; ok {
 		// The first one is always on HomePage
-		for _, r := range firstRows[consts.CT_DAILY_LESSON][1:3] {
+		for _, r := range firstRows[consts.CT_DAILY_LESSON][1:11] {
 			cIDs = append(cIDs, r.id)
 		}
 	}
@@ -1162,9 +1189,9 @@ order by type_id, film_date desc
 	return cus, cs, nil
 }
 
-func handleContentUnitsFull(db *sql.DB, r ContentUnitsRequest, mediaTypes []string, languages []string) (cuResp *ContentUnitsResponse, err error) {
+func handleContentUnitsFull(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest, mediaTypes []string, languages []string) (cuResp *ContentUnitsResponse, err error) {
 	r.WithFiles = false
-	cuResp, herr := handleContentUnits(db, r)
+	cuResp, herr := handleContentUnits(cm, db, r)
 	if herr != nil {
 		err = herr.Err
 		return
@@ -1342,7 +1369,7 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 	return banner, nil
 }
 
-func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsResponse, *HttpError) {
+func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest) (*ContentUnitsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
 	// filters
@@ -1355,14 +1382,14 @@ func handleContentUnits(db *sql.DB, r ContentUnitsRequest) (*ContentUnitsRespons
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendSourcesFilterMods(db, &mods, r.SourcesFilter); err != nil {
+	if err := appendSourcesFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
 		} else {
 			return nil, NewInternalError(err)
 		}
 	}
-	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+	if err := appendTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
@@ -1897,7 +1924,7 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 	return sqd, nil
 }
 
-func handleStatsCUClass(db *sql.DB, r StatsCUClassRequest) (*StatsCUClassResponse, *HttpError) {
+func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsCUClassResponse, *HttpError) {
 	mods := []qm.QueryMod{
 		qm.Select("id"),
 		SECURE_PUBLISHED_MOD,
@@ -1913,14 +1940,14 @@ func handleStatsCUClass(db *sql.DB, r StatsCUClassRequest) (*StatsCUClassRespons
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendSourcesFilterMods(db, &mods, r.SourcesFilter); err != nil {
+	if err := appendSourcesFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
 		} else {
 			return nil, NewInternalError(err)
 		}
 	}
-	if err := appendTagsFilterMods(db, &mods, r.TagsFilter); err != nil {
+	if err := appendTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
@@ -2077,7 +2104,7 @@ func handleBlogPosts(db *sql.DB, r BlogPostsRequest) (*BlogPostsResponse, *HttpE
 	return resp, nil
 }
 
-func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *HttpError) {
+func handleSimpleMode(cm cache.CacheManager, db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *HttpError) {
 	// use today if empty (or partially empty) date range was provided
 	if r.StartDate == "" {
 		r.StartDate = r.EndDate
@@ -2102,7 +2129,7 @@ func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *Ht
 		DateRangeFilter: r.DateRangeFilter,
 		WithFiles:       true,
 	}
-	respCUs, err := handleContentUnits(db, cur)
+	respCUs, err := handleContentUnits(cm, db, cur)
 	if err != nil {
 		return nil, err
 	}
@@ -2139,7 +2166,7 @@ func handleSimpleMode(db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *Ht
 		DateRangeFilter: r.DateRangeFilter,
 		WithUnits:       true,
 	}
-	resp, err := handleCollections(db, cr)
+	resp, err := handleCollections(cm, db, cr)
 	if err != nil {
 		return nil, err
 	}
@@ -2356,21 +2383,31 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
 }
 
-func appendCollectionSourceFilterMods(mods *[]qm.QueryMod, f SourcesFilter) {
-	if len(f.Sources) != 0 {
-		*mods = append(*mods, qm.WhereIn("properties->>'source' in ?", utils.ConvertArgsString(f.Sources)...))
+func appendCollectionSourceFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
+	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
+		return nil
 	}
+	_, uids, err := prepareNestedSources(cm, exec, f)
+	if err != nil {
+		return err
+	}
+	if uids == nil || len(uids) == 0 {
+		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
+	} else {
+		*mods = append(*mods, qm.WhereIn("properties->>'source' in ?", utils.ConvertArgsString(uids)...))
+	}
+	return nil
 }
 
-func appendCollectionTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
+func appendCollectionTagsFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
 	if len(f.Tags) == 0 {
 		return nil
 	}
+	uids, _ := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
 	//use Raw query because of need to use operator ?
 	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
-	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
-	if err != nil {
+	if err := queries.Raw(exec, q, pq.Array(uids)).QueryRow().Scan(&ids); err != nil {
 		return err
 	}
 	if ids == nil || len(ids) == 0 {
@@ -2409,50 +2446,14 @@ func appendDRFBaseMods(mods *[]qm.QueryMod, f DateRangeFilter, field string) err
 	return nil
 }
 
-func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
+func appendSourcesFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
 	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
 		return nil
 	}
-
-	// slice of all source ids we want
-	sourceUids := make([]string, 0)
-
-	// fetch source ids by authors
-	if !utils.IsEmpty(f.Authors) {
-		for _, x := range f.Authors {
-			if _, ok := mdb.AUTHOR_REGISTRY.ByCode[strings.ToLower(x)]; !ok {
-				return NewBadRequestError(errors.Errorf("Unknown author: %s", x))
-			}
-		}
-
-		var uids pq.StringArray
-		q := `SELECT array_agg(DISTINCT s.uid)
-              FROM authors a INNER JOIN authors_sources "as" ON a.id = "as".author_id
-              INNER JOIN sources s ON "as".source_id = s.id
-              WHERE a.code = ANY($1)`
-		err := queries.Raw(exec, q, pq.Array(f.Authors)).QueryRow().Scan(&uids)
-		if err != nil {
-			return err
-		}
-		sourceUids = append(sourceUids, uids...)
-	}
-
-	// blend in requested sources
-	sourceUids = append(sourceUids, f.Sources...)
-
-	// find all nested source_uids
-	q := `WITH RECURSIVE rec_sources AS (
-          SELECT s.id FROM sources s WHERE s.uid = ANY($1)
-          UNION
-          SELECT s.id FROM sources s INNER JOIN rec_sources rs ON s.parent_id = rs.id
-          )
-          SELECT array_agg(distinct id) FROM rec_sources`
-	var ids pq.Int64Array
-	err := queries.Raw(exec, q, pq.Array(sourceUids)).QueryRow().Scan(&ids)
+	ids, _, err := prepareNestedSources(cm, exec, f)
 	if err != nil {
 		return err
 	}
-
 	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
@@ -2464,24 +2465,35 @@ func appendSourcesFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f SourcesF
 	return nil
 }
 
-func appendTagsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
+func prepareNestedSources(cm cache.CacheManager, exec boil.Executor, f SourcesFilter) ([]int64, []string, error) {
+	// slice of all source ids we want
+	sourceUids := make([]string, 0)
+
+	// fetch source ids by authors
+	if !utils.IsEmpty(f.Authors) {
+		for _, x := range f.Authors {
+			if _, ok := mdb.AUTHOR_REGISTRY.ByCode[strings.ToLower(x)]; !ok {
+				return nil, nil, NewBadRequestError(errors.Errorf("Unknown author: %s", x))
+			}
+		}
+
+		roots := cm.AuthorsStats().GetSources(f.Authors)
+		sourceUids = append(sourceUids, roots...)
+	}
+
+	// blend in requested sources
+	sourceUids = append(sourceUids, f.Sources...)
+
+	uids, ids := cm.SourcesStats().GetTree().GetUniqueChildren(sourceUids)
+
+	return ids, uids, nil
+}
+
+func appendTagsFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
 	if len(f.Tags) == 0 {
 		return nil
 	}
-
-	// Find all nested tag_ids.
-	q := `WITH RECURSIVE rec_tags AS (
-            SELECT t.id FROM tags t WHERE t.uid = ANY($1)
-            UNION
-            SELECT t.id FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
-          )
-          SELECT array_agg(distinct id) FROM rec_tags`
-	var ids pq.Int64Array
-	err := queries.Raw(exec, q, pq.Array(f.Tags)).QueryRow().Scan(&ids)
-	if err != nil {
-		return err
-	}
-
+	_, ids := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
 	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
