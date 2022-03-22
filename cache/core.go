@@ -24,6 +24,7 @@ type CacheManager interface {
 	AuthorsStats() AuthorsStatsCache
 	TagsStats() TagsStatsCache
 	Close()
+	Refresh()
 }
 
 type CacheManagerImpl struct {
@@ -44,7 +45,7 @@ func NewCacheManagerImpl(mdb *sql.DB, refreshIntervals map[string]time.Duration)
 	cm.authors = NewAuthorsStatsCacheImpl(mdb)
 	cm.providers = []Provider{cm.sources, cm.tags, cm.authors}
 
-	cm.refresh()
+	cm.Refresh()
 	cm.search = NewSearchStatsCacheImpl(mdb, cm.sources.GetTree().flatten(), cm.tags.GetTree().flatten())
 	cm.providers = append(cm.providers, cm.search)
 	if err := cm.search.Refresh(); err != nil {
@@ -53,7 +54,7 @@ func NewCacheManagerImpl(mdb *sql.DB, refreshIntervals map[string]time.Duration)
 	}
 
 	// Convert time.Duration to int64
-	// So we would have refresh intervals in integer multiple of a second
+	// So we would have Refresh intervals in integer multiple of a second
 	cm.refreshIntervals = make(map[string]int64, len(refreshIntervals))
 	for k, v := range refreshIntervals {
 		cm.refreshIntervals[k] = int64(v.Truncate(time.Second).Seconds())
@@ -64,7 +65,7 @@ func NewCacheManagerImpl(mdb *sql.DB, refreshIntervals map[string]time.Duration)
 		for range cm.ticker.C {
 			cm.ticks++
 			if cm.ticks%cm.refreshIntervals["SearchStats"] == 0 {
-				cm.refresh()
+				cm.Refresh()
 			}
 		}
 	}()
@@ -91,7 +92,7 @@ func (cm *CacheManagerImpl) SearchStats() SearchStatsCache {
 	return cm.search
 }
 
-func (cm *CacheManagerImpl) refresh() {
+func (cm *CacheManagerImpl) Refresh() {
 	for _, p := range cm.providers {
 		log.Infof("Refreshing %s", p)
 		if err := p.Refresh(); err != nil {

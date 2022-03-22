@@ -134,15 +134,14 @@ const (
 )
 
 //Content types by media type
-var TEXT_TYPES = []string{
+var CT_TEXT_PUBLICATIONS = []string{
 	CT_ARTICLE,
 	CT_BLOG_POST,
 	CT_BOOK,
 	CT_PUBLICATION,
 	CT_RESEARCH_MATERIAL,
-	CT_SOURCE,
-	CT_LIKUTIM,
 }
+
 var MEDIA_TYPES = []string{
 	CT_CHILDREN_LESSON,
 	CT_CLIP,
