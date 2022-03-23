@@ -983,3 +983,8 @@ var PERMITTED_UNIT_CT_FOR_DERIVED_FILTER = map[string]bool{
 	CT_KITEI_MAKOR: true,
 	CT_SONG:        true,
 }
+
+const (
+	LABEL_MEDIA_TYPE_TEXT  = "text"
+	LABEL_MEDIA_TYPE_MEDIA = "media"
+)
