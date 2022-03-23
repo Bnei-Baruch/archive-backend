@@ -175,9 +175,11 @@ func (fs *FilterStats) scan(q string) error {
 			tmp = sources
 		} else if k[0] == 'l' {
 			byLang[k[1:]] = len(ids)
+			continue
 		} else if k[0] == 'c' {
 			ct := mdb.CONTENT_TYPE_REGISTRY.ByID[id].Name
 			byType[ct] = len(ids)
+			continue
 		}
 
 		tmp.insert(id, parentID.Int64, k[1:], ids)
