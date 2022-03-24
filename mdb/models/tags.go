@@ -50,6 +50,7 @@ var TagColumns = struct {
 type tagR struct {
 	Parent       *Tag
 	ContentUnits ContentUnitSlice
+	Labels       LabelSlice
 	TagI18ns     TagI18nSlice
 	ParentTags   TagSlice
 }
@@ -115,7 +116,7 @@ func (q tagQuery) One() (*Tag, error) {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
 		}
-		return nil, errors.Wrap(err, "mdbmodels: failed to execute a one query for tags")
+		return nil, errors.Wrap(err, "models: failed to execute a one query for tags")
 	}
 
 	return o, nil
@@ -137,7 +138,7 @@ func (q tagQuery) All() (TagSlice, error) {
 
 	err := q.Bind(&o)
 	if err != nil {
-		return nil, errors.Wrap(err, "mdbmodels: failed to assign all query results to Tag slice")
+		return nil, errors.Wrap(err, "models: failed to assign all query results to Tag slice")
 	}
 
 	return o, nil
@@ -162,7 +163,7 @@ func (q tagQuery) Count() (int64, error) {
 
 	err := q.Query.QueryRow().Scan(&count)
 	if err != nil {
-		return 0, errors.Wrap(err, "mdbmodels: failed to count tags rows")
+		return 0, errors.Wrap(err, "models: failed to count tags rows")
 	}
 
 	return count, nil
@@ -187,7 +188,7 @@ func (q tagQuery) Exists() (bool, error) {
 
 	err := q.Query.QueryRow().Scan(&count)
 	if err != nil {
-		return false, errors.Wrap(err, "mdbmodels: failed to check if tags exists")
+		return false, errors.Wrap(err, "models: failed to check if tags exists")
 	}
 
 	return count > 0, nil
@@ -234,6 +235,33 @@ func (o *Tag) ContentUnits(exec boil.Executor, mods ...qm.QueryMod) contentUnitQ
 
 	if len(queries.GetSelect(query.Query)) == 0 {
 		queries.SetSelect(query.Query, []string{"\"content_units\".*"})
+	}
+
+	return query
+}
+
+// LabelsG retrieves all the label's labels.
+func (o *Tag) LabelsG(mods ...qm.QueryMod) labelQuery {
+	return o.Labels(boil.GetDB(), mods...)
+}
+
+// Labels retrieves all the label's labels with an executor.
+func (o *Tag) Labels(exec boil.Executor, mods ...qm.QueryMod) labelQuery {
+	var queryMods []qm.QueryMod
+	if len(mods) != 0 {
+		queryMods = append(queryMods, mods...)
+	}
+
+	queryMods = append(queryMods,
+		qm.InnerJoin("\"label_tag\" on \"labels\".\"id\" = \"label_tag\".\"label_id\""),
+		qm.Where("\"label_tag\".\"tag_id\"=?", o.ID),
+	)
+
+	query := Labels(exec, queryMods...)
+	queries.SetFrom(query.Query, "\"labels\"")
+
+	if len(queries.GetSelect(query.Query)) == 0 {
+		queries.SetSelect(query.Query, []string{"\"labels\".*"})
 	}
 
 	return query
@@ -434,6 +462,87 @@ func (tagL) LoadContentUnits(e boil.Executor, singular bool, maybeTag interface{
 		for _, local := range slice {
 			if local.ID == localJoinCol {
 				local.R.ContentUnits = append(local.R.ContentUnits, foreign)
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
+// LoadLabels allows an eager lookup of values, cached into the
+// loaded structs of the objects.
+func (tagL) LoadLabels(e boil.Executor, singular bool, maybeTag interface{}) error {
+	var slice []*Tag
+	var object *Tag
+
+	count := 1
+	if singular {
+		object = maybeTag.(*Tag)
+	} else {
+		slice = *maybeTag.(*[]*Tag)
+		count = len(slice)
+	}
+
+	args := make([]interface{}, count)
+	if singular {
+		if object.R == nil {
+			object.R = &tagR{}
+		}
+		args[0] = object.ID
+	} else {
+		for i, obj := range slice {
+			if obj.R == nil {
+				obj.R = &tagR{}
+			}
+			args[i] = obj.ID
+		}
+	}
+
+	query := fmt.Sprintf(
+		"select \"a\".*, \"b\".\"tag_id\" from \"labels\" as \"a\" inner join \"label_tag\" as \"b\" on \"a\".\"id\" = \"b\".\"label_id\" where \"b\".\"tag_id\" in (%s)",
+		strmangle.Placeholders(dialect.IndexPlaceholders, count, 1, 1),
+	)
+	if boil.DebugMode {
+		fmt.Fprintf(boil.DebugWriter, "%s\n%v\n", query, args)
+	}
+
+	results, err := e.Query(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to eager load labels")
+	}
+	defer results.Close()
+
+	var resultSlice []*Label
+
+	var localJoinCols []int64
+	for results.Next() {
+		one := new(Label)
+		var localJoinCol int64
+
+		err = results.Scan(&one.ID, &one.UID, &one.ContentUnitID, &one.MediaType, &one.Properties, &one.ApproveState, &one.CreatedAt, &localJoinCol)
+		if err = results.Err(); err != nil {
+			return errors.Wrap(err, "failed to plebian-bind eager loaded slice labels")
+		}
+
+		resultSlice = append(resultSlice, one)
+		localJoinCols = append(localJoinCols, localJoinCol)
+	}
+
+	if err = results.Err(); err != nil {
+		return errors.Wrap(err, "failed to plebian-bind eager loaded slice labels")
+	}
+
+	if singular {
+		object.R.Labels = resultSlice
+		return nil
+	}
+
+	for i, foreign := range resultSlice {
+		localJoinCol := localJoinCols[i]
+		for _, local := range slice {
+			if local.ID == localJoinCol {
+				local.R.Labels = append(local.R.Labels, foreign)
 				break
 			}
 		}
@@ -945,6 +1054,242 @@ func removeContentUnitsFromTagsSlice(o *Tag, related []*ContentUnit) {
 	}
 }
 
+// AddLabelsG adds the given related objects to the existing relationships
+// of the tag, optionally inserting them as new records.
+// Appends related to o.R.Labels.
+// Sets related.R.Tags appropriately.
+// Uses the global database handle.
+func (o *Tag) AddLabelsG(insert bool, related ...*Label) error {
+	return o.AddLabels(boil.GetDB(), insert, related...)
+}
+
+// AddLabelsP adds the given related objects to the existing relationships
+// of the tag, optionally inserting them as new records.
+// Appends related to o.R.Labels.
+// Sets related.R.Tags appropriately.
+// Panics on error.
+func (o *Tag) AddLabelsP(exec boil.Executor, insert bool, related ...*Label) {
+	if err := o.AddLabels(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddLabelsGP adds the given related objects to the existing relationships
+// of the tag, optionally inserting them as new records.
+// Appends related to o.R.Labels.
+// Sets related.R.Tags appropriately.
+// Uses the global database handle and panics on error.
+func (o *Tag) AddLabelsGP(insert bool, related ...*Label) {
+	if err := o.AddLabels(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// AddLabels adds the given related objects to the existing relationships
+// of the tag, optionally inserting them as new records.
+// Appends related to o.R.Labels.
+// Sets related.R.Tags appropriately.
+func (o *Tag) AddLabels(exec boil.Executor, insert bool, related ...*Label) error {
+	var err error
+	for _, rel := range related {
+		if insert {
+			if err = rel.Insert(exec); err != nil {
+				return errors.Wrap(err, "failed to insert into foreign table")
+			}
+		}
+	}
+
+	for _, rel := range related {
+		query := "insert into \"label_tag\" (\"tag_id\", \"label_id\") values ($1, $2)"
+		values := []interface{}{o.ID, rel.ID}
+
+		if boil.DebugMode {
+			fmt.Fprintln(boil.DebugWriter, query)
+			fmt.Fprintln(boil.DebugWriter, values)
+		}
+
+		_, err = exec.Exec(query, values...)
+		if err != nil {
+			return errors.Wrap(err, "failed to insert into join table")
+		}
+	}
+	if o.R == nil {
+		o.R = &tagR{
+			Labels: related,
+		}
+	} else {
+		o.R.Labels = append(o.R.Labels, related...)
+	}
+
+	for _, rel := range related {
+		if rel.R == nil {
+			rel.R = &labelR{
+				Tags: TagSlice{o},
+			}
+		} else {
+			rel.R.Tags = append(rel.R.Tags, o)
+		}
+	}
+	return nil
+}
+
+// SetLabelsG removes all previously related items of the
+// tag replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Tags's Labels accordingly.
+// Replaces o.R.Labels with related.
+// Sets related.R.Tags's Labels accordingly.
+// Uses the global database handle.
+func (o *Tag) SetLabelsG(insert bool, related ...*Label) error {
+	return o.SetLabels(boil.GetDB(), insert, related...)
+}
+
+// SetLabelsP removes all previously related items of the
+// tag replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Tags's Labels accordingly.
+// Replaces o.R.Labels with related.
+// Sets related.R.Tags's Labels accordingly.
+// Panics on error.
+func (o *Tag) SetLabelsP(exec boil.Executor, insert bool, related ...*Label) {
+	if err := o.SetLabels(exec, insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetLabelsGP removes all previously related items of the
+// tag replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Tags's Labels accordingly.
+// Replaces o.R.Labels with related.
+// Sets related.R.Tags's Labels accordingly.
+// Uses the global database handle and panics on error.
+func (o *Tag) SetLabelsGP(insert bool, related ...*Label) {
+	if err := o.SetLabels(boil.GetDB(), insert, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// SetLabels removes all previously related items of the
+// tag replacing them completely with the passed
+// in related items, optionally inserting them as new records.
+// Sets o.R.Tags's Labels accordingly.
+// Replaces o.R.Labels with related.
+// Sets related.R.Tags's Labels accordingly.
+func (o *Tag) SetLabels(exec boil.Executor, insert bool, related ...*Label) error {
+	query := "delete from \"label_tag\" where \"tag_id\" = $1"
+	values := []interface{}{o.ID}
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, query)
+		fmt.Fprintln(boil.DebugWriter, values)
+	}
+
+	_, err := exec.Exec(query, values...)
+	if err != nil {
+		return errors.Wrap(err, "failed to remove relationships before set")
+	}
+
+	removeLabelsFromTagsSlice(o, related)
+	if o.R != nil {
+		o.R.Labels = nil
+	}
+	return o.AddLabels(exec, insert, related...)
+}
+
+// RemoveLabelsG relationships from objects passed in.
+// Removes related items from R.Labels (uses pointer comparison, removal does not keep order)
+// Sets related.R.Tags.
+// Uses the global database handle.
+func (o *Tag) RemoveLabelsG(related ...*Label) error {
+	return o.RemoveLabels(boil.GetDB(), related...)
+}
+
+// RemoveLabelsP relationships from objects passed in.
+// Removes related items from R.Labels (uses pointer comparison, removal does not keep order)
+// Sets related.R.Tags.
+// Panics on error.
+func (o *Tag) RemoveLabelsP(exec boil.Executor, related ...*Label) {
+	if err := o.RemoveLabels(exec, related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemoveLabelsGP relationships from objects passed in.
+// Removes related items from R.Labels (uses pointer comparison, removal does not keep order)
+// Sets related.R.Tags.
+// Uses the global database handle and panics on error.
+func (o *Tag) RemoveLabelsGP(related ...*Label) {
+	if err := o.RemoveLabels(boil.GetDB(), related...); err != nil {
+		panic(boil.WrapErr(err))
+	}
+}
+
+// RemoveLabels relationships from objects passed in.
+// Removes related items from R.Labels (uses pointer comparison, removal does not keep order)
+// Sets related.R.Tags.
+func (o *Tag) RemoveLabels(exec boil.Executor, related ...*Label) error {
+	var err error
+	query := fmt.Sprintf(
+		"delete from \"label_tag\" where \"tag_id\" = $1 and \"label_id\" in (%s)",
+		strmangle.Placeholders(dialect.IndexPlaceholders, len(related), 2, 1),
+	)
+	values := []interface{}{o.ID}
+	for _, rel := range related {
+		values = append(values, rel.ID)
+	}
+
+	if boil.DebugMode {
+		fmt.Fprintln(boil.DebugWriter, query)
+		fmt.Fprintln(boil.DebugWriter, values)
+	}
+
+	_, err = exec.Exec(query, values...)
+	if err != nil {
+		return errors.Wrap(err, "failed to remove relationships before set")
+	}
+	removeLabelsFromTagsSlice(o, related)
+	if o.R == nil {
+		return nil
+	}
+
+	for _, rel := range related {
+		for i, ri := range o.R.Labels {
+			if rel != ri {
+				continue
+			}
+
+			ln := len(o.R.Labels)
+			if ln > 1 && i < ln-1 {
+				o.R.Labels[i] = o.R.Labels[ln-1]
+			}
+			o.R.Labels = o.R.Labels[:ln-1]
+			break
+		}
+	}
+
+	return nil
+}
+
+func removeLabelsFromTagsSlice(o *Tag, related []*Label) {
+	for _, rel := range related {
+		if rel.R == nil {
+			continue
+		}
+		for i, ri := range rel.R.Tags {
+			if o.ID != ri.ID {
+				continue
+			}
+
+			ln := len(rel.R.Tags)
+			if ln > 1 && i < ln-1 {
+				rel.R.Tags[i] = rel.R.Tags[ln-1]
+			}
+			rel.R.Tags = rel.R.Tags[:ln-1]
+			break
+		}
+	}
+}
+
 // AddTagI18nsG adds the given related objects to the existing relationships
 // of the tag, optionally inserting them as new records.
 // Appends related to o.R.TagI18ns.
@@ -1296,7 +1641,7 @@ func FindTag(exec boil.Executor, id int64, selectCols ...string) (*Tag, error) {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
 		}
-		return nil, errors.Wrap(err, "mdbmodels: unable to select from tags")
+		return nil, errors.Wrap(err, "models: unable to select from tags")
 	}
 
 	return tagObj, nil
@@ -1340,7 +1685,7 @@ func (o *Tag) InsertP(exec boil.Executor, whitelist ...string) {
 // - All columns with a default, but non-zero are included (i.e. health = 75)
 func (o *Tag) Insert(exec boil.Executor, whitelist ...string) error {
 	if o == nil {
-		return errors.New("mdbmodels: no tags provided for insertion")
+		return errors.New("models: no tags provided for insertion")
 	}
 
 	var err error
@@ -1401,7 +1746,7 @@ func (o *Tag) Insert(exec boil.Executor, whitelist ...string) error {
 	}
 
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to insert into tags")
+		return errors.Wrap(err, "models: unable to insert into tags")
 	}
 
 	if !cached {
@@ -1459,7 +1804,7 @@ func (o *Tag) Update(exec boil.Executor, whitelist ...string) error {
 		)
 
 		if len(wl) == 0 {
-			return errors.New("mdbmodels: unable to update tags, could not build whitelist")
+			return errors.New("models: unable to update tags, could not build whitelist")
 		}
 
 		cache.query = fmt.Sprintf("UPDATE \"tags\" SET %s WHERE %s",
@@ -1481,7 +1826,7 @@ func (o *Tag) Update(exec boil.Executor, whitelist ...string) error {
 
 	_, err = exec.Exec(cache.query, values...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to update tags row")
+		return errors.Wrap(err, "models: unable to update tags row")
 	}
 
 	if !cached {
@@ -1506,7 +1851,7 @@ func (q tagQuery) UpdateAll(cols M) error {
 
 	_, err := q.Query.Exec()
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to update all for tags")
+		return errors.Wrap(err, "models: unable to update all for tags")
 	}
 
 	return nil
@@ -1539,7 +1884,7 @@ func (o TagSlice) UpdateAll(exec boil.Executor, cols M) error {
 	}
 
 	if len(cols) == 0 {
-		return errors.New("mdbmodels: update all requires at least one column argument")
+		return errors.New("models: update all requires at least one column argument")
 	}
 
 	colNames := make([]string, len(cols))
@@ -1569,7 +1914,7 @@ func (o TagSlice) UpdateAll(exec boil.Executor, cols M) error {
 
 	_, err := exec.Exec(sql, args...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to update all in tag slice")
+		return errors.Wrap(err, "models: unable to update all in tag slice")
 	}
 
 	return nil
@@ -1598,7 +1943,7 @@ func (o *Tag) UpsertP(exec boil.Executor, updateOnConflict bool, conflictColumns
 // Upsert attempts an insert using an executor, and does an update or ignore on conflict.
 func (o *Tag) Upsert(exec boil.Executor, updateOnConflict bool, conflictColumns []string, updateColumns []string, whitelist ...string) error {
 	if o == nil {
-		return errors.New("mdbmodels: no tags provided for upsert")
+		return errors.New("models: no tags provided for upsert")
 	}
 
 	nzDefaults := queries.NonZeroDefaultSet(tagColumnsWithDefault, o)
@@ -1651,7 +1996,7 @@ func (o *Tag) Upsert(exec boil.Executor, updateOnConflict bool, conflictColumns 
 			updateColumns,
 		)
 		if len(update) == 0 {
-			return errors.New("mdbmodels: unable to upsert tags, could not build update column list")
+			return errors.New("models: unable to upsert tags, could not build update column list")
 		}
 
 		conflict := conflictColumns
@@ -1694,7 +2039,7 @@ func (o *Tag) Upsert(exec boil.Executor, updateOnConflict bool, conflictColumns 
 		_, err = exec.Exec(cache.query, vals...)
 	}
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to upsert tags")
+		return errors.Wrap(err, "models: unable to upsert tags")
 	}
 
 	if !cached {
@@ -1719,7 +2064,7 @@ func (o *Tag) DeleteP(exec boil.Executor) {
 // DeleteG will match against the primary key column to find the record to delete.
 func (o *Tag) DeleteG() error {
 	if o == nil {
-		return errors.New("mdbmodels: no Tag provided for deletion")
+		return errors.New("models: no Tag provided for deletion")
 	}
 
 	return o.Delete(boil.GetDB())
@@ -1738,7 +2083,7 @@ func (o *Tag) DeleteGP() {
 // Delete will match against the primary key column to find the record to delete.
 func (o *Tag) Delete(exec boil.Executor) error {
 	if o == nil {
-		return errors.New("mdbmodels: no Tag provided for delete")
+		return errors.New("models: no Tag provided for delete")
 	}
 
 	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), tagPrimaryKeyMapping)
@@ -1751,7 +2096,7 @@ func (o *Tag) Delete(exec boil.Executor) error {
 
 	_, err := exec.Exec(sql, args...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to delete from tags")
+		return errors.Wrap(err, "models: unable to delete from tags")
 	}
 
 	return nil
@@ -1767,14 +2112,14 @@ func (q tagQuery) DeleteAllP() {
 // DeleteAll deletes all matching rows.
 func (q tagQuery) DeleteAll() error {
 	if q.Query == nil {
-		return errors.New("mdbmodels: no tagQuery provided for delete all")
+		return errors.New("models: no tagQuery provided for delete all")
 	}
 
 	queries.SetDelete(q.Query)
 
 	_, err := q.Query.Exec()
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to delete all from tags")
+		return errors.Wrap(err, "models: unable to delete all from tags")
 	}
 
 	return nil
@@ -1790,7 +2135,7 @@ func (o TagSlice) DeleteAllGP() {
 // DeleteAllG deletes all rows in the slice.
 func (o TagSlice) DeleteAllG() error {
 	if o == nil {
-		return errors.New("mdbmodels: no Tag slice provided for delete all")
+		return errors.New("models: no Tag slice provided for delete all")
 	}
 	return o.DeleteAll(boil.GetDB())
 }
@@ -1805,7 +2150,7 @@ func (o TagSlice) DeleteAllP(exec boil.Executor) {
 // DeleteAll deletes all rows in the slice, using an executor.
 func (o TagSlice) DeleteAll(exec boil.Executor) error {
 	if o == nil {
-		return errors.New("mdbmodels: no Tag slice provided for delete all")
+		return errors.New("models: no Tag slice provided for delete all")
 	}
 
 	if len(o) == 0 {
@@ -1828,7 +2173,7 @@ func (o TagSlice) DeleteAll(exec boil.Executor) error {
 
 	_, err := exec.Exec(sql, args...)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to delete all from tag slice")
+		return errors.Wrap(err, "models: unable to delete all from tag slice")
 	}
 
 	return nil
@@ -1851,7 +2196,7 @@ func (o *Tag) ReloadP(exec boil.Executor) {
 // ReloadG refetches the object from the database using the primary keys.
 func (o *Tag) ReloadG() error {
 	if o == nil {
-		return errors.New("mdbmodels: no Tag provided for reload")
+		return errors.New("models: no Tag provided for reload")
 	}
 
 	return o.Reload(boil.GetDB())
@@ -1891,7 +2236,7 @@ func (o *TagSlice) ReloadAllP(exec boil.Executor) {
 // and overwrites the original object slice with the newly updated slice.
 func (o *TagSlice) ReloadAllG() error {
 	if o == nil {
-		return errors.New("mdbmodels: empty TagSlice provided for reload all")
+		return errors.New("models: empty TagSlice provided for reload all")
 	}
 
 	return o.ReloadAll(boil.GetDB())
@@ -1918,7 +2263,7 @@ func (o *TagSlice) ReloadAll(exec boil.Executor) error {
 
 	err := q.Bind(&tags)
 	if err != nil {
-		return errors.Wrap(err, "mdbmodels: unable to reload all in TagSlice")
+		return errors.Wrap(err, "models: unable to reload all in TagSlice")
 	}
 
 	*o = tags
@@ -1940,7 +2285,7 @@ func TagExists(exec boil.Executor, id int64) (bool, error) {
 
 	err := row.Scan(&exists)
 	if err != nil {
-		return false, errors.Wrap(err, "mdbmodels: unable to check if tags exists")
+		return false, errors.Wrap(err, "models: unable to check if tags exists")
 	}
 
 	return exists, nil

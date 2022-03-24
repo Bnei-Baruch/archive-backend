@@ -82,6 +82,11 @@ const (
 	SEC_SENSITIVE = int16(1)
 	SEC_PRIVATE   = int16(2)
 
+	// Approve state levels
+	APR_NONE     = int16(0)
+	APR_APPROVED = int16(1)
+	APR_DECLINED = int16(2)
+
 	// Weight of 'sources' and 'collections' autocomplete results (assigned at index time)
 	ES_SOURCES_SUGGEST_DEFAULT_WEIGHT     = 50
 	ES_COLLECTIONS_SUGGEST_DEFAULT_WEIGHT = 40
@@ -127,6 +132,34 @@ const (
 	//suggest constant terms patterns
 	TERMS_PATTERN_DIGITS = `(?:^|\s|\(|\/)(\d+)(\b)`
 )
+
+//Content types by media type
+var TEXT_TYPES = []string{
+	CT_ARTICLE,
+	CT_BLOG_POST,
+	CT_BOOK,
+	CT_PUBLICATION,
+	CT_RESEARCH_MATERIAL,
+	CT_SOURCE,
+	CT_LIKUTIM,
+}
+var MEDIA_TYPES = []string{
+	CT_CHILDREN_LESSON,
+	CT_CLIP,
+	CT_EVENT_PART,
+	CT_FRIENDS_GATHERING,
+	CT_FULL_LESSON,
+	CT_LECTURE,
+	CT_LELO_MIKUD,
+	CT_LESSON_PART,
+	CT_MEAL,
+	CT_KTAIM_NIVCHARIM,
+	CT_SONG,
+	CT_TRAINING,
+	CT_VIDEO_PROGRAM_CHAPTER,
+	CT_VIRTUAL_LESSON,
+	CT_WOMEN_LESSON,
+}
 
 var ALL_KNOWN_LANGS = [...]string{
 	LANG_ENGLISH, LANG_HEBREW, LANG_RUSSIAN, LANG_SPANISH, LANG_ITALIAN, LANG_GERMAN, LANG_DUTCH, LANG_FRENCH,

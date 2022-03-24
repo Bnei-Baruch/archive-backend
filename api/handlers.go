@@ -629,7 +629,8 @@ func TagDashboardHandler(c *gin.Context) {
 
 	r.UID = c.Param("uid")
 
-	resp, err := handleTagDashboard(c.MustGet("MDB_DB").(*sql.DB), r)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err := handleTagDashboard(db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -717,6 +718,18 @@ func SimpleModeHandler(c *gin.Context) {
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	resp, err2 := handleSimpleMode(cm, db, r)
+	concludeRequest(c, resp, err2)
+}
+
+func LabelHandler(c *gin.Context) {
+	var r LabelsRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err2 := handleLabels(cm, db, r)
 	concludeRequest(c, resp, err2)
 }
 
@@ -1382,16 +1395,14 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendSourcesFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
+	if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
 		} else {
 			return nil, NewInternalError(err)
 		}
 	}
-	if err := appendTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
+	appendTagsFilterMods(cm, &mods, r.TagsFilter)
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1567,6 +1578,104 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 	resp := &ContentUnitsResponse{
 		ListResponse: ListResponse{Total: total},
 		ContentUnits: cus,
+	}
+
+	return resp, nil
+}
+
+func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsResponse, *HttpError) {
+	mods := []qm.QueryMod{
+		qm.Where("approve_state != ?", consts.APR_DECLINED),
+		qm.Where("\"content_units\".secure = 0 AND \"content_units\".published IS TRUE"),
+		qm.InnerJoin("content_units ON content_unit_id = \"content_units\".id"),
+	}
+
+	// filters
+
+	if !utils.IsEmpty(r.IDs) {
+		mods = append(mods, qm.WhereIn("\"labels\".uid IN ?", utils.ConvertArgsString(r.IDs)...))
+	}
+
+	if !utils.IsEmpty(r.Tags) {
+		_, ids := cm.TagsStats().GetTree().GetUniqueChildren(r.Tags)
+		if ids != nil && len(ids) == 0 {
+			mods = append(mods,
+				qm.InnerJoin("labels_tags lt ON id = lt.label_id"),
+				qm.WhereIn("lt.tag_id in ?", utils.ConvertArgsInt64(ids)...))
+		}
+	}
+
+	if len(r.ContentUnitIDs) > 0 {
+		mods = append(mods,
+			qm.WhereIn("content_unit_id in (SELECT cu.id FROM content_units cu WHERE cu.uid IN (?))", utils.ConvertArgsString(r.ContentUnitIDs)...),
+		)
+	}
+
+	var total int64
+	countMods := append([]qm.QueryMod{qm.Select("count(*)")}, mods...)
+	err := mdbmodels.Labels(db, countMods...).QueryRow().Scan(&total)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	if total == 0 {
+		return NewLabelsResponse(), nil
+	}
+
+	// order, limit, offset
+	if r.OrderBy == "" {
+		r.OrderBy = "created_at"
+	}
+	if r.GroupBy == "" {
+		r.GroupBy = "\"labels\".id"
+	}
+	_, offset, err := appendListMods(&mods, r.ListRequest)
+	if err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if int64(offset) >= total {
+		return NewLabelsResponse(), nil
+	}
+
+	mods = append(mods, qm.Load("ContentUnit"))
+	// data query
+	lsmdb, err := mdbmodels.Labels(db, mods...).All()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	ids := make([]int64, len(lsmdb))
+	for i, label := range lsmdb {
+		ids[i] = label.ID
+	}
+
+	// load i18ns
+	labelI18nsMap, err := loadLabelsI18ns(db, r.Language, ids)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	labels := make([]*Label, len(lsmdb))
+	for i, label := range lsmdb {
+		labels[i] = mdbToLabel(label)
+
+		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+			li18n, ok := labelI18nsMap[label.ID]
+			if !ok {
+				continue
+			}
+			i18n, ok := li18n[l]
+			if ok && labels[i].Name == "" && i18n.Name.Valid {
+				labels[i].Name = i18n.Name.String
+			}
+			if ok && i18n.R.User != nil && i18n.R.User.Name.Valid {
+				labels[i].Author = i18n.R.User.Name.String
+			}
+		}
+	}
+
+	resp := &LabelsResponse{
+		ListResponse: ListResponse{Total: total},
+		Labels:       labels,
 	}
 
 	return resp, nil
@@ -1940,16 +2049,14 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendSourcesFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
+	if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
 		if e, ok := err.(*HttpError); ok {
 			return nil, e
 		} else {
 			return nil, NewInternalError(err)
 		}
 	}
-	if err := appendTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
+	appendTagsFilterMods(cm, &mods, r.TagsFilter)
 	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2387,7 +2494,7 @@ func appendCollectionSourceFilterMods(cm cache.CacheManager, exec boil.Executor,
 	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
 		return nil
 	}
-	_, uids, err := prepareNestedSources(cm, exec, f)
+	_, uids, err := prepareNestedSources(cm, f)
 	if err != nil {
 		return err
 	}
@@ -2446,11 +2553,11 @@ func appendDRFBaseMods(mods *[]qm.QueryMod, f DateRangeFilter, field string) err
 	return nil
 }
 
-func appendSourcesFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
+func appendSourcesFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f SourcesFilter) error {
 	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
 		return nil
 	}
-	ids, _, err := prepareNestedSources(cm, exec, f)
+	ids, _, err := prepareNestedSources(cm, f)
 	if err != nil {
 		return err
 	}
@@ -2465,7 +2572,7 @@ func appendSourcesFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]
 	return nil
 }
 
-func prepareNestedSources(cm cache.CacheManager, exec boil.Executor, f SourcesFilter) ([]int64, []string, error) {
+func prepareNestedSources(cm cache.CacheManager, f SourcesFilter) ([]int64, []string, error) {
 	// slice of all source ids we want
 	sourceUids := make([]string, 0)
 
@@ -2489,9 +2596,9 @@ func prepareNestedSources(cm cache.CacheManager, exec boil.Executor, f SourcesFi
 	return ids, uids, nil
 }
 
-func appendTagsFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f TagsFilter) error {
+func appendTagsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilter) {
 	if len(f.Tags) == 0 {
-		return nil
+		return
 	}
 	_, ids := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
 	if ids == nil || len(ids) == 0 {
@@ -2501,8 +2608,6 @@ func appendTagsFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.
 			qm.InnerJoin("content_units_tags cut ON id = cut.content_unit_id"),
 			qm.WhereIn("cut.tag_id in ?", utils.ConvertArgsInt64(ids)...))
 	}
-
-	return nil
 }
 
 func appendGenresProgramsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f GenresProgramsFilter) error {
@@ -2937,6 +3042,49 @@ func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error)
 		ids[idx] = xu.ID
 	}
 	return
+}
+
+func loadLabelsI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.LabelI18n, error) {
+	i18nsMap := make(map[int64]map[string]*mdbmodels.LabelI18n, len(ids))
+	if len(ids) == 0 {
+		return i18nsMap, nil
+	}
+
+	// Load from DB
+	i18ns, err := mdbmodels.LabelI18ns(db,
+		qm.WhereIn("label_id in ?", utils.ConvertArgsInt64(ids)...),
+		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...),
+		qm.Load("User"),
+	).All()
+	if err != nil {
+		return nil, errors.Wrap(err, "Load content units i18ns from DB")
+	}
+
+	// Group by label and language
+	for _, x := range i18ns {
+		v, ok := i18nsMap[x.LabelID]
+		if !ok {
+			v = make(map[string]*mdbmodels.LabelI18n, 1)
+			i18nsMap[x.LabelID] = v
+		}
+		v[x.Language] = x
+	}
+
+	return i18nsMap, nil
+}
+
+func mdbToLabel(l *mdbmodels.Label) *Label {
+	label := &Label{
+		ID:         l.UID,
+		MediaType:  l.MediaType,
+		Properties: l.Properties,
+		CreatedAt:  l.CreatedAt,
+	}
+	if l.R.ContentUnit != nil {
+		label.ContentUnit = l.R.ContentUnit.UID
+	}
+
+	return label
 }
 
 // Dirty hack for unique mapping - needs to parse in client...
