@@ -1870,23 +1870,42 @@ func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 	}
 
 	// CU filters
-	appendTagsFilterMods(cm, &cuMods, r.TagsFilter)
 	if err := appendSourcesFilterMods(cm, &cuMods, r.SourcesFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
-
 	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendDateRangeFilterMods(&cuMods, r.DateRangeFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			return nil, e
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+	if err := appendMediaLanguageFilterMods(db, &cuMods, r.MediaLanguageFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	appendTagsFilterMods(cm, &cuMods, r.TagsFilter)
 
 	//label filters
-	appendTagsLabelsFilterMods(cm, &lMods, r.TagsFilter)
 	if err := appendSourcesLabelsFilterMods(cm, &lMods, r.SourcesFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 	if err := appendContentTypesLabelsFilterMods(&lMods, r.ContentTypesFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendDateRangeLabelsFilterMods(&lMods, r.DateRangeFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			return nil, e
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
+
+	appendTagsLabelsFilterMods(cm, &lMods, r.TagsFilter)
+	appendMediaLanguageLabelsFilterMods(&lMods, r.MediaLanguageFilter)
 
 	cuByType, err := cuCountTagDashboard(db, cuMods)
 	if err != nil {
@@ -2354,6 +2373,9 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
+		return nil, NewInternalError(err)
+	}
 
 	var err error
 	resp := NewStatsClassResponse()
@@ -2384,13 +2406,11 @@ func handleStatsLabelClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequ
 		qm.Where("\"labels\".approve_state != ?", consts.APR_DECLINED),
 		qm.Where("cu.secure = 0 AND cu.published IS TRUE"),
 		qm.InnerJoin("content_units cu ON \"labels\".content_unit_id = cu.id"),
+		qm.InnerJoin("label_i18n i18n ON i18n.label_id = \"labels\".id"),
 	}
 
 	// filters
-	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+	if err := appendContentTypesLabelsFilterMods(&mods, r.ContentTypesFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendSourcesLabelsFilterMods(cm, &mods, r.SourcesFilter); err != nil {
@@ -2400,8 +2420,16 @@ func handleStatsLabelClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequ
 			return nil, NewInternalError(err)
 		}
 	}
+	if err := appendDateRangeLabelsFilterMods(&mods, r.DateRangeFilter); err != nil {
+		if e, ok := err.(*HttpError); ok {
+			return nil, e
+		} else {
+			return nil, NewInternalError(err)
+		}
+	}
 
 	appendTagsLabelsFilterMods(cm, &mods, r.TagsFilter)
+	appendMediaLanguageLabelsFilterMods(&mods, r.MediaLanguageFilter)
 
 	var err error
 	resp := NewStatsClassResponse()
@@ -3093,12 +3121,9 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 	if len(f.MediaLanguage) == 0 {
 		return nil
 	}
-	//TODO: this query should be optimized ASAP and before we do that clients should use it as little as possible
 	*mods = append(*mods,
-		qm.WhereIn(`(id in ( SELECT DISTINCT cu.id FROM content_units cu 
-			INNER JOIN files f 
-			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
-			AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))`, f.MediaLanguage),
+		qm.InnerJoin("files f ON  f.content_unit_id = \"content_units\".id"),
+		qm.Where("f.language = ?", f.MediaLanguage),
 	)
 	return nil
 }
@@ -3134,6 +3159,19 @@ func appendTagsLabelsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f Ta
 			qm.InnerJoin("labels_tags lt ON id = lt.label_id"),
 			qm.WhereIn("lt.tag_id in ?", utils.ConvertArgsInt64(ids)...))
 	}
+}
+
+func appendMediaLanguageLabelsFilterMods(mods *[]qm.QueryMod, f MediaLanguageFilter) {
+	if f.MediaLanguage == "" {
+		return
+	}
+	*mods = append(*mods,
+		qm.Where("i18n.language = ?", f.MediaLanguage))
+
+}
+
+func appendDateRangeLabelsFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
+	return appendDRFBaseMods(mods, f, "created_at")
 }
 
 func appendSourcesLabelsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f SourcesFilter) error {

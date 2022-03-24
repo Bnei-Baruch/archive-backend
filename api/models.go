@@ -38,6 +38,7 @@ type TagDashboardRequest struct {
 	DateRangeFilter
 	SourcesFilter
 	ContentTypesFilter
+	MediaLanguageFilter
 }
 
 type IDsFilter struct {
