@@ -70,9 +70,6 @@ func (s *TagDashboardSuite) TestMediaPagination() {
 	total := len(cusLessons) + len(cusPrograms) + len(labels)
 
 	for i := 1; pageSize*(i-1) <= total; i++ {
-		if i != 3 {
-			continue
-		}
 		r := api.TagDashboardRequest{
 			ListRequest: api.ListRequest{PageNumber: i, PageSize: pageSize, BaseRequest: api.BaseRequest{Language: "he"}},
 			TagsFilter:  api.TagsFilter{Tags: []string{tag.UID}},
@@ -104,7 +101,7 @@ func (s *TagDashboardSuite) TestMediaPagination() {
 			expLesson = 0
 			expProg = 11
 			expLabels = 7
-		} else if i == 3 {
+		} else if i == 4 {
 			expLesson = 0
 			expProg = 3
 			expLabels = 0
@@ -112,37 +109,6 @@ func (s *TagDashboardSuite) TestMediaPagination() {
 		s.EqualValues(expLesson, len(byType[mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID]), fmt.Sprintf("number of LESSONS, Page n %d", i))
 		s.EqualValues(expProg, len(byType[mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM_CHAPTER].ID]), fmt.Sprintf("number of PROGRAMS, Page n %d", i))
 		s.EqualValues(expLabels, len(byType[-2]), fmt.Sprintf("number of labels, Page n %d", i))
-	}
-}
-
-func (s *TagDashboardSuite) TestTextPagination() {
-	boil.DebugMode = true
-	tag := &mdbmodels.Tag{
-		UID:     utils.GenerateUID(8),
-		Pattern: null.StringFrom("test"),
-	}
-	s.NoError(tag.Insert(s.DB))
-
-	cusArticle := s.mkCUs(100, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID, tag)
-
-	labels := s.mkLabels(100, "text", tag)
-	pageSize := 20
-	total := len(cusArticle) + len(labels)
-
-	for i := 0; i <= total/pageSize; i++ {
-		r := api.TagDashboardRequest{
-			ListRequest: api.ListRequest{PageNumber: i, PageSize: pageSize, BaseRequest: api.BaseRequest{Language: "he"}},
-			TagsFilter:  api.TagsFilter{Tags: []string{tag.UID}},
-		}
-
-		resp, err := api.HandleTagDashboard(common.CACHE, s.DB, r)
-		s.Nil(err)
-		count := pageSize
-		if i+1 > total/pageSize {
-			count = total % pageSize
-		}
-		s.EqualValues(count, len(resp.Items))
-		s.EqualValues(total, resp.TextTotal)
 	}
 }
 
@@ -192,9 +158,10 @@ func (s *TagDashboardSuite) mkLabels(n int, mtype string, tag *mdbmodels.Tag) []
 	labels := make([]*mdbmodels.Label, n)
 	for i, _ := range labels {
 		cu := &mdbmodels.ContentUnit{
-			UID:    utils.GenerateUID(8),
-			Secure: 0,
-			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
+			UID:       utils.GenerateUID(8),
+			Secure:    0,
+			Published: true,
+			TypeID:    mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
 		}
 		s.NoError(cu.Insert(s.DB))
 
