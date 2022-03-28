@@ -30,6 +30,7 @@ import (
 )
 
 var SECURE_PUBLISHED_MOD = qm.Where(fmt.Sprintf("secure=%d AND published IS TRUE", consts.SEC_PUBLIC))
+var SECURE_PUBLISHED_MOD_CU_PREFIX = qm.Where(fmt.Sprintf("\"content_units\".secure=%d AND \"content_units\".published IS TRUE", consts.SEC_PUBLIC))
 
 type firstRowsType struct {
 	id           int64
@@ -1860,13 +1861,18 @@ func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 	lMods := []qm.QueryMod{
 		qm.InnerJoin("label_tag lt ON lt.label_id = id"),
 		qm.InnerJoin("label_i18n i18n ON i18n.label_id = id"),
-		qm.WhereIn("i18n.language = ?", r.Language),
 		qm.Where("approve_state != ?", consts.APR_DECLINED),
 		qm.Where("cu.secure = 0 AND cu.published IS TRUE"),
 		qm.InnerJoin("content_units cu ON \"labels\".content_unit_id = cu.id"),
 	}
+
+	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
+	for i, n := range consts.CT_NOT_FOR_DISPLAY {
+		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
+	}
 	cuMods := []qm.QueryMod{
-		SECURE_PUBLISHED_MOD,
+		SECURE_PUBLISHED_MOD_CU_PREFIX,
+		qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...),
 	}
 
 	// CU filters
@@ -2000,7 +2006,7 @@ func fetchCUTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*tagDas
 	if len(qs) == 0 {
 		return items, nil
 	}
-	mods = append(mods, qm.Select("distinct on (id) *"))
+	mods = append(mods, qm.Select("distinct on (\"content_units\".id) \"content_units\".*"))
 	qf, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
 
 	q := fmt.Sprintf("WITH units AS (%s) %s", qf[:len(qf)-1], strings.Join(qs, "UNION"))
@@ -2103,7 +2109,7 @@ func cuQueriesTagDashboard(opts *tagDashboardFetchOptions) (string, bool) {
 func cuCountTagDashboard(db *sql.DB, baseMods []qm.QueryMod) (map[int64]int64, error) {
 	byType := make(map[int64]int64)
 	mods := append(baseMods,
-		qm.Select("type_id", "count(DISTINCT id)"),
+		qm.Select("type_id", "count(DISTINCT \"content_units\".id)"),
 		qm.GroupBy("type_id"),
 	)
 	q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
@@ -2338,9 +2344,14 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 }
 
 func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsClassResponse, *HttpError) {
+	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
+	for i, n := range consts.CT_NOT_FOR_DISPLAY {
+		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
+	}
 	mods := []qm.QueryMod{
-		qm.Select("id", "type_id"),
-		SECURE_PUBLISHED_MOD,
+		qm.Select("\"content_units\".id as id", "type_id"),
+		qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...),
+		SECURE_PUBLISHED_MOD_CU_PREFIX,
 	}
 
 	// filters
@@ -2350,7 +2361,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+	if err := appendDateRangeCUFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
@@ -2848,6 +2859,9 @@ func appendDerivedTypesFilterMods(mods *[]qm.QueryMod, f DerivedTypesFilter) err
 func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
 }
+func appendDateRangeCUFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
+	return appendDRFBaseMods(mods, f, "(\"content_units\".properties->>'film_date')::date")
+}
 
 func appendCollectionSourceFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
 	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
@@ -2964,7 +2978,7 @@ func appendTagsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilt
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
 		*mods = append(*mods,
-			qm.InnerJoin("content_units_tags cut ON id = cut.content_unit_id"),
+			qm.InnerJoin("content_units_tags cut ON \"content_units\".id = cut.content_unit_id"),
 			qm.WhereIn("cut.tag_id in ?", utils.ConvertArgsInt64(ids)...))
 	}
 }
@@ -3171,7 +3185,7 @@ func appendMediaLanguageLabelsFilterMods(mods *[]qm.QueryMod, f MediaLanguageFil
 }
 
 func appendDateRangeLabelsFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
-	return appendDRFBaseMods(mods, f, "created_at")
+	return appendDRFBaseMods(mods, f, "\"labels\".created_at")
 }
 
 func appendSourcesLabelsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f SourcesFilter) error {
