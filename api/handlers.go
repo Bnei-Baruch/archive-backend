@@ -2006,7 +2006,10 @@ func fetchCUTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*tagDas
 	if len(qs) == 0 {
 		return items, nil
 	}
-	mods = append(mods, qm.Select("distinct on (\"content_units\".id) \"content_units\".*"))
+	mods = append(mods,
+		qm.Select("\"content_units\".*"),
+		qm.OrderBy("(\"content_units\".properties->>'film_date')::date DESC, \"content_units\".created_at DESC"),
+	)
 	qf, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
 
 	q := fmt.Sprintf("WITH units AS (%s) %s", qf[:len(qf)-1], strings.Join(qs, "UNION"))
@@ -2146,7 +2149,10 @@ func fetchLabelsTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*ta
 	if len(qs) == 0 {
 		return items, nil
 	}
-	mods = append(mods, qm.Select("distinct on (\"labels\".id) \"labels\".*"))
+	mods = append(mods,
+		qm.Select("\"labels\".*"),
+		qm.OrderBy("\"labels\".created_at DESC"),
+	)
 	qf, args := queries.BuildQuery(mdbmodels.Labels(db, mods...).Query)
 	q := fmt.Sprintf("WITH labels AS (%s) %s", qf[:len(qf)-1], strings.Join(qs, "UNION"))
 
@@ -2349,7 +2355,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
 	}
 	mods := []qm.QueryMod{
-		qm.Select("\"content_units\".id as id", "type_id"),
+		qm.Select("distinct on (\"content_units\".id) \"content_units\".id as id", "type_id"),
 		qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...),
 		SECURE_PUBLISHED_MOD_CU_PREFIX,
 	}
@@ -2384,7 +2390,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
-	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
+	if err := appendMediaLanguageNoInnerSelectFilterMods(&mods, r.MediaLanguageFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
 
@@ -3135,9 +3141,23 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 	if len(f.MediaLanguage) == 0 {
 		return nil
 	}
+	//TODO: this query should be optimized ASAP and before we do that clients should use it as little as possible
+	*mods = append(*mods,
+		qm.WhereIn(`(id in ( SELECT DISTINCT cu.id FROM content_units cu 
+			INNER JOIN files f 
+			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
+			AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))`, f.MediaLanguage),
+	)
+	return nil
+}
+
+func appendMediaLanguageNoInnerSelectFilterMods(mods *[]qm.QueryMod, f MediaLanguageFilter) error {
+	if len(f.MediaLanguage) == 0 {
+		return nil
+	}
 	*mods = append(*mods,
 		qm.InnerJoin("files f ON  f.content_unit_id = \"content_units\".id"),
-		qm.Where("f.language = ?", f.MediaLanguage),
+		qm.Where("f.secure = 0 AND f.published IS TRUE AND f.language = ?", f.MediaLanguage),
 	)
 	return nil
 }

@@ -3,7 +3,6 @@ package api
 import (
 	"database/sql"
 	"fmt"
-	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 
 	"github.com/Bnei-Baruch/sqlboiler/queries"
@@ -330,9 +329,8 @@ func (fs *FilterLabelStats) GetStats() error {
 	  concat('c', fl.type_id),
 	  array_agg(distinct fl.id)
 	FROM fl
-	WHERE fl.type_id != %d
 	GROUP BY fl.type_id
 	`,
-		fs.Scope[:len(fs.Scope)-1], mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID)
+		fs.Scope[:len(fs.Scope)-1])
 	return fs.scan(qq)
 }
