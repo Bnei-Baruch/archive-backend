@@ -740,8 +740,8 @@ func LabelHandler(c *gin.Context) {
 
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	resp, err2 := handleLabels(cm, db, r)
-	concludeRequest(c, resp, err2)
+	resp, err := handleLabels(cm, db, r)
+	concludeRequest(c, resp, err)
 }
 
 func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
@@ -1640,7 +1640,7 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 		return NewLabelsResponse(), nil
 	}
 
-	mods = append(mods, qm.Load("ContentUnit"))
+	mods = append(mods, qm.Load("ContentUnit", "Tags"))
 	// data query
 	lsmdb, err := mdbmodels.Labels(db, mods...).All()
 	if err != nil {
@@ -3537,6 +3537,12 @@ func mdbToLabel(l *mdbmodels.Label) *Label {
 	}
 	if l.R.ContentUnit != nil {
 		label.ContentUnit = l.R.ContentUnit.UID
+	}
+	if l.R.Tags != nil {
+		label.TagUIDs = make([]string, len(l.R.Tags))
+		for i, t := range l.R.Tags {
+			label.TagUIDs[i] = t.UID
+		}
 	}
 
 	return label
