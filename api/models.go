@@ -114,7 +114,7 @@ type BlogFilter struct {
 }
 
 type MediaLanguageFilter struct {
-	MediaLanguage string `json:"media_language" form:"media_language" binding:"omitempty,len=2"`
+	MediaLanguage []string `json:"media_language" form:"media_language" binding:"omitempty,dive,len=2"`
 }
 
 type CollectionsRequest struct {

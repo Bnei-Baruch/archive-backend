@@ -305,7 +305,7 @@ func LessonsHandler(c *gin.Context) {
 		utils.IsEmpty(r.Tags) &&
 		utils.IsEmpty(r.Tags) &&
 		utils.IsEmpty(r.DerivedTypes) &&
-		r.MediaLanguage == "" {
+		len(r.MediaLanguage) == 0 {
 		if r.OrderBy == "" {
 			r.OrderBy = "(properties->>'film_date')::date desc, (properties->>'number')::int desc, created_at desc"
 		}
@@ -2191,6 +2191,7 @@ func labelQueriesTagDashboard(opts map[string]*tagDashboardFetchOptions, name st
 
 	return fmt.Sprintf(`(
 	SELECT 
+		DISTINCT ON (cu.id)
 		cu.uid, 
 		l.uid,
 		l.media_type
@@ -3146,7 +3147,7 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 		qm.WhereIn(`(id in ( SELECT DISTINCT cu.id FROM content_units cu 
 			INNER JOIN files f 
 			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
-			AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))`, f.MediaLanguage),
+			AND f.secure = 0 AND f.published IS TRUE AND f.language IN ?))`, utils.ConvertArgsString(f.MediaLanguage)...),
 	)
 	return nil
 }
@@ -3157,7 +3158,7 @@ func appendMediaLanguageNoInnerSelectFilterMods(mods *[]qm.QueryMod, f MediaLang
 	}
 	*mods = append(*mods,
 		qm.InnerJoin("files f ON  f.content_unit_id = \"content_units\".id"),
-		qm.Where("f.secure = 0 AND f.published IS TRUE AND f.language = ?", f.MediaLanguage),
+		qm.WhereIn("f.secure = 0 AND f.published IS TRUE AND f.language IN ?", utils.ConvertArgsString(f.MediaLanguage)...),
 	)
 	return nil
 }
@@ -3196,11 +3197,11 @@ func appendTagsLabelsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f Ta
 }
 
 func appendMediaLanguageLabelsFilterMods(mods *[]qm.QueryMod, f MediaLanguageFilter) {
-	if f.MediaLanguage == "" {
+	if len(f.MediaLanguage) == 0 {
 		return
 	}
 	*mods = append(*mods,
-		qm.Where("i18n.language = ?", f.MediaLanguage))
+		qm.WhereIn("i18n.language IN ?", utils.ConvertArgsString(f.MediaLanguage)...))
 
 }
 
