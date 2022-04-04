@@ -456,7 +456,7 @@ type Label struct {
 	MediaType   string    `json:"media_type"`
 	Properties  null.JSON `json:"properties,omitempty"`
 	Author      string    `json:"author,required"`
-	TagUIDs     []string  `json:"tags"`
+	TagUIDs     []string  `json:"tags,omitempty"`
 	ContentUnit string    `json:"content_unit,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }
