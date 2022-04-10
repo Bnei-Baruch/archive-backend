@@ -650,7 +650,13 @@ func StatsCUClassHandler(c *gin.Context) {
 
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	resp, err := handleStatsCUClass(cm, db, r)
+	var resp *StatsClassResponse
+	var err *HttpError
+	if r.ForFilter {
+		resp, err = handleFilterStatsCUClass(cm, db, r)
+	} else {
+		resp, err = handleStatsCUClass(cm, db, r)
+	}
 	concludeRequest(c, resp, err)
 }
 
@@ -2348,6 +2354,47 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 	sqd.Publishers = publishers.Publishers
 
 	return sqd, nil
+}
+
+func handleFilterStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsClassResponse, *HttpError) {
+	var res *StatsClassResponse
+	var err *HttpError
+	if res, err = handleStatsCUClass(cm, db, r); err != nil {
+		return res, err
+	}
+	if !utils.IsEmpty(r.SourcesFilter.Authors) || len(r.SourcesFilter.Sources) != 0 {
+		sr := r
+		sr.SourcesFilter = SourcesFilter{
+			Authors: nil,
+			Sources: nil,
+		}
+		sRes, err := handleStatsCUClass(cm, db, sr)
+		if err != nil {
+			return sRes, err
+		}
+		res.Sources = sRes.Sources
+	}
+
+	if len(r.MediaLanguage) != 0 {
+		lr := r
+		lr.MediaLanguageFilter = MediaLanguageFilter{MediaLanguage: nil}
+		lRes, err := handleStatsCUClass(cm, db, lr)
+		if err != nil {
+			return lRes, err
+		}
+		res.Languages = lRes.Languages
+	}
+
+	if len(r.ContentTypes) != 0 {
+		ctr := r
+		ctr.ContentTypesFilter = ContentTypesFilter{ContentTypes: nil}
+		ctRes, err := handleStatsCUClass(cm, db, ctr)
+		if err != nil {
+			return ctRes, err
+		}
+		res.ContentTypes = ctRes.ContentTypes
+	}
+	return res, nil
 }
 
 func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsClassResponse, *HttpError) {

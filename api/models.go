@@ -201,6 +201,7 @@ type TagsDashboardResponse struct {
 type StatsCUClassRequest struct {
 	ContentUnitsRequest
 	CountOnly bool `json:"count_only" form:"count_only"`
+	ForFilter bool `json:"for_filter" form:"for_filter"`
 }
 type StatsClassResponse struct {
 	Sources      map[string]int `json:"sources"`
