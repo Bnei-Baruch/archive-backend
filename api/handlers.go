@@ -1951,7 +1951,8 @@ func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LECTURE].ID,
 			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
 			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIRTUAL_LESSON].ID:
+			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIRTUAL_LESSON].ID,
+			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID:
 			name = "lesson"
 			mt = consts.LABEL_MEDIA_TYPE_MEDIA
 			cuMediaTotal += count
@@ -1997,6 +1998,96 @@ func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 	return resp, nil
 }
 
+func countLimitsTagDashboard(opts map[string]*tagDashboardFetchOptions, f ListRequest, mediaType string) {
+	optsArr := make([]*tagDashboardFetchOptions, 0)
+	for _, o := range opts {
+		if o.MediaType == mediaType {
+			optsArr = append(optsArr, o)
+		}
+	}
+	if len(optsArr) == 0 {
+		return
+	}
+	/*
+		limit := f.PageSize / len(optsArr)
+		extra := f.PageSize % len(optsArr)
+		offset := (f.PageNumber - 1) * limit
+		extraOffset := (f.PageNumber - 1) * extra
+	*/
+
+	//when not enough numbers of cu of one type need to compliment for be full page
+	sort.SliceStable(optsArr, func(i int, j int) bool {
+		return optsArr[i].Count < optsArr[j].Count
+	})
+	n := len(optsArr)
+	limit := f.PageSize / n
+	extra := f.PageSize % n
+
+	lp := utils.Min(int(optsArr[0].Count)/limit, f.PageNumber)
+	offset := (lp - 1) * limit
+	extraOffset := lp * extra
+	for j := lp; j <= f.PageNumber; j++ {
+
+		sort.SliceStable(optsArr, func(i int, j int) bool {
+			return optsArr[i].Count-int64(optsArr[i].Offset) < optsArr[j].Count-int64(optsArr[j].Offset)
+		})
+
+		for i, o := range optsArr {
+			diff := (offset + limit) - int(o.Count)
+			if diff >= limit {
+				o.Limit = 0
+				continue
+			}
+
+			o.Offset = offset
+			if diff >= 0 && n > 1 {
+				o.Limit = limit - diff
+				n--
+				limit += (diff + extra) / n
+				extra = (diff + extra) % n
+				continue
+			}
+			o.Limit = limit
+
+			if (i + 1) == len(optsArr) {
+				o.Limit += extra
+				o.Offset += extraOffset
+			}
+		}
+		offset += limit
+		extraOffset += extra
+		limit = f.PageSize / n
+		extra = f.PageSize % n
+	}
+
+	/*
+		for i, o := range optsArr {
+			diff := (offset + limit) - int(o.Count)
+			n := utils.MaxInt(len(optsArr)-(i+1), 1)
+			if diff >= limit {
+				offset = offset + (diff-limit+extraOffset)/n
+				extraOffset = (diff - limit + extraOffset) % n
+				lt := limit
+				limit += limit / n
+				extra += lt % n
+				continue
+			}
+			if diff > 0 {
+				o.Limit = limit - diff
+				o.Offset = offset
+				limit += (diff + extra) / n
+				extra = (diff + extra) % n
+				continue
+			}
+			o.Limit = limit
+			o.Offset = offset
+			if (i + 1) == len(optsArr) {
+				o.Limit += extra
+				o.Offset += extraOffset
+			}
+		}*/
+}
+
 func fetchCUTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*tagDashboardFetchOptions) ([]*TagsDashboardItem, error) {
 	qs := make([]string, 0)
 	for n, byName := range opts {
@@ -2012,14 +2103,12 @@ func fetchCUTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*tagDas
 	if len(qs) == 0 {
 		return items, nil
 	}
-	mods = append(mods,
-		qm.Select("\"content_units\".*"),
-		qm.OrderBy("(\"content_units\".properties->>'film_date')::date DESC, \"content_units\".created_at DESC"),
-	)
+	mods = append(mods, qm.Select("DISTINCT ON ( \"content_units\".id) \"content_units\".*"))
 	qf, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
 
 	q := fmt.Sprintf("WITH units AS (%s) %s", qf[:len(qf)-1], strings.Join(qs, "UNION"))
 
+	boil.DebugMode = true
 	rows, err := queries.Raw(db, q, args...).Query()
 
 	if err != nil {
@@ -2027,6 +2116,7 @@ func fetchCUTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*tagDas
 	}
 	defer rows.Close()
 
+	cuById := make(map[string]int)
 	for rows.Next() {
 		var uid string
 		var count int64
@@ -2035,62 +2125,25 @@ func fetchCUTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*tagDas
 		if err != nil {
 			return nil, err
 		}
+		if v, ok := cuById[uid]; ok {
+			cuById[uid] = v + 1
+		} else {
+			cuById[uid] = 0
+		}
 		items = append(items, &TagsDashboardItem{ContentUnitID: uid, IsText: mt == consts.LABEL_MEDIA_TYPE_TEXT})
 	}
 
+	cuByIdD := make(map[string]int)
+	for i, v := range cuById {
+		if v > 0 {
+			cuByIdD[i] = v
+		}
+	}
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
 	return items, nil
 
-}
-
-func countLimitsTagDashboard(opts map[string]*tagDashboardFetchOptions, f ListRequest, mediaType string) {
-	optsArr := make([]*tagDashboardFetchOptions, 0)
-	for _, o := range opts {
-		if o.MediaType == mediaType {
-			optsArr = append(optsArr, o)
-		}
-	}
-	if len(optsArr) == 0 {
-		return
-	}
-
-	limit := f.PageSize / len(optsArr)
-	extra := f.PageSize % len(optsArr)
-	extraOffset := 0
-	offset := (f.PageNumber - 1) * limit
-
-	sort.SliceStable(optsArr, func(i int, j int) bool {
-		return optsArr[i].Count < optsArr[j].Count
-	})
-
-	//when not enough numbers of cu of one type need to compliment for be full page
-	for i, o := range optsArr {
-		diff := (offset + limit) - int(o.Count)
-		n := utils.MaxInt(len(optsArr)-(i+1), 1)
-		if diff >= limit {
-			offset = offset + (diff-limit+extraOffset)/n
-			extraOffset = (diff - limit + extraOffset) % n
-			lt := limit
-			limit += limit / n
-			extra += lt % n
-			continue
-		}
-		if diff > 0 {
-			o.Limit = limit - diff
-			o.Offset = offset
-			limit += (diff + extra) / n
-			extra = (diff + extra) % n
-			continue
-		}
-		o.Limit = limit
-		o.Offset = offset
-		if (i + 1) == len(optsArr) {
-			o.Limit += extra
-			o.Offset += extraOffset
-		}
-	}
 }
 
 func cuQueriesTagDashboard(opts *tagDashboardFetchOptions) (string, bool) {
@@ -2105,6 +2158,7 @@ func cuQueriesTagDashboard(opts *tagDashboardFetchOptions) (string, bool) {
 		'%s' AS media_type
 	FROM units cu
 		WHERE cu.type_id in(%s)
+		ORDER BY (cu.properties->>'film_date')::date DESC, cu.created_at DESC
 		OFFSET %d
 		LIMIT %d
 	)`,
@@ -2155,10 +2209,7 @@ func fetchLabelsTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*ta
 	if len(qs) == 0 {
 		return items, nil
 	}
-	mods = append(mods,
-		qm.Select("\"labels\".*"),
-		qm.OrderBy("\"labels\".created_at DESC"),
-	)
+	mods = append(mods, qm.Select("DISTINCT ON (\"labels\".id) \"labels\".*"))
 	qf, args := queries.BuildQuery(mdbmodels.Labels(db, mods...).Query)
 	q := fmt.Sprintf("WITH labels AS (%s) %s", qf[:len(qf)-1], strings.Join(qs, "UNION"))
 
@@ -2197,13 +2248,13 @@ func labelQueriesTagDashboard(opts map[string]*tagDashboardFetchOptions, name st
 
 	return fmt.Sprintf(`(
 	SELECT 
-		DISTINCT ON (cu.id)
 		cu.uid, 
 		l.uid,
 		l.media_type
 	FROM labels l
 		INNER JOIN content_units cu ON l.content_unit_id = cu.id
 		WHERE l.media_type = '%s'
+		ORDER BY l.created_at DESC
 		OFFSET %d
 		LIMIT %d
 	)`,
@@ -2403,7 +2454,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
 	}
 	mods := []qm.QueryMod{
-		qm.Select("distinct on (\"content_units\".id) \"content_units\".id as id", "type_id"),
+		qm.Select("\"content_units\".id as id", "type_id"),
 		qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...),
 		SECURE_PUBLISHED_MOD_CU_PREFIX,
 	}
@@ -2913,6 +2964,7 @@ func appendDerivedTypesFilterMods(mods *[]qm.QueryMod, f DerivedTypesFilter) err
 func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
 }
+
 func appendDateRangeCUFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(\"content_units\".properties->>'film_date')::date")
 }

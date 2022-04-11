@@ -280,7 +280,7 @@ type FilterLabelStats struct {
 }
 
 func (fs *FilterLabelStats) GetStats() error {
-	qq := fmt.Sprintf(`with fl as (%s)
+	qq := fmt.Sprintf(`WITH fl AS (%s)
 	SELECT
 	  s.id,
 	  s.parent_id,
