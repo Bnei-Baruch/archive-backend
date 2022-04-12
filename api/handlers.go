@@ -30,7 +30,6 @@ import (
 )
 
 var SECURE_PUBLISHED_MOD = qm.Where(fmt.Sprintf("secure=%d AND published IS TRUE", consts.SEC_PUBLIC))
-var SECURE_PUBLISHED_MOD_CU_PREFIX = qm.Where(fmt.Sprintf("\"content_units\".secure=%d AND \"content_units\".published IS TRUE", consts.SEC_PUBLIC))
 
 type firstRowsType struct {
 	id           int64
@@ -305,7 +304,7 @@ func LessonsHandler(c *gin.Context) {
 		utils.IsEmpty(r.Tags) &&
 		utils.IsEmpty(r.Tags) &&
 		utils.IsEmpty(r.DerivedTypes) &&
-		len(r.MediaLanguage) == 0 {
+		r.MediaLanguage == "" {
 		if r.OrderBy == "" {
 			r.OrderBy = "(properties->>'film_date')::date desc, (properties->>'number')::int desc, created_at desc"
 		}
@@ -623,13 +622,15 @@ func RecentlyUpdatedHandler(c *gin.Context) {
 
 func TagDashboardHandler(c *gin.Context) {
 	var r TagDashboardRequest
+	r.N = 5
 	if c.Bind(&r) != nil {
 		return
 	}
 
-	cm := c.MustGet("CACHE").(cache.CacheManager)
+	r.UID = c.Param("uid")
+
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	resp, err := HandleTagDashboard(cm, db, r)
+	resp, err := handleTagDashboard(db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -650,25 +651,7 @@ func StatsCUClassHandler(c *gin.Context) {
 
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	var resp *StatsClassResponse
-	var err *HttpError
-	if r.ForFilter {
-		resp, err = handleFilterStatsCUClass(cm, db, r)
-	} else {
-		resp, err = handleStatsCUClass(cm, db, r)
-	}
-	concludeRequest(c, resp, err)
-}
-
-func StatsLabelClassHandler(c *gin.Context) {
-	var r StatsCUClassRequest
-	if c.Bind(&r) != nil {
-		return
-	}
-
-	cm := c.MustGet("CACHE").(cache.CacheManager)
-	db := c.MustGet("MDB_DB").(*sql.DB)
-	resp, err := handleStatsLabelClass(cm, db, r)
+	resp, err := handleStatsCUClass(cm, db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -746,8 +729,8 @@ func LabelHandler(c *gin.Context) {
 
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	resp, err := handleLabels(cm, db, r)
-	concludeRequest(c, resp, err)
+	resp, err2 := handleLabels(cm, db, r)
+	concludeRequest(c, resp, err2)
 }
 
 func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) (*CollectionsResponse, *HttpError) {
@@ -1613,7 +1596,14 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 		mods = append(mods, qm.WhereIn("\"labels\".uid IN ?", utils.ConvertArgsString(r.IDs)...))
 	}
 
-	appendTagsLabelsFilterMods(cm, &mods, r.TagsFilter)
+	if !utils.IsEmpty(r.Tags) {
+		_, ids := cm.TagsStats().GetTree().GetUniqueChildren(r.Tags)
+		if ids != nil && len(ids) == 0 {
+			mods = append(mods,
+				qm.InnerJoin("labels_tags lt ON id = lt.label_id"),
+				qm.WhereIn("lt.tag_id in ?", utils.ConvertArgsInt64(ids)...))
+		}
+	}
 
 	if len(r.ContentUnitIDs) > 0 {
 		mods = append(mods,
@@ -1646,7 +1636,7 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 		return NewLabelsResponse(), nil
 	}
 
-	mods = append(mods, qm.Load("ContentUnit", "Tags"))
+	mods = append(mods, qm.Load("ContentUnit"))
 	// data query
 	lsmdb, err := mdbmodels.Labels(db, mods...).All()
 	if err != nil {
@@ -1849,453 +1839,89 @@ ORDER BY max_film_date DESC`
 	return data, nil
 }
 
-type tagDashboardFetchOptions struct {
-	ContentTypes []int64
-	Name         string
-	Count        int64
-	MediaType    string
-	Limit        int
-	Offset       int
-}
+func handleTagDashboard(db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
+	// CU ids query
+	q := `
+WITH idsPerTag AS (
+		SELECT DISTINCT cu.id
+		FROM tags t
+		INNER JOIN content_units_tags cut ON t.id = cut.tag_id
+		INNER JOIN content_units cu ON cut.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
+		WHERE t.id IN (
+			WITH RECURSIVE rec_tags AS (
+				SELECT t.id
+				FROM tags t
+				WHERE t.uid = $1
+				UNION
+				SELECT t.id
+				FROM tags t INNER JOIN rec_tags rt ON t.parent_id = rt.id
+			)
+			SELECT DISTINCT id
+			FROM rec_tags
+		)
+), idsGroupedByType AS (
+	SELECT cu.type_id,
+			ARRAY_AGG(cu.id ORDER BY  
+				(coalesce(cu.properties ->> 'film_date', cu.created_at :: TEXT)) :: DATE DESC
+			) AS ids
+	FROM content_units cu
+	WHERE id IN (SELECT id FROM idsPerTag)
+	GROUP BY cu.type_id
+)
+SELECT type_id,
+       ids[0:$2] AS ids,
+       array_length(ids, 1) AS count
+FROM idsGroupedByType
+;`
 
-func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
+	rows, err := queries.Raw(db, q, r.UID, r.N).Query()
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	defer rows.Close()
 
-	if utils.IsEmpty(r.Tags) {
+	cuIDs := []int64{}
+	counts := map[string]int{}
+	for rows.Next() {
+		var typeId int64
+		var count int64
+		ids := []int64{}
+		err = rows.Scan(&typeId, pq.Array(&ids), &count)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		counts[mdb.CONTENT_TYPE_REGISTRY.ByID[typeId].Name] = int(count)
+
+		cuIDs = append(cuIDs, ids...)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	if len(cuIDs) == 0 {
 		return NewTagsDashboardResponse(), nil
 	}
 
-	lMods := []qm.QueryMod{
-		qm.InnerJoin("label_tag lt ON lt.label_id = id"),
-		qm.InnerJoin("label_i18n i18n ON i18n.label_id = id"),
-		qm.Where("approve_state != ?", consts.APR_DECLINED),
-		qm.Where("cu.secure = 0 AND cu.published IS TRUE"),
-		qm.InnerJoin("content_units cu ON \"labels\".content_unit_id = cu.id"),
-	}
-
-	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
-	for i, n := range consts.CT_NOT_FOR_DISPLAY {
-		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
-	}
-	cuMods := []qm.QueryMod{
-		SECURE_PUBLISHED_MOD_CU_PREFIX,
-		qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...),
-	}
-
-	// CU filters
-	if err := appendSourcesFilterMods(cm, &cuMods, r.SourcesFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendDateRangeFilterMods(&cuMods, r.DateRangeFilter); err != nil {
-		if e, ok := err.(*HttpError); ok {
-			return nil, e
-		} else {
-			return nil, NewInternalError(err)
-		}
-	}
-	if err := appendMediaLanguageFilterMods(db, &cuMods, r.MediaLanguageFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-
-	appendTagsFilterMods(cm, &cuMods, r.TagsFilter)
-
-	//label filters
-	if err := appendSourcesLabelsFilterMods(cm, &lMods, r.SourcesFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendContentTypesLabelsFilterMods(&lMods, r.ContentTypesFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendDateRangeLabelsFilterMods(&lMods, r.DateRangeFilter); err != nil {
-		if e, ok := err.(*HttpError); ok {
-			return nil, e
-		} else {
-			return nil, NewInternalError(err)
-		}
-	}
-
-	appendTagsLabelsFilterMods(cm, &lMods, r.TagsFilter)
-	appendMediaLanguageLabelsFilterMods(&lMods, r.MediaLanguageFilter)
-
-	cuByType, err := cuCountTagDashboard(db, cuMods)
-	if err != nil {
-		return NewTagsDashboardResponse(), NewInternalError(err)
-	}
-	cuTextTotal := int64(0)
-	cuMediaTotal := int64(0)
-	optsByName := map[string]*tagDashboardFetchOptions{}
-	for typeId, count := range cuByType {
-		name := ""
-		mt := consts.LABEL_MEDIA_TYPE_TEXT
-		switch typeId {
-		case mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_RESEARCH_MATERIAL].ID:
-			name = "publications"
-			cuTextTotal += count
-		case mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID:
-			name = "source"
-			cuTextTotal += count
-		case mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM_CHAPTER].ID:
-			name = "program"
-			mt = consts.LABEL_MEDIA_TYPE_MEDIA
-			cuMediaTotal += count
-		case mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_EVENT_PART].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LECTURE].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIRTUAL_LESSON].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID:
-			name = "lesson"
-			mt = consts.LABEL_MEDIA_TYPE_MEDIA
-			cuMediaTotal += count
-		default:
-			continue
-		}
-
-		_, ok := optsByName[name]
-		if !ok {
-			optsByName[name] = &tagDashboardFetchOptions{ContentTypes: make([]int64, 0), Name: name, Count: 0, MediaType: mt}
-		}
-		optsByName[name].ContentTypes = append(optsByName[name].ContentTypes, typeId)
-		optsByName[name].Count = optsByName[name].Count + count
-	}
-
-	countT, countM, err := labelsCountTagDashboard(db, lMods)
-	if err != nil {
-		return nil, NewInternalError(err)
-	}
-	if countT > 0 {
-		optsByName["LT"] = &tagDashboardFetchOptions{Name: "L", Count: countT, MediaType: consts.LABEL_MEDIA_TYPE_TEXT}
-	}
-	if countM > 0 {
-		optsByName["LM"] = &tagDashboardFetchOptions{Name: "L", Count: countM, MediaType: consts.LABEL_MEDIA_TYPE_MEDIA}
-	}
-	countLimitsTagDashboard(optsByName, r.ListRequest, consts.LABEL_MEDIA_TYPE_TEXT)
-	countLimitsTagDashboard(optsByName, r.ListRequest, consts.LABEL_MEDIA_TYPE_MEDIA)
-
-	cuItems, err := fetchCUTagDashboard(db, cuMods, optsByName)
-	if err != nil {
-		return nil, NewInternalError(err)
-	}
-	labelItems, err := fetchLabelsTagDashboard(db, lMods, optsByName)
+	// data query
+	units, err := mdbmodels.ContentUnits(db,
+		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
+		qm.OrderBy("(coalesce(properties->>'film_date', created_at::text))::date desc, created_at desc"),
+		qm.Load("CollectionsContentUnits", "CollectionsContentUnits.Collection")).
+		All()
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 
-	resp := &TagsDashboardResponse{
-		MediaTotal: cuMediaTotal + countM,
-		TextTotal:  cuTextTotal + countT,
-		Items:      append(cuItems, labelItems...),
-	}
-	return resp, nil
-}
-
-func countLimitsTagDashboard(opts map[string]*tagDashboardFetchOptions, f ListRequest, mediaType string) {
-	optsArr := make([]*tagDashboardFetchOptions, 0)
-	for _, o := range opts {
-		if o.MediaType == mediaType {
-			optsArr = append(optsArr, o)
-		}
-	}
-	if len(optsArr) == 0 {
-		return
-	}
-	/*
-		limit := f.PageSize / len(optsArr)
-		extra := f.PageSize % len(optsArr)
-		offset := (f.PageNumber - 1) * limit
-		extraOffset := (f.PageNumber - 1) * extra
-	*/
-
-	//when not enough numbers of cu of one type need to compliment for be full page
-	sort.SliceStable(optsArr, func(i int, j int) bool {
-		return optsArr[i].Count < optsArr[j].Count
-	})
-	n := len(optsArr)
-	limit := f.PageSize / n
-	extra := f.PageSize % n
-
-	lp := utils.Min(int(optsArr[0].Count)/limit, f.PageNumber)
-	offset := (lp - 1) * limit
-	extraOffset := lp * extra
-	for j := lp; j <= f.PageNumber; j++ {
-
-		sort.SliceStable(optsArr, func(i int, j int) bool {
-			return optsArr[i].Count-int64(optsArr[i].Offset) < optsArr[j].Count-int64(optsArr[j].Offset)
-		})
-
-		for i, o := range optsArr {
-			diff := (offset + limit) - int(o.Count)
-			if diff >= limit {
-				o.Limit = 0
-				continue
-			}
-
-			o.Offset = offset
-			if diff >= 0 && n > 1 {
-				o.Limit = limit - diff
-				n--
-				limit += (diff + extra) / n
-				extra = (diff + extra) % n
-				continue
-			}
-			o.Limit = limit
-
-			if (i + 1) == len(optsArr) {
-				o.Limit += extra
-				o.Offset += extraOffset
-			}
-		}
-		offset += limit
-		extraOffset += extra
-		limit = f.PageSize / n
-		extra = f.PageSize % n
+	// response
+	cus, ex := prepareCUs(db, units, r.Language)
+	if ex != nil {
+		return nil, ex
 	}
 
-	/*
-		for i, o := range optsArr {
-			diff := (offset + limit) - int(o.Count)
-			n := utils.MaxInt(len(optsArr)-(i+1), 1)
-			if diff >= limit {
-				offset = offset + (diff-limit+extraOffset)/n
-				extraOffset = (diff - limit + extraOffset) % n
-				lt := limit
-				limit += limit / n
-				extra += lt % n
-				continue
-			}
-			if diff > 0 {
-				o.Limit = limit - diff
-				o.Offset = offset
-				limit += (diff + extra) / n
-				extra = (diff + extra) % n
-				continue
-			}
-			o.Limit = limit
-			o.Offset = offset
-			if (i + 1) == len(optsArr) {
-				o.Limit += extra
-				o.Offset += extraOffset
-			}
-		}*/
-}
-
-func fetchCUTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*tagDashboardFetchOptions) ([]*TagsDashboardItem, error) {
-	qs := make([]string, 0)
-	for n, byName := range opts {
-		if n == "LM" || n == "LT" {
-			continue
-		}
-		if q, ok := cuQueriesTagDashboard(byName); ok {
-			qs = append(qs, q)
-		}
-	}
-
-	items := make([]*TagsDashboardItem, 0)
-	if len(qs) == 0 {
-		return items, nil
-	}
-	mods = append(mods, qm.Select("DISTINCT ON ( \"content_units\".id) \"content_units\".*"))
-	qf, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
-
-	q := fmt.Sprintf("WITH units AS (%s) %s", qf[:len(qf)-1], strings.Join(qs, "UNION"))
-
-	boil.DebugMode = true
-	rows, err := queries.Raw(db, q, args...).Query()
-
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	cuById := make(map[string]int)
-	for rows.Next() {
-		var uid string
-		var count int64
-		var mt string
-		err = rows.Scan(&uid, &count, &mt)
-		if err != nil {
-			return nil, err
-		}
-		if v, ok := cuById[uid]; ok {
-			cuById[uid] = v + 1
-		} else {
-			cuById[uid] = 0
-		}
-		items = append(items, &TagsDashboardItem{ContentUnitID: uid, IsText: mt == consts.LABEL_MEDIA_TYPE_TEXT})
-	}
-
-	cuByIdD := make(map[string]int)
-	for i, v := range cuById {
-		if v > 0 {
-			cuByIdD[i] = v
-		}
-	}
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-
-}
-
-func cuQueriesTagDashboard(opts *tagDashboardFetchOptions) (string, bool) {
-	if opts.Limit == 0 {
-		return "", false
-	}
-
-	return fmt.Sprintf(`(
-	SELECT 
-		cu.uid, 
-		cu.type_id,
-		'%s' AS media_type
-	FROM units cu
-		WHERE cu.type_id in(%s)
-		ORDER BY (cu.properties->>'film_date')::date DESC, cu.created_at DESC
-		OFFSET %d
-		LIMIT %d
-	)`,
-		opts.MediaType,
-		utils.JoinInt64(opts.ContentTypes, ","),
-		opts.Offset,
-		opts.Limit,
-	), true
-}
-
-func cuCountTagDashboard(db *sql.DB, baseMods []qm.QueryMod) (map[int64]int64, error) {
-	byType := make(map[int64]int64)
-	mods := append(baseMods,
-		qm.Select("type_id", "count(DISTINCT \"content_units\".id)"),
-		qm.GroupBy("type_id"),
-	)
-	q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
-
-	rows, err := queries.Raw(db, q, args...).Query()
-	if err != nil {
-		return byType, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var tid int64
-		var count int64
-		if err := rows.Scan(&tid, &count); err != nil {
-			return byType, err
-		}
-		byType[tid] = count
-	}
-	if err := rows.Err(); err != nil {
-		return byType, err
-	}
-
-	return byType, err
-}
-
-func fetchLabelsTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*tagDashboardFetchOptions) ([]*TagsDashboardItem, error) {
-	items := make([]*TagsDashboardItem, 0)
-	qs := make([]string, 0)
-	for _, n := range []string{"LT", "LM"} {
-		if q, ok := labelQueriesTagDashboard(opts, n); ok {
-			qs = append(qs, q)
-		}
-	}
-	if len(qs) == 0 {
-		return items, nil
-	}
-	mods = append(mods, qm.Select("DISTINCT ON (\"labels\".id) \"labels\".*"))
-	qf, args := queries.BuildQuery(mdbmodels.Labels(db, mods...).Query)
-	q := fmt.Sprintf("WITH labels AS (%s) %s", qf[:len(qf)-1], strings.Join(qs, "UNION"))
-
-	rows, err := queries.Raw(db, q, args...).Query()
-
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var cuUid string
-		var lUid string
-		var mt string
-		err = rows.Scan(&cuUid, &lUid, &mt)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, &TagsDashboardItem{ContentUnitID: cuUid, LabelID: lUid, IsText: mt == consts.LABEL_MEDIA_TYPE_TEXT})
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-func labelQueriesTagDashboard(opts map[string]*tagDashboardFetchOptions, name string) (string, bool) {
-	opt, ok := opts[name]
-	if !ok {
-		return "", false
-	}
-	if opt.Limit == 0 {
-		return "", false
-	}
-
-	return fmt.Sprintf(`(
-	SELECT 
-		cu.uid, 
-		l.uid,
-		l.media_type
-	FROM labels l
-		INNER JOIN content_units cu ON l.content_unit_id = cu.id
-		WHERE l.media_type = '%s'
-		ORDER BY l.created_at DESC
-		OFFSET %d
-		LIMIT %d
-	)`,
-		opt.MediaType,
-		opt.Offset,
-		opt.Limit,
-	), true
-}
-
-func labelsCountTagDashboard(db *sql.DB, baseMods []qm.QueryMod) (int64, int64, error) {
-	countM := int64(0)
-	countT := int64(0)
-	mods := append(baseMods,
-		qm.Select("media_type", "count(DISTINCT \"labels\".id)"),
-		qm.GroupBy("media_type"),
-	)
-	q, args := queries.BuildQuery(mdbmodels.Labels(db, mods...).Query)
-
-	rows, err := queries.Raw(db, q, args...).Query()
-	if err != nil {
-		return countT, countM, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var mt string
-		var count int64
-		if err := rows.Scan(&mt, &count); err != nil {
-			return countT, countM, err
-		}
-
-		if mt == consts.LABEL_MEDIA_TYPE_TEXT {
-			countT = count
-		}
-		if mt == consts.LABEL_MEDIA_TYPE_MEDIA {
-			countM = count
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return countT, countM, err
-	}
-	return countT, countM, err
+	return &TagsDashboardResponse{
+		LatestContentUnits: cus,
+		Counts:             counts,
+	}, nil
 }
 
 // translate tag.keys (UIDs of tags) to their translation
@@ -2407,56 +2033,10 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 	return sqd, nil
 }
 
-func handleFilterStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsClassResponse, *HttpError) {
-	var res *StatsClassResponse
-	var err *HttpError
-	if res, err = handleStatsCUClass(cm, db, r); err != nil {
-		return res, err
-	}
-	if !utils.IsEmpty(r.SourcesFilter.Authors) || len(r.SourcesFilter.Sources) != 0 {
-		sr := r
-		sr.SourcesFilter = SourcesFilter{
-			Authors: nil,
-			Sources: nil,
-		}
-		sRes, err := handleStatsCUClass(cm, db, sr)
-		if err != nil {
-			return sRes, err
-		}
-		res.Sources = sRes.Sources
-	}
-
-	if len(r.MediaLanguage) != 0 {
-		lr := r
-		lr.MediaLanguageFilter = MediaLanguageFilter{MediaLanguage: nil}
-		lRes, err := handleStatsCUClass(cm, db, lr)
-		if err != nil {
-			return lRes, err
-		}
-		res.Languages = lRes.Languages
-	}
-
-	if len(r.ContentTypes) != 0 {
-		ctr := r
-		ctr.ContentTypesFilter = ContentTypesFilter{ContentTypes: nil}
-		ctRes, err := handleStatsCUClass(cm, db, ctr)
-		if err != nil {
-			return ctRes, err
-		}
-		res.ContentTypes = ctRes.ContentTypes
-	}
-	return res, nil
-}
-
-func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsClassResponse, *HttpError) {
-	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
-	for i, n := range consts.CT_NOT_FOR_DISPLAY {
-		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
-	}
+func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsCUClassResponse, *HttpError) {
 	mods := []qm.QueryMod{
-		qm.Select("\"content_units\".id as id", "type_id"),
-		qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...),
-		SECURE_PUBLISHED_MOD_CU_PREFIX,
+		qm.Select("id"),
+		SECURE_PUBLISHED_MOD,
 	}
 
 	// filters
@@ -2466,7 +2046,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendDateRangeCUFilterMods(&mods, r.DateRangeFilter); err != nil {
+	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
@@ -2489,12 +2069,9 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
-	if err := appendMediaLanguageNoInnerSelectFilterMods(&mods, r.MediaLanguageFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
 
 	var err error
-	resp := NewStatsClassResponse()
+	resp := NewStatsCUClassResponse()
 
 	if r.CountOnly {
 		resp.Total, err = mdbmodels.ContentUnits(db, mods...).Count()
@@ -2503,62 +2080,10 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 		}
 	} else {
 		q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
-		fs := FilterCUStats{FilterStats{
-			DB:        db,
-			Scope:     q,
-			ScopeArgs: args,
-			Resp:      resp,
-		}}
-		if err = fs.GetStats(); err != nil {
+		resp.Tags, resp.Sources, err = GetFiltersStats(db, q, args)
+		if err != nil {
 			return nil, NewInternalError(err)
 		}
-	}
-	return resp, nil
-}
-
-func handleStatsLabelClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsClassResponse, *HttpError) {
-	mods := []qm.QueryMod{
-		qm.Select("\"labels\".id as id", "cu.id as cuid", "cu.type_id as type_id", "cu.properties->>'source_id' as suid"),
-		qm.Where("\"labels\".approve_state != ?", consts.APR_DECLINED),
-		qm.Where("cu.secure = 0 AND cu.published IS TRUE"),
-		qm.InnerJoin("content_units cu ON \"labels\".content_unit_id = cu.id"),
-		qm.InnerJoin("label_i18n i18n ON i18n.label_id = \"labels\".id"),
-	}
-
-	// filters
-	if err := appendContentTypesLabelsFilterMods(&mods, r.ContentTypesFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendSourcesLabelsFilterMods(cm, &mods, r.SourcesFilter); err != nil {
-		if e, ok := err.(*HttpError); ok {
-			return nil, e
-		} else {
-			return nil, NewInternalError(err)
-		}
-	}
-	if err := appendDateRangeLabelsFilterMods(&mods, r.DateRangeFilter); err != nil {
-		if e, ok := err.(*HttpError); ok {
-			return nil, e
-		} else {
-			return nil, NewInternalError(err)
-		}
-	}
-
-	appendTagsLabelsFilterMods(cm, &mods, r.TagsFilter)
-	appendMediaLanguageLabelsFilterMods(&mods, r.MediaLanguageFilter)
-
-	var err error
-	resp := NewStatsClassResponse()
-
-	q, args := queries.BuildQuery(mdbmodels.Labels(db, mods...).Query)
-	fs := FilterLabelStats{FilterStats{
-		DB:        db,
-		Scope:     q,
-		ScopeArgs: args,
-		Resp:      resp,
-	}}
-	if err = fs.GetStats(); err != nil {
-		return nil, NewInternalError(err)
 	}
 	return resp, nil
 }
@@ -2965,10 +2490,6 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
 }
 
-func appendDateRangeCUFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
-	return appendDRFBaseMods(mods, f, "(\"content_units\".properties->>'film_date')::date")
-}
-
 func appendCollectionSourceFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
 	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
 		return nil
@@ -3084,7 +2605,7 @@ func appendTagsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilt
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
 		*mods = append(*mods,
-			qm.InnerJoin("content_units_tags cut ON \"content_units\".id = cut.content_unit_id"),
+			qm.InnerJoin("content_units_tags cut ON id = cut.content_unit_id"),
 			qm.WhereIn("cut.tag_id in ?", utils.ConvertArgsInt64(ids)...))
 	}
 }
@@ -3246,84 +2767,8 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 		qm.WhereIn(`(id in ( SELECT DISTINCT cu.id FROM content_units cu 
 			INNER JOIN files f 
 			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
-			AND f.secure = 0 AND f.published IS TRUE AND f.language IN ?))`, utils.ConvertArgsString(f.MediaLanguage)...),
+			AND f.secure = 0 AND f.published IS TRUE AND f.language = ?))`, f.MediaLanguage),
 	)
-	return nil
-}
-
-func appendMediaLanguageNoInnerSelectFilterMods(mods *[]qm.QueryMod, f MediaLanguageFilter) error {
-	if len(f.MediaLanguage) == 0 {
-		return nil
-	}
-	*mods = append(*mods,
-		qm.InnerJoin("files f ON  f.content_unit_id = \"content_units\".id"),
-		qm.WhereIn("f.secure = 0 AND f.published IS TRUE AND f.language IN ?", utils.ConvertArgsString(f.MediaLanguage)...),
-	)
-	return nil
-}
-
-//append Labels filters
-func appendContentTypesLabelsFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) error {
-	if utils.IsEmpty(f.ContentTypes) {
-		return nil
-	}
-
-	a := make([]interface{}, len(f.ContentTypes))
-	for i, x := range f.ContentTypes {
-		ct, ok := mdb.CONTENT_TYPE_REGISTRY.ByName[strings.ToUpper(x)]
-		if ok {
-			a[i] = ct.ID
-		} else {
-			return errors.Errorf("Unknown content type: %s", x)
-		}
-	}
-
-	*mods = append(*mods, qm.WhereIn("cu.type_id IN ?", a...))
-
-	return nil
-}
-
-func appendTagsLabelsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilter) {
-	if utils.IsEmpty(f.Tags) {
-		return
-	}
-	_, ids := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
-	if ids != nil && len(ids) == 0 {
-		*mods = append(*mods,
-			qm.InnerJoin("labels_tags lt ON id = lt.label_id"),
-			qm.WhereIn("lt.tag_id in ?", utils.ConvertArgsInt64(ids)...))
-	}
-}
-
-func appendMediaLanguageLabelsFilterMods(mods *[]qm.QueryMod, f MediaLanguageFilter) {
-	if len(f.MediaLanguage) == 0 {
-		return
-	}
-	*mods = append(*mods,
-		qm.WhereIn("i18n.language IN ?", utils.ConvertArgsString(f.MediaLanguage)...))
-
-}
-
-func appendDateRangeLabelsFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
-	return appendDRFBaseMods(mods, f, "\"labels\".created_at")
-}
-
-func appendSourcesLabelsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f SourcesFilter) error {
-	if utils.IsEmpty(f.Authors) && len(f.Sources) == 0 {
-		return nil
-	}
-	ids, _, err := prepareNestedSources(cm, f)
-	if err != nil {
-		return err
-	}
-	if ids == nil || len(ids) == 0 {
-		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
-	} else {
-		*mods = append(*mods,
-			qm.InnerJoin("sources s ON cu.properties->>'source_id' = s.uid"),
-			qm.WhereIn("s.id in ?", utils.ConvertArgsInt64(ids)...))
-	}
-
 	return nil
 }
 
@@ -3637,12 +3082,6 @@ func mdbToLabel(l *mdbmodels.Label) *Label {
 	}
 	if l.R.ContentUnit != nil {
 		label.ContentUnit = l.R.ContentUnit.UID
-	}
-	if l.R.Tags != nil {
-		label.TagUIDs = make([]string, len(l.R.Tags))
-		for i, t := range l.R.Tags {
-			label.TagUIDs[i] = t.UID
-		}
 	}
 
 	return label

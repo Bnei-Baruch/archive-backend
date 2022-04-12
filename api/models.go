@@ -33,12 +33,8 @@ type ItemRequest struct {
 }
 
 type TagDashboardRequest struct {
-	ListRequest
-	TagsFilter
-	DateRangeFilter
-	SourcesFilter
-	ContentTypesFilter
-	MediaLanguageFilter
+	ItemRequest
+	N int `json:"n" form:"n"`
 }
 
 type IDsFilter struct {
@@ -114,7 +110,7 @@ type BlogFilter struct {
 }
 
 type MediaLanguageFilter struct {
-	MediaLanguage []string `json:"media_language" form:"media_language" binding:"omitempty,dive,len=2"`
+	MediaLanguage string `json:"media_language" form:"media_language" binding:"omitempty,len=2"`
 }
 
 type CollectionsRequest struct {
@@ -187,28 +183,20 @@ type HomeResponse struct {
 	Banner             *Banner        `json:"banner"`
 }
 
-type TagsDashboardItem struct {
-	LabelID       string `json:"label_id,omitempty"`
-	ContentUnitID string `json:"content_unit_id,required"`
-	IsText        bool   `json:"is_text,required"`
-}
 type TagsDashboardResponse struct {
-	MediaTotal int64                `json:"media_total"`
-	TextTotal  int64                `json:"text_total"`
-	Items      []*TagsDashboardItem `json:"items"`
+	PromotedContentUnits []*ContentUnit `json:"promoted_units"`
+	LatestContentUnits   []*ContentUnit `json:"latest_units"`
+	Counts               map[string]int `json:"counts"`
 }
 
 type StatsCUClassRequest struct {
 	ContentUnitsRequest
 	CountOnly bool `json:"count_only" form:"count_only"`
-	ForFilter bool `json:"for_filter" form:"for_filter"`
 }
-type StatsClassResponse struct {
-	Sources      map[string]int `json:"sources"`
-	Tags         map[string]int `json:"tags"`
-	Languages    map[string]int `json:"languages"`
-	ContentTypes map[string]int `json:"content_types"`
-	Total        int64          `json:"total"`
+type StatsCUClassResponse struct {
+	Sources map[string]int `json:"sources"`
+	Tags    map[string]int `json:"tags"`
+	Total   int64          `json:"total"`
 }
 
 type TweetsRequest struct {
@@ -308,15 +296,16 @@ func NewBlogPostsResponse() *BlogPostsResponse {
 }
 
 func NewTagsDashboardResponse() *TagsDashboardResponse {
-	return &TagsDashboardResponse{Items: make([]*TagsDashboardItem, 0)}
+	return &TagsDashboardResponse{
+		PromotedContentUnits: make([]*ContentUnit, 0),
+		LatestContentUnits:   make([]*ContentUnit, 0),
+	}
 }
 
-func NewStatsClassResponse() *StatsClassResponse {
-	return &StatsClassResponse{
-		Sources:      make(map[string]int),
-		Tags:         make(map[string]int),
-		Languages:    make(map[string]int),
-		ContentTypes: make(map[string]int),
+func NewStatsCUClassResponse() *StatsCUClassResponse {
+	return &StatsCUClassResponse{
+		Sources: make(map[string]int),
+		Tags:    make(map[string]int),
 	}
 }
 
@@ -457,7 +446,6 @@ type Label struct {
 	MediaType   string    `json:"media_type"`
 	Properties  null.JSON `json:"properties,omitempty"`
 	Author      string    `json:"author,required"`
-	TagUIDs     []string  `json:"tags,omitempty"`
 	ContentUnit string    `json:"content_unit,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }
