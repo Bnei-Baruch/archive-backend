@@ -2008,13 +2008,6 @@ func countLimitsTagDashboard(opts map[string]*tagDashboardFetchOptions, f ListRe
 	if len(optsArr) == 0 {
 		return
 	}
-	/*
-		limit := f.PageSize / len(optsArr)
-		extra := f.PageSize % len(optsArr)
-		offset := (f.PageNumber - 1) * limit
-		extraOffset := (f.PageNumber - 1) * extra
-	*/
-
 	//when not enough numbers of cu of one type need to compliment for be full page
 	sort.SliceStable(optsArr, func(i int, j int) bool {
 		return optsArr[i].Count < optsArr[j].Count
@@ -2059,33 +2052,6 @@ func countLimitsTagDashboard(opts map[string]*tagDashboardFetchOptions, f ListRe
 		limit = f.PageSize / n
 		extra = f.PageSize % n
 	}
-
-	/*
-		for i, o := range optsArr {
-			diff := (offset + limit) - int(o.Count)
-			n := utils.MaxInt(len(optsArr)-(i+1), 1)
-			if diff >= limit {
-				offset = offset + (diff-limit+extraOffset)/n
-				extraOffset = (diff - limit + extraOffset) % n
-				lt := limit
-				limit += limit / n
-				extra += lt % n
-				continue
-			}
-			if diff > 0 {
-				o.Limit = limit - diff
-				o.Offset = offset
-				limit += (diff + extra) / n
-				extra = (diff + extra) % n
-				continue
-			}
-			o.Limit = limit
-			o.Offset = offset
-			if (i + 1) == len(optsArr) {
-				o.Limit += extra
-				o.Offset += extraOffset
-			}
-		}*/
 }
 
 func fetchCUTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*tagDashboardFetchOptions) ([]*TagsDashboardItem, error) {
