@@ -151,7 +151,6 @@ func (suite *IndexerSuite) SetupSuite() {
 
 	// Set package db and esc variables.
 	common.InitWithDefault(suite.DB)
-	boil.DebugMode = viper.GetString("boiler-mode") == "debug"
 	esc, err := common.ESC.GetClient()
 	if err != nil {
 		panic(err)
@@ -662,7 +661,7 @@ func deletePosts(IDs []string) error {
 	}
 	scope := strings.Join(quoted, " or ")
 
-	_, err := mdbmodels.BlogPosts(qm.WhereIn(scope)).DeleteAll(common.DB)
+	_, err := mdbmodels.BlogPosts(qm.Where(scope)).DeleteAll(common.DB)
 	return err
 }
 
