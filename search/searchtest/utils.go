@@ -37,7 +37,7 @@ func (suite *SearchSuite) SetupSuite() {
 	suite.Ctx = context.Background()
 
 	// Set package db and esc variables.
-	common.InitWithDefault(suite.DB)
+	common.InitWithDefault(suite.DB, nil)
 	boil.DebugMode = viper.GetString("boiler-mode") == "debug"
 }
 

@@ -150,7 +150,7 @@ func (suite *IndexerSuite) SetupSuite() {
 	viper.Set("elasticsearch.unzip-url", suite.server.URL)
 
 	// Set package db and esc variables.
-	common.InitWithDefault(suite.DB)
+	common.InitWithDefault(suite.DB, nil)
 	esc, err := common.ESC.GetClient()
 	if err != nil {
 		panic(err)

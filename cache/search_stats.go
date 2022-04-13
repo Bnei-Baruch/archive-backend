@@ -252,7 +252,7 @@ func (ssc *SearchStatsCacheImpl) refreshConventions() (map[string]map[string]int
 	if err := mdbmodels.NewQuery(
 		qm.From("collections as c"),
 		qm.Where(fmt.Sprintf("c.type_id = %d and c.secure = 0 and c.published = true", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID))).
-		Bind(nil, ssc.mdb, &collections); err != nil {
+		Bind(nil, ssc.mdb, &collections); err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
 	for _, c := range collections {
