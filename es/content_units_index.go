@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -34,7 +34,7 @@ func MakeContentUnitsIndex(namespace string, indexDate string, db *sql.DB, esc *
 
 type ContentUnitsIndex struct {
 	BaseIndex
-	Progress uint64
+	Progress      uint64
 	assetsService integration.AssetsService
 }
 
@@ -169,14 +169,14 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) (map[string][]strin
 func (index *ContentUnitsIndex) bulkIndexUnits(bulk OffsetLimitJob, sqlScope string) *IndexErrors {
 	indexErrors := MakeIndexErrors()
 	var units []*mdbmodels.ContentUnit
-	if err := mdbmodels.NewQuery(index.db,
+	if err := mdbmodels.NewQuery(
 		qm.From("content_units as cu"),
 		qm.Load("ContentUnitI18ns"),
 		qm.Load("CollectionsContentUnits"),
 		qm.Load("CollectionsContentUnits.Collection"),
 		qm.Where(sqlScope),
 		qm.Offset(bulk.Offset),
-		qm.Limit(bulk.Limit)).Bind(&units); err != nil {
+		qm.Limit(bulk.Limit)).Bind(nil, index.db, &units); err != nil {
 		return indexErrors.SetError(errors.Wrap(err, "Fetch units from mdb"))
 	}
 	log.Infof("Content Units Index - Adding %d units (offset: %d total: %d).", len(units), bulk.Offset, bulk.Total)
@@ -229,10 +229,10 @@ type OffsetLimitJob struct {
 func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	indexErrors := MakeIndexErrors()
 	var count int
-	err := mdbmodels.NewQuery(index.db,
+	err := mdbmodels.NewQuery(
 		qm.Select("COUNT(1)"),
 		qm.From("content_units as cu"),
-		qm.Where(sqlScope)).QueryRow().Scan(&count)
+		qm.Where(sqlScope)).QueryRow(index.db).Scan(&count)
 	if err != nil {
 		return indexErrors.SetError(errors.Wrapf(err, "Failed fetching content_units with sql scope: %s", sqlScope))
 	}
@@ -240,7 +240,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	log.Debugf("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
 
 	tasks := make(chan OffsetLimitJob, 300)
-	errors := make(chan *IndexErrors, 300)
+	errChan := make(chan *IndexErrors, 300)
 	doneAdding := make(chan bool)
 
 	tasksCount := 0
@@ -257,16 +257,16 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	}()
 
 	for w := 1; w <= 10; w++ {
-		go func(tasks <-chan OffsetLimitJob, errors chan<- *IndexErrors) {
+		go func(tasks <-chan OffsetLimitJob, errs chan<- *IndexErrors) {
 			for task := range tasks {
-				errors <- index.bulkIndexUnits(task, sqlScope)
+				errs <- index.bulkIndexUnits(task, sqlScope)
 			}
-		}(tasks, errors)
+		}(tasks, errChan)
 	}
 
 	<-doneAdding
 	for a := 1; a <= tasksCount; a++ {
-		indexErrors.Join(<-errors, "")
+		indexErrors.Join(<-errChan, "")
 	}
 
 	return indexErrors

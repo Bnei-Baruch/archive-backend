@@ -9,10 +9,10 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/es"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries"
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/v4/queries"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -211,13 +211,13 @@ func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]in
 	ret := make(map[string]map[string]int)
 
 	// Replace || operator to & (intersect arrays) after upgrading Postgres to v.12
-	rows, err := queries.Raw(ssc.mdb, `select t.uid as tag_uid, 
+	rows, err := queries.Raw(`select t.uid as tag_uid, 
 	array_remove(array_agg(distinct extract(year from (c.properties ->> 'start_date')::date)) || 
 						  array_agg(distinct extract(year from (c.properties ->> 'end_date')::date)), NULL) as years		
 	from tags t 
 	join collections c on c.properties ->> 'holiday_tag' = t.uid
 	where c.secure = 0 and c.published = true
-	group by t.uid;`).Query()
+	group by t.uid;`).Query(ssc.mdb)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "refreshHolidays - Query failed.")
@@ -249,10 +249,10 @@ func (ssc *SearchStatsCacheImpl) refreshHolidayYears() (map[string]map[string]in
 func (ssc *SearchStatsCacheImpl) refreshConventions() (map[string]map[string]int, error) {
 	ret := make(map[string]map[string]int)
 	var collections []*mdbmodels.Collection
-	if err := mdbmodels.NewQuery(ssc.mdb,
+	if err := mdbmodels.NewQuery(
 		qm.From("collections as c"),
 		qm.Where(fmt.Sprintf("c.type_id = %d and c.secure = 0 and c.published = true", mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID))).
-		Bind(&collections); err != nil {
+		Bind(nil, ssc.mdb, &collections); err != nil {
 		return nil, err
 	}
 	for _, c := range collections {
@@ -302,7 +302,7 @@ func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]st
 		notToInclude = append(notToInclude, fmt.Sprintf("'%s'", s))
 	}
 	query := fmt.Sprintf(queryMask, strings.Join(notToInclude, ","))
-	rows, err := queries.Raw(ssc.mdb, query).Query() // Authors are not part of the query.
+	rows, err := queries.Raw(query).Query(ssc.mdb) // Authors are not part of the query.
 	if err != nil {
 		return nil, errors.Wrap(err, "queries.Raw")
 	}
@@ -336,7 +336,7 @@ func (ssc *SearchStatsCacheImpl) loadProgramsByCollectionAndPosition() (map[stri
 	// For 'new life' programs we handle the 'name' column as chapter number instead of 'position'.
 	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID,
 		consts.PROGRAM_COLLECTION_HAPITARON, consts.PROGRAM_COLLECTION_NEW_LIFE)
-	rows, err := queries.Raw(ssc.mdb, query).Query()
+	rows, err := queries.Raw(query).Query(ssc.mdb)
 	if err != nil {
 		return nil, errors.Wrap(err, "queries.Raw")
 	}

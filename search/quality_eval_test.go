@@ -8,14 +8,14 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/Bnei-Baruch/sqlboiler/boil"
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/volatiletech/null/v8"
+	"github.com/volatiletech/sqlboiler/v4/boil"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"gopkg.in/olivere/elastic.v6"
-	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -298,10 +298,10 @@ func (suite *QualityEvalSuite) validateExpectation(url string, exp search.Expect
 }
 
 func (suite *QualityEvalSuite) updateSourceParent(child mdbmodels.Source, parentSource mdbmodels.Source, insertChild bool, insertParent bool) error {
-	childFromDB, err := mdbmodels.Sources(common.DB, qm.Where("uid = ?", child.UID)).One()
+	childFromDB, err := mdbmodels.Sources(qm.Where("uid = ?", child.UID)).One(common.DB)
 	if err != nil {
 		if err == sql.ErrNoRows && insertChild {
-			err = child.Insert(common.DB)
+			err = child.Insert(common.DB, boil.Infer())
 			if err != nil {
 				return err
 			}
@@ -325,11 +325,11 @@ func (suite *QualityEvalSuite) updateSourceParent(child mdbmodels.Source, parent
 }
 
 func (suite *QualityEvalSuite) updateTagParent(child mdbmodels.Tag, parent mdbmodels.Tag, insertChild bool, insertParent bool) error {
-	childFromDB, err := mdbmodels.Tags(common.DB, qm.Where("uid = ?", child.UID)).One()
+	childFromDB, err := mdbmodels.Tags(qm.Where("uid = ?", child.UID)).One(common.DB)
 	if err != nil {
 		if err == sql.ErrNoRows && insertChild {
 
-			err = child.Insert(common.DB)
+			err = child.Insert(common.DB, boil.Infer())
 			if err != nil {
 				return err
 			}
@@ -354,14 +354,14 @@ func (suite *QualityEvalSuite) updateTagParent(child mdbmodels.Tag, parent mdbmo
 
 func (suite *QualityEvalSuite) addContentUnitTag(cu mdbmodels.ContentUnit, lang string, tag mdbmodels.Tag) (string, error) {
 	if cu.UID != "" {
-		cuFromDB, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.UID)).One()
+		cuFromDB, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cu.UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
 		cu = *cuFromDB
 	} else {
 		cu.UID = utils.GenerateUID(8)
-		if err := cu.Insert(common.DB); err != nil {
+		if err := cu.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	}
@@ -381,7 +381,7 @@ func (suite *QualityEvalSuite) addContentUnitTag(cu mdbmodels.ContentUnit, lang 
 
 func (suite *QualityEvalSuite) addContentUnitSource(cu mdbmodels.ContentUnit, lang string, src mdbmodels.Source) (string, error) {
 	if cu.UID != "" {
-		cuFromDB, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.UID)).One()
+		cuFromDB, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cu.UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -389,7 +389,7 @@ func (suite *QualityEvalSuite) addContentUnitSource(cu mdbmodels.ContentUnit, la
 	} else {
 		cu.UID = utils.GenerateUID(8)
 		cu.TypeID = mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID
-		if err := cu.Insert(common.DB); err != nil {
+		if err := cu.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	}
@@ -397,7 +397,7 @@ func (suite *QualityEvalSuite) addContentUnitSource(cu mdbmodels.ContentUnit, la
 	_, err := mdbmodels.FindSource(common.DB, src.ID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			err = src.Insert(common.DB)
+			err = src.Insert(common.DB, boil.Infer())
 			if err != nil {
 				return "", err
 			}
@@ -416,7 +416,7 @@ func (suite *QualityEvalSuite) addContentUnitSource(cu mdbmodels.ContentUnit, la
 
 func (suite *QualityEvalSuite) updateCollection(c mdbmodels.Collection, cuUID string, position int) (string, error) {
 	if c.UID != "" {
-		cFromDB, err := mdbmodels.Collections(common.DB, qm.Where("uid = ?", c.UID)).One()
+		cFromDB, err := mdbmodels.Collections(qm.Where("uid = ?", c.UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -426,13 +426,13 @@ func (suite *QualityEvalSuite) updateCollection(c mdbmodels.Collection, cuUID st
 		c.TypeID = c.TypeID
 		c.Secure = int16(0)
 		c.Published = true
-		if err := c.Insert(common.DB); err != nil {
+		if err := c.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	}
 
 	if cuUID != "" {
-		cu, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cuUID)).One()
+		cu, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cuUID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -441,7 +441,7 @@ func (suite *QualityEvalSuite) updateCollection(c mdbmodels.Collection, cuUID st
 			mdbCollectionsContentUnit.CollectionID = c.ID
 			mdbCollectionsContentUnit.ContentUnitID = cu.ID
 			mdbCollectionsContentUnit.Position = position
-			if err := mdbCollectionsContentUnit.Insert(common.DB); err != nil {
+			if err := mdbCollectionsContentUnit.Insert(common.DB, boil.Infer()); err != nil {
 				return "", err
 			}
 		}

@@ -13,11 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries"
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/v4/queries"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -98,13 +98,13 @@ func (index *SourcesIndex) bulkIndexSources(
 	idsMap map[string][]int64,
 	authorsByLanguageMap map[string]map[string][]string) *IndexErrors {
 	var sources []*mdbmodels.Source
-	if err := mdbmodels.NewQuery(index.db,
+	if err := mdbmodels.NewQuery(
 		qm.From("sources as source"),
 		qm.Load("SourceI18ns"),
 		qm.Load("Authors"),
 		qm.Where(sqlScope),
 		qm.Offset(bulk.Offset),
-		qm.Limit(bulk.Limit)).Bind(&sources); err != nil {
+		qm.Limit(bulk.Limit)).Bind(nil, index.db, &sources); err != nil {
 		return MakeIndexErrors().SetError(err).Wrap("SourcesIndex.addToIndexSql - Fetch sources from mdb.")
 	}
 
@@ -130,10 +130,10 @@ func (index *SourcesIndex) bulkIndexSources(
 // Note: scope usage is limited to source.uid only (e.g. source.uid='L2jMWyce')
 func (index *SourcesIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	var count int
-	if err := mdbmodels.NewQuery(index.db,
+	if err := mdbmodels.NewQuery(
 		qm.Select("COUNT(1)"),
 		qm.From("sources as source"),
-		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
+		qm.Where(sqlScope)).QueryRow(index.db).Scan(&count); err != nil {
 		return MakeIndexErrors().SetError(err).Wrap("SourcesIndex, addToIndexSql")
 	}
 
@@ -149,7 +149,7 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	}
 
 	tasks := make(chan OffsetLimitJob, 300)
-	errors := make(chan *IndexErrors, 300)
+	errChan := make(chan *IndexErrors, 300)
 	doneAdding := make(chan bool)
 
 	tasksCount := 0
@@ -166,23 +166,23 @@ func (index *SourcesIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	}()
 
 	for w := 1; w <= 10; w++ {
-		go func(tasks <-chan OffsetLimitJob, errors chan<- *IndexErrors) {
+		go func(tasks <-chan OffsetLimitJob, errs chan<- *IndexErrors) {
 			for task := range tasks {
-				errors <- index.bulkIndexSources(task, sqlScope, codesMap, idsMap, authorsByLanguageMap)
+				errs <- index.bulkIndexSources(task, sqlScope, codesMap, idsMap, authorsByLanguageMap)
 			}
-		}(tasks, errors)
+		}(tasks, errChan)
 	}
 
 	<-doneAdding
 	indexErrors := MakeIndexErrors()
 	for a := 1; a <= tasksCount; a++ {
-		indexErrors.Join(<-errors, "")
+		indexErrors.Join(<-errChan, "")
 	}
 	return indexErrors
 }
 
 func (index *SourcesIndex) loadSources(db *sql.DB, sqlScope string) (map[string][]string, map[string][]int64, map[string]map[string][]string, error) {
-	rows, err := queries.Raw(db, fmt.Sprintf(`
+	rows, err := queries.Raw(fmt.Sprintf(`
 		WITH recursive rec_sources AS
         (
                SELECT s.id,
@@ -238,7 +238,7 @@ func (index *SourcesIndex) loadSources(db *sql.DB, sqlScope string) (map[string]
                language,
                author_names
 		FROM   rec_sources source 
-		where %s;`, sqlScope)).Query()
+		where %s;`, sqlScope)).Query(db)
 
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "SourcesIndex.loadSources - Query failed.")
@@ -316,7 +316,7 @@ func (index *SourcesIndex) fetchDocx(cuUid string, lang string) (string, error) 
 		cuUid,
 		lang)
 	var fileUID string
-	err := queries.Raw(index.db, query).QueryRow().Scan(&fileUID)
+	err := queries.Raw(query).QueryRow(index.db).Scan(&fileUID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Missing source. Do not count this as error.

@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"gopkg.in/olivere/elastic.v6"
 	"jaytaylor.com/html2text"
 
@@ -103,12 +103,12 @@ func (index *BlogIndex) removeFromIndex(scope Scope) (map[string][]string, *Inde
 
 func (index *BlogIndex) bulkIndexPosts(bulk OffsetLimitJob, sqlScope string) *IndexErrors {
 	var posts []*mdbmodels.BlogPost
-	if err := mdbmodels.NewQuery(index.db,
+	if err := mdbmodels.NewQuery(
 		qm.From("blog_posts as p"),
 		qm.Where(sqlScope),
 		qm.OrderBy("id"), // Required for same order results in each query
 		qm.Offset(bulk.Offset),
-		qm.Limit(bulk.Limit)).Bind(&posts); err != nil {
+		qm.Limit(bulk.Limit)).Bind(nil, index.db, &posts); err != nil {
 		return MakeIndexErrors().SetError(err).Wrap(fmt.Sprintf("Fetch blog posts from mdb. Offset: %d", bulk.Offset))
 	}
 	log.Infof("Adding %d blog posts (offset %d total %d).", len(posts), bulk.Offset, bulk.Total)
@@ -122,23 +122,23 @@ func (index *BlogIndex) bulkIndexPosts(bulk OffsetLimitJob, sqlScope string) *In
 
 func (index *BlogIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	var count int
-	if err := mdbmodels.NewQuery(index.db,
+	if err := mdbmodels.NewQuery(
 		qm.Select("count(id)"),
 		qm.From("blog_posts as p"),
-		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
+		qm.Where(sqlScope)).QueryRow(index.db).Scan(&count); err != nil {
 		return MakeIndexErrors().SetError(err)
 	}
 	log.Infof("Blog Posts Index - Adding %d posts. Scope: %s.", count, sqlScope)
 
-	limit := utils.MaxInt(10, utils.MinInt(1000, (int)(count/10)))
-	tasks := make(chan OffsetLimitJob, (count/limit + limit))
-	errors := make(chan *IndexErrors, 300)
+	limit := utils.MaxInt(10, utils.MinInt(1000, count/10))
+	tasks := make(chan OffsetLimitJob, count/limit+limit)
+	errChan := make(chan *IndexErrors, 300)
 	doneAdding := make(chan bool, 1)
 
 	tasksCount := 0
 	go func() {
 		offset := 0
-		for offset < int(count) {
+		for offset < count {
 			tasks <- OffsetLimitJob{offset, limit, count}
 			tasksCount++
 			offset += limit
@@ -150,14 +150,14 @@ func (index *BlogIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	for w := 1; w <= 10; w++ {
 		go func(tasks <-chan OffsetLimitJob, errs chan<- *IndexErrors) {
 			for task := range tasks {
-				errors <- index.bulkIndexPosts(task, sqlScope)
+				errs <- index.bulkIndexPosts(task, sqlScope)
 			}
-		}(tasks, errors)
+		}(tasks, errChan)
 	}
 	<-doneAdding
 	indexErrors := MakeIndexErrors()
 	for a := 1; a <= tasksCount; a++ {
-		indexErrors.Join(<-errors, "")
+		indexErrors.Join(<-errChan, "")
 	}
 	return indexErrors
 }

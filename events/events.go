@@ -172,12 +172,13 @@ func msgHandler(msg *stan.Msg) {
 	if d.ReplicationLocation != "" {
 		log.Infof("Replication location: %s", d.ReplicationLocation)
 		var synced bool
-		err := common.DB.
-			QueryRow("SELECT pg_last_xlog_replay_location() >= $1", d.ReplicationLocation).
-			Scan(&synced)
+		err := common.DB.QueryRow("SELECT pg_last_xlog_replay_location() >= $1", d.ReplicationLocation).Scan(&synced)
 		if err != nil {
-			log.Errorf("Check replica is synced: %+v", err)
-			return
+			err := common.DB.QueryRow("SELECT pg_last_wal_replay_lsn() >= $1", d.ReplicationLocation).Scan(&synced)
+			if err != nil {
+				log.Errorf("Check replica is synced: %+v", err)
+				return
+			}
 		}
 		if !synced {
 			log.Infof("Replica not synced: %s", d.ReplicationLocation)

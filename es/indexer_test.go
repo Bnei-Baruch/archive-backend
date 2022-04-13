@@ -17,14 +17,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Bnei-Baruch/sqlboiler/boil"
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/volatiletech/null/v8"
+	"github.com/volatiletech/sqlboiler/v4/boil"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"gopkg.in/olivere/elastic.v6"
-	"gopkg.in/volatiletech/null.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -181,7 +181,7 @@ func (s ESLogAdapter) Printf(format string, v ...interface{}) { s.Logf(format, v
 
 func (suite *IndexerSuite) SetupTest() {
 	r := require.New(suite.T())
-	units, err := mdbmodels.ContentUnits(common.DB).All()
+	units, err := mdbmodels.ContentUnits().All(common.DB)
 	r.Nil(err)
 	esc, err := common.ESC.GetClient()
 	r.Nil(err)
@@ -201,7 +201,7 @@ func (suite *IndexerSuite) SetupTest() {
 func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (string, error) {
 	var mdbCollection mdbmodels.Collection
 	if c.MDB_UID != "" {
-		cp, err := mdbmodels.Collections(common.DB, qm.Where("uid = ?", c.MDB_UID)).One()
+		cp, err := mdbmodels.Collections(qm.Where("uid = ?", c.MDB_UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -211,7 +211,7 @@ func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (
 			UID:    utils.GenerateUID(8),
 			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[c.ContentType].ID,
 		}
-		if err := mdbCollection.Insert(common.DB); err != nil {
+		if err := mdbCollection.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	}
@@ -220,7 +220,7 @@ func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (
 	}
 	mdbCollection.Secure = int16(0)
 	mdbCollection.Published = true
-	if err := mdbCollection.Update(common.DB); err != nil {
+	if _, err := mdbCollection.Update(common.DB, boil.Infer()); err != nil {
 		return "", err
 	}
 	// I18N
@@ -232,7 +232,7 @@ func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (
 			CollectionID: mdbCollection.ID,
 			Language:     lang,
 		}
-		if err := mdbCollectionI18n.Insert(common.DB); err != nil {
+		if err := mdbCollectionI18n.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	} else if err != nil {
@@ -246,11 +246,11 @@ func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (
 	if c.Description != "" {
 		mdbCollectionI18n.Description = null.NewString(c.Description, c.Description != "")
 	}
-	if err := mdbCollectionI18n.Update(common.DB); err != nil {
+	if _, err := mdbCollectionI18n.Update(common.DB, boil.Infer()); err != nil {
 		return "", err
 	}
 
-	cu, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cuUID)).One()
+	cu, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cuUID)).One(common.DB)
 	if err != nil {
 		return "", err
 	}
@@ -258,23 +258,24 @@ func updateCollection(c Collection, cuUID string, removeContentUnitUID string) (
 		var mdbCollectionsContentUnit mdbmodels.CollectionsContentUnit
 		mdbCollectionsContentUnit.CollectionID = mdbCollection.ID
 		mdbCollectionsContentUnit.ContentUnitID = cu.ID
-		if err := mdbCollectionsContentUnit.Insert(common.DB); err != nil {
+		if err := mdbCollectionsContentUnit.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	}
-	// Remomove only the connection between the collection and this content unit.
+	// Remove only the connection between the collection and this content unit.
 	if removeContentUnitUID != "" {
-		ccus, err := mdbmodels.CollectionsContentUnits(common.DB,
+		ccus, err := mdbmodels.CollectionsContentUnits(
 			qm.InnerJoin("content_units on content_units.id = collections_content_units.content_unit_id"),
 			qm.Where("content_units.uid = ?", removeContentUnitUID),
-			qm.And("collection_id = ?", mdbCollection.ID)).All()
+			qm.And("collection_id = ?", mdbCollection.ID)).
+			All(common.DB)
 		if err != nil {
 			return "", errors.Wrap(err, "updateCollection select ccu")
 		}
 		for _, ccu := range ccus {
-			if err := mdbmodels.CollectionsContentUnits(common.DB,
+			if _, err := mdbmodels.CollectionsContentUnits(
 				qm.Where("collection_id = ?", ccu.CollectionID),
-				qm.And("content_unit_id = ?", ccu.ContentUnitID)).DeleteAll(); err != nil {
+				qm.And("content_unit_id = ?", ccu.ContentUnitID)).DeleteAll(common.DB); err != nil {
 				return "", errors.Wrap(err, "updateCollection delete ccu")
 			}
 		}
@@ -292,7 +293,7 @@ func (suite *IndexerSuite) uc(c Collection, cuUID string, removeContentUnitUID s
 func removeContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
-		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		cup, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cu.MDB_UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -317,7 +318,7 @@ func removeContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (strin
 func addContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
-		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		cup, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cu.MDB_UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -327,7 +328,7 @@ func addContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, 
 			UID:    utils.GenerateUID(8),
 			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
 		}
-		if err := mdbContentUnit.Insert(common.DB); err != nil {
+		if err := mdbContentUnit.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	}
@@ -345,7 +346,7 @@ func addContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, 
 			}
 			tag.UID = string(b)*/
 
-			err = tag.Insert(common.DB)
+			err = tag.Insert(common.DB, boil.Infer())
 			if err != nil {
 				return "", err
 			}
@@ -374,7 +375,7 @@ func addContentUnitTag(cu ContentUnit, lang string, tag mdbmodels.Tag) (string, 
 func addContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source, author mdbmodels.Author, insertAuthor bool) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
-		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		cup, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cu.MDB_UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -384,7 +385,7 @@ func addContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source, aut
 			UID:    utils.GenerateUID(8),
 			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
 		}
-		if err := mdbContentUnit.Insert(common.DB); err != nil {
+		if err := mdbContentUnit.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	}
@@ -392,7 +393,7 @@ func addContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source, aut
 	_, err := mdbmodels.FindSource(common.DB, src.ID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			err = src.Insert(common.DB)
+			err = src.Insert(common.DB, boil.Infer())
 			if err != nil {
 				return "", err
 			}
@@ -416,7 +417,7 @@ func addContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source, aut
 func removeContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
-		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		cup, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cu.MDB_UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -441,7 +442,7 @@ func removeContentUnitSource(cu ContentUnit, lang string, src mdbmodels.Source) 
 func addContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
-		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		cup, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cu.MDB_UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -455,7 +456,7 @@ func addContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (strin
 		if cu.UIDForCreate != "" {
 			mdbContentUnit.UID = cu.UIDForCreate
 		}
-		if err := mdbContentUnit.Insert(common.DB); err != nil {
+		if err := mdbContentUnit.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	}
@@ -463,7 +464,7 @@ func addContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (strin
 	_, err := mdbmodels.FindFile(common.DB, file.ID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			err = file.Insert(common.DB)
+			err = file.Insert(common.DB, boil.Infer())
 			if err != nil {
 				return "", err
 			}
@@ -483,7 +484,7 @@ func addContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (strin
 func removeContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
-		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		cup, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cu.MDB_UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -508,7 +509,7 @@ func removeContentUnitFile(cu ContentUnit, lang string, file mdbmodels.File) (st
 func setContentUnitType(cu ContentUnit, typeID int64) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
-		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		cup, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cu.MDB_UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -518,7 +519,7 @@ func setContentUnitType(cu ContentUnit, typeID int64) (string, error) {
 	}
 	mdbContentUnit.TypeID = typeID
 
-	if err := mdbContentUnit.Update(common.DB); err != nil {
+	if _, err := mdbContentUnit.Update(common.DB, boil.Infer()); err != nil {
 		return "", err
 	}
 	return mdbContentUnit.UID, nil
@@ -527,7 +528,7 @@ func setContentUnitType(cu ContentUnit, typeID int64) (string, error) {
 func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool) (string, error) {
 	var mdbContentUnit mdbmodels.ContentUnit
 	if cu.MDB_UID != "" {
-		cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cu.MDB_UID)).One()
+		cup, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cu.MDB_UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -537,7 +538,7 @@ func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool)
 			UID:    utils.GenerateUID(8),
 			TypeID: mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
 		}
-		if err := mdbContentUnit.Insert(common.DB); err != nil {
+		if err := mdbContentUnit.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	}
@@ -552,7 +553,7 @@ func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool)
 
 	mdbContentUnit.Secure = s
 	mdbContentUnit.Published = p
-	if err := mdbContentUnit.Update(common.DB); err != nil {
+	if _, err := mdbContentUnit.Update(common.DB, boil.Infer()); err != nil {
 		return "", err
 	}
 	var mdbContentUnitI18n mdbmodels.ContentUnitI18n
@@ -562,7 +563,7 @@ func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool)
 			ContentUnitID: mdbContentUnit.ID,
 			Language:      lang,
 		}
-		if err := mdbContentUnitI18n.Insert(common.DB); err != nil {
+		if err := mdbContentUnitI18n.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	} else if err != nil {
@@ -576,20 +577,20 @@ func updateContentUnit(cu ContentUnit, lang string, published bool, secure bool)
 	if cu.Description != "" {
 		mdbContentUnitI18n.Description = null.NewString(cu.Description, cu.Description != "")
 	}
-	if err := mdbContentUnitI18n.Update(common.DB); err != nil {
+	if _, err := mdbContentUnitI18n.Update(common.DB, boil.Infer()); err != nil {
 		return "", err
 	}
 	return mdbContentUnit.UID, nil
 }
 
 func updateFile(f File, cuUID string) (string, error) {
-	cup, err := mdbmodels.ContentUnits(common.DB, qm.Where("uid = ?", cuUID)).One()
+	cup, err := mdbmodels.ContentUnits(qm.Where("uid = ?", cuUID)).One(common.DB)
 	if err != nil {
 		return "", err
 	}
 	var mdbFile mdbmodels.File
 	if f.MDB_UID != "" {
-		fp, err := mdbmodels.Files(common.DB, qm.Where("uid = ?", f.MDB_UID)).One()
+		fp, err := mdbmodels.Files(qm.Where("uid = ?", f.MDB_UID)).One(common.DB)
 		if err != nil {
 			return "", err
 		}
@@ -598,22 +599,23 @@ func updateFile(f File, cuUID string) (string, error) {
 		mdbFile = mdbmodels.File{
 			UID: utils.GenerateUID(8),
 		}
-		if err := mdbFile.Insert(common.DB); err != nil {
+		if err := mdbFile.Insert(common.DB, boil.Infer()); err != nil {
 			return "", err
 		}
 	}
 	mdbFile.Name = f.Name
 	mdbFile.ContentUnitID = null.Int64{cup.ID, true}
-	if err := mdbFile.Update(common.DB); err != nil {
+	if _, err := mdbFile.Update(common.DB, boil.Infer()); err != nil {
 		return "", err
 	}
 	return mdbFile.UID, nil
 }
 
 func deleteCollection(UID string) error {
-	collectionsI18ns, err := mdbmodels.CollectionI18ns(common.DB,
+	collectionsI18ns, err := mdbmodels.CollectionI18ns(
 		qm.InnerJoin("collections on collections.id = collection_i18n.collection_id"),
-		qm.WhereIn("collections.uid = ?", UID)).All()
+		qm.WhereIn("collections.uid = ?", UID)).
+		All(common.DB)
 	if err != nil {
 		return errors.Wrap(err, "deleteCollections, select cu i18n.")
 	}
@@ -622,18 +624,22 @@ func deleteCollection(UID string) error {
 		idsI[i] = v.CollectionID
 	}
 	if len(collectionsI18ns) > 0 {
-		if err := mdbmodels.CollectionI18ns(common.DB, qm.WhereIn("collection_id in ?", idsI...)).DeleteAll(); err != nil {
+		if _, err := mdbmodels.CollectionI18ns(qm.WhereIn("collection_id in ?", idsI...)).DeleteAll(common.DB); err != nil {
 			return errors.Wrap(err, "deleteCollections, delete cu i18n.")
 		}
 	}
-	ccu, err := mdbmodels.CollectionsContentUnits(common.DB,
+	ccu, err := mdbmodels.CollectionsContentUnits(
 		qm.InnerJoin("collections on collections.id = collections_content_units.collection_id"),
-		qm.Where("collections.uid = ?", UID)).All()
+		qm.Where("collections.uid = ?", UID)).
+		All(common.DB)
 	if err != nil {
 		return err
 	}
-	ccu.DeleteAll(common.DB)
-	return mdbmodels.Collections(common.DB, qm.Where("uid = ?", UID)).DeleteAll()
+	if _, err := ccu.DeleteAll(common.DB); err != nil {
+		return errors.Wrap(err, "ccu.DeleteAll")
+	}
+	_, err = mdbmodels.Collections(qm.Where("uid = ?", UID)).DeleteAll(common.DB)
+	return err
 }
 
 func deleteCollections(UIDs []string) error {
@@ -647,7 +653,6 @@ func deleteCollections(UIDs []string) error {
 }
 
 func deletePosts(IDs []string) error {
-
 	quoted := make([]string, len(IDs))
 	for i, id := range IDs {
 		s := strings.Split(id, "-")
@@ -657,7 +662,8 @@ func deletePosts(IDs []string) error {
 	}
 	scope := strings.Join(quoted, " or ")
 
-	return mdbmodels.BlogPosts(common.DB, qm.WhereIn(scope)).DeleteAll()
+	_, err := mdbmodels.BlogPosts(qm.WhereIn(scope)).DeleteAll(common.DB)
+	return err
 }
 
 func deleteTweets(TIDs []string) error {
@@ -665,7 +671,8 @@ func deleteTweets(TIDs []string) error {
 	for i, v := range TIDs {
 		TIDsI[i] = v
 	}
-	return mdbmodels.TwitterTweets(common.DB, qm.WhereIn("twitter_id in ?", TIDsI...)).DeleteAll()
+	_, err := mdbmodels.TwitterTweets(qm.WhereIn("twitter_id in ?", TIDsI...)).DeleteAll(common.DB)
+	return err
 }
 
 func deleteContentUnits(UIDs []string) error {
@@ -676,9 +683,10 @@ func deleteContentUnits(UIDs []string) error {
 	for i, v := range UIDs {
 		UIDsI[i] = v
 	}
-	files, err := mdbmodels.Files(common.DB,
+	files, err := mdbmodels.Files(
 		qm.InnerJoin("content_units on content_units.id = files.content_unit_id"),
-		qm.WhereIn("content_units.uid in ?", UIDsI...)).All()
+		qm.WhereIn("content_units.uid in ?", UIDsI...)).
+		All(common.DB)
 	if err != nil {
 		return errors.Wrap(err, "deleteContentUnits, Select files.")
 	}
@@ -687,13 +695,14 @@ func deleteContentUnits(UIDs []string) error {
 		fileIdsI[i] = v.ContentUnitID
 	}
 	if len(files) > 0 {
-		if err := mdbmodels.Files(common.DB, qm.WhereIn("content_unit_id in ?", fileIdsI...)).DeleteAll(); err != nil {
+		if _, err := mdbmodels.Files(qm.WhereIn("content_unit_id in ?", fileIdsI...)).DeleteAll(common.DB); err != nil {
 			return errors.Wrap(err, "deleteContentUnits, delete files.")
 		}
 	}
-	contentUnitsI18ns, err := mdbmodels.ContentUnitI18ns(common.DB,
+	contentUnitsI18ns, err := mdbmodels.ContentUnitI18ns(
 		qm.InnerJoin("content_units on content_units.id = content_unit_i18n.content_unit_id"),
-		qm.WhereIn("content_units.uid in ?", UIDsI...)).All()
+		qm.WhereIn("content_units.uid in ?", UIDsI...)).
+		All(common.DB)
 	if err != nil {
 		return errors.Wrap(err, "deleteContentUnits, select cu i18n.")
 	}
@@ -702,13 +711,14 @@ func deleteContentUnits(UIDs []string) error {
 		idsI[i] = v.ContentUnitID
 	}
 	if len(contentUnitsI18ns) > 0 {
-		if err := mdbmodels.ContentUnitI18ns(common.DB, qm.WhereIn("content_unit_id in ?", idsI...)).DeleteAll(); err != nil {
+		if _, err := mdbmodels.ContentUnitI18ns(qm.WhereIn("content_unit_id in ?", idsI...)).DeleteAll(common.DB); err != nil {
 			return errors.Wrap(err, "deleteContentUnits, delete cu i18n.")
 		}
 	}
-	collectionIds, err := mdbmodels.CollectionsContentUnits(common.DB,
+	collectionIds, err := mdbmodels.CollectionsContentUnits(
 		qm.InnerJoin("content_units on content_units.id = collections_content_units.content_unit_id"),
-		qm.WhereIn("content_units.uid IN ?", UIDsI...)).All()
+		qm.WhereIn("content_units.uid IN ?", UIDsI...)).
+		All(common.DB)
 	if err != nil {
 		return errors.Wrap(err, "deleteContentUnits, select ccu.")
 	}
@@ -717,20 +727,23 @@ func deleteContentUnits(UIDs []string) error {
 		for i, v := range collectionIds {
 			collectionIdsI[i] = v.CollectionID
 		}
-		if err := mdbmodels.CollectionsContentUnits(common.DB,
-			qm.WhereIn("collection_id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
+		if _, err := mdbmodels.CollectionsContentUnits(
+			qm.WhereIn("collection_id IN ?", collectionIdsI...)).
+			DeleteAll(common.DB); err != nil {
 			return errors.Wrap(err, "deleteContentUnits, delete ccu.")
 		}
-		if err := mdbmodels.CollectionI18ns(common.DB,
-			qm.WhereIn("collection_id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
+		if _, err := mdbmodels.CollectionI18ns(
+			qm.WhereIn("collection_id IN ?", collectionIdsI...)).
+			DeleteAll(common.DB); err != nil {
 			return errors.Wrap(err, "deleteContentUnitw, delete c i18n.")
 		}
-		if err := mdbmodels.Collections(common.DB,
-			qm.WhereIn("id IN ?", collectionIdsI...)).DeleteAll(); err != nil {
+		if _, err := mdbmodels.Collections(
+			qm.WhereIn("id IN ?", collectionIdsI...)).DeleteAll(common.DB); err != nil {
 			return errors.Wrap(err, "deleteContentUnits, delete collections.")
 		}
 	}
-	return mdbmodels.ContentUnits(common.DB, qm.WhereIn("uid in ?", UIDsI...)).DeleteAll()
+	_, err = mdbmodels.ContentUnits(qm.WhereIn("uid in ?", UIDsI...)).DeleteAll(common.DB)
+	return err
 }
 
 func deleteSources(UIDs []string) error {
@@ -741,9 +754,10 @@ func deleteSources(UIDs []string) error {
 	for i, v := range UIDs {
 		UIDsI[i] = v
 	}
-	sourcesI18ns, err := mdbmodels.SourceI18ns(common.DB,
+	sourcesI18ns, err := mdbmodels.SourceI18ns(
 		qm.InnerJoin("sources on sources.id = source_i18n.source_id"),
-		qm.WhereIn("sources.uid in ?", UIDsI...)).All()
+		qm.WhereIn("sources.uid in ?", UIDsI...)).
+		All(common.DB)
 	if err != nil {
 		return errors.Wrap(err, "deleteSources, select source i18n.")
 	}
@@ -752,12 +766,12 @@ func deleteSources(UIDs []string) error {
 		idsI[i] = v.SourceID
 	}
 	if len(sourcesI18ns) > 0 {
-		if err := mdbmodels.SourceI18ns(common.DB, qm.WhereIn("source_id in ?", idsI...)).DeleteAll(); err != nil {
+		if _, err := mdbmodels.SourceI18ns(qm.WhereIn("source_id in ?", idsI...)).DeleteAll(common.DB); err != nil {
 			return errors.Wrap(err, "deleteSources, delete source i18n.")
 		}
 	}
 	// Delete authors_sources and authors
-	sources, err := mdbmodels.Sources(common.DB, qm.WhereIn("sources.uid in ?", UIDsI...)).All()
+	sources, err := mdbmodels.Sources(qm.WhereIn("sources.uid in ?", UIDsI...)).All(common.DB)
 	if err != nil {
 		return err
 	}
@@ -765,9 +779,10 @@ func deleteSources(UIDs []string) error {
 	for _, s := range sources {
 		sourcesIdsI = append(sourcesIdsI, s.ID)
 	}
-	authors, err := mdbmodels.Authors(common.DB,
+	authors, err := mdbmodels.Authors(
 		qm.InnerJoin("authors_sources on authors_sources.author_id = authors.id"),
-		qm.WhereIn("authors_sources.source_id in ?", sourcesIdsI...)).All()
+		qm.WhereIn("authors_sources.source_id in ?", sourcesIdsI...)).
+		All(common.DB)
 	if err != nil {
 		return errors.Wrap(err, "Select authors")
 	}
@@ -778,12 +793,13 @@ func deleteSources(UIDs []string) error {
 				return errors.Wrap(err, "RemoveAuthors")
 			}
 		}
-		err = authors.DeleteAll(common.DB)
+		_, err = authors.DeleteAll(common.DB)
 		if err != nil {
 			return errors.Wrap(err, "deleteSources, delete authors.")
 		}
 	}
-	return mdbmodels.Sources(common.DB, qm.WhereIn("uid in ?", UIDsI...)).DeleteAll()
+	_, err = mdbmodels.Sources(qm.WhereIn("uid in ?", UIDsI...)).DeleteAll(common.DB)
+	return err
 }
 
 func updateTag(id int64, parentId null.Int64, name string, language string) (string, error) {
@@ -795,7 +811,7 @@ func updateTag(id int64, parentId null.Int64, name string, language string) (str
 				UID:      utils.GenerateUID(8),
 				ParentID: parentId,
 			}
-			err = tag.Insert(common.DB)
+			err = tag.Insert(common.DB, boil.Infer())
 			if err != nil {
 				return "", err
 			}
@@ -820,16 +836,19 @@ func updateTag(id int64, parentId null.Int64, name string, language string) (str
 		}
 	} else {
 		tagI18n.Label = null.String{Valid: true, String: name}
-		tagI18n.Update(common.DB)
+		if _, err := tagI18n.Update(common.DB, boil.Infer()); err != nil {
+			return "", err
+		}
 	}
 	return tag.UID, nil
 }
 
 func removeTag(id int64) error {
-	if err := mdbmodels.TagI18ns(common.DB, qm.WhereIn("tag_id = ?", id)).DeleteAll(); err != nil {
+	if _, err := mdbmodels.TagI18ns(qm.WhereIn("tag_id = ?", id)).DeleteAll(common.DB); err != nil {
 		return err
 	}
-	return mdbmodels.Tags(common.DB, qm.WhereIn("id = ?", id)).DeleteAll()
+	_, err := mdbmodels.Tags(qm.WhereIn("id = ?", id)).DeleteAll(common.DB)
+	return err
 }
 
 //Return values: MDB_UID - key of the source in string interpretation
@@ -837,7 +856,7 @@ func removeTag(id int64) error {
 func updateSource(source Source, lang string) (string, int64, error) {
 	var mdbSource mdbmodels.Source
 	if source.MDB_UID != "" {
-		s, err := mdbmodels.Sources(common.DB, qm.Where("uid = ?", source.MDB_UID)).One()
+		s, err := mdbmodels.Sources(qm.Where("uid = ?", source.MDB_UID)).One(common.DB)
 		if err != nil {
 			return "", 0, err
 		}
@@ -850,7 +869,7 @@ func updateSource(source Source, lang string) (string, int64, error) {
 			mdbSource.ParentID = source.ParentID
 		}
 
-		if err := mdbSource.Update(common.DB); err != nil {
+		if _, err := mdbSource.Update(common.DB, boil.Infer()); err != nil {
 			return "", 0, err
 		}
 	} else {
@@ -869,7 +888,7 @@ func updateSource(source Source, lang string) (string, int64, error) {
 			mdbSource.Position = source.Position
 		}
 
-		if err := mdbSource.Insert(common.DB); err != nil {
+		if err := mdbSource.Insert(common.DB, boil.Infer()); err != nil {
 			return "", 0, err
 		}
 	}
@@ -880,7 +899,7 @@ func updateSource(source Source, lang string) (string, int64, error) {
 			SourceID: mdbSource.ID,
 			Language: lang,
 		}
-		if err := mdbSourceI18n.Insert(common.DB); err != nil {
+		if err := mdbSourceI18n.Insert(common.DB, boil.Infer()); err != nil {
 			return "", 0, err
 		}
 	} else if err != nil {
@@ -894,7 +913,7 @@ func updateSource(source Source, lang string) (string, int64, error) {
 	if source.Description != "" {
 		mdbSourceI18n.Description = null.NewString(source.Description, source.Description != "")
 	}
-	if err := mdbSourceI18n.Update(common.DB); err != nil {
+	if _, err := mdbSourceI18n.Update(common.DB, boil.Infer()); err != nil {
 		return "", 0, err
 	}
 
@@ -957,7 +976,7 @@ func updateSourceFileContent(uid string, lang string) error {
 func addAuthorToSource(source Source, lang string, mdbAuthor mdbmodels.Author, insertAuthor bool, insertI18n bool) error {
 	var mdbSource mdbmodels.Source
 	if source.MDB_UID != "" {
-		src, err := mdbmodels.Sources(common.DB, qm.Where("uid = ?", source.MDB_UID)).One()
+		src, err := mdbmodels.Sources(qm.Where("uid = ?", source.MDB_UID)).One(common.DB)
 		if err != nil {
 			return err
 		}
@@ -967,7 +986,7 @@ func addAuthorToSource(source Source, lang string, mdbAuthor mdbmodels.Author, i
 			UID:    utils.GenerateUID(8),
 			TypeID: 2,
 		}
-		if err := mdbSource.Insert(common.DB); err != nil {
+		if err := mdbSource.Insert(common.DB, boil.Infer()); err != nil {
 			return err
 		}
 	}
@@ -985,7 +1004,7 @@ func addAuthorToSource(source Source, lang string, mdbAuthor mdbmodels.Author, i
 				AuthorID: mdbAuthor.ID,
 				Language: lang,
 			}
-			if err := mdbAuthorI18n.Insert(common.DB); err != nil {
+			if err := mdbAuthorI18n.Insert(common.DB, boil.Infer()); err != nil {
 				return err
 			}
 		} else if err != nil {
@@ -999,7 +1018,7 @@ func addAuthorToSource(source Source, lang string, mdbAuthor mdbmodels.Author, i
 		if mdbAuthor.FullName.Valid && mdbAuthor.FullName.String != "" {
 			mdbAuthorI18n.FullName = null.NewString(mdbAuthor.FullName.String, true)
 		}
-		if err := mdbAuthorI18n.Update(common.DB); err != nil {
+		if _, err := mdbAuthorI18n.Update(common.DB, boil.Infer()); err != nil {
 			return err
 		}
 	}
@@ -1010,7 +1029,7 @@ func addAuthorToSource(source Source, lang string, mdbAuthor mdbmodels.Author, i
 func removeAuthorFromSource(source Source, mdbAuthor mdbmodels.Author) error {
 	var mdbSource mdbmodels.Source
 	if source.MDB_UID != "" {
-		src, err := mdbmodels.Sources(common.DB, qm.Where("uid = ?", source.MDB_UID)).One()
+		src, err := mdbmodels.Sources(qm.Where("uid = ?", source.MDB_UID)).One(common.DB)
 		if err != nil {
 			return err
 		}
@@ -1045,7 +1064,7 @@ func insertPost(wp_id int64, blogId int64, title string, filtered bool) error {
 		Link:      "",
 		Filtered:  filtered,
 	}
-	if err := mdbPost.Insert(common.DB); err != nil {
+	if err := mdbPost.Insert(common.DB, boil.Infer()); err != nil {
 		return err
 	}
 	return nil
@@ -1064,7 +1083,7 @@ func insertTweet(id int64, tid string, userId int64, title string) error {
 				AccountID: fmt.Sprintf("user-account-%v", userId),
 			}
 
-			err = usr.Insert(common.DB)
+			err = usr.Insert(common.DB, boil.Infer())
 			if err != nil {
 				return err
 			}
@@ -1092,7 +1111,7 @@ func insertTweet(id int64, tid string, userId int64, title string) error {
 		CreatedAt: time.Now(),
 	}
 
-	if err := mdbTweet.Insert(common.DB); err != nil {
+	if err := mdbTweet.Insert(common.DB, boil.Infer()); err != nil {
 		return err
 	}
 	return nil

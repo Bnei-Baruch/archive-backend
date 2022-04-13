@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/v4/queries"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
@@ -65,7 +65,7 @@ func (indexData *IndexData) load(sqlScope string) error {
 }
 
 func (indexData *IndexData) loadSources(sqlScope string) (map[string][]string, error) {
-	rows, err := queries.Raw(indexData.DB, fmt.Sprintf(`
+	rows, err := queries.Raw(fmt.Sprintf(`
 WITH RECURSIVE rec_sources AS (
   SELECT
     s.id,
@@ -90,7 +90,7 @@ FROM content_units_sources cus
     INNER JOIN content_units AS cu ON cus.content_unit_id = cu.id
     , unnest(rs.path) item
 WHERE %s
-GROUP BY cu.uid;`, sqlScope)).Query()
+GROUP BY cu.uid;`, sqlScope)).Query(indexData.DB)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load sources")
@@ -101,7 +101,7 @@ GROUP BY cu.uid;`, sqlScope)).Query()
 }
 
 func (indexData *IndexData) loadTags(sqlScope string) (map[string][]string, error) {
-	rows, err := queries.Raw(indexData.DB, fmt.Sprintf(`
+	rows, err := queries.Raw(fmt.Sprintf(`
 WITH RECURSIVE rec_tags AS (
   SELECT
     t.id,
@@ -124,7 +124,7 @@ FROM content_units_tags cut
     INNER JOIN content_units AS cu ON cut.content_unit_id = cu.id
     , unnest(rt.path) item
 WHERE %s
-GROUP BY cu.uid;`, sqlScope)).Query()
+GROUP BY cu.uid;`, sqlScope)).Query(indexData.DB)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load tags")
@@ -174,7 +174,7 @@ GROUP BY cu.uid;`, sqlScope)).Query()
 
 func (indexData *IndexData) loadTranscripts(sqlScope string) (map[string]map[string][]string, error) {
 	kmID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID
-	rows, err := queries.Raw(indexData.DB, fmt.Sprintf(`
+	rows, err := queries.Raw(fmt.Sprintf(`
 SELECT
     f.uid,
     f.name,
@@ -187,7 +187,7 @@ WHERE f.secure = 0  and f.published = true AND
     f.language NOT IN ('zz', 'xx') AND
     f.content_unit_id IS NOT NULL AND
     cu.type_id != %d AND
-    %s;`, kmID, sqlScope)).Query()
+    %s;`, kmID, sqlScope)).Query(indexData.DB)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load transcripts")
@@ -223,8 +223,7 @@ func loadTranscriptsMap(rows *sql.Rows) (map[string]map[string][]string, error) 
 
 func (indexData *IndexData) loadMediaLanguages(sqlScope string) (map[string][]string, error) {
 
-	rows, err := queries.Raw(indexData.DB,
-		fmt.Sprintf(`SELECT cu.uid, array_agg(DISTINCT f.language) 
+	rows, err := queries.Raw(fmt.Sprintf(`SELECT cu.uid, array_agg(DISTINCT f.language) 
 		FROM files f
 			INNER JOIN content_units AS cu ON f.content_unit_id = cu.id
 		WHERE f.secure = 0  and f.published = true
@@ -232,7 +231,7 @@ func (indexData *IndexData) loadMediaLanguages(sqlScope string) (map[string][]st
 		AND f.language NOT IN ('zz', 'xx')
 		AND f.content_unit_id IS NOT NULL
 		AND %s
-		GROUP BY cu.uid`, sqlScope)).Query()
+		GROUP BY cu.uid`, sqlScope)).Query(indexData.DB)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load media languages")

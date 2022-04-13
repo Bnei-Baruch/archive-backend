@@ -4,13 +4,13 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"gopkg.in/volatiletech/null.v6"
+	"github.com/volatiletech/null/v8"
+	"github.com/volatiletech/sqlboiler/v4/queries"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 )
 
 type ClassificationStats map[string]int
@@ -171,7 +171,7 @@ select
   '{}'
 from tags t`, cuScope[:len(cuScope)-1])
 
-	rows, err := queries.Raw(db, qq, cuScopeArgs...).Query()
+	rows, err := queries.Raw(qq, cuScopeArgs...).Query(db)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "queries.Raw")
 	}
@@ -206,7 +206,7 @@ from tags t`, cuScope[:len(cuScope)-1])
 	sources.accumulate()
 
 	// blend in authors
-	authors, err := mdbmodels.Authors(db, qm.Load("Sources")).All()
+	authors, err := mdbmodels.Authors(qm.Load("Sources")).All(db)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "fetch authors")
 	}

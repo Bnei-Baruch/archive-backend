@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bnei-Baruch/sqlboiler/boil"
-	"github.com/Bnei-Baruch/sqlboiler/queries"
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	"github.com/volatiletech/sqlboiler/v4/boil"
+	"github.com/volatiletech/sqlboiler/v4/queries"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"gopkg.in/gin-gonic/gin.v1"
 	elastic "gopkg.in/olivere/elastic.v6"
 
@@ -95,21 +95,21 @@ func ContentUnitHandler(c *gin.Context) {
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
 	uid := c.Param("uid")
-	cu, err := mdbmodels.ContentUnits(db,
+	cu, err := mdbmodels.ContentUnits(
 		SECURE_PUBLISHED_MOD,
 		qm.Where("uid = ?", uid),
-		qm.Load("Sources",
-			"Tags",
-			"Publishers",
-			"CollectionsContentUnits",
-			"CollectionsContentUnits.Collection",
-			"DerivedContentUnitDerivations",
-			"DerivedContentUnitDerivations.Source",
-			"DerivedContentUnitDerivations.Source.Publishers",
-			"SourceContentUnitDerivations",
-			"SourceContentUnitDerivations.Derived",
-			"SourceContentUnitDerivations.Derived.Publishers")).
-		One()
+		qm.Load("Sources"),
+		qm.Load("Tags"),
+		qm.Load("Publishers"),
+		qm.Load("CollectionsContentUnits"),
+		qm.Load("CollectionsContentUnits.Collection"),
+		qm.Load("DerivedContentUnitDerivations"),
+		qm.Load("DerivedContentUnitDerivations.Source"),
+		qm.Load("DerivedContentUnitDerivations.Source.Publishers"),
+		qm.Load("SourceContentUnitDerivations"),
+		qm.Load("SourceContentUnitDerivations.Derived"),
+		qm.Load("SourceContentUnitDerivations.Derived.Publishers")).
+		One(db)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			NewNotFoundError().Abort(c)
@@ -688,8 +688,8 @@ func BlogPostHandler(c *gin.Context) {
 		return
 	}
 
-	post, err := mdbmodels.BlogPosts(c.MustGet("MDB_DB").(*sql.DB),
-		qm.Where("blog_id = ? and wp_id = ?", blog.ID, id)).One()
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	post, err := mdbmodels.BlogPosts(qm.Where("blog_id = ? and wp_id = ?", blog.ID, id)).One(db)
 	if err != nil {
 		NewNotFoundError().Abort(c)
 		return
@@ -756,7 +756,7 @@ func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) 
 	// count query
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
-	err := mdbmodels.Collections(db, countMods...).QueryRow().Scan(&total)
+	err := mdbmodels.Collections(countMods...).QueryRow(db).Scan(&total)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -775,13 +775,13 @@ func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) 
 
 	if r.WithUnits {
 		// Eager loading
-		mods = append(mods, qm.Load(
-			"CollectionsContentUnits",
-			"CollectionsContentUnits.ContentUnit"))
+		mods = append(mods,
+			qm.Load("CollectionsContentUnits"),
+			qm.Load("CollectionsContentUnits.ContentUnit"))
 	}
 
 	// data query
-	collections, err := mdbmodels.Collections(db, mods...).All()
+	collections, err := mdbmodels.Collections(mods...).All(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -885,11 +885,7 @@ func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) 
 }
 
 func handleCollectionWOCUs(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
-
-	c, err := mdbmodels.Collections(db,
-		SECURE_PUBLISHED_MOD,
-		qm.Where("uid = ?", r.UID)).
-		One()
+	c, err := mdbmodels.Collections(SECURE_PUBLISHED_MOD, qm.Where("uid = ?", r.UID)).One(db)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, NewNotFoundError()
@@ -916,13 +912,12 @@ func handleCollectionWOCUs(db *sql.DB, r ItemRequest) (*Collection, *HttpError) 
 }
 
 func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
-
-	c, err := mdbmodels.Collections(db,
+	c, err := mdbmodels.Collections(
 		SECURE_PUBLISHED_MOD,
 		qm.Where("uid = ?", r.UID),
-		qm.Load("CollectionsContentUnits",
-			"CollectionsContentUnits.ContentUnit")).
-		One()
+		qm.Load("CollectionsContentUnits"),
+		qm.Load("CollectionsContentUnits.ContentUnit")).
+		One(db)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, NewNotFoundError()
@@ -1054,7 +1049,7 @@ order by type_id, film_date desc
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID,
 	)
-	rows, err := queries.Raw(db, query).Query()
+	rows, err := queries.Raw(query).Query(db)
 	if err != nil {
 		return nil, nil, NewInternalError(err)
 	}
@@ -1124,10 +1119,11 @@ order by type_id, film_date desc
 		}
 	}
 	// data query
-	units, err := mdbmodels.ContentUnits(db,
+	units, err := mdbmodels.ContentUnits(
 		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
-		qm.Load("CollectionsContentUnits", "CollectionsContentUnits.Collection")).
-		All()
+		qm.Load("CollectionsContentUnits"),
+		qm.Load("CollectionsContentUnits.Collection")).
+		All(db)
 	if err != nil {
 		return nil, nil, NewInternalError(err)
 	}
@@ -1168,10 +1164,10 @@ order by type_id, film_date desc
 	}
 
 	//collections data query
-	csmdb, err := mdbmodels.Collections(db,
+	csmdb, err := mdbmodels.Collections(
 		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cIDs)...),
 		qm.Load("CollectionI18ns")).
-		All()
+		All(db)
 	if err != nil {
 		return nil, nil, NewInternalError(err)
 	}
@@ -1239,12 +1235,12 @@ func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool, withF
 		qm.OrderBy("(properties->>'film_date')::date desc, (properties->>'number')::int desc"),
 	}
 	if bringContentUnits {
-		mods = append(mods, qm.Load(
-			"CollectionsContentUnits",
-			"CollectionsContentUnits.ContentUnit"))
+		mods = append(mods,
+			qm.Load("CollectionsContentUnits"),
+			qm.Load("CollectionsContentUnits.ContentUnit"))
 	}
 
-	c, err := mdbmodels.Collections(db, mods...).One()
+	c, err := mdbmodels.Collections(mods...).One(db)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, NewNotFoundError()
@@ -1425,7 +1421,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
-	err := mdbmodels.ContentUnits(db, countMods...).QueryRow().Scan(&total)
+	err := mdbmodels.ContentUnits(countMods...).QueryRow(db).Scan(&total)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1451,27 +1447,27 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 	}
 
 	// Eager loading
-	loadTables := []string{
-		"CollectionsContentUnits",
-		"CollectionsContentUnits.Collection",
+	loadTables := []qm.QueryMod{
+		qm.Load("CollectionsContentUnits"),
+		qm.Load("CollectionsContentUnits.Collection"),
 	}
 	if r.WithTags {
-		loadTables = append(loadTables, "Tags")
+		loadTables = append(loadTables, qm.Load("Tags"))
 	}
 	if r.WithSources {
-		loadTables = append(loadTables, "Sources")
+		loadTables = append(loadTables, qm.Load("Sources"))
 	}
 	if r.WithDerivations {
 		loadTables = append(loadTables,
-			"SourceContentUnitDerivations",
-			"SourceContentUnitDerivations.Derived",
-			"SourceContentUnitDerivations.Derived.Publishers",
+			qm.Load("SourceContentUnitDerivations"),
+			qm.Load("SourceContentUnitDerivations.Derived"),
+			qm.Load("SourceContentUnitDerivations.Derived.Publishers"),
 		)
 	}
-	mods = append(mods, qm.Load(loadTables...))
+	mods = append(mods, loadTables...)
 
 	// data query
-	units, err := mdbmodels.ContentUnits(db, mods...).All()
+	units, err := mdbmodels.ContentUnits(mods...).All(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1613,7 +1609,7 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(*)")}, mods...)
-	err := mdbmodels.Labels(db, countMods...).QueryRow().Scan(&total)
+	err := mdbmodels.Labels(countMods...).QueryRow(db).Scan(&total)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1638,7 +1634,7 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 
 	mods = append(mods, qm.Load("ContentUnit"))
 	// data query
-	lsmdb, err := mdbmodels.Labels(db, mods...).All()
+	lsmdb, err := mdbmodels.Labels(mods...).All(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1743,7 +1739,7 @@ func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]
 }
 
 func handlePublishers(db *sql.DB, r PublishersRequest) (*PublishersResponse, *HttpError) {
-	total, err := mdbmodels.Publishers(db).Count()
+	total, err := mdbmodels.Publishers().Count(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1766,7 +1762,7 @@ func handlePublishers(db *sql.DB, r PublishersRequest) (*PublishersResponse, *Ht
 	mods = append(mods, qm.Load("PublisherI18ns"))
 
 	// data query
-	publishers, err := mdbmodels.Publishers(db, mods...).All()
+	publishers, err := mdbmodels.Publishers(mods...).All(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1817,7 +1813,7 @@ FROM collections c INNER JOIN collections_content_units ccu
 GROUP BY c.id
 ORDER BY max_film_date DESC`
 
-	rows, err := queries.Raw(db, q).Query()
+	rows, err := queries.Raw(q).Query(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1874,7 +1870,7 @@ SELECT type_id,
 FROM idsGroupedByType
 ;`
 
-	rows, err := queries.Raw(db, q, r.UID, r.N).Query()
+	rows, err := queries.Raw(q, r.UID, r.N).Query(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1903,11 +1899,12 @@ FROM idsGroupedByType
 	}
 
 	// data query
-	units, err := mdbmodels.ContentUnits(db,
+	units, err := mdbmodels.ContentUnits(
 		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cuIDs)...),
 		qm.OrderBy("(coalesce(properties->>'film_date', created_at::text))::date desc, created_at desc"),
-		qm.Load("CollectionsContentUnits", "CollectionsContentUnits.Collection")).
-		All()
+		qm.Load("CollectionsContentUnits"),
+		qm.Load("CollectionsContentUnits.Collection")).
+		All(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1943,7 +1940,7 @@ func handleTagsTranslationByID(db *sql.DB, r BaseRequest, uids []string) ([]stri
 		args[i] = fmt.Sprintf("$%d", i+1)
 	}
 	q += strings.Join(args, ",") + ")"
-	rows, err := queries.Raw(db, q, utils.ConvertArgsString(uids)...).Query()
+	rows, err := queries.Raw(q, utils.ConvertArgsString(uids)...).Query(db)
 	if err != nil {
 		return []string{}, NewInternalError(err)
 	}
@@ -1992,7 +1989,7 @@ func handleTagsTranslation(db *sql.DB, r BaseRequest, tags map[int64]string) *Ht
 		id    int64
 		label string
 	)
-	rows, err := queries.Raw(db, q, utils.ConvertArgsInt64(ids)...).Query()
+	rows, err := queries.Raw(q, utils.ConvertArgsInt64(ids)...).Query(db)
 	if err != nil {
 		return NewInternalError(err)
 	}
@@ -2074,12 +2071,12 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 	resp := NewStatsCUClassResponse()
 
 	if r.CountOnly {
-		resp.Total, err = mdbmodels.ContentUnits(db, mods...).Count()
+		resp.Total, err = mdbmodels.ContentUnits(mods...).Count(db)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
 	} else {
-		q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
+		q, args := queries.BuildQuery(mdbmodels.ContentUnits(mods...).Query)
 		resp.Tags, resp.Sources, err = GetFiltersStats(db, q, args)
 		if err != nil {
 			return nil, NewInternalError(err)
@@ -2108,7 +2105,7 @@ func handleTweets(db *sql.DB, r TweetsRequest) (*TweetsResponse, *HttpError) {
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
-	err := mdbmodels.TwitterTweets(db, countMods...).QueryRow().Scan(&total)
+	err := mdbmodels.TwitterTweets(countMods...).QueryRow(db).Scan(&total)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2127,7 +2124,7 @@ func handleTweets(db *sql.DB, r TweetsRequest) (*TweetsResponse, *HttpError) {
 	}
 
 	// data query
-	tweets, err := mdbmodels.TwitterTweets(db, mods...).All()
+	tweets, err := mdbmodels.TwitterTweets(mods...).All(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2173,7 +2170,7 @@ func handleBlogPosts(db *sql.DB, r BlogPostsRequest) (*BlogPostsResponse, *HttpE
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select("count(DISTINCT id)")}, mods...)
-	err := mdbmodels.BlogPosts(db, countMods...).QueryRow().Scan(&total)
+	err := mdbmodels.BlogPosts(countMods...).QueryRow(db).Scan(&total)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2192,7 +2189,7 @@ func handleBlogPosts(db *sql.DB, r BlogPostsRequest) (*BlogPostsResponse, *HttpE
 	}
 
 	// data query
-	posts, err := mdbmodels.BlogPosts(db, mods...).All()
+	posts, err := mdbmodels.BlogPosts(mods...).All(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2292,9 +2289,9 @@ func handleSimpleMode(cm cache.CacheManager, db *sql.DB, r SimpleModeRequest) (*
 		dcuIDs = append(dcuIDs, derivedCUs[i].mdbID)
 	}
 	if len(dcuIDs) > 0 {
-		cuds, err2 := mdbmodels.ContentUnitDerivations(db,
+		cuds, err2 := mdbmodels.ContentUnitDerivations(
 			qm.WhereIn("derived_id in ?", utils.ConvertArgsInt64(dcuIDs)...)).
-			All()
+			All(db)
 		if err2 != nil {
 			return nil, NewInternalError(err2)
 		}
@@ -2514,7 +2511,7 @@ func appendCollectionTagsFilterMods(cm cache.CacheManager, exec boil.Executor, m
 	//use Raw query because of need to use operator ?
 	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
-	if err := queries.Raw(exec, q, pq.Array(uids)).QueryRow().Scan(&ids); err != nil {
+	if err := queries.Raw(q, pq.Array(uids)).QueryRow(exec).Scan(&ids); err != nil {
 		return err
 	}
 	if ids == nil || len(ids) == 0 {
@@ -2619,17 +2616,17 @@ func appendGenresProgramsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f G
 	if len(f.Programs) > 0 {
 		// convert collections uids to ids
 		q := `SELECT array_agg(DISTINCT id) FROM collections WHERE uid = ANY($1)`
-		err := queries.Raw(exec, q, pq.Array(f.Programs)).QueryRow().Scan(&ids)
+		err := queries.Raw(q, pq.Array(f.Programs)).QueryRow(exec).Scan(&ids)
 		if err != nil {
 			return err
 		}
 	} else {
 		// find collections by genres
 		q := `SELECT array_agg(DISTINCT id) FROM collections WHERE type_id = $1 AND properties -> 'genres' ?| $2`
-		err := queries.Raw(exec, q,
+		err := queries.Raw(q,
 			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID,
 			pq.Array(f.Genres)).
-			QueryRow().Scan(&ids)
+			QueryRow(exec).Scan(&ids)
 		if err != nil {
 			return err
 		}
@@ -2654,7 +2651,7 @@ func appendCollectionsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Coll
 	// convert collections uids to ids
 	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM collections WHERE uid = ANY($1) AND secure = 0 AND published IS TRUE`
-	err := queries.Raw(exec, q, pq.Array(f.Collections)).QueryRow().Scan(&ids)
+	err := queries.Raw(q, pq.Array(f.Collections)).QueryRow(exec).Scan(&ids)
 	if err != nil {
 		return err
 	}
@@ -2678,7 +2675,7 @@ func appendPublishersFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Publi
 	// convert publisher uids to ids
 	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM publishers WHERE uid = ANY($1)`
-	err := queries.Raw(exec, q, pq.Array(f.Publishers)).QueryRow().Scan(&ids)
+	err := queries.Raw(q, pq.Array(f.Publishers)).QueryRow(exec).Scan(&ids)
 	if err != nil {
 		return err
 	}
@@ -2704,7 +2701,7 @@ func appendPersonsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f PersonsF
 	// convert publisher uids to ids
 	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM persons WHERE uid = ANY($1)`
-	err := queries.Raw(exec, q, pq.Array(f.Persons)).QueryRow().Scan(&ids)
+	err := queries.Raw(q, pq.Array(f.Persons)).QueryRow(exec).Scan(&ids)
 	if err != nil {
 		return err
 	}
@@ -2870,10 +2867,10 @@ func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]
 	}
 
 	// Load from DB
-	i18ns, err := mdbmodels.CollectionI18ns(db,
+	i18ns, err := mdbmodels.CollectionI18ns(
 		qm.WhereIn("collection_id in ?", utils.ConvertArgsInt64(ids)...),
 		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
-		All()
+		All(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "Load collections i18ns from DB")
 	}
@@ -2913,10 +2910,10 @@ func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string
 	}
 
 	// Load from DB
-	i18ns, err := mdbmodels.ContentUnitI18ns(db,
+	i18ns, err := mdbmodels.ContentUnitI18ns(
 		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...),
 		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
-		All()
+		All(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "Load content units i18ns from DB")
 	}
@@ -2952,7 +2949,7 @@ func loadCUFiles(db *sql.DB, ids []int64, mediaTypes []string, languages []strin
 	}
 
 	// Load from DB
-	allFiles, err := mdbmodels.Files(db, mods...).All()
+	allFiles, err := mdbmodels.Files(mods...).All(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "Load files from DB")
 	}
@@ -3033,7 +3030,7 @@ func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error)
 		qm.OrderBy("t.ord"),
 	}
 
-	xus, err := mdbmodels.ContentUnits(db, mods...).All()
+	xus, err := mdbmodels.ContentUnits(mods...).All(db)
 	if err != nil {
 		return
 	}
@@ -3051,11 +3048,11 @@ func loadLabelsI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[st
 	}
 
 	// Load from DB
-	i18ns, err := mdbmodels.LabelI18ns(db,
+	i18ns, err := mdbmodels.LabelI18ns(
 		qm.WhereIn("label_id in ?", utils.ConvertArgsInt64(ids)...),
 		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...),
 		qm.Load("User"),
-	).All()
+	).All(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "Load content units i18ns from DB")
 	}

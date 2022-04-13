@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -79,9 +79,10 @@ func (index *TagsIndex) removeFromIndex(scope Scope) (map[string][]string, *Inde
 }
 
 func (index *TagsIndex) addToIndexSql(sqlScope string) *IndexErrors {
-	tags, err := mdbmodels.Tags(index.db,
+	tags, err := mdbmodels.Tags(
 		qm.Load("TagI18ns"),
-		qm.Where(sqlScope)).All()
+		qm.Where(sqlScope)).
+		All(index.db)
 	if err != nil {
 		return MakeIndexErrors().SetError(err).Wrap("Tags Index - Fetch tags from mdb.")
 	}
@@ -110,9 +111,10 @@ func (index *TagsIndex) indexTag(t *mdbmodels.Tag) *IndexErrors {
 			found := false
 			errFetching := (error)(nil)
 			for parentTag.ParentID.Valid {
-				parentTag, errFetching = mdbmodels.Tags(index.db,
+				parentTag, errFetching = mdbmodels.Tags(
 					qm.Load("TagI18ns"),
-					qm.Where(fmt.Sprintf("id = %d", parentTag.ParentID.Int64))).One()
+					qm.Where(fmt.Sprintf("id = %d", parentTag.ParentID.Int64))).
+					One(index.db)
 				if errFetching != nil {
 					break
 				}

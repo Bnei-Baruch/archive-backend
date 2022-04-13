@@ -22,13 +22,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/spf13/viper"
-
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
+	"github.com/volatiletech/sqlboiler/v4/queries"
 	"gopkg.in/olivere/elastic.v6"
-
-	"github.com/Bnei-Baruch/sqlboiler/queries"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -1324,7 +1322,7 @@ func getLatestUIDByCollection(collectionUID string, db *sql.DB) (string, error) 
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID,
 		collectionUID)
 
-	row := queries.Raw(db, query).QueryRow()
+	row := queries.Raw(query).QueryRow(db)
 
 	err := row.Scan(&latestUID)
 	if err != nil {
@@ -1409,7 +1407,7 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID,
 		filterByUidQuery)
 
-	row := queries.Raw(db, query).QueryRow()
+	row := queries.Raw(query).QueryRow(db)
 
 	err := row.Scan(&uid)
 	if err != nil {
@@ -1438,7 +1436,7 @@ func getLatestUIDOfCollection(contentType string, db *sql.DB) (string, error) {
 	contentTypeId := mdb.CONTENT_TYPE_REGISTRY.ByName[contentType].ID
 	query := fmt.Sprintf(queryMask, contentTypeId)
 
-	row := queries.Raw(db, query).QueryRow()
+	row := queries.Raw(query).QueryRow(db)
 
 	err := row.Scan(&uid)
 	if err != nil {

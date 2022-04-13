@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bnei-Baruch/archive-backend/consts"
-
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/null/v8"
 	"gopkg.in/olivere/elastic.v6"
-	"gopkg.in/volatiletech/null.v6"
+
+	"github.com/Bnei-Baruch/archive-backend/consts"
 )
 
 type SearchLog struct {
