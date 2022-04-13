@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 
+	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
@@ -59,7 +60,7 @@ func ContentUnitPublishedChange(d Data) {
 	putToIndexer(indexer.ContentUnitUpdate, uid)
 
 	// Prepare unit thumbnail
-	unit, err := mdbmodels.ContentUnitsG(qm.Where("uid=?", uid)).One()
+	unit, err := mdbmodels.ContentUnits(qm.Where("uid=?", uid)).One(common.DB)
 	if err != nil {
 		log.Errorf("Error loading unit from mdb %s: %s", uid, err.Error())
 		return
@@ -104,7 +105,7 @@ func FilePublished(d Data) {
 	putToIndexer(indexer.FileUpdate, d.Payload["uid"].(string))
 
 	uid := d.Payload["uid"].(string)
-	file, err := mdbmodels.FilesG(qm.Where("uid=?", uid)).One()
+	file, err := mdbmodels.Files(qm.Where("uid=?", uid)).One(common.DB)
 	if err != nil {
 		log.Errorf("Error loading file from mdb %s: %s", uid, err.Error())
 		return
@@ -231,7 +232,7 @@ type FileBackendRequest struct {
 
 // RemoveFile to send post req to file-api and remove file from search?
 func RemoveFile(uid string) {
-	file, err := mdbmodels.FilesG(qm.Where("uid=?", uid)).One()
+	file, err := mdbmodels.Files(qm.Where("uid=?", uid)).One(common.DB)
 	if err != nil {
 		log.Errorf("Error loading file from mdb %s: %s", uid, err.Error())
 		return

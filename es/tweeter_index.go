@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -94,12 +94,12 @@ func (index *TweeterIndex) removeFromIndex(scope Scope) (map[string][]string, *I
 
 func (index *TweeterIndex) bulkIndexTweets(bulk OffsetLimitJob, sqlScope string) *IndexErrors {
 	var tweets []*mdbmodels.TwitterTweet
-	if err := mdbmodels.NewQuery(index.db,
+	if err := mdbmodels.NewQuery(
 		qm.From("twitter_tweets as t"),
 		qm.Where(sqlScope),
 		qm.OrderBy("id"), // Required for same order results in each query
 		qm.Offset(bulk.Offset),
-		qm.Limit(bulk.Limit)).Bind(&tweets); err != nil {
+		qm.Limit(bulk.Limit)).Bind(nil, index.db, &tweets); err != nil {
 		return MakeIndexErrors().SetError(err).Wrap(fmt.Sprintf("bulkIndexTweets error at offset %d. error: %v", bulk.Offset, err))
 	}
 	log.Infof("Adding %d tweets (offset %d, total %d).", len(tweets), bulk.Offset, bulk.Total)
@@ -113,23 +113,23 @@ func (index *TweeterIndex) bulkIndexTweets(bulk OffsetLimitJob, sqlScope string)
 
 func (index *TweeterIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	var count int
-	if err := mdbmodels.NewQuery(index.db,
+	if err := mdbmodels.NewQuery(
 		qm.Select("count(id)"),
 		qm.From("twitter_tweets as t"),
-		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
+		qm.Where(sqlScope)).QueryRow(index.db).Scan(&count); err != nil {
 		return MakeIndexErrors().SetError(err).Wrap(fmt.Sprintf("Failed TwitterIndex addToIndexSql: %s", sqlScope))
 	}
 	log.Debugf("Tweeter Index - Adding %d tweets. Scope: %s.", count, sqlScope)
 
-	limit := utils.MaxInt(10, utils.MinInt(1000, (int)(count/10)))
-	tasks := make(chan OffsetLimitJob, (count/limit + limit))
-	errors := make(chan *IndexErrors, 300)
+	limit := utils.MaxInt(10, utils.MinInt(1000, count/10))
+	tasks := make(chan OffsetLimitJob, count/limit+limit)
+	errChan := make(chan *IndexErrors, 300)
 	doneAdding := make(chan bool, 1)
 
 	tasksCount := 0
 	go func() {
 		offset := 0
-		for offset < int(count) {
+		for offset < count {
 			tasks <- OffsetLimitJob{offset, limit, count}
 			tasksCount++
 			offset += limit
@@ -141,14 +141,14 @@ func (index *TweeterIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	for w := 1; w <= 10; w++ {
 		go func(tasks <-chan OffsetLimitJob, errs chan<- *IndexErrors) {
 			for task := range tasks {
-				errors <- index.bulkIndexTweets(task, sqlScope)
+				errs <- index.bulkIndexTweets(task, sqlScope)
 			}
-		}(tasks, errors)
+		}(tasks, errChan)
 	}
 	<-doneAdding
 	indexErrors := MakeIndexErrors()
 	for a := 1; a <= tasksCount; a++ {
-		indexErrors.Join(<-errors, "")
+		indexErrors.Join(<-errChan, "")
 	}
 	return indexErrors
 }

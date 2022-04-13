@@ -3,9 +3,9 @@ package cache
 import (
 	"database/sql"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/v4/queries"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 )
@@ -40,12 +40,12 @@ func (s *AuthorsStatsCacheImpl) Refresh() error {
 }
 
 func (s *AuthorsStatsCacheImpl) load() error {
-	rows, err := queries.Raw(s.mdb, `
+	rows, err := queries.Raw(`
 		SELECT a.code, array_agg(DISTINCT s.uid) FROM authors_sources "as"
 			INNER JOIN authors a ON "as".author_id = a.id
 			INNER JOIN sources s ON "as".source_id = s.id
 		GROUP BY a.code
-	`).Query()
+	`).Query(s.mdb)
 	if err != nil {
 		return errors.Wrap(err, "queries.Raw")
 	}

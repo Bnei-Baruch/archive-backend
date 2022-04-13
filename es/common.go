@@ -11,10 +11,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -167,9 +167,10 @@ func Unique(s []string) []string {
 // Scopes - for detection of changes
 
 func contentUnitsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {
-	units, err := mdbmodels.ContentUnits(mdb,
+	units, err := mdbmodels.ContentUnits(
 		qm.InnerJoin("files AS f on f.content_unit_id = content_units.id"),
-		qm.Where("f.uid = ?", fileUID)).All()
+		qm.Where("f.uid = ?", fileUID)).
+		All(mdb)
 	if err != nil {
 		return []string{}, err
 	}
@@ -181,11 +182,12 @@ func contentUnitsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {
 }
 
 func CollectionsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {
-	collections, err := mdbmodels.Collections(mdb,
+	collections, err := mdbmodels.Collections(
 		qm.InnerJoin("collections_content_units AS ccu ON ccu.collection_id = collections.id"),
 		qm.InnerJoin("content_units AS cu ON ccu.content_unit_id = cu.id"),
 		qm.InnerJoin("files AS f on f.content_unit_id = cu.id"),
-		qm.Where("f.uid = ?", fileUID)).All()
+		qm.Where("f.uid = ?", fileUID)).
+		All(mdb)
 	if err != nil {
 		return []string{}, err
 	}
@@ -197,10 +199,11 @@ func CollectionsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {
 }
 
 func contentUnitsScopeByCollection(mdb *sql.DB, cUID string) ([]string, error) {
-	units, err := mdbmodels.ContentUnits(mdb,
+	units, err := mdbmodels.ContentUnits(
 		qm.InnerJoin("collections_content_units AS ccu ON ccu.content_unit_id = content_units.id"),
 		qm.InnerJoin("collections AS c ON ccu.collection_id = c.id"),
-		qm.Where("c.uid = ?", cUID)).All()
+		qm.Where("c.uid = ?", cUID)).
+		All(mdb)
 	if err != nil {
 		return []string{}, err
 	}
@@ -212,10 +215,11 @@ func contentUnitsScopeByCollection(mdb *sql.DB, cUID string) ([]string, error) {
 }
 
 func CollectionsScopeByContentUnit(mdb *sql.DB, cuUID string) ([]string, error) {
-	collections, err := mdbmodels.Collections(mdb,
+	collections, err := mdbmodels.Collections(
 		qm.InnerJoin("collections_content_units AS ccu ON ccu.collection_id = collections.id"),
 		qm.InnerJoin("content_units AS cu ON ccu.content_unit_id = cu.id"),
-		qm.Where("cu.uid = ?", cuUID)).All()
+		qm.Where("cu.uid = ?", cuUID)).
+		All(mdb)
 	if err != nil {
 		return []string{}, err
 	}
@@ -227,10 +231,11 @@ func CollectionsScopeByContentUnit(mdb *sql.DB, cuUID string) ([]string, error) 
 }
 
 func contentUnitsScopeBySource(mdb *sql.DB, sourceUID string) ([]string, error) {
-	sources, err := mdbmodels.ContentUnits(mdb,
+	sources, err := mdbmodels.ContentUnits(
 		qm.InnerJoin("content_units_sources AS cus ON cus.content_unit_id = id"),
 		qm.InnerJoin("sources AS s ON s.id = cus.source_id"),
-		qm.Where("s.uid = ?", sourceUID)).All()
+		qm.Where("s.uid = ?", sourceUID)).
+		All(mdb)
 	if err != nil {
 		return []string{}, err
 	}
@@ -245,7 +250,7 @@ func contentUnitsScopeBySource(mdb *sql.DB, sourceUID string) ([]string, error) 
 
 func DumpDB(mdb *sql.DB, title string) error {
 	fmt.Printf("\n\n ------------------- %s DUMP DB ------------------- \n\n", title)
-	units, err := mdbmodels.ContentUnits(mdb).All()
+	units, err := mdbmodels.ContentUnits().All(mdb)
 	if err != nil {
 		return err
 	}
@@ -254,7 +259,7 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, unit)
 	}
 
-	i18ns, err := mdbmodels.ContentUnitI18ns(mdb).All()
+	i18ns, err := mdbmodels.ContentUnitI18ns().All(mdb)
 	if err != nil {
 		return err
 	}
@@ -263,7 +268,7 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, i18n)
 	}
 
-	collections, err := mdbmodels.Collections(mdb).All()
+	collections, err := mdbmodels.Collections().All(mdb)
 	if err != nil {
 		return err
 	}
@@ -272,7 +277,7 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, c)
 	}
 
-	ci18ns, err := mdbmodels.CollectionI18ns(mdb).All()
+	ci18ns, err := mdbmodels.CollectionI18ns().All(mdb)
 	if err != nil {
 		return err
 	}
@@ -281,7 +286,7 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, ci18n)
 	}
 
-	ccus, err := mdbmodels.CollectionsContentUnits(mdb).All()
+	ccus, err := mdbmodels.CollectionsContentUnits().All(mdb)
 	if err != nil {
 		return err
 	}
@@ -290,7 +295,7 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, ccu)
 	}
 
-	files, err := mdbmodels.Files(mdb).All()
+	files, err := mdbmodels.Files().All(mdb)
 	if err != nil {
 		return err
 	}
@@ -299,7 +304,7 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, file)
 	}
 
-	sources, err := mdbmodels.Sources(mdb).All()
+	sources, err := mdbmodels.Sources().All(mdb)
 	if err != nil {
 		return err
 	}
@@ -308,7 +313,7 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, source)
 	}
 
-	si8ns, err := mdbmodels.SourceI18ns(mdb).All()
+	si8ns, err := mdbmodels.SourceI18ns().All(mdb)
 	if err != nil {
 		return err
 	}
@@ -317,7 +322,7 @@ func DumpDB(mdb *sql.DB, title string) error {
 		fmt.Printf("%d: %+v\n", i, si8n)
 	}
 
-	tags, err := mdbmodels.Tags(mdb).All()
+	tags, err := mdbmodels.Tags().All(mdb)
 	if err != nil {
 		return err
 	}

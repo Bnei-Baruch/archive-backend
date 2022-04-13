@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -130,10 +130,10 @@ func (index *CollectionsIndex) removeFromIndex(scope Scope) (map[string][]string
 
 func (index *CollectionsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	var count int64
-	if err := mdbmodels.NewQuery(index.db,
+	if err := mdbmodels.NewQuery(
 		qm.Select("count(*)"),
 		qm.From("collections as c"),
-		qm.Where(sqlScope)).QueryRow().Scan(&count); err != nil {
+		qm.Where(sqlScope)).QueryRow(index.db).Scan(&count); err != nil {
 		return MakeIndexErrors().SetError(err)
 	}
 	log.Infof("Collections Index - Adding %d collections. Scope: %s.", count, sqlScope)
@@ -142,14 +142,15 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	totalIndexErrors := MakeIndexErrors()
 	for offset < int(count) {
 		var collections []*mdbmodels.Collection
-		if err := mdbmodels.NewQuery(index.db,
+		if err := mdbmodels.NewQuery(
 			qm.From("collections as c"),
 			qm.Load("CollectionI18ns"),
 			qm.Load("CollectionsContentUnits"),
 			qm.Load("CollectionsContentUnits.ContentUnit"),
 			qm.Where(sqlScope),
 			qm.Offset(offset),
-			qm.Limit(limit)).Bind(&collections); err != nil {
+			qm.Limit(limit)).
+			Bind(nil, index.db, &collections); err != nil {
 			return totalIndexErrors.SetError(err).Wrap(fmt.Sprintf("Fetch collections from mdb. Offset: %d", offset))
 		}
 		log.Debugf("Adding %d collections (offset %d).", len(collections), offset)

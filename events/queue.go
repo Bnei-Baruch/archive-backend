@@ -4,11 +4,10 @@ import (
 	"context"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
-
-	"runtime/debug"
 
 	log "github.com/Sirupsen/logrus"
 )

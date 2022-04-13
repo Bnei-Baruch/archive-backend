@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/lib/pq"
+	"github.com/volatiletech/sqlboiler/v4/queries"
 	"gopkg.in/gin-gonic/gin.v1"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -141,7 +141,7 @@ func handleSources(db *sql.DB, r HierarchyRequest) (interface{}, *HttpError) {
 
 	// Execute query
 	rsql := fmt.Sprintf(SOURCE_HIERARCHY_SQL, l, l, rootClause, l, l, depth)
-	rows, err := queries.Raw(db, rsql).Query()
+	rows, err := queries.Raw(rsql).Query(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -184,7 +184,7 @@ func handleSources(db *sql.DB, r HierarchyRequest) (interface{}, *HttpError) {
 
 	if r.RootUID == "" {
 		rsql = fmt.Sprintf(AUTHORS_SOURCES_SQL, l, l)
-		rows, err := queries.Raw(db, rsql).Query()
+		rows, err := queries.Raw(rsql).Query(db)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
@@ -242,7 +242,7 @@ func handleTags(db *sql.DB, r HierarchyRequest) (interface{}, *HttpError) {
 
 	// Execute query
 	rsql := fmt.Sprintf(TAG_HIERARCHY_SQL, l, rootClause, l, depth)
-	rows, err := queries.Raw(db, rsql).Query()
+	rows, err := queries.Raw(rsql).Query(db)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
