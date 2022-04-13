@@ -1,26 +1,6 @@
 package tests
 
-import (
-	"context"
-	"fmt"
-	"github.com/Bnei-Baruch/archive-backend/api"
-	"github.com/Bnei-Baruch/archive-backend/cache"
-	"github.com/Bnei-Baruch/archive-backend/common"
-	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/archive-backend/mdb"
-	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
-	"github.com/Bnei-Baruch/archive-backend/utils"
-	"github.com/Bnei-Baruch/sqlboiler/boil"
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/suite"
-	"gopkg.in/volatiletech/null.v6"
-	"math/rand"
-	"testing"
-	"time"
-)
-
+/*
 type TagDashboardSuite struct {
 	suite.Suite
 	utils.TestDBManager
@@ -273,6 +253,9 @@ func (s *TagDashboardSuite) TestUniqueItemsWithLangugaFilter() {
 }
 
 //helpers
+
+*/
+/*
 func (s *TagDashboardSuite) respCusByCT(resp *api.TagsDashboardResponse) map[int64][]string {
 	cuByType := make(map[int64][]string, 0)
 	// for labels
@@ -399,3 +382,4 @@ func (s *TagDashboardSuite) assertUniq(items []*api.TagsDashboardItem, lById, cu
 		cuById[item.ContentUnitID] = true
 	}
 }
+*/
