@@ -91,7 +91,7 @@ type rssFeedXml struct {
 	Channel    *Channel
 }
 
-// return XML-ready object for a Channel
+// FeedXml return XML-ready object for a Channel
 func (c *Channel) FeedXml() interface{} {
 	return &rssFeedXml{
 		Version:    "2.0",
@@ -113,7 +113,7 @@ func anyTimeFormat(format string, times ...time.Time) string {
 	return ""
 }
 
-// turn a feed object (either a Feed, AtomFeed, or RssFeed) into xml
+// ToXML turns a feed object (either a Feed, AtomFeed, or RssFeed) into xml
 // returns an error if xml marshaling fails
 func (c *Channel) ToXML() (string, error) {
 	x := c.FeedXml()

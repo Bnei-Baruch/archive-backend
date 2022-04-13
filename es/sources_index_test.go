@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"gopkg.in/volatiletech/null.v6"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/volatiletech/null/v8"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"

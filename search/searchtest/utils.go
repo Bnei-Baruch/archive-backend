@@ -5,17 +5,18 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Bnei-Baruch/sqlboiler/boil"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
+	"github.com/volatiletech/sqlboiler/v4/boil"
 	"gopkg.in/olivere/elastic.v6"
+
+	"github.com/stretchr/testify/suite"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
-	"github.com/stretchr/testify/suite"
 )
 
 type SearchSuite struct {

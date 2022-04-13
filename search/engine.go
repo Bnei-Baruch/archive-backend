@@ -12,10 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"gopkg.in/volatiletech/null.v6"
-
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/null/v8"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"

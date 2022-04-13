@@ -3,7 +3,7 @@ package api
 import (
 	"time"
 
-	"gopkg.in/volatiletech/null.v6"
+	"github.com/volatiletech/null/v8"
 
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"

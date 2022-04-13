@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"gopkg.in/volatiletech/null.v6"
+	"github.com/volatiletech/null/v8"
+	"github.com/volatiletech/sqlboiler/v4/queries"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 )
 
 type ClassificationStats map[string]int
@@ -144,7 +144,7 @@ type FilterStats struct {
 }
 
 func (fs *FilterStats) scan(q string) error {
-	rows, err := queries.Raw(fs.DB, q, fs.ScopeArgs...).Query()
+	rows, err := queries.Raw(q, fs.ScopeArgs...).Query(fs.DB)
 	if err != nil {
 		return errors.Wrap(err, "queries.Raw")
 	}
@@ -191,7 +191,7 @@ func (fs *FilterStats) scan(q string) error {
 	sources.accumulate()
 
 	// blend in authors
-	authors, err := mdbmodels.Authors(fs.DB, qm.Load("Sources")).All()
+	authors, err := mdbmodels.Authors(qm.Load("Sources")).All(fs.DB)
 	if err != nil {
 		return errors.Wrap(err, "fetch authors")
 	}

@@ -11,15 +11,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/utils"
-
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	"github.com/volatiletech/sqlboiler/v4/queries"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
-	"github.com/Bnei-Baruch/sqlboiler/queries"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 // Translations language => value => phrases
@@ -195,7 +194,7 @@ func LoadSourceNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 	where (sp.uid is null or sp.uid not in (%s))`
 	query := fmt.Sprintf(queryMask, strings.Join(notToInclude, ","))
 
-	rows, err := queries.Raw(db, query).Query()
+	rows, err := queries.Raw(query).Query(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "Unable to retrieve source name translations from DB.")
 	}
@@ -230,7 +229,7 @@ func LoadProgramNameTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 	and c.published = true and c.secure = 0 and c.type_id = %d`
 	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM].ID)
 
-	rows, err := queries.Raw(db, query).Query()
+	rows, err := queries.Raw(query).Query(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "Unable to retrieve program name translations from DB.")
 	}
@@ -263,7 +262,7 @@ func LoadHolidayTranslationsFromDB(db *sql.DB) (TranslationsV2, error) {
 	where tp.uid = '1nyptSIo'`
 	//  '1nyptSIo' is a const. uid for 'holidays' parent tag
 
-	rows, err := queries.Raw(db, query).Query()
+	rows, err := queries.Raw(query).Query(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "Unable to retrieve from DB the translations for holidays.")
 	}
@@ -337,7 +336,7 @@ func GeneratePositionVariables(db *sql.DB) (TranslationsV2, error) {
 		union
 		select max(position) from collections_content_units) as p`
 	var max int
-	err := queries.Raw(db, query).QueryRow().Scan(&max)
+	err := queries.Raw(query).QueryRow(db).Scan(&max)
 	if err != nil {
 		return nil, errors.Wrap(err, "Unable to retrieve max sources position from DB.")
 	}

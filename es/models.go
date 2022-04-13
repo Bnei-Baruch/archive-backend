@@ -16,7 +16,7 @@ type MdbUid struct {
 	MDB_UID string `json:"mdb_uid"`
 }
 
-// For full description see make.py RESULTS TEMPLATE.
+// Result see full description see make.py RESULTS TEMPLATE.
 type Result struct {
 	// Document type.
 	ResultType string `json:"result_type"`
