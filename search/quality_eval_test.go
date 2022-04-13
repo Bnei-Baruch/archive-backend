@@ -41,7 +41,7 @@ func (suite *QualityEvalSuite) SetupSuite() {
 	suite.ctx = context.Background()
 
 	// Set package db.
-	common.InitWithDefault(suite.DB)
+	common.InitWithDefault(suite.DB, nil)
 	boil.DebugMode = viper.GetString("boiler-mode") == "debug"
 }
 
