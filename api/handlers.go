@@ -5,7 +5,9 @@ import (
 	"crypto/md5"
 	"database/sql"
 	"fmt"
+	"gopkg.in/volatiletech/null.v6"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1849,15 +1851,6 @@ ORDER BY max_film_date DESC`
 	return data, nil
 }
 
-type tagDashboardFetchOptions struct {
-	ContentTypes []int64
-	Name         string
-	Count        int64
-	MediaType    string
-	Limit        int
-	Offset       int
-}
-
 func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
 
 	if utils.IsEmpty(r.Tags) {
@@ -1919,349 +1912,115 @@ func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 	appendTagsLabelsFilterMods(cm, &lMods, r.TagsFilter)
 	appendMediaLanguageLabelsFilterMods(&lMods, r.MediaLanguageFilter)
 
-	cuByType, err := cuCountTagDashboard(db, cuMods)
-	if err != nil {
-		return NewTagsDashboardResponse(), NewInternalError(err)
-	}
-	cuTextTotal := int64(0)
-	cuMediaTotal := int64(0)
-	optsByName := map[string]*tagDashboardFetchOptions{}
-	for typeId, count := range cuByType {
-		name := ""
-		mt := consts.LABEL_MEDIA_TYPE_TEXT
-		switch typeId {
-		case mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_RESEARCH_MATERIAL].ID:
-			name = "publications"
-			cuTextTotal += count
-		case mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID:
-			name = "source"
-			cuTextTotal += count
-		case mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CLIP].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIDEO_PROGRAM_CHAPTER].ID:
-			name = "program"
-			mt = consts.LABEL_MEDIA_TYPE_MEDIA
-			cuMediaTotal += count
-		case mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_EVENT_PART].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LECTURE].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSON_PART].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_WOMEN_LESSON].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_VIRTUAL_LESSON].ID,
-			mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID:
-			name = "lesson"
-			mt = consts.LABEL_MEDIA_TYPE_MEDIA
-			cuMediaTotal += count
-		default:
-			continue
-		}
-
-		_, ok := optsByName[name]
-		if !ok {
-			optsByName[name] = &tagDashboardFetchOptions{ContentTypes: make([]int64, 0), Name: name, Count: 0, MediaType: mt}
-		}
-		optsByName[name].ContentTypes = append(optsByName[name].ContentTypes, typeId)
-		optsByName[name].Count = optsByName[name].Count + count
-	}
-
-	countT, countM, err := labelsCountTagDashboard(db, lMods)
+	tItems, tTotal, err := fetchItemsTagDashboard(db, cuMods, lMods, r.ListRequest, true)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
-	if countT > 0 {
-		optsByName["LT"] = &tagDashboardFetchOptions{Name: "L", Count: countT, MediaType: consts.LABEL_MEDIA_TYPE_TEXT}
-	}
-	if countM > 0 {
-		optsByName["LM"] = &tagDashboardFetchOptions{Name: "L", Count: countM, MediaType: consts.LABEL_MEDIA_TYPE_MEDIA}
-	}
-	countLimitsTagDashboard(optsByName, r.ListRequest, consts.LABEL_MEDIA_TYPE_TEXT)
-	countLimitsTagDashboard(optsByName, r.ListRequest, consts.LABEL_MEDIA_TYPE_MEDIA)
 
-	cuItems, err := fetchCUTagDashboard(db, cuMods, optsByName)
-	if err != nil {
-		return nil, NewInternalError(err)
-	}
-	labelItems, err := fetchLabelsTagDashboard(db, lMods, optsByName)
+	mItems, mTotal, err := fetchItemsTagDashboard(db, cuMods, lMods, r.ListRequest, false)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 
 	resp := &TagsDashboardResponse{
-		MediaTotal: cuMediaTotal + countM,
-		TextTotal:  cuTextTotal + countT,
-		Items:      append(cuItems, labelItems...),
+		MediaTotal: mTotal,
+		TextTotal:  tTotal,
+		Items:      append(mItems, tItems...),
 	}
 	return resp, nil
 }
 
-func countLimitsTagDashboard(opts map[string]*tagDashboardFetchOptions, f ListRequest, mediaType string) {
-	optsArr := make([]*tagDashboardFetchOptions, 0)
-	for _, o := range opts {
-		if o.MediaType == mediaType {
-			optsArr = append(optsArr, o)
+func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMod, f ListRequest, isText bool) ([]*TagsDashboardItem, int64, error) {
+	var cts []string
+	if isText {
+		cts = consts.CT_UNITS_TEXTS
+	} else {
+		cts = consts.CT_UNITS_MEDIA
+	}
+	ctIDs := make([]int64, len(cts))
+	for i, ct := range cts {
+		ctIDs[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[ct].ID
+
+	}
+	cumods = append(cumods,
+		qm.Select(`DISTINCT ON ("content_units".id) 
+			coalesce(("content_units".properties->>'film_date')::date, "content_units".created_at) as date,
+			NULL as l_uid, 
+			"content_units".uid as cu_uid
+		`),
+		qm.WhereIn("\"content_units\".type_id IN ?", utils.ConvertArgsInt64(ctIDs)...),
+	)
+
+	cuTotal, err := mdbmodels.ContentUnits(db, cumods...).Count()
+	if err != nil {
+		return nil, 0, err
+	}
+	qcu, argsCU := queries.BuildQuery(mdbmodels.ContentUnits(db, cumods...).Query)
+
+	lmods = append(lmods,
+		qm.Select(`DISTINCT ON ( "labels".id) 
+			coalesce((cu.properties->>'film_date')::date, "labels".created_at) as date, 
+			"labels".uid as l_uid, 
+			cu.uid as cu_uid
+		`),
+		qm.WhereIn("cu.type_id IN ?", utils.ConvertArgsInt64(ctIDs)...),
+	)
+	lTotal, err := mdbmodels.Labels(db, lmods...).Count()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	ql, argsL := queries.BuildQuery(mdbmodels.Labels(db, lmods...).Query)
+	//need increase argument number for single query
+	re := regexp.MustCompile(`\$\d+`)
+	ql = re.ReplaceAllStringFunc(ql, func(s string) string {
+		if i, err := strconv.Atoi(s[1:]); err == nil {
+			return fmt.Sprintf("$%d", i+len(argsCU))
 		}
-	}
-	if len(optsArr) == 0 {
-		return
-	}
-	//when not enough numbers of cu of one type need to compliment for be full page
-	sort.SliceStable(optsArr, func(i int, j int) bool {
-		return optsArr[i].Count < optsArr[j].Count
+		return s
 	})
-	n := len(optsArr)
-	limit := f.PageSize / n
-	extra := f.PageSize % n
-
-	lp := utils.Min(int(optsArr[0].Count)/limit, f.PageNumber)
-	offset := (lp - 1) * limit
-	extraOffset := lp * extra
-	for j := lp; j <= f.PageNumber; j++ {
-
-		sort.SliceStable(optsArr, func(i int, j int) bool {
-			return optsArr[i].Count-int64(optsArr[i].Offset) < optsArr[j].Count-int64(optsArr[j].Offset)
-		})
-
-		for i, o := range optsArr {
-			diff := (offset + limit) - int(o.Count)
-			if diff >= limit {
-				o.Limit = 0
-				continue
-			}
-
-			o.Offset = offset
-			if diff >= 0 && n > 1 {
-				o.Limit = limit - diff
-				n--
-				limit += (diff + extra) / n
-				extra = (diff + extra) % n
-				continue
-			}
-			o.Limit = limit
-
-			if (i + 1) == len(optsArr) {
-				o.Limit += extra
-				o.Offset += extraOffset
-			}
-		}
-		offset += limit
-		extraOffset += extra
-		limit = f.PageSize / n
-		extra = f.PageSize % n
-	}
-}
-
-func fetchCUTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*tagDashboardFetchOptions) ([]*TagsDashboardItem, error) {
-	qs := make([]string, 0)
-	for n, byName := range opts {
-		if n == "LM" || n == "LT" {
-			continue
-		}
-		if q, ok := cuQueriesTagDashboard(byName); ok {
-			qs = append(qs, q)
-		}
-	}
-
-	items := make([]*TagsDashboardItem, 0)
-	if len(qs) == 0 {
-		return items, nil
-	}
-	mods = append(mods, qm.Select("DISTINCT ON ( \"content_units\".id) \"content_units\".*"))
-	qf, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
-
-	q := fmt.Sprintf("WITH units AS (%s) %s", qf[:len(qf)-1], strings.Join(qs, "UNION"))
+	q := fmt.Sprintf(`
+		WITH items AS (
+			(%s) 
+			UNION 
+			(%s)
+		)(
+			SELECT item.cu_uid, item.l_uid 
+			FROM items item ORDER BY date DESC LIMIT %d OFFSET %d
+		)
+	`, qcu[:len(qcu)-1], ql[:len(ql)-1], f.PageSize, (f.PageNumber-1)*f.PageSize)
 
 	boil.DebugMode = true
-	rows, err := queries.Raw(db, q, args...).Query()
+	rows, err := queries.Raw(db, q, append(argsCU, argsL...)...).Query()
 
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
-	cuById := make(map[string]int)
-	for rows.Next() {
-		var uid string
-		var count int64
-		var mt string
-		err = rows.Scan(&uid, &count, &mt)
-		if err != nil {
-			return nil, err
-		}
-		if v, ok := cuById[uid]; ok {
-			cuById[uid] = v + 1
-		} else {
-			cuById[uid] = 0
-		}
-		items = append(items, &TagsDashboardItem{ContentUnitID: uid, IsText: mt == consts.LABEL_MEDIA_TYPE_TEXT})
-	}
-
-	cuByIdD := make(map[string]int)
-	for i, v := range cuById {
-		if v > 0 {
-			cuByIdD[i] = v
-		}
-	}
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-
-}
-
-func cuQueriesTagDashboard(opts *tagDashboardFetchOptions) (string, bool) {
-	if opts.Limit == 0 {
-		return "", false
-	}
-
-	return fmt.Sprintf(`(
-	SELECT 
-		cu.uid, 
-		cu.type_id,
-		'%s' AS media_type
-	FROM units cu
-		WHERE cu.type_id in(%s)
-		ORDER BY (cu.properties->>'film_date')::date DESC, cu.created_at DESC
-		OFFSET %d
-		LIMIT %d
-	)`,
-		opts.MediaType,
-		utils.JoinInt64(opts.ContentTypes, ","),
-		opts.Offset,
-		opts.Limit,
-	), true
-}
-
-func cuCountTagDashboard(db *sql.DB, baseMods []qm.QueryMod) (map[int64]int64, error) {
-	byType := make(map[int64]int64)
-	mods := append(baseMods,
-		qm.Select("type_id", "count(DISTINCT \"content_units\".id)"),
-		qm.GroupBy("type_id"),
-	)
-	q, args := queries.BuildQuery(mdbmodels.ContentUnits(db, mods...).Query)
-
-	rows, err := queries.Raw(db, q, args...).Query()
-	if err != nil {
-		return byType, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var tid int64
-		var count int64
-		if err := rows.Scan(&tid, &count); err != nil {
-			return byType, err
-		}
-		byType[tid] = count
-	}
-	if err := rows.Err(); err != nil {
-		return byType, err
-	}
-
-	return byType, err
-}
-
-func fetchLabelsTagDashboard(db *sql.DB, mods []qm.QueryMod, opts map[string]*tagDashboardFetchOptions) ([]*TagsDashboardItem, error) {
 	items := make([]*TagsDashboardItem, 0)
-	qs := make([]string, 0)
-	for _, n := range []string{"LT", "LM"} {
-		if q, ok := labelQueriesTagDashboard(opts, n); ok {
-			qs = append(qs, q)
-		}
-	}
-	if len(qs) == 0 {
-		return items, nil
-	}
-	mods = append(mods, qm.Select("DISTINCT ON (\"labels\".id) \"labels\".*"))
-	qf, args := queries.BuildQuery(mdbmodels.Labels(db, mods...).Query)
-	q := fmt.Sprintf("WITH labels AS (%s) %s", qf[:len(qf)-1], strings.Join(qs, "UNION"))
-
-	rows, err := queries.Raw(db, q, args...).Query()
-
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	for rows.Next() {
-		var cuUid string
-		var lUid string
-		var mt string
-		err = rows.Scan(&cuUid, &lUid, &mt)
+		var cu string
+		var label null.String
+		err = rows.Scan(&cu, &label)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		items = append(items, &TagsDashboardItem{ContentUnitID: cuUid, LabelID: lUid, IsText: mt == consts.LABEL_MEDIA_TYPE_TEXT})
+		item := &TagsDashboardItem{
+			ContentUnitID: cu,
+			IsText:        isText,
+		}
+		if label.Valid {
+			item.LabelID = label.String
+		}
+		items = append(items, item)
+
 	}
 
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return items, nil
-}
-
-func labelQueriesTagDashboard(opts map[string]*tagDashboardFetchOptions, name string) (string, bool) {
-	opt, ok := opts[name]
-	if !ok {
-		return "", false
-	}
-	if opt.Limit == 0 {
-		return "", false
-	}
-
-	return fmt.Sprintf(`(
-	SELECT 
-		cu.uid, 
-		l.uid,
-		l.media_type
-	FROM labels l
-		INNER JOIN content_units cu ON l.content_unit_id = cu.id
-		WHERE l.media_type = '%s'
-		ORDER BY l.created_at DESC
-		OFFSET %d
-		LIMIT %d
-	)`,
-		opt.MediaType,
-		opt.Offset,
-		opt.Limit,
-	), true
-}
-
-func labelsCountTagDashboard(db *sql.DB, baseMods []qm.QueryMod) (int64, int64, error) {
-	countM := int64(0)
-	countT := int64(0)
-	mods := append(baseMods,
-		qm.Select("media_type", "count(DISTINCT \"labels\".id)"),
-		qm.GroupBy("media_type"),
-	)
-	q, args := queries.BuildQuery(mdbmodels.Labels(db, mods...).Query)
-
-	rows, err := queries.Raw(db, q, args...).Query()
-	if err != nil {
-		return countT, countM, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var mt string
-		var count int64
-		if err := rows.Scan(&mt, &count); err != nil {
-			return countT, countM, err
-		}
-
-		if mt == consts.LABEL_MEDIA_TYPE_TEXT {
-			countT = count
-		}
-		if mt == consts.LABEL_MEDIA_TYPE_MEDIA {
-			countM = count
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return countT, countM, err
-	}
-	return countT, countM, err
+	return items, cuTotal + lTotal, nil
 }
 
 // translate tag.keys (UIDs of tags) to their translation
