@@ -1993,7 +1993,6 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 		)
 	`, qcu[:len(qcu)-1], ql[:len(ql)-1], f.PageSize, (f.PageNumber-1)*f.PageSize)
 
-	boil.DebugMode = true
 	rows, err := queries.Raw(q, append(argsCU, argsL...)...).Query(db)
 
 	if err != nil {
