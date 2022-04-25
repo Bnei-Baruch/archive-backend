@@ -4,14 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-
+	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
-
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
 type ClassificationStats map[string]int
@@ -330,6 +328,65 @@ func (fs *FilterLabelStats) GetStats() error {
 	  array_agg(distinct fl.id)
 	FROM fl
 	GROUP BY fl.type_id
+	`,
+		fs.Scope[:len(fs.Scope)-1])
+	return fs.scan(qq)
+}
+
+type FilterCollectionStats struct {
+	FilterStats
+}
+
+func (fs *FilterCollectionStats) GetStats() error {
+	qq := fmt.Sprintf(`WITH fc AS (%s)
+	SELECT
+	  s.id,
+	  s.parent_id,
+	  concat('s', s.uid),
+	  array_agg(distinct c.id)
+	FROM fc c
+		INNER JOIN sources s ON s.uid = c.properties->>'source'
+		GROUP BY s.id
+	UNION
+	SELECT
+	  s.id,
+	  s.parent_id,
+	  concat('s', s.uid),
+	  '{}'
+	FROM sources s
+	UNION
+	SELECT
+	  t.id,
+	  t.parent_id,
+	  concat('t', t.uid),
+	  array_agg(distinct c.id)
+	FROM fc c
+		INNER JOIN tags t  ON c.properties->'tags' ? t.uid 
+		GROUP BY t.id
+	UNION
+	SELECT
+	  t.id,
+	  t.parent_id,
+	  concat('t', t.uid),
+	  '{}'
+	FROM tags t	
+	UNION
+	SELECT
+	  0,
+	  NULL,
+	  concat('l', c.properties->>'original_language'),
+	  array_agg(distinct c.id)
+	FROM fc c
+	WHERE c.properties->>'original_language' !=''
+	GROUP BY c.properties->>'original_language'
+	UNION
+	SELECT
+	  c.type_id,
+	  NULL,
+	  concat('c', c.type_id),
+	  array_agg(distinct c.id)
+	FROM fc c
+	GROUP BY c.type_id
 	`,
 		fs.Scope[:len(fs.Scope)-1])
 	return fs.scan(qq)

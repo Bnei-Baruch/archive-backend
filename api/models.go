@@ -189,8 +189,9 @@ type HomeResponse struct {
 
 type TagsDashboardItem struct {
 	LabelID       string `json:"label_id,omitempty"`
-	ContentUnitID string `json:"content_unit_id,required"`
-	IsText        bool   `json:"is_text,required"`
+	ContentUnitID string `json:"content_unit_id,omitempty"`
+	CollectionId  string `json:"collection_id,omitempty"`
+	ItemType      string `json:"type,required"`
 }
 type TagsDashboardResponse struct {
 	MediaTotal int64                `json:"media_total"`
@@ -203,6 +204,11 @@ type StatsCUClassRequest struct {
 	CountOnly bool `json:"count_only" form:"count_only"`
 	ForFilter bool `json:"for_filter" form:"for_filter"`
 }
+type StatsCClassRequest struct {
+	CollectionsRequest
+	ForFilter bool `json:"for_filter" form:"for_filter"`
+}
+
 type StatsClassResponse struct {
 	Sources      map[string]int `json:"sources"`
 	Tags         map[string]int `json:"tags"`

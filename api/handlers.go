@@ -631,7 +631,7 @@ func TagDashboardHandler(c *gin.Context) {
 
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	resp, err := HandleTagDashboard(cm, db, r)
+	resp, err := handleTagDashboard(cm, db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -671,6 +671,18 @@ func StatsLabelClassHandler(c *gin.Context) {
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	resp, err := handleStatsLabelClass(cm, db, r)
+	concludeRequest(c, resp, err)
+}
+
+func StatsCClassHandler(c *gin.Context) {
+	var r StatsCClassRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err := handleStatsCClass(cm, db, r)
 	concludeRequest(c, resp, err)
 }
 
@@ -1854,18 +1866,10 @@ ORDER BY max_film_date DESC`
 	return data, nil
 }
 
-func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
+func handleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest) (*TagsDashboardResponse, *HttpError) {
 
 	if utils.IsEmpty(r.Tags) {
 		return NewTagsDashboardResponse(), nil
-	}
-
-	lMods := []qm.QueryMod{
-		qm.InnerJoin("label_tag lt ON lt.label_id = id"),
-		qm.InnerJoin("label_i18n i18n ON i18n.label_id = id"),
-		qm.Where("approve_state != ?", consts.APR_DECLINED),
-		qm.Where("cu.secure = 0 AND cu.published IS TRUE"),
-		qm.InnerJoin("content_units cu ON \"labels\".content_unit_id = cu.id"),
 	}
 
 	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
@@ -1897,6 +1901,13 @@ func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 
 	appendTagsFilterMods(cm, &cuMods, r.TagsFilter)
 
+	lMods := []qm.QueryMod{
+		qm.InnerJoin("label_tag lt ON lt.label_id = id"),
+		qm.InnerJoin("label_i18n i18n ON i18n.label_id = id"),
+		qm.Where("approve_state != ?", consts.APR_DECLINED),
+		qm.Where("cu.secure = 0 AND cu.published IS TRUE"),
+		qm.InnerJoin("content_units cu ON \"labels\".content_unit_id = cu.id"),
+	}
 	//label filters
 	if err := appendSourcesLabelsFilterMods(cm, &lMods, r.SourcesFilter); err != nil {
 		return nil, NewInternalError(err)
@@ -1915,12 +1926,31 @@ func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 	appendTagsLabelsFilterMods(cm, &lMods, r.TagsFilter)
 	appendMediaLanguageLabelsFilterMods(&lMods, r.MediaLanguageFilter)
 
-	tItems, tTotal, err := fetchItemsTagDashboard(db, cuMods, lMods, r.ListRequest, true)
+	cMods := []qm.QueryMod{
+		SECURE_PUBLISHED_MOD,
+		mdbmodels.CollectionWhere.TypeID.EQ(mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSONS_SERIES].ID),
+	}
+
+	// collections filters
+	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendDateRangeFilterMods(&cMods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendCollectionSourceFilterMods(cm, db, &cMods, r.SourcesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendCollectionTagsFilterMods(cm, db, &cMods, r.TagsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+
+	tItems, tTotal, err := fetchItemsTagDashboard(db, cuMods, lMods, cMods, r.ListRequest, true)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 
-	mItems, mTotal, err := fetchItemsTagDashboard(db, cuMods, lMods, r.ListRequest, false)
+	mItems, mTotal, err := fetchItemsTagDashboard(db, cuMods, lMods, cMods, r.ListRequest, false)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1933,7 +1963,7 @@ func HandleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 	return resp, nil
 }
 
-func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMod, f ListRequest, isText bool) ([]*TagsDashboardItem, int64, error) {
+func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMod, cmods []qm.QueryMod, f ListRequest, isText bool) ([]*TagsDashboardItem, int64, error) {
 	var cts []string
 	if isText {
 		cts = consts.CT_UNITS_TEXTS
@@ -1946,10 +1976,13 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 
 	}
 	cumods = append(cumods,
-		qm.Select(`DISTINCT ON ("content_units".id) 
+		qm.Select(`
+			DISTINCT ON ("content_units".id) 
 			coalesce(("content_units".properties->>'film_date')::date, "content_units".created_at) as date,
 			NULL as l_uid, 
-			"content_units".uid as cu_uid
+			"content_units".uid as cu_uid,
+			NULL as c_uid,
+			'unit' as res_type
 		`),
 		qm.WhereIn("\"content_units\".type_id IN ?", utils.ConvertArgsInt64(ctIDs)...),
 	)
@@ -1958,13 +1991,15 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 	if err != nil {
 		return nil, 0, err
 	}
-	qcu, argsCU := queries.BuildQuery(mdbmodels.ContentUnits(cumods...).Query)
+	qcu, args := queries.BuildQuery(mdbmodels.ContentUnits(cumods...).Query)
 
 	lmods = append(lmods,
 		qm.Select(`DISTINCT ON ( "labels".id) 
 			coalesce((cu.properties->>'film_date')::date, "labels".created_at) as date, 
 			"labels".uid as l_uid, 
-			cu.uid as cu_uid
+			cu.uid as cu_uid,
+			NULL as c_uid,
+			'label' as res_type
 		`),
 		qm.WhereIn("cu.type_id IN ?", utils.ConvertArgsInt64(ctIDs)...),
 	)
@@ -1974,26 +2009,44 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 	}
 
 	ql, argsL := queries.BuildQuery(mdbmodels.Labels(lmods...).Query)
-	//need increase argument number for single query
-	re := regexp.MustCompile(`\$\d+`)
-	ql = re.ReplaceAllStringFunc(ql, func(s string) string {
-		if i, err := strconv.Atoi(s[1:]); err == nil {
-			return fmt.Sprintf("$%d", i+len(argsCU))
-		}
-		return s
-	})
+	ql = startQueryArgCountFrom(ql, len(args))
+	args = append(args, argsL...)
+
+	if isText {
+		cmods = []qm.QueryMod{qm.Where("false")}
+	}
+	cmods = append(cmods,
+		qm.Select(`
+			coalesce((properties->>'film_date')::date, created_at) as date, 
+			NULL as l_uid, 
+			NULL as cu_uid,
+			uid as c_uid,
+			'collection' as res_type
+		`),
+	)
+	cTotal, err := mdbmodels.Collections(cmods...).Count(db)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	qc, argsC := queries.BuildQuery(mdbmodels.Collections(cmods...).Query)
+	qc = startQueryArgCountFrom(qc, len(args))
+	args = append(args, argsC...)
+
 	q := fmt.Sprintf(`
 		WITH items AS (
 			(%s) 
 			UNION 
 			(%s)
+			UNION 
+			(%s)
 		)(
-			SELECT item.cu_uid, item.l_uid 
+			SELECT item.cu_uid, item.l_uid, item.c_uid, item.res_type 
 			FROM items item ORDER BY date DESC LIMIT %d OFFSET %d
 		)
-	`, qcu[:len(qcu)-1], ql[:len(ql)-1], f.PageSize, (f.PageNumber-1)*f.PageSize)
+	`, qcu[:len(qcu)-1], ql[:len(ql)-1], qc[:len(qc)-1], f.PageSize, (f.PageNumber-1)*f.PageSize)
 
-	rows, err := queries.Raw(q, append(argsCU, argsL...)...).Query(db)
+	rows, err := queries.Raw(q, args...).Query(db)
 
 	if err != nil {
 		return nil, 0, err
@@ -2002,18 +2055,25 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 
 	items := make([]*TagsDashboardItem, 0)
 	for rows.Next() {
-		var cu string
+		var cu null.String
 		var label null.String
-		err = rows.Scan(&cu, &label)
+		var c null.String
+		var itemType string
+		err = rows.Scan(&cu, &label, &c, &itemType)
 		if err != nil {
 			return nil, 0, err
 		}
 		item := &TagsDashboardItem{
-			ContentUnitID: cu,
-			IsText:        isText,
+			ItemType: itemType,
+		}
+		if cu.Valid {
+			item.ContentUnitID = cu.String
 		}
 		if label.Valid {
 			item.LabelID = label.String
+		}
+		if c.Valid {
+			item.CollectionId = c.String
 		}
 		items = append(items, item)
 
@@ -2022,7 +2082,19 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 	if err = rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	return items, cuTotal + lTotal, nil
+	return items, cuTotal + lTotal + cTotal, nil
+}
+
+//need increase argument counter for single query
+func startQueryArgCountFrom(q string, from int) string {
+	re := regexp.MustCompile(`\$\d+`)
+	return re.ReplaceAllStringFunc(q, func(s string) string {
+		if i, err := strconv.Atoi(s[1:]); err == nil {
+			return fmt.Sprintf("$%d", i+from)
+		}
+		return s
+	})
+
 }
 
 // translate tag.keys (UIDs of tags) to their translation
@@ -2285,6 +2357,44 @@ func handleStatsLabelClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequ
 		Resp:      resp,
 	}}
 	if err = fs.GetStats(); err != nil {
+		return nil, NewInternalError(err)
+	}
+	return resp, nil
+}
+
+func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsCClassRequest) (*StatsClassResponse, *HttpError) {
+	mods := []qm.QueryMod{
+		SECURE_PUBLISHED_MOD,
+		qm.Select("\"collections\".* AS c"),
+	}
+
+	// filters
+	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendCollectionSourceFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendCollectionTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+
+	resp := NewStatsClassResponse()
+
+	q, args := queries.BuildQuery(mdbmodels.Collections(mods...).Query)
+	cs := FilterCollectionStats{FilterStats{
+		DB:        db,
+		Scope:     q,
+		ScopeArgs: args,
+		Resp:      resp,
+	}}
+	if err := cs.GetStats(); err != nil {
 		return nil, NewInternalError(err)
 	}
 	return resp, nil
