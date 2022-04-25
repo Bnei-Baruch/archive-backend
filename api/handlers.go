@@ -41,6 +41,8 @@ type firstRowsType struct {
 	film_date    time.Time
 }
 
+type statsHandler func(cache.CacheManager, *sql.DB, StatsClassRequest) (*StatsClassResponse, *HttpError)
+
 func CollectionsHandler(c *gin.Context) {
 	r := CollectionsRequest{
 		WithUnits: true,
@@ -645,7 +647,7 @@ func SemiQuasiDataHandler(c *gin.Context) {
 }
 
 func StatsCUClassHandler(c *gin.Context) {
-	var r StatsCUClassRequest
+	var r StatsClassRequest
 	if c.Bind(&r) != nil {
 		return
 	}
@@ -655,7 +657,7 @@ func StatsCUClassHandler(c *gin.Context) {
 	var resp *StatsClassResponse
 	var err *HttpError
 	if r.ForFilter {
-		resp, err = handleFilterStatsCUClass(cm, db, r)
+		resp, err = handleFilterStatsClass(cm, db, r, handleStatsCUClass)
 	} else {
 		resp, err = handleStatsCUClass(cm, db, r)
 	}
@@ -663,26 +665,26 @@ func StatsCUClassHandler(c *gin.Context) {
 }
 
 func StatsLabelClassHandler(c *gin.Context) {
-	var r StatsCUClassRequest
+	var r StatsClassRequest
 	if c.Bind(&r) != nil {
 		return
 	}
 
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	resp, err := handleStatsLabelClass(cm, db, r)
+	resp, err := handleFilterStatsClass(cm, db, r, handleStatsLabelClass)
 	concludeRequest(c, resp, err)
 }
 
 func StatsCClassHandler(c *gin.Context) {
-	var r StatsCClassRequest
+	var r StatsClassRequest
 	if c.Bind(&r) != nil {
 		return
 	}
 
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	resp, err := handleStatsCClass(cm, db, r)
+	resp, err := handleFilterStatsClass(cm, db, r, handleStatsCClass)
 	concludeRequest(c, resp, err)
 }
 
@@ -2202,10 +2204,10 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 	return sqd, nil
 }
 
-func handleFilterStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsClassResponse, *HttpError) {
+func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest, handler statsHandler) (*StatsClassResponse, *HttpError) {
 	var res *StatsClassResponse
 	var err *HttpError
-	if res, err = handleStatsCUClass(cm, db, r); err != nil {
+	if res, err = handler(cm, db, r); err != nil {
 		return res, err
 	}
 	if !utils.IsEmpty(r.SourcesFilter.Authors) || len(r.SourcesFilter.Sources) != 0 {
@@ -2214,7 +2216,7 @@ func handleFilterStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassR
 			Authors: nil,
 			Sources: nil,
 		}
-		sRes, err := handleStatsCUClass(cm, db, sr)
+		sRes, err := handler(cm, db, sr)
 		if err != nil {
 			return sRes, err
 		}
@@ -2224,7 +2226,7 @@ func handleFilterStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassR
 	if len(r.MediaLanguage) != 0 {
 		lr := r
 		lr.MediaLanguageFilter = MediaLanguageFilter{MediaLanguage: nil}
-		lRes, err := handleStatsCUClass(cm, db, lr)
+		lRes, err := handler(cm, db, lr)
 		if err != nil {
 			return lRes, err
 		}
@@ -2234,7 +2236,7 @@ func handleFilterStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassR
 	if len(r.ContentTypes) != 0 {
 		ctr := r
 		ctr.ContentTypesFilter = ContentTypesFilter{ContentTypes: nil}
-		ctRes, err := handleStatsCUClass(cm, db, ctr)
+		ctRes, err := handler(cm, db, ctr)
 		if err != nil {
 			return ctRes, err
 		}
@@ -2243,7 +2245,7 @@ func handleFilterStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassR
 	return res, nil
 }
 
-func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsClassResponse, *HttpError) {
+func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (*StatsClassResponse, *HttpError) {
 	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
 	for i, n := range consts.CT_NOT_FOR_DISPLAY {
 		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
@@ -2311,7 +2313,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest
 	return resp, nil
 }
 
-func handleStatsLabelClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequest) (*StatsClassResponse, *HttpError) {
+func handleStatsLabelClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (*StatsClassResponse, *HttpError) {
 	mods := []qm.QueryMod{
 		qm.Select("\"labels\".id as id", "cu.id as cuid", "cu.type_id as type_id", "cu.properties->>'source_id' as suid"),
 		qm.Where("\"labels\".approve_state != ?", consts.APR_DECLINED),
@@ -2358,7 +2360,7 @@ func handleStatsLabelClass(cm cache.CacheManager, db *sql.DB, r StatsCUClassRequ
 	return resp, nil
 }
 
-func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsCClassRequest) (*StatsClassResponse, *HttpError) {
+func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (*StatsClassResponse, *HttpError) {
 	mods := []qm.QueryMod{
 		SECURE_PUBLISHED_MOD,
 		qm.Select("\"collections\".* AS c"),

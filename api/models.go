@@ -199,13 +199,19 @@ type TagsDashboardResponse struct {
 	Items      []*TagsDashboardItem `json:"items"`
 }
 
-type StatsCUClassRequest struct {
-	ContentUnitsRequest
+type StatsClassRequest struct {
+	ListRequest
+	IDsFilter
+	ContentTypesFilter
+	DateRangeFilter
+	SourcesFilter
+	TagsFilter
+	CollectionsFilter
+	MediaLanguageFilter
+	GenresProgramsFilter
+	PublishersFilter
+	PersonsFilter
 	CountOnly bool `json:"count_only" form:"count_only"`
-	ForFilter bool `json:"for_filter" form:"for_filter"`
-}
-type StatsCClassRequest struct {
-	CollectionsRequest
 	ForFilter bool `json:"for_filter" form:"for_filter"`
 }
 
