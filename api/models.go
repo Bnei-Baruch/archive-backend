@@ -191,7 +191,7 @@ type TagsDashboardItem struct {
 	LabelID       string `json:"label_id,omitempty"`
 	ContentUnitID string `json:"content_unit_id,omitempty"`
 	CollectionId  string `json:"collection_id,omitempty"`
-	ItemType      string `json:"type,required"`
+	IsText        bool   `json:"is_text,required"`
 }
 type TagsDashboardResponse struct {
 	MediaTotal int64                `json:"media_total"`

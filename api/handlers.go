@@ -1981,8 +1981,7 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 			coalesce(("content_units".properties->>'film_date')::date, "content_units".created_at) as date,
 			NULL as l_uid, 
 			"content_units".uid as cu_uid,
-			NULL as c_uid,
-			'unit' as res_type
+			NULL as c_uid
 		`),
 		qm.WhereIn("\"content_units\".type_id IN ?", utils.ConvertArgsInt64(ctIDs)...),
 	)
@@ -1998,8 +1997,7 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 			coalesce((cu.properties->>'film_date')::date, "labels".created_at) as date, 
 			"labels".uid as l_uid, 
 			cu.uid as cu_uid,
-			NULL as c_uid,
-			'label' as res_type
+			NULL as c_uid
 		`),
 		qm.WhereIn("cu.type_id IN ?", utils.ConvertArgsInt64(ctIDs)...),
 	)
@@ -2020,8 +2018,7 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 			coalesce((properties->>'film_date')::date, created_at) as date, 
 			NULL as l_uid, 
 			NULL as cu_uid,
-			uid as c_uid,
-			'collection' as res_type
+			uid as c_uid
 		`),
 	)
 	cTotal, err := mdbmodels.Collections(cmods...).Count(db)
@@ -2041,7 +2038,7 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 			UNION 
 			(%s)
 		)(
-			SELECT item.cu_uid, item.l_uid, item.c_uid, item.res_type 
+			SELECT item.cu_uid, item.l_uid, item.c_uid 
 			FROM items item ORDER BY date DESC LIMIT %d OFFSET %d
 		)
 	`, qcu[:len(qcu)-1], ql[:len(ql)-1], qc[:len(qc)-1], f.PageSize, (f.PageNumber-1)*f.PageSize)
@@ -2058,13 +2055,12 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 		var cu null.String
 		var label null.String
 		var c null.String
-		var itemType string
-		err = rows.Scan(&cu, &label, &c, &itemType)
+		err = rows.Scan(&cu, &label, &c)
 		if err != nil {
 			return nil, 0, err
 		}
 		item := &TagsDashboardItem{
-			ItemType: itemType,
+			IsText: isText,
 		}
 		if cu.Valid {
 			item.ContentUnitID = cu.String
