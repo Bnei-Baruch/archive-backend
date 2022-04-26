@@ -1977,37 +1977,38 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 		ctIDs[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[ct].ID
 
 	}
-	cumods = append(cumods,
-		qm.Select(`
+	cumods = append(cumods, qm.WhereIn(`"content_units".type_id IN ?`, utils.ConvertArgsInt64(ctIDs)...))
+
+	var cuTotal int64
+	err := mdbmodels.ContentUnits(append(cumods, qm.Select(`COUNT(DISTINCT "content_units".id)`))...).QueryRow(db).Scan(&cuTotal)
+	if err != nil {
+		return nil, 0, err
+	}
+	cumods = append(cumods, qm.Select(`
 			DISTINCT ON ("content_units".id) 
 			coalesce(("content_units".properties->>'film_date')::date, "content_units".created_at) as date,
 			NULL as l_uid, 
 			"content_units".uid as cu_uid,
 			NULL as c_uid
 		`),
-		qm.WhereIn("\"content_units\".type_id IN ?", utils.ConvertArgsInt64(ctIDs)...),
 	)
 
-	cuTotal, err := mdbmodels.ContentUnits(cumods...).Count(db)
+	qcu, args := queries.BuildQuery(mdbmodels.ContentUnits(cumods...).Query)
+
+	lmods = append(lmods, qm.WhereIn("cu.type_id IN ?", utils.ConvertArgsInt64(ctIDs)...))
+	var lTotal int64
+	err = mdbmodels.Labels(append(lmods, qm.Select(`COUNT(DISTINCT "labels".id)`))...).QueryRow(db).Scan(&lTotal)
 	if err != nil {
 		return nil, 0, err
 	}
-	qcu, args := queries.BuildQuery(mdbmodels.ContentUnits(cumods...).Query)
 
-	lmods = append(lmods,
-		qm.Select(`DISTINCT ON ( "labels".id) 
+	lmods = append(lmods, qm.Select(`DISTINCT ON ("labels".id) 
 			coalesce((cu.properties->>'film_date')::date, "labels".created_at) as date, 
 			"labels".uid as l_uid, 
 			cu.uid as cu_uid,
 			NULL as c_uid
 		`),
-		qm.WhereIn("cu.type_id IN ?", utils.ConvertArgsInt64(ctIDs)...),
 	)
-	lTotal, err := mdbmodels.Labels(lmods...).Count(db)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	ql, argsL := queries.BuildQuery(mdbmodels.Labels(lmods...).Query)
 	ql = startQueryArgCountFrom(ql, len(args))
 	args = append(args, argsL...)
@@ -2015,19 +2016,18 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 	if isText {
 		cmods = []qm.QueryMod{qm.Where("false")}
 	}
-	cmods = append(cmods,
-		qm.Select(`
+	var cTotal int64
+	err = mdbmodels.Collections(append(cmods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
+	if err != nil {
+		return nil, 0, err
+	}
+	cmods = append(cmods, qm.Select(`
 			coalesce((properties->>'film_date')::date, created_at) as date, 
 			NULL as l_uid, 
 			NULL as cu_uid,
 			uid as c_uid
 		`),
 	)
-	cTotal, err := mdbmodels.Collections(cmods...).Count(db)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	qc, argsC := queries.BuildQuery(mdbmodels.Collections(cmods...).Query)
 	qc = startQueryArgCountFrom(qc, len(args))
 	args = append(args, argsC...)
