@@ -3123,10 +3123,10 @@ func appendTagsLabelsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f Ta
 		return
 	}
 	_, ids := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
-	if ids != nil && len(ids) == 0 {
+	if ids != nil && len(ids) != 0 {
 		*mods = append(*mods,
-			qm.InnerJoin("labels_tags lt ON id = lt.label_id"),
-			qm.WhereIn("lt.tag_id in ?", utils.ConvertArgsInt64(ids)...))
+			qm.InnerJoin(`label_tag l_tag ON "labels".id = l_tag.label_id`),
+			qm.WhereIn("l_tag.tag_id in ?", utils.ConvertArgsInt64(ids)...))
 	}
 }
 
