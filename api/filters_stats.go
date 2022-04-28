@@ -3,14 +3,13 @@ package api
 import (
 	"database/sql"
 	"fmt"
-
+	"github.com/Bnei-Baruch/archive-backend/mdb"
+	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
-
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
 type ClassificationStats map[string]int
@@ -39,7 +38,7 @@ type StatsNode struct {
 	parentID int64
 	uid      string
 	children []int64
-	cuIDs    IDSet
+	ids      IDSet
 }
 
 type StatsTree struct {
@@ -82,7 +81,7 @@ func (st *StatsTree) accumulate() {
 			if node.parentID != 0 {
 				p := st.byID[node.parentID] // get parent
 				parents[p.id] = true        // add to next gen of
-				p.cuIDs.Merge(node.cuIDs)   // merge parent ID set with that of child
+				p.ids.Merge(node.ids)       // merge parent ID set with that of child
 			}
 		}
 
@@ -98,11 +97,11 @@ func (st *StatsTree) accumulate() {
 	// add artificial root node
 	root := new(StatsNode)
 	root.uid = "root"
-	root.cuIDs = make(IDSet)
+	root.ids = make(IDSet)
 	st.byID[-1] = root
 	for _, v := range st.byID {
 		if v.parentID == 0 {
-			root.cuIDs.Merge(v.cuIDs)
+			root.ids.Merge(v.ids)
 		}
 	}
 }
@@ -113,7 +112,7 @@ func (st *StatsTree) accumulate() {
 func (st *StatsTree) flatten() ClassificationStats {
 	byUID := make(ClassificationStats, len(st.byID))
 	for _, v := range st.byID {
-		if count := len(v.cuIDs); count > 0 {
+		if count := len(v.ids); count > 0 {
 			byUID[v.uid] = count
 		}
 	}
@@ -127,99 +126,268 @@ func (st *StatsTree) insert(id, parentID int64, uid string, ids []int64) {
 		node.id = id
 		node.parentID = parentID
 		node.uid = uid
-		node.cuIDs = make(IDSet)
+		node.ids = make(IDSet)
 		st.byID[id] = node
 	}
 	for i := range ids {
-		node.cuIDs.Increment(ids[i])
+		node.ids.Increment(ids[i])
 	}
 }
 
-func GetFiltersStats(db *sql.DB, cuScope string, cuScopeArgs []interface{}) (ClassificationStats, ClassificationStats, error) {
-	qq := fmt.Sprintf(`with fcu as (%s)
-select
-  s.id,
-  s.parent_id,
-  concat('s', s.uid),
-  array_agg(distinct cus.content_unit_id)
-from sources s
-  inner join content_units_sources cus on s.id = cus.source_id
-  inner join fcu on cus.content_unit_id = fcu.id
-group by s.id
-union
-select
-  s.id,
-  s.parent_id,
-  concat('s', s.uid),
-  '{}'
-from sources s
-union
-select
-  t.id,
-  t.parent_id,
-  concat('t', t.uid),
-  array_agg(distinct cut.content_unit_id)
-from tags t
-  inner join content_units_tags cut on t.id = cut.tag_id
-  inner join fcu on cut.content_unit_id = fcu.id
-group by t.id
-union
-select
-  t.id,
-  t.parent_id,
-  concat('t', t.uid),
-  '{}'
-from tags t`, cuScope[:len(cuScope)-1])
+type FilterStats struct {
+	DB        *sql.DB
+	Scope     string
+	ScopeArgs []interface{}
+	Resp      *StatsClassResponse
+}
 
-	rows, err := queries.Raw(qq, cuScopeArgs...).Query(db)
+func (fs *FilterStats) scan(q string) error {
+	rows, err := queries.Raw(q, fs.ScopeArgs...).Query(fs.DB)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "queries.Raw")
+		return errors.Wrap(err, "queries.Raw")
 	}
 	defer rows.Close()
 
 	tags := NewStatsTree()
 	sources := NewStatsTree()
 	var tmp *StatsTree
+	byLang := make(map[string]int)
+	byType := make(map[string]int)
+	total := make(map[int64]bool)
 	for rows.Next() {
 		var k string
 		var id int64
 		var parentID null.Int64
-		var cuIDs pq.Int64Array
-		err = rows.Scan(&id, &parentID, &k, &cuIDs)
+		var ids pq.Int64Array
+		err = rows.Scan(&id, &parentID, &k, &ids)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "rows.Scan")
+			return errors.Wrap(err, "rows.Scan")
 		}
-
+		for _, id := range ids {
+			total[id] = true
+		}
 		if k[0] == 't' {
 			tmp = tags
 		} else if k[0] == 's' {
 			tmp = sources
+		} else if k[0] == 'l' {
+			byLang[k[1:]] = len(ids)
+			continue
+		} else if k[0] == 'c' {
+			ct := mdb.CONTENT_TYPE_REGISTRY.ByID[id].Name
+			byType[ct] = len(ids)
+			continue
 		}
 
-		tmp.insert(id, parentID.Int64, k[1:], cuIDs)
+		tmp.insert(id, parentID.Int64, k[1:], ids)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, errors.Wrap(err, "rows.Err()")
+		return errors.Wrap(err, "rows.Err()")
 	}
 
 	tags.accumulate()
 	sources.accumulate()
 
 	// blend in authors
-	authors, err := mdbmodels.Authors(qm.Load("Sources")).All(db)
+	authors, err := mdbmodels.Authors(qm.Load("Sources")).All(fs.DB)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "fetch authors")
+		return errors.Wrap(err, "fetch authors")
 	}
 	for i := range authors {
 		author := authors[i]
 		node := new(StatsNode)
 		node.uid = author.Code
-		node.cuIDs = make(IDSet)
+		node.ids = make(IDSet)
 		sources.byID[-1*(author.ID+1)] = node
 		for j := range author.R.Sources {
-			node.cuIDs.Merge(sources.byID[author.R.Sources[j].ID].cuIDs)
+			node.ids.Merge(sources.byID[author.R.Sources[j].ID].ids)
 		}
 	}
 
-	return tags.flatten(), sources.flatten(), nil
+	fs.Resp.Tags = tags.flatten()
+	fs.Resp.Sources = sources.flatten()
+	fs.Resp.Languages = byLang
+	fs.Resp.ContentTypes = byType
+	fs.Resp.Total = int64(len(total))
+	return nil
+}
+
+type FilterCUStats struct {
+	FilterStats
+}
+
+func (fs *FilterCUStats) GetStats() error {
+	qq := fmt.Sprintf(`with fcu as (%s)
+	SELECT
+	  s.id,
+	  s.parent_id,
+	  concat('s', s.uid),
+	  array_agg(distinct cus.content_unit_id)
+	FROM sources s
+	  INNER JOIN content_units_sources cus on s.id = cus.source_id
+	  INNER JOIN fcu on cus.content_unit_id = fcu.id
+	GROUP BY s.id
+	UNION
+	SELECT
+	  s.id,
+	  s.parent_id,
+	  concat('s', s.uid),
+	  '{}'
+	FROM sources s
+	UNION
+	SELECT
+	  t.id,
+	  t.parent_id,
+	  concat('t', t.uid),
+	  array_agg(distinct cut.content_unit_id)
+	FROM tags t
+	  INNER JOIN content_units_tags cut on t.id = cut.tag_id
+	  INNER JOIN fcu on cut.content_unit_id = fcu.id
+	GROUP BY t.id
+	UNION
+	SELECT
+	  t.id,
+	  t.parent_id,
+	  concat('t', t.uid),
+	  '{}'
+	FROM tags t
+	UNION
+	SELECT
+	  0,
+	  NULL,
+	  concat('l', f.language),
+	  array_agg(distinct f.content_unit_id)
+	FROM files f
+	INNER JOIN fcu on f.content_unit_id = fcu.id
+	WHERE f.secure = 0 AND f.published IS TRUE
+	GROUP BY f.language
+	UNION
+	SELECT
+	  fcu.type_id,
+	  NULL,
+	  concat('c', fcu.type_id),
+	  array_agg(distinct fcu.id)
+	FROM fcu
+	GROUP BY fcu.type_id
+	`, fs.Scope[:len(fs.Scope)-1])
+	return fs.scan(qq)
+}
+
+type FilterLabelStats struct {
+	FilterStats
+}
+
+func (fs *FilterLabelStats) GetStats() error {
+	qq := fmt.Sprintf(`WITH fl AS (%s)
+	SELECT
+	  s.id,
+	  s.parent_id,
+	  concat('s', s.uid),
+	  array_agg(distinct fl.id)
+	FROM fl 
+		INNER JOIN sources s ON s.uid = fl.suid
+		GROUP BY s.id
+	UNION
+	SELECT
+	  s.id,
+	  s.parent_id,
+	  concat('s', s.uid),
+	  '{}'
+	FROM sources s
+	UNION
+	SELECT
+	  t.id,
+	  t.parent_id,
+	  concat('t', t.uid),
+	  array_agg(distinct fl.id)
+	FROM tags t
+		INNER JOIN label_tag lt on t.id = lt.tag_id
+		INNER JOIN fl on lt.label_id = fl.id
+		GROUP BY t.id
+	UNION
+	SELECT
+	  t.id,
+	  t.parent_id,
+	  concat('t', t.uid),
+	  '{}'
+	FROM tags t
+	UNION
+	SELECT
+	  0,
+	  NULL,
+	  concat('l', i18n.language),
+	  array_agg(distinct fl.id)
+	FROM label_i18n i18n
+	INNER JOIN fl on i18n.label_id = fl.id
+	GROUP BY i18n.language
+	UNION
+	SELECT
+	  fl.type_id,
+	  NULL,
+	  concat('c', fl.type_id),
+	  array_agg(distinct fl.id)
+	FROM fl
+	GROUP BY fl.type_id
+	`,
+		fs.Scope[:len(fs.Scope)-1])
+	return fs.scan(qq)
+}
+
+type FilterCollectionStats struct {
+	FilterStats
+}
+
+func (fs *FilterCollectionStats) GetStats() error {
+	qq := fmt.Sprintf(`WITH fc AS (%s)
+	SELECT
+	  s.id,
+	  s.parent_id,
+	  concat('s', s.uid),
+	  array_agg(distinct c.id)
+	FROM fc c
+		INNER JOIN sources s ON s.uid = c.properties->>'source'
+		GROUP BY s.id
+	UNION
+	SELECT
+	  s.id,
+	  s.parent_id,
+	  concat('s', s.uid),
+	  '{}'
+	FROM sources s
+	UNION
+	SELECT
+	  t.id,
+	  t.parent_id,
+	  concat('t', t.uid),
+	  array_agg(distinct c.id)
+	FROM fc c
+		INNER JOIN tags t  ON c.properties->'tags' ? t.uid 
+		GROUP BY t.id
+	UNION
+	SELECT
+	  t.id,
+	  t.parent_id,
+	  concat('t', t.uid),
+	  '{}'
+	FROM tags t	
+	UNION
+	SELECT
+	  0,
+	  NULL,
+	  concat('l', c.properties->>'original_language'),
+	  array_agg(distinct c.id)
+	FROM fc c
+	WHERE c.properties->>'original_language' !=''
+	GROUP BY c.properties->>'original_language'
+	UNION
+	SELECT
+	  c.type_id,
+	  NULL,
+	  concat('c', c.type_id),
+	  array_agg(distinct c.id)
+	FROM fc c
+	GROUP BY c.type_id
+	`,
+		fs.Scope[:len(fs.Scope)-1])
+	return fs.scan(qq)
 }
