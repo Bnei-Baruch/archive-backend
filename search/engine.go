@@ -8,14 +8,14 @@ import (
 	"math"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"gopkg.in/volatiletech/null.v6"
-
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/null/v8"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
@@ -299,8 +299,6 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 		}
 	}
 
-	// Debug. Tokens stats: fmt.Printf("--------------Count: %d, First: %d\n", countVM, countVMFirst)
-
 	// Process response
 	sRes := (*elastic.SearchResult)(nil)
 	for _, r := range mr.Responses {
@@ -315,6 +313,84 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	}
 
 	return sRes, nil
+}
+
+func FloatOrNil(f *float64) string {
+	if f == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("%.2f", *f)
+}
+
+func LogIfDeb(deb bool, l string) {
+	if deb {
+		log.Info(l)
+	}
+}
+
+func IntentsToStringDebug(label string, intents []Intent) string {
+	parts := []string{fmt.Sprintf("--- %s ----", label), fmt.Sprintf("%d items", len(intents))}
+	for k := range intents {
+		parts = append(parts, fmt.Sprintf("%d: %+v", k, IntentToStringDebug(intents[k])))
+	}
+	parts = append(parts, fmt.Sprintf("--- END %s ----", label))
+	return strings.Join(parts, "\n")
+}
+
+func ResultsSliceMapToStringDebug(label string, m map[string][]*elastic.SearchResult, limit int) string {
+	parts := []string{fmt.Sprintf("--- %s ----", label), fmt.Sprintf("%d items", len(m))}
+	for k, v := range m {
+		parts = append(parts, fmt.Sprintf("%s: %d", k, len(v)))
+		for j, r := range v {
+			parts = append(parts, fmt.Sprintf("\t%d: %s", j, ResultToStringDebug(r, limit)))
+		}
+	}
+	parts = append(parts, fmt.Sprintf("--- END %s ----", label))
+	return strings.Join(parts, "\n")
+}
+
+func ResultsMapToStringDebug(label string, m map[string]*elastic.SearchResult, limit int) string {
+	parts := []string{fmt.Sprintf("--- %s ----", label), fmt.Sprintf("%d items", len(m))}
+	for k, v := range m {
+		parts = append(parts, fmt.Sprintf("%s: %s", k, ResultToStringDebug(v, limit)))
+	}
+	parts = append(parts, fmt.Sprintf("--- END %s ----", label))
+	return strings.Join(parts, "\n")
+}
+
+func IntentToStringDebug(intent Intent) string {
+	str := fmt.Sprintf("INTENT: Type: %s Language: %s", intent.Type, intent.Language)
+	if v, ok := intent.Value.(ClassificationIntent); ok {
+		str = fmt.Sprintf(
+			"%s (%s - %s - [%s]) (%s Exist:%s Score:%s Max:%s)",
+			str, v.ResultType, v.MDB_UID, v.Title, v.ContentType,
+			strconv.FormatBool(v.Exist), FloatOrNil(v.Score), FloatOrNil(v.MaxScore))
+	}
+	return str
+}
+
+func ResultToStringDebug(r *elastic.SearchResult, limit int) string {
+	parts := []string{fmt.Sprintf("%d hits.", len(r.Hits.Hits))}
+	// log.Infof("\t\t%d: %+v", j, r.Hits)
+	for k := range r.Hits.Hits {
+		if k >= limit {
+			parts = append(parts, "\t\t\t...")
+			break
+		}
+		parts = append(parts, HitToStringDebug(fmt.Sprintf("\t\t\t%d: ", k), r.Hits.Hits[k]))
+	}
+	return strings.Join(parts, "\n")
+}
+
+func HitToStringDebug(prefix string, h *elastic.SearchHit) string {
+	parts := []string(nil)
+	var src es.Result
+	if err := json.Unmarshal(*h.Source, &src); err != nil {
+		parts = append(parts, fmt.Sprintf("%s%s %s %s %s failed unmarshling source.", prefix, FloatOrNil(h.Score), h.Index, h.Id, h.Type))
+	} else {
+		parts = append(parts, fmt.Sprintf("%s%s %s %s %s %+v", prefix, FloatOrNil(h.Score), h.Index, h.Id, h.Type, src))
+	}
+	return strings.Join(parts, "\n")
 }
 
 func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.SearchResult) {
@@ -594,7 +670,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	// Search grammars in parallel to native search.
-
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -637,6 +712,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}()
 
+	// Search lesson series
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -653,6 +729,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}()
 
 	filterIntents := <-grammarsFilterIntentsChannel
+	LogIfDeb(query.Deb, IntentsToStringDebug("GRAMMAR FILTER INTENTS", filterIntents))
 
 	if checkTypo {
 		go func() {
@@ -671,7 +748,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
+	LogIfDeb(query.Deb, fmt.Sprintf("query.Intents: %d", len(query.Intents)))
 	query.Intents = append(query.Intents, <-grammarsSingleHitIntentsChannel...)
+	LogIfDeb(query.Deb, IntentsToStringDebug("GRAMMARS SINGLE HIT INTENTS", query.Intents))
+
 	hasClassificationIntentFromGrammar := false
 	for _, intent := range query.Intents {
 		if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Exist {
@@ -679,14 +759,17 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			break
 		}
 	}
+	LogIfDeb(query.Deb, fmt.Sprintf("Has classification intent from grammar: %s", strconv.FormatBool(hasClassificationIntentFromGrammar)))
+
+	LogIfDeb(query.Deb, fmt.Sprintf("query.Intents: %d", len(query.Intents)))
 	// Grammar engine is currently support a search for classification intents according to 'by_content_type_and_source' rule only.
 	// If we have classification intents from Grammar, IntentsEngine will search for intents only by tag.
 	intents, err := e.AddIntents(&query, preference, sortBy, true, !hasClassificationIntentFromGrammar, filterIntents)
 	if err != nil {
 		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 	}
+	LogIfDeb(query.Deb, IntentsToStringDebug("ADD INTENTS", intents))
 	query.Intents = append(query.Intents, intents...)
-	log.Debugf("Intents: %+v", query.Intents)
 
 	// When we have a lessons carousel we filter out the regular results that are also exist in the carousel.
 	filterOutCUSources := make([]string, 0)
@@ -696,7 +779,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				// This is not a perfect solution since we dont know yet what is the currentLang and we filter by all languages
 				// Also: it is possible that we may filter regular lesson results even if the carousel is not on the first page.
 				filterOutCUSources = append(filterOutCUSources, intentValue.MDB_UID)
-				log.Infof("MDB_UID added to filterOutCUSources: %s.", intentValue.MDB_UID)
+				LogIfDeb(query.Deb, fmt.Sprintf("MDB_UID added to filterOutCUSources: %s.", intentValue.MDB_UID))
 			}
 		}
 	}
@@ -718,7 +801,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 	multiSearchService.Add(requests...)
 
-	// Do search.
+	// Do regular search.
 	beforeDoSearch := time.Now()
 	mr, err := multiSearchService.Do(context.TODO())
 	e.timeTrack(beforeDoSearch, consts.LAT_DOSEARCH_MULTISEARCHDO)
@@ -768,6 +851,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						}
 					}
 				}
+				LogIfDeb(query.Deb, fmt.Sprintf("Program collection uid: %+v", programCollectionUid))
 				if programCollectionUid != nil {
 					for _, hit := range currentResults.Hits.Hits {
 						if hit.Score == nil {
@@ -801,9 +885,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					return programsToReplaceWithGrammarResults[i].score > programsToReplaceWithGrammarResults[j].score
 				})
 			}
-			for _, p := range programsToReplaceWithGrammarResults {
-				log.Infof("Program to replace with grammar result: %+v", p)
-			}
 
 			if currentResults.Hits.MaxScore != nil {
 				if maxRegularScore == nil {
@@ -824,11 +905,18 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
+	LogIfDeb(query.Deb, ResultsSliceMapToStringDebug("RESULTS BY LANG", resultsByLang, 5))
+	LogIfDeb(query.Deb, fmt.Sprintf("Program to replace with grammar results: %d", len(programsToReplaceWithGrammarResults)))
+	for _, p := range programsToReplaceWithGrammarResults {
+		LogIfDeb(query.Deb, fmt.Sprintf("\t%+v", p))
+	}
+
 	// Convert intents and grammars to results.
 	err, intentResultsMap := e.IntentsToResults(&query)
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error adding intents to results.")
 	}
+	LogIfDeb(query.Deb, ResultsMapToStringDebug("INTENTS TO RESULTS", intentResultsMap, 3))
 	for lang, intentResults := range intentResultsMap {
 		if haveHits(intentResults) {
 			if _, ok := resultsByLang[lang]; !ok {
@@ -839,6 +927,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	tweetsByLang := <-tweetsByLangChannel
+	LogIfDeb(query.Deb, ResultsMapToStringDebug("TWEETS", tweetsByLang, 3))
 	for lang, tweets := range tweetsByLang {
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
@@ -847,6 +936,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	seriesByLang := <-seriesLangChannel
+	LogIfDeb(query.Deb, ResultsMapToStringDebug("SERIES", seriesByLang, 3))
 	for lang, s := range seriesByLang {
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
@@ -855,6 +945,19 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	filteredByLang := <-grammarsFilteredResultsByLangChannel
+	LogIfDeb(query.Deb, fmt.Sprintf("---- GRAMMAR SEARCH FILTERED ----"))
+	for k, v := range filteredByLang {
+		LogIfDeb(query.Deb, fmt.Sprintf("\t%+v:", k))
+		for i := range v {
+			// log.Infof("\t%d: %+v", i, v[i])
+			for j := range v[i].Results {
+				LogIfDeb(query.Deb, fmt.Sprintf("\t\t%d (%d hits)", j, len(v[i].Results[j].Hits.Hits)))
+				LogIfDeb(query.Deb, fmt.Sprintf(ResultToStringDebug(v[i].Results[j], 3)))
+			}
+		}
+	}
+	LogIfDeb(query.Deb, fmt.Sprintf("---- END GRAMMAR SEARCH FILTERED ----"))
+
 	var programToReplaceIndex int
 	if len(programsToReplaceWithGrammarResults) > 0 {
 		for lang, filtered := range filteredByLang {
@@ -890,6 +993,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 		}
 	}
+
 	// Loop over grammar filtered results to apply the score logic for combination with regular results
 	for lang, filtered := range filteredByLang {
 		if _, ok := resultsByLang[lang]; !ok {
@@ -932,6 +1036,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				result.Hits.TotalHits = int64(len(withoutCarouselDuplications))
 			}
 		}
+
 		// Note:
 		// Below we handle 2 result types from a different elastic queries: grammar based results and regular results.
 		// Changes we made to the scores that is based on the reliance to the results of another type
@@ -950,10 +1055,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					}
 				}
 			}
+			boost := ((*maxRegularScore * 0.9) + 10) / filteredMaxScore
+			LogIfDeb(query.Deb, fmt.Sprintf("--- NORMALIZE FILTERED RESULTS SCORES --- maxRegularScore: %.2f filteredMaxScore: %.2f, boost: %.2f",
+				*maxRegularScore, filteredMaxScore, boost))
 			for _, fr := range filtered {
 				for _, result := range fr.Results {
 					var maxScore float64
-					boost := ((*maxRegularScore * 0.9) + 10) / filteredMaxScore
 					// Why we add +10 to the formula:
 					// In some cases we have several regular results with a very close scores that above 90% of the maxRegularScore.
 					// Since the top score for the best 'filter grammar' result is 90% of the maxRegularScore,
@@ -984,7 +1091,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						// Assign results score to zero if the results are to be replaced by program grammar
 						for i := 0; i < programToReplaceIndex; i++ {
 							if hit.Id == programsToReplaceWithGrammarResults[i].hitId {
-								log.Infof("Setting zero score for %s.", hit.Id)
+								LogIfDeb(query.Deb, fmt.Sprintf("Setting zero score for %s.", hit.Id))
 								zero := 0.0
 								hit.Score = &zero
 								break
@@ -993,7 +1100,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					}
 					for _, fr := range filtered {
 						if _, hasId := fr.HitIdsMap[hit.Id]; hasId {
-							log.Infof("Same hit found for both regular and grammar filtered results: %v", hit.Id)
+							LogIfDeb(query.Deb, fmt.Sprintf("Same hit found for both regular and grammar filtered results: %v", hit.Id))
 							if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
 								*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM
 							}
@@ -1028,6 +1135,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	ret, err := joinResponses(sortBy, from, size, results...)
+
+	LogIfDeb(query.Deb, "--- AFTER JOIN ---")
+	LogIfDeb(query.Deb, ResultToStringDebug(ret, 20))
+	LogIfDeb(query.Deb, "--- END AFTER JOIN ---")
 
 	suggestText := null.String{"", false}
 

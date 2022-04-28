@@ -4,10 +4,10 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/Bnei-Baruch/sqlboiler/boil"
 	log "github.com/Sirupsen/logrus"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
+	"github.com/volatiletech/sqlboiler/v4/boil"
 
 	"github.com/Bnei-Baruch/archive-backend/api"
 	"github.com/Bnei-Baruch/archive-backend/cache"
@@ -30,10 +30,10 @@ var (
 )
 
 func Init() time.Time {
-	return InitWithDefault(nil)
+	return InitWithDefault(nil, nil)
 }
 
-func InitWithDefault(defaultDb *sql.DB) time.Time {
+func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.Time {
 	var err error
 	clock := time.Now()
 
@@ -80,12 +80,15 @@ func InitWithDefault(defaultDb *sql.DB) time.Time {
 	//utils.Must(err)
 	//GRAMMARS, err = search.MakeGrammars(viper.GetString("elasticsearch.grammars"), esc, TOKENS_CACHE, VARIABLES)
 	//utils.Must(err)
-
-	viper.SetDefault("cache.refresh-search-stats", 5*time.Minute)
-	refreshIntervals := map[string]time.Duration{
-		"SearchStats": viper.GetDuration("cache.refresh-search-stats"),
+	if defaultCache == nil {
+		viper.SetDefault("cache.refresh-search-stats", 5*time.Minute)
+		refreshIntervals := map[string]time.Duration{
+			"SearchStats": viper.GetDuration("cache.refresh-search-stats"),
+		}
+		CACHE = cache.NewCacheManagerImpl(DB, refreshIntervals)
+	} else {
+		CACHE = *defaultCache
 	}
-	CACHE = cache.NewCacheManagerImpl(DB, refreshIntervals)
 
 	return clock
 }

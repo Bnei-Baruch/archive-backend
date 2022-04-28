@@ -3,7 +3,7 @@ package api
 import (
 	"time"
 
-	"gopkg.in/volatiletech/null.v6"
+	"github.com/volatiletech/null/v8"
 
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
@@ -61,6 +61,10 @@ type TagsFilter struct {
 type DateRangeFilter struct {
 	StartDate string `json:"start_date" form:"start_date" binding:"omitempty"`
 	EndDate   string `json:"end_date" form:"end_date" binding:"omitempty"`
+}
+
+type ContentUnitsFilter struct {
+	ContentUnitIDs []string `json:"content_units" form:"content_unit" binding:"omitempty"`
 }
 
 func (drf *DateRangeFilter) Range() (time.Time, time.Time, error) {
@@ -258,6 +262,19 @@ type EvalSxSRequest struct {
 	Language      string `json:"language"`
 }
 
+type LabelsRequest struct {
+	ListRequest
+	IDsFilter
+	TagsFilter
+	ContentUnitsFilter
+	WithTags bool `json:"with_tags" form:"with_tags"`
+}
+
+type LabelsResponse struct {
+	ListResponse
+	Labels []*Label `json:"labels"`
+}
+
 func NewCollectionsResponse() *CollectionsResponse {
 	return &CollectionsResponse{Collections: make([]*Collection, 0)}
 }
@@ -290,6 +307,10 @@ func NewStatsCUClassResponse() *StatsCUClassResponse {
 		Sources: make(map[string]int),
 		Tags:    make(map[string]int),
 	}
+}
+
+func NewLabelsResponse() *LabelsResponse {
+	return &LabelsResponse{Labels: make([]*Label, 0)}
 }
 
 type Collection struct {
@@ -417,4 +438,14 @@ type BlogPost struct {
 	Title        string    `json:"title"`
 	Content      string    `json:"content"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+type Label struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	MediaType   string    `json:"media_type"`
+	Properties  null.JSON `json:"properties,omitempty"`
+	Author      string    `json:"author,required"`
+	ContentUnit string    `json:"content_unit,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
 }

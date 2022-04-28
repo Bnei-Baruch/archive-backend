@@ -3,9 +3,9 @@ package cache
 import (
 	"database/sql"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries"
 	"github.com/pkg/errors"
-	"gopkg.in/volatiletech/null.v6"
+	"github.com/volatiletech/null/v8"
+	"github.com/volatiletech/sqlboiler/v4/queries"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 )
@@ -42,7 +42,7 @@ func (s *TagsStatsCacheImpl) Refresh() error {
 }
 
 func (s *TagsStatsCacheImpl) load() error {
-	rows, err := queries.Raw(s.mdb, `
+	rows, err := queries.Raw(`
 		SELECT
 			t.id, t.parent_id, t.uid, cu.type_id, COUNT(cu.id) 
 		FROM tags t
@@ -51,7 +51,7 @@ func (s *TagsStatsCacheImpl) load() error {
 					SELECT * FROM content_units WHERE content_units.secure = 0 AND content_units.published IS TRUE
 				) AS cu ON cut.content_unit_id = cu.id
 		GROUP BY t.id, cu.type_id
-	`).Query()
+	`).Query(s.mdb)
 	if err != nil {
 		return errors.Wrap(err, "queries.Raw")
 	}

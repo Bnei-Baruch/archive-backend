@@ -3,8 +3,8 @@ package search
 import (
 	"context"
 
+	"github.com/volatiletech/null/v8"
 	"gopkg.in/olivere/elastic.v6"
-	null "gopkg.in/volatiletech/null.v6"
 )
 
 type Intent struct {

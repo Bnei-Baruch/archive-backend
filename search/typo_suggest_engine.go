@@ -7,11 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+	"github.com/volatiletech/null/v8"
+	"gopkg.in/olivere/elastic.v6"
+
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
-	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
-	null "gopkg.in/volatiletech/null.v6"
 )
 
 type ConstantTerms struct {

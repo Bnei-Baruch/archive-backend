@@ -6,9 +6,9 @@ This is a modified version of the github.com/Bnei-Baruch/mdb/api/registry.go
 */
 
 import (
-	"github.com/Bnei-Baruch/sqlboiler/boil"
-	"github.com/Bnei-Baruch/sqlboiler/queries/qm"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/v4/boil"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
@@ -51,7 +51,7 @@ type ContentTypeRegistry struct {
 }
 
 func (r *ContentTypeRegistry) Init(exec boil.Executor) error {
-	types, err := mdbmodels.ContentTypes(exec).All()
+	types, err := mdbmodels.ContentTypes().All(exec)
 	if err != nil {
 		return errors.Wrap(err, "Load content_types from DB")
 	}
@@ -71,7 +71,7 @@ type ContentRoleTypeRegistry struct {
 }
 
 func (r *ContentRoleTypeRegistry) Init(exec boil.Executor) error {
-	types, err := mdbmodels.ContentRoleTypes(exec).All()
+	types, err := mdbmodels.ContentRoleTypes().All(exec)
 	if err != nil {
 		return errors.Wrap(err, "Load content_role_types from DB")
 	}
@@ -89,7 +89,7 @@ type PersonsRegistry struct {
 }
 
 func (r *PersonsRegistry) Init(exec boil.Executor) error {
-	types, err := mdbmodels.Persons(exec, qm.Where("pattern is not null")).All()
+	types, err := mdbmodels.Persons(qm.Where("pattern is not null")).All(exec)
 	if err != nil {
 		return errors.Wrap(err, "Load persons from DB")
 	}
@@ -107,7 +107,7 @@ type AuthorRegistry struct {
 }
 
 func (r *AuthorRegistry) Init(exec boil.Executor) error {
-	authors, err := mdbmodels.Authors(exec).All()
+	authors, err := mdbmodels.Authors().All(exec)
 	if err != nil {
 		return errors.Wrap(err, "Load authors from DB")
 	}
@@ -126,7 +126,7 @@ type SourceTypeRegistry struct {
 }
 
 func (r *SourceTypeRegistry) Init(exec boil.Executor) error {
-	types, err := mdbmodels.SourceTypes(exec).All()
+	types, err := mdbmodels.SourceTypes().All(exec)
 	if err != nil {
 		return errors.Wrap(err, "Load source_types from DB")
 	}
@@ -147,7 +147,7 @@ type TwitterUsersRegistry struct {
 }
 
 func (r *TwitterUsersRegistry) Init(exec boil.Executor) error {
-	users, err := mdbmodels.TwitterUsers(exec).All()
+	users, err := mdbmodels.TwitterUsers().All(exec)
 	if err != nil {
 		return errors.Wrap(err, "Load twitter users from DB")
 	}
@@ -168,7 +168,7 @@ type BlogsRegistry struct {
 }
 
 func (r *BlogsRegistry) Init(exec boil.Executor) error {
-	blogs, err := mdbmodels.Blogs(exec).All()
+	blogs, err := mdbmodels.Blogs().All(exec)
 	if err != nil {
 		return errors.Wrap(err, "Load blogs from DB")
 	}

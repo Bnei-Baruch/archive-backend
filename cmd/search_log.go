@@ -13,15 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/volatiletech/null.v6"
-
-	"github.com/Bnei-Baruch/archive-backend/consts"
-
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/volatiletech/null/v8"
 	"gopkg.in/olivere/elastic.v6"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )

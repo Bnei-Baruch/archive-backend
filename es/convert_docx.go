@@ -7,15 +7,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Bnei-Baruch/sqlboiler/queries"
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/sqlboiler/v4/queries"
 
 	"github.com/Bnei-Baruch/archive-backend/integration"
 )
 
 func loadDocs(db *sql.DB) ([]string, error) {
-	rows, err := queries.Raw(db, `
+	rows, err := queries.Raw(`
 SELECT
   f.uid
 FROM files f
@@ -26,7 +26,7 @@ FROM files f
                                  AND f.published IS TRUE
                                  AND cu.secure = 0
                                  AND cu.published IS TRUE
-                                 AND cu.type_id != 42;`).Query()
+                                 AND cu.type_id != 42;`).Query(db)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load docs")
