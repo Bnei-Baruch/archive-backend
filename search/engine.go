@@ -374,6 +374,9 @@ func IntentToStringDebug(intent Intent) string {
 		str = fmt.Sprintf(
 			"%.2f %s %s %s %+v",
 			v.Score, v.LandingPage, singleHitMdbUid, HitToStringDebug("", v.SingleHit), v.FilterValues)
+		str = fmt.Sprintf(
+			"%.2f %s %s %s %+v",
+			v.Score, v.LandingPage, v.SingleHitMdbUid, HitToStringDebug("", v.SingleHit), v.FilterValues)
 	}
 	return str
 }
@@ -383,7 +386,6 @@ func ResultToStringDebug(r *elastic.SearchResult, limit int) string {
 		return "Results or Hits are nil."
 	}
 	parts := []string{fmt.Sprintf("%d hits.", len(r.Hits.Hits))}
-	// log.Infof("\t\t%d: %+v", j, r.Hits)
 	for k := range r.Hits.Hits {
 		if k >= limit {
 			parts = append(parts, "\t\t\t...")
