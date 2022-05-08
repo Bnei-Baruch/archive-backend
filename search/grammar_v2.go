@@ -60,7 +60,7 @@ func ReadGrammarFileV2(grammarFile string) (GrammarsV2, error) {
 	re := regexp.MustCompile(`^(.*).grammar$`)
 	matches := re.FindStringSubmatch(filepath.Base(grammarFile))
 	if len(matches) != 2 {
-		return nil, errors.New(fmt.Sprintf("Bad gramamr file: %s, expected: <hit-type>.grammar", grammarFile))
+		return nil, errors.New(fmt.Sprintf("Bad grammar file: %s, expected: <hit-type>.grammar", grammarFile))
 	}
 	hitType := matches[1]
 

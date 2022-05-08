@@ -35,6 +35,8 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 		return landingPageConventionsMatch(vMap, cm)
 	case consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS:
 		return landingPageHolidaysMatch(vMap, cm)
+	case consts.GRAMMAR_INTENT_FILTER_BY_LANG:
+		return filterByLanguageMatch(vMap)
 	default:
 		return true
 	}
@@ -320,4 +322,48 @@ func landingPageHolidaysMatch(vMap map[string][]string, cm cache.CacheManager) b
 		return false
 	}
 	return cm.SearchStats().DoesHolidayExist(holiday, year)
+}
+
+func filterByLanguageMatch(vMap map[string][]string) bool {
+	hasVarContentType := false
+	hasVarSource := false
+	hasVarProgram := false
+	hasVarLanguage := false
+
+	for variable, values := range vMap {
+		if variable == consts.VAR_CONTENT_TYPE {
+			if hasVarContentType || len(values) != 1 {
+				log.Warningf("Number of $ContentType appearances or values in 'by_lang' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarContentType = true
+		}
+		if variable == consts.VAR_SOURCE {
+			if hasVarSource || len(values) != 1 {
+				log.Warningf("Number of $Source appearances or values in 'by_lang' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarSource = true
+		}
+		if variable == consts.VAR_PROGRAM {
+			if hasVarProgram || len(values) != 1 {
+				log.Warningf("Number of $Program appearances or values in 'by_lang' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarProgram = true
+		}
+		if variable == consts.VAR_LANGUAGE {
+			if hasVarLanguage || len(values) != 1 {
+				log.Warningf("Number of $Language appearances or values in 'by_lang' rule is not 1. Values: %+v", values)
+				return false
+			}
+			hasVarLanguage = true
+		}
+	}
+
+	if !(hasVarProgram || hasVarContentType || hasVarSource || hasVarLanguage) {
+		log.Warningf("Filter intent by language must have at least one appearance either of $Source, or $ContentType, or $Program, or $Language")
+		return false
+	}
+	return true
 }

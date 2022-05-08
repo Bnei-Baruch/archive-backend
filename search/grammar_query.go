@@ -115,7 +115,7 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 		Preference(preference)
 }
 
-func NewFilteredResultsSearchRequest(text string, filters map[string][]string, contentType string, programCollection string, sources []string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
+func NewFilteredResultsSearchRequest(text string, filters map[string][]string, contentType string, programCollection string, sources []string, mediaLanguage string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
 	if contentType == "" && programCollection == "" && len(sources) == 0 {
 		return nil, fmt.Errorf("No contentType or programCollection or sources provided for NewFilteredResultsSearchRequest().")
 	}
@@ -151,6 +151,9 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 	if programCollection != "" {
 		// by program
 		filters[consts.FILTERS[consts.FILTERS[consts.FILTER_COLLECTION]]] = []string{programCollection}
+	}
+	if mediaLanguage != "" {
+		filters[consts.FILTERS[consts.FILTERS[consts.FILTER_LANGUAGE]]] = []string{mediaLanguage}
 	}
 	requests := []*elastic.SearchRequest{}
 	if searchSources {

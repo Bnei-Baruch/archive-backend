@@ -278,6 +278,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 			var contentType string
 			var text string
 			var programCollection string
+			var mediaLanguage string
 			sources := []string{}
 			for _, fv := range intentValue.FilterValues {
 				if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_CONTENT_TYPE] {
@@ -288,19 +289,21 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 					sources = append(sources, fv.Value)
 				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_PROGRAM] {
 					programCollection = fv.Value
+				} else if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_LANGUAGE] {
+					mediaLanguage = fv.Value
 				}
 			}
 			searchWithoutTerm := text == ""
-			if contentType != "" || programCollection != "" || len(sources) > 0 {
-				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Program collection is '%s', Sources are '%+v'.", contentType, text, programCollection, sources)
+			if contentType != "" || programCollection != "" || len(sources) > 0 || mediaLanguage != "" {
+				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Program collection is '%s', Sources are '%+v', Media Language '%s'.", contentType, text, programCollection, sources, mediaLanguage)
 				requests := []*elastic.SearchRequest{}
-				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, mediaLanguage, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 				if err != nil {
 					return nil, err
 				}
 				requests = append(requests, textValSearchRequests...)
 				if !searchWithoutTerm && contentType != consts.VAR_CT_ARTICLES {
-					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, sources, mediaLanguage, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 					if err != nil {
 						return nil, err
 					}
@@ -615,6 +618,15 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				}
 				singleHitIntents = append(singleHitIntents, intents...)
 				addSourcePositionWithoutTerm = false // We add results only one time for this rule type
+			} else if rule.Intent == consts.GRAMMAR_INTENT_FILTER_BY_LANG {
+				filterIntents = append(filterIntents, Intent{
+					Type:     consts.GRAMMAR_TYPE_FILTER,
+					Language: language,
+					Value: GrammarIntent{
+						FilterValues: e.VariableMapToFilterValues(vMap, language),
+						Score:        score,
+						Explanation:  hit.Explanation,
+					}})
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {
@@ -1206,7 +1218,7 @@ func (e *ESEngine) selectFilterIntents(intents []Intent) ([]Intent, error) {
 	log.Info("Optional Intents:")
 	for i, intentIs := range grammarIntents {
 		intent := intentIs.(Intent)
-		log.Infof("#%d\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Value.(GrammarIntent).FilterValues)
+		log.Infof("#%d\nType: '%s',\nScore:%v,\nLanguage:%s,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Language, intent.Value.(GrammarIntent).FilterValues)
 	}
 	intentsWithoutTerm, intentsWithTerm := utils.Filter(grammarIntents, func(v interface{}) bool {
 		return v.(Intent).Type == consts.GRAMMAR_TYPE_FILTER_WITHOUT_TERM
@@ -1259,7 +1271,7 @@ func (e *ESEngine) selectFilterIntents(intents []Intent) ([]Intent, error) {
 		}
 		log.Info("SELECTED Intents:")
 		for i, intent := range selected {
-			log.Infof("#%d\nType: '%s',\nScore:%v,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Value.(GrammarIntent).FilterValues)
+			log.Infof("#%d\nType: '%s',\nScore:%v,\nLanguage:%s,\nFilterValues: [%+v].", i+1, intent.Type, intent.Value.(GrammarIntent).Score, intent.Language, intent.Value.(GrammarIntent).FilterValues)
 		}
 	}
 	if len(selected) > consts.MAX_GRAMMAR_INTENTS_FOR_FILTER_SEARCH {

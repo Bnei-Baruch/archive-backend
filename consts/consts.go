@@ -560,6 +560,7 @@ const (
 	GRAMMAR_INTENT_FILTER_BY_PROGRAM_WITHOUT_TERM = "by_program_without_term"
 	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM   = "source_position_without_term"
 	GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM  = "program_position_without_term"
+	GRAMMAR_INTENT_FILTER_BY_LANG                 = "by_lang"
 
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 	GRAMMAR_GENERATED_CU_HIT     = "grammar_generated_content_unit_hit"
@@ -684,7 +685,7 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 		FILTERS[FILTER_SECTION_SOURCES]: []string{""},
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]: []string{CT_LESSON_PART, CT_FULL_LESSON, CT_VIDEO_PROGRAM_CHAPTER, CT_VIRTUAL_LESSON, CT_LECTURE,
 			CT_WOMEN_LESSON, CT_EVENT_PART, CT_FRIENDS_GATHERING, CT_MEAL},
-		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON, CT_VIDEO_PROGRAM, CT_VIRTUAL_LESSONS, CT_LECTURE_SERIES, CT_LECTURE_SERIES,
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_DAILY_LESSON, CT_VIDEO_PROGRAM, CT_VIRTUAL_LESSONS, CT_LECTURE_SERIES,
 			CT_CONGRESS, CT_HOLIDAY, CT_UNITY_DAY, CT_FRIENDS_GATHERINGS, CT_MEALS},
 	},
 
@@ -696,6 +697,12 @@ var GRAMMAR_INTENTS_TO_FILTER_VALUES = map[string]map[string][]string{
 	GRAMMAR_INTENT_FILTER_BY_PROGRAM_WITHOUT_TERM: map[string][]string{
 		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_VIDEO_PROGRAM_CHAPTER},
 		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_VIDEO_PROGRAM},
+	},
+
+	GRAMMAR_INTENT_FILTER_BY_LANG: map[string][]string{
+		FILTERS[FILTER_SECTION_SOURCES]:           []string{""},
+		FILTERS[FILTER_UNITS_CONTENT_TYPES]:       []string{CT_ARTICLE, CT_PUBLICATION, CT_BOOK, CT_VIDEO_PROGRAM_CHAPTER, CT_LECTURE},
+		FILTERS[FILTER_COLLECTIONS_CONTENT_TYPES]: []string{CT_ARTICLES, CT_BOOKS, CT_VIDEO_PROGRAM, CT_LECTURE_SERIES},
 	},
 }
 
@@ -713,6 +720,7 @@ const (
 	VAR_DIVISION_TYPE       = "$DivisionType"
 	VAR_PROGRAM             = "$Program"
 	VAR_RESTRICTED          = "$Restricted" // Search terms that privent triggering grammar engine.
+	VAR_LANGUAGE            = "$Language"
 
 	// $ContentType variable values
 
@@ -798,6 +806,7 @@ var VARIABLE_TO_FILTER = map[string]string{
 	VAR_SOURCE:              "source",
 	VAR_POSITION:            "position",
 	VAR_PROGRAM:             "program",
+	VAR_LANGUAGE:            "language",
 }
 
 // Latency log
