@@ -1995,8 +1995,13 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 
 	qcu, args := queries.BuildQuery(mdbmodels.ContentUnits(cumods...).Query)
 
-	lmods = append(lmods, qm.WhereIn("cu.type_id IN ?", utils.ConvertArgsInt64(ctIDs)...))
 	var lTotal int64
+	mt := "media"
+	if isText {
+		mt = "text"
+	}
+
+	lmods = append(lmods, mdbmodels.LabelWhere.MediaType.EQ(mt))
 	err = mdbmodels.Labels(append(lmods, qm.Select(`COUNT(DISTINCT "labels".id)`))...).QueryRow(db).Scan(&lTotal)
 	if err != nil {
 		return nil, 0, err
@@ -2074,7 +2079,6 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 			item.CollectionId = c.String
 		}
 		items = append(items, item)
-
 	}
 
 	if err = rows.Err(); err != nil {
