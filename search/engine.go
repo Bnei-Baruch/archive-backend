@@ -580,6 +580,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	grammarsFilteredResultsByLangChannel := make(chan map[string][]FilteredSearchResult)
 	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 	seriesLangChannel := make(chan map[string]*elastic.SearchResult)
+	seriesLikutimChannel := make(chan map[string]*elastic.SearchResult)
 
 	var resultTypes []string
 	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
@@ -649,6 +650,21 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			seriesLangChannel <- map[string]*elastic.SearchResult{}
 		} else {
 			seriesLangChannel <- byLang
+		}
+	}()
+
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("ESEngine.DoSearch - Panic searching lesson series: %+v", err)
+				seriesLikutimChannel <- map[string]*elastic.SearchResult{}
+			}
+		}()
+		if byLang, err := e.LikutimSeries(query, preference); err != nil {
+			log.Errorf("ESEngine.DoSearch - Error searching likutim series: %+v", err)
+			seriesLikutimChannel <- map[string]*elastic.SearchResult{}
+		} else {
+			seriesLikutimChannel <- byLang
 		}
 	}()
 
@@ -848,6 +864,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	seriesByLang := <-seriesLangChannel
 	for lang, s := range seriesByLang {
+		if _, ok := resultsByLang[lang]; !ok {
+			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+		}
+		resultsByLang[lang] = append(resultsByLang[lang], s)
+	}
+
+	likutimByLang := <-seriesLikutimChannel
+	for lang, s := range likutimByLang {
 		if _, ok := resultsByLang[lang]; !ok {
 			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 		}
