@@ -46,7 +46,7 @@ func NewCacheManagerImpl(mdb *sql.DB, refreshIntervals map[string]time.Duration)
 	cm.providers = []Provider{cm.sources, cm.tags, cm.authors}
 
 	cm.Refresh()
-	cm.search = NewSearchStatsCacheImpl(mdb, cm.sources.GetTree().flatten(), cm.tags.GetTree().flatten())
+	cm.search = NewSearchStatsCacheImpl(mdb, cm.sources.GetTree(), cm.tags.GetTree())
 	cm.providers = append(cm.providers, cm.search)
 	if err := cm.search.Refresh(); err != nil {
 		log.Errorf("Refresh %s: %s", cm.search, err.Error())

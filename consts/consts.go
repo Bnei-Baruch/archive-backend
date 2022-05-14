@@ -560,6 +560,7 @@ const (
 	GRAMMAR_INTENT_FILTER_BY_PROGRAM_WITHOUT_TERM = "by_program_without_term"
 	GRAMMAR_INTENT_SOURCE_POSITION_WITHOUT_TERM   = "source_position_without_term"
 	GRAMMAR_INTENT_PROGRAM_POSITION_WITHOUT_TERM  = "program_position_without_term"
+	GRAMMAR_INTENT_SOURCE_PATH                    = "source_path"
 
 	GRAMMAR_LP_SINGLE_COLLECTION = "grammar_landing_page_single_collection_from_sql"
 	GRAMMAR_GENERATED_CU_HIT     = "grammar_generated_content_unit_hit"

@@ -615,6 +615,9 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				}
 				singleHitIntents = append(singleHitIntents, intents...)
 				addSourcePositionWithoutTerm = false // We add results only one time for this rule type
+			} else if rule.Intent == consts.GRAMMAR_INTENT_SOURCE_PATH {
+				log.Infof("GRAMMAR_INTENT_SOURCE_PATH %+v", rule)
+				// TBD FROM HERE
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {

@@ -41,23 +41,28 @@ type SearchStatsCache interface {
 	GetSourceParentAndPosition(source string, getSourceTypeIds bool) (*string, *string, []int64, error)
 
 	GetProgramByCollectionAndPosition(collection_uid string, position string) *string
+
+	GetSourceDescendantsThatHasAncestor(descendants []string, ancestors []string) []string
 }
 
 type SearchStatsCacheImpl struct {
 	mdb                             *sql.DB
 	tags                            ClassByTypeStats
 	sources                         ClassByTypeStats
+	sourcesTree                     *StatsTree
 	conventions                     map[string]map[string]int
 	holidayYears                    map[string]map[string]int
 	sourcesByPositionAndParent      map[string]string
 	programsByCollectionAndPosition map[string]string
+	authorBySource                  map[string]string
 }
 
-func NewSearchStatsCacheImpl(mdb *sql.DB, sources, tags ClassByTypeStats) SearchStatsCache {
+func NewSearchStatsCacheImpl(mdb *sql.DB, sources, tags *StatsTree) SearchStatsCache {
 	ssc := new(SearchStatsCacheImpl)
 	ssc.mdb = mdb
-	ssc.sources = sources
-	ssc.tags = tags
+	ssc.sourcesTree = sources
+	ssc.sources = sources.flatten()
+	ssc.tags = tags.flatten()
 	return ssc
 }
 
@@ -159,6 +164,45 @@ func (ssc *SearchStatsCacheImpl) GetProgramByCollectionAndPosition(collection_ui
 	return nil
 }
 
+func (ssc *SearchStatsCacheImpl) GetSourceDescendantsThatHasAncestor(descendants []string, ancestors []string) []string {
+	ret := []string{}
+	for _, des := range descendants {
+		if len(des) < 4 {
+			// des is author
+			continue
+		}
+		for _, an := range ancestors {
+			if an == des {
+				continue
+			}
+			if ssc.hasAncestor(des, an) {
+				ret = append(ret, des)
+			}
+		}
+	}
+	return ret
+}
+
+func (ssc *SearchStatsCacheImpl) hasAncestor(src string, ancestor string) bool {
+	if src == ancestor {
+		return true
+	}
+	if len(ancestor) < 4 {
+		// ancestor is author
+		if val, ok := ssc.authorBySource[src]; ok {
+			if val == ancestor {
+				return true
+			}
+		}
+	}
+	if val, ok := ssc.sourcesTree.byUID[src]; ok {
+		if parentVal, ok := ssc.sourcesTree.byID[val.parentID]; ok {
+			return ssc.hasAncestor(parentVal.uid, ancestor)
+		}
+	}
+	return false
+}
+
 func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, minCount *int, maxCount *int, cts ...string) bool {
 	var stats ClassByTypeStats
 	switch class {
@@ -203,6 +247,10 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	ssc.programsByCollectionAndPosition, err = ssc.loadProgramsByCollectionAndPosition()
 	if err != nil {
 		return errors.Wrap(err, "Load program position map.")
+	}
+	ssc.authorBySource, err = ssc.loadAuthorsBySources()
+	if err != nil {
+		return errors.Wrap(err, "Load authors by sources.")
 	}
 	return nil
 }
@@ -363,6 +411,29 @@ func (ssc *SearchStatsCacheImpl) loadProgramsByCollectionAndPosition() (map[stri
 		}
 		key := fmt.Sprintf("%v-%v", collection_uid, position)
 		ret[key] = program_uid
+	}
+	return ret, nil
+}
+
+func (ssc *SearchStatsCacheImpl) loadAuthorsBySources() (map[string]string, error) {
+	query := `select s.uid as source, a.code as author from sources s 
+	left join authors_sources aus on aus.source_id = s.id
+	left join authors a on a.id = aus.author_id
+	where a.code is not null`
+	rows, err := queries.Raw(query).Query(ssc.mdb)
+	if err != nil {
+		return nil, errors.Wrap(err, "queries.Raw")
+	}
+	defer rows.Close()
+	ret := map[string]string{}
+	for rows.Next() {
+		var source string
+		var author string
+		err = rows.Scan(&source, &author)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		ret[source] = author
 	}
 	return ret, nil
 }

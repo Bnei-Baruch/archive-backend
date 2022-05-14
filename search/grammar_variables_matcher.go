@@ -35,6 +35,8 @@ func GrammarVariablesMatch(intent string, vMap map[string][]string, cm cache.Cac
 		return landingPageConventionsMatch(vMap, cm)
 	case consts.GRAMMAR_INTENT_LANDING_PAGE_HOLIDAYS:
 		return landingPageHolidaysMatch(vMap, cm)
+	case consts.GRAMMAR_INTENT_SOURCE_PATH:
+		return sourcePathMatch(vMap, cm)
 	default:
 		return true
 	}
@@ -320,4 +322,37 @@ func landingPageHolidaysMatch(vMap map[string][]string, cm cache.CacheManager) b
 		return false
 	}
 	return cm.SearchStats().DoesHolidayExist(holiday, year)
+}
+
+func sourcePathMatch(vMap map[string][]string, cm cache.CacheManager) bool {
+	varDivType := ""
+	varSources1 := []string{}
+	varSources2 := []string{}
+	for variable, values := range vMap {
+		if variable == consts.VAR_SOURCE {
+			if len(varSources2) > 0 { //  Disable if we have more than two $Source appereances
+				log.Warningf("Number of $Source appearances in 'by_position' rule is more than 2. Values: %+v", values)
+				return false
+			}
+			if len(varSources1) == 0 {
+				varSources1 = append(varSources1, values...)
+			} else {
+				varSources2 = append(varSources2, values...)
+			}
+		}
+		if variable == consts.VAR_DIVISION_TYPE {
+			if varDivType != "" || len(values) != 1 { //  Disable if we have more than one $DivisionType appereance or value
+				log.Warningf("Number of $DivisionType appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				return false
+			}
+			varDivType = values[0]
+		}
+	}
+	if varDivType != "" && varDivType != consts.VAR_DIV_ARTICLE {
+		log.Warningf("The only supported division type for source path intent is 'article'.")
+		return false
+	}
+	ret := len(cm.SearchStats().GetSourceDescendantsThatHasAncestor(varSources1, varSources2)) > 0 ||
+		len(cm.SearchStats().GetSourceDescendantsThatHasAncestor(varSources2, varSources1)) > 0
+	return ret
 }
