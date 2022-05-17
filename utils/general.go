@@ -134,6 +134,15 @@ func Int64InSlice(i int64, s []int64) bool {
 	return false
 }
 
+func StringInSlice(str string, s []string) bool {
+	for i := range s {
+		if str == s[i] {
+			return true
+		}
+	}
+	return false
+}
+
 func Is(slice interface{}) []interface{} {
 	s := reflect.ValueOf(slice)
 	if s.Kind() != reflect.Slice && s.Kind() != reflect.Array {
@@ -255,6 +264,16 @@ func HasNumeric(term string) (bool, bool) {
 		}
 	}
 	return allIsDigit, hasDigit
+}
+
+func FilterStringSlice(list []string, test func(string) bool) []string {
+	filtered := []string(nil)
+	for _, item := range list {
+		if test(item) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func Filter(list []interface{}, test func(interface{}) bool) ([]interface{}, []interface{}) {
