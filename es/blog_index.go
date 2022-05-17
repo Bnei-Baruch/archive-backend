@@ -182,7 +182,7 @@ func (index *BlogIndex) indexPost(mdbPost *mdbmodels.BlogPost) *IndexErrors {
 		IndexDate:     &utils.Date{Time: time.Now()},
 		MDB_UID:       idStr,
 		TypedUids:     []string{KeyValue(consts.ES_UID_TYPE_BLOG_POST, idStr)},
-		FilterValues:  []string{KeyValue("content_type", consts.SCT_BLOG_POST), KeyValue(consts.FILTER_LANGUAGE, postLang)},
+		FilterValues:  []string{KeyValue("content_type", consts.CT_BLOG_POST), KeyValue(consts.FILTER_MEDIA_LANGUAGE, postLang)},
 		Title:         html.UnescapeString(mdbPost.Title),
 		TitleSuggest:  SuggestField{Suffixes(mdbPost.Title), float64(1)},
 		EffectiveDate: &utils.Date{Time: mdbPost.PostedAt},

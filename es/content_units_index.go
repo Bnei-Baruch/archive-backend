@@ -174,6 +174,8 @@ func (index *ContentUnitsIndex) bulkIndexUnits(bulk OffsetLimitJob, sqlScope str
 		qm.Load("ContentUnitI18ns"),
 		qm.Load("CollectionsContentUnits"),
 		qm.Load("CollectionsContentUnits.Collection"),
+		qm.Load("ContentUnitsPersons"),
+		qm.Load("ContentUnitsPersons.Person"),
 		qm.Where(sqlScope),
 		qm.Offset(bulk.Offset),
 		qm.Limit(bulk.Limit)).Bind(nil, index.db, &units); err != nil {
@@ -312,12 +314,24 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 				unit.Description = i18n.Description.String
 			}
 
+			for _, person := range cu.R.ContentUnitsPersons {
+				unit.FilterValues = append(unit.FilterValues, KeyValue(consts.FILTER_PERSON, person.R.Person.UID))
+			}
+
 			if cu.Properties.Valid {
 				var props map[string]interface{}
 				err := json.Unmarshal(cu.Properties.JSON, &props)
 				indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("json.Unmarshal properties %s", cu.UID))
 				if err != nil {
 					continue
+				}
+				if originalLanguage, ok := props["original_language"]; ok {
+					lang, ok := originalLanguage.(string)
+					if !ok {
+						indexErrors.DocumentError(i18n.Language, err, "original_language is not a string")
+						continue
+					}
+					unit.FilterValues = append(unit.FilterValues, KeyValue(consts.FILTER_ORIGINAL_LANGUAGE, lang))
 				}
 				if filmDate, ok := props["film_date"]; ok {
 					dateStr := strings.Split(filmDate.(string), "T")[0] // remove the 'time' part
@@ -343,7 +357,7 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 				unit.TypedUids = append(unit.TypedUids, KeyValues(consts.ES_UID_TYPE_TAG, val)...)
 			}
 			if val, ok := indexData.MediaLanguages[cu.UID]; ok {
-				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.FILTER_LANGUAGE, val)...)
+				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.FILTER_MEDIA_LANGUAGE, val)...)
 			}
 			if byLang, ok := indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {

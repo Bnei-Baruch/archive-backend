@@ -5,8 +5,6 @@ import (
 	"crypto/md5"
 	"database/sql"
 	"fmt"
-	"github.com/volatiletech/null/v8"
-	"golang.org/x/sync/errgroup"
 	"net/http"
 	"regexp"
 	"sort"
@@ -18,9 +16,11 @@ import (
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/gin-gonic/gin.v1"
 	elastic "gopkg.in/olivere/elastic.v6"
 
@@ -638,6 +638,49 @@ func PublishersHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func SearchStatsHandler(c *gin.Context) {
+	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	cacheM := c.MustGet("CACHE").(cache.CacheManager)
+	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
+	variables := c.MustGet("VARIABLES").(search.VariablesV2)
+
+	query := search.ParseQuery(c.Query("q"))
+	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
+	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
+
+	esc, err := esManager.GetClient()
+	if err != nil {
+		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
+		return
+	}
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
+	sources, err := mdbmodels.Sources().All(db)
+	if err != nil {
+		return
+	}
+	suids := make([]string, len(sources))
+	for i, s := range sources {
+		suids[i] = s.UID
+	}
+
+	tags, err := mdbmodels.Tags().All(db)
+	if err != nil {
+		return
+	}
+	tuids := make([]string, len(tags))
+	for i, t := range tags {
+		tuids[i] = t.UID
+	}
+
+	res, err := se.GetCounts(context.TODO(), query, suids, tuids)
+
+	if err != nil {
+		NewInternalError(err).Abort(c)
+	}
+	c.JSON(http.StatusOK, res)
+}
+
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
@@ -646,7 +689,7 @@ func SearchHandler(c *gin.Context) {
 	if c.Query("deb") == "true" {
 		query.Deb = true
 	}
-	log.Debugf("Parsed Query: %#v", query)
+	log.Infof("Parsed Query: %#v", query)
 	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
 		NewBadRequestError(errors.New("Can't search with no terms.")).Abort(c)
 		return
@@ -716,7 +759,7 @@ func SearchHandler(c *gin.Context) {
 	log.Debugf("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
 	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 	for k, v := range query.Filters {
-		if k == consts.FILTER_LANGUAGE {
+		if k == consts.FILTER_MEDIA_LANGUAGE {
 			addLang := true
 			for _, flang := range v {
 				for _, ilang := range query.LanguageOrder {
@@ -839,9 +882,8 @@ func AutocompleteHandler(c *gin.Context) {
 
 	log.Infof("Query: [%s] Language Order: [%+v]", c.Query("q"), order)
 
-	// Have a 300ms deadline on the search engine call.
-	// It's autocomplete after all...
-	ctx, cancelFn := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	// Have a deadline on the search engine call. It's autocomplete after all...
+	ctx, cancelFn := context.WithTimeout(context.Background(), 900*time.Millisecond)
 	defer cancelFn()
 
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
