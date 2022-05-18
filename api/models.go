@@ -220,6 +220,7 @@ type StatsClassResponse struct {
 	Tags         map[string]int `json:"tags"`
 	Languages    map[string]int `json:"languages"`
 	ContentTypes map[string]int `json:"content_types"`
+	Collections  map[string]int `json:"collections"`
 	Total        int64          `json:"total"`
 }
 
@@ -329,6 +330,7 @@ func NewStatsClassResponse() *StatsClassResponse {
 		Tags:         make(map[string]int),
 		Languages:    make(map[string]int),
 		ContentTypes: make(map[string]int),
+		Collections:  make(map[string]int),
 	}
 }
 

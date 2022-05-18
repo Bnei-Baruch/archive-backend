@@ -2246,6 +2246,16 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 		}
 		res.ContentTypes = ctRes.ContentTypes
 	}
+
+	if len(r.Collections) != 0 {
+		ctr := r
+		ctr.Collections = nil
+		ctRes, err := handler(cm, db, ctr)
+		if err != nil {
+			return ctRes, err
+		}
+		res.Collections = ctRes.Collections
+	}
 	return res, nil
 }
 
