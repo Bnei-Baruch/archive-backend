@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/volatiletech/null/v8"
+	"golang.org/x/sync/errgroup"
 	"net/http"
 	"regexp"
 	"sort"
@@ -2209,57 +2210,116 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 }
 
 func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest, handler statsHandler) (*StatsClassResponse, *HttpError) {
-	var res *StatsClassResponse
-	var err *HttpError
-	if res, err = handler(cm, db, r); err != nil {
-		return res, err
-	}
-	if !utils.IsEmpty(r.SourcesFilter.Authors) || len(r.SourcesFilter.Sources) != 0 {
+	ctx := context.Background()
+	g, ctx := errgroup.WithContext(ctx)
+	withFilterCh := make(chan *StatsClassResponse, 1)
+
+	g.Go(func() error {
 		sr := r
 		sr.SourcesFilter = SourcesFilter{
 			Authors: nil,
 			Sources: nil,
 		}
-		sRes, err := handler(cm, db, sr)
+		res, err := handler(cm, db, sr)
 		if err != nil {
-			return sRes, err
+			return err
 		}
-		res.Sources = sRes.Sources
+		withFilterCh <- res
+		return nil
+	})
+
+	sCh := make(chan map[string]int, 1)
+	if !utils.IsEmpty(r.SourcesFilter.Authors) || len(r.SourcesFilter.Sources) != 0 {
+		g.Go(func() error {
+			sr := r
+			sr.SourcesFilter = SourcesFilter{
+				Authors: nil,
+				Sources: nil,
+			}
+			sRes, err := handler(cm, db, sr)
+			if err != nil {
+				return err
+			}
+			sCh <- sRes.Sources
+			return nil
+		})
+	} else {
+		close(sCh)
 	}
 
+	langCh := make(chan map[string]int, 1)
 	if len(r.MediaLanguage) != 0 {
-		lr := r
-		lr.MediaLanguageFilter = MediaLanguageFilter{MediaLanguage: nil}
-		lRes, err := handler(cm, db, lr)
-		if err != nil {
-			return lRes, err
-		}
-		res.Languages = lRes.Languages
+		g.Go(func() error {
+			lr := r
+			lr.MediaLanguageFilter = MediaLanguageFilter{MediaLanguage: nil}
+			lRes, err := handler(cm, db, lr)
+			if err != nil {
+				return err
+			}
+			langCh <- lRes.Languages
+			return nil
+		})
+	} else {
+		close(langCh)
 	}
 
+	ctCh := make(chan map[string]int, 1)
 	if len(r.ContentTypes) != 0 {
-		ctr := r
-		ctr.ContentTypesFilter = ContentTypesFilter{ContentTypes: nil}
-		ctRes, err := handler(cm, db, ctr)
-		if err != nil {
-			return ctRes, err
-		}
-		res.ContentTypes = ctRes.ContentTypes
+		g.Go(func() error {
+			ctr := r
+			ctr.ContentTypesFilter = ContentTypesFilter{ContentTypes: nil}
+			ctRes, err := handler(cm, db, ctr)
+			if err != nil {
+				return err
+			}
+			ctCh <- ctRes.ContentTypes
+			return nil
+		})
+	} else {
+		close(ctCh)
 	}
 
+	cCh := make(chan map[string]int, 1)
 	if len(r.Collections) != 0 {
-		ctr := r
-		ctr.Collections = nil
-		ctRes, err := handler(cm, db, ctr)
-		if err != nil {
-			return ctRes, err
-		}
-		res.Collections = ctRes.Collections
+		g.Go(func() error {
+			ctr := r
+			ctr.Collections = nil
+			ctRes, err := handler(cm, db, ctr)
+			if err != nil {
+				return err
+			}
+			cCh <- ctRes.Collections
+			return nil
+		})
+	} else {
+		close(cCh)
 	}
-	return res, nil
+
+	if err := g.Wait(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	result := <-withFilterCh
+
+	if v, ok := <-langCh; ok {
+		result.Languages = v
+	}
+	if v, ok := <-ctCh; ok {
+		result.ContentTypes = v
+	}
+	if v, ok := <-cCh; ok {
+		result.Collections = v
+	}
+	if v, ok := <-sCh; ok {
+		result.Sources = v
+	}
+	return result, nil
 }
 
 func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (*StatsClassResponse, *HttpError) {
+	log.SetLevel(log.DebugLevel)
+	log.Infof("handleStatsCUClass: start at %s", time.Now())
+
 	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
 	for i, n := range consts.CT_NOT_FOR_DISPLAY {
 		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
@@ -2313,6 +2373,8 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 			return nil, NewInternalError(err)
 		}
 	} else {
+		boil.DebugMode = true
+		log.Infof("handleStatsCUClass: start build query at %s", time.Now())
 		q, args := queries.BuildQuery(mdbmodels.ContentUnits(mods...).Query)
 		fs := FilterCUStats{FilterStats{
 			DB:        db,
@@ -2320,9 +2382,14 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 			ScopeArgs: args,
 			Resp:      resp,
 		}}
+
+		log.Infof("handleStatsCUClass: start call DB at %s", time.Now())
 		if err = fs.GetStats(); err != nil {
 			return nil, NewInternalError(err)
 		}
+
+		boil.DebugMode = false
+		log.Infof("handleStatsCUClass: end call DB at %s", time.Now())
 	}
 	return resp, nil
 }

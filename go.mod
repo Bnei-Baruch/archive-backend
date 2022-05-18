@@ -27,6 +27,7 @@ require (
 	github.com/volatiletech/sqlboiler/v4 v4.8.6
 	github.com/volatiletech/strmangle v0.0.2
 	golang.org/x/net v0.0.0-20210503060351-7fd8e65b6420
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/text v0.3.6
 	gopkg.in/gin-contrib/cors.v1 v1.0.0-20161109062726-fb918bcd825b
 	gopkg.in/gin-gonic/gin.v1 v1.1.4
