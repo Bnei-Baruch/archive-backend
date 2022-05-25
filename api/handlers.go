@@ -2295,6 +2295,22 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 		close(cCh)
 	}
 
+	tCh := make(chan map[string]int, 1)
+	if len(r.Tags) != 0 {
+		g.Go(func() error {
+			ctr := r
+			ctr.Tags = nil
+			ctRes, err := handler(cm, db, ctr)
+			if err != nil {
+				return err
+			}
+			tCh <- ctRes.Tags
+			return nil
+		})
+	} else {
+		close(tCh)
+	}
+
 	if err := g.Wait(); err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2312,6 +2328,9 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	}
 	if v, ok := <-sCh; ok {
 		result.Sources = v
+	}
+	if v, ok := <-tCh; ok {
+		result.Tags = v
 	}
 	return result, nil
 }
