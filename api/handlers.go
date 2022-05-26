@@ -2337,7 +2337,6 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 
 func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (*StatsClassResponse, *HttpError) {
 	log.SetLevel(log.DebugLevel)
-	log.Infof("handleStatsCUClass: start at %s", time.Now())
 
 	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
 	for i, n := range consts.CT_NOT_FOR_DISPLAY {
@@ -2392,8 +2391,6 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 			return nil, NewInternalError(err)
 		}
 	} else {
-		boil.DebugMode = true
-		log.Infof("handleStatsCUClass: start build query at %s", time.Now())
 		q, args := queries.BuildQuery(mdbmodels.ContentUnits(mods...).Query)
 		fs := FilterCUStats{FilterStats{
 			DB:        db,
@@ -2402,13 +2399,9 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 			Resp:      resp,
 		}}
 
-		log.Infof("handleStatsCUClass: start call DB at %s", time.Now())
 		if err = fs.GetStats(); err != nil {
 			return nil, NewInternalError(err)
 		}
-
-		boil.DebugMode = false
-		log.Infof("handleStatsCUClass: end call DB at %s", time.Now())
 	}
 	return resp, nil
 }
