@@ -3464,14 +3464,15 @@ func loadCUFiles(db *sql.DB, ids []int64, mediaTypes []string, languages []strin
 }
 
 func setCUI18n(cu *ContentUnit, language string, i18ns map[string]*mdbmodels.ContentUnitI18n) {
+	if v, ok := i18ns[language]; ok {
+		cu.Description = v.Description.String
+	}
+
 	for _, l := range consts.I18N_LANG_ORDER[language] {
 		li18n, ok := i18ns[l]
 		if ok {
 			if cu.Name == "" && li18n.Name.Valid {
 				cu.Name = li18n.Name.String
-			}
-			if cu.Description == "" && li18n.Description.Valid {
-				cu.Description = li18n.Description.String
 			}
 		}
 	}
