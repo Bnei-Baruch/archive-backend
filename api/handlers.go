@@ -2215,12 +2215,7 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	withFilterCh := make(chan *StatsClassResponse, 1)
 
 	g.Go(func() error {
-		sr := r
-		sr.SourcesFilter = SourcesFilter{
-			Authors: nil,
-			Sources: nil,
-		}
-		res, err := handler(cm, db, sr)
+		res, err := handler(cm, db, r)
 		if err != nil {
 			return err
 		}
@@ -2229,13 +2224,16 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	})
 
 	sCh := make(chan map[string]int, 1)
-	if !utils.IsEmpty(r.SourcesFilter.Authors) || len(r.SourcesFilter.Sources) != 0 {
+	if r.WithSources && (!utils.IsEmpty(r.SourcesFilter.Authors) || len(r.SourcesFilter.Sources) != 0) {
 		g.Go(func() error {
 			sr := r
 			sr.SourcesFilter = SourcesFilter{
 				Authors: nil,
 				Sources: nil,
 			}
+			sr.StatsFetchOptions = StatsFetchOptions{}
+			sr.StatsFetchOptions.WithSources = true
+
 			sRes, err := handler(cm, db, sr)
 			if err != nil {
 				return err
@@ -2248,10 +2246,14 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	}
 
 	langCh := make(chan map[string]int, 1)
-	if len(r.MediaLanguage) != 0 {
+	if r.WithLanguages && len(r.MediaLanguage) != 0 {
 		g.Go(func() error {
 			lr := r
 			lr.MediaLanguageFilter = MediaLanguageFilter{MediaLanguage: nil}
+
+			lr.StatsFetchOptions = StatsFetchOptions{}
+			lr.StatsFetchOptions.WithTags = true
+
 			lRes, err := handler(cm, db, lr)
 			if err != nil {
 				return err
@@ -2264,10 +2266,12 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	}
 
 	ctCh := make(chan map[string]int, 1)
-	if len(r.ContentTypes) != 0 {
+	if r.WithContentTypes && len(r.ContentTypes) != 0 {
 		g.Go(func() error {
 			ctr := r
 			ctr.ContentTypesFilter = ContentTypesFilter{ContentTypes: nil}
+			ctr.StatsFetchOptions = StatsFetchOptions{}
+			ctr.StatsFetchOptions.WithContentTypes = true
 			ctRes, err := handler(cm, db, ctr)
 			if err != nil {
 				return err
@@ -2280,10 +2284,12 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	}
 
 	cCh := make(chan map[string]int, 1)
-	if len(r.Collections) != 0 {
+	if r.WithCollections && len(r.Collections) != 0 {
 		g.Go(func() error {
 			ctr := r
 			ctr.Collections = nil
+			ctr.StatsFetchOptions = StatsFetchOptions{}
+			ctr.StatsFetchOptions.WithCollections = true
 			ctRes, err := handler(cm, db, ctr)
 			if err != nil {
 				return err
@@ -2296,10 +2302,12 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	}
 
 	tCh := make(chan map[string]int, 1)
-	if len(r.Tags) != 0 {
+	if r.WithTags && len(r.Tags) != 0 {
 		g.Go(func() error {
 			ctr := r
 			ctr.Tags = nil
+			ctr.StatsFetchOptions = StatsFetchOptions{}
+			ctr.StatsFetchOptions.WithTags = true
 			ctRes, err := handler(cm, db, ctr)
 			if err != nil {
 				return err
@@ -2393,10 +2401,11 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 	} else {
 		q, args := queries.BuildQuery(mdbmodels.ContentUnits(mods...).Query)
 		fs := FilterCUStats{FilterStats{
-			DB:        db,
-			Scope:     q,
-			ScopeArgs: args,
-			Resp:      resp,
+			DB:           db,
+			Scope:        q,
+			ScopeArgs:    args,
+			Resp:         resp,
+			FetchOptions: &r.StatsFetchOptions,
 		}}
 
 		if err = fs.GetStats(); err != nil {
