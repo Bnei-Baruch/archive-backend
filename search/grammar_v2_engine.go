@@ -617,7 +617,38 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				addSourcePositionWithoutTerm = false // We add results only one time for this rule type
 			} else if rule.Intent == consts.GRAMMAR_INTENT_SOURCE_PATH {
 				log.Infof("GRAMMAR_INTENT_SOURCE_PATH %+v", rule)
-				// TBD FROM HERE
+				var source1, source2 string
+				filterValues := e.VariableMapToFilterValues(vMap, language)
+				for _, fv := range filterValues {
+					if fv.Name == consts.VARIABLE_TO_FILTER[consts.VAR_SOURCE] {
+						if len(source1) != 0 {
+							source2 = fv.Value
+						} else {
+							source1 = fv.Value
+						}
+					}
+					if len(source1) > 0 && len(source2) > 0 {
+						var relevantSource string
+						if e.cache.SearchStats().IsAncestor(source1, source2) {
+							relevantSource = source1
+						} else {
+							relevantSource = source2
+						}
+						path, err := e.sourcePathFromSql(relevantSource, language, nil, nil)
+						if err != nil {
+							return nil, nil, errors.Wrap(err, "sourcePathFromSql")
+						}
+						var expl elastic.SearchExplanation
+						if hit.Explanation != nil {
+							expl = *hit.Explanation
+						}
+						intents, err := e.getSingleHitIntentsBySource(relevantSource, query.Filters, language, path, *hit.Score, expl)
+						if err != nil {
+							return nil, nil, err
+						}
+						singleHitIntents = append(singleHitIntents, intents...)
+					}
+				}
 			} else {
 				if intentsByLandingPage, ok := intentsCount[rule.Intent]; ok && len(intentsByLandingPage) >= consts.MAX_MATCHES_PER_GRAMMAR_INTENT {
 					if score <= minScoreByLandingPage[rule.Intent] {

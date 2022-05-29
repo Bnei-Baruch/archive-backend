@@ -42,7 +42,7 @@ type SearchStatsCache interface {
 
 	GetProgramByCollectionAndPosition(collection_uid string, position string) *string
 
-	GetSourceDescendantsThatHasAncestor(descendants []string, ancestors []string) []string
+	IsAncestor(src string, ancestor string) bool
 }
 
 type SearchStatsCacheImpl struct {
@@ -164,26 +164,7 @@ func (ssc *SearchStatsCacheImpl) GetProgramByCollectionAndPosition(collection_ui
 	return nil
 }
 
-func (ssc *SearchStatsCacheImpl) GetSourceDescendantsThatHasAncestor(descendants []string, ancestors []string) []string {
-	ret := []string{}
-	for _, des := range descendants {
-		if len(des) < 4 {
-			// des is author
-			continue
-		}
-		for _, an := range ancestors {
-			if an == des {
-				continue
-			}
-			if ssc.hasAncestor(des, an) {
-				ret = append(ret, des)
-			}
-		}
-	}
-	return ret
-}
-
-func (ssc *SearchStatsCacheImpl) hasAncestor(src string, ancestor string) bool {
+func (ssc *SearchStatsCacheImpl) IsAncestor(src string, ancestor string) bool {
 	if src == ancestor {
 		return true
 	}
@@ -197,7 +178,7 @@ func (ssc *SearchStatsCacheImpl) hasAncestor(src string, ancestor string) bool {
 	}
 	if val, ok := ssc.sourcesTree.byUID[src]; ok {
 		if parentVal, ok := ssc.sourcesTree.byID[val.parentID]; ok {
-			return ssc.hasAncestor(parentVal.uid, ancestor)
+			return ssc.IsAncestor(parentVal.uid, ancestor)
 		}
 	}
 	return false

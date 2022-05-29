@@ -206,7 +206,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 						variableValues := valueIter.Values()
 						vMap := make(map[string][]string)
 						for i := range variablesSet {
-							vMap[variablesSet[i]] = []string{variableValues[i]}
+							vMap[variablesSet[i]] = append(vMap[variablesSet[i]], variableValues[i])
 						}
 						if !GrammarVariablesMatch(intent, vMap, cm) {
 							continue
