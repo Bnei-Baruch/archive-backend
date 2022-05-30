@@ -227,7 +227,7 @@ func IndexGrammars(esc *elastic.Client, indexDate string, grammars GrammarsV2, v
 								assignValues := phrasesIter.Values()
 								assignedRule = rules[i]
 								for j := range assignValues {
-									assignedRule = strings.Replace(assignedRule, variablesSet[j], assignValues[j], -1)
+									assignedRule = strings.Replace(assignedRule, variablesSet[j], assignValues[j], 1)
 								}
 								assignedRules = append(assignedRules, assignedRule)
 							}
