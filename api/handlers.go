@@ -1415,6 +1415,10 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest) (*ContentUnitsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
+	if err := appendNotForDisplayCU(cm, db, &mods); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+
 	// filters
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
 		return nil, NewBadRequestError(err)
@@ -1875,13 +1879,10 @@ func handleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 		return NewTagsDashboardResponse(), nil
 	}
 
-	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
-	for i, n := range consts.CT_NOT_FOR_DISPLAY {
-		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
-	}
-	cuMods := []qm.QueryMod{
-		SECURE_PUBLISHED_MOD_CU_PREFIX,
-		qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...),
+	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
+
+	if err := appendNotForDisplayCU(cm, db, &cuMods); err != nil {
+		return nil, NewInternalError(err)
 	}
 
 	// CU filters
@@ -2344,18 +2345,15 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 }
 
 func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (*StatsClassResponse, *HttpError) {
-	log.SetLevel(log.DebugLevel)
 
-	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
-	for i, n := range consts.CT_NOT_FOR_DISPLAY {
-		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
-	}
 	mods := []qm.QueryMod{
 		qm.Select("\"content_units\".id as id", "type_id"),
-		qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...),
 		SECURE_PUBLISHED_MOD_CU_PREFIX,
 	}
 
+	if err := appendNotForDisplayCU(cm, db, &mods); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 	// filters
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
 		return nil, NewBadRequestError(err)
@@ -3196,6 +3194,46 @@ func appendMediaLanguageNoInnerSelectFilterMods(mods *[]qm.QueryMod, f MediaLang
 		qm.InnerJoin("files f ON  f.content_unit_id = \"content_units\".id"),
 		qm.WhereIn("f.secure = 0 AND f.published IS TRUE AND f.language IN ?", utils.ConvertArgsString(f.MediaLanguage)...),
 	)
+	return nil
+}
+
+func appendNotForDisplayCU(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod) error {
+	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
+	for i, n := range consts.CT_NOT_FOR_DISPLAY {
+		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
+	}
+
+	*mods = append(*mods, qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...))
+
+	t, err := mdbmodels.Tags(
+		mdbmodels.TagWhere.Pattern.EQ(null.StringFrom("special-lesson")),
+	).One(exec)
+	if err != nil {
+		return NewBadRequestError(err)
+	}
+	_, tids := cm.TagsStats().GetTree().GetChildren([]string{t.UID})
+
+	rows, err := mdbmodels.NewQuery(
+		qm.From("content_units_tags as cut"),
+		qm.Select("cut.content_unit_id"),
+		qm.WhereIn("cut.tag_id IN ?", utils.ConvertArgsInt64(tids)...),
+	).Query(exec)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	cuIDs := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		err = rows.Scan(&id)
+		cuIDs = append(cuIDs, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	*mods = append(*mods, qm.WhereNotIn(`content_units.id NOT IN ?`, utils.ConvertArgsInt64(cuIDs)...))
 	return nil
 }
 
