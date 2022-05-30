@@ -101,7 +101,7 @@ func (e *ESEngine) suggestOptionsToVariablesByPhrases(query *Query, suggest *ela
 					}
 					vMap := make(map[string][]string)
 					for i := range rule.Variables {
-						vMap[rule.Variables[i]] = []string{rule.Values[i]}
+						vMap[rule.Variables[i]] = append(vMap[rule.Variables[i]], rule.Values[i])
 					}
 					if GrammarVariablesMatch(rule.Intent, vMap, e.cache) {
 						//log.Infof("Chosen: %s", chosen)
@@ -136,7 +136,7 @@ func (e *ESEngine) suggestResultsToVariablesByPhrases(query *Query, result *elas
 			}
 			vMap := make(map[string][]string)
 			for i := range rule.Variables {
-				vMap[rule.Variables[i]] = []string{rule.Values[i]}
+				vMap[rule.Variables[i]] = append(vMap[rule.Variables[i]], rule.Values[i])
 			}
 			if GrammarVariablesMatch(rule.Intent, vMap, e.cache) {
 				// Map from lang => Original Full Phrase => $Var => values
@@ -464,13 +464,13 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						log.Infof("search_text: %s", text)
 						if len(text) == 1 && text[0] != "" {
 							textVarValues := retrieveTextVarValues(text[0])
-							vMap[rule.Variables[i]] = textVarValues
+							vMap[rule.Variables[i]] = append(vMap[rule.Variables[i]], textVarValues...)
 							log.Infof("$Text values are %+v", textVarValues)
 						}
 					}
 				}
 			} else {
-				vMap[rule.Variables[i]] = []string{rule.Values[i]}
+				vMap[rule.Variables[i]] = append(vMap[rule.Variables[i]], rule.Values[i])
 			}
 		}
 
