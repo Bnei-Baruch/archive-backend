@@ -3213,27 +3213,11 @@ func appendNotForDisplayCU(cm cache.CacheManager, exec boil.Executor, mods *[]qm
 	}
 	_, tids := cm.TagsStats().GetTree().GetChildren([]string{t.UID})
 
-	rows, err := mdbmodels.NewQuery(
-		qm.From("content_units_tags as cut"),
-		qm.Select("cut.content_unit_id"),
-		qm.WhereIn("cut.tag_id IN ?", utils.ConvertArgsInt64(tids)...),
-	).Query(exec)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	cuIDs := make([]int64, 0)
-	for rows.Next() {
-		var id int64
-		err = rows.Scan(&id)
-		cuIDs = append(cuIDs, id)
-	}
-
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	*mods = append(*mods, qm.WhereNotIn(`content_units.id NOT IN ?`, utils.ConvertArgsInt64(cuIDs)...))
+	*mods = append(*mods, qm.WhereIn(`NOT EXISTS (
+	SELECT cut.content_unit_id 
+	FROM content_units_tags cut 
+	WHERE cut.tag_id in ? 
+	AND "content_units".id = cut.content_unit_id)`, utils.ConvertArgsInt64(tids)...))
 	return nil
 }
 
