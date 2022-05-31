@@ -49,36 +49,36 @@ func filterByProgramMatch(vMap map[string][]string) bool {
 	for variable, values := range vMap {
 		if variable == consts.VAR_TEXT {
 			if hasVarText || len(values) != 1 { //  Disable if we have more than one $Text appereance or value
-				log.Warningf("Number of $Text appearances or values in 'by_program' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $Text appearances or values in 'by_program' rule is not 1. Values: %+v", values)
 				return false
 			}
 			if _, err := strconv.Atoi(values[0]); err == nil {
-				log.Warningf("$Text (%v) is numeric in 'by_program' rule. Should not trigger.", values[0])
+				log.Debugf("$Text (%v) is numeric in 'by_program' rule. Should not trigger.", values[0])
 				return false
 			}
 			hasVarText = true
 		}
 		if variable == consts.VAR_PROGRAM {
 			if hasVarProgram || len(values) != 1 { //  Disable if we have more than one $Program appereance or value
-				log.Warningf("Number of $Program appearances or values in 'by_program' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $Program appearances or values in 'by_program' rule is not 1. Values: %+v", values)
 				return false
 			}
 			hasVarProgram = true
 		}
 		if variable == consts.VAR_CONTENT_TYPE {
 			if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
-				log.Warningf("Number of $ContentType appearances or values in 'by_program' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $ContentType appearances or values in 'by_program' rule is not 1. Values: %+v", values)
 				return false
 			}
 			if values[0] != consts.VAR_CT_PROGRAMS {
-				log.Warningf("$ContentType value in 'by_program' rule should be 'programs'. We have: %v.", values[0])
+				log.Debugf("$ContentType value in 'by_program' rule should be 'programs'. We have: %v.", values[0])
 				return false
 			}
 			hasVarContentType = true
 		}
 	}
 	if !(hasVarProgram && hasVarText) {
-		log.Warningf("Filter intent by program must have one appearance of $Text and one appearance of $Program")
+		log.Debugf("Filter intent by program must have one appearance of $Text and one appearance of $Program")
 		return false
 	}
 	return true
@@ -92,7 +92,7 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 	for variable, values := range vMap {
 		if variable == consts.VAR_CONTENT_TYPE {
 			if hasContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
-				log.Warningf("Number of $ContentType appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $ContentType appearances or values in 'by_position' rule is not 1. Values: %+v", values)
 				return false
 			}
 			if values[0] != consts.VAR_CT_PROGRAMS {
@@ -102,28 +102,28 @@ func programPositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMan
 		}
 		if variable == consts.VAR_POSITION {
 			if varPosition != "" || len(values) != 1 { //  Disable if we have more than one $Position appereance or value
-				log.Warningf("Number of $Position appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $Position appearances or values in 'by_position' rule is not 1. Values: %+v", values)
 				return false
 			}
 			varPosition = values[0]
 		}
 		if variable == consts.VAR_PROGRAM {
 			if varProgramCollection != "" || len(values) != 1 { //  Disable if we have more than one $Program appereance or value
-				log.Warningf("Number of $Program appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $Program appearances or values in 'by_position' rule is not 1. Values: %+v", values)
 				return false
 			}
 			varProgramCollection = values[0]
 		}
 		if variable == consts.VAR_DIVISION_TYPE {
 			if varDivType != "" || len(values) != 1 { //  Disable if we have more than one $DivisionType appereance or value
-				log.Warningf("Number of $DivisionType appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $DivisionType appearances or values in 'by_position' rule is not 1. Values: %+v", values)
 				return false
 			}
 			varDivType = values[0]
 		}
 	}
 	if varPosition == "" {
-		log.Warningf("Intent of program by position must have one appearance of $Position")
+		log.Debugf("Intent of program by position must have one appearance of $Position")
 		return false
 	}
 	if varDivType != "" {
@@ -149,32 +149,32 @@ func filterByProgramWithoutTermMatch(vMap map[string][]string) bool {
 	for variable, values := range vMap {
 		if variable == consts.VAR_PROGRAM {
 			if hasVarProgram || len(values) != 1 { //  Disable if we have more than one $Program appereance or value
-				log.Warningf("Number of $Program appearances or values in 'by_program_without_term' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $Program appearances or values in 'by_program_without_term' rule is not 1. Values: %+v", values)
 				return false
 			}
 			hasVarProgram = true
 		}
 		if variable == consts.VAR_POSITION {
 			if hasVarPosition || len(values) != 1 { //  Disable if we have more than one $Position appereance or value
-				log.Warningf("Number of $Position appearances or values in 'by_program_without_term' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $Position appearances or values in 'by_program_without_term' rule is not 1. Values: %+v", values)
 				return false
 			}
 			hasVarPosition = true
 		}
 		if variable == consts.VAR_CONTENT_TYPE {
 			if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
-				log.Warningf("Number of $ContentType appearances or values in 'by_program_without_term' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $ContentType appearances or values in 'by_program_without_term' rule is not 1. Values: %+v", values)
 				return false
 			}
 			if values[0] != consts.VAR_CT_PROGRAMS {
-				log.Warningf("$ContentType value in 'by_program_without_term' rule should be 'programs'. We have: %v.", values[0])
+				log.Debugf("$ContentType value in 'by_program_without_term' rule should be 'programs'. We have: %v.", values[0])
 				return false
 			}
 			hasVarContentType = true
 		}
 	}
 	if !hasVarProgram {
-		log.Warningf("Filter intent 'by program without term' must have one appearance of $Program")
+		log.Debugf("Filter intent 'by program without term' must have one appearance of $Program")
 		return false
 	}
 	return true
@@ -186,22 +186,22 @@ func filterBySourceMatch(vMap map[string][]string) bool {
 	for variable, values := range vMap {
 		if variable == consts.VAR_TEXT {
 			if hasVarText || len(values) != 1 { //  Disable if we have more than one $Text appereance or value
-				log.Warningf("Number of $Text appearances or values in 'by_source' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $Text appearances or values in 'by_source' rule is not 1. Values: %+v", values)
 				return false
 			}
 			hasVarText = true
 		}
 		if variable == consts.VAR_SOURCE {
 			if hasVarSource || len(values) != 1 { //  Disable if we have more than one $Source appereance or value
-				// TBD consider support for multiple $Source values
-				log.Warningf("Number of $Source appearances or values in 'by_source' rule is not 1. Values: %+v", values)
+				// Multiple sources are supported with 'source_path' rule
+				log.Debugf("Number of $Source appearances or values in 'by_source' rule is not 1. Values: %+v", values)
 				return false
 			}
 			hasVarSource = true
 		}
 	}
 	if !(hasVarText && hasVarSource) {
-		log.Warningf("Filter intent by content type must have one appearance of $Text and one appearance of $Source")
+		log.Debugf("Filter intent by content type must have one appearance of $Text and one appearance of $Source")
 		return false
 	}
 	return true
@@ -214,7 +214,7 @@ func sourcePositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMana
 	for variable, values := range vMap {
 		if variable == consts.VAR_POSITION {
 			if varPosition != "" || len(values) != 1 { //  Disable if we have more than one $Position appereance or value
-				log.Warningf("Number of $Position appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $Position appearances or values in 'by_position' rule is not 1. Values: %+v", values)
 				return false
 			}
 			varPosition = values[0]
@@ -222,21 +222,21 @@ func sourcePositionWithoutTermMatch(vMap map[string][]string, cm cache.CacheMana
 		if variable == consts.VAR_SOURCE {
 			if varSource != "" || len(values) != 1 { //  Disable if we have more than one $Source appereance or value
 				// TBD consider support for multiple $Source values
-				log.Warningf("Number of $Source appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $Source appearances or values in 'by_position' rule is not 1. Values: %+v", values)
 				return false
 			}
 			varSource = values[0]
 		}
 		if variable == consts.VAR_DIVISION_TYPE {
 			if varDivType != "" || len(values) != 1 { //  Disable if we have more than one $DivisionType appereance or value
-				log.Warningf("Number of $DivisionType appearances or values in 'by_position' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $DivisionType appearances or values in 'by_position' rule is not 1. Values: %+v", values)
 				return false
 			}
 			varDivType = values[0]
 		}
 	}
 	if varPosition == "" || varSource == "" {
-		log.Warningf("Intent of source by position must have one appearance of $Position and one appearance of $Source")
+		log.Debugf("Intent of source by position must have one appearance of $Position and one appearance of $Source")
 		return false
 	}
 	var divTypes []int64
@@ -256,7 +256,7 @@ func filterByContentTypeMatch(vMap map[string][]string) bool {
 	for variable, values := range vMap {
 		if variable == consts.VAR_TEXT {
 			if hasVarText || len(values) != 1 { //  Disable if we have more than one $Text appereance or value
-				log.Warningf("Number of $Text appearances or values in 'by_content' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $Text appearances or values in 'by_content' rule is not 1. Values: %+v", values)
 				return false
 			}
 			hasVarText = true
@@ -264,14 +264,14 @@ func filterByContentTypeMatch(vMap map[string][]string) bool {
 		if variable == consts.VAR_CONTENT_TYPE {
 			if hasVarContentType || len(values) != 1 { //  Disable if we have more than one $ContentType appereance or value
 				// TBD consider support for multiple $ContentType values
-				log.Warningf("Number of $ContentType appearances or values in 'by_content' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $ContentType appearances or values in 'by_content' rule is not 1. Values: %+v", values)
 				return false
 			}
 			hasVarContentType = true
 		}
 	}
 	if !(hasVarText && hasVarContentType) {
-		log.Warningf("Filter intent by content type must have one appearance of $Text and one appearance of $ContentType")
+		log.Debugf("Filter intent by content type must have one appearance of $Text and one appearance of $ContentType")
 		return false
 	}
 	return true
@@ -330,29 +330,29 @@ func sourcePathMatch(vMap map[string][]string, cm cache.CacheManager) bool {
 	for variable, values := range vMap {
 		if variable == consts.VAR_SOURCE {
 			if len(varSources) > 0 { //  Disable if we have more than two $Source appereances. Later consider to support more.
-				log.Warningf("Number of $Source appearances in 'source_path' rule is more than 2. Values: %+v", values)
+				log.Debugf("Number of $Source appearances in 'source_path' rule is more than 2. Values: %+v", values)
 				return false
 			}
 			varSources = append(varSources, values...)
 		}
 		if variable == consts.VAR_DIVISION_TYPE {
 			if varDivType != "" || len(values) != 1 { //  Disable if we have more than one $DivisionType appereance or value
-				log.Warningf("Number of $DivisionType appearances or values in 'source_path' rule is not 1. Values: %+v", values)
+				log.Debugf("Number of $DivisionType appearances or values in 'source_path' rule is not 1. Values: %+v", values)
 				return false
 			}
 			varDivType = values[0]
 		}
 	}
 	if len(varSources) == 1 {
-		log.Warningf("Number of $Source appearances in 'source_path' is only 1.")
+		log.Debugf("Number of $Source appearances in 'source_path' is only 1.")
 		return false
 	}
 	if varSources[0] == varSources[1] {
-		log.Warningf("Both sources in 'source_path' are equal.")
+		log.Debugf("Both sources in 'source_path' are equal.")
 		return false
 	}
 	if varDivType != "" && varDivType != consts.VAR_DIV_ARTICLE {
-		log.Warningf("The only supported division type for source path intent is 'article'.")
+		log.Debugf("The only supported division type for source path intent is 'article'.")
 		return false
 	}
 	ret := cm.SearchStats().IsAncestor(varSources[0], varSources[1]) ||
