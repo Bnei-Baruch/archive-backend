@@ -418,15 +418,18 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	singleHitIntents := []Intent(nil)
 	intentsCount := make(map[string][]Intent)
 	minScoreByLandingPage := make(map[string]float64)
+	sourcesForWhichWeAddedIntents := make(map[string]bool)
 	queryTermIsNumber, queryTermHasDigit := utils.HasNumeric(query.Term)
 	// In case our query is numeric only, we ignore intents of "source position without term" to avoid irrelavnt results.
 	// Also we support "program with position without term" intents only if we have a numeric chapter as part of the query.
 	addProgramPositionWithoutTerm := queryTermHasDigit
 	addSourcePositionWithoutTerm := !queryTermIsNumber
+	var addSourcePath bool = true
 	if addSourcePositionWithoutTerm {
 		for filterKey := range query.Filters {
 			if _, ok := consts.AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS[filterKey]; !ok {
 				addSourcePositionWithoutTerm = false
+				addSourcePath = false
 				break
 			}
 		}
@@ -597,25 +600,31 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				if relevantSource == nil {
 					return nil, nil, errors.New(fmt.Sprintf("Relevant source is not found by source parent '%v' and position '%v'.", source, position))
 				}
-				var leafPrefixType *consts.PositionIndexType
-				if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[source]; ok {
-					leafPrefixType = &val
+				if res, ok := sourcesForWhichWeAddedIntents[*relevantSource]; !ok || !res {
+					var leafPrefixType *consts.PositionIndexType
+					if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[source]; ok {
+						leafPrefixType = &val
+					}
+					path, err := e.sourcePathFromSql(*relevantSource, language, &position, leafPrefixType)
+					if err != nil {
+						return nil, nil, err
+					}
+					var expl elastic.SearchExplanation
+					if hit.Explanation != nil {
+						expl = *hit.Explanation
+					}
+					intents, err := e.getSingleHitIntentsBySource(*relevantSource, query.Filters, language, path, *hit.Score, expl)
+					if err != nil {
+						return nil, nil, err
+					}
+					singleHitIntents = append(singleHitIntents, intents...)
+					sourcesForWhichWeAddedIntents[*relevantSource] = true
+					addSourcePositionWithoutTerm = false // We add results only one time for this rule type
 				}
-				path, err := e.sourcePathFromSql(*relevantSource, language, &position, leafPrefixType)
-				if err != nil {
-					return nil, nil, err
-				}
-				var expl elastic.SearchExplanation
-				if hit.Explanation != nil {
-					expl = *hit.Explanation
-				}
-				intents, err := e.getSingleHitIntentsBySource(*relevantSource, query.Filters, language, path, *hit.Score, expl)
-				if err != nil {
-					return nil, nil, err
-				}
-				singleHitIntents = append(singleHitIntents, intents...)
-				addSourcePositionWithoutTerm = false // We add results only one time for this rule type
 			} else if rule.Intent == consts.GRAMMAR_INTENT_SOURCE_PATH {
+				if !addSourcePath {
+					continue
+				}
 				log.Infof("GRAMMAR_INTENT_SOURCE_PATH %+v", rule)
 				var source1, source2 string
 				filterValues := e.VariableMapToFilterValues(vMap, language)
@@ -634,19 +643,22 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						} else {
 							relevantSource = source2
 						}
-						path, err := e.sourcePathFromSql(relevantSource, language, nil, nil)
-						if err != nil {
-							return nil, nil, errors.Wrap(err, "sourcePathFromSql")
+						if res, ok := sourcesForWhichWeAddedIntents[relevantSource]; !ok || !res {
+							path, err := e.sourcePathFromSql(relevantSource, language, nil, nil)
+							if err != nil {
+								return nil, nil, errors.Wrap(err, "sourcePathFromSql")
+							}
+							var expl elastic.SearchExplanation
+							if hit.Explanation != nil {
+								expl = *hit.Explanation
+							}
+							intents, err := e.getSingleHitIntentsBySource(relevantSource, query.Filters, language, path, *hit.Score, expl)
+							if err != nil {
+								return nil, nil, err
+							}
+							singleHitIntents = append(singleHitIntents, intents...)
+							sourcesForWhichWeAddedIntents[relevantSource] = true
 						}
-						var expl elastic.SearchExplanation
-						if hit.Explanation != nil {
-							expl = *hit.Explanation
-						}
-						intents, err := e.getSingleHitIntentsBySource(relevantSource, query.Filters, language, path, *hit.Score, expl)
-						if err != nil {
-							return nil, nil, err
-						}
-						singleHitIntents = append(singleHitIntents, intents...)
 					}
 				}
 			} else {
