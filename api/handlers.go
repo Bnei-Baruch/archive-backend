@@ -301,32 +301,116 @@ func LessonsHandler(c *gin.Context) {
 	if c.Bind(&r) != nil {
 		return
 	}
-
+	db := c.MustGet("MDB_DB").(*sql.DB)
 	// We're either in full lessons mode or lesson parts mode based on
 	// filters that apply only to lesson parts (content_units)
 
 	if utils.IsEmpty(r.Authors) &&
 		utils.IsEmpty(r.Sources) &&
 		utils.IsEmpty(r.Tags) &&
-		utils.IsEmpty(r.Tags) &&
 		utils.IsEmpty(r.DerivedTypes) &&
+		utils.IsEmpty(r.Collections) &&
 		len(r.MediaLanguage) == 0 {
 		if r.OrderBy == "" {
 			r.OrderBy = "(properties->>'film_date')::date desc, (properties->>'number')::int desc, created_at desc"
 		}
-		cr := CollectionsRequest{
-			ContentTypesFilter: ContentTypesFilter{
-				ContentTypes: []string{consts.CT_DAILY_LESSON, consts.CT_SPECIAL_LESSON},
-			},
-			ListRequest:     r.ListRequest,
-			DateRangeFilter: r.DateRangeFilter,
-			WithUnits:       true,
+		cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+
+		if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
+			NewInternalError(err).Abort(c)
+			return
+		}
+		if err := appendDateRangeFilterMods(&cMods, r.DateRangeFilter); err != nil {
+			NewInternalError(err).Abort(c)
+			return
 		}
 
-		cm := c.MustGet("CACHE").(cache.CacheManager)
-		db := c.MustGet("MDB_DB").(*sql.DB)
-		resp, err := handleCollections(cm, db, cr)
-		concludeRequest(c, resp, err)
+		var cTotal int64
+		err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
+		if err != nil {
+			NewInternalError(err).Abort(c)
+			return
+		}
+		cMods = append(cMods, qm.Select(`
+			DISTINCT ON (id) 
+			coalesce((properties->>'film_date')::date, created_at) as date, 
+			uid as uid,
+			type_id as type_id
+		`),
+		)
+
+		qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
+
+		cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+		if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
+			NewInternalError(err).Abort(c)
+			return
+		}
+		if err := appendDateRangeFilterMods(&cuMods, r.DateRangeFilter); err != nil {
+			NewInternalError(err).Abort(c)
+			return
+		}
+		var cuTotal int64
+		err = mdbmodels.ContentUnits(append(cuMods, qm.Select(`COUNT(DISTINCT "content_units".id)`))...).QueryRow(db).Scan(&cuTotal)
+		if err != nil {
+			NewInternalError(err).Abort(c)
+			return
+		}
+
+		cuMods = append(cuMods, qm.Select(`
+			DISTINCT ON (id) 
+			coalesce((properties->>'film_date')::date, created_at) as date,
+			uid as uid,
+			type_id as type_id
+		`),
+		)
+
+		qcu, argsCu := queries.BuildQuery(mdbmodels.ContentUnits(cuMods...).Query)
+		qcu = startQueryArgCountFrom(qcu, len(args))
+		args = append(args, argsCu...)
+
+		q := fmt.Sprintf(`
+			WITH items AS (
+				(%s) 
+				UNION 
+				(%s)
+			)(
+				SELECT item.uid, item.type_id 
+				FROM items item ORDER BY date DESC LIMIT %d OFFSET %d
+			)
+		`, qc[:len(qc)-1], qcu[:len(qcu)-1], r.PageSize, (r.PageNumber-1)*r.PageSize)
+
+		rows, err := queries.Raw(q, args...).Query(db)
+		if err != nil {
+			NewInternalError(err).Abort(c)
+			return
+		}
+		defer rows.Close()
+
+		resp := LessonsResponse{
+			ListResponse: ListResponse{
+				Total: cTotal + cuTotal,
+			},
+			Items: make([]*LessonsResponseItem, 0),
+		}
+		for rows.Next() {
+			var uid string
+			var ct int64
+
+			err = rows.Scan(&uid, &ct)
+			item := LessonsResponseItem{
+				UID:         uid,
+				ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[ct].Name,
+			}
+			resp.Items = append(resp.Items, &item)
+		}
+
+		if err = rows.Err(); err != nil {
+			NewInternalError(err).Abort(c)
+			return
+		}
+
+		concludeRequest(c, resp, nil)
 	} else {
 		if r.OrderBy == "" {
 			r.OrderBy = "(properties->>'film_date')::date desc, created_at desc"
@@ -341,19 +425,18 @@ func LessonsHandler(c *gin.Context) {
 		}
 
 		cur := ContentUnitsRequest{
-			ContentTypesFilter: ContentTypesFilter{
-				ContentTypes: []string{consts.CT_LESSON_PART},
-			},
 			ListRequest:         r.ListRequest,
 			DateRangeFilter:     r.DateRangeFilter,
 			SourcesFilter:       r.SourcesFilter,
 			TagsFilter:          r.TagsFilter,
 			WithFiles:           withFiles,
+			ContentTypesFilter:  r.ContentTypesFilter,
 			MediaLanguageFilter: r.MediaLanguageFilter,
 			DerivedTypesFilter:  r.DerivedTypesFilter,
+			CollectionsFilter:   r.CollectionsFilter,
 		}
 		cm := c.MustGet("CACHE").(cache.CacheManager)
-		db := c.MustGet("MDB_DB").(*sql.DB)
+
 		resp, err := handleContentUnits(cm, db, cur)
 		concludeRequest(c, resp, err)
 	}

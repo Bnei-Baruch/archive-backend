@@ -163,6 +163,17 @@ type LessonsRequest struct {
 	TagsFilter
 	MediaLanguageFilter
 	DerivedTypesFilter
+	ContentTypesFilter
+	CollectionsFilter
+}
+
+type LessonsResponseItem struct {
+	UID         string `json:"id"`
+	ContentType string `json:"content_type"`
+}
+type LessonsResponse struct {
+	ListResponse
+	Items []*LessonsResponseItem `json:"items"`
 }
 
 type PublishersRequest struct {
