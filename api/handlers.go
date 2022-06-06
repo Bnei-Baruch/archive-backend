@@ -302,74 +302,97 @@ func LessonsHandler(c *gin.Context) {
 		return
 	}
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	// We're either in full lessons mode or lesson parts mode based on
-	// filters that apply only to lesson parts (content_units)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
 
-	if utils.IsEmpty(r.Authors) &&
-		utils.IsEmpty(r.Sources) &&
-		utils.IsEmpty(r.Tags) &&
-		utils.IsEmpty(r.DerivedTypes) &&
-		utils.IsEmpty(r.Collections) &&
-		len(r.MediaLanguage) == 0 {
-		if r.OrderBy == "" {
-			r.OrderBy = "(properties->>'film_date')::date desc, (properties->>'number')::int desc, created_at desc"
-		}
-		cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
-		if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
-			NewInternalError(err).Abort(c)
-			return
-		}
-		if err := appendDateRangeFilterMods(&cMods, r.DateRangeFilter); err != nil {
-			NewInternalError(err).Abort(c)
-			return
-		}
+	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendDateRangeFilterMods(&cMods, r.DateRangeFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendCollectionSourceFilterMods(cm, db, &cMods, r.SourcesFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendCollectionTagsFilterMods(cm, db, &cMods, r.TagsFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendMediaLanguageFilterMods(db, &cMods, r.MediaLanguageFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
 
-		var cTotal int64
-		err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
-		if err != nil {
-			NewInternalError(err).Abort(c)
-			return
-		}
-		cMods = append(cMods, qm.Select(`
+	if err := appendIDsFilterMods(&cMods, IDsFilter{IDs: r.Collections}); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	var cTotal int64
+	err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	cMods = append(cMods, qm.Select(`
 			DISTINCT ON (id) 
 			coalesce((properties->>'film_date')::date, created_at) as date, 
 			uid as uid,
 			type_id as type_id
 		`),
-		)
+	)
 
-		qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
+	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
 
-		cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
-		if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
-			NewInternalError(err).Abort(c)
-			return
-		}
-		if err := appendDateRangeFilterMods(&cuMods, r.DateRangeFilter); err != nil {
-			NewInternalError(err).Abort(c)
-			return
-		}
-		var cuTotal int64
-		err = mdbmodels.ContentUnits(append(cuMods, qm.Select(`COUNT(DISTINCT "content_units".id)`))...).QueryRow(db).Scan(&cuTotal)
-		if err != nil {
-			NewInternalError(err).Abort(c)
-			return
-		}
+	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendDateRangeFilterMods(&cuMods, r.DateRangeFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
 
-		cuMods = append(cuMods, qm.Select(`
+	if err := appendSourcesFilterMods(cm, &cuMods, r.SourcesFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	appendTagsFilterMods(cm, &cuMods, r.TagsFilter)
+
+	if err := appendMediaLanguageFilterMods(db, &cuMods, r.MediaLanguageFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendCollectionsFilterMods(db, &cuMods, r.CollectionsFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	var cuTotal int64
+	err = mdbmodels.ContentUnits(append(cuMods, qm.Select(`COUNT(DISTINCT "content_units".id)`))...).QueryRow(db).Scan(&cuTotal)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	cuMods = append(cuMods, qm.Select(`
 			DISTINCT ON (id) 
 			coalesce((properties->>'film_date')::date, created_at) as date,
 			uid as uid,
 			type_id as type_id
 		`),
-		)
+	)
 
-		qcu, argsCu := queries.BuildQuery(mdbmodels.ContentUnits(cuMods...).Query)
-		qcu = startQueryArgCountFrom(qcu, len(args))
-		args = append(args, argsCu...)
+	qcu, argsCu := queries.BuildQuery(mdbmodels.ContentUnits(cuMods...).Query)
+	qcu = startQueryArgCountFrom(qcu, len(args))
+	args = append(args, argsCu...)
 
-		q := fmt.Sprintf(`
+	q := fmt.Sprintf(`
 			WITH items AS (
 				(%s) 
 				UNION 
@@ -380,66 +403,37 @@ func LessonsHandler(c *gin.Context) {
 			)
 		`, qc[:len(qc)-1], qcu[:len(qcu)-1], r.PageSize, (r.PageNumber-1)*r.PageSize)
 
-		rows, err := queries.Raw(q, args...).Query(db)
-		if err != nil {
-			NewInternalError(err).Abort(c)
-			return
-		}
-		defer rows.Close()
-
-		resp := LessonsResponse{
-			ListResponse: ListResponse{
-				Total: cTotal + cuTotal,
-			},
-			Items: make([]*LessonsResponseItem, 0),
-		}
-		for rows.Next() {
-			var uid string
-			var ct int64
-
-			err = rows.Scan(&uid, &ct)
-			item := LessonsResponseItem{
-				UID:         uid,
-				ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[ct].Name,
-			}
-			resp.Items = append(resp.Items, &item)
-		}
-
-		if err = rows.Err(); err != nil {
-			NewInternalError(err).Abort(c)
-			return
-		}
-
-		concludeRequest(c, resp, nil)
-	} else {
-		if r.OrderBy == "" {
-			r.OrderBy = "(properties->>'film_date')::date desc, created_at desc"
-		}
-
-		// We parse with_files query string parameter here
-		// since we bind the request to the base struct at the top of this method.
-		// This is rather ugly...
-		withFiles, pErr := strconv.ParseBool(c.Request.Form.Get("with_files"))
-		if pErr != nil {
-			withFiles = false
-		}
-
-		cur := ContentUnitsRequest{
-			ListRequest:         r.ListRequest,
-			DateRangeFilter:     r.DateRangeFilter,
-			SourcesFilter:       r.SourcesFilter,
-			TagsFilter:          r.TagsFilter,
-			WithFiles:           withFiles,
-			ContentTypesFilter:  r.ContentTypesFilter,
-			MediaLanguageFilter: r.MediaLanguageFilter,
-			DerivedTypesFilter:  r.DerivedTypesFilter,
-			CollectionsFilter:   r.CollectionsFilter,
-		}
-		cm := c.MustGet("CACHE").(cache.CacheManager)
-
-		resp, err := handleContentUnits(cm, db, cur)
-		concludeRequest(c, resp, err)
+	rows, err := queries.Raw(q, args...).Query(db)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
 	}
+	defer rows.Close()
+
+	resp := LessonsResponse{
+		ListResponse: ListResponse{
+			Total: cTotal + cuTotal,
+		},
+		Items: make([]*LessonsResponseItem, 0),
+	}
+	for rows.Next() {
+		var uid string
+		var ct int64
+
+		err = rows.Scan(&uid, &ct)
+		item := LessonsResponseItem{
+			UID:         uid,
+			ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[ct].Name,
+		}
+		resp.Items = append(resp.Items, &item)
+	}
+
+	if err = rows.Err(); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	concludeRequest(c, resp, nil)
 }
 
 func PublishersHandler(c *gin.Context) {
