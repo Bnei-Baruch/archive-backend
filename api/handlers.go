@@ -349,6 +349,10 @@ func LessonsHandler(c *gin.Context) {
 	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
 
 	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+	if err := appendNotForDisplayCU(cm, db, &cuMods); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
 	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
 		NewInternalError(err).Abort(c)
 		return
