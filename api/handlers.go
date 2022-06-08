@@ -322,7 +322,7 @@ func LessonsHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	if err := appendMediaLanguageFilterMods(db, &cMods, r.MediaLanguageFilter); err != nil {
+	if err := appendCollectionMediaLanguageFilterMods(&cMods, r.MediaLanguageFilter); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -368,7 +368,12 @@ func LessonsHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
+
 	if err := appendCollectionsFilterMods(db, &cuMods, r.CollectionsFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendPersonsFilterMods(db, &cuMods, r.PersonsFilter); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -2330,7 +2335,7 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 			lr.MediaLanguageFilter = MediaLanguageFilter{MediaLanguage: nil}
 
 			lr.StatsFetchOptions = StatsFetchOptions{}
-			lr.StatsFetchOptions.WithTags = true
+			lr.StatsFetchOptions.WithLanguages = true
 
 			lRes, err := handler(cm, db, lr)
 			if err != nil {
@@ -2348,6 +2353,7 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 		g.Go(func() error {
 			ctr := r
 			ctr.ContentTypesFilter = ContentTypesFilter{ContentTypes: nil}
+			ctr.PersonsFilter = PersonsFilter{Persons: nil}
 			ctr.StatsFetchOptions = StatsFetchOptions{}
 			ctr.StatsFetchOptions.WithContentTypes = true
 			ctRes, err := handler(cm, db, ctr)
@@ -2526,10 +2532,11 @@ func handleStatsLabelClass(cm cache.CacheManager, db *sql.DB, r StatsClassReques
 
 	q, args := queries.BuildQuery(mdbmodels.Labels(mods...).Query)
 	fs := FilterLabelStats{FilterStats{
-		DB:        db,
-		Scope:     q,
-		ScopeArgs: args,
-		Resp:      resp,
+		DB:           db,
+		Scope:        q,
+		ScopeArgs:    args,
+		Resp:         resp,
+		FetchOptions: &r.StatsFetchOptions,
 	}}
 	if err = fs.GetStats(); err != nil {
 		return nil, NewInternalError(err)
@@ -2559,16 +2566,23 @@ func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (
 	if err := appendCollectionTagsFilterMods(cm, db, &mods, r.TagsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
+	if err := appendCollectionMediaLanguageFilterMods(&mods, r.MediaLanguageFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 
 	resp := NewStatsClassResponse()
 
 	q, args := queries.BuildQuery(mdbmodels.Collections(mods...).Query)
-	cs := FilterCollectionStats{FilterStats{
-		DB:        db,
-		Scope:     q,
-		ScopeArgs: args,
-		Resp:      resp,
-	}}
+	cs := FilterCollectionStats{
+		FilterStats: FilterStats{
+			DB:           db,
+			Scope:        q,
+			ScopeArgs:    args,
+			Resp:         resp,
+			FetchOptions: &r.StatsFetchOptions,
+		},
+		ContentTypesFilter: &r.ContentTypesFilter,
+	}
 	if err := cs.GetStats(); err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -3013,6 +3027,45 @@ func appendCollectionTagsFilterMods(cm cache.CacheManager, exec boil.Executor, m
 	} else {
 		*mods = append(*mods, qm.WhereIn("id in ?", utils.ConvertArgsInt64(ids)...))
 	}
+	return nil
+}
+
+func appendCollectionMediaLanguageFilterMods(mods *[]qm.QueryMod, f MediaLanguageFilter) error {
+	if len(f.MediaLanguage) == 0 {
+		return nil
+	}
+	for _, lang := range f.MediaLanguage {
+		has := false
+		for _, l := range consts.ALL_KNOWN_LANGS {
+			if lang == l {
+				has = true
+			}
+		}
+
+		if !has {
+			return NewBadRequestError(errors.New("pass bad language"))
+		}
+	}
+	args := fmt.Sprintf("'%s'", strings.Join(f.MediaLanguage, "','"))
+	q := fmt.Sprintf(`
+(
+	"collections".properties->>'original_language' IS NULL  AND EXISTS (
+		SELECT ccu.collection_id FROM collections_content_units ccu 
+		INNER JOIN content_units cu ON cu.id = ccu.content_unit_id
+		INNER JOIN files f ON f.content_unit_id = cu.id
+		WHERE ccu.collection_id = "collections".id 
+		AND (cu.secure=0 AND cu.published IS TRUE)
+		AND f.language IN (%[1]s)
+		AND (f.secure=0 AND f.published IS TRUE)
+		LIMIT 1
+	)
+) OR (
+"collections".properties->>'original_language' IS NOT NULL
+AND "collections".properties->>'original_language' IN (%[1]s)
+)
+`, args)
+
+	*mods = append(*mods, qm.Where(q))
 	return nil
 }
 

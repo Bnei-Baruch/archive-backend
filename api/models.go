@@ -165,6 +165,7 @@ type LessonsRequest struct {
 	DerivedTypesFilter
 	ContentTypesFilter
 	CollectionsFilter
+	PersonsFilter
 }
 
 type LessonsResponseItem struct {
@@ -216,6 +217,7 @@ type StatsFetchOptions struct {
 	WithCollections  bool `json:"with_collections" form:"with_collections" binding:"omitempty"`
 	WithLanguages    bool `json:"with_languages" form:"with_languages" binding:"omitempty"`
 	WithContentTypes bool `json:"with_content_types" form:"with_content_types" binding:"omitempty"`
+	WithPersons      bool `json:"with_persons" form:"with_persons" binding:"omitempty"`
 }
 
 type StatsClassRequest struct {
@@ -241,6 +243,7 @@ type StatsClassResponse struct {
 	Languages    map[string]int `json:"languages"`
 	ContentTypes map[string]int `json:"content_types"`
 	Collections  map[string]int `json:"collections"`
+	Persons      map[string]int `json:"persons"`
 	Total        int64          `json:"total"`
 }
 
