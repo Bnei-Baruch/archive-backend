@@ -337,6 +337,9 @@ GROUP BY f.language
 	GROUP BY p.uid`)
 	}
 
+	if len(qs) == 0 {
+		return nil
+	}
 	qq := fmt.Sprintf("with fcu as (%s) %s", fs.Scope[:len(fs.Scope)-1], strings.Join(qs, " UNION "))
 	return fs.scan(qq)
 }
@@ -411,6 +414,9 @@ func (fs *FilterLabelStats) GetStats() error {
 	GROUP BY fl.type_id`)
 	}
 
+	if len(qs) == 0 {
+		return nil
+	}
 	qq := fmt.Sprintf("with fl as (%s) %s", fs.Scope[:len(fs.Scope)-1], strings.Join(qs, " UNION "))
 
 	return fs.scan(qq)
@@ -518,6 +524,9 @@ GROUP BY c.type_id
 		)
 	}
 
+	if len(qs) == 0 {
+		return nil
+	}
 	qq := fmt.Sprintf("with fc as (%s) %s", fs.Scope[:len(fs.Scope)-1], strings.Join(qs, " UNION "))
 	return fs.scan(qq)
 }

@@ -451,6 +451,12 @@ type Publisher struct {
 	ID          int64       `json:"-"`
 }
 
+type Person struct {
+	UID  string      `json:"id"`
+	Name null.String `json:"name"`
+	ID   int64       `json:"-"`
+}
+
 type CollectionUpdateStatus struct {
 	UID        string     `json:"id"`
 	LastUpdate utils.Date `json:"last_update"`
@@ -469,6 +475,7 @@ type SemiQuasiData struct {
 	Authors    []*Author    `json:"sources"`
 	Tags       []*Tag       `json:"tags"`
 	Publishers []*Publisher `json:"publishers"`
+	Persons    []*Person    `json:"persons"`
 }
 
 type Tweet struct {

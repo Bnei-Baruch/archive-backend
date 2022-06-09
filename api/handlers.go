@@ -331,6 +331,9 @@ func LessonsHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
+	if len(r.Persons) > 0 {
+		cMods = []qm.QueryMod{qm.Where("id < 0")}
+	}
 
 	var cTotal int64
 	err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
@@ -349,6 +352,7 @@ func LessonsHandler(c *gin.Context) {
 	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
 
 	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+
 	if err := appendNotForDisplayCU(cm, db, &cuMods); err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -1925,6 +1929,40 @@ func handlePublishers(db *sql.DB, r PublishersRequest) (*PublishersResponse, *Ht
 	return resp, nil
 }
 
+func handlePersons(db *sql.DB, r BaseRequest) ([]*Person, *HttpError) {
+	mods := make([]qm.QueryMod, 0)
+	mods = append(mods, qm.Load(mdbmodels.PersonRels.PersonI18ns))
+	persons, err := mdbmodels.Persons(mods...).All(db)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	// response
+	resp := make([]*Person, len(persons))
+	for i := range persons {
+		p := persons[i]
+
+		pp := &Person{
+			UID: p.UID,
+		}
+
+		// i18ns
+		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+			for _, i18n := range p.R.PersonI18ns {
+				if i18n.Language == l {
+					if !pp.Name.Valid && i18n.Name.Valid {
+						pp.Name = i18n.Name
+					}
+				}
+			}
+		}
+
+		resp[i] = pp
+	}
+
+	return resp, nil
+}
+
 func handleRecentlyUpdated(db *sql.DB) ([]CollectionUpdateStatus, *HttpError) {
 	q := `SELECT
   c.uid,
@@ -2293,6 +2331,12 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 	}
 	sqd.Publishers = publishers.Publishers
 
+	persons, err := handlePersons(db, r)
+	if err != nil {
+		return nil, err
+	}
+	sqd.Persons = persons
+
 	return sqd, nil
 }
 
@@ -2357,7 +2401,6 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 		g.Go(func() error {
 			ctr := r
 			ctr.ContentTypesFilter = ContentTypesFilter{ContentTypes: nil}
-			ctr.PersonsFilter = PersonsFilter{Persons: nil}
 			ctr.StatsFetchOptions = StatsFetchOptions{}
 			ctr.StatsFetchOptions.WithContentTypes = true
 			ctRes, err := handler(cm, db, ctr)
@@ -2369,6 +2412,24 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 		})
 	} else {
 		close(ctCh)
+	}
+
+	pCh := make(chan map[string]int, 1)
+	if r.WithPersons && len(r.Persons) != 0 {
+		g.Go(func() error {
+			pr := r
+			pr.PersonsFilter = PersonsFilter{Persons: nil}
+			pr.StatsFetchOptions = StatsFetchOptions{}
+			pr.StatsFetchOptions.WithPersons = true
+			pRes, err := handler(cm, db, pr)
+			if err != nil {
+				return err
+			}
+			pCh <- pRes.Persons
+			return nil
+		})
+	} else {
+		close(pCh)
 	}
 
 	cCh := make(chan map[string]int, 1)
@@ -2418,6 +2479,9 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	}
 	if v, ok := <-ctCh; ok {
 		result.ContentTypes = v
+	}
+	if v, ok := <-pCh; ok {
+		result.Persons = v
 	}
 	if v, ok := <-cCh; ok {
 		result.Collections = v
