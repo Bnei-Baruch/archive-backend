@@ -870,6 +870,8 @@ const (
 	SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU         = "8Y0f8Jg9"
 	SRC_CONNECTING_TO_THE_SOURCE              = "wWm6fbn4"
 	SRC_ZOHAR_FOR_ALL_VOL_12                  = "oau8jvcD"
+	SRC_TORA                                  = "bvA8ZB1w"
+	SRC_KABBALISTS_COLLECTIONS_BY_TOPIC       = "6hUZu0yu"
 )
 
 var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
@@ -946,8 +948,16 @@ var NOT_TO_INCLUDE_IN_SOURCE_BY_POSITION = []string{
 // 1. Zohar For All vol.12 chapter names (that are actually general topic names).
 // 2. Source names from Rabash Assorted notes because many of them are similar to concepts or topics and less known as names of Rabash sources.
 // 3. Article summaries and campus material to avoid confusion with the original sources.
+// 4. Kabbalist's Collections by Topics (should be part of likutim and not sources?).
+// 5. Tora books since the actual sources content is not exist yet.
 var SOURCE_PARENTS_NOT_TO_INCLUDE_IN_VARIABLE_VALUES = []string{
-	SRC_RABASH_ASSORTED_NOTES, SRC_ZOHAR_FOR_ALL_VOL_12, SRC_BAAL_SULAM_ARTICLES_LETTERS_SUMMARIES, SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU, SRC_CONNECTING_TO_THE_SOURCE,
+	SRC_RABASH_ASSORTED_NOTES,
+	SRC_ZOHAR_FOR_ALL_VOL_12,
+	SRC_BAAL_SULAM_ARTICLES_LETTERS_SUMMARIES,
+	SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU,
+	SRC_CONNECTING_TO_THE_SOURCE,
+	SRC_KABBALISTS_COLLECTIONS_BY_TOPIC,
+	SRC_TORA,
 }
 
 var ARTICLE_COLLECTION_TO_PROGRAM_COLLECTION = map[string]string{

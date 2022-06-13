@@ -654,7 +654,8 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 							}
 							intents, err := e.getSingleHitIntentsBySource(relevantSource, query.Filters, language, path, *hit.Score, expl)
 							if err != nil {
-								return nil, nil, err
+								log.Warnf("%+v", err)
+								continue
 							}
 							singleHitIntents = append(singleHitIntents, intents...)
 							sourcesForWhichWeAddedIntents[relevantSource] = true

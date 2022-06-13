@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	GRAMMAR_BOOST = 100.0
+	GRAMMAR_BOOST = 15.0
 
 	GRAMMAR_BOOST_KEYWORD = 300.0
 
