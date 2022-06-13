@@ -117,6 +117,10 @@ type MediaLanguageFilter struct {
 	MediaLanguage []string `json:"media_language" form:"media_language" binding:"omitempty,dive,len=2"`
 }
 
+type OriginalLanguageFilter struct {
+	OriginalLanguages []string `json:"original_languages" form:"original_languages" binding:"omitempty,dive,len=2"`
+}
+
 // MediaTypeFilter TODO: for version 1.8 can try to use oneof=text image validation
 type MediaTypeFilter struct {
 	MediaType []string `json:"media_type" form:"media_type" binding:"omitempty"`
@@ -172,6 +176,7 @@ type LessonsRequest struct {
 	CollectionsFilter
 	PersonsFilter
 	MediaTypeFilter
+	OriginalLanguageFilter
 }
 
 type LessonsResponseItem struct {
@@ -218,13 +223,14 @@ type TagsDashboardResponse struct {
 }
 
 type StatsFetchOptions struct {
-	WithSources      bool `json:"with_sources" form:"with_sources" binding:"omitempty"`
-	WithTags         bool `json:"with_tags" form:"with_tags" binding:"omitempty"`
-	WithCollections  bool `json:"with_collections" form:"with_collections" binding:"omitempty"`
-	WithLanguages    bool `json:"with_languages" form:"with_languages" binding:"omitempty"`
-	WithContentTypes bool `json:"with_content_types" form:"with_content_types" binding:"omitempty"`
-	WithPersons      bool `json:"with_persons" form:"with_persons" binding:"omitempty"`
-	WithMediaType    bool `json:"with_media" form:"with_media" binding:"omitempty"`
+	WithSources           bool `json:"with_sources" form:"with_sources" binding:"omitempty"`
+	WithTags              bool `json:"with_tags" form:"with_tags" binding:"omitempty"`
+	WithCollections       bool `json:"with_collections" form:"with_collections" binding:"omitempty"`
+	WithLanguages         bool `json:"with_languages" form:"with_languages" binding:"omitempty"`
+	WithContentTypes      bool `json:"with_content_types" form:"with_content_types" binding:"omitempty"`
+	WithPersons           bool `json:"with_persons" form:"with_persons" binding:"omitempty"`
+	WithMediaType         bool `json:"with_media" form:"with_media" binding:"omitempty"`
+	WithOriginalLanguages bool `json:"with_original_languages" form:"with_original_languages" binding:"omitempty"`
 }
 
 type StatsClassRequest struct {
@@ -241,19 +247,21 @@ type StatsClassRequest struct {
 	PersonsFilter
 	StatsFetchOptions
 	MediaTypeFilter
+	OriginalLanguageFilter
 	CountOnly bool `json:"count_only" form:"count_only"`
 	ForFilter bool `json:"for_filter" form:"for_filter"`
 }
 
 type StatsClassResponse struct {
-	Sources      map[string]int `json:"sources"`
-	Tags         map[string]int `json:"tags"`
-	Languages    map[string]int `json:"languages"`
-	ContentTypes map[string]int `json:"content_types"`
-	Collections  map[string]int `json:"collections"`
-	Persons      map[string]int `json:"persons"`
-	MediaTypes   map[string]int `json:"media_types"`
-	Total        int64          `json:"total"`
+	Sources           map[string]int `json:"sources"`
+	Tags              map[string]int `json:"tags"`
+	Languages         map[string]int `json:"languages"`
+	ContentTypes      map[string]int `json:"content_types"`
+	Collections       map[string]int `json:"collections"`
+	Persons           map[string]int `json:"persons"`
+	MediaTypes        map[string]int `json:"media_types"`
+	OriginalLanguages map[string]int `json:"original_languages"`
+	Total             int64          `json:"total"`
 }
 
 type TweetsRequest struct {
@@ -358,11 +366,15 @@ func NewTagsDashboardResponse() *TagsDashboardResponse {
 
 func NewStatsClassResponse() *StatsClassResponse {
 	return &StatsClassResponse{
-		Sources:      make(map[string]int),
-		Tags:         make(map[string]int),
-		Languages:    make(map[string]int),
-		ContentTypes: make(map[string]int),
-		Collections:  make(map[string]int),
+		Sources:           make(map[string]int),
+		Tags:              make(map[string]int),
+		Languages:         make(map[string]int),
+		ContentTypes:      make(map[string]int),
+		Collections:       make(map[string]int),
+		Persons:           make(map[string]int),
+		MediaTypes:        make(map[string]int),
+		OriginalLanguages: make(map[string]int),
+		Total:             0,
 	}
 }
 

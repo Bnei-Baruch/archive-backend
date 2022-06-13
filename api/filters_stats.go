@@ -158,6 +158,7 @@ func (fs *FilterStats) scan(q string) error {
 	byC := make(map[string]int)
 	byPerson := make(map[string]int)
 	byMedia := make(map[string]int)
+	byOLang := make(map[string]int)
 	total := make(map[int64]bool)
 	for rows.Next() {
 		var k string
@@ -195,6 +196,9 @@ func (fs *FilterStats) scan(q string) error {
 		} else if k[0] == 'm' {
 			byMedia[k[1:]] = count
 			continue
+		} else if k[0] == 'o' {
+			byOLang[k[1:]] = count
+			continue
 		}
 
 		tmp.insert(id, parentID.Int64, k[1:], ids)
@@ -230,6 +234,7 @@ func (fs *FilterStats) scan(q string) error {
 	fs.Resp.Collections = byC
 	fs.Resp.Persons = byPerson
 	fs.Resp.MediaTypes = byMedia
+	fs.Resp.OriginalLanguages = byOLang
 
 	fs.Resp.Total = int64(len(total))
 	return nil
@@ -285,6 +290,21 @@ SELECT
   '{}',
 	0
 FROM tags t
+`,
+		)
+	}
+
+	if fs.FetchOptions.WithOriginalLanguages {
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('o', cu.properties->>'original_language'),
+  NULL,
+  count(distinct cu.id)
+FROM fcu cu
+WHERE cu.properties->>'original_language' IS NOT NULL
+GROUP BY cu.properties->>'original_language'
 `,
 		)
 	}
@@ -496,12 +516,12 @@ FROM tags t
 		)
 	}
 
-	if fs.FetchOptions.WithLanguages {
+	if fs.FetchOptions.WithOriginalLanguages {
 		qs = append(qs, `
 SELECT
   0,
   NULL,
-  concat('l', c.properties->>'original_language'),
+  concat('o', c.properties->>'original_language'),
   NULL,
   count(distinct c.id)
 FROM fc c
@@ -509,8 +529,9 @@ WHERE c.properties->>'original_language' IS NOT NULL
 GROUP BY c.properties->>'original_language'
 `,
 		)
+	}
 
-		//LESSONS_SERIES have no original language property, so we need take language from file of first content unit
+	if fs.FetchOptions.WithLanguages {
 		qs = append(qs, `
 SELECT
   0,
@@ -525,7 +546,7 @@ INNER JOIN (
 	INNER JOIN files f ON f.content_unit_id = cu.id
 	WHERE (cu.secure=0 AND cu.published IS TRUE) AND (f.secure=0 AND f.published IS TRUE) AND f.language IS NOT NULL
 ) AS ccuf ON ccuf.ccu_id = c.id
-WHERE c.properties->>'original_language' IS NULL AND ccuf.lang IS NOT NULL
+WHERE ccuf.lang IS NOT NULL
 GROUP BY lang
 `,
 		)
