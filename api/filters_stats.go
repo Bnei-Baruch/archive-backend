@@ -157,6 +157,7 @@ func (fs *FilterStats) scan(q string) error {
 	byType := make(map[string]int)
 	byC := make(map[string]int)
 	byPerson := make(map[string]int)
+	byMedia := make(map[string]int)
 	total := make(map[int64]bool)
 	for rows.Next() {
 		var k string
@@ -190,6 +191,9 @@ func (fs *FilterStats) scan(q string) error {
 			continue
 		} else if k[0] == 'p' {
 			byPerson[k[1:]] = count
+			continue
+		} else if k[0] == 'm' {
+			byMedia[k[1:]] = count
 			continue
 		}
 
@@ -225,6 +229,7 @@ func (fs *FilterStats) scan(q string) error {
 	fs.Resp.ContentTypes = byType
 	fs.Resp.Collections = byC
 	fs.Resp.Persons = byPerson
+	fs.Resp.MediaTypes = byMedia
 
 	fs.Resp.Total = int64(len(total))
 	return nil
@@ -296,6 +301,22 @@ FROM fcu
 INNER JOIN files f ON f.content_unit_id = fcu.id
 WHERE f.secure = 0 AND f.published IS TRUE AND f.language IS NOT NULL 
 GROUP BY f.language
+`,
+		)
+	}
+
+	if fs.FetchOptions.WithMediaType {
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('m', f.type),
+  NULL,
+  count(distinct f.content_unit_id)
+FROM fcu
+INNER JOIN files f ON f.content_unit_id = fcu.id
+WHERE f.secure = 0 AND f.published IS TRUE AND f.type IS NOT NULL 
+GROUP BY f.type
 `,
 		)
 	}

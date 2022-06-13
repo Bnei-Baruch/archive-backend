@@ -117,6 +117,11 @@ type MediaLanguageFilter struct {
 	MediaLanguage []string `json:"media_language" form:"media_language" binding:"omitempty,dive,len=2"`
 }
 
+// MediaTypeFilter TODO: for version 1.8 can try to use oneof=text image validation
+type MediaTypeFilter struct {
+	MediaType []string `json:"media_type" form:"media_type" binding:"omitempty"`
+}
+
 type CollectionsRequest struct {
 	ListRequest
 	IDsFilter
@@ -129,7 +134,7 @@ type CollectionsRequest struct {
 
 type CollectionsResponse struct {
 	ListResponse
-	Collections []*Collection `json:"collections"`
+	Collections []*Collection `json:"collections" binding:"omitempty,dive,len=2"`
 }
 
 type ContentUnitsRequest struct {
@@ -166,6 +171,7 @@ type LessonsRequest struct {
 	ContentTypesFilter
 	CollectionsFilter
 	PersonsFilter
+	MediaTypeFilter
 }
 
 type LessonsResponseItem struct {
@@ -218,6 +224,7 @@ type StatsFetchOptions struct {
 	WithLanguages    bool `json:"with_languages" form:"with_languages" binding:"omitempty"`
 	WithContentTypes bool `json:"with_content_types" form:"with_content_types" binding:"omitempty"`
 	WithPersons      bool `json:"with_persons" form:"with_persons" binding:"omitempty"`
+	WithMediaType    bool `json:"with_media" form:"with_media" binding:"omitempty"`
 }
 
 type StatsClassRequest struct {
@@ -233,6 +240,7 @@ type StatsClassRequest struct {
 	PublishersFilter
 	PersonsFilter
 	StatsFetchOptions
+	MediaTypeFilter
 	CountOnly bool `json:"count_only" form:"count_only"`
 	ForFilter bool `json:"for_filter" form:"for_filter"`
 }
@@ -244,6 +252,7 @@ type StatsClassResponse struct {
 	ContentTypes map[string]int `json:"content_types"`
 	Collections  map[string]int `json:"collections"`
 	Persons      map[string]int `json:"persons"`
+	MediaTypes   map[string]int `json:"media_types"`
 	Total        int64          `json:"total"`
 }
 

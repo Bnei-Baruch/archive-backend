@@ -304,8 +304,8 @@ func LessonsHandler(c *gin.Context) {
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 
+	//append collection filters
 	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
-
 	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -335,24 +335,8 @@ func LessonsHandler(c *gin.Context) {
 		cMods = []qm.QueryMod{qm.Where("id < 0")}
 	}
 
-	var cTotal int64
-	err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
-	if err != nil {
-		NewInternalError(err).Abort(c)
-		return
-	}
-	cMods = append(cMods, qm.Select(`
-			DISTINCT ON (id) 
-			coalesce((properties->>'film_date')::date, created_at) as date, 
-			uid as uid,
-			type_id as type_id
-		`),
-	)
-
-	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
-
-	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
-
+	//append content units filters
+	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
 	if err := appendNotForDisplayCU(cm, db, &cuMods); err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -377,6 +361,13 @@ func LessonsHandler(c *gin.Context) {
 		return
 	}
 
+	if err := appendMediaTypeFilterMods(&cuMods, r.MediaTypeFilter, true); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	} else {
+		cMods = append(cMods, qm.Where("id < 0"))
+	}
+
 	if err := appendCollectionsFilterMods(db, &cuMods, r.CollectionsFilter); err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -386,6 +377,23 @@ func LessonsHandler(c *gin.Context) {
 		return
 	}
 
+	//call DB
+	var cTotal int64
+	err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	cMods = append(cMods, qm.Select(`
+			DISTINCT ON (id) 
+			coalesce((properties->>'film_date')::date, created_at) as date, 
+			uid as uid,
+			type_id as type_id
+		`),
+	)
+
+	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
+
 	var cuTotal int64
 	err = mdbmodels.ContentUnits(append(cuMods, qm.Select(`COUNT(DISTINCT "content_units".id)`))...).QueryRow(db).Scan(&cuTotal)
 	if err != nil {
@@ -394,10 +402,10 @@ func LessonsHandler(c *gin.Context) {
 	}
 
 	cuMods = append(cuMods, qm.Select(`
-			DISTINCT ON (id) 
-			coalesce((properties->>'film_date')::date, created_at) as date,
-			uid as uid,
-			type_id as type_id
+			DISTINCT ON (content_units.id) 
+			coalesce((content_units.properties->>'film_date')::date, content_units.created_at) as date,
+			content_units.uid as uid,
+			content_units.type_id as type_id
 		`),
 	)
 
@@ -2535,7 +2543,17 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
-	if err := appendMediaLanguageNoInnerSelectFilterMods(&mods, r.MediaLanguageFilter); err != nil {
+
+	if len(r.MediaLanguageFilter.MediaLanguage) > 0 || len(r.MediaTypeFilter.MediaType) > 0 {
+		mods = append(mods,
+			qm.InnerJoin("files f ON  f.content_unit_id = \"content_units\".id"),
+			qm.Where("f.secure = 0 AND f.published IS TRUE"),
+		)
+	}
+	if err := appendMediaLanguageNoInnerSelectFilterMods(&mods, r.MediaLanguageFilter, false); err != nil {
+		return nil, NewInternalError(err)
+	}
+	if err := appendMediaTypeFilterMods(&mods, r.MediaTypeFilter, false); err != nil {
 		return nil, NewInternalError(err)
 	}
 
@@ -3376,7 +3394,7 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 	}
 	//TODO: this query should be optimized ASAP and before we do that clients should use it as little as possible
 	*mods = append(*mods,
-		qm.WhereIn(`(id in ( SELECT DISTINCT cu.id FROM content_units cu 
+		qm.WhereIn(`(content_units.id in ( SELECT DISTINCT cu.id FROM content_units cu 
 			INNER JOIN files f 
 			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
 			AND f.secure = 0 AND f.published IS TRUE AND f.language IN ?))`, utils.ConvertArgsString(f.MediaLanguage)...),
@@ -3384,13 +3402,40 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 	return nil
 }
 
-func appendMediaLanguageNoInnerSelectFilterMods(mods *[]qm.QueryMod, f MediaLanguageFilter) error {
+func appendMediaLanguageNoInnerSelectFilterMods(mods *[]qm.QueryMod, f MediaLanguageFilter, needLoad bool) error {
 	if len(f.MediaLanguage) == 0 {
 		return nil
 	}
+	if needLoad {
+		*mods = append(*mods,
+			qm.InnerJoin("files f ON  f.content_unit_id = \"content_units\".id"),
+			qm.Where("f.secure = 0 AND f.published IS TRUE"),
+		)
+	}
 	*mods = append(*mods,
-		qm.InnerJoin("files f ON  f.content_unit_id = \"content_units\".id"),
-		qm.WhereIn("f.secure = 0 AND f.published IS TRUE AND f.language IN ?", utils.ConvertArgsString(f.MediaLanguage)...),
+		qm.WhereIn("f.language IN ?", utils.ConvertArgsString(f.MediaLanguage)...),
+	)
+	return nil
+}
+
+func appendMediaTypeFilterMods(mods *[]qm.QueryMod, f MediaTypeFilter, needLoad bool) error {
+	if len(f.MediaType) == 0 {
+		return nil
+	}
+	for _, mt := range f.MediaType {
+		if mt != "text" && mt != "image" {
+			return errors.New("media type can be text or image only")
+		}
+	}
+
+	if needLoad {
+		*mods = append(*mods,
+			qm.InnerJoin("files f ON  f.content_unit_id = \"content_units\".id"),
+			qm.Where("f.secure = 0 AND f.published IS TRUE"),
+		)
+	}
+	*mods = append(*mods,
+		qm.WhereIn("f.type IN ?", utils.ConvertArgsString(f.MediaType)...),
 	)
 	return nil
 }
