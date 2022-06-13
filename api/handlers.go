@@ -2488,9 +2488,9 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	if r.WithOriginalLanguages && len(r.OriginalLanguages) != 0 {
 		g.Go(func() error {
 			lr := r
-			lr.PersonsFilter = PersonsFilter{Persons: nil}
+			lr.OriginalLanguageFilter = OriginalLanguageFilter{OriginalLanguages: nil}
 			lr.StatsFetchOptions = StatsFetchOptions{}
-			lr.StatsFetchOptions.WithPersons = true
+			lr.StatsFetchOptions.WithOriginalLanguages = true
 			lRes, err := handler(cm, db, lr)
 			if err != nil {
 				return err
