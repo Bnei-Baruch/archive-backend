@@ -424,7 +424,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	// Also we support "program with position without term" intents only if we have a numeric chapter as part of the query.
 	addProgramPositionWithoutTerm := queryTermHasDigit
 	addSourcePositionWithoutTerm := !queryTermIsNumber
-	var addSourcePath bool = true
+	addSourcePath := len(strings.Fields(query.Term)) > 1
 	if addSourcePositionWithoutTerm {
 		for filterKey := range query.Filters {
 			if _, ok := consts.AUTO_INTENTS_BY_SOURCE_NAME_SUPPORTED_FILTERS[filterKey]; !ok {
