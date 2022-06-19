@@ -465,6 +465,159 @@ func LessonsHandler(c *gin.Context) {
 	concludeRequest(c, resp, nil)
 }
 
+func EventsHandler(c *gin.Context) {
+	var r EventsRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+
+	//append collection filters
+	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendDateRangeFilterMods(&cMods, r.DateRangeFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendCollectionSourceFilterMods(cm, db, &cMods, r.SourcesFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendCollectionTagsFilterMods(cm, db, &cMods, r.TagsFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendCollectionMediaLanguageFilterMods(&cMods, r.MediaLanguageFilter); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+	if err := appendOriginalLanguageFilterMods(&cMods, r.OriginalLanguageFilter); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+	if err := appendCountriesFilterMods(&cMods, r.CountriesFilter); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+
+	//append content units filters
+	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
+	if err := appendNotForDisplayCU(cm, db, &cuMods); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := appendDateRangeFilterMods(&cuMods, r.DateRangeFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	if err := appendSourcesFilterMods(cm, &cuMods, r.SourcesFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	appendTagsFilterMods(cm, &cuMods, r.TagsFilter)
+
+	if err := appendMediaLanguageFilterMods(db, &cuMods, r.MediaLanguageFilter); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	if err := appendOriginalLanguageFilterMods(&cuMods, r.OriginalLanguageFilter); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+	if len(r.Countries) > 0 {
+		cuMods = []qm.QueryMod{qm.Where("id < 0")}
+	}
+
+	//call DB
+	var cTotal int64
+	err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	cMods = append(cMods, qm.Select(`
+			DISTINCT ON (id) 
+			coalesce((properties->>'film_date')::date, created_at) as date, 
+			uid as uid,
+			type_id as type_id
+		`),
+	)
+
+	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
+
+	var cuTotal int64
+	err = mdbmodels.ContentUnits(append(cuMods, qm.Select(`COUNT(DISTINCT "content_units".id)`))...).QueryRow(db).Scan(&cuTotal)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	cuMods = append(cuMods, qm.Select(`
+			DISTINCT ON (content_units.id) 
+			coalesce((content_units.properties->>'film_date')::date, content_units.created_at) as date,
+			content_units.uid as uid,
+			content_units.type_id as type_id
+		`),
+	)
+
+	qcu, argsCu := queries.BuildQuery(mdbmodels.ContentUnits(cuMods...).Query)
+	qcu = startQueryArgCountFrom(qcu, len(args))
+	args = append(args, argsCu...)
+
+	q := fmt.Sprintf(`
+			WITH items AS (
+				(%s) 
+				UNION 
+				(%s)
+			)(
+				SELECT item.uid, item.type_id 
+				FROM items item ORDER BY date DESC LIMIT %d OFFSET %d
+			)
+		`, qc[:len(qc)-1], qcu[:len(qcu)-1], r.PageSize, (r.PageNumber-1)*r.PageSize)
+
+	rows, err := queries.Raw(q, args...).Query(db)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	defer rows.Close()
+
+	resp := LessonsResponse{
+		ListResponse: ListResponse{
+			Total: cTotal + cuTotal,
+		},
+		Items: make([]*LessonsResponseItem, 0),
+	}
+	for rows.Next() {
+		var uid string
+		var ct int64
+
+		err = rows.Scan(&uid, &ct)
+		item := LessonsResponseItem{
+			UID:         uid,
+			ContentType: mdb.CONTENT_TYPE_REGISTRY.ByID[ct].Name,
+		}
+		resp.Items = append(resp.Items, &item)
+	}
+
+	if err = rows.Err(); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	concludeRequest(c, resp, nil)
+}
+
 func PublishersHandler(c *gin.Context) {
 	var r PublishersRequest
 	if c.Bind(&r) != nil {
@@ -1558,9 +1711,11 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 	if err := appendDerivedTypesFilterMods(&mods, r.DerivedTypesFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-
 	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
 		return nil, NewInternalError(err)
+	}
+	if err := appendOriginalLanguageFilterMods(&mods, r.OriginalLanguageFilter); err != nil {
+		return nil, NewBadRequestError(err)
 	}
 
 	var total int64
@@ -2502,6 +2657,24 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 		close(olCh)
 	}
 
+	countiesCh := make(chan map[string]CityItem, 1)
+	if r.WithCountries && len(r.Countries) != 0 {
+		g.Go(func() error {
+			lr := r
+			lr.CountriesFilter = CountriesFilter{Countries: nil}
+			lr.StatsFetchOptions = StatsFetchOptions{}
+			lr.StatsFetchOptions.WithCountries = true
+			lRes, err := handler(cm, db, lr)
+			if err != nil {
+				return err
+			}
+			countiesCh <- lRes.Locations
+			return nil
+		})
+	} else {
+		close(countiesCh)
+	}
+
 	if err := g.Wait(); err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2528,6 +2701,9 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	}
 	if v, ok := <-olCh; ok {
 		result.OriginalLanguages = v
+	}
+	if v, ok := <-countiesCh; ok {
+		result.Locations = v
 	}
 	return result, nil
 }
@@ -2690,7 +2866,9 @@ func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (
 	if err := appendCollectionMediaLanguageFilterMods(&mods, r.MediaLanguageFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-
+	if err := appendCountriesFilterMods(&mods, r.CountriesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 	resp := NewStatsClassResponse()
 
 	q, args := queries.BuildQuery(mdbmodels.Collections(mods...).Query)
@@ -3204,6 +3382,27 @@ func appendOriginalLanguageFilterMods(mods *[]qm.QueryMod, f OriginalLanguageFil
 	*mods = append(*mods,
 		qm.Where(`properties->>'original_language' IS NOT NULL`),
 		qm.WhereIn(`properties->>'original_language' IN ?`, utils.ConvertArgsString(f.OriginalLanguages)...),
+	)
+	return nil
+}
+
+func appendCitiesFilterMods(mods *[]qm.QueryMod, f CityFilter) error {
+	if len(f.Cities) == 0 {
+		return nil
+	}
+	*mods = append(*mods,
+		qm.Where(`properties->>'city' IS NOT NULL`),
+		qm.WhereIn(`properties->>'city' IN ?`, utils.ConvertArgsString(f.Cities)...),
+	)
+	return nil
+}
+func appendCountriesFilterMods(mods *[]qm.QueryMod, f CountriesFilter) error {
+	if len(f.Countries) == 0 {
+		return nil
+	}
+	*mods = append(*mods,
+		qm.Where(`properties->>'country' IS NOT NULL`),
+		qm.WhereIn(`properties->>'country' IN ?`, utils.ConvertArgsString(f.Countries)...),
 	)
 	return nil
 }
