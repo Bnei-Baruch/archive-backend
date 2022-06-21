@@ -368,7 +368,7 @@ func LessonsHandler(c *gin.Context) {
 	if err := appendMediaTypeFilterMods(&cuMods, r.MediaTypeFilter, true); err != nil {
 		NewBadRequestError(err).Abort(c)
 		return
-	} else {
+	} else if len(r.MediaType) > 0 {
 		cMods = append(cMods, qm.Where("id < 0"))
 	}
 
