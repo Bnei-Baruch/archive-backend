@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/volatiletech/null/v8"
+	"golang.org/x/sync/errgroup"
 	"net/http"
 	"regexp"
 	"sort"
@@ -1414,6 +1415,10 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest) (*ContentUnitsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
+	if err := appendNotForDisplayCU(cm, db, &mods); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+
 	// filters
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
 		return nil, NewBadRequestError(err)
@@ -1874,13 +1879,10 @@ func handleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 		return NewTagsDashboardResponse(), nil
 	}
 
-	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
-	for i, n := range consts.CT_NOT_FOR_DISPLAY {
-		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
-	}
-	cuMods := []qm.QueryMod{
-		SECURE_PUBLISHED_MOD_CU_PREFIX,
-		qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...),
+	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
+
+	if err := appendNotForDisplayCU(cm, db, &cuMods); err != nil {
+		return nil, NewInternalError(err)
 	}
 
 	// CU filters
@@ -2209,57 +2211,149 @@ func handleSemiQuasiData(db *sql.DB, r BaseRequest) (*SemiQuasiData, *HttpError)
 }
 
 func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest, handler statsHandler) (*StatsClassResponse, *HttpError) {
-	var res *StatsClassResponse
-	var err *HttpError
-	if res, err = handler(cm, db, r); err != nil {
-		return res, err
-	}
-	if !utils.IsEmpty(r.SourcesFilter.Authors) || len(r.SourcesFilter.Sources) != 0 {
-		sr := r
-		sr.SourcesFilter = SourcesFilter{
-			Authors: nil,
-			Sources: nil,
-		}
-		sRes, err := handler(cm, db, sr)
+	ctx := context.Background()
+	g, ctx := errgroup.WithContext(ctx)
+	withFilterCh := make(chan *StatsClassResponse, 1)
+
+	g.Go(func() error {
+		res, err := handler(cm, db, r)
 		if err != nil {
-			return sRes, err
+			return err
 		}
-		res.Sources = sRes.Sources
+		withFilterCh <- res
+		return nil
+	})
+
+	sCh := make(chan map[string]int, 1)
+	if r.WithSources && (!utils.IsEmpty(r.SourcesFilter.Authors) || len(r.SourcesFilter.Sources) != 0) {
+		g.Go(func() error {
+			sr := r
+			sr.SourcesFilter = SourcesFilter{
+				Authors: nil,
+				Sources: nil,
+			}
+			sr.StatsFetchOptions = StatsFetchOptions{}
+			sr.StatsFetchOptions.WithSources = true
+
+			sRes, err := handler(cm, db, sr)
+			if err != nil {
+				return err
+			}
+			sCh <- sRes.Sources
+			return nil
+		})
+	} else {
+		close(sCh)
 	}
 
-	if len(r.MediaLanguage) != 0 {
-		lr := r
-		lr.MediaLanguageFilter = MediaLanguageFilter{MediaLanguage: nil}
-		lRes, err := handler(cm, db, lr)
-		if err != nil {
-			return lRes, err
-		}
-		res.Languages = lRes.Languages
+	langCh := make(chan map[string]int, 1)
+	if r.WithLanguages && len(r.MediaLanguage) != 0 {
+		g.Go(func() error {
+			lr := r
+			lr.MediaLanguageFilter = MediaLanguageFilter{MediaLanguage: nil}
+
+			lr.StatsFetchOptions = StatsFetchOptions{}
+			lr.StatsFetchOptions.WithTags = true
+
+			lRes, err := handler(cm, db, lr)
+			if err != nil {
+				return err
+			}
+			langCh <- lRes.Languages
+			return nil
+		})
+	} else {
+		close(langCh)
 	}
 
-	if len(r.ContentTypes) != 0 {
-		ctr := r
-		ctr.ContentTypesFilter = ContentTypesFilter{ContentTypes: nil}
-		ctRes, err := handler(cm, db, ctr)
-		if err != nil {
-			return ctRes, err
-		}
-		res.ContentTypes = ctRes.ContentTypes
+	ctCh := make(chan map[string]int, 1)
+	if r.WithContentTypes && len(r.ContentTypes) != 0 {
+		g.Go(func() error {
+			ctr := r
+			ctr.ContentTypesFilter = ContentTypesFilter{ContentTypes: nil}
+			ctr.StatsFetchOptions = StatsFetchOptions{}
+			ctr.StatsFetchOptions.WithContentTypes = true
+			ctRes, err := handler(cm, db, ctr)
+			if err != nil {
+				return err
+			}
+			ctCh <- ctRes.ContentTypes
+			return nil
+		})
+	} else {
+		close(ctCh)
 	}
-	return res, nil
+
+	cCh := make(chan map[string]int, 1)
+	if r.WithCollections && len(r.Collections) != 0 {
+		g.Go(func() error {
+			ctr := r
+			ctr.Collections = nil
+			ctr.StatsFetchOptions = StatsFetchOptions{}
+			ctr.StatsFetchOptions.WithCollections = true
+			ctRes, err := handler(cm, db, ctr)
+			if err != nil {
+				return err
+			}
+			cCh <- ctRes.Collections
+			return nil
+		})
+	} else {
+		close(cCh)
+	}
+
+	tCh := make(chan map[string]int, 1)
+	if r.WithTags && len(r.Tags) != 0 {
+		g.Go(func() error {
+			ctr := r
+			ctr.Tags = nil
+			ctr.StatsFetchOptions = StatsFetchOptions{}
+			ctr.StatsFetchOptions.WithTags = true
+			ctRes, err := handler(cm, db, ctr)
+			if err != nil {
+				return err
+			}
+			tCh <- ctRes.Tags
+			return nil
+		})
+	} else {
+		close(tCh)
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	result := <-withFilterCh
+
+	if v, ok := <-langCh; ok {
+		result.Languages = v
+	}
+	if v, ok := <-ctCh; ok {
+		result.ContentTypes = v
+	}
+	if v, ok := <-cCh; ok {
+		result.Collections = v
+	}
+	if v, ok := <-sCh; ok {
+		result.Sources = v
+	}
+	if v, ok := <-tCh; ok {
+		result.Tags = v
+	}
+	return result, nil
 }
 
 func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (*StatsClassResponse, *HttpError) {
-	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
-	for i, n := range consts.CT_NOT_FOR_DISPLAY {
-		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
-	}
+
 	mods := []qm.QueryMod{
 		qm.Select("\"content_units\".id as id", "type_id"),
-		qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...),
 		SECURE_PUBLISHED_MOD_CU_PREFIX,
 	}
 
+	if err := appendNotForDisplayCU(cm, db, &mods); err != nil {
+		return nil, NewBadRequestError(err)
+	}
 	// filters
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
 		return nil, NewBadRequestError(err)
@@ -2305,11 +2399,13 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 	} else {
 		q, args := queries.BuildQuery(mdbmodels.ContentUnits(mods...).Query)
 		fs := FilterCUStats{FilterStats{
-			DB:        db,
-			Scope:     q,
-			ScopeArgs: args,
-			Resp:      resp,
+			DB:           db,
+			Scope:        q,
+			ScopeArgs:    args,
+			Resp:         resp,
+			FetchOptions: &r.StatsFetchOptions,
 		}}
+
 		if err = fs.GetStats(); err != nil {
 			return nil, NewInternalError(err)
 		}
@@ -3101,6 +3197,30 @@ func appendMediaLanguageNoInnerSelectFilterMods(mods *[]qm.QueryMod, f MediaLang
 	return nil
 }
 
+func appendNotForDisplayCU(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod) error {
+	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
+	for i, n := range consts.CT_NOT_FOR_DISPLAY {
+		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
+	}
+
+	*mods = append(*mods, qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...))
+
+	t, err := mdbmodels.Tags(
+		mdbmodels.TagWhere.Pattern.EQ(null.StringFrom("special-lesson")),
+	).One(exec)
+	if err != nil {
+		return NewBadRequestError(err)
+	}
+	_, tids := cm.TagsStats().GetTree().GetChildren([]string{t.UID})
+
+	*mods = append(*mods, qm.WhereIn(`NOT EXISTS (
+	SELECT cut.content_unit_id 
+	FROM content_units_tags cut 
+	WHERE cut.tag_id in ? 
+	AND "content_units".id = cut.content_unit_id)`, utils.ConvertArgsInt64(tids)...))
+	return nil
+}
+
 //append Labels filters
 func appendContentTypesLabelsFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) error {
 	if utils.IsEmpty(f.ContentTypes) {
@@ -3366,14 +3486,15 @@ func loadCUFiles(db *sql.DB, ids []int64, mediaTypes []string, languages []strin
 }
 
 func setCUI18n(cu *ContentUnit, language string, i18ns map[string]*mdbmodels.ContentUnitI18n) {
+	if v, ok := i18ns[language]; ok {
+		cu.Description = v.Description.String
+	}
+
 	for _, l := range consts.I18N_LANG_ORDER[language] {
 		li18n, ok := i18ns[l]
 		if ok {
 			if cu.Name == "" && li18n.Name.Valid {
 				cu.Name = li18n.Name.String
-			}
-			if cu.Description == "" && li18n.Description.Valid {
-				cu.Description = li18n.Description.String
 			}
 		}
 	}
