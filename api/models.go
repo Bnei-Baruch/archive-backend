@@ -199,6 +199,14 @@ type TagsDashboardResponse struct {
 	Items      []*TagsDashboardItem `json:"items"`
 }
 
+type StatsFetchOptions struct {
+	WithSources      bool `json:"with_sources" form:"with_sources" binding:"omitempty"`
+	WithTags         bool `json:"with_tags" form:"with_tags" binding:"omitempty"`
+	WithCollections  bool `json:"with_collections" form:"with_collections" binding:"omitempty"`
+	WithLanguages    bool `json:"with_languages" form:"with_languages" binding:"omitempty"`
+	WithContentTypes bool `json:"with_content_types" form:"with_content_types" binding:"omitempty"`
+}
+
 type StatsClassRequest struct {
 	ListRequest
 	IDsFilter
@@ -211,6 +219,7 @@ type StatsClassRequest struct {
 	GenresProgramsFilter
 	PublishersFilter
 	PersonsFilter
+	StatsFetchOptions
 	CountOnly bool `json:"count_only" form:"count_only"`
 	ForFilter bool `json:"for_filter" form:"for_filter"`
 }
@@ -220,6 +229,7 @@ type StatsClassResponse struct {
 	Tags         map[string]int `json:"tags"`
 	Languages    map[string]int `json:"languages"`
 	ContentTypes map[string]int `json:"content_types"`
+	Collections  map[string]int `json:"collections"`
 	Total        int64          `json:"total"`
 }
 
@@ -329,6 +339,7 @@ func NewStatsClassResponse() *StatsClassResponse {
 		Tags:         make(map[string]int),
 		Languages:    make(map[string]int),
 		ContentTypes: make(map[string]int),
+		Collections:  make(map[string]int),
 	}
 }
 

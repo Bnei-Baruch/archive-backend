@@ -10,6 +10,7 @@ import (
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
+	"strings"
 )
 
 type ClassificationStats map[string]int
@@ -135,10 +136,11 @@ func (st *StatsTree) insert(id, parentID int64, uid string, ids []int64) {
 }
 
 type FilterStats struct {
-	DB        *sql.DB
-	Scope     string
-	ScopeArgs []interface{}
-	Resp      *StatsClassResponse
+	DB           *sql.DB
+	Scope        string
+	ScopeArgs    []interface{}
+	Resp         *StatsClassResponse
+	FetchOptions *StatsFetchOptions
 }
 
 func (fs *FilterStats) scan(q string) error {
@@ -153,13 +155,15 @@ func (fs *FilterStats) scan(q string) error {
 	var tmp *StatsTree
 	byLang := make(map[string]int)
 	byType := make(map[string]int)
+	byC := make(map[string]int)
 	total := make(map[int64]bool)
 	for rows.Next() {
 		var k string
 		var id int64
 		var parentID null.Int64
 		var ids pq.Int64Array
-		err = rows.Scan(&id, &parentID, &k, &ids)
+		var count int
+		err = rows.Scan(&id, &parentID, &k, &ids, &count)
 		if err != nil {
 			return errors.Wrap(err, "rows.Scan")
 		}
@@ -171,11 +175,14 @@ func (fs *FilterStats) scan(q string) error {
 		} else if k[0] == 's' {
 			tmp = sources
 		} else if k[0] == 'l' {
-			byLang[k[1:]] = len(ids)
+			byLang[k[1:]] = count
+			continue
+		} else if k[0] == 'u' {
+			ct := mdb.CONTENT_TYPE_REGISTRY.ByID[id].Name
+			byType[ct] = count
 			continue
 		} else if k[0] == 'c' {
-			ct := mdb.CONTENT_TYPE_REGISTRY.ByID[id].Name
-			byType[ct] = len(ids)
+			byC[k[1:]] = count
 			continue
 		}
 
@@ -188,26 +195,29 @@ func (fs *FilterStats) scan(q string) error {
 	tags.accumulate()
 	sources.accumulate()
 
-	// blend in authors
-	authors, err := mdbmodels.Authors(qm.Load("Sources")).All(fs.DB)
-	if err != nil {
-		return errors.Wrap(err, "fetch authors")
-	}
-	for i := range authors {
-		author := authors[i]
-		node := new(StatsNode)
-		node.uid = author.Code
-		node.ids = make(IDSet)
-		sources.byID[-1*(author.ID+1)] = node
-		for j := range author.R.Sources {
-			node.ids.Merge(sources.byID[author.R.Sources[j].ID].ids)
+	if fs.FetchOptions == nil || fs.FetchOptions.WithSources {
+		// blend in authors
+		authors, err := mdbmodels.Authors(qm.Load("Sources")).All(fs.DB)
+		if err != nil {
+			return errors.Wrap(err, "fetch authors")
+		}
+		for i := range authors {
+			author := authors[i]
+			node := new(StatsNode)
+			node.uid = author.Code
+			node.ids = make(IDSet)
+			sources.byID[-1*(author.ID+1)] = node
+			for j := range author.R.Sources {
+				node.ids.Merge(sources.byID[author.R.Sources[j].ID].ids)
+			}
 		}
 	}
-
 	fs.Resp.Tags = tags.flatten()
 	fs.Resp.Sources = sources.flatten()
 	fs.Resp.Languages = byLang
 	fs.Resp.ContentTypes = byType
+	fs.Resp.Collections = byC
+
 	fs.Resp.Total = int64(len(total))
 	return nil
 }
@@ -217,12 +227,14 @@ type FilterCUStats struct {
 }
 
 func (fs *FilterCUStats) GetStats() error {
-	qq := fmt.Sprintf(`with fcu as (%s)
-	SELECT
+	qs := make([]string, 0)
+	if fs.FetchOptions.WithSources {
+		qs = append(qs, `SELECT
 	  s.id,
 	  s.parent_id,
 	  concat('s', s.uid),
-	  array_agg(distinct cus.content_unit_id)
+	  array_agg(distinct cus.content_unit_id),
+		0
 	FROM sources s
 	  INNER JOIN content_units_sources cus on s.id = cus.source_id
 	  INNER JOIN fcu on cus.content_unit_id = fcu.id
@@ -232,14 +244,18 @@ func (fs *FilterCUStats) GetStats() error {
 	  s.id,
 	  s.parent_id,
 	  concat('s', s.uid),
-	  '{}'
-	FROM sources s
-	UNION
-	SELECT
+	  '{}',
+		0
+	FROM sources s`)
+	}
+
+	if fs.FetchOptions.WithTags {
+		qs = append(qs, `SELECT
 	  t.id,
 	  t.parent_id,
 	  concat('t', t.uid),
-	  array_agg(distinct cut.content_unit_id)
+	  array_agg(distinct cut.content_unit_id),
+		0
 	FROM tags t
 	  INNER JOIN content_units_tags cut on t.id = cut.tag_id
 	  INNER JOIN fcu on cut.content_unit_id = fcu.id
@@ -249,27 +265,49 @@ func (fs *FilterCUStats) GetStats() error {
 	  t.id,
 	  t.parent_id,
 	  concat('t', t.uid),
-	  '{}'
-	FROM tags t
-	UNION
-	SELECT
+	  '{}',
+		0
+	FROM tags t`)
+	}
+
+	if fs.FetchOptions.WithLanguages {
+		qs = append(qs, `SELECT
 	  0,
 	  NULL,
 	  concat('l', f.language),
-	  array_agg(distinct f.content_unit_id)
+	  NULL,
+	  count(distinct f.content_unit_id)
 	FROM files f
 	INNER JOIN fcu on f.content_unit_id = fcu.id
 	WHERE f.secure = 0 AND f.published IS TRUE
-	GROUP BY f.language
-	UNION
-	SELECT
+	GROUP BY f.language`)
+	}
+
+	if fs.FetchOptions.WithContentTypes {
+		qs = append(qs, `SELECT
 	  fcu.type_id,
 	  NULL,
-	  concat('c', fcu.type_id),
-	  array_agg(distinct fcu.id)
+	  concat('u', fcu.type_id),
+	  NULL,
+	  count(distinct fcu.id)
 	FROM fcu
-	GROUP BY fcu.type_id
-	`, fs.Scope[:len(fs.Scope)-1])
+	GROUP BY fcu.type_id`)
+	}
+
+	if fs.FetchOptions.WithCollections {
+		qs = append(qs, `SELECT
+	  0,
+	  NULL,
+	  concat('c', c.uid),
+	  NULL,
+	  count(distinct fcu.id)
+	FROM collections_content_units ccu
+	INNER JOIN fcu ON ccu.content_unit_id = fcu.id  
+	INNER JOIN collections c ON ccu.collection_id = c.id
+	GROUP BY c.uid`)
+	}
+
+	qq := fmt.Sprintf("with fcu as (%s) %s", fs.Scope[:len(fs.Scope)-1], strings.Join(qs, " UNION "))
 	return fs.scan(qq)
 }
 
@@ -283,7 +321,8 @@ func (fs *FilterLabelStats) GetStats() error {
 	  s.id,
 	  s.parent_id,
 	  concat('s', s.uid),
-	  array_agg(distinct fl.id)
+	  array_agg(distinct fl.id),
+		0
 	FROM fl 
 		INNER JOIN sources s ON s.uid = fl.suid
 		GROUP BY s.id
@@ -292,14 +331,16 @@ func (fs *FilterLabelStats) GetStats() error {
 	  s.id,
 	  s.parent_id,
 	  concat('s', s.uid),
-	  '{}'
+	  '{}',
+		0
 	FROM sources s
 	UNION
 	SELECT
 	  t.id,
 	  t.parent_id,
 	  concat('t', t.uid),
-	  array_agg(distinct fl.id)
+	  array_agg(distinct fl.id),
+		0
 	FROM tags t
 		INNER JOIN label_tag lt on t.id = lt.tag_id
 		INNER JOIN fl on lt.label_id = fl.id
@@ -309,14 +350,16 @@ func (fs *FilterLabelStats) GetStats() error {
 	  t.id,
 	  t.parent_id,
 	  concat('t', t.uid),
-	  '{}'
+	  '{}',
+		0
 	FROM tags t
 	UNION
 	SELECT
 	  0,
 	  NULL,
 	  concat('l', i18n.language),
-	  array_agg(distinct fl.id)
+	  NULL,
+	  count(distinct fl.id)
 	FROM label_i18n i18n
 	INNER JOIN fl on i18n.label_id = fl.id
 	GROUP BY i18n.language
@@ -324,8 +367,9 @@ func (fs *FilterLabelStats) GetStats() error {
 	SELECT
 	  fl.type_id,
 	  NULL,
-	  concat('c', fl.type_id),
-	  array_agg(distinct fl.id)
+	  concat('u', fl.type_id),
+	  NULL,
+	  count(distinct fl.id)
 	FROM fl
 	GROUP BY fl.type_id
 	`,
@@ -343,7 +387,8 @@ func (fs *FilterCollectionStats) GetStats() error {
 	  s.id,
 	  s.parent_id,
 	  concat('s', s.uid),
-	  array_agg(distinct c.id)
+	  array_agg(distinct c.id),
+		0
 	FROM fc c
 		INNER JOIN sources s ON s.uid = c.properties->>'source'
 		GROUP BY s.id
@@ -352,14 +397,16 @@ func (fs *FilterCollectionStats) GetStats() error {
 	  s.id,
 	  s.parent_id,
 	  concat('s', s.uid),
-	  '{}'
+	  '{}',
+		0
 	FROM sources s
 	UNION
 	SELECT
 	  t.id,
 	  t.parent_id,
 	  concat('t', t.uid),
-	  array_agg(distinct c.id)
+	  array_agg(distinct c.id),
+		0
 	FROM fc c
 		INNER JOIN tags t  ON c.properties->'tags' ? t.uid 
 		GROUP BY t.id
@@ -368,14 +415,16 @@ func (fs *FilterCollectionStats) GetStats() error {
 	  t.id,
 	  t.parent_id,
 	  concat('t', t.uid),
-	  '{}'
+	  '{}',
+		0
 	FROM tags t	
 	UNION
 	SELECT
 	  0,
 	  NULL,
 	  concat('l', c.properties->>'original_language'),
-	  array_agg(distinct c.id)
+	  NULL,
+	  count(distinct c.id)
 	FROM fc c
 	WHERE c.properties->>'original_language' !=''
 	GROUP BY c.properties->>'original_language'
@@ -383,8 +432,9 @@ func (fs *FilterCollectionStats) GetStats() error {
 	SELECT
 	  c.type_id,
 	  NULL,
-	  concat('c', c.type_id),
-	  array_agg(distinct c.id)
+	  concat('u', c.type_id),
+	  NULL,
+	  count(distinct c.id)
 	FROM fc c
 	GROUP BY c.type_id
 	`,
