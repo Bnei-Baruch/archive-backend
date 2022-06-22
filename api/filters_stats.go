@@ -356,40 +356,46 @@ GROUP BY f.type
 	}
 
 	if fs.FetchOptions.WithContentTypes {
-		qs = append(qs, `SELECT
-	  fcu.type_id,
-	  NULL,
-	  concat('ct', fcu.type_id),
-	  NULL,
-	  count(distinct fcu.id)
-	FROM fcu
-	GROUP BY fcu.type_id`)
+		qs = append(qs, `
+SELECT
+  fcu.type_id,
+  NULL,
+  concat('ct', fcu.type_id),
+  NULL,
+  count(distinct fcu.id)
+FROM fcu
+GROUP BY fcu.type_id
+`)
 	}
 
 	if fs.FetchOptions.WithCollections {
-		qs = append(qs, `SELECT
-	  0,
-	  NULL,
-	  concat('cl', c.uid),
-	  NULL,
-	  count(distinct fcu.id)
-	FROM collections_content_units ccu
-	INNER JOIN fcu ON ccu.content_unit_id = fcu.id  
-	INNER JOIN collections c ON ccu.collection_id = c.id
-	GROUP BY c.uid`)
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('cl', c.uid),
+  NULL,
+  count(distinct fcu.id)
+FROM collections_content_units ccu
+INNER JOIN fcu ON ccu.content_unit_id = fcu.id  
+INNER JOIN collections c ON ccu.collection_id = c.id
+GROUP BY c.uid
+`)
 	}
 
 	if fs.FetchOptions.WithPersons {
-		qs = append(qs, `SELECT
-	  0,
-	  NULL,
-	  concat('pr', p.uid),
-	  NULL,
-	  count(distinct fcu.id)
-	FROM fcu
-	INNER JOIN content_units_persons cup ON fcu.id = cup.content_unit_id
-	INNER JOIN persons p ON cup.person_id = p.id
-	GROUP BY p.uid`)
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('pr', p.uid),
+  NULL,
+  count(distinct fcu.id)
+FROM fcu
+INNER JOIN content_units_persons cup ON fcu.id = cup.content_unit_id
+INNER JOIN persons p ON cup.person_id = p.id
+GROUP BY p.uid
+`)
 	}
 
 	if len(qs) == 0 {
@@ -580,7 +586,7 @@ GROUP BY c.type_id
 		)
 	}
 
-	if fs.FetchOptions.WithCountries {
+	if fs.FetchOptions.WithLocations {
 		qs = append(qs, fmt.Sprintf(`
 SELECT
   0,
@@ -589,7 +595,7 @@ SELECT
   NULL,
   count(distinct c.id)
 FROM fc c
-WHERE c.properties->>'country' IS NOT NULL
+WHERE c.properties->>'country' IS NOT NULL OR  c.properties->>'city' IS NOT NULL 
 GROUP BY  c.properties->>'city', c.properties->>'country'
 `, CITY_COUNTRY_SEPARATOR),
 		)

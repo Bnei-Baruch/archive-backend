@@ -499,7 +499,7 @@ func EventsHandler(c *gin.Context) {
 		NewBadRequestError(err).Abort(c)
 		return
 	}
-	if err := appendCountriesFilterMods(&cMods, r.CountriesFilter); err != nil {
+	if err := appendLocationsFilterMods(&cMods, r.LocationsFilter); err != nil {
 		NewBadRequestError(err).Abort(c)
 		return
 	}
@@ -534,7 +534,7 @@ func EventsHandler(c *gin.Context) {
 		NewBadRequestError(err).Abort(c)
 		return
 	}
-	if len(r.Countries) > 0 {
+	if len(r.Locations) > 0 {
 		cuMods = []qm.QueryMod{qm.Where("id < 0")}
 	}
 
@@ -2658,12 +2658,12 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	}
 
 	countiesCh := make(chan map[string]CityItem, 1)
-	if r.WithCountries && len(r.Countries) != 0 {
+	if r.WithLocations && len(r.Locations) != 0 {
 		g.Go(func() error {
 			lr := r
-			lr.CountriesFilter = CountriesFilter{Countries: nil}
+			lr.LocationsFilter = LocationsFilter{Locations: nil}
 			lr.StatsFetchOptions = StatsFetchOptions{}
-			lr.StatsFetchOptions.WithCountries = true
+			lr.StatsFetchOptions.WithLocations = true
 			lRes, err := handler(cm, db, lr)
 			if err != nil {
 				return err
@@ -2763,6 +2763,9 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 	}
 	if err := appendOriginalLanguageFilterMods(&mods, r.OriginalLanguageFilter); err != nil {
 		return nil, NewBadRequestError(err)
+	}
+	if len(r.Locations) > 0 {
+		mods = []qm.QueryMod{qm.Where("id < 0")}
 	}
 
 	var err error
@@ -2866,7 +2869,7 @@ func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (
 	if err := appendCollectionMediaLanguageFilterMods(&mods, r.MediaLanguageFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendCountriesFilterMods(&mods, r.CountriesFilter); err != nil {
+	if err := appendLocationsFilterMods(&mods, r.LocationsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	resp := NewStatsClassResponse()
@@ -3386,23 +3389,15 @@ func appendOriginalLanguageFilterMods(mods *[]qm.QueryMod, f OriginalLanguageFil
 	return nil
 }
 
-func appendCitiesFilterMods(mods *[]qm.QueryMod, f CityFilter) error {
-	if len(f.Cities) == 0 {
+func appendLocationsFilterMods(mods *[]qm.QueryMod, f LocationsFilter) error {
+	if len(f.Locations) == 0 {
 		return nil
 	}
 	*mods = append(*mods,
-		qm.Where(`properties->>'city' IS NOT NULL`),
-		qm.WhereIn(`properties->>'city' IN ?`, utils.ConvertArgsString(f.Cities)...),
-	)
-	return nil
-}
-func appendCountriesFilterMods(mods *[]qm.QueryMod, f CountriesFilter) error {
-	if len(f.Countries) == 0 {
-		return nil
-	}
-	*mods = append(*mods,
-		qm.Where(`properties->>'country' IS NOT NULL`),
-		qm.WhereIn(`properties->>'country' IN ?`, utils.ConvertArgsString(f.Countries)...),
+		qm.Expr(
+			qm.WhereIn(`properties->>'country' IN ?`, utils.ConvertArgsString(f.Locations)...),
+			qm.Or2(qm.WhereIn(`properties->>'city' IN ?`, utils.ConvertArgsString(f.Locations)...)),
+		),
 	)
 	return nil
 }
