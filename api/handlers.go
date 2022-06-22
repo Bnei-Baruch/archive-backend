@@ -2535,7 +2535,7 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (*StatsClassResponse, *HttpError) {
 
 	mods := []qm.QueryMod{
-		qm.Select("\"content_units\".id as id", "type_id", "properties"),
+		qm.Select(`"content_units".id as id`, `"content_units".type_id as type_id`, `"content_units".properties as properties`),
 		SECURE_PUBLISHED_MOD_CU_PREFIX,
 	}
 
