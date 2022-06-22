@@ -394,7 +394,7 @@ func LessonsHandler(c *gin.Context) {
 	}
 	cMods = append(cMods, qm.Select(`
 			DISTINCT ON (id) 
-			coalesce((properties->>'film_date')::date, created_at) as date, 
+			coalesce((properties->>'start_date')::date, (properties->>'end_date')::date, (properties->>'film_date')::date, created_at) as date, 
 			uid as uid,
 			type_id as type_id
 		`),
