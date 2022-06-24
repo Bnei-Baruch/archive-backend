@@ -341,7 +341,7 @@ func LessonsHandler(c *gin.Context) {
 
 	//append content units filters
 	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
-	if err := appendNotForDisplayCU(cm, db, &cuMods); err != nil {
+	if err := appendNotForDisplayCU(&cuMods); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -1521,10 +1521,6 @@ func handleBanner(r BaseRequest) (*Banner, *HttpError) {
 func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest) (*ContentUnitsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
-	if err := appendNotForDisplayCU(cm, db, &mods); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-
 	// filters
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
 		return nil, NewBadRequestError(err)
@@ -2021,7 +2017,7 @@ func handleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 
 	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
 
-	if err := appendNotForDisplayCU(cm, db, &cuMods); err != nil {
+	if err := appendNotForDisplayCU(&cuMods); err != nil {
 		return nil, NewInternalError(err)
 	}
 
@@ -2539,7 +2535,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 		SECURE_PUBLISHED_MOD_CU_PREFIX,
 	}
 
-	if err := appendNotForDisplayCU(cm, db, &mods); err != nil {
+	if err := appendNotForDisplayCU(&mods); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	// filters
@@ -2601,6 +2597,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 		q, args := queries.BuildQuery(mdbmodels.ContentUnits(mods...).Query)
 		fs := FilterCUStats{FilterStats{
 			DB:           db,
+			TagTree:      cm.TagsStats().GetTree(),
 			Scope:        q,
 			ScopeArgs:    args,
 			Resp:         resp,
@@ -2654,6 +2651,7 @@ func handleStatsLabelClass(cm cache.CacheManager, db *sql.DB, r StatsClassReques
 	q, args := queries.BuildQuery(mdbmodels.Labels(mods...).Query)
 	fs := FilterLabelStats{FilterStats{
 		DB:           db,
+		TagTree:      cm.TagsStats().GetTree(),
 		Scope:        q,
 		ScopeArgs:    args,
 		Resp:         resp,
@@ -2697,6 +2695,7 @@ func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (
 	cs := FilterCollectionStats{
 		FilterStats: FilterStats{
 			DB:           db,
+			TagTree:      cm.TagsStats().GetTree(),
 			Scope:        q,
 			ScopeArgs:    args,
 			Resp:         resp,
@@ -3493,27 +3492,13 @@ func appendMediaTypeFilterMods(mods *[]qm.QueryMod, f MediaTypeFilter, needLoad 
 	return nil
 }
 
-func appendNotForDisplayCU(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod) error {
+func appendNotForDisplayCU(mods *[]qm.QueryMod) error {
 	ids := make([]int64, len(consts.CT_NOT_FOR_DISPLAY))
 	for i, n := range consts.CT_NOT_FOR_DISPLAY {
 		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
 	}
 
 	*mods = append(*mods, qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...))
-
-	t, err := mdbmodels.Tags(
-		mdbmodels.TagWhere.Pattern.EQ(null.StringFrom("special-lesson")),
-	).One(exec)
-	if err != nil {
-		return NewBadRequestError(err)
-	}
-	_, tids := cm.TagsStats().GetTree().GetChildren([]string{t.UID})
-
-	*mods = append(*mods, qm.WhereIn(`NOT EXISTS (
-	SELECT cut.content_unit_id 
-	FROM content_units_tags cut 
-	WHERE cut.tag_id in ? 
-	AND "content_units".id = cut.content_unit_id)`, utils.ConvertArgsInt64(tids)...))
 	return nil
 }
 
