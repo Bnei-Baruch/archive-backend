@@ -506,7 +506,7 @@ func EventsHandler(c *gin.Context) {
 
 	//append content units filters
 	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
-	if err := appendNotForDisplayCU(cm, db, &cuMods); err != nil {
+	if err := appendNotForDisplayCU(&cuMods); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
