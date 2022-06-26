@@ -44,6 +44,8 @@ var serverLangs = []language.Tag{
 	language.Latvian,    // lv
 	language.Slovak,     // sk
 	language.Czech,      // cs
+	language.Armenian,   // hy
+	language.Indonesian, // id
 }
 
 var GO_TO_MDB = map[language.Tag]string{
@@ -78,6 +80,8 @@ var GO_TO_MDB = map[language.Tag]string{
 	language.Latvian:    consts.LANG_LATVIAN,
 	language.Slovak:     consts.LANG_SLOVAK,
 	language.Czech:      consts.LANG_CZECH,
+	language.Armenian:   consts.LANG_ARMENIAN,
+	language.Indonesian: consts.LANG_INDONESIAN,
 }
 
 func reverseLanguages() map[string]language.Tag {

@@ -3,8 +3,10 @@ package api
 import (
 	"database/sql"
 	"fmt"
+	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/volatiletech/null/v8"
@@ -137,6 +139,7 @@ func (st *StatsTree) insert(id, parentID int64, uid string, ids []int64) {
 
 type FilterStats struct {
 	DB           *sql.DB
+	TagTree      *cache.StatsTree
 	Scope        string
 	ScopeArgs    []interface{}
 	Resp         *StatsClassResponse
@@ -285,7 +288,12 @@ FROM sources s
 	}
 
 	if fs.FetchOptions.WithTags {
-		qs = append(qs, `
+		tids, err := getNotInTags(fs.TagTree, fs.DB)
+		if err != nil {
+			return err
+		}
+
+		qs = append(qs, fmt.Sprintf(`
 SELECT
   t.id,
   t.parent_id,
@@ -295,6 +303,7 @@ SELECT
 FROM tags t
   INNER JOIN content_units_tags cut on t.id = cut.tag_id
   INNER JOIN fcu on cut.content_unit_id = fcu.id
+  WHERE t.id NOT IN (%s)
 GROUP BY t.id
 UNION
 SELECT
@@ -304,7 +313,7 @@ SELECT
   '{}',
 	0
 FROM tags t
-`,
+`, tids),
 		)
 	}
 
@@ -432,24 +441,32 @@ func (fs *FilterLabelStats) GetStats() error {
 	}
 
 	if fs.FetchOptions.WithTags {
-		qs = append(qs, `SELECT
-	  t.id,
-	  t.parent_id,
-	  concat('tg', t.uid),
-	  array_agg(distinct fl.id),
-		0
-	FROM tags t
-		INNER JOIN label_tag lt on t.id = lt.tag_id
-		INNER JOIN fl on lt.label_id = fl.id
-		GROUP BY t.id
-	UNION
-	SELECT
-	  t.id,
-	  t.parent_id,
-	  concat('tg', t.uid),
-	  '{}',
-		0
-	FROM tags t`)
+		tids, err := getNotInTags(fs.TagTree, fs.DB)
+		if err != nil {
+			return err
+		}
+		qs = append(qs, fmt.Sprintf(`
+SELECT
+  t.id,
+  t.parent_id,
+  concat('tg', t.uid),
+  array_agg(distinct fl.id),
+	0
+FROM tags t
+	INNER JOIN label_tag lt on t.id = lt.tag_id
+	INNER JOIN fl on lt.label_id = fl.id
+  	WHERE t.id NOT IN (%s)
+	GROUP BY t.id
+UNION
+SELECT
+  t.id,
+  t.parent_id,
+  concat('tg', t.uid),
+  '{}',
+	0
+FROM tags t
+`, tids),
+		)
 	}
 
 	if fs.FetchOptions.WithLanguages {
@@ -514,7 +531,11 @@ FROM sources s
 	}
 
 	if fs.FetchOptions.WithTags {
-		qs = append(qs, `
+		tids, err := getNotInTags(fs.TagTree, fs.DB)
+		if err != nil {
+			return err
+		}
+		qs = append(qs, fmt.Sprintf(`
 SELECT
   t.id,
   t.parent_id,
@@ -523,6 +544,7 @@ SELECT
 	0
 FROM fc c
 	INNER JOIN tags t  ON c.properties->'tags' ? t.uid 
+  	WHERE t.id NOT IN (%s)
 	GROUP BY t.id
 UNION
 SELECT
@@ -532,7 +554,7 @@ SELECT
   '{}',
 	0
 FROM tags t
-`,
+`, tids),
 		)
 	}
 
@@ -606,4 +628,15 @@ GROUP BY  c.properties->>'city', c.properties->>'country'
 	}
 	qq := fmt.Sprintf("with fc as (%s) %s", fs.Scope[:len(fs.Scope)-1], strings.Join(qs, " UNION "))
 	return fs.scan(qq)
+}
+
+func getNotInTags(tree *cache.StatsTree, db *sql.DB) (string, error) {
+	t, err := mdbmodels.Tags(
+		mdbmodels.TagWhere.Pattern.EQ(null.StringFrom("special-lesson")),
+	).One(db)
+	if err != nil {
+		return "", err
+	}
+	_, tids := tree.GetUniqueChildren([]string{t.UID})
+	return utils.JoinInt64(tids, ","), nil
 }
