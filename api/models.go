@@ -159,6 +159,7 @@ type ContentUnitsRequest struct {
 	MediaLanguageFilter
 	DerivedTypesFilter
 	OriginalLanguageFilter
+	MediaTypeFilter
 	WithFiles       bool `json:"with_files" form:"with_files"`
 	WithDerivations bool `json:"with_derivations" form:"with_derivations"`
 	WithTags        bool `json:"with_tags" form:"with_tags"`
