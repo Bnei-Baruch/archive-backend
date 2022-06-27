@@ -2895,6 +2895,10 @@ func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (
 	if err := appendLocationsFilterMods(&mods, r.LocationsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
+	if err := appendOriginalLanguageFilterMods(&mods, r.OriginalLanguageFilter, mdbmodels.TableNames.Collections); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+
 	resp := NewStatsClassResponse()
 
 	q, args := queries.BuildQuery(mdbmodels.Collections(mods...).Query)
