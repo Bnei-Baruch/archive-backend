@@ -3,8 +3,10 @@ package api
 import (
 	"database/sql"
 	"fmt"
+	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/volatiletech/null/v8"
@@ -137,6 +139,7 @@ func (st *StatsTree) insert(id, parentID int64, uid string, ids []int64) {
 
 type FilterStats struct {
 	DB           *sql.DB
+	TagTree      *cache.StatsTree
 	Scope        string
 	ScopeArgs    []interface{}
 	Resp         *StatsClassResponse
@@ -156,6 +159,9 @@ func (fs *FilterStats) scan(q string) error {
 	byLang := make(map[string]int)
 	byType := make(map[string]int)
 	byC := make(map[string]int)
+	byPerson := make(map[string]int)
+	byMedia := make(map[string]int)
+	byOLang := make(map[string]int)
 	total := make(map[int64]bool)
 	for rows.Next() {
 		var k string
@@ -175,7 +181,10 @@ func (fs *FilterStats) scan(q string) error {
 		} else if k[0] == 's' {
 			tmp = sources
 		} else if k[0] == 'l' {
-			byLang[k[1:]] = count
+			if _, ok := byLang[k[1:]]; !ok {
+				byLang[k[1:]] = 0
+			}
+			byLang[k[1:]] += count
 			continue
 		} else if k[0] == 'u' {
 			ct := mdb.CONTENT_TYPE_REGISTRY.ByID[id].Name
@@ -183,6 +192,15 @@ func (fs *FilterStats) scan(q string) error {
 			continue
 		} else if k[0] == 'c' {
 			byC[k[1:]] = count
+			continue
+		} else if k[0] == 'p' {
+			byPerson[k[1:]] = count
+			continue
+		} else if k[0] == 'm' {
+			byMedia[k[1:]] = count
+			continue
+		} else if k[0] == 'o' {
+			byOLang[k[1:]] = count
 			continue
 		}
 
@@ -217,6 +235,9 @@ func (fs *FilterStats) scan(q string) error {
 	fs.Resp.Languages = byLang
 	fs.Resp.ContentTypes = byType
 	fs.Resp.Collections = byC
+	fs.Resp.Persons = byPerson
+	fs.Resp.MediaTypes = byMedia
+	fs.Resp.OriginalLanguages = byOLang
 
 	fs.Resp.Total = int64(len(total))
 	return nil
@@ -229,58 +250,104 @@ type FilterCUStats struct {
 func (fs *FilterCUStats) GetStats() error {
 	qs := make([]string, 0)
 	if fs.FetchOptions.WithSources {
-		qs = append(qs, `SELECT
-	  s.id,
-	  s.parent_id,
-	  concat('s', s.uid),
-	  array_agg(distinct cus.content_unit_id),
-		0
-	FROM sources s
-	  INNER JOIN content_units_sources cus on s.id = cus.source_id
-	  INNER JOIN fcu on cus.content_unit_id = fcu.id
-	GROUP BY s.id
-	UNION
-	SELECT
-	  s.id,
-	  s.parent_id,
-	  concat('s', s.uid),
-	  '{}',
-		0
-	FROM sources s`)
+		qs = append(qs, `
+SELECT
+  s.id,
+  s.parent_id,
+  concat('s', s.uid),
+  array_agg(distinct cus.content_unit_id),
+	0
+FROM sources s
+  INNER JOIN content_units_sources cus on s.id = cus.source_id
+  INNER JOIN fcu on cus.content_unit_id = fcu.id
+GROUP BY s.id
+UNION
+SELECT
+  s.id,
+  s.parent_id,
+  concat('s', s.uid),
+  '{}',
+	0
+FROM sources s
+`,
+		)
 	}
 
 	if fs.FetchOptions.WithTags {
-		qs = append(qs, `SELECT
-	  t.id,
-	  t.parent_id,
-	  concat('t', t.uid),
-	  array_agg(distinct cut.content_unit_id),
-		0
-	FROM tags t
-	  INNER JOIN content_units_tags cut on t.id = cut.tag_id
-	  INNER JOIN fcu on cut.content_unit_id = fcu.id
-	GROUP BY t.id
-	UNION
-	SELECT
-	  t.id,
-	  t.parent_id,
-	  concat('t', t.uid),
-	  '{}',
-		0
-	FROM tags t`)
+		tids, err := getNotInTags(fs.TagTree, fs.DB)
+		if err != nil {
+			return err
+		}
+
+		qs = append(qs, fmt.Sprintf(`
+SELECT
+  t.id,
+  t.parent_id,
+  concat('t', t.uid),
+  array_agg(distinct cut.content_unit_id),
+	0
+FROM tags t
+  INNER JOIN content_units_tags cut on t.id = cut.tag_id
+  INNER JOIN fcu on cut.content_unit_id = fcu.id
+  WHERE t.id NOT IN (%s)
+GROUP BY t.id
+UNION
+SELECT
+  t.id,
+  t.parent_id,
+  concat('t', t.uid),
+  '{}',
+	0
+FROM tags t
+`, tids),
+		)
+	}
+
+	if fs.FetchOptions.WithOriginalLanguages {
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('o', cu.properties->>'original_language'),
+  NULL,
+  count(distinct cu.id)
+FROM fcu cu
+WHERE cu.properties->>'original_language' IS NOT NULL
+GROUP BY cu.properties->>'original_language'
+`,
+		)
 	}
 
 	if fs.FetchOptions.WithLanguages {
-		qs = append(qs, `SELECT
-	  0,
-	  NULL,
-	  concat('l', f.language),
-	  NULL,
-	  count(distinct f.content_unit_id)
-	FROM files f
-	INNER JOIN fcu on f.content_unit_id = fcu.id
-	WHERE f.secure = 0 AND f.published IS TRUE
-	GROUP BY f.language`)
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('l', f.language),
+  NULL,
+  count(distinct f.content_unit_id)
+FROM fcu
+INNER JOIN files f ON f.content_unit_id = fcu.id
+WHERE f.secure = 0 AND f.published IS TRUE AND f.language IS NOT NULL 
+GROUP BY f.language
+`,
+		)
+	}
+
+	if fs.FetchOptions.WithMediaType {
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('m', f.type),
+  NULL,
+  count(distinct f.content_unit_id)
+FROM fcu
+INNER JOIN files f ON f.content_unit_id = fcu.id
+WHERE f.secure = 0 AND f.published IS TRUE AND f.type IS NOT NULL 
+GROUP BY f.type
+`,
+		)
 	}
 
 	if fs.FetchOptions.WithContentTypes {
@@ -307,6 +374,22 @@ func (fs *FilterCUStats) GetStats() error {
 	GROUP BY c.uid`)
 	}
 
+	if fs.FetchOptions.WithPersons {
+		qs = append(qs, `SELECT
+	  0,
+	  NULL,
+	  concat('p', p.uid),
+	  NULL,
+	  count(distinct fcu.id)
+	FROM fcu
+	INNER JOIN content_units_persons cup ON fcu.id = cup.content_unit_id
+	INNER JOIN persons p ON cup.person_id = p.id
+	GROUP BY p.uid`)
+	}
+
+	if len(qs) == 0 {
+		return nil
+	}
 	qq := fmt.Sprintf("with fcu as (%s) %s", fs.Scope[:len(fs.Scope)-1], strings.Join(qs, " UNION "))
 	return fs.scan(qq)
 }
@@ -316,8 +399,9 @@ type FilterLabelStats struct {
 }
 
 func (fs *FilterLabelStats) GetStats() error {
-	qq := fmt.Sprintf(`WITH fl AS (%s)
-	SELECT
+	qs := make([]string, 0)
+	if fs.FetchOptions.WithSources {
+		qs = append(qs, `SELECT
 	  s.id,
 	  s.parent_id,
 	  concat('s', s.uid),
@@ -333,28 +417,40 @@ func (fs *FilterLabelStats) GetStats() error {
 	  concat('s', s.uid),
 	  '{}',
 		0
-	FROM sources s
-	UNION
-	SELECT
-	  t.id,
-	  t.parent_id,
-	  concat('t', t.uid),
-	  array_agg(distinct fl.id),
-		0
-	FROM tags t
-		INNER JOIN label_tag lt on t.id = lt.tag_id
-		INNER JOIN fl on lt.label_id = fl.id
-		GROUP BY t.id
-	UNION
-	SELECT
-	  t.id,
-	  t.parent_id,
-	  concat('t', t.uid),
-	  '{}',
-		0
-	FROM tags t
-	UNION
-	SELECT
+	FROM sources s`)
+	}
+
+	if fs.FetchOptions.WithTags {
+		tids, err := getNotInTags(fs.TagTree, fs.DB)
+		if err != nil {
+			return err
+		}
+		qs = append(qs, fmt.Sprintf(`
+SELECT
+  t.id,
+  t.parent_id,
+  concat('t', t.uid),
+  array_agg(distinct fl.id),
+	0
+FROM tags t
+	INNER JOIN label_tag lt on t.id = lt.tag_id
+	INNER JOIN fl on lt.label_id = fl.id
+  	WHERE t.id NOT IN (%s)
+	GROUP BY t.id
+UNION
+SELECT
+  t.id,
+  t.parent_id,
+  concat('t', t.uid),
+  '{}',
+	0
+FROM tags t
+`, tids),
+		)
+	}
+
+	if fs.FetchOptions.WithLanguages {
+		qs = append(qs, `SELECT
 	  0,
 	  NULL,
 	  concat('l', i18n.language),
@@ -362,82 +458,150 @@ func (fs *FilterLabelStats) GetStats() error {
 	  count(distinct fl.id)
 	FROM label_i18n i18n
 	INNER JOIN fl on i18n.label_id = fl.id
-	GROUP BY i18n.language
-	UNION
-	SELECT
+	GROUP BY i18n.language`)
+	}
+
+	if fs.FetchOptions.WithContentTypes {
+		qs = append(qs, `SELECT
 	  fl.type_id,
 	  NULL,
 	  concat('u', fl.type_id),
 	  NULL,
 	  count(distinct fl.id)
 	FROM fl
-	GROUP BY fl.type_id
-	`,
-		fs.Scope[:len(fs.Scope)-1])
+	GROUP BY fl.type_id`)
+	}
+
+	if len(qs) == 0 {
+		return nil
+	}
+	qq := fmt.Sprintf("with fl as (%s) %s", fs.Scope[:len(fs.Scope)-1], strings.Join(qs, " UNION "))
+
 	return fs.scan(qq)
 }
 
 type FilterCollectionStats struct {
 	FilterStats
+	*ContentTypesFilter
 }
 
 func (fs *FilterCollectionStats) GetStats() error {
-	qq := fmt.Sprintf(`WITH fc AS (%s)
-	SELECT
-	  s.id,
-	  s.parent_id,
-	  concat('s', s.uid),
-	  array_agg(distinct c.id),
-		0
-	FROM fc c
-		INNER JOIN sources s ON s.uid = c.properties->>'source'
-		GROUP BY s.id
-	UNION
-	SELECT
-	  s.id,
-	  s.parent_id,
-	  concat('s', s.uid),
-	  '{}',
-		0
-	FROM sources s
-	UNION
-	SELECT
-	  t.id,
-	  t.parent_id,
-	  concat('t', t.uid),
-	  array_agg(distinct c.id),
-		0
-	FROM fc c
-		INNER JOIN tags t  ON c.properties->'tags' ? t.uid 
-		GROUP BY t.id
-	UNION
-	SELECT
-	  t.id,
-	  t.parent_id,
-	  concat('t', t.uid),
-	  '{}',
-		0
-	FROM tags t	
-	UNION
-	SELECT
-	  0,
-	  NULL,
-	  concat('l', c.properties->>'original_language'),
-	  NULL,
-	  count(distinct c.id)
-	FROM fc c
-	WHERE c.properties->>'original_language' !=''
-	GROUP BY c.properties->>'original_language'
-	UNION
-	SELECT
-	  c.type_id,
-	  NULL,
-	  concat('u', c.type_id),
-	  NULL,
-	  count(distinct c.id)
-	FROM fc c
-	GROUP BY c.type_id
-	`,
-		fs.Scope[:len(fs.Scope)-1])
+	qs := make([]string, 0)
+	if fs.FetchOptions.WithSources {
+		qs = append(qs, `
+SELECT
+  s.id,
+  s.parent_id,
+  concat('s', s.uid),
+  array_agg(distinct c.id),
+	0
+FROM fc c
+	INNER JOIN sources s ON s.uid = c.properties->>'source'
+	GROUP BY s.id
+UNION
+SELECT
+  s.id,
+  s.parent_id,
+  concat('s', s.uid),
+  '{}',
+	0
+FROM sources s
+`,
+		)
+	}
+
+	if fs.FetchOptions.WithTags {
+		tids, err := getNotInTags(fs.TagTree, fs.DB)
+		if err != nil {
+			return err
+		}
+		qs = append(qs, fmt.Sprintf(`
+SELECT
+  t.id,
+  t.parent_id,
+  concat('t', t.uid),
+  array_agg(distinct c.id),
+	0
+FROM fc c
+	INNER JOIN tags t  ON c.properties->'tags' ? t.uid 
+  	WHERE t.id NOT IN (%s)
+	GROUP BY t.id
+UNION
+SELECT
+  t.id,
+  t.parent_id,
+  concat('t', t.uid),
+  '{}',
+	0
+FROM tags t
+`, tids),
+		)
+	}
+
+	if fs.FetchOptions.WithOriginalLanguages {
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('o', c.properties->>'original_language'),
+  NULL,
+  count(distinct c.id)
+FROM fc c
+WHERE c.properties->>'original_language' IS NOT NULL
+GROUP BY c.properties->>'original_language'
+`,
+		)
+	}
+
+	if fs.FetchOptions.WithLanguages {
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('l', ccuf.lang),
+  NULL,
+  count(distinct c.id)
+FROM fc as c
+INNER JOIN (
+	SELECT f.language as lang, ccu.collection_id as ccu_id  FROM collections_content_units ccu
+	INNER JOIN content_units cu ON cu.id = ccu.content_unit_id
+	INNER JOIN files f ON f.content_unit_id = cu.id
+	WHERE (cu.secure=0 AND cu.published IS TRUE) AND (f.secure=0 AND f.published IS TRUE) AND f.language IS NOT NULL
+) AS ccuf ON ccuf.ccu_id = c.id
+WHERE ccuf.lang IS NOT NULL
+GROUP BY lang
+`,
+		)
+	}
+
+	if fs.FetchOptions.WithContentTypes {
+		qs = append(qs, `
+SELECT
+  c.type_id,
+  NULL,
+  concat('u', c.type_id),
+  NULL,
+  count(distinct c.id)
+FROM fc c
+GROUP BY c.type_id
+`,
+		)
+	}
+
+	if len(qs) == 0 {
+		return nil
+	}
+	qq := fmt.Sprintf("with fc as (%s) %s", fs.Scope[:len(fs.Scope)-1], strings.Join(qs, " UNION "))
 	return fs.scan(qq)
+}
+
+func getNotInTags(tree *cache.StatsTree, db *sql.DB) (string, error) {
+	t, err := mdbmodels.Tags(
+		mdbmodels.TagWhere.Pattern.EQ(null.StringFrom("special-lesson")),
+	).One(db)
+	if err != nil {
+		return "", err
+	}
+	_, tids := tree.GetUniqueChildren([]string{t.UID})
+	return utils.JoinInt64(tids, ","), nil
 }
