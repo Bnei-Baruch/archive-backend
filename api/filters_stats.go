@@ -146,6 +146,8 @@ type FilterStats struct {
 	FetchOptions *StatsFetchOptions
 }
 
+const CITY_COUNTRY_SEPARATOR = "___"
+
 func (fs *FilterStats) scan(q string) error {
 	rows, err := queries.Raw(q, fs.ScopeArgs...).Query(fs.DB)
 	if err != nil {
@@ -162,6 +164,7 @@ func (fs *FilterStats) scan(q string) error {
 	byPerson := make(map[string]int)
 	byMedia := make(map[string]int)
 	byOLang := make(map[string]int)
+	byLocation := make(map[string]CityItem)
 	total := make(map[int64]bool)
 	for rows.Next() {
 		var k string
@@ -176,35 +179,45 @@ func (fs *FilterStats) scan(q string) error {
 		for _, id := range ids {
 			total[id] = true
 		}
-		if k[0] == 't' {
+		prefix := k[:2]
+		key := k[2:]
+
+		switch prefix {
+		case "tg":
 			tmp = tags
-		} else if k[0] == 's' {
+		case "sr":
 			tmp = sources
-		} else if k[0] == 'l' {
-			if _, ok := byLang[k[1:]]; !ok {
-				byLang[k[1:]] = 0
+		case "lg":
+			if _, ok := byLang[key]; !ok {
+				byLang[key] = 0
 			}
-			byLang[k[1:]] += count
+			byLang[key] += count
 			continue
-		} else if k[0] == 'u' {
+		case "ct":
 			ct := mdb.CONTENT_TYPE_REGISTRY.ByID[id].Name
 			byType[ct] = count
 			continue
-		} else if k[0] == 'c' {
-			byC[k[1:]] = count
+		case "cl":
+			byC[key] = count
 			continue
-		} else if k[0] == 'p' {
-			byPerson[k[1:]] = count
+		case "pr":
+			byPerson[key] = count
 			continue
-		} else if k[0] == 'm' {
-			byMedia[k[1:]] = count
+		case "mt":
+			byMedia[key] = count
 			continue
-		} else if k[0] == 'o' {
-			byOLang[k[1:]] = count
+		case "ol":
+			byOLang[key] = count
+			continue
+		case "co":
+			spl := strings.Split(key, CITY_COUNTRY_SEPARATOR)
+			byLocation[spl[0]] = CityItem{Count: count, City: spl[0], Country: spl[1]}
+			continue
+		default:
 			continue
 		}
 
-		tmp.insert(id, parentID.Int64, k[1:], ids)
+		tmp.insert(id, parentID.Int64, k[2:], ids)
 	}
 	if err := rows.Err(); err != nil {
 		return errors.Wrap(err, "rows.Err()")
@@ -238,6 +251,7 @@ func (fs *FilterStats) scan(q string) error {
 	fs.Resp.Persons = byPerson
 	fs.Resp.MediaTypes = byMedia
 	fs.Resp.OriginalLanguages = byOLang
+	fs.Resp.Locations = byLocation
 
 	fs.Resp.Total = int64(len(total))
 	return nil
@@ -254,7 +268,7 @@ func (fs *FilterCUStats) GetStats() error {
 SELECT
   s.id,
   s.parent_id,
-  concat('s', s.uid),
+  concat('sr', s.uid),
   array_agg(distinct cus.content_unit_id),
 	0
 FROM sources s
@@ -265,7 +279,7 @@ UNION
 SELECT
   s.id,
   s.parent_id,
-  concat('s', s.uid),
+  concat('sr', s.uid),
   '{}',
 	0
 FROM sources s
@@ -283,7 +297,7 @@ FROM sources s
 SELECT
   t.id,
   t.parent_id,
-  concat('t', t.uid),
+  concat('tg', t.uid),
   array_agg(distinct cut.content_unit_id),
 	0
 FROM tags t
@@ -295,7 +309,7 @@ UNION
 SELECT
   t.id,
   t.parent_id,
-  concat('t', t.uid),
+  concat('tg', t.uid),
   '{}',
 	0
 FROM tags t
@@ -308,7 +322,7 @@ FROM tags t
 SELECT
   0,
   NULL,
-  concat('o', cu.properties->>'original_language'),
+  concat('ol', cu.properties->>'original_language'),
   NULL,
   count(distinct cu.id)
 FROM fcu cu
@@ -323,7 +337,7 @@ GROUP BY cu.properties->>'original_language'
 SELECT
   0,
   NULL,
-  concat('l', f.language),
+  concat('lg', f.language),
   NULL,
   count(distinct f.content_unit_id)
 FROM fcu
@@ -339,7 +353,7 @@ GROUP BY f.language
 SELECT
   0,
   NULL,
-  concat('m', f.type),
+  concat('mt', f.type),
   NULL,
   count(distinct f.content_unit_id)
 FROM fcu
@@ -351,40 +365,46 @@ GROUP BY f.type
 	}
 
 	if fs.FetchOptions.WithContentTypes {
-		qs = append(qs, `SELECT
-	  fcu.type_id,
-	  NULL,
-	  concat('u', fcu.type_id),
-	  NULL,
-	  count(distinct fcu.id)
-	FROM fcu
-	GROUP BY fcu.type_id`)
+		qs = append(qs, `
+SELECT
+  fcu.type_id,
+  NULL,
+  concat('ct', fcu.type_id),
+  NULL,
+  count(distinct fcu.id)
+FROM fcu
+GROUP BY fcu.type_id
+`)
 	}
 
 	if fs.FetchOptions.WithCollections {
-		qs = append(qs, `SELECT
-	  0,
-	  NULL,
-	  concat('c', c.uid),
-	  NULL,
-	  count(distinct fcu.id)
-	FROM collections_content_units ccu
-	INNER JOIN fcu ON ccu.content_unit_id = fcu.id  
-	INNER JOIN collections c ON ccu.collection_id = c.id
-	GROUP BY c.uid`)
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('cl', c.uid),
+  NULL,
+  count(distinct fcu.id)
+FROM collections_content_units ccu
+INNER JOIN fcu ON ccu.content_unit_id = fcu.id  
+INNER JOIN collections c ON ccu.collection_id = c.id
+GROUP BY c.uid
+`)
 	}
 
 	if fs.FetchOptions.WithPersons {
-		qs = append(qs, `SELECT
-	  0,
-	  NULL,
-	  concat('p', p.uid),
-	  NULL,
-	  count(distinct fcu.id)
-	FROM fcu
-	INNER JOIN content_units_persons cup ON fcu.id = cup.content_unit_id
-	INNER JOIN persons p ON cup.person_id = p.id
-	GROUP BY p.uid`)
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('pr', p.uid),
+  NULL,
+  count(distinct fcu.id)
+FROM fcu
+INNER JOIN content_units_persons cup ON fcu.id = cup.content_unit_id
+INNER JOIN persons p ON cup.person_id = p.id
+GROUP BY p.uid
+`)
 	}
 
 	if len(qs) == 0 {
@@ -404,7 +424,7 @@ func (fs *FilterLabelStats) GetStats() error {
 		qs = append(qs, `SELECT
 	  s.id,
 	  s.parent_id,
-	  concat('s', s.uid),
+	  concat('sr', s.uid),
 	  array_agg(distinct fl.id),
 		0
 	FROM fl 
@@ -414,7 +434,7 @@ func (fs *FilterLabelStats) GetStats() error {
 	SELECT
 	  s.id,
 	  s.parent_id,
-	  concat('s', s.uid),
+	  concat('sr', s.uid),
 	  '{}',
 		0
 	FROM sources s`)
@@ -429,7 +449,7 @@ func (fs *FilterLabelStats) GetStats() error {
 SELECT
   t.id,
   t.parent_id,
-  concat('t', t.uid),
+  concat('tg', t.uid),
   array_agg(distinct fl.id),
 	0
 FROM tags t
@@ -441,7 +461,7 @@ UNION
 SELECT
   t.id,
   t.parent_id,
-  concat('t', t.uid),
+  concat('tg', t.uid),
   '{}',
 	0
 FROM tags t
@@ -453,7 +473,7 @@ FROM tags t
 		qs = append(qs, `SELECT
 	  0,
 	  NULL,
-	  concat('l', i18n.language),
+	  concat('lg', i18n.language),
 	  NULL,
 	  count(distinct fl.id)
 	FROM label_i18n i18n
@@ -465,7 +485,7 @@ FROM tags t
 		qs = append(qs, `SELECT
 	  fl.type_id,
 	  NULL,
-	  concat('u', fl.type_id),
+	  concat('ct', fl.type_id),
 	  NULL,
 	  count(distinct fl.id)
 	FROM fl
@@ -492,7 +512,7 @@ func (fs *FilterCollectionStats) GetStats() error {
 SELECT
   s.id,
   s.parent_id,
-  concat('s', s.uid),
+  concat('sr', s.uid),
   array_agg(distinct c.id),
 	0
 FROM fc c
@@ -502,7 +522,7 @@ UNION
 SELECT
   s.id,
   s.parent_id,
-  concat('s', s.uid),
+  concat('sr', s.uid),
   '{}',
 	0
 FROM sources s
@@ -519,7 +539,7 @@ FROM sources s
 SELECT
   t.id,
   t.parent_id,
-  concat('t', t.uid),
+  concat('tg', t.uid),
   array_agg(distinct c.id),
 	0
 FROM fc c
@@ -530,7 +550,7 @@ UNION
 SELECT
   t.id,
   t.parent_id,
-  concat('t', t.uid),
+  concat('tg', t.uid),
   '{}',
 	0
 FROM tags t
@@ -543,7 +563,7 @@ FROM tags t
 SELECT
   0,
   NULL,
-  concat('o', c.properties->>'original_language'),
+  concat('ol', c.properties->>'original_language'),
   NULL,
   count(distinct c.id)
 FROM fc c
@@ -558,7 +578,7 @@ GROUP BY c.properties->>'original_language'
 SELECT
   0,
   NULL,
-  concat('l', ccuf.lang),
+  concat('lg', ccuf.lang),
   NULL,
   count(distinct c.id)
 FROM fc as c
@@ -579,12 +599,27 @@ GROUP BY lang
 SELECT
   c.type_id,
   NULL,
-  concat('u', c.type_id),
+  concat('ct', c.type_id),
   NULL,
   count(distinct c.id)
 FROM fc c
 GROUP BY c.type_id
 `,
+		)
+	}
+
+	if fs.FetchOptions.WithLocations {
+		qs = append(qs, fmt.Sprintf(`
+SELECT
+  0,
+  NULL,
+  concat('co', c.properties->>'city', '%s', c.properties->>'country'),
+  NULL,
+  count(distinct c.id)
+FROM fc c
+WHERE c.properties->>'country' IS NOT NULL OR  c.properties->>'city' IS NOT NULL 
+GROUP BY  c.properties->>'city', c.properties->>'country'
+`, CITY_COUNTRY_SEPARATOR),
 		)
 	}
 

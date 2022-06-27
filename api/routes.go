@@ -18,6 +18,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/content_units/:uid", ContentUnitHandler)
 	router.GET("/lessons", LessonsHandler)
 	router.POST("/lessons", LessonsHandler)
+	router.GET("/events", EventsHandler)
 	router.GET("/sources", SourcesHierarchyHandler)
 	router.GET("/tags", TagsHierarchyHandler)
 	router.GET("/tags/dashboard", TagDashboardHandler)

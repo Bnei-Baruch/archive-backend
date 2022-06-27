@@ -114,16 +114,20 @@ type BlogFilter struct {
 }
 
 type MediaLanguageFilter struct {
-	MediaLanguage []string `json:"media_language" form:"media_language" binding:"omitempty,dive,len=2"`
+	MediaLanguage []string `json:"media_languages" form:"media_language" binding:"omitempty,dive,len=2"`
 }
 
 type OriginalLanguageFilter struct {
-	OriginalLanguages []string `json:"original_languages" form:"original_languages" binding:"omitempty,dive,len=2"`
+	OriginalLanguages []string `json:"original_languages" form:"original_language" binding:"omitempty,dive,len=2"`
+}
+
+type LocationsFilter struct {
+	Locations []string `json:"locations" form:"location" binding:"omitempty"`
 }
 
 // MediaTypeFilter TODO: for version 1.8 can try to use oneof=text image validation
 type MediaTypeFilter struct {
-	MediaType []string `json:"media_type" form:"media_type" binding:"omitempty"`
+	MediaType []string `json:"media_types" form:"media_type" binding:"omitempty"`
 }
 
 type CollectionsRequest struct {
@@ -154,6 +158,8 @@ type ContentUnitsRequest struct {
 	PersonsFilter
 	MediaLanguageFilter
 	DerivedTypesFilter
+	OriginalLanguageFilter
+	MediaTypeFilter
 	WithFiles       bool `json:"with_files" form:"with_files"`
 	WithDerivations bool `json:"with_derivations" form:"with_derivations"`
 	WithTags        bool `json:"with_tags" form:"with_tags"`
@@ -177,6 +183,17 @@ type LessonsRequest struct {
 	PersonsFilter
 	MediaTypeFilter
 	OriginalLanguageFilter
+}
+
+type EventsRequest struct {
+	ListRequest
+	DateRangeFilter
+	SourcesFilter
+	TagsFilter
+	MediaLanguageFilter
+	ContentTypesFilter
+	OriginalLanguageFilter
+	LocationsFilter
 }
 
 type LessonsResponseItem struct {
@@ -231,6 +248,7 @@ type StatsFetchOptions struct {
 	WithPersons           bool `json:"with_persons" form:"with_persons" binding:"omitempty"`
 	WithMediaType         bool `json:"with_media" form:"with_media" binding:"omitempty"`
 	WithOriginalLanguages bool `json:"with_original_languages" form:"with_original_languages" binding:"omitempty"`
+	WithLocations         bool `json:"with_locations" form:"with_locations" binding:"omitempty"`
 }
 
 type StatsClassRequest struct {
@@ -248,20 +266,22 @@ type StatsClassRequest struct {
 	StatsFetchOptions
 	MediaTypeFilter
 	OriginalLanguageFilter
+	LocationsFilter
 	CountOnly bool `json:"count_only" form:"count_only"`
 	ForFilter bool `json:"for_filter" form:"for_filter"`
 }
 
 type StatsClassResponse struct {
-	Sources           map[string]int `json:"sources"`
-	Tags              map[string]int `json:"tags"`
-	Languages         map[string]int `json:"languages"`
-	ContentTypes      map[string]int `json:"content_types"`
-	Collections       map[string]int `json:"collections"`
-	Persons           map[string]int `json:"persons"`
-	MediaTypes        map[string]int `json:"media_types"`
-	OriginalLanguages map[string]int `json:"original_languages"`
-	Total             int64          `json:"total"`
+	Sources           map[string]int      `json:"sources"`
+	Tags              map[string]int      `json:"tags"`
+	Languages         map[string]int      `json:"languages"`
+	ContentTypes      map[string]int      `json:"content_types"`
+	Collections       map[string]int      `json:"collections"`
+	Persons           map[string]int      `json:"persons"`
+	MediaTypes        map[string]int      `json:"media_types"`
+	OriginalLanguages map[string]int      `json:"original_languages"`
+	Locations         map[string]CityItem `json:"locations"`
+	Total             int64               `json:"total"`
 }
 
 type TweetsRequest struct {
@@ -525,4 +545,10 @@ type Label struct {
 	TagUIDs     []string  `json:"tags,omitempty"`
 	ContentUnit string    `json:"content_unit,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+type CityItem struct {
+	Count   int    `json:"count"`
+	City    string `json:"city"`
+	Country string `json:"country"`
 }
