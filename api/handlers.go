@@ -504,6 +504,11 @@ func EventsHandler(c *gin.Context) {
 		return
 	}
 
+	if err := appendIDsFilterMods(&cMods, IDsFilter{IDs: r.Collections}); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
 	//append content units filters
 	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
 	if err := appendNotForDisplayCU(&cuMods); err != nil {
@@ -531,6 +536,11 @@ func EventsHandler(c *gin.Context) {
 	}
 
 	if err := appendOriginalLanguageFilterMods(&cuMods, r.OriginalLanguageFilter, mdbmodels.TableNames.ContentUnits); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+
+	if err := appendCollectionsFilterMods(db, &cuMods, r.CollectionsFilter); err != nil {
 		NewBadRequestError(err).Abort(c)
 		return
 	}

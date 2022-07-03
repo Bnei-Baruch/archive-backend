@@ -194,6 +194,7 @@ type EventsRequest struct {
 	ContentTypesFilter
 	OriginalLanguageFilter
 	LocationsFilter
+	CollectionsFilter
 }
 
 type LessonsResponseItem struct {
