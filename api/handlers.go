@@ -504,6 +504,11 @@ func EventsHandler(c *gin.Context) {
 		return
 	}
 
+	if err := appendIDsFilterMods(&cMods, IDsFilter{IDs: r.Collections}); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
 	//append content units filters
 	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
 	if err := appendNotForDisplayCU(&cuMods); err != nil {
@@ -534,6 +539,11 @@ func EventsHandler(c *gin.Context) {
 		NewBadRequestError(err).Abort(c)
 		return
 	}
+
+	if err := appendCollectionsFilterMods(db, &cuMods, r.CollectionsFilter); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
 	if len(r.Locations) > 0 {
 		cuMods = []qm.QueryMod{qm.Where("id < 0")}
 	}
@@ -547,7 +557,7 @@ func EventsHandler(c *gin.Context) {
 	}
 	cMods = append(cMods, qm.Select(`
 			DISTINCT ON (id) 
-			coalesce((properties->>'film_date')::date, created_at) as date, 
+			coalesce((properties->>'start_date')::date, (properties->>'end_date')::date, (properties->>'film_date')::date, created_at) as date,
 			uid as uid,
 			type_id as type_id
 		`),
@@ -1717,6 +1727,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
+	appendCUNameFilterMods(&mods, r.CuNameFilter)
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select(`count(DISTINCT "content_units".id)`)}, mods...)
@@ -2785,10 +2796,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 	if err := appendOriginalLanguageFilterMods(&mods, r.OriginalLanguageFilter, mdbmodels.TableNames.ContentUnits); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if len(r.Locations) > 0 {
-		mods = []qm.QueryMod{qm.Where("id < 0")}
-	}
-
+	appendCUNameFilterMods(&mods, r.CuNameFilter)
 	var err error
 	resp := NewStatsClassResponse()
 
@@ -3730,6 +3738,18 @@ func appendNotForDisplayCU(mods *[]qm.QueryMod) error {
 
 	*mods = append(*mods, qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...))
 	return nil
+}
+
+func appendCUNameFilterMods(mods *[]qm.QueryMod, f CuNameFilter) {
+	if f.CuName == "" {
+		return
+	}
+
+	*mods = append(*mods,
+		qm.InnerJoin(`content_unit_i18n cu18 ON "content_units".id = cu18.content_unit_id`),
+		qm.Where("cu18.name ILIKE ?", fmt.Sprintf("%%%s%%", f.CuName)),
+	)
+	return
 }
 
 //append Labels filters
