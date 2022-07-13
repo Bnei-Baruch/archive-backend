@@ -125,9 +125,13 @@ type LocationsFilter struct {
 	Locations []string `json:"locations" form:"location" binding:"omitempty"`
 }
 
-// MediaTypeFilter TODO: for version 1.8 can try to use oneof=text image validation
+// MediaTypeFilter TODO: for version 1.8 can try to use oneof=text image video validation
 type MediaTypeFilter struct {
 	MediaType []string `json:"media_types" form:"media_type" binding:"omitempty"`
+}
+
+type CuNameFilter struct {
+	CuName string `json:"q" form:"q" binding:"omitempty"`
 }
 
 type CollectionsRequest struct {
@@ -160,6 +164,7 @@ type ContentUnitsRequest struct {
 	DerivedTypesFilter
 	OriginalLanguageFilter
 	MediaTypeFilter
+	CuNameFilter
 	WithFiles       bool `json:"with_files" form:"with_files"`
 	WithDerivations bool `json:"with_derivations" form:"with_derivations"`
 	WithTags        bool `json:"with_tags" form:"with_tags"`
@@ -268,6 +273,7 @@ type StatsClassRequest struct {
 	MediaTypeFilter
 	OriginalLanguageFilter
 	LocationsFilter
+	CuNameFilter
 	CountOnly bool `json:"count_only" form:"count_only"`
 	ForFilter bool `json:"for_filter" form:"for_filter"`
 }
