@@ -728,7 +728,8 @@ func FeedCollections(c *gin.Context) {
 		mediaTypes = []string{consts.MEDIA_MP4, consts.MEDIA_MP3a, consts.MEDIA_MP3b}
 	}
 
-	href := "https://old.kabbalahmedia.info/cover_podcast.jpg"
+	href := getImageByLangCuid(config.DLANG, config.COLLECTION)
+
 	l := "/feeds/collections/" + config.DLANG + "/" + config.COLLECTION
 	if config.DF != "" {
 		l += "/df/" + config.DF
@@ -971,4 +972,13 @@ func renderContentUnits(cm cache.CacheManager, db *sql.DB, cur ContentUnitsReque
 func etag(name string, data []byte) string {
 	crc := crc32.ChecksumIEEE(data)
 	return fmt.Sprintf(`W/"%s-%d-%08X"`, name, len(data), crc)
+}
+
+func getImageByLangCuid(lang, cuid string) string {
+	href := fmt.Sprintf("https://kabbalahmedia.info/cms/wp-content/uploads/rss/%s/%s.jpg", lang, cuid)
+	resp, err := http.Head(href)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return "https://old.kabbalahmedia.info/cover_podcast.jpg"
+	}
+	return href
 }
