@@ -996,18 +996,18 @@ func getImageByLangCuid(lang, cuid string) string {
 func checkIsWithRav(db *sql.DB, cUid string) (bool, error) {
 	var exists bool
 	err := mdbmodels.NewQuery(
-		qm.Select(`
+		qm.Select(fmt.Sprintf(`
 			EXISTS(
 				SELECT cu.id
 				FROM content_units cu
 				INNER JOIN collections_content_units ccu ON ccu.content_unit_id = cu.id
+				INNER JOIN content_units_persons cup ON cup.person_id = %d
 				WHERE ccu.collection_id = c.id 
 					AND cu.id = cup.content_unit_id
 					AND cu.secure = 0 AND cu.published IS TRUE
 			)
-		`),
+		`, mdb.PERSONS_REGISTRY.ByPattern[consts.P_RAV].ID)),
 		qm.From("collections as c"),
-		qm.InnerJoin("content_units_persons cup ON cup.person_id = ?", mdb.PERSONS_REGISTRY.ByPattern[consts.P_RAV].ID),
 		qm.Where("c.uid = ?", cUid),
 	).QueryRow(db).Scan(&exists)
 	return exists, err
