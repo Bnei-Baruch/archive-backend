@@ -310,7 +310,7 @@ func LessonsHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	if err := appendDateRangeFilterMods(&cMods, r.DateRangeFilter); err != nil {
+	if err := appendDateRangeCFilterMods(&cMods, r.DateRangeFilter); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -479,7 +479,7 @@ func EventsHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	if err := appendDateRangeFilterMods(&cMods, r.DateRangeFilter); err != nil {
+	if err := appendDateRangeCFilterMods(&cMods, r.DateRangeFilter); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -2245,7 +2245,7 @@ func handleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendDateRangeFilterMods(&cMods, r.DateRangeFilter); err != nil {
+	if err := appendDateRangeCFilterMods(&cMods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendCollectionSourceFilterMods(cm, db, &cMods, r.SourcesFilter); err != nil {
