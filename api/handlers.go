@@ -2881,6 +2881,12 @@ func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (
 		qm.Select("\"collections\".* AS c"),
 	}
 
+	resp := NewStatsClassResponse()
+
+	if len(r.MediaType) != 0 {
+		return resp, nil
+	}
+
 	// filters
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
 		return nil, NewBadRequestError(err)
@@ -2906,8 +2912,6 @@ func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (
 	if err := appendOriginalLanguageFilterMods(&mods, r.OriginalLanguageFilter, mdbmodels.TableNames.Collections); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-
-	resp := NewStatsClassResponse()
 
 	q, args := queries.BuildQuery(mdbmodels.Collections(mods...).Query)
 	cs := FilterCollectionStats{
