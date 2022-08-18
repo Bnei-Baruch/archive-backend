@@ -940,10 +940,18 @@ func renderContentUnits(cm cache.CacheManager, db *sql.DB, cur ContentUnitsReque
 			if description == "" {
 				description = cu.Name
 			}
+
+			var pubDate time.Time
+			if cu.FilmDate == nil {
+				pubDate = file.CreatedAt
+			} else {
+				pubDate = cu.FilmDate.Time
+			}
+
 			channel.Items = append(channel.Items, &podcastItem{
 				Title:       cu.Name,
 				Link:        url,
-				PubDate:     file.CreatedAt.Format(time.RFC822),
+				PubDate:     pubDate.Format(time.RFC822),
 				Description: description,
 				Enclosure: &podcastEnclosure{
 					Url:    url,
