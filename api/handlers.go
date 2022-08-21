@@ -310,7 +310,7 @@ func LessonsHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	if err := appendDateRangeFilterMods(&cMods, r.DateRangeFilter); err != nil {
+	if err := appendDateRangeCFilterMods(&cMods, r.DateRangeFilter); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -479,7 +479,7 @@ func EventsHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	if err := appendDateRangeFilterMods(&cMods, r.DateRangeFilter); err != nil {
+	if err := appendDateRangeCFilterMods(&cMods, r.DateRangeFilter); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -1046,7 +1046,7 @@ func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) 
 	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+	if err := appendDateRangeCFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendCollectionSourceFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
@@ -2245,7 +2245,7 @@ func handleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendDateRangeFilterMods(&cMods, r.DateRangeFilter); err != nil {
+	if err := appendDateRangeCFilterMods(&cMods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendCollectionSourceFilterMods(cm, db, &cMods, r.SourcesFilter); err != nil {
@@ -2894,7 +2894,7 @@ func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (
 	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+	if err := appendDateRangeCFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendCollectionSourceFilterMods(cm, db, &mods, r.SourcesFilter); err != nil {
@@ -3342,6 +3342,35 @@ func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 
 func appendDateRangeCUFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 	return appendDRFBaseMods(mods, f, "(\"content_units\".properties->>'film_date')::date")
+}
+
+func appendDateRangeCFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
+	if f.StartDate == "" && f.EndDate == "" {
+		return nil
+	}
+
+	orMode := []qm.QueryMod{}
+
+	startMode := []qm.QueryMod{}
+	if err := appendDRFBaseMods(&startMode, f, `("collections".properties->>'start_date')::date`); err != nil {
+		return err
+	}
+	orMode = append(orMode, qm.Or2(qm.Expr(startMode...)))
+
+	endMode := []qm.QueryMod{}
+	if err := appendDRFBaseMods(&endMode, f, `("collections".properties->>'end_date')::date`); err != nil {
+		return err
+	}
+	orMode = append(orMode, qm.Or2(qm.Expr(endMode...)))
+
+	filmMode := []qm.QueryMod{}
+	if err := appendDRFBaseMods(&filmMode, f, `("collections".properties->>'film_date')::date`); err != nil {
+		return err
+	}
+	orMode = append(orMode, qm.Or2(qm.Expr(filmMode...)))
+
+	*mods = append(*mods, qm.Expr(orMode...))
+	return nil
 }
 
 func appendCollectionSourceFilterMods(cm cache.CacheManager, exec boil.Executor, mods *[]qm.QueryMod, f SourcesFilter) error {
