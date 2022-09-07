@@ -49,42 +49,32 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/rss.php", FeedRssPhp)
 	feeds := router.Group("/feeds")
 	{
-		feeds.GET("/rus_zohar", FeedRusZohar)
-		feeds.GET("/rus_zohar.rss", FeedRusZohar)
-		feeds.GET("/rus_for_laitman_ru", FeedRusForLaitmanRu)
-		feeds.GET("/rus_for_laitman_ru.rss", FeedRusForLaitmanRu)
-		feeds.GET("/wsxml.xml", FeedWSXML)
-		feeds.GET("/rss_video.php", FeedRssVideo)
-		feeds.GET("/podcast/:DLANG/:DF", FeedPodcast)
-		feeds.GET("/podcast.rss/:DLANG/:DF", FeedPodcast)
-		feeds.GET("/morning_lesson", FeedMorningLesson)
+		headAndGet(feeds, "/rus_zohar", FeedRusZohar)
+		headAndGet(feeds, "/rus_zohar.rss", FeedRusZohar)
+		headAndGet(feeds, "/rus_for_laitman_ru", FeedRusForLaitmanRu)
+		headAndGet(feeds, "/rus_for_laitman_ru.rss", FeedRusForLaitmanRu)
+		headAndGet(feeds, "/wsxml.xml", FeedWSXML)
+		headAndGet(feeds, "/rss_video.php", FeedRssVideo)
+		headAndGet(feeds, "/podcast/:DLANG/:DF", FeedPodcast)
+		headAndGet(feeds, "/podcast.rss/:DLANG/:DF", FeedPodcast)
+		headAndGet(feeds, "/morning_lesson", FeedMorningLesson)
 
 		collections := feeds.Group("/collections/:DLANG")
 		{
-			collections.GET("/:COLLECTION", FeedCollections)
-			collections.HEAD("/:COLLECTION", FeedCollections)
-			collections.GET("/:COLLECTION/df/:DF", FeedCollections)
-			collections.HEAD("/:COLLECTION/df/:DF", FeedCollections)
-			collections.GET("/:COLLECTION/tag/:TAG", FeedCollections)
-			collections.HEAD("/:COLLECTION/tag/:TAG", FeedCollections)
-			collections.GET("/:COLLECTION/df/:DF/tag/:TAG", FeedCollections)
-			collections.HEAD("/:COLLECTION/df/:DF/tag/:TAG", FeedCollections)
-			collections.GET("/:COLLECTION/tag/:TAG/df/:DF", FeedCollections)
-			collections.HEAD("/:COLLECTION/tag/:TAG/df/:DF", FeedCollections)
+			headAndGet(collections, "/:COLLECTION", FeedCollections)
+			headAndGet(collections, "/:COLLECTION/df/:DF", FeedCollections)
+			headAndGet(collections, "/:COLLECTION/tag/:TAG", FeedCollections)
+			headAndGet(collections, "/:COLLECTION/df/:DF/tag/:TAG", FeedCollections)
+			headAndGet(collections, "/:COLLECTION/tag/:TAG/df/:DF", FeedCollections)
 		}
 
 		ct := feeds.Group("/content_type/:DLANG/:CT")
 		{
-			ct.GET("/", FeedByContentType)
-			ct.HEAD("/", FeedByContentType)
-			ct.GET("/df/:DF", FeedByContentType)
-			ct.HEAD("/df/:DF", FeedByContentType)
-			ct.GET("/df/:DF/tag/:TAG", FeedByContentType)
-			ct.HEAD("/df/:DF/tag/:TAG", FeedByContentType)
-			ct.GET("/tag/:TAG", FeedByContentType)
-			ct.HEAD("/tag/:TAG", FeedByContentType)
-			ct.GET("/tag/:TAG/df/:DF", FeedByContentType)
-			ct.HEAD("/tag/:TAG/df/:DF", FeedByContentType)
+			headAndGet(ct, "/", FeedByContentType)
+			headAndGet(ct, "/df/:DF", FeedByContentType)
+			headAndGet(ct, "/df/:DF/tag/:TAG", FeedByContentType)
+			headAndGet(ct, "/tag/:TAG", FeedByContentType)
+			headAndGet(ct, "/tag/:TAG/df/:DF", FeedByContentType)
 		}
 	}
 
@@ -124,4 +114,9 @@ func pprofHandler(h http.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		handler.ServeHTTP(c.Writer, c.Request)
 	}
+}
+
+func headAndGet(group *gin.RouterGroup, relativePath string, handlers ...gin.HandlerFunc) gin.IRoutes {
+	return group.GET(relativePath, handlers...).
+		HEAD(relativePath, handlers...)
 }
