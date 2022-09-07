@@ -628,7 +628,7 @@ func FeedPodcast(c *gin.Context) {
 
 	channel := &podcastChannel{
 		Title:           title,
-		Link:            "https://www.kabbalahmedia.info/",
+		Link:            link,
 		Description:     description,
 		Image:           &podcastImage{Url: href, Title: title, Link: link},
 		Language:        config.Lang,
@@ -757,7 +757,7 @@ func FeedCollections(c *gin.Context) {
 	description := collection.Description
 	channel := &podcastChannel{
 		Title:           title,
-		Link:            "https://www.kabbalahmedia.info/",
+		Link:            link,
 		Description:     description,
 		Image:           &podcastImage{Url: href, Title: title, Link: link},
 		Language:        config.Lang,
@@ -853,7 +853,7 @@ func FeedByContentType(c *gin.Context) {
 	link := getHref(l, c)
 	channel := &podcastChannel{
 		Title:           title,
-		Link:            "https://www.kabbalahmedia.info/",
+		Link:            link,
 		Description:     description,
 		Image:           &podcastImage{Url: href, Title: title, Link: link},
 		Language:        config.Lang,
