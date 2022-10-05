@@ -119,7 +119,8 @@ func LessonOverviewHandler(c *gin.Context) {
 							WHERE (secure=0 AND published IS TRUE)
              			ORDER BY ccu.collection_id, cu.created_at)
 				SELECT
-					c.uid                                                        AS content_unit_id,
+					c.id                                                         AS content_unit_id,
+					c.uid                                                        AS content_unit_uid,
 				    c.collection_id,
 				    c.collection_uid,
 				    c.type_id                                                    AS content_type,
@@ -147,8 +148,10 @@ func LessonOverviewHandler(c *gin.Context) {
 	}
 
 	var collectionIds []int64
+	var cuIds []int64
 	for rows.Next() {
-		var contentUnitId string
+		var contentUnitId int64
+		var contentUnitUid string
 		var collectionId int64
 		var collectionUid string
 		var contentType int64
@@ -158,13 +161,14 @@ func LessonOverviewHandler(c *gin.Context) {
 		var endDate *time.Time
 		var duration int64
 
-		err = rows.Scan(&contentUnitId, &collectionId, &collectionUid, &contentType, &views, &date,
+		err = rows.Scan(&contentUnitId, &contentUnitUid, &collectionId, &collectionUid, &contentType, &views, &date,
 			&startDate, &endDate, &duration)
 		item := LessonOverview{
-			ContentUnitUid:       contentUnitId,
+			ContentUnitUid:       contentUnitUid,
 			CollectionId:         collectionUid,
+			internalUnitId:       contentUnitId,
 			internalCollectionId: collectionId,
-			Image:                fmt.Sprintf("api/thumbnail/%s", contentUnitId),
+			Image:                fmt.Sprintf("api/thumbnail/%s", contentUnitUid),
 			Views:                views,
 			Date:                 date,
 			StartDate:            startDate,
@@ -174,6 +178,7 @@ func LessonOverviewHandler(c *gin.Context) {
 		}
 		resp.Items = append(resp.Items, &item)
 		collectionIds = append(collectionIds, collectionId)
+		cuIds = append(cuIds, contentUnitId)
 	}
 
 	if err = rows.Err(); err != nil {
@@ -187,10 +192,29 @@ func LessonOverviewHandler(c *gin.Context) {
 		return
 	}
 
+	cuNames, err := loadCUI18ns(db, r.Language, cuIds)
+	if err = rows.Err(); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
 	for _, ri := range resp.Items {
 		li18ns, _ := colNames[ri.internalCollectionId]
 		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
 			li18n, ok := li18ns[l]
+			if ok {
+				if ri.Title == "" && li18n.Name.Valid {
+					ri.Title = li18n.Name.String
+				}
+				if ri.Description == "" && li18n.Description.Valid {
+					ri.Description = li18n.Description.String
+				}
+			}
+		}
+
+		culi18ns, _ := cuNames[ri.internalUnitId]
+		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+			li18n, ok := culi18ns[l]
 			if ok {
 				if ri.Title == "" && li18n.Name.Valid {
 					ri.Title = li18n.Name.String

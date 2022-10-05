@@ -162,6 +162,7 @@ type LessonOverview struct {
 	EndDate        *time.Time `json:"endDate"`
 	Duration       *int64     `json:"duration"`
 
+	internalUnitId       int64 `json:"-"`
 	internalCollectionId int64 `json:"-"`
 }
 
