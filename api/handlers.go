@@ -70,6 +70,141 @@ func CollectionHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func LessonOverviewHandler(c *gin.Context) {
+	var r LessonOverviewRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+	db := c.MustGet("MDB_DB").(*sql.DB)
+
+	//append collection filters
+	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+
+	var cTotal int64
+	err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	if cTotal == 0 {
+		concludeRequest(c, NewEmptyLessonOverviewResponse(), nil)
+		return
+	}
+
+	cMods = append(cMods, qm.Select(`
+			DISTINCT ON (id) 
+			coalesce((properties->>'start_date')::date, (properties->>'end_date')::date, (properties->>'film_date')::date, created_at) as date, 
+			id,
+			uid,
+			(properties ->> 'start_date')::date                      as start_date,
+			(properties ->> 'end_date')::date                        as end_date
+		`),
+	)
+
+	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
+
+	q := fmt.Sprintf(`
+			WITH
+				collecs AS (%s),
+     			cus AS (SELECT DISTINCT ON (ccu.collection_id) cu.*,
+                                                    		   cll.id as collection_id,
+                                                    		   cll.uid as collection_uid,
+                                                    		   cll.date,
+                                                    		   cll.start_date,
+                                                    		   cll.end_date
+             			FROM content_units cu
+                      		JOIN collections_content_units ccu ON cu.id = ccu.content_unit_id
+                      		JOIN collecs cll ON ccu.collection_id = cll.id
+							WHERE (secure=0 AND published IS TRUE)
+             			ORDER BY ccu.collection_id, cu.created_at)
+				SELECT
+					c.uid                                                        AS content_unit_id,
+				    c.collection_id,
+				    c.collection_uid,
+				    c.type_id                                                    AS content_type,
+				    0                                                               views,
+				    coalesce((c.properties ->> 'film_date')::date, c.created_at) AS date,
+				    c.start_date,
+				    c.end_date,
+				    c.properties ->> 'duration'                                  AS file_duration
+				FROM cus c
+				ORDER BY c.date DESC, c.id DESC LIMIT %d OFFSET %d
+		`, qc[:len(qc)-1], r.PageSize, (r.PageNumber-1)*r.PageSize)
+
+	rows, err := queries.Raw(q, args...).Query(db)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	defer rows.Close()
+
+	resp := LessonOverviewResponse{
+		ListResponse: ListResponse{
+			Total: cTotal,
+		},
+		Items: make([]*LessonOverview, 0),
+	}
+
+	var collectionIds []int64
+	for rows.Next() {
+		var contentUnitId string
+		var collectionId int64
+		var collectionUid string
+		var contentType int64
+		var views *int32
+		var date *time.Time
+		var startDate *time.Time
+		var endDate *time.Time
+		var duration int64
+
+		err = rows.Scan(&contentUnitId, &collectionId, &collectionUid, &contentType, &views, &date,
+			&startDate, &endDate, &duration)
+		item := LessonOverview{
+			ContentUnitUid:       contentUnitId,
+			CollectionId:         collectionUid,
+			internalCollectionId: collectionId,
+			Image:                fmt.Sprintf("api/thumbnail/%s", contentUnitId),
+			Views:                views,
+			Date:                 date,
+			StartDate:            startDate,
+			EndDate:              endDate,
+			Duration:             &duration,
+			ContentType:          mdb.CONTENT_TYPE_REGISTRY.ByID[contentType].Name,
+		}
+		resp.Items = append(resp.Items, &item)
+		collectionIds = append(collectionIds, collectionId)
+	}
+
+	if err = rows.Err(); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	colNames, err := loadCI18ns(db, r.Language, collectionIds)
+	if err = rows.Err(); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	for _, ri := range resp.Items {
+		li18ns, _ := colNames[ri.internalCollectionId]
+		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+			li18n, ok := li18ns[l]
+			if ok {
+				if ri.Title == "" && li18n.Name.Valid {
+					ri.Title = li18n.Name.String
+				}
+				if ri.Description == "" && li18n.Description.Valid {
+					ri.Description = li18n.Description.String
+				}
+			}
+		}
+	}
+
+	concludeRequest(c, resp, nil)
+}
+
 func LatestLessonHandler(c *gin.Context) {
 	var r BaseRequest
 	if c.Bind(&r) != nil {

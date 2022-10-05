@@ -149,6 +149,38 @@ type CollectionsResponse struct {
 	Collections []*Collection `json:"collections" binding:"omitempty,dive,len=2"`
 }
 
+type LessonOverview struct {
+	ContentUnitUid string     `json:"contentUnitId"`
+	CollectionId   string     `json:"collectionId"`
+	Image          string     `json:"image"`
+	Title          string     `json:"title"`
+	Description    string     `json:"description"`
+	ContentType    string     `json:"contentType"`
+	Views          *int32     `json:"views,omitempty"`
+	Date           *time.Time `json:"date,omitempty"`
+	StartDate      *time.Time `json:"startDate"`
+	EndDate        *time.Time `json:"endDate"`
+	Duration       *int64     `json:"duration"`
+
+	internalCollectionId int64 `json:"-"`
+}
+
+type LessonOverviewRequest struct {
+	ListRequest
+}
+
+type LessonOverviewResponse struct {
+	ListResponse
+	Items []*LessonOverview `json:"items"`
+}
+
+func NewEmptyLessonOverviewResponse() *LessonOverviewResponse {
+	return &LessonOverviewResponse{
+		ListResponse: ListResponse{Total: 0},
+		Items:        make([]*LessonOverview, 0),
+	}
+}
+
 type ContentUnitsRequest struct {
 	ListRequest
 	IDsFilter
