@@ -683,3 +683,71 @@ func NewResultsSuggestRequests(resultTypes []string, query Query, preference str
 	}
 	return requests
 }
+
+func NewFacetSearchRequest(q Query, options CreateFacetAggregationOptions) (*elastic.SearchSource, error) {
+
+	resultQuery, err := createResultsQuery(
+		[]string{options.resultType},
+		q,
+		[]string{},
+		[]string{},
+		false,
+	)
+
+	if err != nil {
+		fmt.Printf("Error creating results query: %s", err.Error())
+		return nil, err
+	}
+
+	source := elastic.NewSearchSource().
+		Query(resultQuery).
+		FetchSource(false).
+		Size(0)
+
+	aggQueries := createFacetAggregationQueries(options)
+
+	for aggName, aqqQuery := range aggQueries {
+		source.Aggregation(aggName, aqqQuery)
+	}
+
+	return source, nil
+}
+
+func createFacetAggregationQueries(options CreateFacetAggregationOptions) map[string]elastic.Query {
+	queries := map[string]elastic.Query{}
+
+	if len(options.tagUIDs) > 0 {
+		queries[consts.FILTER_TAG] = createFacetAggregationQuery(options.tagUIDs, consts.FILTER_TAG)
+	}
+
+	if len(options.contentTypeValues) > 0 {
+		queries[consts.FILTER_COLLECTIONS_CONTENT_TYPES] = createFacetAggregationQuery(
+			options.contentTypeValues,
+			consts.FILTER_COLLECTIONS_CONTENT_TYPES,
+		)
+	}
+
+	if len(options.mediaLanguageValues) > 0 {
+		queries[consts.FILTER_LANGUAGE] = createFacetAggregationQuery(options.mediaLanguageValues, consts.FILTER_LANGUAGE)
+	}
+
+	if len(options.sourceUIDs) > 0 {
+		queries[consts.FILTER_SOURCE] = createFacetAggregationQuery(options.sourceUIDs, consts.FILTER_SOURCE)
+	}
+
+	return queries
+}
+
+func createFacetAggregationQuery(values []string, filter string) elastic.Query {
+	agg := elastic.NewFiltersAggregation()
+	prefix := consts.FILTERS[filter]
+
+	for _, value := range values {
+		agg.FilterWithName(value, elastic.NewTermQuery(
+			"filter_values",
+			fmt.Sprintf("%s:%s", prefix, value),
+		))
+	}
+
+	return agg
+}

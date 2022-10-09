@@ -794,6 +794,39 @@ func SearchHandler(c *gin.Context) {
 	}
 }
 
+func SearchStatsHandler(c *gin.Context) {
+	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	cacheM := c.MustGet("CACHE").(cache.CacheManager)
+	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
+	variables := c.MustGet("VARIABLES").(search.VariablesV2)
+
+	query := search.ParseQuery(c.Query("q"))
+	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
+	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
+
+	esc, err := esManager.GetClient()
+	if err != nil {
+		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
+		return
+	}
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
+	sources, err := mdbmodels.Sources().All(db)
+	if err != nil {
+		return
+	}
+	suids := make([]string, len(sources))
+	for i, s := range sources {
+		suids[i] = s.UID
+	}
+
+	res, err := se.GetSourceCounts(context.TODO(), query, suids)
+
+	if err != nil {
+		NewInternalError(err).Abort(c)
+	}
+	c.JSON(http.StatusOK, res)
+}
 func ClickHandler(c *gin.Context) {
 	mdbUid := c.Query("mdb_uid")
 	index := c.Query("index")
