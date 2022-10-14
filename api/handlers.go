@@ -73,25 +73,59 @@ func CollectionHandler(c *gin.Context) {
 }
 
 func LessonOverviewHandler(c *gin.Context) {
-	var r LessonOverviewRequest
-	if c.Bind(&r) != nil {
+	var request LessonOverviewRequest
+	if c.Bind(&request) != nil {
 		return
 	}
 	db := c.MustGet("MDB_DB").(*sql.DB)
+	resp, err := getLessonOverviewsPage(db, request)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
 
+	var collectionIds []int64
+	var cuIds []int64
+	var collectionUids []string
+	itemsMap := make(map[string]*LessonsOverviewResponseItem)
+	for _, item := range resp.Items {
+		itemsMap[item.CollectionId] = item
+		collectionIds = append(collectionIds, item.internalCollectionId)
+		cuIds = append(cuIds, item.internalUnitId)
+		collectionUids = append(collectionUids, item.CollectionId)
+	}
+
+	if err = setI18ColNameDesc(db, request.Language, collectionIds, cuIds, resp.Items); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	if viewsResp, err := getViewsByCollectionIds(collectionUids); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	} else {
+		for ix, viewsCount := range viewsResp.Views {
+			colId := collectionUids[ix]
+			item := itemsMap[colId]
+			item.Views = &viewsCount
+		}
+	}
+
+	concludeRequest(c, resp, nil)
+}
+
+func getLessonOverviewsPage(db *sql.DB, r LessonOverviewRequest) (*LessonOverviewResponse, error) {
 	//append collection filters
 	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 
 	var cTotal int64
 	err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
 	if err != nil {
-		NewInternalError(err).Abort(c)
-		return
+		return nil, err
 	}
 
 	if cTotal == 0 {
-		concludeRequest(c, NewEmptyLessonOverviewResponse(), nil)
-		return
+		return NewEmptyLessonOverviewResponse(), nil
 	}
 
 	cMods = append(cMods, qm.Select(`
@@ -136,22 +170,17 @@ func LessonOverviewHandler(c *gin.Context) {
 
 	rows, err := queries.Raw(q, args...).Query(db)
 	if err != nil {
-		NewInternalError(err).Abort(c)
-		return
+		return nil, err
 	}
 	defer rows.Close()
 
-	resp := LessonOverviewResponse{
+	resp := &LessonOverviewResponse{
 		ListResponse: ListResponse{
 			Total: cTotal,
 		},
 		Items: make([]*LessonsOverviewResponseItem, 0),
 	}
 
-	var collectionIds []int64
-	var cuIds []int64
-	var collectionUids []string
-	itemsMap := make(map[string]*LessonsOverviewResponseItem)
 	for rows.Next() {
 		var contentUnitId int64
 		var contentUnitUid string
@@ -180,35 +209,14 @@ func LessonOverviewHandler(c *gin.Context) {
 			ContentType:          mdb.CONTENT_TYPE_REGISTRY.ByID[contentType].Name,
 		}
 
-		itemsMap[item.CollectionId] = item
 		resp.Items = append(resp.Items, item)
-		collectionIds = append(collectionIds, collectionId)
-		cuIds = append(cuIds, contentUnitId)
-		collectionUids = append(collectionUids, collectionUid)
 	}
 
 	if err = rows.Err(); err != nil {
-		NewInternalError(err).Abort(c)
-		return
+		return nil, err
 	}
 
-	if err = setI18ColNameDesc(db, r.Language, collectionIds, cuIds, resp.Items); err != nil {
-		NewInternalError(err).Abort(c)
-		return
-	}
-
-	if viewsResp, err := getViewsByCollectionIds(collectionUids); err != nil {
-		NewInternalError(err).Abort(c)
-		return
-	} else {
-		for ix, viewsCount := range viewsResp.Views {
-			colId := collectionUids[ix]
-			item := itemsMap[colId]
-			item.Views = &viewsCount
-		}
-	}
-
-	concludeRequest(c, resp, nil)
+	return resp, nil
 }
 
 func setI18ColNameDesc(db *sql.DB, lang string, collectionIds []int64, cuIds []int64, items []*LessonsOverviewResponseItem) error {
