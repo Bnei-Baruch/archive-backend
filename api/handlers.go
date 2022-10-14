@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/md5"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"github.com/volatiletech/null/v8"
 	"golang.org/x/sync/errgroup"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 	"sort"
@@ -99,8 +101,7 @@ func LessonOverviewHandler(c *gin.Context) {
 			uid,
 			(properties ->> 'start_date')::date                      as start_date,
 			(properties ->> 'end_date')::date                        as end_date
-		`),
-	)
+		`))
 
 	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
 
@@ -144,11 +145,13 @@ func LessonOverviewHandler(c *gin.Context) {
 		ListResponse: ListResponse{
 			Total: cTotal,
 		},
-		Items: make([]*LessonOverview, 0),
+		Items: make([]*LessonsOverviewResponseItem, 0),
 	}
 
 	var collectionIds []int64
 	var cuIds []int64
+	var collectionUids []string
+	itemsMap := make(map[string]*LessonsOverviewResponseItem)
 	for rows.Next() {
 		var contentUnitId int64
 		var contentUnitUid string
@@ -163,7 +166,7 @@ func LessonOverviewHandler(c *gin.Context) {
 
 		err = rows.Scan(&contentUnitId, &contentUnitUid, &collectionId, &collectionUid, &contentType, &views, &date,
 			&startDate, &endDate, &duration)
-		item := LessonOverview{
+		item := &LessonsOverviewResponseItem{
 			ContentUnitUid:       contentUnitUid,
 			CollectionId:         collectionUid,
 			internalUnitId:       contentUnitId,
@@ -176,9 +179,12 @@ func LessonOverviewHandler(c *gin.Context) {
 			Duration:             &duration,
 			ContentType:          mdb.CONTENT_TYPE_REGISTRY.ByID[contentType].Name,
 		}
-		resp.Items = append(resp.Items, &item)
+
+		itemsMap[item.CollectionId] = item
+		resp.Items = append(resp.Items, item)
 		collectionIds = append(collectionIds, collectionId)
 		cuIds = append(cuIds, contentUnitId)
+		collectionUids = append(collectionUids, collectionUid)
 	}
 
 	if err = rows.Err(); err != nil {
@@ -186,21 +192,39 @@ func LessonOverviewHandler(c *gin.Context) {
 		return
 	}
 
-	colNames, err := loadCI18ns(db, r.Language, collectionIds)
-	if err = rows.Err(); err != nil {
+	if err = setI18ColNameDesc(db, r.Language, collectionIds, cuIds, resp.Items); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
 
-	cuNames, err := loadCUI18ns(db, r.Language, cuIds)
-	if err = rows.Err(); err != nil {
+	if viewsResp, err := getViewsByCollectionIds(collectionUids); err != nil {
 		NewInternalError(err).Abort(c)
 		return
+	} else {
+		for ix, viewsCount := range viewsResp.Views {
+			colId := collectionUids[ix]
+			item := itemsMap[colId]
+			item.Views = &viewsCount
+		}
 	}
 
-	for _, ri := range resp.Items {
+	concludeRequest(c, resp, nil)
+}
+
+func setI18ColNameDesc(db *sql.DB, lang string, collectionIds []int64, cuIds []int64, items []*LessonsOverviewResponseItem) error {
+	colNames, err := loadCI18ns(db, lang, collectionIds)
+	if err != nil {
+		return err
+	}
+
+	cuNames, err := loadCUI18ns(db, lang, cuIds)
+	if err != nil {
+		return err
+	}
+
+	for _, ri := range items {
 		li18ns, _ := colNames[ri.internalCollectionId]
-		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+		for _, l := range consts.I18N_LANG_ORDER[lang] {
 			li18n, ok := li18ns[l]
 			if ok {
 				if ri.Title == "" && li18n.Name.Valid {
@@ -213,7 +237,7 @@ func LessonOverviewHandler(c *gin.Context) {
 		}
 
 		culi18ns, _ := cuNames[ri.internalUnitId]
-		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+		for _, l := range consts.I18N_LANG_ORDER[lang] {
 			li18n, ok := culi18ns[l]
 			if ok {
 				if ri.Title == "" && li18n.Name.Valid {
@@ -226,7 +250,49 @@ func LessonOverviewHandler(c *gin.Context) {
 		}
 	}
 
-	concludeRequest(c, resp, nil)
+	return nil
+}
+
+func getViewsByCollectionIds(collectionIds []string) (*viewsResponse, error) {
+	viewsUrl := getFeedApi("views")
+	viewsPayload := map[string]interface{}{
+		"uids": collectionIds,
+	}
+
+	viewsPayloadJson, err := json.Marshal(viewsPayload)
+	if err != nil {
+		return nil, err
+	}
+
+	viewsResp, err := http.Post(viewsUrl, "application/json", strings.NewReader(string(viewsPayloadJson)))
+	if err != nil {
+		return nil, err
+	}
+
+	viewsRespBytes, err := ioutil.ReadAll(viewsResp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	views := new(viewsResponse)
+	if err = json.Unmarshal(viewsRespBytes, views); err != nil {
+		return nil, err
+	}
+
+	return views, nil
+}
+
+type viewsResponse struct {
+	Views []int32 `json:"views"`
+}
+
+func getFeedApi(path string) string {
+	baseUrl := viper.GetString("feed_service.url")
+	if strings.HasPrefix(path, "/") {
+		path = path[1:]
+	}
+
+	return baseUrl + path
 }
 
 func LatestLessonHandler(c *gin.Context) {

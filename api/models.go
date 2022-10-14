@@ -149,7 +149,7 @@ type CollectionsResponse struct {
 	Collections []*Collection `json:"collections" binding:"omitempty,dive,len=2"`
 }
 
-type LessonOverview struct {
+type LessonsOverviewResponseItem struct {
 	ContentUnitUid string     `json:"contentUnitId"`
 	CollectionId   string     `json:"collectionId"`
 	Image          string     `json:"image"`
@@ -172,13 +172,13 @@ type LessonOverviewRequest struct {
 
 type LessonOverviewResponse struct {
 	ListResponse
-	Items []*LessonOverview `json:"items"`
+	Items []*LessonsOverviewResponseItem `json:"items"`
 }
 
 func NewEmptyLessonOverviewResponse() *LessonOverviewResponse {
 	return &LessonOverviewResponse{
 		ListResponse: ListResponse{Total: 0},
-		Items:        make([]*LessonOverview, 0),
+		Items:        make([]*LessonsOverviewResponseItem, 0),
 	}
 }
 
