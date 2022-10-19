@@ -46,5 +46,8 @@ url1="http://files.kabbalahmedia.info/api/v1/get"
 [assets_service]
 url="https://kabbalahmedia.info/assets/api/"
 
+[feed_service]
+url="https://kabbalahmedia.info/feed_api/"
+
 [cache]
 refresh-search-stats="5m"

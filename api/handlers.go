@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"github.com/volatiletech/null/v8"
 	"golang.org/x/sync/errgroup"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -101,8 +102,7 @@ func LessonOverviewHandler(c *gin.Context) {
 	}
 
 	if viewsResp, err := getViewsByCollectionIds(collectionUids); err != nil {
-		NewInternalError(err).Abort(c)
-		return
+		log.Error(err.Error())
 	} else {
 		for ix, viewsCount := range viewsResp.Views {
 			colId := collectionUids[ix]
@@ -262,7 +262,11 @@ func setI18ColNameDesc(db *sql.DB, lang string, collectionIds []int64, cuIds []i
 }
 
 func getViewsByCollectionIds(collectionIds []string) (*viewsResponse, error) {
-	viewsUrl := getFeedApi("views")
+	viewsUrl, err := getFeedApi("views")
+	if err != nil {
+		return nil, err
+	}
+
 	viewsPayload := map[string]interface{}{
 		"uids": collectionIds,
 	}
@@ -277,7 +281,7 @@ func getViewsByCollectionIds(collectionIds []string) (*viewsResponse, error) {
 		return nil, err
 	}
 
-	viewsRespBytes, err := ioutil.ReadAll(viewsResp.Body)
+	viewsRespBytes, err := io.ReadAll(viewsResp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -294,13 +298,13 @@ type viewsResponse struct {
 	Views []int32 `json:"views"`
 }
 
-func getFeedApi(path string) string {
+func getFeedApi(path string) (string, error) {
 	baseUrl := viper.GetString("feed_service.url")
 	if strings.HasPrefix(path, "/") {
 		path = path[1:]
 	}
 
-	return baseUrl + path
+	return url.JoinPath(baseUrl, path)
 }
 
 func LatestLessonHandler(c *gin.Context) {
