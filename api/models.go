@@ -161,6 +161,7 @@ type LessonsOverviewResponseItem struct {
 	StartDate      *time.Time `json:"startDate"`
 	EndDate        *time.Time `json:"endDate"`
 	Duration       *int64     `json:"duration"`
+	Number         int        `json:"number,omitempty"`
 
 	internalUnitId       int64 `json:"-"`
 	internalCollectionId int64 `json:"-"`

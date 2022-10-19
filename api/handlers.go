@@ -133,6 +133,7 @@ func getLessonOverviewsPage(db *sql.DB, r LessonOverviewRequest) (*LessonOvervie
 			coalesce((properties->>'start_date')::date, (properties->>'end_date')::date, (properties->>'film_date')::date, created_at) as date, 
 			id,
 			uid,
+			(properties ->> 'number')                      			 as number,
 			(properties ->> 'start_date')::date                      as start_date,
 			(properties ->> 'end_date')::date                        as end_date
 		`))
@@ -145,6 +146,7 @@ func getLessonOverviewsPage(db *sql.DB, r LessonOverviewRequest) (*LessonOvervie
      			cus AS (SELECT DISTINCT ON (ccu.collection_id) cu.*,
                                                     		   cll.id as collection_id,
                                                     		   cll.uid as collection_uid,
+                                                    		   cll.number,
                                                     		   cll.date,
                                                     		   cll.start_date,
                                                     		   cll.end_date
@@ -161,6 +163,7 @@ func getLessonOverviewsPage(db *sql.DB, r LessonOverviewRequest) (*LessonOvervie
 				    c.type_id                                                    AS content_type,
 				    0                                                               views,
 				    coalesce((c.properties ->> 'film_date')::date, c.created_at) AS date,
+				    c.number,
 				    c.start_date,
 				    c.end_date,
 				    c.properties ->> 'duration'                                  AS file_duration
@@ -188,13 +191,14 @@ func getLessonOverviewsPage(db *sql.DB, r LessonOverviewRequest) (*LessonOvervie
 		var collectionUid string
 		var contentType int64
 		var views *int32
+		var number int
 		var date *time.Time
 		var startDate *time.Time
 		var endDate *time.Time
 		var duration int64
 
 		err = rows.Scan(&contentUnitId, &contentUnitUid, &collectionId, &collectionUid, &contentType, &views, &date,
-			&startDate, &endDate, &duration)
+			&number, &startDate, &endDate, &duration)
 		item := &LessonsOverviewResponseItem{
 			ContentUnitUid:       contentUnitUid,
 			CollectionId:         collectionUid,
@@ -202,6 +206,7 @@ func getLessonOverviewsPage(db *sql.DB, r LessonOverviewRequest) (*LessonOvervie
 			internalCollectionId: collectionId,
 			Image:                fmt.Sprintf("api/thumbnail/%s", contentUnitUid),
 			Views:                views,
+			Number:               number,
 			Date:                 date,
 			StartDate:            startDate,
 			EndDate:              endDate,
@@ -2632,7 +2637,7 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 	return items, cuTotal + lTotal + cTotal, nil
 }
 
-//need increase argument counter for single query
+// need increase argument counter for single query
 func startQueryArgCountFrom(q string, from int) string {
 	re := regexp.MustCompile(`\$\d+`)
 	return re.ReplaceAllStringFunc(q, func(s string) string {
@@ -4022,7 +4027,7 @@ func appendCUNameFilterMods(mods *[]qm.QueryMod, f CuNameFilter) {
 	return
 }
 
-//append Labels filters
+// append Labels filters
 func appendContentTypesLabelsFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) error {
 	if utils.IsEmpty(f.ContentTypes) {
 		return nil
