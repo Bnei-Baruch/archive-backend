@@ -73,6 +73,34 @@ func CollectionHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func MobileProgramsPageHandler(c *gin.Context) {
+	var r MobileProgramsPageRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+
+	cuRequest := ContentUnitsRequest{
+		ListRequest: r.ListRequest,
+		ContentTypesFilter: ContentTypesFilter{
+			ContentTypes: []string{
+				consts.CT_VIDEO_PROGRAM_CHAPTER,
+				consts.CT_CLIP,
+			},
+		},
+	}
+
+	resp, err := handleContentUnits(cm, db, cuRequest)
+
+	programsRepose := &MobileProgramsPageResponse{
+		ContentUnitsResponse: *resp,
+	}
+
+	concludeRequest(c, programsRepose, err)
+}
+
 func LessonOverviewHandler(c *gin.Context) {
 	var request LessonOverviewRequest
 	if c.Bind(&request) != nil {

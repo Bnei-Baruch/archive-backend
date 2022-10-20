@@ -176,6 +176,14 @@ type LessonOverviewResponse struct {
 	Items []*LessonsOverviewResponseItem `json:"items"`
 }
 
+type MobileProgramsPageRequest struct {
+	ListRequest
+}
+
+type MobileProgramsPageResponse struct {
+	ContentUnitsResponse
+}
+
 func NewEmptyLessonOverviewResponse() *LessonOverviewResponse {
 	return &LessonOverviewResponse{
 		ListResponse: ListResponse{Total: 0},
