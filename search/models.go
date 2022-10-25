@@ -50,3 +50,23 @@ type SearchRequestOptions struct {
 	// If not nil, set how long a search is allowed to take, e.g. "1s" or "500ms". Note: Not always respected by ES.
 	Timeout *string
 }
+
+type CreateFacetAggregationOptions struct {
+	tagUIDs                []string
+	mediaLanguageValues    []string
+	originalLanguageValues []string
+	contentTypeValues      []string
+	sourceUIDs             []string
+	dateRanges             []string
+	personUIDs             []string
+}
+
+type FacetSearchResults struct {
+	Tags              map[string]int64 `json:"tags,omitempty"`
+	MediaLanguages    map[string]int64 `json:"languages,omitempty"`
+	OriginalLanguages map[string]int64 `json:"original_languages,omitempty"`
+	ContentTypes      map[string]int64 `json:"content_types,omitempty"`
+	Sources           map[string]int64 `json:"sources,omitempty"`
+	Dates             map[string]int64 `json:"dates,omitempty"`
+	Persons           map[string]int64 `json:"persons,omitempty"`
+}

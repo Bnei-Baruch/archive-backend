@@ -438,7 +438,7 @@ func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []st
 
 	// Index each document in its language index
 	for k, v := range i18nMap {
-		v.FilterValues = append(v.FilterValues, KeyValues(consts.FILTER_LANGUAGE, allLanguages)...)
+		v.FilterValues = append(v.FilterValues, KeyValues(consts.FILTER_MEDIA_LANGUAGE, allLanguages)...)
 		name := index.IndexName(k)
 		log.Debugf("Sources Index - Add source %s to index %s", mdbSource.UID, name)
 		resp, err := index.esc.Index().
