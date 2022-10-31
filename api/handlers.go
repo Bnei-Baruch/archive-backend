@@ -3973,14 +3973,15 @@ func mdbToFile(file *mdbmodels.File) (*File, error) {
 	}
 
 	f := &File{
-		ID:        file.UID,
-		Name:      file.Name,
-		Size:      file.Size,
-		Type:      file.Type,
-		SubType:   file.SubType,
-		CreatedAt: file.CreatedAt,
-		Duration:  props.Duration,
-		VideoSize: props.VideoSize,
+		ID:         file.UID,
+		Name:       file.Name,
+		Size:       file.Size,
+		Type:       file.Type,
+		SubType:    file.SubType,
+		CreatedAt:  file.CreatedAt,
+		Duration:   props.Duration,
+		VideoSize:  props.VideoSize,
+		InsertType: props.InsertType,
 	}
 
 	if file.Language.Valid {
