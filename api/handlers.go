@@ -668,9 +668,19 @@ func SearchStatsHandler(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	tuids := make([]string, len(tags))
-	for i, t := range tags {
-		tuids[i] = t.UID
+	skipUids, _, err := GetNotInTagsIds(cacheM.TagsStats().GetTree(), db)
+	if err != nil {
+		return
+	}
+	skipUidsMap := make(map[string]bool)
+	for _, uid := range skipUids {
+		skipUidsMap[uid] = true
+	}
+	tuids := []string(nil)
+	for _, t := range tags {
+		if _, ok := skipUidsMap[t.UID]; !ok {
+			tuids = append(tuids, t.UID)
+		}
 	}
 
 	res, err := se.GetCounts(context.TODO(), query, suids, tuids)
