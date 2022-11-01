@@ -7,12 +7,12 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/utils"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -135,10 +135,16 @@ func ParseQuery(q string) Query {
 	var exactTerms []string
 	for _, t := range tokenize(q) {
 		isFilter := false
-		for filter := range consts.FILTERS {
+		for _, filter := range consts.ALL_FILTERS {
 			prefix := fmt.Sprintf("%s:", filter)
+			// log.Infof("Token: %s, Filter prefix: %s", t, prefix)
 			if isFilter = strings.HasPrefix(t, prefix); isFilter {
-				filters[consts.FILTERS[filter]] = strings.Split(strings.TrimPrefix(t, prefix), ",")
+				// Special case for Author filter to be used as Source filter.
+				if filter == consts.FILTER_AUTHOR {
+					filters[consts.FILTER_SOURCE] = strings.Split(strings.TrimPrefix(t, prefix), ",")
+				} else {
+					filters[filter] = strings.Split(strings.TrimPrefix(t, prefix), ",")
+				}
 				break
 			}
 		}
@@ -207,16 +213,16 @@ func createSpanNearQuery(field string, term string, boost float32, slop int, inO
 }
 
 func addMustNotSeries(q Query) *elastic.BoolQuery {
-	if filters, ok := q.Filters[consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]]; ok {
+	if filters, ok := q.Filters[consts.FILTER_CONTENT_TYPE]; ok {
 		for _, f := range filters {
 			if f == consts.CT_LESSONS_SERIES {
 				return nil
 			}
 		}
 	}
-	//remove from results lesson series collections
+	// Remove from results lesson series collections.
 	fCollections := elastic.NewTermsQuery(consts.ES_RESULT_TYPE, consts.ES_RESULT_TYPE_COLLECTIONS)
-	fSeries := elastic.NewTermsQuery("filter_values", fmt.Sprintf("%s:%s", consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES], consts.CT_LESSONS_SERIES))
+	fSeries := elastic.NewTermsQuery("filter_values", fmt.Sprintf("%s:%s", consts.FILTER_COLLECTIONS_CONTENT_TYPE, consts.CT_LESSONS_SERIES))
 	return elastic.NewBoolQuery().Filter(fCollections, fSeries)
 }
 
@@ -430,7 +436,6 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 		)
 	}
 	for _, exactTerm := range q.ExactTerms {
-
 		constantScoreQueries := []elastic.Query{
 			elastic.NewMatchPhraseQuery("title", exactTerm),
 			elastic.NewMatchPhraseQuery("full_title", exactTerm),
@@ -480,30 +485,36 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 			elastic.NewDisMaxQuery().Query(disMaxQueries...),
 		)
 	}
-	contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
-	filterByContentType := false
 	for filter, values := range q.Filters {
 		s := make([]string, len(values))
 		for i, v := range values {
 			s[i] = v
 		}
 		switch filter {
-		case consts.FILTERS[consts.FILTER_START_DATE]:
+		case consts.FILTER_START_DATE:
 			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Gte(values[0]).Format("yyyy-MM-dd"))
-		case consts.FILTERS[consts.FILTER_END_DATE]:
+		case consts.FILTER_END_DATE:
 			boolQuery.Filter(elastic.NewRangeQuery("effective_date").Lte(values[0]).Format("yyyy-MM-dd"))
-		case consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES], consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]:
-			contentTypeQuery.Should(elastic.NewTermsQuery("filter_values", es.KeyIValues(filter, s)...))
-			filterByContentType = true
-		case consts.FILTERS[consts.FILTER_SECTION_SOURCES]:
-			boolQuery.Filter(elastic.NewTermsQuery("result_type", consts.ES_RESULT_TYPE_SOURCES))
-		case consts.FILTERS[consts.FILTER_COLLECTION]:
+		case consts.FILTER_CONTENT_TYPE:
+			contentTypeQuery := elastic.NewBoolQuery().MinimumNumberShouldMatch(1)
+			collectionContentTypes := utils.FilterStringSlice(s, func(ct string) bool { return utils.StringInSlice(ct, consts.COLLECTIONS_CONTENT_TYPES) })
+			if len(collectionContentTypes) != 0 {
+				contentTypeQuery.Should(elastic.NewTermsQuery("filter_values", es.KeyIValues(consts.FILTER_COLLECTIONS_CONTENT_TYPE, collectionContentTypes)...))
+			}
+			unitsContentTypes := utils.FilterStringSlice(s, func(ct string) bool {
+				return ct != consts.CT_SOURCE && !utils.StringInSlice(ct, consts.COLLECTIONS_CONTENT_TYPES)
+			})
+			if len(unitsContentTypes) != 0 {
+				contentTypeQuery.Should(elastic.NewTermsQuery("filter_values", es.KeyIValues(consts.FILTER_CONTENT_TYPE, unitsContentTypes)...))
+			}
+			if utils.StringInSlice(consts.CT_SOURCE, values) {
+				contentTypeQuery.Should(elastic.NewTermsQuery("result_type", consts.ES_RESULT_TYPE_SOURCES))
+			}
+			boolQuery.Filter(contentTypeQuery)
+		case consts.FILTER_COLLECTION:
 			boolQuery.Filter(elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.ES_UID_TYPE_COLLECTION, values[0])))
 		default:
 			boolQuery.Filter(elastic.NewTermsQuery("filter_values", es.KeyIValues(filter, s)...))
-		}
-		if filterByContentType {
-			boolQuery.Filter(contentTypeQuery)
 		}
 	}
 
@@ -541,8 +552,8 @@ func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchReque
 	titleAdded := false
 	fullTitleAdded := false
 	contentAdded := false
-	//	This is a generic imp. that supports searching tweets together with other results.
-	//	Currently we are not searching for tweets together with other results but in parallel.
+	// This is a generic imp. that supports searching tweets together with other results.
+	// Currently we are not searching for tweets together with other results but in parallel.
 	for _, rt := range options.resultTypes {
 		if rt == consts.ES_RESULT_TYPE_TWEETS && !contentAdded {
 			fetchSourceContext.Include("content")

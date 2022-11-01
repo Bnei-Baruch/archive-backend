@@ -3,16 +3,17 @@ package api
 import (
 	"database/sql"
 	"fmt"
+	"strings"
+
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
-	"strings"
 )
 
 type ClassificationStats map[string]int
@@ -631,12 +632,20 @@ GROUP BY  c.properties->>'city', c.properties->>'country'
 }
 
 func getNotInTags(tree *cache.StatsTree, db *sql.DB) (string, error) {
+	if _, tIds, err := GetNotInTagsIds(tree, db); err != nil {
+		return "", err
+	} else {
+		return utils.JoinInt64(tIds, ","), nil
+	}
+}
+
+func GetNotInTagsIds(tree *cache.StatsTree, db *sql.DB) ([]string, []int64, error) {
 	t, err := mdbmodels.Tags(
 		mdbmodels.TagWhere.Pattern.EQ(null.StringFrom("special-lesson")),
 	).One(db)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
-	_, tids := tree.GetUniqueChildren([]string{t.UID})
-	return utils.JoinInt64(tids, ","), nil
+	tUids, tIds := tree.GetUniqueChildren([]string{t.UID})
+	return tUids, tIds, nil
 }

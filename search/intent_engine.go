@@ -64,7 +64,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 		}
 	}
 
-	if contentTypes, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
+	if contentTypes, ok := query.Filters[consts.FILTER_CONTENT_TYPE]; ok {
 		for _, contentType := range contentTypes {
 			if _, ok := consts.ES_INTENT_SUPPORTED_CONTENT_TYPES[contentType]; !ok {
 				return intents, nil
@@ -75,7 +75,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH_ADDINTENTS)
 
 	checkContentUnitsTypes := []string{}
-	if values, ok := query.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
+	if values, ok := query.Filters[consts.FILTER_CONTENT_TYPE]; ok {
 		for _, value := range values {
 			if value == consts.CT_LESSON_PART {
 				checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_LESSON_PART)
@@ -94,11 +94,12 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 		queryWithoutFilters.Filters[filterName] = values
 	}
 	//  Keep only source and tag filters.
-	if _, ok := queryWithoutFilters.Filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
-		delete(queryWithoutFilters.Filters, consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES])
-	}
-	if _, ok := queryWithoutFilters.Filters[consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES]]; ok {
-		delete(queryWithoutFilters.Filters, consts.FILTERS[consts.FILTER_COLLECTIONS_CONTENT_TYPES])
+	if _, ok := queryWithoutFilters.Filters[consts.FILTER_CONTENT_TYPE]; ok {
+		if utils.StringInSlice(consts.CT_SOURCE, queryWithoutFilters.Filters[consts.FILTER_CONTENT_TYPE]) {
+			queryWithoutFilters.Filters[consts.FILTER_CONTENT_TYPE] = []string{consts.CT_SOURCE}
+		} else {
+			delete(queryWithoutFilters.Filters, consts.FILTER_CONTENT_TYPE)
+		}
 	}
 
 	mssFirstRound := e.esc.MultiSearch()

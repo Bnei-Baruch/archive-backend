@@ -965,7 +965,7 @@ func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string
 		getProgramCI = true
 		getSourceGI = true
 	} else {
-		if values, ok := filters[consts.FILTERS[consts.FILTER_UNITS_CONTENT_TYPES]]; ok {
+		if values, ok := filters[consts.FILTER_CONTENT_TYPE]; ok {
 			for _, value := range values {
 				if value == consts.CT_LESSON_PART {
 					getLessonCI = true
@@ -975,7 +975,7 @@ func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string
 				}
 			}
 		}
-		if _, ok := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]; ok {
+		if utils.StringInSlice(consts.CT_SOURCE, filters[consts.FILTER_CONTENT_TYPE]) {
 			getSourceGI = true
 		}
 	}

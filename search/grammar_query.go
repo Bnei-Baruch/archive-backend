@@ -116,6 +116,7 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 }
 
 func NewFilteredResultsSearchRequest(text string, filters map[string][]string, contentType string, programCollection string, sources []string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
+	// THOSE CONSTRAINTS ARE NO LONGER TRUE...
 	if contentType == "" && programCollection == "" && len(sources) == 0 {
 		return nil, fmt.Errorf("No contentType or programCollection or sources provided for NewFilteredResultsSearchRequest().")
 	}
@@ -128,7 +129,7 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 		filtersCopy[k] = v
 	}
 	filters = filtersCopy // Reassign pointer to a copy in order to keep the original query filters
-	_, isSectionSources := filters[consts.FILTERS[consts.FILTER_SECTION_SOURCES]]
+	isSectionSources := utils.StringInSlice(consts.CT_SOURCE, filters[consts.FILTER_CONTENT_TYPE])
 	if contentType != "" || len(sources) > 0 {
 		searchSources = len(filters) == 0 || isSectionSources // Search for sources only on the main section (without filters) or on the sources section.
 		if contentType != "" {
@@ -136,7 +137,7 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 			if len(filters) > 0 && !hasCommonFilter(filters, consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]) {
 				return nil, fmt.Errorf("No common query filters with filters by content type operation.")
 			}
-			filters, _ = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType] // We ovveride the given query filters. Consider merging filters.
+			filters, _ = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType] // We override the given query filters. Consider merging filters.
 			_, enableSourcesSearch := consts.CT_VARIABLES_ENABLE_SOURCES_SEARCH[contentType]
 			if len(filters) == 0 && !enableSourcesSearch {
 				return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES and not in CT_VARIABLES_ENABLE_SOURCES_SEARCH.", contentType)
@@ -145,20 +146,18 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 		}
 		if len(sources) > 0 {
 			// by source filter
-			filters[consts.FILTERS[consts.FILTERS[consts.FILTER_SOURCE]]] = sources
+			filters[consts.FILTER_SOURCE] = sources
 		}
 	}
 	if programCollection != "" {
 		// by program
-		filters[consts.FILTERS[consts.FILTERS[consts.FILTER_COLLECTION]]] = []string{programCollection}
+		filters[consts.FILTER_COLLECTION] = []string{programCollection}
 	}
 	requests := []*elastic.SearchRequest{}
 	if searchSources {
-		sourceOnlyFilter := map[string][]string{
-			consts.FILTERS[consts.FILTER_SECTION_SOURCES]: nil,
-		}
+		sourceOnlyFilter := map[string][]string{consts.FILTER_CONTENT_TYPE: []string{consts.CT_SOURCE}}
 		if len(sources) > 0 {
-			sourceOnlyFilter[consts.FILTERS[consts.FILTERS[consts.FILTER_SOURCE]]] = sources
+			sourceOnlyFilter[consts.FILTER_SOURCE] = sources
 		}
 		titlesOnly := contentType == consts.VAR_CT_BOOK_TITLES
 		sourceRequests, err := NewResultsSearchRequests(

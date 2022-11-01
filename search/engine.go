@@ -22,6 +22,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
+	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -438,7 +439,6 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 		minClassificationScore = scores[0]
 	}
 
-	// log.Infof("IntentsToResults - %d intents.", len(query.Intents))
 	for _, intent := range query.Intents {
 		// Convert intent to result with score.
 		if intentValue, ok := intent.Value.(ClassificationIntent); ok {
@@ -468,7 +468,6 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				intentHit.Source = (*json.RawMessage)(&source)
 				sh.Hits = append(sh.Hits, intentHit)
 			}
-			// log.Infof("Added intent %s %s %s boost score:%f exist:%t", intentValue.Title, intent.Type, intent.Language, boostedScore, intentValue.Exist)
 		}
 		if intentValue, ok := intent.Value.(GrammarIntent); ok {
 			sh := srMap[intent.Language].Hits
@@ -554,7 +553,6 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 			return ed2.EffectiveDate.Time.After(ed1.EffectiveDate.Time) ||
 				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && score(h1.Score) > score(h2.Score), nil
 		} else {
-			//log.Infof("%+v %+v %+v %+v", ed1, ed2, h1, h2)
 			// Order by newer to older, break ties using score.
 			return ed2.EffectiveDate.Time.Before(ed1.EffectiveDate.Time) ||
 				ed2.EffectiveDate.Time.Equal(ed1.EffectiveDate.Time) && score(h1.Score) > score(h2.Score), nil
@@ -574,7 +572,18 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	}
 
 	// Keep only unique results by MDB_UID (additional results with a duplicate MDB_UID might be added by Grammar).
-	unique := uniqueHitsByMdbUid(concatenated, []string{consts.INTENT_INDEX_TAG, consts.INTENT_INDEX_SOURCE}, []string{consts.HT_LESSONS_SERIES})
+	unique := uniqueHitsByMdbUid(
+		concatenated,
+		[]string{
+			consts.INTENT_INDEX_TAG,
+			consts.INTENT_INDEX_SOURCE,
+		},
+		[]string{
+			consts.HT_LESSONS_SERIES,
+			consts.SEARCH_RESULT_LESSONS_SERIES_BY_TAG,
+			consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE,
+		},
+	)
 
 	// Apply sorting.
 	if sortBy == consts.SORT_BY_RELEVANCE {
@@ -632,9 +641,9 @@ func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string, typ
 			if err := json.Unmarshal(*hit.Source, &mdbUid); err == nil {
 				if mdbUid.MDB_UID != "" {
 					// Uncomment for debug
-					/*if _, ok := mdbMap[mdbUid.MDB_UID]; ok {
-						log.Infof("Found duplicate of %+v", hit)
-					}*/
+					// if dupHit, ok := mdbMap[mdbUid.MDB_UID]; ok {
+					// 	log.Infof("Found duplicate of \n%f: %+v \nand \n%f: %+v", *hit.Score, hit, *dupHit.Score, dupHit)
+					// }
 					// We keep the result with a higher score.
 					if _, ok := mdbMap[mdbUid.MDB_UID]; !ok || *hit.Score > *mdbMap[mdbUid.MDB_UID].Score {
 						mdbMap[mdbUid.MDB_UID] = hit
@@ -964,7 +973,6 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	for k, v := range filteredByLang {
 		LogIfDeb(&query, fmt.Sprintf("\t%+v:", k))
 		for i := range v {
-			// log.Infof("\t%d: %+v", i, v[i])
 			for j := range v[i].Results {
 				LogIfDeb(&query, fmt.Sprintf("\t\t%d (%d hits)", j, len(v[i].Results[j].Hits.Hits)))
 				LogIfDeb(&query, fmt.Sprintf(ResultToStringDebug(v[i].Results[j], 3)))
@@ -1357,4 +1365,201 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		return &QueryResult{mr.Responses[0], suggestText, currentLang}, err
 	}
 	return nil, errors.Wrap(err, "ESEngine.DoSearch - No responses from multi search.")
+}
+
+func (e *ESEngine) GetCounts(ctx context.Context, query Query, allSourceUIDs []string, allTagUIDs []string) (*FacetSearchResults, error) {
+	defer e.timeTrack(time.Now(), consts.LAT_GET_SOURCE_COUNTS)
+
+	options := CreateFacetAggregationOptions{
+		sourceUIDs:             allSourceUIDs,
+		tagUIDs:                allTagUIDs,
+		mediaLanguageValues:    consts.ALL_KNOWN_LANGS[:],
+		originalLanguageValues: consts.ALL_KNOWN_LANGS[:],
+		contentTypeValues:      consts.SECTION_CT_TYPES[:],
+		dateRanges:             []string{consts.DATE_FILTER_TODAY, consts.DATE_FILTER_YESTERDAY, consts.DATE_FILTER_LAST_7_DAYS, consts.DATE_FILTER_LAST_30_DAYS},
+		personUIDs:             []string{mdb.PERSONS_REGISTRY.ByPattern[consts.P_RAV].UID, mdb.PERSONS_REGISTRY.ByPattern[consts.P_RABASH].UID},
+	}
+
+	multiSearchService := e.esc.MultiSearch()
+	for _, countFilter := range []string{
+		consts.FILTER_CONTENT_TYPE,
+		consts.FILTER_SOURCE,
+		consts.FILTER_TAG,
+		consts.FILTER_MEDIA_LANGUAGE,
+		consts.FILTER_ORIGINAL_LANGUAGE,
+		consts.AGG_FILTER_DATES,
+		consts.FILTER_PERSON,
+	} {
+		// If filter exist in query, count it with separate facet request.
+		// Handle dates in special way as the AGG_FILTER_DATES is applied via
+		// two different filters FILTER_START_DATE and FILTER_END_DATE.
+		if (countFilter == consts.AGG_FILTER_DATES &&
+			(len(query.Filters[consts.FILTER_START_DATE]) > 0 || len(query.Filters[consts.FILTER_END_DATE]) > 0)) ||
+			len(query.Filters[countFilter]) > 0 {
+			// Shallow copy query without the relevant filter.
+			filterQuery := query
+			filterQuery.Filters = make(map[string][]string)
+			for k, v := range query.Filters {
+				if k != countFilter || (countFilter == consts.AGG_FILTER_DATES && (k != consts.FILTER_START_DATE && k != consts.FILTER_END_DATE)) {
+					filterQuery.Filters[k] = v
+				}
+			}
+
+			filterOptions := CreateFacetAggregationOptions{}
+			switch countFilter {
+			case consts.FILTER_CONTENT_TYPE:
+				filterOptions.contentTypeValues = options.contentTypeValues
+				options.contentTypeValues = []string(nil)
+			case consts.FILTER_SOURCE:
+				filterOptions.sourceUIDs = options.sourceUIDs
+				options.sourceUIDs = []string(nil)
+			case consts.FILTER_TAG:
+				filterOptions.tagUIDs = options.tagUIDs
+				options.tagUIDs = []string(nil)
+			case consts.FILTER_MEDIA_LANGUAGE:
+				filterOptions.mediaLanguageValues = options.mediaLanguageValues
+				options.mediaLanguageValues = []string(nil)
+			case consts.FILTER_ORIGINAL_LANGUAGE:
+				filterOptions.originalLanguageValues = options.originalLanguageValues
+				options.originalLanguageValues = []string(nil)
+			case consts.AGG_FILTER_DATES:
+				filterOptions.dateRanges = options.dateRanges
+				options.dateRanges = []string(nil)
+			case consts.FILTER_PERSON:
+				filterOptions.personUIDs = options.personUIDs
+				options.personUIDs = []string(nil)
+			}
+
+			request, err := NewFacetSearchRequest(filterQuery, filterOptions)
+			if err != nil {
+				return nil, errors.Wrap(err, "ESEngine.GetSourceCounts - Error creating facet search source.")
+			}
+			multiSearchService.Add(request)
+		}
+	}
+	// If some filters were not set, use one search to count them all.
+	// In most cases where filters are not used, only this will be applied.
+	if len(options.contentTypeValues) > 0 || len(options.sourceUIDs) > 0 ||
+		len(options.tagUIDs) > 0 || len(options.mediaLanguageValues) > 0 ||
+		len(options.originalLanguageValues) > 0 || len(options.dateRanges) > 0 ||
+		len(options.personUIDs) > 0 {
+		request, err := NewFacetSearchRequest(query, options)
+		if err != nil {
+			return nil, errors.Wrap(err, "ESEngine.GetSourceCounts - Error creating facet search source.")
+		}
+		multiSearchService.Add(request)
+	}
+	mr, err := multiSearchService.Do(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "ESEngine.GetSourceCounts - Error execute facet multi search request.")
+	}
+
+	facetSearchResults, err := parseFacetAggregationsResult(mr.Responses)
+	if err != nil {
+		return nil, errors.Wrap(err, "ESEngine.GetSourceCounts - Error parce facet search result.")
+	}
+
+	return facetSearchResults, nil
+}
+
+func parseFacetAggregationsResult(results []*elastic.SearchResult) (*FacetSearchResults, error) {
+	r := new(FacetSearchResults)
+	for _, result := range results {
+		agg := &result.Aggregations
+		if agg == nil {
+			return nil, errors.New("ESEngine.GetSourceCounts - No search aggregations")
+		}
+
+		if tags, err := parseFacetAggregationForName(agg, consts.FILTER_TAG); err != nil {
+			return nil, err
+		} else if len(tags) > 0 {
+			if r.Tags != nil {
+				return nil, errors.New("ESEngine.GetSourceCounts - Aggregating tags filter twice")
+			}
+			r.Tags = tags
+		}
+
+		if contentTypes, err := parseFacetAggregationForName(agg, consts.FILTER_CONTENT_TYPE); err != nil {
+			return nil, err
+		} else if len(contentTypes) > 0 {
+			if r.ContentTypes != nil {
+				return nil, errors.New("ESEngine.GetSourceCounts - Aggregating content types filter twice")
+			}
+			r.ContentTypes = contentTypes
+		}
+
+		if mediaLanguages, err := parseFacetAggregationForName(agg, consts.FILTER_MEDIA_LANGUAGE); err != nil {
+			return nil, err
+		} else if len(mediaLanguages) > 0 {
+			if r.MediaLanguages != nil {
+				return nil, errors.New("ESEngine.GetSourceCounts - Aggregating media language filter twice")
+			}
+			r.MediaLanguages = mediaLanguages
+		}
+
+		if originalLanguages, err := parseFacetAggregationForName(agg, consts.FILTER_ORIGINAL_LANGUAGE); err != nil {
+			return nil, err
+		} else if len(originalLanguages) > 0 {
+			if r.OriginalLanguages != nil {
+				return nil, errors.New("ESEngine.GetSourceCounts - Aggregating original language filter twice")
+			}
+			r.OriginalLanguages = originalLanguages
+		}
+
+		if sources, err := parseFacetAggregationForName(agg, consts.FILTER_SOURCE); err != nil {
+			return nil, err
+		} else if len(sources) > 0 {
+			if r.Sources != nil {
+				return nil, errors.New("ESEngine.GetSourceCounts - Aggregating source filter twice")
+			}
+			r.Sources = sources
+		}
+
+		if dates, err := parseFacetAggregationForName(agg, consts.AGG_FILTER_DATES); err != nil {
+			return nil, err
+		} else if len(dates) > 0 {
+			if r.Dates != nil {
+				return nil, errors.New("ESEngine.GetSourceCounts - Aggregating same filter twice")
+			}
+			r.Dates = dates
+		}
+
+		if persons, err := parseFacetAggregationForName(agg, consts.FILTER_PERSON); err != nil {
+			return nil, err
+		} else if len(persons) > 0 {
+			if r.Persons != nil {
+				return nil, errors.New("ESEngine.GetSourceCounts - Aggregating same filter twice")
+			}
+			r.Persons = persons
+		}
+	}
+
+	if len(r.Tags) == 0 ||
+		len(r.ContentTypes) == 0 ||
+		len(r.MediaLanguages) == 0 ||
+		len(r.OriginalLanguages) == 0 ||
+		len(r.Sources) == 0 ||
+		len(r.Dates) == 0 ||
+		len(r.Persons) == 0 {
+		return nil, errors.New("ESEngine.GetSourceCounts - One of the aggregations is empty, expected all to be non-empty.")
+	}
+
+	return r, nil
+}
+
+func parseFacetAggregationForName(agg *elastic.Aggregations, aggName string) (map[string]int64, error) {
+	aggFilters, _ := agg.Filters(aggName)
+
+	if aggFilters == nil || len(aggFilters.NamedBuckets) <= 0 {
+		// We expect several searches which split the aggregations between them.
+		return nil, nil
+	}
+
+	result := map[string]int64{}
+
+	for name, data := range aggFilters.NamedBuckets {
+		result[name] = data.DocCount
+	}
+
+	return result, nil
 }
