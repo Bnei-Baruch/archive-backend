@@ -10,7 +10,6 @@ import (
 	"golang.org/x/sync/errgroup"
 	"io"
 	"net/http"
-	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -309,7 +308,9 @@ func getFeedApi(path string) (string, error) {
 		path = path[1:]
 	}
 
-	return url.JoinPath(baseUrl, path)
+	// NOTICE: it's not supported on golang 1.17
+	//return url.JoinPath(baseUrl, path)
+	return baseUrl + path, nil
 }
 
 func LatestLessonHandler(c *gin.Context) {
