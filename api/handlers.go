@@ -881,6 +881,50 @@ func PublishersHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+func SearchStatsHandler(c *gin.Context) {
+	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	cacheM := c.MustGet("CACHE").(cache.CacheManager)
+	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
+	variables := c.MustGet("VARIABLES").(search.VariablesV2)
+
+	query := search.ParseQuery(c.Query("q"))
+	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
+	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
+
+	esc, err := esManager.GetClient()
+	if err != nil {
+		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
+		return
+	}
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
+	sources, err := mdbmodels.Sources().All(db)
+	if err != nil {
+		return
+	}
+	suids := make([]string, len(sources))
+	for i, s := range sources {
+		suids[i] = s.UID
+	}
+
+	tags, err := mdbmodels.Tags().All(db)
+	if err != nil {
+		return
+	}
+	tuids := make([]string, len(tags))
+	for i, t := range tags {
+		tuids[i] = t.UID
+	}
+
+	res, err := se.GetCounts(context.TODO(), query, suids, tuids)
+
+	if err != nil {
+		NewInternalError(err).Abort(c)
+	}
+	c.JSON(http.StatusOK, res)
+}
+
+
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
@@ -959,7 +1003,7 @@ func SearchHandler(c *gin.Context) {
 	log.Debugf("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
 	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
 	for k, v := range query.Filters {
-		if k == consts.FILTER_LANGUAGE {
+		if k == consts.FILTER_MEDIA_LANGUAGE {
 			addLang := true
 			for _, flang := range v {
 				for _, ilang := range query.LanguageOrder {
