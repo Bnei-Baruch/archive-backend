@@ -116,6 +116,18 @@ func LessonOverviewHandler(c *gin.Context) {
 func getLessonOverviewsPage(db *sql.DB, r LessonOverviewRequest) (*LessonOverviewResponse, error) {
 	//append collection filters
 	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+	if err := appendContentTypesFilterMods(&cMods, ContentTypesFilter{
+		ContentTypes: []string{
+			consts.CT_LESSON_PART,
+			consts.CT_VIRTUAL_LESSON,
+			consts.CT_WOMEN_LESSON,
+			consts.CT_LECTURE,
+			consts.CT_LESSONS_SERIES,
+			consts.CT_DAILY_LESSON,
+		},
+	}); err != nil {
+		return nil, err
+	}
 
 	var cTotal int64
 	err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
@@ -160,7 +172,7 @@ func getLessonOverviewsPage(db *sql.DB, r LessonOverviewRequest) (*LessonOvervie
 				    c.collection_id,
 				    c.collection_uid,
 				    c.type_id                                                    AS content_type,
-				    0                                                               views,
+				    0                                                            AS views,
 				    coalesce((c.properties ->> 'film_date')::date, c.created_at) AS date,
 				    c.number,
 				    c.start_date,
@@ -923,7 +935,6 @@ func SearchStatsHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, res)
 }
-
 
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
