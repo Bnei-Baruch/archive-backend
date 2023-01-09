@@ -909,6 +909,7 @@ const (
 	SRC_BAAL_SULAM_WRITINGS_CAMPUS_RU         = "8Y0f8Jg9"
 	SRC_CONNECTING_TO_THE_SOURCE              = "wWm6fbn4"
 	SRC_ZOHAR_FOR_ALL_VOL_12                  = "oau8jvcD"
+	SRC_INTRO_TO_BOOK_OF_ZOHAR                = "ALlyoveA"
 )
 
 var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
@@ -916,6 +917,7 @@ var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
 	SRC_PEACE_ARCTICLE:         120,
 	SRC_PEACE_IN_WORLD_ARTICLE: 120,
 	SRC_ARVUT_ARTICLE:          210,
+	SRC_INTRO_TO_BOOK_OF_ZOHAR: 200,
 }
 
 // We used to name this articles with the prefix word "maamar" (article).
