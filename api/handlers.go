@@ -110,7 +110,8 @@ func LessonOverviewHandler(c *gin.Context) {
 		return
 	}
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	resp, err := getLessonOverviewsPage(db, request)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	resp, err := getLessonOverviewsPage(cm, db, request)
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -154,7 +155,7 @@ var fallbackLessonsContentUnitTypes = []string{
 	consts.CT_DAILY_LESSON,
 }
 
-func getLessonOverviewsPage(db *sql.DB, r LessonOverviewRequest) (*LessonOverviewResponse, error) {
+func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewRequest) (*LessonOverviewResponse, error) {
 	//append collection filters
 	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 	if len(r.ContentTypesFilter.ContentTypes) == 0 {
@@ -163,6 +164,18 @@ func getLessonOverviewsPage(db *sql.DB, r LessonOverviewRequest) (*LessonOvervie
 
 	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
 		return nil, err
+	}
+	if err := appendIDsFilterMods(&cMods, r.IDsFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendDateRangeCFilterMods(&cMods, r.DateRangeFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendCollectionSourceFilterMods(cm, db, &cMods, r.SourcesFilter); err != nil {
+		return nil, NewBadRequestError(err)
+	}
+	if err := appendCollectionTagsFilterMods(cm, db, &cMods, r.TagsFilter); err != nil {
+		return nil, NewBadRequestError(err)
 	}
 
 	var cTotal int64

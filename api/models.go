@@ -170,6 +170,10 @@ type LessonsOverviewResponseItem struct {
 type LessonOverviewRequest struct {
 	ListRequest
 	ContentTypesFilter
+	IDsFilter
+	DateRangeFilter
+	SourcesFilter
+	TagsFilter
 }
 
 type LessonOverviewResponse struct {
