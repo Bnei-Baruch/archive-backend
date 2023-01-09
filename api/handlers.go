@@ -72,6 +72,11 @@ func CollectionHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
+var programsFallbackContentUnitTypes = []string{
+	consts.CT_VIDEO_PROGRAM_CHAPTER,
+	consts.CT_CLIP,
+}
+
 func MobileProgramsPageHandler(c *gin.Context) {
 	var r MobileProgramsPageRequest
 	if c.Bind(&r) != nil {
@@ -81,14 +86,13 @@ func MobileProgramsPageHandler(c *gin.Context) {
 	cm := c.MustGet("CACHE").(cache.CacheManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
+	if len(r.ContentTypesFilter.ContentTypes) == 0 {
+		r.ContentTypesFilter.ContentTypes = programsFallbackContentUnitTypes
+	}
+
 	cuRequest := ContentUnitsRequest{
-		ListRequest: r.ListRequest,
-		ContentTypesFilter: ContentTypesFilter{
-			ContentTypes: []string{
-				consts.CT_VIDEO_PROGRAM_CHAPTER,
-				consts.CT_CLIP,
-			},
-		},
+		ListRequest:        r.ListRequest,
+		ContentTypesFilter: r.ContentTypesFilter,
 	}
 
 	resp, err := handleContentUnits(cm, db, cuRequest)
@@ -141,19 +145,23 @@ func LessonOverviewHandler(c *gin.Context) {
 	concludeRequest(c, resp, nil)
 }
 
+var fallbackLessonsContentUnitTypes = []string{
+	consts.CT_LESSON_PART,
+	consts.CT_VIRTUAL_LESSON,
+	consts.CT_WOMEN_LESSON,
+	consts.CT_LECTURE,
+	consts.CT_LESSONS_SERIES,
+	consts.CT_DAILY_LESSON,
+}
+
 func getLessonOverviewsPage(db *sql.DB, r LessonOverviewRequest) (*LessonOverviewResponse, error) {
 	//append collection filters
 	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
-	if err := appendContentTypesFilterMods(&cMods, ContentTypesFilter{
-		ContentTypes: []string{
-			consts.CT_LESSON_PART,
-			consts.CT_VIRTUAL_LESSON,
-			consts.CT_WOMEN_LESSON,
-			consts.CT_LECTURE,
-			consts.CT_LESSONS_SERIES,
-			consts.CT_DAILY_LESSON,
-		},
-	}); err != nil {
+	if len(r.ContentTypesFilter.ContentTypes) == 0 {
+		r.ContentTypesFilter.ContentTypes = fallbackLessonsContentUnitTypes
+	}
+
+	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
 		return nil, err
 	}
 

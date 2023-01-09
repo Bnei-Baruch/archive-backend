@@ -169,6 +169,7 @@ type LessonsOverviewResponseItem struct {
 
 type LessonOverviewRequest struct {
 	ListRequest
+	ContentTypesFilter
 }
 
 type LessonOverviewResponse struct {
@@ -178,6 +179,7 @@ type LessonOverviewResponse struct {
 
 type MobileProgramsPageRequest struct {
 	ListRequest
+	ContentTypesFilter
 }
 
 type MobileProgramsPageResponse struct {
