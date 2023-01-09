@@ -972,9 +972,19 @@ func SearchStatsHandler(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	tuids := make([]string, len(tags))
-	for i, t := range tags {
-		tuids[i] = t.UID
+	skipUids, _, err := GetNotInTagsIds(cacheM.TagsStats().GetTree(), db)
+	if err != nil {
+		return
+	}
+	skipUidsMap := make(map[string]bool)
+	for _, uid := range skipUids {
+		skipUidsMap[uid] = true
+	}
+	tuids := []string(nil)
+	for _, t := range tags {
+		if _, ok := skipUidsMap[t.UID]; !ok {
+			tuids = append(tuids, t.UID)
+		}
 	}
 
 	res, err := se.GetCounts(context.TODO(), query, suids, tuids)
@@ -993,7 +1003,7 @@ func SearchHandler(c *gin.Context) {
 	if c.Query("deb") == "true" {
 		query.Deb = true
 	}
-	log.Debugf("Parsed Query: %#v", query)
+	log.Infof("Parsed Query: %#v", query)
 	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
 		NewBadRequestError(errors.New("Can't search with no terms.")).Abort(c)
 		return
@@ -1186,9 +1196,8 @@ func AutocompleteHandler(c *gin.Context) {
 
 	log.Infof("Query: [%s] Language Order: [%+v]", c.Query("q"), order)
 
-	// Have a 300ms deadline on the search engine call.
-	// It's autocomplete after all...
-	ctx, cancelFn := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	// Have a deadline on the search engine call. It's autocomplete after all...
+	ctx, cancelFn := context.WithTimeout(context.Background(), 900*time.Millisecond)
 	defer cancelFn()
 
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
@@ -4268,14 +4277,15 @@ func mdbToFile(file *mdbmodels.File) (*File, error) {
 	}
 
 	f := &File{
-		ID:        file.UID,
-		Name:      file.Name,
-		Size:      file.Size,
-		Type:      file.Type,
-		SubType:   file.SubType,
-		CreatedAt: file.CreatedAt,
-		Duration:  props.Duration,
-		VideoSize: props.VideoSize,
+		ID:         file.UID,
+		Name:       file.Name,
+		Size:       file.Size,
+		Type:       file.Type,
+		SubType:    file.SubType,
+		CreatedAt:  file.CreatedAt,
+		Duration:   props.Duration,
+		VideoSize:  props.VideoSize,
+		InsertType: props.InsertType,
 	}
 
 	if file.Language.Valid {
