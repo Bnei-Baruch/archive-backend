@@ -149,7 +149,7 @@ type CollectionsResponse struct {
 	Collections []*Collection `json:"collections" binding:"omitempty,dive,len=2"`
 }
 
-type LessonsOverviewResponseItem struct {
+type MobileContentUnitResponseItem struct {
 	ContentUnitUid string     `json:"contentUnitId"`
 	CollectionId   string     `json:"collectionId"`
 	Image          string     `json:"image"`
@@ -176,9 +176,9 @@ type LessonOverviewRequest struct {
 	TagsFilter
 }
 
-type LessonOverviewResponse struct {
+type MobileContentUnitResponse struct {
 	ListResponse
-	Items []*LessonsOverviewResponseItem `json:"items"`
+	Items []*MobileContentUnitResponseItem `json:"items"`
 }
 
 type MobileProgramsPageRequest struct {
@@ -186,14 +186,10 @@ type MobileProgramsPageRequest struct {
 	ContentTypesFilter
 }
 
-type MobileProgramsPageResponse struct {
-	ContentUnitsResponse
-}
-
-func NewEmptyLessonOverviewResponse() *LessonOverviewResponse {
-	return &LessonOverviewResponse{
+func NewEmptyLessonOverviewResponse() *MobileContentUnitResponse {
+	return &MobileContentUnitResponse{
 		ListResponse: ListResponse{Total: 0},
-		Items:        make([]*LessonsOverviewResponseItem, 0),
+		Items:        make([]*MobileContentUnitResponseItem, 0),
 	}
 }
 

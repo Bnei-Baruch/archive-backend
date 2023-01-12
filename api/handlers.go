@@ -97,11 +97,57 @@ func MobileProgramsPageHandler(c *gin.Context) {
 
 	resp, err := handleContentUnits(cm, db, cuRequest)
 
-	programsRepose := &MobileProgramsPageResponse{
-		ContentUnitsResponse: *resp,
+	result := &MobileContentUnitResponse{
+		ListResponse: resp.ListResponse,
+		Items:        make([]*MobileContentUnitResponseItem, 0, len(resp.ContentUnits)),
 	}
 
-	concludeRequest(c, programsRepose, err)
+	var contentUnitUids []string
+	itemsMap := make(map[string]*MobileContentUnitResponseItem)
+	imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
+	for _, pItem := range resp.ContentUnits {
+		var date *time.Time
+		if pItem.FilmDate != nil {
+			date = &pItem.FilmDate.Time
+		}
+		var collection *Collection
+		for _, col := range pItem.Collections {
+			collection = col
+			break
+		}
+
+		duration := int64(pItem.Duration)
+		item := &MobileContentUnitResponseItem{
+			ContentUnitUid: pItem.ID,
+			CollectionId:   collection.ID,
+			Title:          pItem.Name,
+			Description:    collection.Name,
+			Date:           date,
+			ContentType:    pItem.ContentType,
+			Duration:       &duration,
+			Image:          fmt.Sprintf(imagesUrlTemplate, pItem.ID),
+		}
+
+		contentUnitUids = append(contentUnitUids, item.ContentUnitUid)
+		itemsMap[item.ContentUnitUid] = item
+		result.Items = append(result.Items, item)
+	}
+
+	mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
+	concludeRequest(c, result, err)
+}
+
+func mapViewsToMobileContentUnitItems(contentUnitUids []string, itemsMap map[string]*MobileContentUnitResponseItem) {
+	if viewsResp, err := getViewsByCollectionIds(contentUnitUids); err != nil {
+		log.Error(err.Error())
+	} else {
+		for ix := range viewsResp.Views {
+			viewsCount := viewsResp.Views[ix]
+			colId := contentUnitUids[ix]
+			item := itemsMap[colId]
+			item.Views = &viewsCount
+		}
+	}
 }
 
 func LessonOverviewHandler(c *gin.Context) {
@@ -119,13 +165,13 @@ func LessonOverviewHandler(c *gin.Context) {
 
 	var collectionIds []int64
 	var cuIds []int64
-	var collectionUids []string
-	itemsMap := make(map[string]*LessonsOverviewResponseItem)
+	var contentUnitUids []string
+	itemsMap := make(map[string]*MobileContentUnitResponseItem)
 	for _, item := range resp.Items {
-		itemsMap[item.CollectionId] = item
+		itemsMap[item.ContentUnitUid] = item
 		collectionIds = append(collectionIds, item.internalCollectionId)
 		cuIds = append(cuIds, item.internalUnitId)
-		collectionUids = append(collectionUids, item.CollectionId)
+		contentUnitUids = append(contentUnitUids, item.ContentUnitUid)
 	}
 
 	if err = setI18ColNameDesc(db, request.Language, collectionIds, cuIds, resp.Items); err != nil {
@@ -133,16 +179,7 @@ func LessonOverviewHandler(c *gin.Context) {
 		return
 	}
 
-	if viewsResp, err := getViewsByCollectionIds(collectionUids); err != nil {
-		log.Error(err.Error())
-	} else {
-		for ix, viewsCount := range viewsResp.Views {
-			colId := collectionUids[ix]
-			item := itemsMap[colId]
-			item.Views = &viewsCount
-		}
-	}
-
+	mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
 	concludeRequest(c, resp, nil)
 }
 
@@ -155,7 +192,7 @@ var fallbackLessonsContentUnitTypes = []string{
 	consts.CT_DAILY_LESSON,
 }
 
-func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewRequest) (*LessonOverviewResponse, error) {
+func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewRequest) (*MobileContentUnitResponse, error) {
 	//append collection filters
 	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
 	if len(r.ContentTypesFilter.ContentTypes) == 0 {
@@ -237,13 +274,14 @@ func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewR
 	}
 	defer rows.Close()
 
-	resp := &LessonOverviewResponse{
+	resp := &MobileContentUnitResponse{
 		ListResponse: ListResponse{
 			Total: cTotal,
 		},
-		Items: make([]*LessonsOverviewResponseItem, 0),
+		Items: make([]*MobileContentUnitResponseItem, 0),
 	}
 
+	imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
 	for rows.Next() {
 		var contentUnitId int64
 		var contentUnitUid string
@@ -259,12 +297,12 @@ func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewR
 
 		err = rows.Scan(&contentUnitId, &contentUnitUid, &collectionId, &collectionUid, &contentType, &views, &date,
 			&number, &startDate, &endDate, &duration)
-		item := &LessonsOverviewResponseItem{
+		item := &MobileContentUnitResponseItem{
 			ContentUnitUid:       contentUnitUid,
 			CollectionId:         collectionUid,
 			internalUnitId:       contentUnitId,
 			internalCollectionId: collectionId,
-			Image:                fmt.Sprintf("api/thumbnail/%s", contentUnitUid),
+			Image:                fmt.Sprintf(imagesUrlTemplate, contentUnitUid),
 			Views:                views,
 			Number:               number,
 			Date:                 date,
@@ -284,7 +322,7 @@ func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewR
 	return resp, nil
 }
 
-func setI18ColNameDesc(db *sql.DB, lang string, collectionIds []int64, cuIds []int64, items []*LessonsOverviewResponseItem) error {
+func setI18ColNameDesc(db *sql.DB, lang string, collectionIds []int64, cuIds []int64, items []*MobileContentUnitResponseItem) error {
 	colNames, err := loadCI18ns(db, lang, collectionIds)
 	if err != nil {
 		return err
