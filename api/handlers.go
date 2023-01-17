@@ -119,7 +119,7 @@ func MobileProgramsPageHandler(c *gin.Context) {
 		duration := int64(pItem.Duration)
 		item := &MobileContentUnitResponseItem{
 			ContentUnitUid: pItem.ID,
-			CollectionId:   collection.ID,
+			CollectionId:   &collection.ID,
 			Title:          pItem.Name,
 			Description:    collection.Name,
 			Date:           date,
@@ -169,7 +169,10 @@ func LessonOverviewHandler(c *gin.Context) {
 	itemsMap := make(map[string]*MobileContentUnitResponseItem)
 	for _, item := range resp.Items {
 		itemsMap[item.ContentUnitUid] = item
-		collectionIds = append(collectionIds, item.internalCollectionId)
+		if item.internalCollectionId != nil {
+			collectionIds = append(collectionIds, *item.internalCollectionId)
+		}
+
 		cuIds = append(cuIds, item.internalUnitId)
 		contentUnitUids = append(contentUnitUids, item.ContentUnitUid)
 	}
@@ -199,25 +202,63 @@ func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewR
 		r.ContentTypesFilter.ContentTypes = fallbackLessonsContentUnitTypes
 	}
 
-	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
+	if err := mobileLessonsAddCMods(cm, db, r, &cMods); err != nil {
 		return nil, err
 	}
-	if err := appendIDsFilterMods(&cMods, r.IDsFilter); err != nil {
-		return nil, NewBadRequestError(err)
+
+	//append content units filters
+	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
+	if err := appendNotForDisplayCU(&cuMods); err != nil {
+		return nil, err
 	}
-	if err := appendDateRangeCFilterMods(&cMods, r.DateRangeFilter); err != nil {
-		return nil, NewBadRequestError(err)
+	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
+		return nil, err
 	}
-	if err := appendCollectionSourceFilterMods(cm, db, &cMods, r.SourcesFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendCollectionTagsFilterMods(cm, db, &cMods, r.TagsFilter); err != nil {
-		return nil, NewBadRequestError(err)
+	if err := appendDateRangeFilterMods(&cuMods, r.DateRangeFilter); err != nil {
+		return nil, err
 	}
 
+	if err := appendSourcesFilterMods(cm, &cuMods, r.SourcesFilter); err != nil {
+		return nil, err
+	}
+	appendTagsFilterMods(cm, &cuMods, r.TagsFilter)
+
+	if err := appendMediaLanguageFilterMods(db, &cuMods, r.MediaLanguageFilter); err != nil {
+		return nil, err
+	}
+
+	if err := appendMediaTypeFilterMods(&cuMods, r.MediaTypeFilter, true); err != nil {
+		return nil, err
+	} else if len(r.MediaType) > 0 {
+		cMods = append(cMods, qm.Where("id < 0"))
+	}
+
+	if err := appendCollectionsFilterMods(db, &cuMods, r.CollectionsFilter); err != nil {
+		return nil, err
+	}
+	if err := appendPersonsFilterMods(db, &cuMods, r.PersonsFilter); err != nil {
+		return nil, err
+	}
+	if err := appendOriginalLanguageFilterMods(&cuMods, r.OriginalLanguageFilter, mdbmodels.TableNames.ContentUnits); err != nil {
+		return nil, err
+	}
+
+	cCountQuery, cArgs := queries.BuildQuery(mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id) AS count`))...).Query)
+	cuCountQuery, cuArgs := queries.BuildQuery(mdbmodels.ContentUnits(append(cuMods, qm.Select(`*`))...).Query)
+	cuCountQuery = startQueryArgCountFrom(cuCountQuery, len(cArgs))
+	countQueryStr := `WITH
+cCount AS (%s),
+cuCount AS (
+	SELECT COUNT(DISTINCT "cu".id) AS count
+	FROM (%s) cu
+	LEFT JOIN collections_content_units ccu ON cu.id = ccu.content_unit_id
+	WHERE ccu IS NULL
+)
+SELECT cc.count + cu.count FROM cCount cc, cuCount cu`
+	countQueryJoint := fmt.Sprintf(countQueryStr, cCountQuery[:len(cCountQuery)-1], cuCountQuery[:len(cuCountQuery)-1])
 	var cTotal int64
-	err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
-	if err != nil {
+	countArgs := append(cArgs, cuArgs...)
+	if err := queries.Raw(countQueryJoint, countArgs...).QueryRow(db).Scan(&cTotal); err != nil {
 		return nil, err
 	}
 
@@ -232,29 +273,72 @@ func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewR
 			uid,
 			(properties ->> 'number')                      			 as number,
 			(properties ->> 'start_date')::date                      as start_date,
-			(properties ->> 'end_date')::date                        as end_date
+			(properties ->> 'end_date')::date                        as end_date,
+		    (properties -> 'tags' ->> 0)        					 as tag
 		`))
 
 	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
 
+	cuq, cuargs := queries.BuildQuery(mdbmodels.ContentUnits(append(cuMods, qm.Select(`*`))...).Query)
+	cuq = startQueryArgCountFrom(cuq, len(args))
+
+	cuqJoint := fmt.Sprintf(`
+SELECT 
+	   cu.id,
+	   cu.uid,
+	   cu.type_id,
+	   cu.properties,
+	   cu.created_at,
+       NULL AS tag,
+       NULL AS collection_id,
+	   NULL AS collection_uid,
+	   NULL AS number,
+	   NULL AS date,
+	   NULL AS start_date,
+	   NULL AS end_date
+	FROM (%s) cu
+	LEFT JOIN collections_content_units ccu ON cu.id = ccu.content_unit_id
+	WHERE ccu IS NULL
+`, cuq[:len(cuq)-1])
+
 	q := fmt.Sprintf(`
 			WITH
 				collecs AS (%s),
-     			cus AS (SELECT DISTINCT ON (ccu.collection_id) cu.*,
-                                                    		   cll.id as collection_id,
-                                                    		   cll.uid as collection_uid,
-                                                    		   cll.number,
-                                                    		   cll.date,
-                                                    		   cll.start_date,
-                                                    		   cll.end_date
+     			cusCollectionful AS (
+						SELECT
+							coalesce((ARRAY_AGG(cu.id) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.id))[1])                            AS id,
+                                 coalesce((ARRAY_AGG(cu.uid) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.uid))[1])                           AS uid,
+                                 coalesce((ARRAY_AGG(cu.type_id) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.type_id))[1])                       AS type_id,
+                                 coalesce((ARRAY_AGG(cu.properties) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.properties))[1])                    AS properties,
+                                 coalesce((ARRAY_AGG(cu.created_at) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.created_at))[1])                    AS created_at,
+							(ARRAY_AGG(cll.tag) FILTER (WHERE cll.tag IS NOT NULL))[1] as tag,
+							cll.id  as collection_id,
+							cll.uid as collection_uid,
+							cll.number,
+							cll.date,
+							cll.start_date,
+							cll.end_date
              			FROM content_units cu
                       		JOIN collections_content_units ccu ON cu.id = ccu.content_unit_id
                       		JOIN collecs cll ON ccu.collection_id = cll.id
 							WHERE (secure=0 AND published IS TRUE)
-             			ORDER BY ccu.collection_id, cu.created_at)
+							group by cll.id, cll.uid, number, date, start_date, end_date
+             			-- ORDER BY ccu.collection_id, cu.created_at
+				),
+				cus AS (
+					SELECT * FROM (%s) cu
+					UNION
+					(SELECT * FROM cusCollectionful)
+				)
 				SELECT
 					c.id                                                         AS content_unit_id,
 					c.uid                                                        AS content_unit_uid,
+				    c.tag,
 				    c.collection_id,
 				    c.collection_uid,
 				    c.type_id                                                    AS content_type,
@@ -266,9 +350,9 @@ func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewR
 				    c.properties ->> 'duration'                                  AS file_duration
 				FROM cus c
 				ORDER BY c.date DESC, c.id DESC LIMIT %d OFFSET %d
-		`, qc[:len(qc)-1], r.PageSize, (r.PageNumber-1)*r.PageSize)
+		`, qc[:len(qc)-1], cuqJoint[:len(cuqJoint)-1], r.PageSize, (r.PageNumber-1)*r.PageSize)
 
-	rows, err := queries.Raw(q, args...).Query(db)
+	rows, err := queries.Raw(q, append(args, cuargs...)...).Query(db)
 	if err != nil {
 		return nil, err
 	}
@@ -285,8 +369,9 @@ func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewR
 	for rows.Next() {
 		var contentUnitId int64
 		var contentUnitUid string
-		var collectionId int64
-		var collectionUid string
+		var collectionId *int64
+		var collectionUid *string
+		var tag *string
 		var contentType int64
 		var views *int32
 		var number int
@@ -295,13 +380,14 @@ func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewR
 		var endDate *time.Time
 		var duration int64
 
-		err = rows.Scan(&contentUnitId, &contentUnitUid, &collectionId, &collectionUid, &contentType, &views, &date,
-			&number, &startDate, &endDate, &duration)
+		err = rows.Scan(&contentUnitId, &contentUnitUid, &tag, &collectionId, &collectionUid, &contentType, &views,
+			&date, &number, &startDate, &endDate, &duration)
 		item := &MobileContentUnitResponseItem{
 			ContentUnitUid:       contentUnitUid,
 			CollectionId:         collectionUid,
 			internalUnitId:       contentUnitId,
 			internalCollectionId: collectionId,
+			tag:                  tag,
 			Image:                fmt.Sprintf(imagesUrlTemplate, contentUnitUid),
 			Views:                views,
 			Number:               number,
@@ -322,6 +408,26 @@ func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewR
 	return resp, nil
 }
 
+func mobileLessonsAddCMods(cm cache.CacheManager, db *sql.DB, r LessonOverviewRequest, cMods *[]qm.QueryMod) error {
+	if err := appendContentTypesFilterMods(cMods, r.ContentTypesFilter); err != nil {
+		return err
+	}
+	if err := appendIDsFilterMods(cMods, r.IDsFilter); err != nil {
+		return NewBadRequestError(err)
+	}
+	if err := appendDateRangeCFilterMods(cMods, r.DateRangeFilter); err != nil {
+		return NewBadRequestError(err)
+	}
+	if err := appendCollectionSourceFilterMods(cm, db, cMods, r.SourcesFilter); err != nil {
+		return NewBadRequestError(err)
+	}
+	if err := appendCollectionTagsFilterMods(cm, db, cMods, r.TagsFilter); err != nil {
+		return NewBadRequestError(err)
+	}
+
+	return nil
+}
+
 func setI18ColNameDesc(db *sql.DB, lang string, collectionIds []int64, cuIds []int64, items []*MobileContentUnitResponseItem) error {
 	colNames, err := loadCI18ns(db, lang, collectionIds)
 	if err != nil {
@@ -334,15 +440,17 @@ func setI18ColNameDesc(db *sql.DB, lang string, collectionIds []int64, cuIds []i
 	}
 
 	for _, ri := range items {
-		li18ns, _ := colNames[ri.internalCollectionId]
-		for _, l := range consts.I18N_LANG_ORDER[lang] {
-			li18n, ok := li18ns[l]
-			if ok {
-				if ri.Title == "" && li18n.Name.Valid {
-					ri.Title = li18n.Name.String
-				}
-				if ri.Description == "" && li18n.Description.Valid {
-					ri.Description = li18n.Description.String
+		if ri.internalCollectionId != nil && ri.tag != nil {
+			li18ns, _ := colNames[*ri.internalCollectionId]
+			for _, l := range consts.I18N_LANG_ORDER[lang] {
+				li18n, ok := li18ns[l]
+				if ok {
+					if ri.Title == "" && li18n.Name.Valid {
+						ri.Title = li18n.Name.String
+					}
+					if ri.Description == "" && li18n.Description.Valid {
+						ri.Description = li18n.Description.String
+					}
 				}
 			}
 		}

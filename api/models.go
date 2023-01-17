@@ -151,7 +151,7 @@ type CollectionsResponse struct {
 
 type MobileContentUnitResponseItem struct {
 	ContentUnitUid string     `json:"contentUnitId"`
-	CollectionId   string     `json:"collectionId"`
+	CollectionId   *string    `json:"collectionId"`
 	Image          string     `json:"image"`
 	Title          string     `json:"title"`
 	Description    string     `json:"description"`
@@ -163,8 +163,9 @@ type MobileContentUnitResponseItem struct {
 	Duration       *int64     `json:"duration"`
 	Number         int        `json:"number,omitempty"`
 
-	internalUnitId       int64 `json:"-"`
-	internalCollectionId int64 `json:"-"`
+	internalUnitId       int64   `json:"-"`
+	internalCollectionId *int64  `json:"-"`
+	tag                  *string `json:"-"`
 }
 
 type LessonOverviewRequest struct {
@@ -174,6 +175,12 @@ type LessonOverviewRequest struct {
 	DateRangeFilter
 	SourcesFilter
 	TagsFilter
+	MediaLanguageFilter
+	DerivedTypesFilter
+	CollectionsFilter
+	PersonsFilter
+	MediaTypeFilter
+	OriginalLanguageFilter
 }
 
 type MobileContentUnitResponse struct {
