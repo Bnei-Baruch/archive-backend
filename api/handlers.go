@@ -293,7 +293,7 @@ SELECT
        NULL AS collection_id,
 	   NULL AS collection_uid,
 	   NULL AS number,
-	   NULL AS date,
+	   coalesce((cu.properties ->> 'film_date')::date, cu.created_at) AS date,
 	   NULL AS start_date,
 	   NULL AS end_date
 	FROM (%s) cu
@@ -343,7 +343,7 @@ SELECT
 				    c.collection_uid,
 				    c.type_id                                                    AS content_type,
 				    0                                                            AS views,
-				    coalesce((c.properties ->> 'film_date')::date, c.created_at) AS date,
+				    c.date,
 				    c.number,
 				    c.start_date,
 				    c.end_date,
