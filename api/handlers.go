@@ -271,6 +271,7 @@ SELECT cc.count + cu.count FROM cCount cc, cuCount cu`
 			coalesce((properties->>'start_date')::date, (properties->>'end_date')::date, (properties->>'film_date')::date, created_at) as date, 
 			id,
 			uid,
+            type_id,
 			(properties ->> 'number')                      			 as number,
 			(properties ->> 'start_date')::date                      as start_date,
 			(properties ->> 'end_date')::date                        as end_date,
@@ -306,17 +307,18 @@ SELECT
 				collecs AS (%s),
      			cusCollectionful AS (
 						SELECT
-							coalesce((ARRAY_AGG(cu.id) FILTER (WHERE cll.tag IS NOT NULL))[1],
-                                          (ARRAY_AGG(cu.id))[1])                            AS id,
-                                 coalesce((ARRAY_AGG(cu.uid) FILTER (WHERE cll.tag IS NOT NULL))[1],
-                                          (ARRAY_AGG(cu.uid))[1])                           AS uid,
-                                 coalesce((ARRAY_AGG(cu.type_id) FILTER (WHERE cll.tag IS NOT NULL))[1],
-                                          (ARRAY_AGG(cu.type_id))[1])                       AS type_id,
-                                 coalesce((ARRAY_AGG(cu.properties) FILTER (WHERE cll.tag IS NOT NULL))[1],
-                                          (ARRAY_AGG(cu.properties))[1])                    AS properties,
-                                 coalesce((ARRAY_AGG(cu.created_at) FILTER (WHERE cll.tag IS NOT NULL))[1],
-                                          (ARRAY_AGG(cu.created_at))[1])                    AS created_at,
-							(ARRAY_AGG(cll.tag) FILTER (WHERE cll.tag IS NOT NULL))[1] as tag,
+								coalesce((ARRAY_AGG(cu.id ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.id ORDER BY ccu.position))[1])                            AS id,
+                                 coalesce((ARRAY_AGG(cu.uid ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.uid ORDER BY ccu.position))[1])                           AS uid,
+                                 cll.type_id,
+--                                  coalesce((ARRAY_AGG(cu.type_id ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1],
+--                                           (ARRAY_AGG(cu.type_id ORDER BY ccu.position))[1])                       AS type_id,
+                                 coalesce((ARRAY_AGG(cu.properties ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.properties ORDER BY ccu.position))[1])                    AS properties,
+                                 coalesce((ARRAY_AGG(cu.created_at ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.created_at ORDER BY ccu.position))[1])                    AS created_at,
+                                 (ARRAY_AGG(cll.tag ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1] as tag,
 							cll.id  as collection_id,
 							cll.uid as collection_uid,
 							cll.number,
@@ -327,7 +329,7 @@ SELECT
                       		JOIN collections_content_units ccu ON cu.id = ccu.content_unit_id
                       		JOIN collecs cll ON ccu.collection_id = cll.id
 							WHERE (secure=0 AND published IS TRUE)
-							group by cll.id, cll.uid, number, date, start_date, end_date
+							group by cll.id, cll.uid, number, date, start_date, end_date, cll.type_id
              			-- ORDER BY ccu.collection_id, cu.created_at
 				),
 				cus AS (
