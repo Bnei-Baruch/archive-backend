@@ -4,7 +4,11 @@ import (
 	"context"
 	"crypto/md5"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"github.com/volatiletech/null/v8"
+	"golang.org/x/sync/errgroup"
+	"io"
 	"net/http"
 	"regexp"
 	"sort"
@@ -16,11 +20,9 @@ import (
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
-	"golang.org/x/sync/errgroup"
 	"gopkg.in/gin-gonic/gin.v1"
 	elastic "gopkg.in/olivere/elastic.v6"
 
@@ -68,6 +70,456 @@ func CollectionHandler(c *gin.Context) {
 
 	resp, err := handleCollection(c.MustGet("MDB_DB").(*sql.DB), r)
 	concludeRequest(c, resp, err)
+}
+
+var programsFallbackContentUnitTypes = []string{
+	consts.CT_VIDEO_PROGRAM_CHAPTER,
+	consts.CT_CLIP,
+}
+
+func MobileProgramsPageHandler(c *gin.Context) {
+	var r MobileProgramsPageRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+
+	if len(r.ContentTypesFilter.ContentTypes) == 0 {
+		r.ContentTypesFilter.ContentTypes = programsFallbackContentUnitTypes
+	}
+
+	cuRequest := ContentUnitsRequest{
+		ListRequest:        r.ListRequest,
+		ContentTypesFilter: r.ContentTypesFilter,
+	}
+
+	resp, err := handleContentUnits(cm, db, cuRequest)
+
+	result := &MobileContentUnitResponse{
+		ListResponse: resp.ListResponse,
+		Items:        make([]*MobileContentUnitResponseItem, 0, len(resp.ContentUnits)),
+	}
+
+	var contentUnitUids []string
+	itemsMap := make(map[string]*MobileContentUnitResponseItem)
+	imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
+	for _, pItem := range resp.ContentUnits {
+		var date *time.Time
+		if pItem.FilmDate != nil {
+			date = &pItem.FilmDate.Time
+		}
+		var collection *Collection
+		for _, col := range pItem.Collections {
+			collection = col
+			break
+		}
+
+		duration := int64(pItem.Duration)
+		item := &MobileContentUnitResponseItem{
+			ContentUnitUid: pItem.ID,
+			CollectionId:   &collection.ID,
+			Title:          pItem.Name,
+			Description:    collection.Name,
+			Date:           date,
+			ContentType:    pItem.ContentType,
+			Duration:       &duration,
+			Image:          fmt.Sprintf(imagesUrlTemplate, pItem.ID),
+		}
+
+		contentUnitUids = append(contentUnitUids, item.ContentUnitUid)
+		itemsMap[item.ContentUnitUid] = item
+		result.Items = append(result.Items, item)
+	}
+
+	mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
+	concludeRequest(c, result, err)
+}
+
+func mapViewsToMobileContentUnitItems(contentUnitUids []string, itemsMap map[string]*MobileContentUnitResponseItem) {
+	if viewsResp, err := getViewsByCollectionIds(contentUnitUids); err != nil {
+		log.Error(err.Error())
+	} else {
+		for ix := range viewsResp.Views {
+			viewsCount := viewsResp.Views[ix]
+			colId := contentUnitUids[ix]
+			item := itemsMap[colId]
+			item.Views = &viewsCount
+		}
+	}
+}
+
+func LessonOverviewHandler(c *gin.Context) {
+	var request LessonOverviewRequest
+	if c.Bind(&request) != nil {
+		return
+	}
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	cm := c.MustGet("CACHE").(cache.CacheManager)
+	resp, err := getLessonOverviewsPage(cm, db, request)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	var collectionIds []int64
+	var cuIds []int64
+	var contentUnitUids []string
+	itemsMap := make(map[string]*MobileContentUnitResponseItem)
+	for _, item := range resp.Items {
+		itemsMap[item.ContentUnitUid] = item
+		if item.internalCollectionId != nil {
+			collectionIds = append(collectionIds, *item.internalCollectionId)
+		}
+
+		cuIds = append(cuIds, item.internalUnitId)
+		contentUnitUids = append(contentUnitUids, item.ContentUnitUid)
+	}
+
+	if err = setI18ColNameDesc(db, request.Language, collectionIds, cuIds, resp.Items); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
+	concludeRequest(c, resp, nil)
+}
+
+var fallbackLessonsContentUnitTypes = []string{
+	consts.CT_LESSON_PART,
+	consts.CT_VIRTUAL_LESSON,
+	consts.CT_WOMEN_LESSON,
+	consts.CT_LECTURE,
+	consts.CT_LESSONS_SERIES,
+	consts.CT_DAILY_LESSON,
+}
+
+func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewRequest) (*MobileContentUnitResponse, error) {
+	//append collection filters
+	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
+	if len(r.ContentTypesFilter.ContentTypes) == 0 {
+		r.ContentTypesFilter.ContentTypes = fallbackLessonsContentUnitTypes
+	}
+
+	if err := mobileLessonsAddCMods(cm, db, r, &cMods); err != nil {
+		return nil, err
+	}
+
+	//append content units filters
+	cuMods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
+	if err := appendNotForDisplayCU(&cuMods); err != nil {
+		return nil, err
+	}
+	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
+		return nil, err
+	}
+	if err := appendDateRangeFilterMods(&cuMods, r.DateRangeFilter); err != nil {
+		return nil, err
+	}
+
+	if err := appendSourcesFilterMods(cm, &cuMods, r.SourcesFilter); err != nil {
+		return nil, err
+	}
+	appendTagsFilterMods(cm, &cuMods, r.TagsFilter)
+
+	if err := appendMediaLanguageFilterMods(db, &cuMods, r.MediaLanguageFilter); err != nil {
+		return nil, err
+	}
+
+	if err := appendMediaTypeFilterMods(&cuMods, r.MediaTypeFilter, true); err != nil {
+		return nil, err
+	} else if len(r.MediaType) > 0 {
+		cMods = append(cMods, qm.Where("id < 0"))
+	}
+
+	if err := appendCollectionsFilterMods(db, &cuMods, r.CollectionsFilter); err != nil {
+		return nil, err
+	}
+	if err := appendPersonsFilterMods(db, &cuMods, r.PersonsFilter); err != nil {
+		return nil, err
+	}
+	if err := appendOriginalLanguageFilterMods(&cuMods, r.OriginalLanguageFilter, mdbmodels.TableNames.ContentUnits); err != nil {
+		return nil, err
+	}
+
+	cCountQuery, cArgs := queries.BuildQuery(mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id) AS count`))...).Query)
+	cuCountQuery, cuArgs := queries.BuildQuery(mdbmodels.ContentUnits(append(cuMods, qm.Select(`*`))...).Query)
+	cuCountQuery = startQueryArgCountFrom(cuCountQuery, len(cArgs))
+	countQueryStr := `WITH
+cCount AS (%s),
+cuCount AS (
+	SELECT COUNT(DISTINCT "cu".id) AS count
+	FROM (%s) cu
+	LEFT JOIN collections_content_units ccu ON cu.id = ccu.content_unit_id
+	WHERE ccu IS NULL
+)
+SELECT cc.count + cu.count FROM cCount cc, cuCount cu`
+	countQueryJoint := fmt.Sprintf(countQueryStr, cCountQuery[:len(cCountQuery)-1], cuCountQuery[:len(cuCountQuery)-1])
+	var cTotal int64
+	countArgs := append(cArgs, cuArgs...)
+	if err := queries.Raw(countQueryJoint, countArgs...).QueryRow(db).Scan(&cTotal); err != nil {
+		return nil, err
+	}
+
+	if cTotal == 0 {
+		return NewEmptyLessonOverviewResponse(), nil
+	}
+
+	cMods = append(cMods, qm.Select(`
+			DISTINCT ON (id) 
+			coalesce((properties->>'start_date')::date, (properties->>'end_date')::date, (properties->>'film_date')::date, created_at) as date, 
+			id,
+			uid,
+            type_id,
+			(properties ->> 'number')                      			 as number,
+			(properties ->> 'start_date')::date                      as start_date,
+			(properties ->> 'end_date')::date                        as end_date,
+		    (properties -> 'tags' ->> 0)        					 as tag
+		`))
+
+	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
+
+	cuq, cuargs := queries.BuildQuery(mdbmodels.ContentUnits(append(cuMods, qm.Select(`*`))...).Query)
+	cuq = startQueryArgCountFrom(cuq, len(args))
+
+	cuqJoint := fmt.Sprintf(`
+SELECT 
+	   cu.id,
+	   cu.uid,
+	   cu.type_id,
+	   cu.properties,
+	   cu.created_at,
+       NULL AS tag,
+       NULL AS collection_id,
+	   NULL AS collection_uid,
+	   NULL AS number,
+	   coalesce((cu.properties ->> 'film_date')::date, cu.created_at) AS date,
+	   NULL AS start_date,
+	   NULL AS end_date
+	FROM (%s) cu
+	LEFT JOIN collections_content_units ccu ON cu.id = ccu.content_unit_id
+	WHERE ccu IS NULL
+`, cuq[:len(cuq)-1])
+
+	q := fmt.Sprintf(`
+			WITH
+				collecs AS (%s),
+     			cusCollectionful AS (
+						SELECT
+								coalesce((ARRAY_AGG(cu.id ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.id ORDER BY ccu.position))[1])                            AS id,
+                                 coalesce((ARRAY_AGG(cu.uid ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.uid ORDER BY ccu.position))[1])                           AS uid,
+                                 cll.type_id,
+--                                  coalesce((ARRAY_AGG(cu.type_id ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1],
+--                                           (ARRAY_AGG(cu.type_id ORDER BY ccu.position))[1])                       AS type_id,
+                                 coalesce((ARRAY_AGG(cu.properties ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.properties ORDER BY ccu.position))[1])                    AS properties,
+                                 coalesce((ARRAY_AGG(cu.created_at ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1],
+                                          (ARRAY_AGG(cu.created_at ORDER BY ccu.position))[1])                    AS created_at,
+                                 (ARRAY_AGG(cll.tag ORDER BY ccu.position) FILTER (WHERE cll.tag IS NOT NULL))[1] as tag,
+							cll.id  as collection_id,
+							cll.uid as collection_uid,
+							cll.number,
+							cll.date,
+							cll.start_date,
+							cll.end_date
+             			FROM content_units cu
+                      		JOIN collections_content_units ccu ON cu.id = ccu.content_unit_id
+                      		JOIN collecs cll ON ccu.collection_id = cll.id
+							WHERE (secure=0 AND published IS TRUE)
+							group by cll.id, cll.uid, number, date, start_date, end_date, cll.type_id
+             			-- ORDER BY ccu.collection_id, cu.created_at
+				),
+				cus AS (
+					SELECT * FROM (%s) cu
+					UNION
+					(SELECT * FROM cusCollectionful)
+				)
+				SELECT
+					c.id                                                         AS content_unit_id,
+					c.uid                                                        AS content_unit_uid,
+				    c.tag,
+				    c.collection_id,
+				    c.collection_uid,
+				    c.type_id                                                    AS content_type,
+				    0                                                            AS views,
+				    c.date,
+				    c.number,
+				    c.start_date,
+				    c.end_date,
+				    c.properties ->> 'duration'                                  AS file_duration
+				FROM cus c
+				ORDER BY c.date DESC, c.id DESC LIMIT %d OFFSET %d
+		`, qc[:len(qc)-1], cuqJoint[:len(cuqJoint)-1], r.PageSize, (r.PageNumber-1)*r.PageSize)
+
+	rows, err := queries.Raw(q, append(args, cuargs...)...).Query(db)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	resp := &MobileContentUnitResponse{
+		ListResponse: ListResponse{
+			Total: cTotal,
+		},
+		Items: make([]*MobileContentUnitResponseItem, 0),
+	}
+
+	imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
+	for rows.Next() {
+		var contentUnitId int64
+		var contentUnitUid string
+		var collectionId *int64
+		var collectionUid *string
+		var tag *string
+		var contentType int64
+		var views *int32
+		var number int
+		var date *time.Time
+		var startDate *time.Time
+		var endDate *time.Time
+		var duration int64
+
+		err = rows.Scan(&contentUnitId, &contentUnitUid, &tag, &collectionId, &collectionUid, &contentType, &views,
+			&date, &number, &startDate, &endDate, &duration)
+		item := &MobileContentUnitResponseItem{
+			ContentUnitUid:       contentUnitUid,
+			CollectionId:         collectionUid,
+			internalUnitId:       contentUnitId,
+			internalCollectionId: collectionId,
+			tag:                  tag,
+			Image:                fmt.Sprintf(imagesUrlTemplate, contentUnitUid),
+			Views:                views,
+			Number:               number,
+			Date:                 date,
+			StartDate:            startDate,
+			EndDate:              endDate,
+			Duration:             &duration,
+			ContentType:          mdb.CONTENT_TYPE_REGISTRY.ByID[contentType].Name,
+		}
+
+		resp.Items = append(resp.Items, item)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func mobileLessonsAddCMods(cm cache.CacheManager, db *sql.DB, r LessonOverviewRequest, cMods *[]qm.QueryMod) error {
+	if err := appendContentTypesFilterMods(cMods, r.ContentTypesFilter); err != nil {
+		return err
+	}
+	if err := appendIDsFilterMods(cMods, r.IDsFilter); err != nil {
+		return NewBadRequestError(err)
+	}
+	if err := appendDateRangeCFilterMods(cMods, r.DateRangeFilter); err != nil {
+		return NewBadRequestError(err)
+	}
+	if err := appendCollectionSourceFilterMods(cm, db, cMods, r.SourcesFilter); err != nil {
+		return NewBadRequestError(err)
+	}
+	if err := appendCollectionTagsFilterMods(cm, db, cMods, r.TagsFilter); err != nil {
+		return NewBadRequestError(err)
+	}
+
+	return nil
+}
+
+func setI18ColNameDesc(db *sql.DB, lang string, collectionIds []int64, cuIds []int64, items []*MobileContentUnitResponseItem) error {
+	colNames, err := loadCI18ns(db, lang, collectionIds)
+	if err != nil {
+		return err
+	}
+
+	cuNames, err := loadCUI18ns(db, lang, cuIds)
+	if err != nil {
+		return err
+	}
+
+	for _, ri := range items {
+		if ri.internalCollectionId != nil && ri.tag != nil {
+			li18ns, _ := colNames[*ri.internalCollectionId]
+			for _, l := range consts.I18N_LANG_ORDER[lang] {
+				li18n, ok := li18ns[l]
+				if ok {
+					if ri.Title == "" && li18n.Name.Valid {
+						ri.Title = li18n.Name.String
+					}
+					if ri.Description == "" && li18n.Description.Valid {
+						ri.Description = li18n.Description.String
+					}
+				}
+			}
+		}
+
+		culi18ns, _ := cuNames[ri.internalUnitId]
+		for _, l := range consts.I18N_LANG_ORDER[lang] {
+			li18n, ok := culi18ns[l]
+			if ok {
+				if ri.Title == "" && li18n.Name.Valid {
+					ri.Title = li18n.Name.String
+				}
+				if ri.Description == "" && li18n.Description.Valid {
+					ri.Description = li18n.Description.String
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func getViewsByCollectionIds(collectionIds []string) (*viewsResponse, error) {
+	viewsUrl, err := getFeedApi("views")
+	if err != nil {
+		return nil, err
+	}
+
+	viewsPayload := map[string]interface{}{
+		"uids": collectionIds,
+	}
+
+	viewsPayloadJson, err := json.Marshal(viewsPayload)
+	if err != nil {
+		return nil, err
+	}
+
+	viewsResp, err := http.Post(viewsUrl, "application/json", strings.NewReader(string(viewsPayloadJson)))
+	if err != nil {
+		return nil, err
+	}
+
+	viewsRespBytes, err := io.ReadAll(viewsResp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	views := new(viewsResponse)
+	if err = json.Unmarshal(viewsRespBytes, views); err != nil {
+		return nil, err
+	}
+
+	return views, nil
+}
+
+type viewsResponse struct {
+	Views []int32 `json:"views"`
+}
+
+func getFeedApi(path string) (string, error) {
+	baseUrl := viper.GetString("feed_service.url")
+	if strings.HasPrefix(path, "/") {
+		path = path[1:]
+	}
+
+	// NOTICE: it's not supported on golang 1.17
+	//return url.JoinPath(baseUrl, path)
+	return baseUrl + path, nil
 }
 
 func LatestLessonHandler(c *gin.Context) {
@@ -2447,7 +2899,7 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 	return items, cuTotal + lTotal + cTotal, nil
 }
 
-//need increase argument counter for single query
+// need increase argument counter for single query
 func startQueryArgCountFrom(q string, from int) string {
 	re := regexp.MustCompile(`\$\d+`)
 	return re.ReplaceAllStringFunc(q, func(s string) string {
@@ -3837,7 +4289,7 @@ func appendCUNameFilterMods(mods *[]qm.QueryMod, f CuNameFilter) {
 	return
 }
 
-//append Labels filters
+// append Labels filters
 func appendContentTypesLabelsFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) error {
 	if utils.IsEmpty(f.ContentTypes) {
 		return nil

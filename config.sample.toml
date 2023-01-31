@@ -46,5 +46,11 @@ url1="http://files.kabbalahmedia.info/api/v1/get"
 [assets_service]
 url="https://kabbalahmedia.info/assets/api/"
 
+[feed_service]
+url="https://kabbalahmedia.info/feed_api/"
+
+[content_unit_images]
+url_template="https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2Fnginx%%2Fassets%%2Fapi%%2Fthumbnail%%2F%s&width=140&stripmeta=true"
+
 [cache]
 refresh-search-stats="5m"

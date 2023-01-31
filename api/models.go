@@ -149,6 +149,57 @@ type CollectionsResponse struct {
 	Collections []*Collection `json:"collections" binding:"omitempty,dive,len=2"`
 }
 
+type MobileContentUnitResponseItem struct {
+	ContentUnitUid string     `json:"contentUnitId"`
+	CollectionId   *string    `json:"collectionId"`
+	Image          string     `json:"image"`
+	Title          string     `json:"title"`
+	Description    string     `json:"description"`
+	ContentType    string     `json:"contentType"`
+	Views          *int32     `json:"views,omitempty"`
+	Date           *time.Time `json:"date,omitempty"`
+	StartDate      *time.Time `json:"startDate"`
+	EndDate        *time.Time `json:"endDate"`
+	Duration       *int64     `json:"duration"`
+	Number         int        `json:"number,omitempty"`
+
+	internalUnitId       int64   `json:"-"`
+	internalCollectionId *int64  `json:"-"`
+	tag                  *string `json:"-"`
+}
+
+type LessonOverviewRequest struct {
+	ListRequest
+	ContentTypesFilter
+	IDsFilter
+	DateRangeFilter
+	SourcesFilter
+	TagsFilter
+	MediaLanguageFilter
+	DerivedTypesFilter
+	CollectionsFilter
+	PersonsFilter
+	MediaTypeFilter
+	OriginalLanguageFilter
+}
+
+type MobileContentUnitResponse struct {
+	ListResponse
+	Items []*MobileContentUnitResponseItem `json:"items"`
+}
+
+type MobileProgramsPageRequest struct {
+	ListRequest
+	ContentTypesFilter
+}
+
+func NewEmptyLessonOverviewResponse() *MobileContentUnitResponse {
+	return &MobileContentUnitResponse{
+		ListResponse: ListResponse{Total: 0},
+		Items:        make([]*MobileContentUnitResponseItem, 0),
+	}
+}
+
 type ContentUnitsRequest struct {
 	ListRequest
 	IDsFilter
