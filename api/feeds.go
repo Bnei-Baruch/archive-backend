@@ -272,20 +272,23 @@ func FeedWSXML(c *gin.Context) {
 			},
 		}
 		for j, f := range files {
-			language := consts.LANG2CODE[f.Language]
-			original := 1
-			if f.Language != cu.OriginalLanguage {
-				original = 0
-			}
-			size := fmt.Sprintf("%.2f MB", convertSizeToMb(int64(f.Size)))
-			lessons.Lesson[idx].Files.Files[j] = fileT{
-				Type:     f.Type,
-				Language: language,
-				Original: original,
-				Path:     fmt.Sprintf("%s%s", consts.CDN, f.ID),
-				Size:     size,
-				Length:   convertDuration(cu.Duration),
-				Title:    language + " " + size,
+			for i, l := range f.Languages {
+				language := consts.LANG2CODE[l]
+				original := 1
+				if l != cu.OriginalLanguage {
+					original = 0
+				}
+				//size := fmt.Sprintf("%.2f MB", convertSizeToMb(int64(f.Size)))
+
+				lessons.Lesson[idx].Files.Files[j+i] = fileT{
+					Type:     f.Type,
+					Language: language,
+					Original: original,
+					Path:     pathByFileAndLang(f, language),
+					//	Size:     size,
+					Length: convertDuration(cu.Duration),
+					Title:  language,
+				}
 			}
 		}
 	}
@@ -365,20 +368,22 @@ func FeedMorningLesson(c *gin.Context) {
 		}
 		var files []FileFeed
 		for _, file := range cu.Files {
-			if file.Language != config.Lang {
-				continue
+			for _, l := range file.Languages {
+				if l != config.Lang {
+					continue
+				}
+				files = append(files,
+					FileFeed{
+						Name:      file.Name,
+						Url:       fmt.Sprintf("%s%s", consts.CDN, file.ID),
+						Size:      file.Size,
+						VideoSize: file.VideoSize,
+						Created:   file.CreatedAt,
+					})
 			}
-			files = append(files,
-				FileFeed{
-					Name:      file.Name,
-					Url:       fmt.Sprintf("%s%s", consts.CDN, file.ID),
-					Size:      file.Size,
-					VideoSize: file.VideoSize,
-					Created:   file.CreatedAt,
-				})
+			item.Files = files
+			items = append(items, item)
 		}
-		item.Files = files
-		items = append(items, item)
 	}
 	c.JSON(http.StatusOK, items)
 }
@@ -529,8 +534,10 @@ func FeedRssVideo(c *gin.Context) {
 func showAsset(language string, mimeTypes []string, files []*File, duration float64, name string, ext string) string {
 	var bestFiles []*File = nil
 	for _, file := range files {
-		if file.Language == language && inArray(file.MimeType, mimeTypes) {
-			bestFiles = append(bestFiles, file)
+		for _, l := range file.Languages {
+			if l == language && inArray(file.MimeType, mimeTypes) {
+				bestFiles = append(bestFiles, file)
+			}
 		}
 	}
 	if len(bestFiles) == 0 {
@@ -567,17 +574,21 @@ func inArray(val string, array []string) (ok bool) {
 
 func buildHtmlFromFile(language string, mimeType string, files []*File, duration float64) string {
 	for _, file := range files {
-		if file.MimeType == mimeType && file.Language == language {
-			size := convertSizeToMb(file.Size)
-			var title string
-			if duration == 0 {
-				title = fmt.Sprintf("mp4&nbsp;|&nbsp;%.2fMb", size)
-			} else {
-				title = fmt.Sprintf("mp4&nbsp;|&nbsp;%.2fMb&nbsp;|&nbsp;%s", size, convertDuration(duration))
+		if file.MimeType == mimeType {
+			for _, l := range file.Languages {
+				if l != language {
+					continue
+				}
+				var title string
+				if duration == 0 {
+					title = "mp4&nbsp;"
+				} else {
+					title = fmt.Sprintf("mp4&nbsp;|&nbsp;%s", convertDuration(duration))
+				}
+				return fmt.Sprintf(
+					`<a href="%[1]s%[2]s" title="%[3]s">Открыть</a> | <a href="%[1]s%[2]s" title="%[3]s">Скачать</a>`,
+					consts.CDN, file.ID, title)
 			}
-			return fmt.Sprintf(
-				`<a href="%s%s" title="%s">Открыть</a> | <a href="%s%s" title="%s">Скачать</a>`,
-				consts.CDN, file.ID, title, consts.CDN, file.ID, title)
 		}
 	}
 
@@ -595,11 +606,12 @@ func buildRssVideoHtmlFromFiles(files []*File) (items string) {
 	for key, f := range h {
 		items += key
 		for _, file := range f {
-			fileSize := convertSizeToMb(file.Size)
-			name := fmt.Sprintf("%s_%.2fMB", consts.LANG2CODE[file.Language], fileSize)
-			href := fmt.Sprintf("%s%s", consts.CDN, file.ID)
+			for _, l := range file.Languages {
+				name := consts.LANG2CODE[l]
+				href := pathByFileAndLang(file, l)
 
-			items += "<div><a href='" + href + "'>" + name + "</a></div>"
+				items += "<div><a href='" + href + "'>" + name + "</a></div>"
+			}
 		}
 	}
 	return
@@ -617,6 +629,12 @@ func getHref(href string, c *gin.Context) string {
 	return utils.ResolveScheme(c) + "://" + utils.ResolveHost(c) + href
 }
 
+func pathByFileAndLang(file *File, language string) string {
+	if file.IsHLS {
+		return fmt.Sprintf("%s%s%s?language=%s?quality=HD", consts.CDN_HLS, file.ID, ".m3u8", language)
+	}
+	return fmt.Sprintf("%s%s", consts.CDN, file.ID)
+}
 func (config *feedConfig) getConfig(c *gin.Context) {
 	if c.Bind(config) != nil {
 		return

@@ -27,11 +27,13 @@ type ContentUnitProperties struct {
 }
 
 type FileProperties struct {
-	Secure     int     `json:"secure"`
-	URL        string  `json:"url"`
-	Duration   float64 `json:"duration"`
-	VideoSize  string  `json:"video_size"`
-	InsertType string  `json:"insert_type"`
+	Secure     int      `json:"secure"`
+	URL        string   `json:"url"`
+	Duration   float64  `json:"duration"`
+	VideoSize  string   `json:"video_size"`
+	InsertType string   `json:"insert_type"`
+	Languages  []string `json:"languages"`
+	Qualities  []string `json:"video_qualities"`
 }
 
 // A time.Time like structure with support for date part only JSON marshalling
