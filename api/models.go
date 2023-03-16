@@ -505,7 +505,8 @@ type File struct {
 	Name           string    `json:"name"`
 	Size           int64     `json:"size"`
 	Duration       float64   `json:"duration,omitempty"`
-	Languages      []string  `json:"languages,omitempty"`
+	Language       string    `json:"language,omitempty"`
+	HlsLanguages   []string  `json:"hls_languages,omitempty"`
 	MimeType       string    `json:"mimetype,omitempty"`
 	Type           string    `json:"type,omitempty"`
 	SubType        string    `json:"subtype,omitempty"`
