@@ -2395,6 +2395,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 
 func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsResponse, *HttpError) {
 	mods := []qm.QueryMod{
+		qm.Load("Tags"),
 		qm.Where("approve_state != ?", consts.APR_DECLINED),
 		qm.Where("\"content_units\".secure = 0 AND \"content_units\".published IS TRUE"),
 		qm.InnerJoin("content_units ON content_unit_id = \"content_units\".id"),
