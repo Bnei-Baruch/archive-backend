@@ -347,20 +347,6 @@ WHERE f.secure = 0 AND f.published IS TRUE AND f.language IS NOT NULL
 GROUP BY f.language
 `,
 		)
-		/*
-		   		qs = append(qs, `
-		   SELECT
-		     0,
-		     NULL,
-		     concat('lg', f.properties->'languages'::jsonb),
-		     NULL,
-		     count(distinct f.content_unit_id)
-		   FROM fcu
-		   INNER JOIN files f ON f.content_unit_id = fcu.id
-		   WHERE f.secure = 0 AND f.published IS TRUE AND f.properties->>'video_size' = 'HLS'
-		   GROUP BY f.properties->'languages'::jsonb
-		   `,
-		   		)*/
 	}
 
 	if fs.FetchOptions.WithMediaType {

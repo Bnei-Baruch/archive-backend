@@ -509,7 +509,6 @@ const (
 )
 
 const CDN = "https://cdn.kabbalahmedia.info/"
-const CDN_HLS = "https://cdn.kab.info/"
 
 // TokensCache LRU cache size
 const TOKEN_CACHE_SIZE = 10000

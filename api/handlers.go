@@ -3942,23 +3942,6 @@ EXISTS (
 	LIMIT 1
 )
 `, args)
-	/*
-		q := fmt.Sprintf(`
-		EXISTS (
-			SELECT ccu.collection_id FROM collections_content_units ccu
-			INNER JOIN content_units cu ON cu.id = ccu.content_unit_id
-			INNER JOIN files f ON f.content_unit_id = cu.id
-			WHERE ccu.collection_id = "collections".id
-			AND (cu.secure=0 AND cu.published IS TRUE)
-			AND (
-				(f.properties->>'video_size' != 'HLS' AND f.language IN (%[1]s))
-				OR (f.properties->>'video_size' = 'HLS' AND f.properties->>'languages' IN (%[1]s) )
-			)
-			AND (f.secure=0 AND f.published IS TRUE)
-			LIMIT 1
-		)
-		`, args)
-	*/
 
 	*mods = append(*mods, qm.Where(q))
 	return nil
@@ -4239,19 +4222,10 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 	}
 	//TODO: this query should be optimized ASAP and before we do that clients should use it as little as possible
 	*mods = append(*mods,
-		qm.WhereIn(`(
-			content_units.id in ( 
-				SELECT DISTINCT cu.id FROM content_units cu 
-				INNER JOIN files f 
-				ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
-				AND f.secure = 0 AND f.published IS TRUE 
-				AND f.language IN ?
-				AND (
-					(f.properties->>'video_size' != 'HLS' AND f.language IN ?) 
-					OR (f.properties->>'video_size' = 'HLS' AND f.properties->>'languages' IN ? )
-				)
-			)
-		)`, utils.ConvertArgsString(f.MediaLanguage)...),
+		qm.WhereIn(`(content_units.id in ( SELECT DISTINCT cu.id FROM content_units cu 
+			INNER JOIN files f 
+			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
+			AND f.secure = 0 AND f.published IS TRUE AND f.language IN ?))`, utils.ConvertArgsString(f.MediaLanguage)...),
 	)
 	return nil
 }
@@ -4269,16 +4243,6 @@ func appendMediaLanguageNoInnerSelectFilterMods(mods *[]qm.QueryMod, f MediaLang
 	*mods = append(*mods,
 		qm.WhereIn("f.language IN ?", utils.ConvertArgsString(f.MediaLanguage)...),
 	)
-
-	/*
-
-		*mods = append(*mods,
-			qm.WhereIn(`
-				(f.properties->>'video_size' != 'HLS' AND f.language IN ?)
-				OR (f.properties->>'video_size' = 'HLS' AND f.properties->>'languages' IN ? )
-			`, utils.ConvertArgsString(f.MediaLanguage)...),
-		)
-	*/
 	return nil
 }
 
@@ -4571,7 +4535,6 @@ func loadCUFiles(db *sql.DB, ids []int64, mediaTypes []string, languages []strin
 	}
 	if len(languages) != 0 {
 		mods = append(mods, qm.WhereIn("language in ?", utils.ConvertArgsString(languages)...))
-		//mods = append(mods, qm.WhereIn("language in ? OR properties->languages IN ?", utils.ConvertArgsString(languages)...))
 	}
 	if len(mediaTypes) != 0 {
 		mods = append(mods, qm.WhereIn("mime_type in ?", utils.ConvertArgsString(mediaTypes)...))
