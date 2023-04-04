@@ -4426,17 +4426,22 @@ func mdbToFile(file *mdbmodels.File) (*File, error) {
 	}
 
 	f := &File{
-		ID:         file.UID,
-		Name:       file.Name,
-		Size:       file.Size,
-		Type:       file.Type,
-		SubType:    file.SubType,
-		CreatedAt:  file.CreatedAt,
-		Duration:   props.Duration,
-		VideoSize:  props.VideoSize,
-		InsertType: props.InsertType,
+		ID:             file.UID,
+		Name:           file.Name,
+		Size:           file.Size,
+		Type:           file.Type,
+		SubType:        file.SubType,
+		CreatedAt:      file.CreatedAt,
+		Duration:       props.Duration,
+		VideoSize:      props.VideoSize,
+		InsertType:     props.InsertType,
+		IsHLS:          props.VideoSize == "HLS",
+		VideoQualities: props.Qualities,
 	}
 
+	if props.Languages != nil {
+		f.HlsLanguages = props.Languages
+	}
 	if file.Language.Valid {
 		f.Language = file.Language.String
 	}
