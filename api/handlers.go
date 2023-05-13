@@ -6,8 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/volatiletech/null/v8"
-	"golang.org/x/sync/errgroup"
 	"io"
 	"net/http"
 	"regexp"
@@ -15,6 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/volatiletech/null/v8"
+	"golang.org/x/sync/errgroup"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/lib/pq"
@@ -267,8 +268,8 @@ SELECT cc.count + cu.count FROM cCount cc, cuCount cu`
 	}
 
 	cMods = append(cMods, qm.Select(`
-			DISTINCT ON (id) 
-			coalesce((properties->>'start_date')::date, (properties->>'end_date')::date, (properties->>'film_date')::date, created_at) as date, 
+			DISTINCT ON (id)
+			coalesce((properties->>'start_date')::date, (properties->>'end_date')::date, (properties->>'film_date')::date, created_at) as date,
 			id,
 			uid,
             type_id,
@@ -284,7 +285,7 @@ SELECT cc.count + cu.count FROM cCount cc, cuCount cu`
 	cuq = startQueryArgCountFrom(cuq, len(args))
 
 	cuqJoint := fmt.Sprintf(`
-SELECT 
+SELECT
 	   cu.id,
 	   cu.uid,
 	   cu.type_id,
@@ -845,8 +846,8 @@ func LessonsHandler(c *gin.Context) {
 		return
 	}
 	cMods = append(cMods, qm.Select(`
-			DISTINCT ON (id) 
-			coalesce((properties->>'start_date')::date, (properties->>'end_date')::date, (properties->>'film_date')::date, created_at) as date, 
+			DISTINCT ON (id)
+			coalesce((properties->>'start_date')::date, (properties->>'end_date')::date, (properties->>'film_date')::date, created_at) as date,
 			uid as uid,
 			type_id as type_id
 		`),
@@ -862,7 +863,7 @@ func LessonsHandler(c *gin.Context) {
 	}
 
 	cuMods = append(cuMods, qm.Select(`
-			DISTINCT ON (content_units.id) 
+			DISTINCT ON (content_units.id)
 			coalesce((content_units.properties->>'film_date')::date, content_units.created_at) as date,
 			content_units.uid as uid,
 			content_units.type_id as type_id
@@ -875,11 +876,11 @@ func LessonsHandler(c *gin.Context) {
 
 	q := fmt.Sprintf(`
 			WITH items AS (
-				(%s) 
-				UNION 
+				(%s)
+				UNION
 				(%s)
 			)(
-				SELECT item.uid, item.type_id 
+				SELECT item.uid, item.type_id
 				FROM items item ORDER BY date DESC LIMIT %d OFFSET %d
 			)
 		`, qc[:len(qc)-1], qcu[:len(qcu)-1], r.PageSize, (r.PageNumber-1)*r.PageSize)
@@ -1008,7 +1009,7 @@ func EventsHandler(c *gin.Context) {
 		return
 	}
 	cMods = append(cMods, qm.Select(`
-			DISTINCT ON (id) 
+			DISTINCT ON (id)
 			coalesce((properties->>'start_date')::date, (properties->>'end_date')::date, (properties->>'film_date')::date, created_at) as date,
 			uid as uid,
 			type_id as type_id
@@ -1025,7 +1026,7 @@ func EventsHandler(c *gin.Context) {
 	}
 
 	cuMods = append(cuMods, qm.Select(`
-			DISTINCT ON (content_units.id) 
+			DISTINCT ON (content_units.id)
 			coalesce((content_units.properties->>'film_date')::date, content_units.created_at) as date,
 			content_units.uid as uid,
 			content_units.type_id as type_id
@@ -1038,11 +1039,11 @@ func EventsHandler(c *gin.Context) {
 
 	q := fmt.Sprintf(`
 			WITH items AS (
-				(%s) 
-				UNION 
+				(%s)
+				UNION
 				(%s)
 			)(
-				SELECT item.uid, item.type_id 
+				SELECT item.uid, item.type_id
 				FROM items item ORDER BY date DESC LIMIT %d OFFSET %d
 			)
 		`, qc[:len(qc)-1], qcu[:len(qcu)-1], r.PageSize, (r.PageNumber-1)*r.PageSize)
@@ -1187,12 +1188,12 @@ func SearchHandler(c *gin.Context) {
 	if _, ok := consts.SORT_BY_VALUES[sortBy]; ok {
 		sortByVal = sortBy
 	}
+
 	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
 		sortByVal = consts.SORT_BY_SOURCE_FIRST
 	}
 
 	searchId := c.Query("search_id")
-
 	suggestion := c.Query("suggest")
 
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
@@ -1266,6 +1267,7 @@ func SearchHandler(c *gin.Context) {
 		checkTypo,
 		timeoutForHighlight,
 	)
+
 	if err == nil {
 		// TODO: How does this slows the search query? Consider logging in parallel.
 		if !query.Deb {
@@ -1287,14 +1289,16 @@ func SearchHandler(c *gin.Context) {
 				hit.Highlight = elastic.SearchHitHighlight{}
 			}
 		}
+
 		c.JSON(http.StatusOK, res)
 	} else {
 		// TODO: Remove following line, we should not log this.
 		log.Infof("Error on search: %+v", err)
 		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, suggestion, err, se.ExecutionTimeLog)
 		if logErr != nil {
-			log.Warnf("Erro logging search error: %+v %+v", logErr, err)
+			log.Warnf("Error logging search error: %+v %+v", logErr, err)
 		}
+
 		NewInternalError(err).Abort(c)
 	}
 }
@@ -1801,7 +1805,7 @@ WITH CUs AS (
 		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
 		FROM content_units cu
 		WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
-		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC 
+		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
 		FETCH FIRST 20 ROWS ONLY
 	) t ON true
 ), LESSON_COLLs AS (
@@ -2798,9 +2802,9 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 		return nil, 0, err
 	}
 	cumods = append(cumods, qm.Select(`
-			DISTINCT ON ("content_units".id) 
+			DISTINCT ON ("content_units".id)
 			coalesce(("content_units".properties->>'film_date')::date, "content_units".created_at) as date,
-			NULL as l_uid, 
+			NULL as l_uid,
 			"content_units".uid as cu_uid,
 			NULL as c_uid
 		`),
@@ -2820,9 +2824,9 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 		return nil, 0, err
 	}
 
-	lmods = append(lmods, qm.Select(`DISTINCT ON ("labels".id) 
-			coalesce((cu.properties->>'film_date')::date, "labels".created_at) as date, 
-			"labels".uid as l_uid, 
+	lmods = append(lmods, qm.Select(`DISTINCT ON ("labels".id)
+			coalesce((cu.properties->>'film_date')::date, "labels".created_at) as date,
+			"labels".uid as l_uid,
 			cu.uid as cu_uid,
 			NULL as c_uid
 		`),
@@ -2840,8 +2844,8 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 		return nil, 0, err
 	}
 	cmods = append(cmods, qm.Select(`
-			coalesce((properties->>'film_date')::date, created_at) as date, 
-			NULL as l_uid, 
+			coalesce((properties->>'film_date')::date, created_at) as date,
+			NULL as l_uid,
 			NULL as cu_uid,
 			uid as c_uid
 		`),
@@ -2852,13 +2856,13 @@ func fetchItemsTagDashboard(db *sql.DB, cumods []qm.QueryMod, lmods []qm.QueryMo
 
 	q := fmt.Sprintf(`
 		WITH items AS (
-			(%s) 
-			UNION 
 			(%s)
-			UNION 
+			UNION
+			(%s)
+			UNION
 			(%s)
 		)(
-			SELECT item.cu_uid, item.l_uid, item.c_uid 
+			SELECT item.cu_uid, item.l_uid, item.c_uid
 			FROM items item ORDER BY date DESC LIMIT %d OFFSET %d
 		)
 	`, qcu[:len(qcu)-1], ql[:len(ql)-1], qc[:len(qc)-1], f.PageSize, (f.PageNumber-1)*f.PageSize)
@@ -3686,7 +3690,7 @@ func appendListMods(mods *[]qm.QueryMod, r ListRequest, alias string) (int, int,
 	if r.OrderBy == "" {
 		*mods = append(*mods,
 			qm.OrderBy(fmt.Sprintf(`
-(coalesce(%[1]sproperties->>'film_date', %[1]sproperties->>'start_date', %[1]screated_at::text))::date desc, 
+(coalesce(%[1]sproperties->>'film_date', %[1]sproperties->>'start_date', %[1]screated_at::text))::date desc,
 %[1]screated_at desc
 `, alias),
 			),
@@ -3832,8 +3836,8 @@ func appendDerivedTypesFilterMods(mods *[]qm.QueryMod, f DerivedTypesFilter) err
 		a[i] = ct.ID
 	}
 	q := `id IN (
-		SELECT cud.source_id FROM content_units cu 
-		INNER JOIN content_unit_derivations cud ON cu.id = cud.derived_id 
+		SELECT cud.source_id FROM content_units cu
+		INNER JOIN content_unit_derivations cud ON cu.id = cud.derived_id
 		WHERE cu.type_id = ?
 	)`
 	*mods = append(*mods, qm.WhereIn(q, a...))
@@ -3932,10 +3936,10 @@ func appendCollectionMediaLanguageFilterMods(mods *[]qm.QueryMod, f MediaLanguag
 	args := fmt.Sprintf("'%s'", strings.Join(f.MediaLanguage, "','"))
 	q := fmt.Sprintf(`
 EXISTS (
-	SELECT ccu.collection_id FROM collections_content_units ccu 
+	SELECT ccu.collection_id FROM collections_content_units ccu
 	INNER JOIN content_units cu ON cu.id = ccu.content_unit_id
 	INNER JOIN files f ON f.content_unit_id = cu.id
-	WHERE ccu.collection_id = "collections".id 
+	WHERE ccu.collection_id = "collections".id
 	AND (cu.secure=0 AND cu.published IS TRUE)
 	AND f.language IN (%[1]s)
 	AND (f.secure=0 AND f.published IS TRUE)
@@ -4222,8 +4226,8 @@ func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f Me
 	}
 	//TODO: this query should be optimized ASAP and before we do that clients should use it as little as possible
 	*mods = append(*mods,
-		qm.WhereIn(`(content_units.id in ( SELECT DISTINCT cu.id FROM content_units cu 
-			INNER JOIN files f 
+		qm.WhereIn(`(content_units.id in ( SELECT DISTINCT cu.id FROM content_units cu
+			INNER JOIN files f
 			ON f.content_unit_id = cu.id AND cu.secure = 0 AND cu.published IS TRUE
 			AND f.secure = 0 AND f.published IS TRUE AND f.language IN ?))`, utils.ConvertArgsString(f.MediaLanguage)...),
 	)
