@@ -2460,7 +2460,7 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 	}
 
 	// load i18ns
-	labelI18nsMap, err := loadLabelsI18ns(db, r.Language, ids)
+	labelI18nsMap, err := loadLabelsI18ns(db, ids)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2469,13 +2469,13 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 	for i, label := range lsmdb {
 		labels[i] = mdbToLabel(label)
 
-		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
+		for _, l := range append(consts.I18N_LANG_ORDER[r.Language], consts.ALL_KNOWN_LANGS[:]...) {
 			li18n, ok := labelI18nsMap[label.ID]
 			if !ok {
 				continue
 			}
 			i18n, ok := li18n[l]
-			if ok && labels[i].Name == "" && i18n.Name.Valid {
+			if ok && labels[i].Name == "" && i18n.Name.Valid && l == r.Language {
 				labels[i].Name = i18n.Name.String
 			}
 			if ok && i18n.R.User != nil && i18n.R.User.Name.Valid {
@@ -4634,7 +4634,7 @@ func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error)
 	return
 }
 
-func loadLabelsI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.LabelI18n, error) {
+func loadLabelsI18ns(db *sql.DB, ids []int64) (map[int64]map[string]*mdbmodels.LabelI18n, error) {
 	i18nsMap := make(map[int64]map[string]*mdbmodels.LabelI18n, len(ids))
 	if len(ids) == 0 {
 		return i18nsMap, nil
@@ -4643,7 +4643,6 @@ func loadLabelsI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[st
 	// Load from DB
 	i18ns, err := mdbmodels.LabelI18ns(
 		qm.WhereIn("label_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...),
 		qm.Load("User"),
 	).All(db)
 	if err != nil {
