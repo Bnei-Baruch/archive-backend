@@ -188,6 +188,13 @@ type MobileContentUnitResponse struct {
 	Items []*MobileContentUnitResponseItem `json:"items"`
 }
 
+type MobileSearchResponse struct {
+	Uid   string `json:"_uid"`
+	Title string `json:"title"`
+	Image string `json:"image"`
+	Views *int32 `json:"views,omitempty"`
+}
+
 type MobileProgramsPageRequest struct {
 	ListRequest
 	ContentTypesFilter
