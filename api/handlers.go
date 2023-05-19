@@ -1144,6 +1144,218 @@ func SearchStatsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
+func MobileSearchHandler(c *gin.Context) {
+// 	אפליקציה צריכה לקבל חוץ מ uid:
+// 1. תמונה
+// 2. שם מלא של התוכן לפי השפה שנבחרה
+// 3. כמות צפיות (אם זה וידאו)
+
+// תעשה את זה רק לתוצאות רגילות, בינתיים תדלג על תוצאות גראמר
+
+	//SearchHandler
+
+	log.Debugf("Mobile Language: %s", c.Query("language"))
+	log.Infof("Mobile Query: [%s]", c.Query("q"))
+	query := search.ParseQuery(c.Query("q"))
+	query.Deb = false
+	if c.Query("deb") == "true" {
+		query.Deb = true
+	}
+	log.Infof("Parsed Query: %#v", query)
+	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
+		NewBadRequestError(errors.New("Can't search with no terms.")).Abort(c)
+		return
+	}
+
+	var err error
+
+	pageNoVal := 1
+	pageNo := c.Query("page_no")
+	if pageNo != "" {
+		pageNoVal, err = strconv.Atoi(pageNo)
+		if err != nil {
+			NewBadRequestError(errors.New("page_no expects a positive number")).Abort(c)
+			return
+		}
+	}
+
+	size := consts.API_DEFAULT_PAGE_SIZE
+	pageSize := c.Query("page_size")
+	if pageSize != "" {
+		size, err = strconv.Atoi(pageSize)
+		if err != nil {
+			NewBadRequestError(errors.New("page_size expects a positive number")).Abort(c)
+			return
+		}
+		size = utils.Min(size, consts.API_MAX_PAGE_SIZE)
+	}
+
+	from := (pageNoVal - 1) * size
+
+	sortByVal := consts.SORT_BY_RELEVANCE
+	sortBy := c.Query("sort_by")
+	if _, ok := consts.SORT_BY_VALUES[sortBy]; ok {
+		sortByVal = sortBy
+	}
+
+	if len(query.Term) == 0 && len(query.ExactTerms) == 0 {
+		sortByVal = consts.SORT_BY_SOURCE_FIRST
+	}
+
+	searchId := c.Query("search_id")
+	suggestion := c.Query("suggest")
+
+	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
+	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
+	preference := fmt.Sprintf("%x", md5.Sum([]byte(c.ClientIP())))
+
+	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+
+	logger := c.MustGet("LOGGER").(*search.SearchLogger)
+	cacheM := c.MustGet("CACHE").(cache.CacheManager)
+	//grammars := c.MustGet("GRAMMARS").(search.Grammars)
+	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
+	variables := c.MustGet("VARIABLES").(search.VariablesV2)
+
+	esc, err := esManager.GetClient()
+	if err != nil {
+		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
+		return
+	}
+
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
+
+	// Detect input language
+	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
+	log.Debugf("Detect language input: (%s, %s, %s)", detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"))
+	query.LanguageOrder = utils.DetectLanguage(detectQuery, c.Query("language"), c.Request.Header.Get("Accept-Language"), nil)
+	for k, v := range query.Filters {
+		if k == consts.FILTER_MEDIA_LANGUAGE {
+			addLang := true
+			for _, flang := range v {
+				for _, ilang := range query.LanguageOrder {
+					if flang == ilang {
+						// language already exist
+						addLang = false
+						break
+					}
+				}
+				if addLang {
+					query.LanguageOrder = append(query.LanguageOrder, flang)
+				}
+			}
+			break
+		}
+	}
+
+	//  Quick workround to allow Spanish support when the interface language is Spanish (AS-99).
+	if c.Query("language") == consts.LANG_SPANISH {
+		for i, lang := range query.LanguageOrder {
+			if lang == consts.LANG_SPANISH {
+				query.LanguageOrder = append(query.LanguageOrder[:i], query.LanguageOrder[i+1:]...)
+				break
+			}
+		}
+		query.LanguageOrder = append([]string{consts.LANG_SPANISH}, query.LanguageOrder...)
+	}
+
+	checkTypo := viper.GetBool("elasticsearch.check-typo") &&
+		//  temp. disable typo suggestion for other interface languages than english, russian and hebrew
+		(c.Query("language") == consts.LANG_ENGLISH || c.Query("language") == consts.LANG_RUSSIAN || c.Query("language") == consts.LANG_HEBREW)
+
+	timeoutForHighlight := viper.GetDuration("elasticsearch.timeout-for-highlight")
+
+	res, err := se.DoSearch(
+		context.TODO(),
+		query,
+		sortByVal,
+		from,
+		size,
+		preference,
+		checkTypo,
+		timeoutForHighlight,
+	)
+
+	if err == nil {
+		// TODO: How does this slows the search query? Consider logging in parallel.
+		if !query.Deb {
+			err = logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
+			if err != nil {
+				log.Warnf("Error logging search: %+v %+v", err, res)
+			}
+		}
+
+		var allUids []string
+		// uIdMap := make(map[string][]string);
+		intUidMap := make(map[string][]int64);
+		mobileRespMap := make(map[string]*MobileSearchResponse)
+		imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
+
+		for _, hit := range res.SearchResult.Hits.Hits {
+			// if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
+			// 	// Move Tweets from innerHits to Source, to make client more consistent (work with source only).
+			// 	// Should be done after the logging to avoid errors with source field
+			// 	err = se.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
+			// }
+
+			var intUid, err = strconv.ParseInt(hit.Uid, 10, 0)
+
+			if err != nil {
+				// put in map by hit type
+				intUidMap[hit.Type] = append(intUidMap[hit.Type], intUid);
+				// uIdMap[hit.Type] = append(uIdMap[hit.Type], hit.Uid);
+			}
+
+			mobileResp := &MobileSearchResponse{
+				Uid: 				hit.Uid,
+				Image:      fmt.Sprintf(imagesUrlTemplate, hit.Uid),
+				// Title:
+				// Views:
+			}
+
+			mobileRespMap[hit.Uid] = mobileResp
+			allUids = append(allUids, hit.Uid)
+		}
+
+		// content units
+		cuNames, err := loadCUI18ns(db, c.Query("language"), intUidMap[consts.ES_RESULT_TYPE_UNITS])
+		if err != nil {
+			log.Error(err.Error())
+		}
+
+		for _, mobileResp := range mobileRespMap {
+			var intUid, _ = strconv.ParseInt(mobileResp.Uid, 10, 0)
+			var title, _ = cuNames[intUid]
+			mobileResp.Title = title[mobileResp.Uid].Name.String
+		}
+
+		//mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
+
+		if viewsResp, err := getViewsByCollectionIds(allUids); err != nil {
+			log.Error(err.Error())
+		} else {
+			for ix := range viewsResp.Views {
+				viewsCount := viewsResp.Views[ix]
+				Uid := allUids[ix]
+				mobileRespMap[Uid].Views = &viewsCount
+			}
+		}
+
+		c.JSON(http.StatusOK, mobileRespMap)
+
+	} else {
+		// TODO: Remove following line, we should not log this.
+		log.Infof("Error on search: %+v", err)
+		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, suggestion, err, se.ExecutionTimeLog)
+		if logErr != nil {
+			log.Warnf("Error logging search error: %+v %+v", logErr, err)
+		}
+
+		NewInternalError(err).Abort(c)
+	}
+}
+
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
