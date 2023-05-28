@@ -1289,8 +1289,10 @@ func MobileSearchHandler(c *gin.Context) {
 		var allUids []string
 		// uIdMap := make(map[string][]string);
 		intUidMap := make(map[string][]int64);
-		mobileRespMap := make(map[string]*MobileSearchResponse)
+		mobileRespMap := make(map[string]MobileSearchResponse)
 		imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
+
+		fmt.Println("Hits:", res.SearchResult.Hits);
 
 		for _, hit := range res.SearchResult.Hits.Hits {
 			// if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
@@ -1303,8 +1305,11 @@ func MobileSearchHandler(c *gin.Context) {
 
 			if err != nil {
 				// put in map by hit type
+				if intUidMap[hit.Type] == nil {
+					intUidMap[hit.Type] = []int64{}
+				}
+
 				intUidMap[hit.Type] = append(intUidMap[hit.Type], intUid);
-				// uIdMap[hit.Type] = append(uIdMap[hit.Type], hit.Uid);
 			}
 
 			mobileResp := &MobileSearchResponse{
@@ -1314,9 +1319,13 @@ func MobileSearchHandler(c *gin.Context) {
 				// Views:
 			}
 
-			mobileRespMap[hit.Uid] = mobileResp
+			mobileRespMap[hit.Uid] = *mobileResp
 			allUids = append(allUids, hit.Uid)
 		}
+
+		fmt.Println("mobileRespMap:", mobileRespMap)
+		fmt.Println("allUids:", allUids)
+		fmt.Println("intUidMap:", intUidMap)
 
 		// content units
 		cuNames, err := loadCUI18ns(db, c.Query("language"), intUidMap[consts.ES_RESULT_TYPE_UNITS])
@@ -1338,7 +1347,7 @@ func MobileSearchHandler(c *gin.Context) {
 			for ix := range viewsResp.Views {
 				viewsCount := viewsResp.Views[ix]
 				Uid := allUids[ix]
-				mobileRespMap[Uid].Views = &viewsCount
+				*mobileRespMap[Uid].Views = viewsCount
 			}
 		}
 
