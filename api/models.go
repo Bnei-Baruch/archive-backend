@@ -189,10 +189,19 @@ type MobileContentUnitResponse struct {
 }
 
 type MobileSearchResponse struct {
-	Uid   string `json:"_uid"`
-	Title string `json:"title"`
-	Image string `json:"image"`
-	Views *int32 `json:"views,omitempty"`
+	total int
+	items []*MobileSearchResponseItem	`json:"items"`
+}
+
+type MobileSearchResponseItem struct {
+	ContentUnitUid string   	`json:"contentUnitId"`
+	CollectionId   string  		`json:"collectionId"`
+	SourceId			 string			`json:"source_id,omitempty"`
+	Title 				 string   	`json:"title"`
+	Image 				 string   	`json:"image"`
+	Views 				 *int32   	`json:"views,omitempty"`
+	Type  				 string			`json:"contentType"`
+	Date  				 *time.Time `json:"date,omitempty"`
 }
 
 type MobileProgramsPageRequest struct {
