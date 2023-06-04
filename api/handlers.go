@@ -1289,8 +1289,8 @@ func MobileSearchHandler(c *gin.Context) {
 
 		var allUids []string
 		mapIdsByType := make(map[string][]string);
-		mobileRespItemMap := make(map[string]MobileSearchResponseItem)
-		allItems := make([]*MobileSearchResponseItem, 1);
+		mobileRespItemMap := make(map[string]*MobileSearchResponseItem)
+		allItems := make([]MobileSearchResponseItem, 1);
 
 		imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
 
@@ -1353,8 +1353,8 @@ func MobileSearchHandler(c *gin.Context) {
 					}
 
 					allUids = append(allUids, hit.Uid)
-					allItems = append(allItems, mobileResp);
-					mobileRespItemMap[result.MDB_UID] = *mobileResp;
+					allItems = append(allItems, *mobileResp);
+					mobileRespItemMap[result.MDB_UID] = mobileResp;
 					mapIdsByType[result.ResultType] = append(mapIdsByType[result.ResultType], result.MDB_UID)
 				}
 			}
@@ -1370,7 +1370,7 @@ func MobileSearchHandler(c *gin.Context) {
 		}
 
 		for _, mobileResp := range mobileRespItemMap {
-			var intUid, _ = strconv.ParseInt(mobileResp.ContentUnitUid, 10, 0)
+			var intUid, _ = strconv.ParseInt((*mobileResp).ContentUnitUid, 10, 0)
 			var cu, _ = contentUnits[intUid]
 			mobileResp.Title = cu[mobileResp.ContentUnitUid].Name.String
 		}
