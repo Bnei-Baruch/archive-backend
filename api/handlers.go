@@ -1146,12 +1146,12 @@ func SearchStatsHandler(c *gin.Context) {
 }
 
 func MobileSearchHandler(c *gin.Context) {
-// 	אפליקציה צריכה לקבל חוץ מ uid:
-// 1. תמונה
-// 2. שם מלא של התוכן לפי השפה שנבחרה
-// 3. כמות צפיות (אם זה וידאו)
+	// 	אפליקציה צריכה לקבל חוץ מ uid:
+	// 1. תמונה
+	// 2. שם מלא של התוכן לפי השפה שנבחרה
+	// 3. כמות צפיות (אם זה וידאו)
 
-// תעשה את זה רק לתוצאות רגילות, בינתיים תדלג על תוצאות גראמר
+	// תעשה את זה רק לתוצאות רגילות, בינתיים תדלג על תוצאות גראמר
 
 	//SearchHandler
 
@@ -1288,13 +1288,13 @@ func MobileSearchHandler(c *gin.Context) {
 		}
 
 		var allUids []string
-		mapIdsByType := make(map[string][]string);
+		mapIdsByType := make(map[string][]string)
 		mobileRespItemMap := make(map[string]*MobileSearchResponseItem)
-		allItems := make([]MobileSearchResponseItem, 1);
+		allItems := make([]MobileSearchResponseItem, 1)
 
 		imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
 
-		fmt.Println("Hits:", res.SearchResult.Hits.Hits);
+		fmt.Println("Hits:", res.SearchResult.Hits.Hits)
 
 		resultTypes := []string{consts.ES_RESULT_TYPE_UNITS, consts.ES_RESULT_TYPE_COLLECTIONS, consts.ES_RESULT_TYPE_SOURCES}
 
@@ -1305,56 +1305,61 @@ func MobileSearchHandler(c *gin.Context) {
 			// 	err = se.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
 			// }
 
-			if hit.Type == consts.ES_RESULTS_INDEX && hit.Source != nil {
-				var result es.Result;
-        json.Unmarshal(*hit.Source, &result)
+			if hit.Type == consts.SEARCH_RESULT && hit.Source != nil {
+				var result es.Result
+				json.Unmarshal(*hit.Source, &result)
 
 				if result.MDB_UID != "" && utils.Contains(utils.Is(resultTypes), result.ResultType) {
 					var mobileResp *MobileSearchResponseItem
+					var date *time.Time = nil
 
-					switch (result.ResultType){
-						case consts.ES_RESULT_TYPE_UNITS:
-							mobileResp = &MobileSearchResponseItem {
-								ContentUnitUid: 	result.MDB_UID,
-								Image:     		  	fmt.Sprintf(imagesUrlTemplate, result.MDB_UID),
-								Title:						result.Title,
-								Date: 						&result.EffectiveDate.Time,
-								Type: 						result.ResultType,
-								// CollectionId
-								// Views:
-							}
-
-						case consts.ES_RESULT_TYPE_COLLECTIONS:
-							mobileResp = &MobileSearchResponseItem {
-								CollectionId: 		result.MDB_UID,
-								Image:     		  	fmt.Sprintf(imagesUrlTemplate, result.MDB_UID),
-								Title:						result.Title,
-								Date: 						&result.EffectiveDate.Time,
-								Type: 						result.ResultType,
-								// ContentUnitUid
-								// SourceId
-								// Views:
-							}
-
-						case consts.ES_RESULT_TYPE_SOURCES:
-							mobileResp = &MobileSearchResponseItem {
-								SourceId: 				result.MDB_UID,
-								Image:     		  	fmt.Sprintf(imagesUrlTemplate, result.MDB_UID),
-								Title:						result.Title,
-								Date: 						&result.EffectiveDate.Time,
-								Type: 						result.ResultType,
-								// CollectionId
-								// ContentUnitUid
-								// Views:
-							}
-
-						default:
-							continue;
+					if result.EffectiveDate != nil {
+						date = &result.EffectiveDate.Time
 					}
 
-					allUids = append(allUids, hit.Uid)
-					allItems = append(allItems, *mobileResp);
-					mobileRespItemMap[result.MDB_UID] = mobileResp;
+					switch result.ResultType {
+					case consts.ES_RESULT_TYPE_UNITS:
+						mobileResp = &MobileSearchResponseItem{
+							ContentUnitUid: result.MDB_UID,
+							Image:          fmt.Sprintf(imagesUrlTemplate, result.MDB_UID),
+							Title:          result.Title,
+							Date:           date,
+							Type:           result.ResultType,
+							// CollectionId
+							// Views:
+						}
+
+					case consts.ES_RESULT_TYPE_COLLECTIONS:
+						mobileResp = &MobileSearchResponseItem{
+							CollectionId: result.MDB_UID,
+							Image:        fmt.Sprintf(imagesUrlTemplate, result.MDB_UID),
+							Title:        result.Title,
+							Date:         date,
+							Type:         result.ResultType,
+							// ContentUnitUid
+							// SourceId
+							// Views:
+						}
+
+					case consts.ES_RESULT_TYPE_SOURCES:
+						mobileResp = &MobileSearchResponseItem{
+							SourceId: result.MDB_UID,
+							Image:    fmt.Sprintf(imagesUrlTemplate, result.MDB_UID),
+							Title:    result.Title,
+							Date:     date,
+							Type:     result.ResultType,
+							// CollectionId
+							// ContentUnitUid
+							// Views:
+						}
+
+					default:
+						continue
+					}
+
+					allUids = append(allUids, result.MDB_UID)
+					allItems = append(allItems, *mobileResp)
+					mobileRespItemMap[result.MDB_UID] = mobileResp
 					mapIdsByType[result.ResultType] = append(mapIdsByType[result.ResultType], result.MDB_UID)
 				}
 			}
@@ -1367,12 +1372,12 @@ func MobileSearchHandler(c *gin.Context) {
 		contentUnits, err := loadCUI18ni(db, c.Query("language"), utils.ConvertArgsString(mapIdsByType[consts.ES_RESULT_TYPE_UNITS]))
 		if err != nil {
 			log.Error(err.Error())
-		}
-
-		for _, mobileResp := range mobileRespItemMap {
-			var intUid, _ = strconv.ParseInt((*mobileResp).ContentUnitUid, 10, 0)
-			var cu, _ = contentUnits[intUid]
-			mobileResp.Title = cu[mobileResp.ContentUnitUid].Name.String
+		} else {
+			for _, mobileResp := range mobileRespItemMap {
+				var intUid, _ = strconv.ParseInt((*mobileResp).ContentUnitUid, 10, 0)
+				var cu, _ = contentUnits[intUid]
+				mobileResp.Title = cu[mobileResp.ContentUnitUid].Name.String
+			}
 		}
 
 		//mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
@@ -1383,11 +1388,11 @@ func MobileSearchHandler(c *gin.Context) {
 			for ix := range viewsResp.Views {
 				viewsCount := viewsResp.Views[ix]
 				Uid := allUids[ix]
-				*mobileRespItemMap[Uid].Views = viewsCount
+				mobileRespItemMap[Uid].Views = &viewsCount
 			}
 		}
 
-		mobileResponse := MobileSearchResponse { total: len(allItems), items: allItems }
+		mobileResponse := MobileSearchResponse{total: len(allItems), items: allItems}
 
 		c.JSON(http.StatusOK, mobileResponse)
 
@@ -4759,7 +4764,7 @@ func setCI18n(c *Collection, language string, i18ns map[string]*mdbmodels.Collec
 }
 
 func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.ContentUnitI18n, error) {
-	return loadCUI18ni(db, language, utils.ConvertArgsInt64(ids));
+	return loadCUI18ni(db, language, utils.ConvertArgsInt64(ids))
 
 	// Load from DB
 	// i18ns, err := mdbmodels.ContentUnitI18ns(
@@ -4800,17 +4805,17 @@ func loadCUI18ni(db *sql.DB, language string, ids []interface{}) (map[int64]map[
 		return nil, errors.Wrap(err, "Load content units i18ns from DB")
 	}
 
-		// Group by content unit and language
-		for _, x := range i18ns {
-			v, ok := i18nsMap[x.ContentUnitID]
-			if !ok {
-				v = make(map[string]*mdbmodels.ContentUnitI18n, 1)
-				i18nsMap[x.ContentUnitID] = v
-			}
-			v[x.Language] = x
+	// Group by content unit and language
+	for _, x := range i18ns {
+		v, ok := i18nsMap[x.ContentUnitID]
+		if !ok {
+			v = make(map[string]*mdbmodels.ContentUnitI18n, 1)
+			i18nsMap[x.ContentUnitID] = v
 		}
+		v[x.Language] = x
+	}
 
-		return i18nsMap, nil
+	return i18nsMap, nil
 }
 
 func loadCUFiles(db *sql.DB, ids []int64, mediaTypes []string, languages []string) (map[int64][]*mdbmodels.File, error) {
