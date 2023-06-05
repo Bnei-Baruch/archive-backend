@@ -502,7 +502,7 @@ class DemoHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             if m:
                 filename = m.groups(1)[1]
                 dirname = backend_dir(m.groups(1)[0])
-                if filename == 'frontend.log': #or filename == 'ssr_frontend.log':
+                if filename == 'frontend.log' or filename == 'build.log':
                     dirname = frontend_dir(m.groups(1)[0])
                 path = '%s/%s' % (dirname, filename)
                 text = 'Unable to read file'
