@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"regexp"
 	"sort"
@@ -1290,7 +1291,7 @@ func MobileSearchHandler(c *gin.Context) {
 		var allUids []string
 		mapIdsByType := make(map[string][]string)
 		mobileRespItemMap := make(map[string]*MobileSearchResponseItem)
-		allItems := make([]MobileSearchResponseItem, 1)
+		allItems := make([]MobileSearchResponseItem, 0)
 
 		imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
 
@@ -1332,10 +1333,10 @@ func MobileSearchHandler(c *gin.Context) {
 					case consts.ES_RESULT_TYPE_COLLECTIONS:
 						mobileResp = &MobileSearchResponseItem{
 							CollectionId: result.MDB_UID,
-							Image:        fmt.Sprintf(imagesUrlTemplate, result.MDB_UID),
-							Title:        result.Title,
-							Date:         date,
-							Type:         result.ResultType,
+							//Image:        fmt.Sprintf(imagesUrlTemplate, result.MDB_UID), // TBD
+							Title: result.Title,
+							Date:  date,
+							Type:  result.ResultType,
 							// ContentUnitUid
 							// SourceId
 							// Views:
@@ -1344,7 +1345,6 @@ func MobileSearchHandler(c *gin.Context) {
 					case consts.ES_RESULT_TYPE_SOURCES:
 						mobileResp = &MobileSearchResponseItem{
 							SourceId: result.MDB_UID,
-							Image:    fmt.Sprintf(imagesUrlTemplate, result.MDB_UID),
 							Title:    result.Title,
 							Date:     date,
 							Type:     result.ResultType,
@@ -1369,30 +1369,41 @@ func MobileSearchHandler(c *gin.Context) {
 		fmt.Println("mapIdsByType:", mapIdsByType)
 
 		// content units
-		contentUnits, err := loadCUI18ni(db, c.Query("language"), utils.ConvertArgsString(mapIdsByType[consts.ES_RESULT_TYPE_UNITS]))
+		// TBD: Here we should send Id's and not Uid's
+		//contentUnits, err := loadCUI18ni(db, c.Query("language"), utils.ConvertArgsString(mapIdsByType[consts.ES_RESULT_TYPE_UNITS]))
+
 		if err != nil {
 			log.Error(err.Error())
 		} else {
-			for _, mobileResp := range mobileRespItemMap {
+			// TBD
+			/* for _, mobileResp := range mobileRespItemMap {
 				var intUid, _ = strconv.ParseInt((*mobileResp).ContentUnitUid, 10, 0)
 				var cu, _ = contentUnits[intUid]
 				mobileResp.Title = cu[mobileResp.ContentUnitUid].Name.String
-			}
+			}*/
 		}
 
 		//mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
 
-		if viewsResp, err := getViewsByCollectionIds(allUids); err != nil {
-			log.Error(err.Error())
-		} else {
-			for ix := range viewsResp.Views {
-				viewsCount := viewsResp.Views[ix]
-				Uid := allUids[ix]
-				mobileRespItemMap[Uid].Views = &viewsCount
-			}
+		// TBD
+		/*
+			if viewsResp, err := getViewsByCollectionIds(allUids); err != nil {
+				log.Error(err.Error())
+			} else {
+				for ix := range viewsResp.Views {
+					viewsCount := viewsResp.Views[ix]
+					Uid := allUids[ix]
+					mobileRespItemMap[Uid].Views = &viewsCount
+				}
+			}*/
+
+		// Just for mock - Assign random numbers for views
+		for i, _ := range allItems {
+			rndn := int32(rand.Intn(6000))
+			allItems[i].Views = &rndn
 		}
 
-		mobileResponse := MobileSearchResponse{total: len(allItems), items: allItems}
+		mobileResponse := MobileSearchResponse{Total: len(allItems), Items: allItems}
 
 		c.JSON(http.StatusOK, mobileResponse)
 
