@@ -1147,13 +1147,6 @@ func SearchStatsHandler(c *gin.Context) {
 }
 
 func MobileSearchHandler(c *gin.Context) {
-	// 	אפליקציה צריכה לקבל חוץ מ uid:
-	// 1. תמונה
-	// 2. שם מלא של התוכן לפי השפה שנבחרה
-	// 3. כמות צפיות (אם זה וידאו)
-
-	// תעשה את זה רק לתוצאות רגילות, בינתיים תדלג על תוצאות גראמר
-
 	//SearchHandler
 
 	log.Debugf("Mobile Language: %s", c.Query("language"))
@@ -1293,7 +1286,9 @@ func MobileSearchHandler(c *gin.Context) {
 		mobileRespItemMap := make(map[string]*MobileSearchResponseItem)
 		allItems := make([]MobileSearchResponseItem, 0)
 
-		imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
+		// TBD - Temp. usage of const instead of config key, for faster deployment to http://bbdev6.kbb1.com/
+		const imagesUrlTemplate = "https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2Fnginx%%2Fassets%%2Fapi%%2Fthumbnail%%2F%s&width=140&stripmeta=true"
+		//imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
 
 		fmt.Println("Hits:", res.SearchResult.Hits.Hits)
 
@@ -1331,13 +1326,19 @@ func MobileSearchHandler(c *gin.Context) {
 						}
 
 					case consts.ES_RESULT_TYPE_COLLECTIONS:
+						// TBD Refactore: Get all collection Ids and add to map... instead call getCollectionsFirstUnit for each one
+						firstUnits, err := getCollectionsFirstUnit(db, []string{result.MDB_UID})
+						if err != nil {
+							NewBadRequestError(errors.New("page_no expects a positive number")).Abort(c)
+							return
+						}
 						mobileResp = &MobileSearchResponseItem{
-							CollectionId: result.MDB_UID,
-							//Image:        fmt.Sprintf(imagesUrlTemplate, result.MDB_UID), // TBD
-							Title: result.Title,
-							Date:  date,
-							Type:  result.ResultType,
-							// ContentUnitUid
+							CollectionId:   result.MDB_UID,
+							Image:          fmt.Sprintf(imagesUrlTemplate, firstUnits[0]), // TBD - Change
+							Title:          result.Title,
+							Date:           date,
+							Type:           result.ResultType,
+							ContentUnitUid: firstUnits[0],
 							// SourceId
 							// Views:
 						}
@@ -5075,4 +5076,38 @@ func EvalSxSHandler(c *gin.Context) {
 		return
 	}
 	concludeRequest(c, querySetsResultsDiffs, nil)
+}
+
+func getCollectionsFirstUnit(db *sql.DB, collectionUids []string) ([]string, *HttpError) {
+	queryMask := `select cu.uid
+	from collections_content_units ccu
+	join collections c on c.id=ccu.collection_id
+	join content_units cu on cu.id=ccu.content_unit_id
+	where cu.secure = 0 and cu.published = true
+	and c.uid in ('%s')
+	order by cu.created_at asc limit 1`
+
+	uidsStr := strings.Join(collectionUids, ",")
+	query := fmt.Sprintf(queryMask, uidsStr)
+
+	rows, err := queries.Raw(query).Query(db)
+	if err != nil {
+		return nil, NewInternalError(err)
+	}
+	defer rows.Close()
+
+	var cuSlice = []string{}
+	for rows.Next() {
+		var cu string
+		err := rows.Scan(&cu)
+		if err != nil {
+			return nil, NewInternalError(err)
+		}
+		cuSlice = append(cuSlice, cu)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, NewInternalError(err)
+	}
+
+	return cuSlice, nil
 }
