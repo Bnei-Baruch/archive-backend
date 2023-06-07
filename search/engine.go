@@ -670,7 +670,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	e.ExecutionTimeLog.Store(operation, elapsed)
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchGrammars bool, searchTweets bool, searchLessonSeries bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
 	// Initializing all channels.
@@ -693,64 +693,70 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		resultTypes = consts.ES_SEARCH_RESULT_TYPES
 	}
 
-	// Search grammars in parallel to native search.
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
+	if searchGrammars {
+		// Search grammars in parallel to native search.
+		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
+					grammarsSingleHitIntentsChannel <- []Intent{}
+					grammarsFilterIntentsChannel <- []Intent{}
+					grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
+				}
+			}()
+			if singleHitIntents, filterIntents, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
+				log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
 				grammarsSingleHitIntentsChannel <- []Intent{}
 				grammarsFilterIntentsChannel <- []Intent{}
 				grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
-			}
-		}()
-		if singleHitIntents, filterIntents, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
-			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
-			grammarsSingleHitIntentsChannel <- []Intent{}
-			grammarsFilterIntentsChannel <- []Intent{}
-			grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
-		} else {
-			grammarsSingleHitIntentsChannel <- singleHitIntents
-			grammarsFilterIntentsChannel <- filterIntents
-			if filtered, err := e.SearchByFilterIntents(filterIntents, query.Filters, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
-				log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
-				grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
 			} else {
-				grammarsFilteredResultsByLangChannel <- filtered
+				grammarsSingleHitIntentsChannel <- singleHitIntents
+				grammarsFilterIntentsChannel <- filterIntents
+				if filtered, err := e.SearchByFilterIntents(filterIntents, query.Filters, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
+					log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
+					grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
+				} else {
+					grammarsFilteredResultsByLangChannel <- filtered
+				}
 			}
-		}
-	}()
+		}()
+	}
 
-	// Search tweets in parallel to native search.
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				log.Errorf("ESEngine.DoSearch - Panic searching tweets: %+v", err)
+	if searchTweets {
+		// Search tweets in parallel to native search.
+		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					log.Errorf("ESEngine.DoSearch - Panic searching tweets: %+v", err)
+					tweetsByLangChannel <- map[string]*elastic.SearchResult{}
+				}
+			}()
+			if tweetsByLang, err := e.SearchTweets(query, sortBy, from, size, preference); err != nil {
+				log.Errorf("ESEngine.DoSearch - Error searching tweets: %+v", err)
 				tweetsByLangChannel <- map[string]*elastic.SearchResult{}
+			} else {
+				tweetsByLangChannel <- tweetsByLang
 			}
 		}()
-		if tweetsByLang, err := e.SearchTweets(query, sortBy, from, size, preference); err != nil {
-			log.Errorf("ESEngine.DoSearch - Error searching tweets: %+v", err)
-			tweetsByLangChannel <- map[string]*elastic.SearchResult{}
-		} else {
-			tweetsByLangChannel <- tweetsByLang
-		}
-	}()
+	}
 
-	// Search lesson series
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				log.Errorf("ESEngine.DoSearch - Panic searching lesson series: %+v", err)
+	if searchLessonSeries {
+		// Search lesson series
+		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					log.Errorf("ESEngine.DoSearch - Panic searching lesson series: %+v", err)
+					seriesLangChannel <- map[string]*elastic.SearchResult{}
+				}
+			}()
+			if byLang, err := e.LessonsSeries(query, preference); err != nil {
+				log.Errorf("ESEngine.DoSearch - Error searching lesson series: %+v", err)
 				seriesLangChannel <- map[string]*elastic.SearchResult{}
+			} else {
+				seriesLangChannel <- byLang
 			}
 		}()
-		if byLang, err := e.LessonsSeries(query, preference); err != nil {
-			log.Errorf("ESEngine.DoSearch - Error searching lesson series: %+v", err)
-			seriesLangChannel <- map[string]*elastic.SearchResult{}
-		} else {
-			seriesLangChannel <- byLang
-		}
-	}()
+	}
 
 	filterIntents := <-grammarsFilterIntentsChannel
 	LogIfDeb(&query, IntentsToStringDebug("GRAMMAR FILTER INTENTS", filterIntents))

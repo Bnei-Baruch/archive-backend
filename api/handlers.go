@@ -1269,6 +1269,9 @@ func MobileSearchHandler(c *gin.Context) {
 		size,
 		preference,
 		checkTypo,
+		true,
+		true,
+		true,
 		timeoutForHighlight,
 	)
 
