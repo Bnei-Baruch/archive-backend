@@ -196,7 +196,7 @@ type MobileSearchResponse struct {
 type MobileSearchResponseItem struct {
 	ContentUnitUid string     `json:"contentUnitId"`
 	CollectionId   string     `json:"collectionId"`
-	SourceId       string     `json:"source_id,omitempty"`
+	SourceId       string     `json:"sourceId,omitempty"`
 	Title          string     `json:"title"`
 	Image          string     `json:"image"`
 	Views          *int32     `json:"views,omitempty"`
