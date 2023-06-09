@@ -4786,29 +4786,32 @@ func setCI18n(c *Collection, language string, i18ns map[string]*mdbmodels.Collec
 }
 
 func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.ContentUnitI18n, error) {
-	return loadCUI18ni(db, language, utils.ConvertArgsInt64(ids))
+	i18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(ids))
+	if len(ids) == 0 {
+		return i18nsMap, nil
+	}
 
 	// Load from DB
-	// i18ns, err := mdbmodels.ContentUnitI18ns(
-	// 	qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...),
-	// 	qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
-	// 	All(db)
+	i18ns, err := mdbmodels.ContentUnitI18ns(
+		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...),
+		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
+		All(db)
 
-	// if err != nil {
-	// 	return nil, errors.Wrap(err, "Load content units i18ns from DB")
-	// }
+	if err != nil {
+		return nil, errors.Wrap(err, "Load content units i18ns from DB")
+	}
 
-	// // Group by content unit and language
-	// for _, x := range i18ns {
-	// 	v, ok := i18nsMap[x.ContentUnitID]
-	// 	if !ok {
-	// 		v = make(map[string]*mdbmodels.ContentUnitI18n, 1)
-	// 		i18nsMap[x.ContentUnitID] = v
-	// 	}
-	// 	v[x.Language] = x
-	// }
+	// Group by content unit and language
+	for _, x := range i18ns {
+		v, ok := i18nsMap[x.ContentUnitID]
+		if !ok {
+			v = make(map[string]*mdbmodels.ContentUnitI18n, 1)
+			i18nsMap[x.ContentUnitID] = v
+		}
+		v[x.Language] = x
+	}
 
-	// return i18nsMap, nil
+	return i18nsMap, nil
 }
 
 func loadCUI18ni(db *sql.DB, language string, ids []interface{}) (map[int64]map[string]*mdbmodels.ContentUnitI18n, error) {
