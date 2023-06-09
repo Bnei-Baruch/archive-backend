@@ -1255,11 +1255,12 @@ func MobileSearchHandler(c *gin.Context) {
 		query.LanguageOrder = append([]string{consts.LANG_SPANISH}, query.LanguageOrder...)
 	}
 
-	checkTypo := viper.GetBool("elasticsearch.check-typo") &&
-		//  temp. disable typo suggestion for other interface languages than english, russian and hebrew
-		(c.Query("language") == consts.LANG_ENGLISH || c.Query("language") == consts.LANG_RUSSIAN || c.Query("language") == consts.LANG_HEBREW)
+	checkTypo := false // TBD - consider to add it later for mobile search
+	searchIntents := c.Query("search_intents") == "true"
+	searchTweets := c.Query("search_tweets") == "true"
+	searchLessonSeries := c.Query("search_lesson_series") == "true"
 
-	timeoutForHighlight := viper.GetDuration("elasticsearch.timeout-for-highlight")
+	timeoutForHighlight := time.Duration(0) // TBD rethink if we need highlight for mobile
 
 	res, err := se.DoSearch(
 		context.TODO(),
@@ -1269,9 +1270,10 @@ func MobileSearchHandler(c *gin.Context) {
 		size,
 		preference,
 		checkTypo,
-		true,
-		true,
-		true,
+		searchIntents,
+		searchTweets,
+		searchLessonSeries,
+		false,
 		timeoutForHighlight,
 	)
 
@@ -1544,6 +1546,10 @@ func SearchHandler(c *gin.Context) {
 		size,
 		preference,
 		checkTypo,
+		true,
+		true,
+		true,
+		true,
 		timeoutForHighlight,
 	)
 
