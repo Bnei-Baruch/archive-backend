@@ -1376,6 +1376,7 @@ func MobileSearchHandler(c *gin.Context) {
 
 		// content units
 		// TBD: Here we should send Id's and not Uid's
+		// loadCUI18ni - is only form mobile search?
 		//contentUnits, err := loadCUI18ni(db, c.Query("language"), utils.ConvertArgsString(mapIdsByType[consts.ES_RESULT_TYPE_UNITS]))
 
 		if err != nil {
