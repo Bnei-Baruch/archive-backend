@@ -1320,14 +1320,13 @@ func MobileSearchHandler(c *gin.Context) {
 
 					switch result.ResultType {
 					case consts.ES_RESULT_TYPE_UNITS:
+						image := fmt.Sprintf(imagesUrlTemplate, result.MDB_UID)
 						mobileResp = &MobileSearchResponseItem{
-							ContentUnitUid: result.MDB_UID,
-							Image:          fmt.Sprintf(imagesUrlTemplate, result.MDB_UID),
+							ContentUnitUid: &result.MDB_UID,
+							Image:          &image,
 							Title:          result.Title,
 							Date:           date,
 							Type:           result.ResultType,
-							// CollectionId
-							// Views:
 						}
 
 					case consts.ES_RESULT_TYPE_COLLECTIONS:
@@ -1337,26 +1336,22 @@ func MobileSearchHandler(c *gin.Context) {
 							NewBadRequestError(errors.New("page_no expects a positive number")).Abort(c)
 							return
 						}
+						image := fmt.Sprintf(imagesUrlTemplate, firstUnits[0]) // TBD - Need to take the collection image and not the image of the first unit
 						mobileResp = &MobileSearchResponseItem{
-							CollectionId:   result.MDB_UID,
-							Image:          fmt.Sprintf(imagesUrlTemplate, firstUnits[0]), // TBD - Change
+							CollectionId:   &result.MDB_UID,
+							Image:          &image,
 							Title:          result.Title,
 							Date:           date,
 							Type:           result.ResultType,
-							ContentUnitUid: firstUnits[0],
-							// SourceId
-							// Views:
+							ContentUnitUid: &firstUnits[0],
 						}
 
 					case consts.ES_RESULT_TYPE_SOURCES:
 						mobileResp = &MobileSearchResponseItem{
-							SourceId: result.MDB_UID,
+							SourceId: &result.MDB_UID,
 							Title:    result.Title,
 							Date:     date,
 							Type:     result.ResultType,
-							// CollectionId
-							// ContentUnitUid
-							// Views:
 						}
 
 					default:
