@@ -41,6 +41,7 @@ type SearchStatsCache interface {
 	GetSourceParentAndPosition(source string, getSourceTypeIds bool) (*string, *string, []int64, error)
 
 	GetProgramByCollectionAndPosition(collection_uid string, position string) *string
+	GetCollectionFirstUnit(collection_uid string) *string
 }
 
 type SearchStatsCacheImpl struct {
@@ -51,6 +52,7 @@ type SearchStatsCacheImpl struct {
 	holidayYears                    map[string]map[string]int
 	sourcesByPositionAndParent      map[string]string
 	programsByCollectionAndPosition map[string]string
+	firstUnitsOfCollections         map[string]string
 }
 
 func NewSearchStatsCacheImpl(mdb *sql.DB, sources, tags ClassByTypeStats) SearchStatsCache {
@@ -159,6 +161,13 @@ func (ssc *SearchStatsCacheImpl) GetProgramByCollectionAndPosition(collection_ui
 	return nil
 }
 
+func (ssc *SearchStatsCacheImpl) GetCollectionFirstUnit(collection_uid string) *string {
+	if unit_uid, ok := ssc.firstUnitsOfCollections[collection_uid]; ok {
+		return &unit_uid
+	}
+	return nil
+}
+
 func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, minCount *int, maxCount *int, cts ...string) bool {
 	var stats ClassByTypeStats
 	switch class {
@@ -203,6 +212,10 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	ssc.programsByCollectionAndPosition, err = ssc.loadProgramsByCollectionAndPosition()
 	if err != nil {
 		return errors.Wrap(err, "Load program position map.")
+	}
+	ssc.firstUnitsOfCollections, err = ssc.loadCollectionsFirstUnit()
+	if err != nil {
+		return errors.Wrap(err, "Load collections first unit map.")
 	}
 	return nil
 }
@@ -363,6 +376,30 @@ func (ssc *SearchStatsCacheImpl) loadProgramsByCollectionAndPosition() (map[stri
 		}
 		key := fmt.Sprintf("%v-%v", collection_uid, position)
 		ret[key] = program_uid
+	}
+	return ret, nil
+}
+
+func (ssc *SearchStatsCacheImpl) loadCollectionsFirstUnit() (map[string]string, error) {
+	query := `SELECT DISTINCT ON (c.id) c.uid AS collection_uid, cu.uid AS first_content_unit_uid
+	FROM collections AS c
+	JOIN collections_content_units AS ccu ON c.id = ccu.collection_id
+	JOIN content_units AS cu ON ccu.content_unit_id = cu.id
+	ORDER BY c.id, cu.created_at ASC`
+	rows, err := queries.Raw(query).Query(ssc.mdb)
+	if err != nil {
+		return nil, errors.Wrap(err, "queries.Raw")
+	}
+	defer rows.Close()
+	ret := map[string]string{}
+	for rows.Next() {
+		var collection_uid string
+		var first_content_unit_uid string
+		err = rows.Scan(&collection_uid, &first_content_unit_uid)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		ret[collection_uid] = first_content_unit_uid
 	}
 	return ret, nil
 }
