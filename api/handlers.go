@@ -1330,20 +1330,15 @@ func MobileSearchHandler(c *gin.Context) {
 						}
 
 					case consts.ES_RESULT_TYPE_COLLECTIONS:
-						// TBD Refactore: Get all collection Ids and add to map... instead call getCollectionsFirstUnit for each one
-						firstUnits, err := getCollectionsFirstUnit(db, []string{result.MDB_UID})
-						if err != nil {
-							NewBadRequestError(errors.New("page_no expects a positive number")).Abort(c)
-							return
-						}
-						image := fmt.Sprintf(imagesUrlTemplate, firstUnits[0]) // TBD - Need to take the collection image and not the image of the first unit
+						firstUnit := cacheM.SearchStats().GetCollectionFirstUnit(result.MDB_UID)
+						image := fmt.Sprintf(imagesUrlTemplate, firstUnit) // TBD - Need to take the collection image and not the image of the first unit
 						mobileResp = &MobileSearchResponseItem{
 							CollectionId:   &result.MDB_UID,
 							Image:          &image,
 							Title:          result.Title,
 							Date:           date,
 							Type:           result.ResultType,
-							ContentUnitUid: &firstUnits[0],
+							ContentUnitUid: firstUnit,
 						}
 
 					case consts.ES_RESULT_TYPE_SOURCES:
@@ -1355,6 +1350,7 @@ func MobileSearchHandler(c *gin.Context) {
 						}
 
 					default:
+						search.LogIfDeb(&query, fmt.Sprintf("Skip result for mobile search: %s", result.ResultType))
 						continue
 					}
 
@@ -5084,38 +5080,4 @@ func EvalSxSHandler(c *gin.Context) {
 		return
 	}
 	concludeRequest(c, querySetsResultsDiffs, nil)
-}
-
-func getCollectionsFirstUnit(db *sql.DB, collectionUids []string) ([]string, *HttpError) {
-	queryMask := `select cu.uid
-	from collections_content_units ccu
-	join collections c on c.id=ccu.collection_id
-	join content_units cu on cu.id=ccu.content_unit_id
-	where cu.secure = 0 and cu.published = true
-	and c.uid in ('%s')
-	order by cu.created_at asc limit 1`
-
-	uidsStr := strings.Join(collectionUids, ",")
-	query := fmt.Sprintf(queryMask, uidsStr)
-
-	rows, err := queries.Raw(query).Query(db)
-	if err != nil {
-		return nil, NewInternalError(err)
-	}
-	defer rows.Close()
-
-	var cuSlice = []string{}
-	for rows.Next() {
-		var cu string
-		err := rows.Scan(&cu)
-		if err != nil {
-			return nil, NewInternalError(err)
-		}
-		cuSlice = append(cuSlice, cu)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, NewInternalError(err)
-	}
-
-	return cuSlice, nil
 }
