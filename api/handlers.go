@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"regexp"
 	"sort"
@@ -1285,7 +1286,7 @@ func MobileSearchHandler(c *gin.Context) {
 			}
 		}
 
-		// var allUids []string
+		var allUids []string
 		mapIdsByType := make(map[string][]string)
 		mobileRespItemMap := make(map[string]*MobileSearchResponseItem)
 		allItems := make([]MobileSearchResponseItem, 0)
@@ -1362,10 +1363,9 @@ func MobileSearchHandler(c *gin.Context) {
 						continue
 					}
 
-					// allUids = append(allUids, result.MDB_UID)
-					mobileRespItemMap[result.MDB_UID] = mobileResp
+					allUids = append(allUids, result.MDB_UID)
 					allItems = append(allItems, *mobileResp)
-
+					mobileRespItemMap[result.MDB_UID] = mobileResp
 					mapIdsByType[result.ResultType] = append(mapIdsByType[result.ResultType], result.MDB_UID)
 				}
 			}
@@ -1379,37 +1379,36 @@ func MobileSearchHandler(c *gin.Context) {
 		// loadCUI18ni - is only form mobile search?
 		//contentUnits, err := loadCUI18ni(db, c.Query("language"), utils.ConvertArgsString(mapIdsByType[consts.ES_RESULT_TYPE_UNITS]))
 
-		// if err != nil {
-		// 	log.Error(err.Error())
-		// } else {
-		// 	// TBD
-		// 	for _, mobileResp := range mobileRespItemMap {
-		// 		var intUid, _ = strconv.ParseInt((*mobileResp).ContentUnitUid, 10, 0)
-		// 		var cu, _ = contentUnits[intUid]
-		// 		mobileResp.Title = cu[mobileResp.ContentUnitUid].Name.String
-		// 	}
-		// }
+		if err != nil {
+			log.Error(err.Error())
+		} else {
+			// TBD
+			/* for _, mobileResp := range mobileRespItemMap {
+				var intUid, _ = strconv.ParseInt((*mobileResp).ContentUnitUid, 10, 0)
+				var cu, _ = contentUnits[intUid]
+				mobileResp.Title = cu[mobileResp.ContentUnitUid].Name.String
+			}*/
+		}
 
-		// content units only - mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
+		//mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
 
-		if len(mapIdsByType[consts.ES_RESULT_TYPE_UNITS]) > 0 {
-			if viewsResp, err := getViewsByCollectionIds(mapIdsByType[consts.ES_RESULT_TYPE_UNITS]); err != nil {
+		// TBD
+		/*
+			if viewsResp, err := getViewsByCollectionIds(allUids); err != nil {
 				log.Error(err.Error())
 			} else {
 				for ix := range viewsResp.Views {
 					viewsCount := viewsResp.Views[ix]
-					Uid := mapIdsByType[consts.ES_RESULT_TYPE_UNITS][ix]
-					mobileResp := *mobileRespItemMap[Uid]
-					mobileResp.Views = &viewsCount
+					Uid := allUids[ix]
+					mobileRespItemMap[Uid].Views = &viewsCount
 				}
-			}
-		}
+			}*/
 
 		// Just for mock - Assign random numbers for views
-		// for i, _ := range allItems {
-		// 	rndn := int32(rand.Intn(6000))
-		// 	allItems[i].Views = &rndn
-		// }
+		for i, _ := range allItems {
+			rndn := int32(rand.Intn(6000))
+			allItems[i].Views = &rndn
+		}
 
 		mobileResponse := MobileSearchResponse{Total: len(allItems), Items: allItems}
 
