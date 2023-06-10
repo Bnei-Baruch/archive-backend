@@ -1342,9 +1342,13 @@ func MobileSearchHandler(c *gin.Context) {
 						}
 
 					case consts.ES_RESULT_TYPE_SOURCES:
+						title := result.Title
+						if len(result.FullTitle) > 0 {
+							title = result.FullTitle
+						}
 						mobileResp = &MobileSearchResponseItem{
 							SourceId: &result.MDB_UID,
-							Title:    result.Title,
+							Title:    title,
 							Date:     date,
 							Type:     result.ResultType,
 						}
