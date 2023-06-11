@@ -27,13 +27,14 @@ import (
 )
 
 type ESEngine struct {
-	esc              *elastic.Client
-	mdb              *sql.DB
-	cache            cache.CacheManager
-	ExecutionTimeLog *TimeLogMap
-	grammars         Grammars
-	TokensCache      *TokensCache
-	variables        VariablesV2
+	esc               *elastic.Client
+	mdb               *sql.DB
+	cache             cache.CacheManager
+	ExecutionTimeLog  *TimeLogMap
+	grammars          Grammars
+	TokensCache       *TokensCache
+	variables         VariablesV2
+	searchResultTypes []string
 }
 
 type ClassificationIntent struct {
@@ -159,15 +160,16 @@ func (s bySourceFirst) Less(i, j int) bool {
 
 // TODO: All interactions with ES should be throttled to prevent downstream pressure
 
-func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager /*, grammars Grammars*/, tc *TokensCache, variables VariablesV2) *ESEngine {
+func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager /*, grammars Grammars*/, tc *TokensCache, variables VariablesV2, searchResultTypes []string) *ESEngine {
 	return &ESEngine{
 		esc:              esc,
 		mdb:              db,
 		cache:            cache,
 		ExecutionTimeLog: NewTimeLogMap(),
 		//grammars:         grammars,
-		TokensCache: tc,
-		variables:   variables,
+		TokensCache:       tc,
+		variables:         variables,
+		searchResultTypes: searchResultTypes,
 	}
 }
 
@@ -689,13 +691,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	var resultTypes []string
 	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
 		resultTypes = make([]string, 0)
-		for _, str := range consts.ES_SEARCH_RESULT_TYPES {
+		for _, str := range e.searchResultTypes {
 			if str != consts.ES_RESULT_TYPE_COLLECTIONS {
 				resultTypes = append(resultTypes, str)
 			}
 		}
 	} else {
-		resultTypes = consts.ES_SEARCH_RESULT_TYPES
+		resultTypes = e.searchResultTypes
 	}
 
 	if searchIntents {
