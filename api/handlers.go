@@ -1159,7 +1159,10 @@ func SearchStatsHandler(c *gin.Context) {
 }
 
 func MobileSearchHandler(c *gin.Context) {
-	//SearchHandler
+
+	// Content types that are not currently supported in mobile search:
+	// 1. Arcticle collections
+	// TBD
 
 	log.Debugf("Mobile Language: %s", c.Query("language"))
 	log.Infof("Mobile Query: [%s]", c.Query("q"))
@@ -1311,11 +1314,6 @@ func MobileSearchHandler(c *gin.Context) {
 		resultTypes := []string{consts.ES_RESULT_TYPE_UNITS, consts.ES_RESULT_TYPE_COLLECTIONS, consts.ES_RESULT_TYPE_SOURCES}
 
 		for _, hit := range res.SearchResult.Hits.Hits {
-			// if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
-			// 	// Move Tweets from innerHits to Source, to make client more consistent (work with source only).
-			// 	// Should be done after the logging to avoid errors with source field
-			// 	err = se.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
-			// }
 
 			if hit.Type == consts.SEARCH_RESULT && hit.Source != nil {
 				var result es.Result
@@ -1331,18 +1329,33 @@ func MobileSearchHandler(c *gin.Context) {
 
 					switch result.ResultType {
 					case consts.ES_RESULT_TYPE_UNITS:
-						image := fmt.Sprintf(imagesUrlTemplate, result.MDB_UID)
+						var image *string
+						var ct string
+						isArticle := cacheM.SearchStats().IsContentUnitTypeArticle(result.MDB_UID)
+						if isArticle {
+							ct = consts.CT_ARTICLES
+						} else {
+							ct = result.ResultType
+							imageStr := fmt.Sprintf(imagesUrlTemplate, result.MDB_UID)
+							image = &imageStr
+						}
 						mobileResp = &MobileSearchResponseItem{
 							ContentUnitUid: &result.MDB_UID,
-							Image:          &image,
+							Image:          image,
 							Title:          result.Title,
 							Date:           date,
-							Type:           result.ResultType,
+							Type:           ct,
 						}
 
 					case consts.ES_RESULT_TYPE_COLLECTIONS:
 						firstUnit := cacheM.SearchStats().GetCollectionFirstUnit(result.MDB_UID)
-						image := fmt.Sprintf(imagesUrlTemplate, firstUnit) // TBD - Need to take the collection image and not the image of the first unit
+						isArticle := firstUnit != nil && cacheM.SearchStats().IsContentUnitTypeArticle(*firstUnit)
+						if isArticle {
+							// Articles collection is not currently supported in mobile
+							search.LogIfDeb(&query, "Skip result for mobile search: Articles Collection.")
+							continue
+						}
+						image := fmt.Sprintf(imagesUrlTemplate, firstUnit) // TBD url template for collection, not article
 						mobileResp = &MobileSearchResponseItem{
 							CollectionId:   &result.MDB_UID,
 							Image:          &image,
@@ -1365,7 +1378,7 @@ func MobileSearchHandler(c *gin.Context) {
 						}
 
 					default:
-						search.LogIfDeb(&query, fmt.Sprintf("Skip result for mobile search: %s", result.ResultType))
+						search.LogIfDeb(&query, fmt.Sprintf("Skip result for mobile search: %s.", result.ResultType))
 						continue
 					}
 
