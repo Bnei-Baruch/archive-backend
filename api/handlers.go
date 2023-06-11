@@ -1162,7 +1162,10 @@ func MobileSearchHandler(c *gin.Context) {
 
 	// Content types that are not currently supported in mobile search:
 	// 1. Arcticle collections
-	// TBD
+	// 2. Blog posts
+	// 3. Tweets
+	// 4. Lesson series
+	// 5. All kind of intent results
 
 	log.Debugf("Mobile Language: %s", c.Query("language"))
 	log.Infof("Mobile Query: [%s]", c.Query("q"))
