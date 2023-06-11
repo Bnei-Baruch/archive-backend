@@ -42,6 +42,7 @@ type SearchStatsCache interface {
 
 	GetProgramByCollectionAndPosition(collection_uid string, position string) *string
 	GetCollectionFirstUnit(collection_uid string) *string
+	IsContentUnitTypeArticle(uid string) bool
 }
 
 type SearchStatsCacheImpl struct {
@@ -53,6 +54,7 @@ type SearchStatsCacheImpl struct {
 	sourcesByPositionAndParent      map[string]string
 	programsByCollectionAndPosition map[string]string
 	firstUnitsOfCollections         map[string]string
+	unitsThatAreArticles            map[string]bool
 }
 
 func NewSearchStatsCacheImpl(mdb *sql.DB, sources, tags ClassByTypeStats) SearchStatsCache {
@@ -168,6 +170,11 @@ func (ssc *SearchStatsCacheImpl) GetCollectionFirstUnit(collection_uid string) *
 	return nil
 }
 
+func (ssc *SearchStatsCacheImpl) IsContentUnitTypeArticle(uid string) bool {
+	value, exists := ssc.unitsThatAreArticles[uid]
+	return exists && value
+}
+
 func (ssc *SearchStatsCacheImpl) isClassWithUnits(class, uid string, minCount *int, maxCount *int, cts ...string) bool {
 	var stats ClassByTypeStats
 	switch class {
@@ -216,6 +223,10 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	ssc.firstUnitsOfCollections, err = ssc.loadCollectionsFirstUnit()
 	if err != nil {
 		return errors.Wrap(err, "Load collections first unit map.")
+	}
+	ssc.unitsThatAreArticles, err = ssc.loadUnitsThatAreArticles()
+	if err != nil {
+		return errors.Wrap(err, "Load units that are articles.")
 	}
 	return nil
 }
@@ -400,6 +411,26 @@ func (ssc *SearchStatsCacheImpl) loadCollectionsFirstUnit() (map[string]string, 
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
 		ret[collection_uid] = first_content_unit_uid
+	}
+	return ret, nil
+}
+
+func (ssc *SearchStatsCacheImpl) loadUnitsThatAreArticles() (map[string]bool, error) {
+	queryMask := `select uid from content_units where type_id = %d and secure=0 and published=true`
+	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID)
+	rows, err := queries.Raw(query).Query(ssc.mdb)
+	if err != nil {
+		return nil, errors.Wrap(err, "queries.Raw")
+	}
+	defer rows.Close()
+	ret := map[string]bool{}
+	for rows.Next() {
+		var uid string
+		err = rows.Scan(&uid)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		ret[uid] = true
 	}
 	return ret, nil
 }
