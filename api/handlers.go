@@ -1316,7 +1316,7 @@ func MobileSearchHandler(c *gin.Context) {
 
 			var result es.Result
 			if hit.Source == nil {
-				search.LogIfDeb(&query, fmt.Sprint("Empty source in hit: %u+v.", hit))
+				search.LogIfDeb(&query, fmt.Sprint("Empty source in hit: %+v.", hit))
 				continue
 			}
 			json.Unmarshal(*hit.Source, &result)
@@ -1427,6 +1427,9 @@ func MobileSearchHandler(c *gin.Context) {
 					search.LogIfDeb(&query, fmt.Sprintf("Skip result for mobile search: %s.", result.ResultType))
 					continue
 				}
+			} else {
+				search.LogIfDeb(&query, fmt.Sprintf("Skip hit for mobile search: %+v.", hit))
+				continue
 			}
 			allItems = append(allItems, mobileResp)
 			mobileRespItemMap[result.MDB_UID] = mobileResp
