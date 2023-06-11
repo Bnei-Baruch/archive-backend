@@ -189,8 +189,8 @@ type MobileContentUnitResponse struct {
 }
 
 type MobileSearchResponse struct {
-	Total int                        `json:"total"`
-	Items []MobileSearchResponseItem `json:"items"`
+	Total int                         `json:"total"`
+	Items []*MobileSearchResponseItem `json:"items"`
 }
 
 type MobileSearchResponseItem struct {
