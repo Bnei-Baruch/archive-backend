@@ -1349,6 +1349,7 @@ func MobileSearchHandler(c *gin.Context) {
 						}
 
 					case consts.ES_RESULT_TYPE_COLLECTIONS:
+						var image *string
 						firstUnit := cacheM.SearchStats().GetCollectionFirstUnit(result.MDB_UID)
 						isArticle := firstUnit != nil && cacheM.SearchStats().IsContentUnitTypeArticle(*firstUnit)
 						if isArticle {
@@ -1356,10 +1357,15 @@ func MobileSearchHandler(c *gin.Context) {
 							search.LogIfDeb(&query, "Skip result for mobile search: Articles Collection.")
 							continue
 						}
-						image := fmt.Sprintf(imagesUrlTemplate, firstUnit) // TBD url template for collection, not article
+						if firstUnit != nil {
+							// We retrieve collection image according to the first content unit of the collection.
+							// Maybe we should retrieve collection image in a different way.
+							imageStr := fmt.Sprintf(imagesUrlTemplate, *firstUnit)
+							image = &imageStr
+						}
 						mobileResp = &MobileSearchResponseItem{
 							CollectionId:   &result.MDB_UID,
-							Image:          &image,
+							Image:          image,
 							Title:          result.Title,
 							Date:           date,
 							Type:           result.ResultType,
