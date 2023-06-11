@@ -672,7 +672,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	e.ExecutionTimeLog.Store(operation, elapsed)
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchIntents bool, searchTweets bool, searchLessonSeries bool, withHighlights bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchTweets bool, searchLessonSeries bool, withHighlights bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
 	// Initializing all channels.
@@ -700,34 +700,32 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		resultTypes = e.searchResultTypes
 	}
 
-	if searchIntents {
-		// Search grammars in parallel to native search.
-		go func() {
-			defer func() {
-				if err := recover(); err != nil {
-					log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
-					grammarsSingleHitIntentsChannel <- []Intent{}
-					grammarsFilterIntentsChannel <- []Intent{}
-					grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
-				}
-			}()
-			if singleHitIntents, filterIntents, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
-				log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
+	// Search grammars in parallel to native search.
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
 				grammarsSingleHitIntentsChannel <- []Intent{}
 				grammarsFilterIntentsChannel <- []Intent{}
 				grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
-			} else {
-				grammarsSingleHitIntentsChannel <- singleHitIntents
-				grammarsFilterIntentsChannel <- filterIntents
-				if filtered, err := e.SearchByFilterIntents(filterIntents, query.Filters, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
-					log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
-					grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
-				} else {
-					grammarsFilteredResultsByLangChannel <- filtered
-				}
 			}
 		}()
-	}
+		if singleHitIntents, filterIntents, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
+			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
+			grammarsSingleHitIntentsChannel <- []Intent{}
+			grammarsFilterIntentsChannel <- []Intent{}
+			grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
+		} else {
+			grammarsSingleHitIntentsChannel <- singleHitIntents
+			grammarsFilterIntentsChannel <- filterIntents
+			if filtered, err := e.SearchByFilterIntents(filterIntents, query.Filters, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
+				log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
+				grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
+			} else {
+				grammarsFilteredResultsByLangChannel <- filtered
+			}
+		}
+	}()
 
 	if searchTweets {
 		// Search tweets in parallel to native search.
@@ -765,10 +763,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
-	if searchIntents {
-		filterIntents = <-grammarsFilterIntentsChannel
-		LogIfDeb(&query, IntentsToStringDebug("GRAMMAR FILTER INTENTS", filterIntents))
-	}
+	filterIntents = <-grammarsFilterIntentsChannel
+	LogIfDeb(&query, IntentsToStringDebug("GRAMMAR FILTER INTENTS", filterIntents))
 
 	if checkTypo {
 		go func() {
@@ -787,30 +783,28 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
-	if searchIntents {
-		LogIfDeb(&query, fmt.Sprintf("query.Intents: %d", len(query.Intents)))
-		query.Intents = append(query.Intents, <-grammarsSingleHitIntentsChannel...)
-		LogIfDeb(&query, IntentsToStringDebug("GRAMMARS SINGLE HIT INTENTS", query.Intents))
+	LogIfDeb(&query, fmt.Sprintf("query.Intents: %d", len(query.Intents)))
+	query.Intents = append(query.Intents, <-grammarsSingleHitIntentsChannel...)
+	LogIfDeb(&query, IntentsToStringDebug("GRAMMARS SINGLE HIT INTENTS", query.Intents))
 
-		hasClassificationIntentFromGrammar := false
-		for _, intent := range query.Intents {
-			if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Exist {
-				hasClassificationIntentFromGrammar = true
-				break
-			}
+	hasClassificationIntentFromGrammar := false
+	for _, intent := range query.Intents {
+		if intentValue, ok := intent.Value.(ClassificationIntent); ok && intentValue.Exist {
+			hasClassificationIntentFromGrammar = true
+			break
 		}
-		LogIfDeb(&query, fmt.Sprintf("Has classification intent from grammar: %s", strconv.FormatBool(hasClassificationIntentFromGrammar)))
-
-		LogIfDeb(&query, fmt.Sprintf("query.Intents: %d", len(query.Intents)))
-		// Grammar engine is currently support a search for classification intents according to 'by_content_type_and_source' rule only.
-		// If we have classification intents from Grammar, IntentsEngine will search for intents only by tag.
-		intents, err := e.AddIntents(&query, preference, sortBy, true, !hasClassificationIntentFromGrammar, filterIntents)
-		if err != nil {
-			log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
-		}
-		LogIfDeb(&query, IntentsToStringDebug("ADD INTENTS", intents))
-		query.Intents = append(query.Intents, intents...)
 	}
+	LogIfDeb(&query, fmt.Sprintf("Has classification intent from grammar: %s", strconv.FormatBool(hasClassificationIntentFromGrammar)))
+
+	LogIfDeb(&query, fmt.Sprintf("query.Intents: %d", len(query.Intents)))
+	// Grammar engine is currently support a search for classification intents according to 'by_content_type_and_source' rule only.
+	// If we have classification intents from Grammar, IntentsEngine will search for intents only by tag.
+	intents, err := e.AddIntents(&query, preference, sortBy, true, !hasClassificationIntentFromGrammar, filterIntents)
+	if err != nil {
+		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
+	}
+	LogIfDeb(&query, IntentsToStringDebug("ADD INTENTS", intents))
+	query.Intents = append(query.Intents, intents...)
 
 	// When we have a lessons carousel we filter out the regular results that are also exist in the carousel.
 	filterOutCUSources := make([]string, 0)
@@ -989,20 +983,18 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
-	if searchIntents {
-		filteredByLang = <-grammarsFilteredResultsByLangChannel
-		LogIfDeb(&query, fmt.Sprintf("---- GRAMMAR SEARCH FILTERED ----"))
-		for k, v := range filteredByLang {
-			LogIfDeb(&query, fmt.Sprintf("\t%+v:", k))
-			for i := range v {
-				for j := range v[i].Results {
-					LogIfDeb(&query, fmt.Sprintf("\t\t%d (%d hits)", j, len(v[i].Results[j].Hits.Hits)))
-					LogIfDeb(&query, fmt.Sprintf(ResultToStringDebug(v[i].Results[j], 3)))
-				}
+	filteredByLang = <-grammarsFilteredResultsByLangChannel
+	LogIfDeb(&query, fmt.Sprintf("---- GRAMMAR SEARCH FILTERED ----"))
+	for k, v := range filteredByLang {
+		LogIfDeb(&query, fmt.Sprintf("\t%+v:", k))
+		for i := range v {
+			for j := range v[i].Results {
+				LogIfDeb(&query, fmt.Sprintf("\t\t%d (%d hits)", j, len(v[i].Results[j].Hits.Hits)))
+				LogIfDeb(&query, fmt.Sprintf(ResultToStringDebug(v[i].Results[j], 3)))
 			}
 		}
-		LogIfDeb(&query, fmt.Sprintf("---- END GRAMMAR SEARCH FILTERED ----"))
 	}
+	LogIfDeb(&query, fmt.Sprintf("---- END GRAMMAR SEARCH FILTERED ----"))
 
 	var programToReplaceIndex int
 	if len(programsToReplaceWithGrammarResults) > 0 {

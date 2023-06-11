@@ -1160,12 +1160,12 @@ func SearchStatsHandler(c *gin.Context) {
 
 func MobileSearchHandler(c *gin.Context) {
 
-	// Content types that are not currently supported in mobile search:
+	// Mobile search support all content types of the regular search beside:
 	// 1. Arcticle collections
 	// 2. Blog posts
 	// 3. Tweets
 	// 4. Lesson series
-	// 5. All kind of intent results
+	// 5. Landing pages
 
 	log.Debugf("Mobile Language: %s", c.Query("language"))
 	log.Infof("Mobile Query: [%s]", c.Query("q"))
@@ -1274,7 +1274,6 @@ func MobileSearchHandler(c *gin.Context) {
 	}
 
 	checkTypo := false // TBD - consider to add it later for mobile search
-	searchIntents := c.Query("search_intents") == "true"
 	searchTweets := c.Query("search_tweets") == "true"
 	searchLessonSeries := c.Query("search_lesson_series") == "true"
 
@@ -1288,7 +1287,6 @@ func MobileSearchHandler(c *gin.Context) {
 		size,
 		preference,
 		checkTypo,
-		searchIntents,
 		searchTweets,
 		searchLessonSeries,
 		false,
@@ -1316,85 +1314,123 @@ func MobileSearchHandler(c *gin.Context) {
 
 		for _, hit := range res.SearchResult.Hits.Hits {
 
-			if hit.Type == consts.SEARCH_RESULT && hit.Source != nil {
-				var result es.Result
-				json.Unmarshal(*hit.Source, &result)
+			var result es.Result
+			if hit.Source == nil {
+				search.LogIfDeb(&query, fmt.Sprint("Empty source in hit: %u+v.", hit))
+				continue
+			}
+			json.Unmarshal(*hit.Source, &result)
+			if err != nil {
+				NewInternalError(err).Abort(c)
+				return
+			}
+			var mobileResp *MobileSearchResponseItem
+			var date *time.Time = nil
 
-				if result.MDB_UID != "" {
-					var mobileResp *MobileSearchResponseItem
-					var date *time.Time = nil
-
-					if result.EffectiveDate != nil {
-						date = &result.EffectiveDate.Time
+			if result.EffectiveDate != nil {
+				date = &result.EffectiveDate.Time
+			}
+			if hit.Type == "result" {
+				switch result.ResultType {
+				case consts.ES_RESULT_TYPE_UNITS:
+					var image *string
+					var ct string
+					isArticle := cacheM.SearchStats().IsContentUnitTypeArticle(result.MDB_UID)
+					if isArticle {
+						ct = consts.CT_ARTICLES
+					} else {
+						ct = result.ResultType
+						imageStr := fmt.Sprintf(imagesUrlTemplate, result.MDB_UID)
+						image = &imageStr
+					}
+					mobileResp = &MobileSearchResponseItem{
+						ContentUnitUid: &result.MDB_UID,
+						Image:          image,
+						Title:          result.Title,
+						Date:           date,
+						Type:           ct,
 					}
 
-					switch result.ResultType {
-					case consts.ES_RESULT_TYPE_UNITS:
-						var image *string
-						var ct string
-						isArticle := cacheM.SearchStats().IsContentUnitTypeArticle(result.MDB_UID)
-						if isArticle {
-							ct = consts.CT_ARTICLES
-						} else {
-							ct = result.ResultType
-							imageStr := fmt.Sprintf(imagesUrlTemplate, result.MDB_UID)
-							image = &imageStr
-						}
-						mobileResp = &MobileSearchResponseItem{
-							ContentUnitUid: &result.MDB_UID,
-							Image:          image,
-							Title:          result.Title,
-							Date:           date,
-							Type:           ct,
-						}
-
-					case consts.ES_RESULT_TYPE_COLLECTIONS:
-						var image *string
-						firstUnit := cacheM.SearchStats().GetCollectionFirstUnit(result.MDB_UID)
-						isArticle := firstUnit != nil && cacheM.SearchStats().IsContentUnitTypeArticle(*firstUnit)
-						if isArticle {
-							// Articles collection is not currently supported in mobile
-							search.LogIfDeb(&query, "Skip result for mobile search: Articles Collection.")
-							continue
-						}
-						if firstUnit != nil {
-							// We retrieve collection image according to the first content unit of the collection.
-							// Maybe we should retrieve collection image in a different way.
-							imageStr := fmt.Sprintf(imagesUrlTemplate, *firstUnit)
-							image = &imageStr
-						}
-						mobileResp = &MobileSearchResponseItem{
-							CollectionId:   &result.MDB_UID,
-							Image:          image,
-							Title:          result.Title,
-							Date:           date,
-							Type:           result.ResultType,
-							ContentUnitUid: firstUnit,
-						}
-
-					case consts.ES_RESULT_TYPE_SOURCES:
-						title := result.Title
-						if len(result.FullTitle) > 0 {
-							title = result.FullTitle
-						}
-						mobileResp = &MobileSearchResponseItem{
-							SourceId: &result.MDB_UID,
-							Title:    title,
-							Date:     date,
-							Type:     result.ResultType,
-						}
-
-					default:
-						search.LogIfDeb(&query, fmt.Sprintf("Skip result for mobile search: %s.", result.ResultType))
+				case consts.ES_RESULT_TYPE_COLLECTIONS:
+					var image *string
+					firstUnit := cacheM.SearchStats().GetCollectionFirstUnit(result.MDB_UID)
+					isArticle := firstUnit != nil && cacheM.SearchStats().IsContentUnitTypeArticle(*firstUnit)
+					if isArticle {
+						// Articles collection is not currently supported in mobile
+						search.LogIfDeb(&query, "Skip result for mobile search: Articles Collection.")
 						continue
 					}
+					if firstUnit != nil {
+						// We retrieve collection image according to the first content unit of the collection.
+						// Maybe we should retrieve collection image in a different way.
+						imageStr := fmt.Sprintf(imagesUrlTemplate, *firstUnit)
+						image = &imageStr
+					}
+					mobileResp = &MobileSearchResponseItem{
+						CollectionUid:  &result.MDB_UID,
+						Image:          image,
+						Title:          result.Title,
+						Date:           date,
+						Type:           result.ResultType,
+						ContentUnitUid: firstUnit,
+					}
 
-					allItems = append(allItems, mobileResp)
-					mobileRespItemMap[result.MDB_UID] = mobileResp
-					mapIdsByType[result.ResultType] = append(mapIdsByType[result.ResultType], result.MDB_UID)
+				case consts.ES_RESULT_TYPE_SOURCES:
+					title := result.Title
+					if len(result.FullTitle) > 0 {
+						title = result.FullTitle
+					}
+					mobileResp = &MobileSearchResponseItem{
+						SourceUid: &result.MDB_UID,
+						Title:     title,
+						Date:      date,
+						Type:      result.ResultType,
+					}
+
+				default:
+					search.LogIfDeb(&query, fmt.Sprintf("Skip result for mobile search: %s.", result.ResultType))
+					continue
+				}
+			} else if hit.Type == consts.INTENT_HIT_TYPE_LESSONS {
+				switch result.ResultType {
+				case consts.ES_RESULT_TYPE_SOURCES:
+					mobileResp = &MobileSearchResponseItem{
+						SourceUid: &result.MDB_UID,
+						Title:     result.Title,
+						Type:      consts.SEARCH_RESULT_LESSONS_BY_SOURCE,
+					}
+				case consts.ES_RESULT_TYPE_TAGS:
+					mobileResp = &MobileSearchResponseItem{
+						TagUid: &result.MDB_UID,
+						Title:  result.Title,
+						Type:   consts.SEARCH_RESULT_LESSONS_BY_TAG,
+					}
+				default:
+					search.LogIfDeb(&query, fmt.Sprintf("Skip result for mobile search: %s.", result.ResultType))
+					continue
+				}
+			} else if hit.Type == consts.INTENT_HIT_TYPE_PROGRAMS {
+				switch result.ResultType {
+				case consts.ES_RESULT_TYPE_SOURCES:
+					mobileResp = &MobileSearchResponseItem{
+						SourceUid: &result.MDB_UID,
+						Title:     result.Title,
+						Type:      consts.SEARCH_RESULT_PROGRAMS_BY_SOURCE,
+					}
+				case consts.ES_RESULT_TYPE_TAGS:
+					mobileResp = &MobileSearchResponseItem{
+						TagUid: &result.MDB_UID,
+						Title:  result.Title,
+						Type:   consts.SEARCH_RESULT_PROGRAMS_BY_TAG,
+					}
+				default:
+					search.LogIfDeb(&query, fmt.Sprintf("Skip result for mobile search: %s.", result.ResultType))
+					continue
 				}
 			}
-
+			allItems = append(allItems, mobileResp)
+			mobileRespItemMap[result.MDB_UID] = mobileResp
+			mapIdsByType[result.ResultType] = append(mapIdsByType[result.ResultType], result.MDB_UID)
 		}
 
 		cuIds, exists := mapIdsByType[consts.ES_RESULT_TYPE_UNITS]
@@ -1539,7 +1575,6 @@ func SearchHandler(c *gin.Context) {
 		size,
 		preference,
 		checkTypo,
-		true,
 		true,
 		true,
 		true,
