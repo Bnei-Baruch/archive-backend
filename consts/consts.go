@@ -473,7 +473,12 @@ const ES_RESULT_TYPE_TWEETS = "tweets"
 const SEARCH_RESULT_TWEETS_MANY = "tweets_many"
 const SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE = "lessons_series_by_source"
 const SEARCH_RESULT_LESSONS_SERIES_BY_TAG = "lessons_series_by_tag"
-const SEARCH_RESULT = "result"
+
+// Additional result types for mobile client
+const SEARCH_RESULT_PROGRAMS_BY_SOURCE = "programs_by_source"
+const SEARCH_RESULT_PROGRAMS_BY_TAG = "programs_by_tag"
+const SEARCH_RESULT_LESSONS_BY_SOURCE = "lessons_by_source"
+const SEARCH_RESULT_LESSONS_BY_TAG = "lessons_by_tag"
 
 // Typed UIDs and Filter
 const ES_UID_TYPE_CONTENT_UNIT = "content_unit"
