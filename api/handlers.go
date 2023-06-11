@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"regexp"
 	"sort"
@@ -141,13 +140,26 @@ func MobileProgramsPageHandler(c *gin.Context) {
 }
 
 func mapViewsToMobileContentUnitItems(contentUnitUids []string, itemsMap map[string]*MobileContentUnitResponseItem) {
-	if viewsResp, err := getViewsByCollectionIds(contentUnitUids); err != nil {
+	if viewsResp, err := getViewsByCUIds(contentUnitUids); err != nil {
 		log.Error(err.Error())
 	} else {
 		for ix := range viewsResp.Views {
 			viewsCount := viewsResp.Views[ix]
-			colId := contentUnitUids[ix]
-			item := itemsMap[colId]
+			uid := contentUnitUids[ix]
+			item := itemsMap[uid]
+			item.Views = &viewsCount
+		}
+	}
+}
+
+func mapViewsToMobileSearchResponseItems(contentUnitUids []string, itemsMap map[string]*MobileSearchResponseItem) {
+	if viewsResp, err := getViewsByCUIds(contentUnitUids); err != nil {
+		log.Error(err.Error())
+	} else {
+		for ix := range viewsResp.Views {
+			viewsCount := viewsResp.Views[ix]
+			uid := contentUnitUids[ix]
+			item := itemsMap[uid]
 			item.Views = &viewsCount
 		}
 	}
@@ -477,7 +489,7 @@ func setI18ColNameDesc(db *sql.DB, lang string, collectionIds []int64, cuIds []i
 	return nil
 }
 
-func getViewsByCollectionIds(collectionIds []string) (*viewsResponse, error) {
+func getViewsByCUIds(collectionIds []string) (*viewsResponse, error) {
 	viewsUrl, err := getFeedApi("views")
 	if err != nil {
 		return nil, err
@@ -1286,10 +1298,9 @@ func MobileSearchHandler(c *gin.Context) {
 			}
 		}
 
-		var allUids []string
-		mapIdsByType := make(map[string][]string)
-		mobileRespItemMap := make(map[string]*MobileSearchResponseItem)
-		allItems := make([]MobileSearchResponseItem, 0)
+		mapIdsByType := map[string][]string{}
+		mobileRespItemMap := map[string]*MobileSearchResponseItem{}
+		allItems := []*MobileSearchResponseItem{}
 
 		// TBD - Temp. usage of const instead of config key, for faster deployment to http://bbdev6.kbb1.com/
 		const imagesUrlTemplate = "https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2Fnginx%%2Fassets%%2Fapi%%2Fthumbnail%%2F%s&width=140&stripmeta=true"
@@ -1358,8 +1369,7 @@ func MobileSearchHandler(c *gin.Context) {
 						continue
 					}
 
-					allUids = append(allUids, result.MDB_UID)
-					allItems = append(allItems, *mobileResp)
+					allItems = append(allItems, mobileResp)
 					mobileRespItemMap[result.MDB_UID] = mobileResp
 					mapIdsByType[result.ResultType] = append(mapIdsByType[result.ResultType], result.MDB_UID)
 				}
@@ -1367,42 +1377,9 @@ func MobileSearchHandler(c *gin.Context) {
 
 		}
 
-		fmt.Println("mapIdsByType:", mapIdsByType)
-
-		// content units
-		// TBD: Here we should send Id's and not Uid's
-		// loadCUI18ni - is only form mobile search?
-		//contentUnits, err := loadCUI18ni(db, c.Query("language"), utils.ConvertArgsString(mapIdsByType[consts.ES_RESULT_TYPE_UNITS]))
-
-		if err != nil {
-			log.Error(err.Error())
-		} else {
-			// TBD
-			/* for _, mobileResp := range mobileRespItemMap {
-				var intUid, _ = strconv.ParseInt((*mobileResp).ContentUnitUid, 10, 0)
-				var cu, _ = contentUnits[intUid]
-				mobileResp.Title = cu[mobileResp.ContentUnitUid].Name.String
-			}*/
-		}
-
-		//mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
-
-		// TBD
-		/*
-			if viewsResp, err := getViewsByCollectionIds(allUids); err != nil {
-				log.Error(err.Error())
-			} else {
-				for ix := range viewsResp.Views {
-					viewsCount := viewsResp.Views[ix]
-					Uid := allUids[ix]
-					mobileRespItemMap[Uid].Views = &viewsCount
-				}
-			}*/
-
-		// Just for mock - Assign random numbers for views
-		for i, _ := range allItems {
-			rndn := int32(rand.Intn(6000))
-			allItems[i].Views = &rndn
+		cuIds, exists := mapIdsByType[consts.ES_RESULT_TYPE_UNITS]
+		if exists {
+			mapViewsToMobileSearchResponseItems(cuIds, mobileRespItemMap)
 		}
 
 		mobileResponse := MobileSearchResponse{Total: len(allItems), Items: allItems}
@@ -4789,35 +4766,6 @@ func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string
 	// Load from DB
 	i18ns, err := mdbmodels.ContentUnitI18ns(
 		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
-		All(db)
-
-	if err != nil {
-		return nil, errors.Wrap(err, "Load content units i18ns from DB")
-	}
-
-	// Group by content unit and language
-	for _, x := range i18ns {
-		v, ok := i18nsMap[x.ContentUnitID]
-		if !ok {
-			v = make(map[string]*mdbmodels.ContentUnitI18n, 1)
-			i18nsMap[x.ContentUnitID] = v
-		}
-		v[x.Language] = x
-	}
-
-	return i18nsMap, nil
-}
-
-func loadCUI18ni(db *sql.DB, language string, ids []interface{}) (map[int64]map[string]*mdbmodels.ContentUnitI18n, error) {
-	i18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(ids))
-	if len(ids) == 0 {
-		return i18nsMap, nil
-	}
-
-	// Load from DB
-	i18ns, err := mdbmodels.ContentUnitI18ns(
-		qm.WhereIn("content_unit_id in ?", ids...),
 		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
 		All(db)
 
