@@ -327,7 +327,7 @@ func testTypoSuggestFn(cmd *cobra.Command, args []string) {
 	esManager := search.MakeESManager(elasticUrl)
 	esc, err := esManager.GetClient()
 	utils.Must(err)
-	engine := search.NewESEngine(esc, nil, nil, nil, nil)
+	engine := search.NewESEngine(esc, nil, nil, nil, nil, nil)
 
 	evalSet, err := search.InitAndReadEvalSet(evalSetPath)
 	utils.Must(err)

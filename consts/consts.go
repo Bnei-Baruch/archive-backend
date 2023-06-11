@@ -473,7 +473,7 @@ const ES_RESULT_TYPE_TWEETS = "tweets"
 const SEARCH_RESULT_TWEETS_MANY = "tweets_many"
 const SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE = "lessons_series_by_source"
 const SEARCH_RESULT_LESSONS_SERIES_BY_TAG = "lessons_series_by_tag"
-const SEARCH_RESULT = "result";
+const SEARCH_RESULT = "result"
 
 // Typed UIDs and Filter
 const ES_UID_TYPE_CONTENT_UNIT = "content_unit"
@@ -491,6 +491,12 @@ var ES_SEARCH_RESULT_TYPES = []string{
 	ES_RESULT_TYPE_SOURCES,
 	ES_RESULT_TYPE_COLLECTIONS,
 	ES_RESULT_TYPE_BLOG_POSTS,
+}
+
+var ES_MOBILE_SEARCH_RESULT_TYPES = []string{
+	ES_RESULT_TYPE_UNITS,
+	ES_RESULT_TYPE_SOURCES,
+	ES_RESULT_TYPE_COLLECTIONS,
 }
 
 var ES_ALL_RESULT_TYPES = []string{

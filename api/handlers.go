@@ -1121,7 +1121,7 @@ func SearchStatsHandler(c *gin.Context) {
 		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
 		return
 	}
-	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables, consts.ES_SEARCH_RESULT_TYPES)
 	sources, err := mdbmodels.Sources().All(db)
 	if err != nil {
 		return
@@ -1234,7 +1234,7 @@ func MobileSearchHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables, consts.ES_MOBILE_SEARCH_RESULT_TYPES)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -1311,15 +1311,13 @@ func MobileSearchHandler(c *gin.Context) {
 
 		fmt.Println("Hits:", res.SearchResult.Hits.Hits)
 
-		resultTypes := []string{consts.ES_RESULT_TYPE_UNITS, consts.ES_RESULT_TYPE_COLLECTIONS, consts.ES_RESULT_TYPE_SOURCES}
-
 		for _, hit := range res.SearchResult.Hits.Hits {
 
 			if hit.Type == consts.SEARCH_RESULT && hit.Source != nil {
 				var result es.Result
 				json.Unmarshal(*hit.Source, &result)
 
-				if result.MDB_UID != "" && utils.Contains(utils.Is(resultTypes), result.ResultType) {
+				if result.MDB_UID != "" {
 					var mobileResp *MobileSearchResponseItem
 					var date *time.Time = nil
 
@@ -1482,7 +1480,7 @@ func SearchHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables, consts.ES_SEARCH_RESULT_TYPES)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -1611,7 +1609,7 @@ func AutocompleteHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables)
+	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables, consts.ES_SEARCH_RESULT_TYPES)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
