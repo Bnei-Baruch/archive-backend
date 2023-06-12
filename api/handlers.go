@@ -95,6 +95,9 @@ func MobileProgramsPageHandler(c *gin.Context) {
 	cuRequest := ContentUnitsRequest{
 		ListRequest:        r.ListRequest,
 		ContentTypesFilter: r.ContentTypesFilter,
+		SourcesFilter:      r.SourcesFilter,
+		TagsFilter:         r.TagsFilter,
+		PersonsFilter:      r.PersonsFilter,
 	}
 
 	resp, err := handleContentUnits(cm, db, cuRequest)

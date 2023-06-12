@@ -208,6 +208,10 @@ type MobileSearchResponseItem struct {
 type MobileProgramsPageRequest struct {
 	ListRequest
 	ContentTypesFilter
+	SourcesFilter
+	TagsFilter
+	PersonsFilter
+	// more filters should be added here later
 }
 
 func NewEmptyLessonOverviewResponse() *MobileContentUnitResponse {
