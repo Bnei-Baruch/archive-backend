@@ -1230,7 +1230,6 @@ func MobileSearchHandler(c *gin.Context) {
 
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
-	//grammars := c.MustGet("GRAMMARS").(search.Grammars)
 	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
 	variables := c.MustGet("VARIABLES").(search.VariablesV2)
 
@@ -1239,8 +1238,6 @@ func MobileSearchHandler(c *gin.Context) {
 		NewBadRequestError(errors.Wrap(err, "Failed to connect to ElasticSearch.")).Abort(c)
 		return
 	}
-
-	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables, consts.ES_MOBILE_SEARCH_RESULT_TYPES)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -1264,8 +1261,7 @@ func MobileSearchHandler(c *gin.Context) {
 			break
 		}
 	}
-
-	//  Quick workround to allow Spanish support when the interface language is Spanish (AS-99).
+	// Quick workround to allow Spanish support when the interface language is Spanish (AS-99).
 	if c.Query("language") == consts.LANG_SPANISH {
 		for i, lang := range query.LanguageOrder {
 			if lang == consts.LANG_SPANISH {
@@ -1276,11 +1272,13 @@ func MobileSearchHandler(c *gin.Context) {
 		query.LanguageOrder = append([]string{consts.LANG_SPANISH}, query.LanguageOrder...)
 	}
 
-	checkTypo := false // TBD - consider to add it later for mobile search
+	// The logic up to this point is the same as the regular search handle
+
+	se := search.NewESEngine(esc, db, cacheM, tc, variables, consts.ES_MOBILE_SEARCH_RESULT_TYPES)
+
+	checkTypo := false // Currently not supported in mobile
 	searchTweets := c.Query("search_tweets") == "true"
 	searchLessonSeries := c.Query("search_lesson_series") == "true"
-
-	timeoutForHighlight := time.Duration(0) // TBD rethink if we need highlight for mobile
 
 	res, err := se.DoSearch(
 		context.TODO(),
@@ -1292,8 +1290,8 @@ func MobileSearchHandler(c *gin.Context) {
 		checkTypo,
 		searchTweets,
 		searchLessonSeries,
-		false,
-		timeoutForHighlight,
+		false, // Highlights are not currently supported in mobile
+		time.Duration(0),
 	)
 
 	if err == nil {
@@ -1309,17 +1307,13 @@ func MobileSearchHandler(c *gin.Context) {
 		mobileRespItemMap := map[string]*MobileSearchResponseItem{}
 		allItems := []*MobileSearchResponseItem{}
 
-		// TBD - Temp. usage of const instead of config key, for faster deployment to http://bbdev6.kbb1.com/
-		const imagesUrlTemplate = "https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2Fnginx%%2Fassets%%2Fapi%%2Fthumbnail%%2F%s&width=140&stripmeta=true"
-		//imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
-
-		fmt.Println("Hits:", res.SearchResult.Hits.Hits)
+		imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
 
 		for _, hit := range res.SearchResult.Hits.Hits {
 
 			var result es.Result
 			if hit.Source == nil {
-				search.LogIfDeb(&query, fmt.Sprint("Empty source in hit: %+v.", hit))
+				search.LogIfDeb(&query, fmt.Sprintf("Empty source in hit: %+v.", hit))
 				continue
 			}
 			json.Unmarshal(*hit.Source, &result)
@@ -1449,8 +1443,6 @@ func MobileSearchHandler(c *gin.Context) {
 		c.JSON(http.StatusOK, mobileResponse)
 
 	} else {
-		// TODO: Remove following line, we should not log this.
-		log.Infof("Error on search: %+v", err)
 		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, suggestion, err, se.ExecutionTimeLog)
 		if logErr != nil {
 			log.Warnf("Error logging search error: %+v %+v", logErr, err)
