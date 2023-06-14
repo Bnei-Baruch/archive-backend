@@ -393,7 +393,7 @@ SELECT
 		var collectionUid *string
 		var tag *string
 		var contentType int64
-		var views *int32
+		var views *int64
 		var number int
 		var date *time.Time
 		var startDate *time.Time
@@ -526,7 +526,7 @@ func getViewsByCUIds(collectionIds []string) (*viewsResponse, error) {
 }
 
 type viewsResponse struct {
-	Views []int32 `json:"views"`
+	Views []int64 `json:"views"`
 }
 
 func getFeedApi(path string) (string, error) {
