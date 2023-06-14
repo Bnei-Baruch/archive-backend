@@ -1316,7 +1316,7 @@ func MobileSearchHandler(c *gin.Context) {
 				search.LogIfDeb(&query, fmt.Sprintf("Empty source in hit: %+v.", hit))
 				continue
 			}
-			json.Unmarshal(*hit.Source, &result)
+			err = json.Unmarshal(*hit.Source, &result)
 			if err != nil {
 				NewInternalError(err).Abort(c)
 				return
