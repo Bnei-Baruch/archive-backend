@@ -396,7 +396,9 @@ func (ssc *SearchStatsCacheImpl) loadCollectionsFirstUnit() (map[string]string, 
 	FROM collections AS c
 	JOIN collections_content_units AS ccu ON c.id = ccu.collection_id
 	JOIN content_units AS cu ON ccu.content_unit_id = cu.id
-	ORDER BY c.id, cu.created_at ASC`
+	where c.secure = 0 and c.published = true
+	and cu.secure = 0 and cu.published = true
+	ORDER BY c.id, (cu.properties->>'film_date')::date ASC`
 	rows, err := queries.Raw(query).Query(ssc.mdb)
 	if err != nil {
 		return nil, errors.Wrap(err, "queries.Raw")
