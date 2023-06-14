@@ -156,7 +156,7 @@ type MobileContentUnitResponseItem struct {
 	Title          string     `json:"title"`
 	Description    string     `json:"description"`
 	ContentType    string     `json:"contentType"`
-	Views          *int32     `json:"views,omitempty"`
+	Views          *int64     `json:"views,omitempty"`
 	Date           *time.Time `json:"date,omitempty"`
 	StartDate      *time.Time `json:"startDate"`
 	EndDate        *time.Time `json:"endDate"`
@@ -200,7 +200,7 @@ type MobileSearchResponseItem struct {
 	TagUid         *string    `json:"tagId,omitempty"`
 	Title          string     `json:"title"`
 	Image          *string    `json:"image,omitempty"`
-	Views          *int32     `json:"views,omitempty"`
+	Views          *int64     `json:"views,omitempty"`
 	Type           string     `json:"contentType"`
 	Date           *time.Time `json:"date,omitempty"`
 }
