@@ -1438,7 +1438,7 @@ func MobileSearchHandler(c *gin.Context) {
 			mapViewsToMobileSearchResponseItems(cuIds, mobileRespItemMap)
 		}
 
-		mobileResponse := MobileSearchResponse{Total: len(allItems), Items: allItems}
+		mobileResponse := MobileSearchResponse{Total: res.SearchResult.Hits.TotalHits, Items: allItems}
 
 		c.JSON(http.StatusOK, mobileResponse)
 
