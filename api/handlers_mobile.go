@@ -641,8 +641,8 @@ func MobileSearchHandler(c *gin.Context) {
 			}
 			err = json.Unmarshal(*hit.Source, &result)
 			if err != nil {
-				NewInternalError(err).Abort(c)
-				return
+				search.LogIfDeb(&query, fmt.Sprintf("Unable to unmarshal source: %s. Error: %+v.", hit.Source, err))
+				continue
 			}
 			var mobileResp *MobileSearchResponseItem
 			var date *time.Time = nil
