@@ -224,7 +224,7 @@ cuCount AS (
 	SELECT COUNT(DISTINCT "cu".id) AS count
 	FROM (%s) cu
 	LEFT JOIN collections_content_units ccu ON cu.id = ccu.content_unit_id
-	WHERE ccu IS NULL
+	WHERE ccu IS NOT NULL
 )
 SELECT cc.count + cu.count FROM cCount cc, cuCount cu`
 	countQueryJoint := fmt.Sprintf(countQueryStr, cCountQuery[:len(cCountQuery)-1], cuCountQuery[:len(cuCountQuery)-1])
@@ -271,7 +271,7 @@ SELECT
 	   NULL AS end_date
 	FROM (%s) cu
 	LEFT JOIN collections_content_units ccu ON cu.id = ccu.content_unit_id
-	WHERE ccu IS NULL
+	WHERE ccu IS NOT NULL
 `, cuq[:len(cuq)-1])
 
 	q := fmt.Sprintf(`
@@ -305,7 +305,8 @@ SELECT
              			-- ORDER BY ccu.collection_id, cu.created_at
 				),
 				cus AS (
-					SELECT * FROM (%s) cu
+					SELECT CAST(id AS bigint), uid, type_id, properties, created_at, tag, CAST(collection_id as bigint), collection_uid, number, CAST(date as date), CAST(start_date as date), CAST(end_date as date)
+						FROM (%s) cu
 					UNION
 					(SELECT * FROM cusCollectionful)
 				)
