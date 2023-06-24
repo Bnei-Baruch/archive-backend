@@ -674,7 +674,7 @@ func MobileSearchHandler(c *gin.Context) {
 
 				case consts.ES_RESULT_TYPE_COLLECTIONS:
 					var image *string
-					firstUnit := cacheM.SearchStats().GetCollectionFirstUnit(result.MDB_UID)
+					firstUnit := cacheM.SearchStats().GetCollectionRecentUnit(result.MDB_UID)
 					isArticle := firstUnit != nil && cacheM.SearchStats().IsContentUnitTypeArticle(*firstUnit)
 					if isArticle {
 						// Articles collection is not currently supported in mobile
