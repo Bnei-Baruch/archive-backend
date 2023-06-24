@@ -41,7 +41,7 @@ type SearchStatsCache interface {
 	GetSourceParentAndPosition(source string, getSourceTypeIds bool) (*string, *string, []int64, error)
 
 	GetProgramByCollectionAndPosition(collection_uid string, position string) *string
-	GetCollectionFirstUnit(collection_uid string) *string
+	GetCollectionRecentUnit(collection_uid string) *string
 	IsContentUnitTypeArticle(uid string) bool
 }
 
@@ -53,7 +53,7 @@ type SearchStatsCacheImpl struct {
 	holidayYears                    map[string]map[string]int
 	sourcesByPositionAndParent      map[string]string
 	programsByCollectionAndPosition map[string]string
-	firstUnitsOfCollections         map[string]string
+	recentUnitsOfCollections        map[string]string
 	unitsThatAreArticles            map[string]bool
 }
 
@@ -163,8 +163,8 @@ func (ssc *SearchStatsCacheImpl) GetProgramByCollectionAndPosition(collection_ui
 	return nil
 }
 
-func (ssc *SearchStatsCacheImpl) GetCollectionFirstUnit(collection_uid string) *string {
-	if unit_uid, ok := ssc.firstUnitsOfCollections[collection_uid]; ok {
+func (ssc *SearchStatsCacheImpl) GetCollectionRecentUnit(collection_uid string) *string {
+	if unit_uid, ok := ssc.recentUnitsOfCollections[collection_uid]; ok {
 		return &unit_uid
 	}
 	return nil
@@ -220,7 +220,7 @@ func (ssc *SearchStatsCacheImpl) Refresh() error {
 	if err != nil {
 		return errors.Wrap(err, "Load program position map.")
 	}
-	ssc.firstUnitsOfCollections, err = ssc.loadCollectionsFirstUnit()
+	ssc.recentUnitsOfCollections, err = ssc.loadCollectionsRecentUnit()
 	if err != nil {
 		return errors.Wrap(err, "Load collections first unit map.")
 	}
@@ -391,14 +391,14 @@ func (ssc *SearchStatsCacheImpl) loadProgramsByCollectionAndPosition() (map[stri
 	return ret, nil
 }
 
-func (ssc *SearchStatsCacheImpl) loadCollectionsFirstUnit() (map[string]string, error) {
+func (ssc *SearchStatsCacheImpl) loadCollectionsRecentUnit() (map[string]string, error) {
 	query := `SELECT DISTINCT ON (c.id) c.uid AS collection_uid, cu.uid AS first_content_unit_uid
 	FROM collections AS c
 	JOIN collections_content_units AS ccu ON c.id = ccu.collection_id
 	JOIN content_units AS cu ON ccu.content_unit_id = cu.id
 	where c.secure = 0 and c.published = true
 	and cu.secure = 0 and cu.published = true
-	ORDER BY c.id, (cu.properties->>'film_date')::date ASC`
+	ORDER BY c.id, (cu.properties->>'film_date')::date DESC`
 	rows, err := queries.Raw(query).Query(ssc.mdb)
 	if err != nil {
 		return nil, errors.Wrap(err, "queries.Raw")
