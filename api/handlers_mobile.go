@@ -493,6 +493,17 @@ type viewsResponse struct {
 	Views []int64 `json:"views"`
 }
 
+func getFeedApi(path string) (string, error) {
+	baseUrl := viper.GetString("feed_service.url")
+	if strings.HasPrefix(path, "/") {
+		path = path[1:]
+	}
+
+	// NOTICE: it's not supported on golang 1.17
+	//return url.JoinPath(baseUrl, path)
+	return baseUrl + path, nil
+}
+
 func MobileSearchHandler(c *gin.Context) {
 
 	// Mobile search support all content types of the regular search beside:
