@@ -53,5 +53,5 @@ func (e *ESEngine) Likutim(query Query, preference string) (map[string]*elastic.
 		}
 	}
 
-	return CombineBySourceOrTag(byLang, null.String{}, null.StringFrom(consts.SEARCH_RESULT_LIKUTIM_BY_TAG)), nil
+	return CombineBySourceOrTag(byLang, consts.ES_RESULT_TYPE_UNITS, null.String{}, null.StringFrom(consts.SEARCH_RESULT_LIKUTIM_BY_TAG)), nil
 }

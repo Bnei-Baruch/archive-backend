@@ -66,14 +66,14 @@ func (query *Query) ToFullSimpleString(sortBy string, from int, size int) string
 	return fmt.Sprintf("%s[%s%s]%s%s%s%s", language, query.Term, exactStr, filtersStr, page, sortStr, deb)
 }
 
-func CombineBySourceOrTag(byLang map[string]*elastic.SearchResult, typeNameForGroupBySource null.String, typeNameForGroupByTag null.String) map[string]*elastic.SearchResult {
+func CombineBySourceOrTag(byLang map[string]*elastic.SearchResult, resultType string, typeNameForGroupBySource null.String, typeNameForGroupByTag null.String) map[string]*elastic.SearchResult {
 	for l, r := range byLang {
 		hitBySource := make(map[string]*elastic.SearchHit)
 		hitByTag := make(map[string]*elastic.SearchHit)
 		hitsWithoutSourceOrTag := []*elastic.SearchHit{}
 		var maxScore *float64
 		for _, h := range r.Hits.Hits {
-			suid, tuid := GetHitSourceAndTag(h)
+			suid, tuid := GetHitSourceAndTag(h, resultType)
 			if typeNameForGroupBySource.Valid && suid != "" {
 				if val, hasKey := hitBySource[suid]; !hasKey || (h.Score != nil && *h.Score > *val.Score) {
 					hitBySource[suid] = h
@@ -128,7 +128,7 @@ func CombineBySourceOrTag(byLang map[string]*elastic.SearchResult, typeNameForGr
 	return byLang
 }
 
-func GetHitSourceAndTag(hit *elastic.SearchHit) (string, string) {
+func GetHitSourceAndTag(hit *elastic.SearchHit, resultType string) (string, string) {
 	var res es.Result
 	if err := json.Unmarshal(*hit.Source, &res); err != nil {
 		return "", ""
@@ -136,7 +136,7 @@ func GetHitSourceAndTag(hit *elastic.SearchHit) (string, string) {
 	tagKeys := make(map[string]bool)
 	srcKeys := make(map[string]bool)
 
-	if res.ResultType != consts.ES_RESULT_TYPE_COLLECTIONS {
+	if res.ResultType != resultType {
 		return "", ""
 	}
 	for _, tId := range res.TypedUids {
