@@ -9,6 +9,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/null/v8"
 	"gopkg.in/olivere/elastic.v6"
 )
 
@@ -58,5 +59,5 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 		// When the query has a number, we assume that the user is looking for a specific collection and we avoid grouping.
 		return byLang, nil
 	}
-	return CombineBySourceOrTag(byLang, consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE, consts.SEARCH_RESULT_LESSONS_SERIES_BY_TAG), nil
+	return CombineBySourceOrTag(byLang, null.StringFrom(consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE), null.StringFrom(consts.SEARCH_RESULT_LESSONS_SERIES_BY_TAG)), nil
 }

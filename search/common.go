@@ -9,6 +9,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
+	"github.com/volatiletech/null/v8"
 )
 
 func (query *Query) ToString() string {
@@ -65,7 +66,7 @@ func (query *Query) ToFullSimpleString(sortBy string, from int, size int) string
 	return fmt.Sprintf("%s[%s%s]%s%s%s%s", language, query.Term, exactStr, filtersStr, page, sortStr, deb)
 }
 
-func CombineBySourceOrTag(byLang map[string]*elastic.SearchResult, typeNameForGroupBySource string, typeNameForGroupByTag string) map[string]*elastic.SearchResult {
+func CombineBySourceOrTag(byLang map[string]*elastic.SearchResult, typeNameForGroupBySource null.String, typeNameForGroupByTag null.String) map[string]*elastic.SearchResult {
 	for l, r := range byLang {
 		hitBySource := make(map[string]*elastic.SearchHit)
 		hitByTag := make(map[string]*elastic.SearchHit)
@@ -73,11 +74,11 @@ func CombineBySourceOrTag(byLang map[string]*elastic.SearchResult, typeNameForGr
 		var maxScore *float64
 		for _, h := range r.Hits.Hits {
 			suid, tuid := GetHitSourceAndTag(h)
-			if suid != "" {
+			if typeNameForGroupBySource.Valid && suid != "" {
 				if val, hasKey := hitBySource[suid]; !hasKey || (h.Score != nil && *h.Score > *val.Score) {
 					hitBySource[suid] = h
 				}
-			} else if tuid != "" {
+			} else if typeNameForGroupByTag.Valid && tuid != "" {
 				if val, hasKey := hitByTag[tuid]; !hasKey || (h.Score != nil && *h.Score > *val.Score) {
 					hitByTag[tuid] = h
 				}
@@ -95,7 +96,7 @@ func CombineBySourceOrTag(byLang map[string]*elastic.SearchResult, typeNameForGr
 		for k, h := range hitBySource {
 			newH := &elastic.SearchHit{
 				Source:      h.Source,
-				Type:        typeNameForGroupBySource,
+				Type:        typeNameForGroupBySource.String,
 				Score:       h.Score,
 				Uid:         k,
 				Explanation: h.Explanation,
@@ -109,7 +110,7 @@ func CombineBySourceOrTag(byLang map[string]*elastic.SearchResult, typeNameForGr
 		for k, h := range hitByTag {
 			newH := &elastic.SearchHit{
 				Source:      h.Source,
-				Type:        typeNameForGroupByTag,
+				Type:        typeNameForGroupByTag.String,
 				Score:       h.Score,
 				Uid:         k,
 				Explanation: h.Explanation,

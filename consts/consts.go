@@ -473,7 +473,6 @@ const ES_RESULT_TYPE_TWEETS = "tweets"
 const SEARCH_RESULT_TWEETS_MANY = "tweets_many"
 const SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE = "lessons_series_by_source"
 const SEARCH_RESULT_LESSONS_SERIES_BY_TAG = "lessons_series_by_tag"
-const SEARCH_RESULT_LIKUTIM_BY_SOURCE = "likutim_by_source"
 const SEARCH_RESULT_LIKUTIM_BY_TAG = "likutim_by_tag"
 
 // Additional result types for mobile client

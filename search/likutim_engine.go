@@ -8,6 +8,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/pkg/errors"
+	"github.com/volatiletech/null/v8"
 	"gopkg.in/olivere/elastic.v6"
 )
 
@@ -52,5 +53,5 @@ func (e *ESEngine) Likutim(query Query, preference string) (map[string]*elastic.
 		}
 	}
 
-	return CombineBySourceOrTag(byLang, consts.SEARCH_RESULT_LIKUTIM_BY_SOURCE, consts.SEARCH_RESULT_LIKUTIM_BY_TAG), nil
+	return CombineBySourceOrTag(byLang, null.String{}, null.StringFrom(consts.SEARCH_RESULT_LIKUTIM_BY_TAG)), nil
 }
