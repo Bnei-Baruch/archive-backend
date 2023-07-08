@@ -672,7 +672,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	e.ExecutionTimeLog.Store(operation, elapsed)
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchTweets bool, searchLessonSeries bool, withHighlights bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchTweets bool, searchLessonSeries bool, searchLikutim bool, withHighlights bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
 	// Initializing all channels.
@@ -682,11 +682,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	grammarsFilteredResultsByLangChannel := make(chan map[string][]FilteredSearchResult)
 	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
 	seriesLangChannel := make(chan map[string]*elastic.SearchResult)
+	likutimChannel := make(chan map[string]*elastic.SearchResult)
 
 	filterIntents := []Intent{}
 	filteredByLang := map[string][]FilteredSearchResult{}
 	tweetsByLang := map[string]*elastic.SearchResult{}
 	seriesByLang := map[string]*elastic.SearchResult{}
+	likutimByLang := map[string]*elastic.SearchResult{}
 
 	var resultTypes []string
 	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
@@ -763,6 +765,24 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}()
 	}
 
+	if searchLikutim {
+		// Search lesson series
+		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					log.Errorf("ESEngine.DoSearch - Panic searching likutim: %+v", err)
+					likutimChannel <- map[string]*elastic.SearchResult{}
+				}
+			}()
+			if byLang, err := e.Likutim(query, preference); err != nil {
+				log.Errorf("ESEngine.DoSearch - Error searching likutim: %+v", err)
+				likutimChannel <- map[string]*elastic.SearchResult{}
+			} else {
+				likutimChannel <- byLang
+			}
+		}()
+	}
+
 	filterIntents = <-grammarsFilterIntentsChannel
 	LogIfDeb(&query, IntentsToStringDebug("GRAMMAR FILTER INTENTS", filterIntents))
 
@@ -830,7 +850,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			preference:         preference,
 			useHighlight:       false,
 			partialHighlight:   false,
-			filterOutCUSources: filterOutCUSources})
+			filterOutCUSources: filterOutCUSources,
+			filterOutCUTypes:   consts.ES_CONTENT_UNIT_TYPES_TO_FILTER_IN_MAIN_SEARCH})
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do on creating requests.")
 	}
@@ -976,6 +997,17 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		seriesByLang = <-seriesLangChannel
 		LogIfDeb(&query, ResultsMapToStringDebug("SERIES", seriesByLang, 3))
 		for lang, s := range seriesByLang {
+			if _, ok := resultsByLang[lang]; !ok {
+				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+			}
+			resultsByLang[lang] = append(resultsByLang[lang], s)
+		}
+	}
+
+	if searchLikutim {
+		likutimByLang = <-likutimChannel
+		LogIfDeb(&query, ResultsMapToStringDebug("LIKUTIM", likutimByLang, 3))
+		for lang, s := range likutimByLang {
 			if _, ok := resultsByLang[lang]; !ok {
 				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 			}

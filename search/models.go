@@ -40,8 +40,10 @@ type SearchRequestOptions struct {
 	// for highlighting. Only happens with intents.
 	partialHighlight bool
 	// Following field comes to reduce results duplication.
-	// If we have classification intent (carousel) by source, filter out this results from the main search.
+	// If we have classification intent (carousel) by source, filter out these results from the main search.
 	filterOutCUSources []string
+	// Specific content unit types we want to filter out from the search.
+	filterOutCUTypes []string
 	// Setting the following field to 'true' will ignore the search of content and in some cases also description.
 	// Description is considered as subtitle in sources,
 	//  so the 'description' field will be included only when this field is true and resultTypes contains only 'sources'.

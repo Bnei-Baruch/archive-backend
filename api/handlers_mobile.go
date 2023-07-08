@@ -489,11 +489,12 @@ type viewsResponse struct {
 func MobileSearchHandler(c *gin.Context) {
 
 	// Mobile search support all content types of the regular search beside:
-	// 1. Arcticle collections
+	// 1. Article collections
 	// 2. Blog posts
 	// 3. Tweets
 	// 4. Lesson series
 	// 5. Landing pages
+	// 6. Likutim
 
 	log.Debugf("Mobile Language: %s", c.Query("language"))
 	log.Infof("Mobile Query: [%s]", c.Query("q"))
@@ -605,6 +606,7 @@ func MobileSearchHandler(c *gin.Context) {
 	checkTypo := false // Currently not supported in mobile
 	searchTweets := c.Query("search_tweets") == "true"
 	searchLessonSeries := c.Query("search_lesson_series") == "true"
+	searchLikutim := c.Query("search_likutim") == "true"
 
 	res, err := se.DoSearch(
 		context.TODO(),
@@ -616,6 +618,7 @@ func MobileSearchHandler(c *gin.Context) {
 		checkTypo,
 		searchTweets,
 		searchLessonSeries,
+		searchLikutim,
 		false, // Highlights are not currently supported in mobile
 		time.Duration(0),
 	)

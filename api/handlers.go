@@ -827,6 +827,7 @@ func SearchHandler(c *gin.Context) {
 		true,
 		true,
 		true,
+		true,
 		timeoutForHighlight,
 	)
 

@@ -16,7 +16,7 @@ func NewFacetSearchRequest(q Query, options CreateFacetAggregationOptions) (*ela
 
 	resultQuery, err := createResultsQuery(
 		consts.ES_ALL_RESULT_TYPES, q,
-		[]string{} /*docIds=*/, []string{} /*filterOutCUSources=*/, false /*titleOnly=*/)
+		[]string{} /*docIds=*/, []string{} /*filterOutCUSources=*/, []string{} /*filterOutCUTypes*/, false /*titleOnly=*/)
 	if err != nil {
 		fmt.Printf("Error creating results query: %s", err.Error())
 		return nil, err

@@ -191,7 +191,8 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 					preference:         preference,
 					useHighlight:       false,
 					partialHighlight:   false,
-					filterOutCUSources: []string{}})
+					filterOutCUSources: []string{},
+					filterOutCUTypes:   consts.ES_CONTENT_UNIT_TYPES_TO_FILTER_IN_MAIN_SEARCH})
 			if err != nil {
 				return nil, err
 			}

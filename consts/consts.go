@@ -469,10 +469,12 @@ const ES_RESULT_TYPE_TAGS = "tags"
 const ES_RESULT_TYPE_BLOG_POSTS = "posts"
 const ES_RESULT_TYPE_TWEETS = "tweets"
 
-// Result of many tweets in one hit
+// Result of many items in one hit
 const SEARCH_RESULT_TWEETS_MANY = "tweets_many"
 const SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE = "lessons_series_by_source"
 const SEARCH_RESULT_LESSONS_SERIES_BY_TAG = "lessons_series_by_tag"
+const SEARCH_RESULT_LIKUTIM_BY_SOURCE = "likutim_by_source"
+const SEARCH_RESULT_LIKUTIM_BY_TAG = "likutim_by_tag"
 
 // Additional result types for mobile client
 const SEARCH_RESULT_PROGRAMS_BY_SOURCE = "programs_by_source"
@@ -511,6 +513,10 @@ var ES_ALL_RESULT_TYPES = []string{
 	ES_RESULT_TYPE_COLLECTIONS,
 	ES_RESULT_TYPE_BLOG_POSTS,
 	ES_RESULT_TYPE_TWEETS,
+}
+
+var ES_CONTENT_UNIT_TYPES_TO_FILTER_IN_MAIN_SEARCH = []string{
+	CT_LIKUTIM,
 }
 
 const (
@@ -866,6 +872,8 @@ const (
 	LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO        = "DoSearch.AddIntents.FirstRoundDo"
 	LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO       = "DoSearch.AddIntents.SecondRoundDo"
 	LAT_DOSEARCH_MULTISEARCHTWEETSDO            = "DoSearch.MultisearchTweetsDo"
+	LAT_DOSEARCH_MULTISEARCHLESSONSERIESDO      = "DoSearch.MultisearchLessonSeriesDo"
+	LAT_DOSEARCH_MULTISEARCHLIKUTIMDO           = "DoSearch.MultisearchLikutimDo"
 	LAT_DOSEARCH_TYPOSUGGESTDO                  = "DoSearch.TypoSuggestDo"
 	LAT_GETSUGGESTIONS                          = "GetSuggestions"
 	LAT_SUGGEST_SUGGESTIONS                     = "GetSuggestions.SuggestSuggestions"

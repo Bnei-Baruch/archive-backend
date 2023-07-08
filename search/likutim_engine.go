@@ -7,21 +7,19 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
-	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/olivere/elastic.v6"
 )
 
-func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*elastic.SearchResult, error) {
+func (e *ESEngine) Likutim(query Query, preference string) (map[string]*elastic.SearchResult, error) {
 	byLang := make(map[string]*elastic.SearchResult)
 	mss := e.esc.MultiSearch()
-	_, queryTermHasDigit := utils.HasNumeric(query.Term)
-	filter := map[string][]string{consts.FILTER_CONTENT_TYPE: {consts.CT_LESSONS_SERIES}}
+	filter := map[string][]string{consts.FILTER_CONTENT_TYPE: {consts.CT_LIKUTIM}}
 	for _, language := range query.LanguageOrder {
 		index := es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, language)
 		req, err := NewResultsSearchRequest(
 			SearchRequestOptions{
-				resultTypes:      []string{consts.ES_RESULT_TYPE_COLLECTIONS},
+				resultTypes:      []string{consts.ES_RESULT_TYPE_UNITS},
 				index:            index,
 				query:            Query{Term: query.Term, ExactTerms: query.ExactTerms, Filters: filter, LanguageOrder: query.LanguageOrder, Deb: query.Deb},
 				sortBy:           consts.SORT_BY_RELEVANCE,
@@ -38,7 +36,7 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 	before := time.Now()
 	mr, err := mss.Do(context.TODO())
 
-	e.timeTrack(before, consts.LAT_DOSEARCH_MULTISEARCHLESSONSERIESDO)
+	e.timeTrack(before, consts.LAT_DOSEARCH_MULTISEARCHLIKUTIMDO)
 	if err != nil {
 		return nil, err
 	}
@@ -54,9 +52,5 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 		}
 	}
 
-	if queryTermHasDigit {
-		// When the query has a number, we assume that the user is looking for a specific collection and we avoid grouping.
-		return byLang, nil
-	}
-	return CombineBySourceOrTag(byLang, consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE, consts.SEARCH_RESULT_LESSONS_SERIES_BY_TAG), nil
+	return CombineBySourceOrTag(byLang, consts.SEARCH_RESULT_LIKUTIM_BY_SOURCE, consts.SEARCH_RESULT_LIKUTIM_BY_TAG), nil
 }

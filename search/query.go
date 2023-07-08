@@ -166,7 +166,9 @@ func ParseQuery(q string) Query {
 }
 
 // Here we build the span_near query with span_multi sub queries to allow effective fuzzy search
-//  with slop and special cases like avoiding numeric values from applying fuzziness and handling of single hebrew letter in the query.
+//
+//	with slop and special cases like avoiding numeric values from applying fuzziness and handling of single hebrew letter in the query.
+//
 // The query is not supported in the elastic SDK so we build it manually.
 // Arguments:
 // field - the field where we search (title, full_title, description, content).
@@ -230,9 +232,12 @@ func addMustNotSeries(q Query) *elastic.BoolQuery {
 // resultTypes - list of search result types: sources, topics, CU's, etc..
 // docIds - optional list of _uid's for filtering the search. If the parameter value is nil, no filtering is applied. Used for highlight search.
 // filterOutCUSources - optional list of sources for which we want to filter out the CU's that connected to those sources
+//
 //	(in order to avoid duplication between carousel and regular results).
+//
+// filterOutCUTypes - optional list of content unit types we want to filter out (the 'likutim' content type, since we have a special engine for the likutim).
 // titlesOnly - limit our search only to title fields: title, full_title and description in case we search for intent sources. Used for intent search.
-func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, titlesOnly bool) (elastic.Query, error) {
+func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, filterOutCUTypes []string, titlesOnly bool) (elastic.Query, error) {
 	boolQuery := elastic.NewBoolQuery().Must(
 		elastic.NewConstantScoreQuery(
 			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(resultTypes)...),
@@ -250,7 +255,14 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 			boolQuery.MustNot(innerBoolQuery)
 		}
 	}
-
+	if len(filterOutCUTypes) > 0 {
+		rtForMustNotQuery := elastic.NewTermsQuery(consts.ES_RESULT_TYPE, consts.ES_RESULT_TYPE_UNITS)
+		for _, ct := range filterOutCUTypes {
+			typeForMustNotQuery := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.FILTER_CONTENT_TYPE, ct))
+			innerBoolQuery := elastic.NewBoolQuery().Filter(typeForMustNotQuery, rtForMustNotQuery)
+			boolQuery.MustNot(innerBoolQuery)
+		}
+	}
 	if mustNot := addMustNotSeries(q); mustNot != nil {
 		boolQuery.MustNot(mustNot)
 	}
@@ -571,7 +583,7 @@ func NewResultsSearchRequest(options SearchRequestOptions) (*elastic.SearchReque
 		}
 	}
 
-	resultsQuery, err := createResultsQuery(options.resultTypes, options.query, options.docIds, options.filterOutCUSources, options.titlesOnly)
+	resultsQuery, err := createResultsQuery(options.resultTypes, options.query, options.docIds, options.filterOutCUSources, options.filterOutCUTypes, options.titlesOnly)
 	if err != nil {
 		fmt.Printf("Error creating results query: %s", err.Error())
 		return nil, err
