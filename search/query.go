@@ -258,7 +258,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 	if len(filterOutCUTypes) > 0 {
 		rtForMustNotQuery := elastic.NewTermsQuery(consts.ES_RESULT_TYPE, consts.ES_RESULT_TYPE_UNITS)
 		for _, ct := range filterOutCUTypes {
-			typeForMustNotQuery := elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.FILTER_CONTENT_TYPE, ct))
+			typeForMustNotQuery := elastic.NewTermsQuery("filter_values", fmt.Sprintf("%s:%s", consts.FILTER_CONTENT_TYPE, ct))
 			innerBoolQuery := elastic.NewBoolQuery().Filter(typeForMustNotQuery, rtForMustNotQuery)
 			boolQuery.MustNot(innerBoolQuery)
 		}
@@ -554,7 +554,7 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 	// Reduce score for clips.
 	scoreQuery.Add(elastic.NewTermsQuery("filter_values", es.KeyValue("content_type", consts.CT_CLIP)), elastic.NewWeightFactorFunction(0.7))
 	// Boost score for likutim.
-	scoreQuery.Add(elastic.NewTermsQuery("filter_values", es.KeyValue("content_type", consts.CT_LIKUTIM)), elastic.NewWeightFactorFunction(2.0))
+	//scoreQuery.Add(elastic.NewTermsQuery("filter_values", es.KeyValue("content_type", consts.CT_LIKUTIM)), elastic.NewWeightFactorFunction(2.0))
 	return elastic.NewFunctionScoreQuery().Query(scoreQuery.Query(query).MinScore(MIN_SCORE_FOR_RESULTS)).ScoreMode("sum").MaxBoost(100.0).
 		AddScoreFunc(elastic.NewWeightFactorFunction(2.0)).
 		AddScoreFunc(elastic.NewGaussDecayFunction().FieldName("effective_date").Decay(0.6).Scale("2000d")), nil
