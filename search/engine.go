@@ -766,7 +766,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	if searchLikutim {
-		// Search lesson series
+		// Search Likutim
 		go func() {
 			defer func() {
 				if err := recover(); err != nil {
