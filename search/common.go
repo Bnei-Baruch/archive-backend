@@ -3,6 +3,7 @@ package search
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"gopkg.in/olivere/elastic.v6"
@@ -160,6 +161,8 @@ func GetHitSourceAndTag(hit *elastic.SearchHit, resultType string) (string, stri
 	for k := range tagKeys {
 		tagList = append(tagList, k)
 	}
+	sort.Strings(srcList)
+	sort.Strings(tagList)
 	src := strings.Join(srcList, "_")
 	tag := strings.Join(tagList, "_")
 
