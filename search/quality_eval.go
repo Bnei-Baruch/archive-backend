@@ -351,6 +351,7 @@ type HitSource struct {
 	CarrouselHitSources []HitSource `json:"carrousel,omitempty"`
 	ContentType         string      `json:"content_type,omitempty"`
 	Score               float64     `json:"score,omitempty"`
+	TypedUids           []string    `json:"typed_uids"`
 }
 
 func HitSourcesEqual(a, b HitSource) bool {
@@ -1475,7 +1476,7 @@ func evalResultToHitSources(result EvalResult) ([]HitSource, error) {
 					}
 					hitSource.CarrouselHitSources = append(hitSource.CarrouselHitSources, carrouselHitSource)
 				}
-			} else if hit.Type == consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE || hit.Type == consts.SEARCH_RESULT_LESSONS_SERIES_BY_TAG {
+			} else if hit.Type == consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE || hit.Type == consts.SEARCH_RESULT_LESSONS_SERIES_BY_TAG || hit.Type == consts.SEARCH_RESULT_LIKUTIM_BY_TAG {
 				hitSource.Score = *hit.Score
 				hitSource.ContentType = hit.Type
 				hitSource.ResultType = hit.Type
@@ -1483,6 +1484,9 @@ func evalResultToHitSources(result EvalResult) ([]HitSource, error) {
 			} else {
 				if hit.Score != nil {
 					hitSource.Score = *hit.Score
+				}
+				if utils.Contains(utils.Is(hitSource.TypedUids), es.KeyValue("content_type", consts.CT_LIKUTIM)) {
+					hitSource.ResultType = "Single Likutim Result"
 				}
 			}
 			sources = append(sources, hitSource)
