@@ -2544,7 +2544,7 @@ func handleTagsTranslation(db *sql.DB, r BaseRequest, tags map[int64]string) *Ht
 	q += strings.Join(args, ",") + ")"
 	var (
 		id    int64
-		label string
+		label null.String
 	)
 	rows, err := queries.Raw(q, utils.ConvertArgsInt64(ids)...).Query(db)
 	if err != nil {
@@ -2558,7 +2558,7 @@ func handleTagsTranslation(db *sql.DB, r BaseRequest, tags map[int64]string) *Ht
 		if err != nil {
 			return NewInternalError(err)
 		}
-		tags[id] = label
+		tags[id] = label.String
 	}
 	return nil
 }

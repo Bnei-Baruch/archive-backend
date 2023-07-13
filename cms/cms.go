@@ -199,7 +199,7 @@ func mkdir(permissions os.FileMode, dirs ...string) (err error) {
 func prepareDirectories() (workDir string, err error) {
 	workDir = filepath.Join(config.assets, fmt.Sprint(time.Now().Unix()))
 
-	for _,folder := range []string{"banners", "persons", "sources"} {
+	for _, folder := range []string{"banners", "persons", "sources"} {
 		if err = mkdir(0755, workDir, folder); err != nil {
 			return "", errors.Wrapf(err, "mkdir %s/%s", workDir, folder)
 		}
@@ -279,11 +279,11 @@ func getItem(name string, url string, v interface{}) (err error) {
 func saveImage(image string) (err error) {
 	// create directories for images
 	if err = mkdir(0755, config.workDir, "images", path.Dir(image)); err != nil {
-		return errors.Wrapf(err,"mkdir %s", image)
+		return errors.Wrapf(err, "mkdir %s", image)
 	}
 
 	// copy images
-	res, err := http.Get(fmt.Sprintf("https://%s%s",config.imageUrl, image))
+	res, err := http.Get(fmt.Sprintf("https://%s%s", config.imageUrl, image))
 	if err != nil {
 		return errors.Wrapf(err, "http.Get %s", image)
 	}

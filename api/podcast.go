@@ -789,7 +789,7 @@ func FeedCollections(c *gin.Context) {
 				Language: config.Lang,
 			},
 			StartIndex: 1,
-			StopIndex:  20,
+			StopIndex:  consts.API_MAX_PAGE_SIZE,
 			OrderBy:    "created_at desc",
 		},
 		CollectionsFilter: CollectionsFilter{
@@ -879,7 +879,7 @@ func FeedByContentType(c *gin.Context) {
 				Language: config.Lang,
 			},
 			StartIndex: 1,
-			StopIndex:  20,
+			StopIndex:  consts.API_MAX_PAGE_SIZE,
 			OrderBy:    "created_at desc",
 		},
 		ContentTypesFilter: ContentTypesFilter{
