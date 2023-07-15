@@ -211,6 +211,31 @@ type MobileSearchResponseItem struct {
 	Date           *time.Time `json:"date,omitempty"`
 }
 
+type MobileFeedRequest struct {
+	MoreItems   	int         `json:"more_items"`
+	CurrentFeed 	interface{} `json:"current_feed"`
+	Namespace   	string      `json:"namespace"`
+}
+
+type MobileFeedItem struct {
+	ContentUnitUid string     `json:"uid"`
+	ContentType    string     `json:"content_type"`
+	Date           *time.Time `json:"date"`
+	CreatedAt      *time.Time `json:"created_at"`
+	OriginalOrder  []int      `json:"original_order"`
+	Suggester      string     `json:"suggester"`
+	FeedOrder      int        `json:"feed_order"`
+}
+
+type MobileFeedResponseItem struct {
+	ContentUnitUid *string    `json:"contentUnitId,omitempty"`
+	Title          string     `json:"title"`
+	Image          *string    `json:"image,omitempty"`
+	Views          *int64     `json:"views,omitempty"`
+	Type           string     `json:"contentType"`
+	Date           *time.Time `json:"date,omitempty"`
+}
+
 type MobileProgramsPageRequest struct {
 	ListRequest
 	ContentTypesFilter

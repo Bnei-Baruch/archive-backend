@@ -305,7 +305,9 @@ SELECT
              			-- ORDER BY ccu.collection_id, cu.created_at
 				),
 				cus AS (
-					 SELECT id::bigint, uid, type_id, properties, created_at, tag, collection_id::bigint, collection_uid, number, date, start_date::date, end_date::date
+					SELECT id, uid, type_id, properties, created_at, tag, collection_id, collection_uid, number, date, start_date, end_date
+					-- On PostgreSQL 15 change the above line to:
+					-- SELECT id::bigint, uid, type_id, properties, created_at, tag, collection_id::bigint, collection_uid, number, date, start_date::date, end_date::date
 						FROM (%s) cu
 					UNION
 					(SELECT * FROM cusCollectionful)
@@ -794,4 +796,76 @@ func MobileSearchHandler(c *gin.Context) {
 
 		NewInternalError(err).Abort(c)
 	}
+}
+
+// call feed api to get results like search - https://kabbalahmedia.info/feed_api/feed
+// write sql to get
+func MobileFeed(c *gin.Context){
+	// get input json
+	var r MobileFeedRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	fmt.Println("r:", r.MoreItems, r.Namespace, r.CurrentFeed)
+
+	// temp - until the bug is fixed
+	// feedInput := map[string]interface{}{
+  //   "more_items": 20,
+  //   "current_feed": nil,
+  //   "namespace": "kmedia-app-1.4",
+  // }
+
+	feedInputJson, err := json.Marshal(r)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+	}
+
+	feedApi, err := getFeedApi("feed")
+	if err != nil {
+		NewInternalError(err).Abort(c)
+	}
+
+	feedResponseObj, err := http.Post(feedApi, "application/json", strings.NewReader(string(feedInputJson)))
+	if err != nil {
+		NewInternalError(err).Abort(c)
+	}
+
+	fmt.Println("Feed Response:", *feedResponseObj)
+
+	// convert response body to byte arr and then get the feed array
+	feedRespBytes, err := io.ReadAll(feedResponseObj.Body)
+	if err != nil {
+		log.Error(err.Error())
+	}
+
+	feedBody := new(feedResponseType)
+	if err = json.Unmarshal(feedRespBytes, feedBody); err != nil || feedBody == nil {
+		log.Error(err.Error())
+	}
+
+	var mobilefeedResponse []*MobileFeedResponseItem
+	imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
+
+	for _, item := range feedBody.Feed {
+		imageStr := fmt.Sprintf(imagesUrlTemplate, item.ContentUnitUid)
+
+		feedResp := MobileFeedResponseItem {
+			ContentUnitUid: &item.ContentUnitUid,
+			Type: item.ContentType,
+			Image: &imageStr,
+			Date: item.Date,
+			// Views: ,
+			//Title: item.,
+		}
+
+		mobilefeedResponse = append(mobilefeedResponse, &feedResp)
+	}
+
+	c.JSON(http.StatusOK, mobilefeedResponse)
+}
+
+type feedResponseType struct {
+	Feed 		[]MobileFeedItem  `json:"feed"`
+	Feeds 	interface{}				`json:"feeds"`
 }
