@@ -807,15 +807,6 @@ func MobileFeed(c *gin.Context){
 		return
 	}
 
-	fmt.Println("r:", r.MoreItems, r.Namespace, r.CurrentFeed)
-
-	// temp - until the bug is fixed
-	// feedInput := map[string]interface{}{
-  //   "more_items": 20,
-  //   "current_feed": nil,
-  //   "namespace": "kmedia-app-1.4",
-  // }
-
 	feedInputJson, err := json.Marshal(r)
 	if err != nil {
 		NewInternalError(err).Abort(c)
@@ -831,8 +822,6 @@ func MobileFeed(c *gin.Context){
 		NewInternalError(err).Abort(c)
 	}
 
-	fmt.Println("Feed Response:", *feedResponseObj)
-
 	// convert response body to byte arr and then get the feed array
 	feedRespBytes, err := io.ReadAll(feedResponseObj.Body)
 	if err != nil {
@@ -844,14 +833,16 @@ func MobileFeed(c *gin.Context){
 		log.Error(err.Error())
 	}
 
-	var mobilefeedResponse []*MobileFeedResponseItem
 	imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
+	var mobilefeedResponse []*MobileFeedResponseItem
+
+	// fmt.Println("feedBody:", feedBody)
 
 	for _, item := range feedBody.Feed {
 		imageStr := fmt.Sprintf(imagesUrlTemplate, item.ContentUnitUid)
 
-		feedResp := MobileFeedResponseItem {
-			ContentUnitUid: &item.ContentUnitUid,
+		feedResp := &MobileFeedResponseItem {
+			ContentUnitUid: item.ContentUnitUid,
 			Type: item.ContentType,
 			Image: &imageStr,
 			Date: item.Date,
@@ -859,7 +850,7 @@ func MobileFeed(c *gin.Context){
 			//Title: item.,
 		}
 
-		mobilefeedResponse = append(mobilefeedResponse, &feedResp)
+		mobilefeedResponse = append(mobilefeedResponse, feedResp)
 	}
 
 	c.JSON(http.StatusOK, mobilefeedResponse)

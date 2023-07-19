@@ -228,7 +228,7 @@ type MobileFeedItem struct {
 }
 
 type MobileFeedResponseItem struct {
-	ContentUnitUid *string    `json:"contentUnitId,omitempty"`
+	ContentUnitUid string    `json:"contentUnitId,omitempty"`
 	Title          string     `json:"title"`
 	Image          *string    `json:"image,omitempty"`
 	Views          *int64     `json:"views,omitempty"`
