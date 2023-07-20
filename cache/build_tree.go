@@ -36,6 +36,7 @@ func (st *StatsTree) GetUniqueChildren(rootUIDs []string) ([]string, []int64) {
 	uids, ids := st.GetChildren(rootUIDs)
 	return utils.ClearDuplicateString(uids), utils.ClearDuplicateInt64(ids)
 }
+
 func (st *StatsTree) GetChildren(rootUIDs []string) ([]string, []int64) {
 	chs := make([]*StatsNode, 0)
 	for _, rootUID := range rootUIDs {
@@ -47,6 +48,28 @@ func (st *StatsTree) GetChildren(rootUIDs []string) ([]string, []int64) {
 	for i, ch := range chs {
 		uids[i] = ch.uid
 		ids[i] = ch.id
+	}
+	return uids, ids
+}
+func (st *StatsTree) GetByUids(uids []string) ([]string, []int64) {
+	chs := make([]*StatsNode, 0)
+	for _, uid := range uids {
+		chs = append(chs, st.byUID[uid])
+	}
+	ids := make([]int64, len(chs))
+	for i, ch := range chs {
+		ids[i] = ch.id
+	}
+	return uids, ids
+}
+func (st *StatsTree) GetByIds(ids []int64) ([]string, []int64) {
+	chs := make([]*StatsNode, 0)
+	for _, id := range ids {
+		chs = append(chs, st.byID[id])
+	}
+	uids := make([]string, len(chs))
+	for i, ch := range chs {
+		uids[i] = ch.uid
 	}
 	return uids, ids
 }
