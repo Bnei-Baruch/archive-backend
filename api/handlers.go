@@ -3464,7 +3464,10 @@ func appendCollectionTagsFilterMods(cm cache.CacheManager, exec boil.Executor, m
 	if len(f.Tags) == 0 {
 		return nil
 	}
-	uids, _ := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
+	uids := f.Tags
+	if !f.RootsOnly {
+		uids, _ = cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
+	}
 	//use Raw query because of need to use operator ?
 	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM collections as c WHERE (c.properties->>'tags')::jsonb ?| $1`
@@ -3624,7 +3627,12 @@ func appendTagsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f TagsFilt
 	if len(f.Tags) == 0 {
 		return
 	}
-	_, ids := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
+	var ids []int64
+	if !f.RootsOnly {
+		_, ids = cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
+	} else {
+		_, ids = cm.TagsStats().GetTree().GetByUids(f.Tags)
+	}
 	if ids == nil || len(ids) == 0 {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
@@ -3881,7 +3889,13 @@ func appendTagsLabelsFilterMods(cm cache.CacheManager, mods *[]qm.QueryMod, f Ta
 	if utils.IsEmpty(f.Tags) {
 		return
 	}
-	_, ids := cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
+
+	var ids []int64
+	if !f.RootsOnly {
+		_, ids = cm.TagsStats().GetTree().GetUniqueChildren(f.Tags)
+	} else {
+		_, ids = cm.TagsStats().GetTree().GetByUids(f.Tags)
+	}
 	if ids != nil && len(ids) != 0 {
 		*mods = append(*mods,
 			qm.InnerJoin(`label_tag l_tag ON "labels".id = l_tag.label_id`),

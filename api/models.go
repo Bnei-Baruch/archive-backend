@@ -59,7 +59,8 @@ type SourcesFilter struct {
 }
 
 type TagsFilter struct {
-	Tags []string `json:"tags" form:"tag" binding:"omitempty,dive,len=8"`
+	Tags      []string `json:"tags" form:"tag" binding:"omitempty,dive,len=8"`
+	RootsOnly bool     `json:"roots_only" form:"roots_only" binding:"omitempty"`
 }
 
 type DateRangeFilter struct {
