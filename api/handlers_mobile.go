@@ -458,14 +458,14 @@ func setI18ColNameDesc(db *sql.DB, r BaseRequest, collectionIds []int64, cuIds [
 	return nil
 }
 
-func getViewsByCUIds(collectionIds []string) (*viewsResponse, error) {
+func getViewsByCUIds(uIds []string) (*viewsResponse, error) {
 	viewsUrl, err := getFeedApi("views")
 	if err != nil {
 		return nil, err
 	}
 
 	viewsPayload := map[string]interface{}{
-		"uids": collectionIds,
+		"uids": uIds,
 	}
 
 	viewsPayloadJson, err := json.Marshal(viewsPayload)
