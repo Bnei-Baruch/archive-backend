@@ -305,9 +305,7 @@ SELECT
              			-- ORDER BY ccu.collection_id, cu.created_at
 				),
 				cus AS (
-					SELECT id, uid, type_id, properties, created_at, tag, collection_id, collection_uid, number, date, start_date, end_date
-					-- On PostgreSQL 15 change the above line to: 
-					-- SELECT id::bigint, uid, type_id, properties, created_at, tag, collection_id::bigint, collection_uid, number, date, start_date::date, end_date::date
+					 SELECT id::bigint, uid, type_id, properties, created_at, tag, collection_id::bigint, collection_uid, number, date, start_date::date, end_date::date
 						FROM (%s) cu
 					UNION
 					(SELECT * FROM cusCollectionful)
