@@ -160,7 +160,7 @@ func concludeRequestFile(c *gin.Context, fileName string, err *HttpError) {
 func handleItemsRequest(filePattern string, contentLanguages []string) ([]string, *HttpError) {
 	for _, lang := range contentLanguages {
 		pattern := fmt.Sprintf(filePattern, lang)
-		if files, err := filepath.Glob(pattern); err == nil {
+		if files, err := filepath.Glob(pattern); err == nil && len(files) > 0 {
 			return files, nil
 		}
 	}
