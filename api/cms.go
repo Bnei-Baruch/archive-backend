@@ -170,8 +170,13 @@ func handleItemsRequest(filePattern string, contentLanguages []string) ([]string
 
 // responds with File(s) content or aborts the request with the given error.
 func concludeRequestFiles(c *gin.Context, fileNames []string, err *HttpError) {
-	if err != nil || len(fileNames) == 0 {
+	if err != nil {
 		err.Abort(c)
+		return
+	}
+
+	if len(fileNames) == 0 {
+		NewNotFoundError().Abort(c)
 		return
 	}
 
