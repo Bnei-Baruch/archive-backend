@@ -10,8 +10,6 @@ import (
 	"strings"
 
 	"gopkg.in/gin-gonic/gin.v1"
-
-	"github.com/Bnei-Baruch/archive-backend/consts"
 )
 
 type CMSParams struct {
@@ -33,35 +31,31 @@ func CMSPerson(c *gin.Context) {
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
 	filePattern := fmt.Sprintf("%sactive/persons/%s-%%s", assets, id)
-	fileName, err := handleItemRequest(filePattern, r.Language)
+	fileName, err := handleItemRequest(filePattern, BaseRequestToContentLanguages(r))
 	concludeRequestFile(c, fileName, err)
 }
 
 func CMSBanner(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		err := fmt.Errorf("id must be supplied")
-		concludeRequestFile(c, "", NewBadRequestError(err))
+	var r BaseRequest
+	if c.Bind(&r) != nil {
 		return
 	}
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
 	filePattern := fmt.Sprintf("%sactive/banners/%%s", assets)
-	fileName, err := handleItemRequest(filePattern, id)
+	fileName, err := handleItemRequest(filePattern, BaseRequestToContentLanguages(r))
 	concludeRequestFile(c, fileName, err)
 }
 
 func CMSBanners(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		err := fmt.Errorf("id must be supplied")
-		concludeRequestFile(c, "", NewBadRequestError(err))
+	var r BaseRequest
+	if c.Bind(&r) != nil {
 		return
 	}
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
 	filePattern := fmt.Sprintf("%sactive/banners/%%s-*", assets)
-	fileNames, err := handleItemsRequest(filePattern, id)
+	fileNames, err := handleItemsRequest(filePattern, BaseRequestToContentLanguages(r))
 	concludeRequestFiles(c, fileNames, err)
 }
 
@@ -84,7 +78,7 @@ func CMSSource(c *gin.Context) {
 
 	assets := c.MustGet("CMS").(*CMSParams).Assets
 	filePattern := fmt.Sprintf("%sactive/sources/%s-%%s-%s/%s", assets, r.Uid, r.Uid, id)
-	fileName, err := handleItemRequest(filePattern, r.Language)
+	fileName, err := handleItemRequest(filePattern, BaseRequestToContentLanguages(r.BaseRequest))
 	concludeRequestFile(c, fileName, err)
 }
 
@@ -137,12 +131,10 @@ func handleImageRequest(path string, assets string) (string, *HttpError) {
 	return fileName, nil
 }
 
-func handleItemRequest(filePattern string, language string) (string, *HttpError) {
-	var err error
-
-	for _, lang := range consts.I18N_LANG_ORDER[language] {
+func handleItemRequest(filePattern string, contentLanguages []string) (string, *HttpError) {
+	for _, lang := range contentLanguages {
 		file := fmt.Sprintf(filePattern, lang)
-		if _, err = os.Stat(file); err == nil {
+		if _, err := os.Stat(file); err == nil {
 			return file, nil
 		}
 	}
@@ -165,8 +157,8 @@ func concludeRequestFile(c *gin.Context, fileName string, err *HttpError) {
 	}
 }
 
-func handleItemsRequest(filePattern string, language string) ([]string, *HttpError) {
-	for _, lang := range consts.I18N_LANG_ORDER[language] {
+func handleItemsRequest(filePattern string, contentLanguages []string) ([]string, *HttpError) {
+	for _, lang := range contentLanguages {
 		pattern := fmt.Sprintf(filePattern, lang)
 		if files, err := filepath.Glob(pattern); err == nil {
 			return files, nil

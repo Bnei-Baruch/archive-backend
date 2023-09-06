@@ -133,6 +133,8 @@ const (
 
 	//suggest constant terms patterns
 	TERMS_PATTERN_DIGITS = `(?:^|\s|\(|\/)(\d+)(\b)`
+
+	DEFAULT_UI_LANGUAGE = LANG_ENGLISH
 )
 
 var COLLECTIONS_CONTENT_TYPES = []string{

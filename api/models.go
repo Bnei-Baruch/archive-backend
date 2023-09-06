@@ -10,6 +10,12 @@ import (
 )
 
 type BaseRequest struct {
+	UILanguage       string   `json:"ui_language" form:"ui_language" binding:"omitempty,len=2"`
+	ContentLanguages []string `json:"content_languages" form:"content_languages" binding:"omitempty"`
+	// UseFallbackLanguages when true will fallback to English or Russian based on consts.I18N_LANG_ORDER
+	UseFallbackLanguages bool `json:"use_fallback_languages" form:"use_fallback_languages" binding:"omitempty"`
+
+	// Deprecated, to be removed after frontend not depending on it any more.
 	Language string `json:"language" form:"language" binding:"omitempty,len=2"`
 }
 
