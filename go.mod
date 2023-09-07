@@ -1,6 +1,6 @@
 module github.com/Bnei-Baruch/archive-backend
 
-go 1.20
+go 1.21
 
 require (
 	github.com/Sirupsen/logrus v0.11.5-0.20170308203635-1deb2db2a6ff
