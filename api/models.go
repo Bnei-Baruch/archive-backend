@@ -155,6 +155,14 @@ type CollectionsResponse struct {
 	Collections []*Collection `json:"collections" binding:"omitempty,dive,len=2"`
 }
 
+type ViewsType struct {
+	Views          *int64     `json:"views,omitempty"`
+}
+
+func (viewsType *ViewsType) SetViews(views *int64) {
+    viewsType.Views = views
+}
+
 type MobileContentUnitResponseItem struct {
 	ContentUnitUid string     `json:"contentUnitId"`
 	CollectionId   *string    `json:"collectionId"`
@@ -162,7 +170,6 @@ type MobileContentUnitResponseItem struct {
 	Title          string     `json:"title"`
 	Description    string     `json:"description"`
 	ContentType    string     `json:"contentType"`
-	Views          *int64     `json:"views,omitempty"`
 	Date           *time.Time `json:"date,omitempty"`
 	StartDate      *time.Time `json:"startDate"`
 	EndDate        *time.Time `json:"endDate"`
@@ -172,6 +179,7 @@ type MobileContentUnitResponseItem struct {
 	internalUnitId       int64   `json:"-"`
 	internalCollectionId *int64  `json:"-"`
 	tag                  *string `json:"-"`
+	ViewsType
 }
 
 type LessonOverviewRequest struct {
@@ -206,7 +214,7 @@ type MobileSearchResponseItem struct {
 	TagUid         *string    `json:"tagId,omitempty"`
 	Title          string     `json:"title"`
 	Image          *string    `json:"image,omitempty"`
-	Views          *int64     `json:"views,omitempty"`
+	ViewsType
 	Type           string     `json:"contentType"`
 	Date           *time.Time `json:"date,omitempty"`
 }
@@ -231,7 +239,7 @@ type MobileFeedResponseItem struct {
 	ContentUnitUid string    `json:"contentUnitId,omitempty"`
 	Title          string     `json:"title"`
 	Image          *string    `json:"image,omitempty"`
-	Views          *int64     `json:"views,omitempty"`
+	ViewsType
 	Type           string     `json:"contentType"`
 	Date           *time.Time `json:"date,omitempty"`
 }

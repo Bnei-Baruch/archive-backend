@@ -92,24 +92,16 @@ func MobileProgramsPageHandler(c *gin.Context) {
 		result.Items = append(result.Items, item)
 	}
 
-	mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
+	mapViewsToMobileResponseItems[*MobileContentUnitResponseItem](contentUnitUids, itemsMap)
 	concludeRequest(c, result, err)
 }
 
-func mapViewsToMobileContentUnitItems(contentUnitUids []string, itemsMap map[string]*MobileContentUnitResponseItem) {
-	if viewsResp, err := getViewsByCUIds(contentUnitUids); err != nil {
-		log.Error(err.Error())
-	} else {
-		for ix := range viewsResp.Views {
-			viewsCount := viewsResp.Views[ix]
-			uid := contentUnitUids[ix]
-			item := itemsMap[uid]
-			item.Views = &viewsCount
-		}
-	}
+type responseItemType interface {
+	*MobileContentUnitResponseItem | *MobileSearchResponseItem | *MobileFeedResponseItem
+	SetViews(views *int64)
 }
 
-func mapViewsToMobileSearchResponseItems(contentUnitUids []string, itemsMap map[string]*MobileSearchResponseItem) {
+func mapViewsToMobileResponseItems[T responseItemType](contentUnitUids []string, itemsMap map[string]T) {
 	if viewsResp, err := getViewsByCUIds(contentUnitUids); err != nil {
 		log.Error(err.Error())
 	} else {
@@ -117,7 +109,7 @@ func mapViewsToMobileSearchResponseItems(contentUnitUids []string, itemsMap map[
 			viewsCount := viewsResp.Views[ix]
 			uid := contentUnitUids[ix]
 			item := itemsMap[uid]
-			item.Views = &viewsCount
+			item.SetViews(&viewsCount);
 		}
 	}
 }
@@ -154,7 +146,7 @@ func LessonOverviewHandler(c *gin.Context) {
 		return
 	}
 
-	mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
+	mapViewsToMobileResponseItems[*MobileContentUnitResponseItem](contentUnitUids, itemsMap)
 	concludeRequest(c, resp, nil)
 }
 
@@ -366,13 +358,17 @@ SELECT
 			internalCollectionId: collectionId,
 			tag:                  tag,
 			Image:                fmt.Sprintf(imagesUrlTemplate, contentUnitUid),
-			Views:                views,
 			Number:               number,
+			Title:                "",
+			Description:          "",
+			ContentType:          mdb.CONTENT_TYPE_REGISTRY.ByID[contentType].Name,
 			Date:                 date,
 			StartDate:            startDate,
 			EndDate:              endDate,
 			Duration:             &duration,
-			ContentType:          mdb.CONTENT_TYPE_REGISTRY.ByID[contentType].Name,
+			ViewsType:            ViewsType{
+				Views: 							views,
+			},
 		}
 
 		resp.Items = append(resp.Items, item)
@@ -781,7 +777,7 @@ func MobileSearchHandler(c *gin.Context) {
 
 		cuIds, exists := mapIdsByType[consts.ES_RESULT_TYPE_UNITS]
 		if exists {
-			mapViewsToMobileSearchResponseItems(cuIds, mobileRespItemMap)
+			mapViewsToMobileResponseItems[*MobileSearchResponseItem](cuIds, mobileRespItemMap)
 		}
 
 		mobileResponse := MobileSearchResponse{Total: res.SearchResult.Hits.TotalHits, Items: allItems}
