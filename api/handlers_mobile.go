@@ -505,7 +505,7 @@ func getFeedApi(path string) (string, error) {
 func MobileSearchHandler(c *gin.Context) {
 
 	// Mobile search support all content types of the regular search beside:
-	// 1. Arcticle collections
+	// 1. Article collections
 	// 2. Blog posts
 	// 3. Tweets
 	// 4. Lesson series
@@ -834,6 +834,9 @@ func MobileFeed(c *gin.Context){
 
 	// fmt.Println("feedBody:", feedBody)
 
+	var cuIds []string
+	itemsMap := make(map[string]*MobileFeedResponseItem)
+
 	for _, item := range feedBody.Feed {
 		imageStr := fmt.Sprintf(imagesUrlTemplate, item.ContentUnitUid)
 
@@ -846,8 +849,12 @@ func MobileFeed(c *gin.Context){
 			//Title: item.,
 		}
 
+		itemsMap[item.ContentUnitUid] = feedResp
+		cuIds = append(cuIds, item.ContentUnitUid)
 		mobilefeedResponse = append(mobilefeedResponse, feedResp)
 	}
+
+	mapViewsToMobileResponseItems[*MobileFeedResponseItem](cuIds, itemsMap)
 
 	c.JSON(http.StatusOK, mobilefeedResponse)
 }
