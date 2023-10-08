@@ -4084,6 +4084,9 @@ func setCI18n(c *Collection, r BaseRequest, i18ns map[string]*mdbmodels.Collecti
 func BaseRequestToContentLanguages(r BaseRequest) []string {
 	if !r.UseFallbackLanguages {
 		if len(r.ContentLanguages) > 0 {
+			if r.UILanguage != "" && !utils.StringInSlice(r.UILanguage, r.ContentLanguages) {
+				return append(r.ContentLanguages, r.UILanguage)
+			}
 			return r.ContentLanguages
 		} else {
 			// Deprecated, should be removed after new client launched with
