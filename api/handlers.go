@@ -1359,6 +1359,10 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 }
 
 func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, []*Collection, *HttpError) {
+	inLangs := []string(nil)
+	for _, lang := range BaseRequestToContentLanguages(r) {
+		inLangs = append(inLangs, fmt.Sprintf("'%s'", lang))
+	}
 	const queryTemplate = `
 WITH CUs AS (
 	SELECT ct.id as type_id, uid, cu_id AS id, film_date
@@ -1366,6 +1370,11 @@ WITH CUs AS (
 	INNER JOIN LATERAL (
 		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
 		FROM content_units cu
+		INNER JOIN (
+			SELECT DISTINCT content_unit_id AS fcontent_unit_id
+			FROM files WHERE secure = 0 AND published IS TRUE
+			AND language IN (%s)
+		) AS f ON cu.id = f.fcontent_unit_id
 		WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
 		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
 		FETCH FIRST 20 ROWS ONLY
@@ -1415,6 +1424,9 @@ order by type_id, film_date desc
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
 
+		// Languages for units.
+		strings.Join(inLangs, ","),
+
 		// Collections (lessons): CT_LESSONS_SERIES x 10, CT_DAILY_LESSON x 1 + 10
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSONS_SERIES].ID,
@@ -1422,6 +1434,7 @@ order by type_id, film_date desc
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID,
 	)
+
 	rows, err := queries.Raw(query).Query(db)
 	if err != nil {
 		return nil, nil, NewInternalError(err)
@@ -1457,37 +1470,44 @@ order by type_id, film_date desc
 	}
 	cuIDs := make([]int64, 0)
 	if _, ok := firstRows[consts.CT_WOMEN_LESSON]; ok {
-		for _, r := range firstRows[consts.CT_WOMEN_LESSON][0:5] {
+		minLen := utils.MinInt(5, len(firstRows[consts.CT_WOMEN_LESSON]))
+		for _, r := range firstRows[consts.CT_WOMEN_LESSON][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_VIRTUAL_LESSON]; ok {
-		for _, r := range firstRows[consts.CT_VIRTUAL_LESSON][0:10] {
+		minLen := utils.MinInt(10, len(firstRows[consts.CT_VIRTUAL_LESSON]))
+		for _, r := range firstRows[consts.CT_VIRTUAL_LESSON][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER]; ok {
-		for _, r := range firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER][0:20] {
+		minLen := utils.MinInt(20, len(firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER]))
+		for _, r := range firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_CLIP]; ok {
-		for _, r := range firstRows[consts.CT_CLIP][0:20] {
+		minLen := utils.MinInt(20, len(firstRows[consts.CT_CLIP]))
+		for _, r := range firstRows[consts.CT_CLIP][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_ARTICLE]; ok {
-		for _, r := range firstRows[consts.CT_ARTICLE][0:20] {
+		minLen := utils.MinInt(20, len(firstRows[consts.CT_ARTICLE]))
+		for _, r := range firstRows[consts.CT_ARTICLE][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_MEAL]; ok {
-		for _, r := range firstRows[consts.CT_MEAL][0:5] {
+		minLen := utils.MinInt(5, len(firstRows[consts.CT_MEAL]))
+		for _, r := range firstRows[consts.CT_MEAL][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_FRIENDS_GATHERING]; ok {
-		for _, r := range firstRows[consts.CT_FRIENDS_GATHERING][0:5] {
+		minLen := utils.MinInt(5, len(firstRows[consts.CT_FRIENDS_GATHERING]))
+		for _, r := range firstRows[consts.CT_FRIENDS_GATHERING][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
@@ -3759,7 +3779,7 @@ func appendContentLanguagesFilterMods(mods *[]qm.QueryMod, r BaseRequest) error 
 	}
 	*mods = append(*mods,
 		qm.InnerJoin(fmt.Sprintf(`
-			(SELECT content_unit_id AS fcontent_unit_id
+			(SELECT DISTINCT content_unit_id AS fcontent_unit_id
 			 FROM files WHERE secure = 0 AND published IS TRUE
 			 AND language IN (%s)
 			) AS f
