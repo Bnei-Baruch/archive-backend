@@ -1359,10 +1359,6 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 }
 
 func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, []*Collection, *HttpError) {
-	inLangs := []string(nil)
-	for _, lang := range BaseRequestToContentLanguages(r) {
-		inLangs = append(inLangs, fmt.Sprintf("'%s'", lang))
-	}
 	const queryTemplate = `
 WITH CUs AS (
 	SELECT ct.id as type_id, uid, cu_id AS id, film_date
@@ -1370,11 +1366,6 @@ WITH CUs AS (
 	INNER JOIN LATERAL (
 		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
 		FROM content_units cu
-		INNER JOIN (
-			SELECT DISTINCT content_unit_id AS fcontent_unit_id
-			FROM files WHERE secure = 0 AND published IS TRUE
-			AND language IN (%s)
-		) AS f ON cu.id = f.fcontent_unit_id
 		WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
 		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
 		FETCH FIRST 20 ROWS ONLY
@@ -1423,9 +1414,6 @@ order by type_id, film_date desc
 		// row #5: CT_FRIENDS_GATHERING, CT_MEAL x 5
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
-
-		// Languages for units.
-		strings.Join(inLangs, ","),
 
 		// Collections (lessons): CT_LESSONS_SERIES x 10, CT_DAILY_LESSON x 1 + 10
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
@@ -3770,6 +3758,8 @@ func appendBlogFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f BlogFilter)
 }
 
 func appendContentLanguagesFilterMods(mods *[]qm.QueryMod, r BaseRequest) error {
+  return nil
+
 	if r.Language != "" {
 		return nil
 	}
