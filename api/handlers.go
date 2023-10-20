@@ -3782,8 +3782,8 @@ func appendContentLanguagesFilterMods(mods *[]qm.QueryMod, r BaseRequest) error 
 			(SELECT DISTINCT content_unit_id AS fcontent_unit_id
 			 FROM files WHERE secure = 0 AND published IS TRUE
 			 AND language IN (%s)
-			) AS f
-			ON content_units.id = f.fcontent_unit_id
+			) AS cuf
+			ON content_units.id = cuf.fcontent_unit_id
 		`, strings.Join(inLangs, ","))))
 	return nil
 }
