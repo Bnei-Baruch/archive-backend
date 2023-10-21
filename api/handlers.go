@@ -3779,7 +3779,7 @@ func appendContentLanguagesFilterMods(mods *[]qm.QueryMod, r BaseRequest) error 
 	}
 	*mods = append(*mods,
 		qm.InnerJoin(fmt.Sprintf(`
-			(SELECT DISTINCT content_unit_id AS fcontent_unit_id
+			(SELECT content_unit_id AS fcontent_unit_id
 			 FROM files WHERE secure = 0 AND published IS TRUE
 			 AND language IN (%s)
 			) AS cuf
@@ -4033,7 +4033,7 @@ func loadCI18ns(db *sql.DB, r BaseRequest, ids []int64) (map[int64]map[string]*m
 	// Load from DB
 	i18ns, err := mdbmodels.CollectionI18ns(
 		qm.WhereIn("collection_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(BaseRequestToContentLanguages(r))...)).
+		qm.AndIn("language in ?", utils.ConvertArgsString(BaseRequestToUILanguages(r))...)).
 		All(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "Load collections i18ns from DB")
@@ -4054,7 +4054,7 @@ func loadCI18ns(db *sql.DB, r BaseRequest, ids []int64) (map[int64]map[string]*m
 }
 
 func setPublisherI18n(p *Publisher, r BaseRequest, i18ns map[string]*mdbmodels.PublisherI18n) {
-	languages := BaseRequestToContentLanguages(r)
+	languages := BaseRequestToUILanguages(r)
 	i := 0
 	for i < len(languages) && (p.Name.String == "" || p.Description.String == "") {
 		li18n, ok := i18ns[languages[i]]
@@ -4071,7 +4071,7 @@ func setPublisherI18n(p *Publisher, r BaseRequest, i18ns map[string]*mdbmodels.P
 }
 
 func setPersonI18n(p *Person, r BaseRequest, i18ns map[string]*mdbmodels.PersonI18n) {
-	languages := BaseRequestToContentLanguages(r)
+	languages := BaseRequestToUILanguages(r)
 	i := 0
 	for i < len(languages) && p.Name.String == "" {
 		li18n, ok := i18ns[languages[i]]
@@ -4085,9 +4085,11 @@ func setPersonI18n(p *Person, r BaseRequest, i18ns map[string]*mdbmodels.PersonI
 }
 
 func setCI18n(c *Collection, r BaseRequest, i18ns map[string]*mdbmodels.CollectionI18n) {
-	languages := BaseRequestToContentLanguages(r)
+	languages := BaseRequestToUILanguages(r)
 	i := 0
-	for i < len(languages) && (c.Name == "" || c.Description == "") {
+	// Name is the dominant ui element and when set, we don't add description even if
+	// we have it in other languages.
+	for i < len(languages) && c.Name == "" {
 		li18n, ok := i18ns[languages[i]]
 		if ok {
 			if c.Name == "" && li18n.Name.Valid && li18n.Name.String != "" {
@@ -4099,6 +4101,27 @@ func setCI18n(c *Collection, r BaseRequest, i18ns map[string]*mdbmodels.Collecti
 		}
 		i++
 	}
+}
+
+
+// UI elements are content elements are split by the following general rule
+// Files are content.
+// Labels, titles, descriptions... are ui elements.
+func BaseRequestToUILanguages(r BaseRequest) []string {
+  if r.UILanguage != "" {
+    // Return list of [ui lang, all content langs, fallback langs]
+    uiLangs := []string{r.UILanguage}
+    for _, lang := range append(r.ContentLanguages, consts.I18N_LANG_ORDER[r.UILanguage]...) {
+			if !utils.StringInSlice(lang, uiLangs) {
+        uiLangs = append(uiLangs, lang)
+      }
+    }
+    return uiLangs
+	}
+
+  // Deprecated, should be removed after new client launched with
+  // new languages fields.
+  return consts.I18N_LANG_ORDER[r.Language]
 }
 
 func BaseRequestToContentLanguages(r BaseRequest) []string {
@@ -4148,7 +4171,7 @@ func loadCUI18ns(db *sql.DB, r BaseRequest, ids []int64) (map[int64]map[string]*
 	// Load from DB
 	i18ns, err := mdbmodels.ContentUnitI18ns(
 		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(BaseRequestToContentLanguages(r))...)).
+		qm.AndIn("language in ?", utils.ConvertArgsString(BaseRequestToUILanguages(r))...)).
 		All(db)
 
 	if err != nil {
@@ -4206,9 +4229,11 @@ func loadCUFiles(db *sql.DB, ids []int64, mediaTypes []string, languages []strin
 }
 
 func setCUI18n(cu *ContentUnit, r BaseRequest, i18ns map[string]*mdbmodels.ContentUnitI18n) {
-	languages := BaseRequestToContentLanguages(r)
+	languages := BaseRequestToUILanguages(r)
 	i := 0
-	for i < len(languages) && (cu.Name == "" || cu.Description == "") {
+	// Name is the dominant ui element and when set, we don't add description even if
+	// we have it in other languages.
+	for i < len(languages) && cu.Name == "" {
 		li18n, ok := i18ns[languages[i]]
 		if ok {
 			if cu.Name == "" && li18n.Name.Valid && li18n.Name.String != "" {
@@ -4290,7 +4315,7 @@ func loadLabelsI18ns(db *sql.DB, r BaseRequest, ids []int64) (map[int64]map[stri
 	// Load from DB
 	i18ns, err := mdbmodels.LabelI18ns(
 		qm.WhereIn("label_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(BaseRequestToContentLanguages(r))...),
+		qm.AndIn("language in ?", utils.ConvertArgsString(BaseRequestToUILanguages(r))...),
 		qm.Load("User"),
 	).All(db)
 	if err != nil {
@@ -4311,9 +4336,11 @@ func loadLabelsI18ns(db *sql.DB, r BaseRequest, ids []int64) (map[int64]map[stri
 }
 
 func setLabelI18n(l *Label, r BaseRequest, i18ns map[string]*mdbmodels.LabelI18n) {
-	languages := BaseRequestToContentLanguages(r)
+	languages := BaseRequestToUILanguages(r)
 	i := 0
-	for i < len(languages) && (l.Name == "" || l.Author == "") {
+	// Name is the dominant ui element and when set, we don't add author even if
+	// we have it in other languages.
+	for i < len(languages) && l.Name == "" {
 		li18n, ok := i18ns[languages[i]]
 		if ok {
 			if l.Name == "" && li18n.Name.Valid && li18n.Name.String != "" {
