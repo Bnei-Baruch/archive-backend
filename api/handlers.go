@@ -3779,7 +3779,7 @@ func appendContentLanguagesFilterMods(mods *[]qm.QueryMod, r BaseRequest) error 
 	}
 	*mods = append(*mods,
 		qm.InnerJoin(fmt.Sprintf(`
-			(SELECT DISTINCT content_unit_id AS fcontent_unit_id
+			(SELECT content_unit_id AS fcontent_unit_id
 			 FROM files WHERE secure = 0 AND published IS TRUE
 			 AND language IN (%s)
 			) AS cuf
