@@ -832,7 +832,8 @@ func MobileFeed(c *gin.Context){
 	imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
 	var mobilefeedResponse []*MobileFeedResponseItem
 
-	// fmt.Println("feedBody:", feedBody)
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	language := c.Query("language");
 
 	var cuIds []string
 	itemsMap := make(map[string]*MobileFeedResponseItem)
@@ -846,7 +847,7 @@ func MobileFeed(c *gin.Context){
 			Image: &imageStr,
 			Date: item.Date,
 			// Views: ,
-			//Title: item.,
+			Title: getContentUnitName(item.ContentUnitUid, language, db),
 		}
 
 		itemsMap[item.ContentUnitUid] = feedResp
@@ -854,9 +855,26 @@ func MobileFeed(c *gin.Context){
 		mobilefeedResponse = append(mobilefeedResponse, feedResp)
 	}
 
+	// set views
 	mapViewsToMobileResponseItems[*MobileFeedResponseItem](cuIds, itemsMap)
 
 	c.JSON(http.StatusOK, mobilefeedResponse)
+}
+
+func getContentUnitName(uid string, language string, db *sql.DB) string {
+	QUERY_TITLE := `SELECT name
+									FROM content_unit_i18n i18n
+									JOIN content_units cu ON cu.id = i18n.content_unit_id
+									WHERE uid = '%s'
+									AND language = '%s'`
+
+		rsql := fmt.Sprintf(QUERY_TITLE, uid, language)
+		row := queries.Raw(rsql).QueryRow(db)
+
+		var title string
+		row.Scan(&title)
+
+		return title;
 }
 
 type feedResponseType struct {
