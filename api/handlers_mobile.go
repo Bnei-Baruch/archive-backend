@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -109,7 +110,7 @@ func mapViewsToMobileResponseItems[T responseItemType](contentUnitUids []string,
 			viewsCount := viewsResp.Views[ix]
 			uid := contentUnitUids[ix]
 			item := itemsMap[uid]
-			item.SetViews(&viewsCount);
+			item.SetViews(&viewsCount)
 		}
 	}
 }
@@ -366,8 +367,8 @@ SELECT
 			StartDate:            startDate,
 			EndDate:              endDate,
 			Duration:             &duration,
-			ViewsType:            ViewsType{
-				Views: 							views,
+			ViewsType: ViewsType{
+				Views: views,
 			},
 		}
 
@@ -497,9 +498,7 @@ func getFeedApi(path string) (string, error) {
 		path = path[1:]
 	}
 
-	// NOTICE: it's not supported on golang 1.17
-	//return url.JoinPath(baseUrl, path)
-	return baseUrl + path, nil
+	return url.JoinPath(baseUrl, path)
 }
 
 func MobileSearchHandler(c *gin.Context) {
@@ -794,9 +793,7 @@ func MobileSearchHandler(c *gin.Context) {
 	}
 }
 
-// call feed api to get results like search - https://kabbalahmedia.info/feed_api/feed
-// write sql to get
-func MobileFeed(c *gin.Context){
+func MobileFeed(c *gin.Context) {
 	// get input json
 	var r MobileFeedRequest
 	if c.Bind(&r) != nil {
@@ -833,7 +830,7 @@ func MobileFeed(c *gin.Context){
 	var mobilefeedResponse []*MobileFeedResponseItem
 
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	language := c.Query("language");
+	language := c.Query("language")
 
 	var cuIds []string
 	itemsMap := make(map[string]*MobileFeedResponseItem)
@@ -841,13 +838,12 @@ func MobileFeed(c *gin.Context){
 	for _, item := range feedBody.Feed {
 		imageStr := fmt.Sprintf(imagesUrlTemplate, item.ContentUnitUid)
 
-		feedResp := &MobileFeedResponseItem {
+		feedResp := &MobileFeedResponseItem{
 			ContentUnitUid: item.ContentUnitUid,
-			Type: item.ContentType,
-			Image: &imageStr,
-			Date: item.Date,
-			// Views: ,
-			Title: getContentUnitName(item.ContentUnitUid, language, db),
+			Type:           item.ContentType,
+			Image:          &imageStr,
+			Date:           item.Date,
+			Title:          getContentUnitName(item.ContentUnitUid, language, db),
 		}
 
 		itemsMap[item.ContentUnitUid] = feedResp
@@ -868,16 +864,16 @@ func getContentUnitName(uid string, language string, db *sql.DB) string {
 									WHERE uid = '%s'
 									AND language = '%s'`
 
-		rsql := fmt.Sprintf(QUERY_TITLE, uid, language)
-		row := queries.Raw(rsql).QueryRow(db)
+	rsql := fmt.Sprintf(QUERY_TITLE, uid, language)
+	row := queries.Raw(rsql).QueryRow(db)
 
-		var title string
-		row.Scan(&title)
+	var title string
+	row.Scan(&title)
 
-		return title;
+	return title
 }
 
 type feedResponseType struct {
-	Feed 		[]MobileFeedItem  `json:"feed"`
-	Feeds 	interface{}				`json:"feeds"`
+	Feed  []MobileFeedItem `json:"feed"`
+	Feeds interface{}      `json:"feeds"`
 }

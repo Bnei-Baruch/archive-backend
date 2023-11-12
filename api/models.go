@@ -208,13 +208,13 @@ type MobileSearchResponse struct {
 }
 
 type MobileSearchResponseItem struct {
+	ViewsType
 	ContentUnitUid *string    `json:"contentUnitId,omitempty"`
 	CollectionUid  *string    `json:"collectionId,omitempty"`
 	SourceUid      *string    `json:"sourceId,omitempty"`
 	TagUid         *string    `json:"tagId,omitempty"`
 	Title          string     `json:"title"`
 	Image          *string    `json:"image,omitempty"`
-	ViewsType
 	Type           string     `json:"contentType"`
 	Date           *time.Time `json:"date,omitempty"`
 }
@@ -236,10 +236,10 @@ type MobileFeedItem struct {
 }
 
 type MobileFeedResponseItem struct {
+	ViewsType
 	ContentUnitUid string    `json:"contentUnitId,omitempty"`
 	Title          string     `json:"title"`
 	Image          *string    `json:"image,omitempty"`
-	ViewsType
 	Type           string     `json:"contentType"`
 	Date           *time.Time `json:"date,omitempty"`
 }
