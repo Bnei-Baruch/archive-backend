@@ -835,6 +835,12 @@ func MobileFeed(c *gin.Context) {
 	var cuIds []string
 	itemsMap := make(map[string]*MobileFeedResponseItem)
 
+	cuMap, err := getContentUnits(language, db)
+
+	if (err != nil) {
+		log.Error(err.Error())
+	}
+
 	for _, item := range feedBody.Feed {
 		imageStr := fmt.Sprintf(imagesUrlTemplate, item.ContentUnitUid)
 
@@ -843,7 +849,7 @@ func MobileFeed(c *gin.Context) {
 			Type:           item.ContentType,
 			Image:          &imageStr,
 			Date:           item.Date,
-			Title:          getContentUnitName(item.ContentUnitUid, language, db),
+			Title:          cuMap[item.ContentUnitUid],
 		}
 
 		itemsMap[item.ContentUnitUid] = feedResp
@@ -857,20 +863,35 @@ func MobileFeed(c *gin.Context) {
 	c.JSON(http.StatusOK, mobilefeedResponse)
 }
 
-func getContentUnitName(uid string, language string, db *sql.DB) string {
-	QUERY_TITLE := `SELECT name
+func getContentUnits(language string, db *sql.DB) (map[string]string, error) {
+	QUERY_TITLE := `SELECT uid, name
 									FROM content_unit_i18n i18n
 									JOIN content_units cu ON cu.id = i18n.content_unit_id
-									WHERE uid = '%s'
-									AND language = '%s'`
+									WHERE language = '%s'`
 
-	rsql := fmt.Sprintf(QUERY_TITLE, uid, language)
-	row := queries.Raw(rsql).QueryRow(db)
+	rsql := fmt.Sprintf(QUERY_TITLE, language)
+	rows, err := queries.Raw(rsql).Query(db)
 
-	var title string
-	row.Scan(&title)
+	if err != nil {
+		return nil, errors.Wrap(err, "getContentUnits queries.Raw(rsql).Query(db)")
+	}
 
-	return title
+	defer rows.Close()
+
+	cuMap := make(map[string]string) // contentUnits
+
+	for rows.Next() {
+		var uid string
+		var name string
+		err := rows.Scan(&uid, &name)
+		if err != nil {
+			return nil, errors.Wrap(err, "getContentUnits rows.Scan")
+		}
+
+		cuMap[uid] = name
+	}
+
+	return cuMap, nil
 }
 
 type feedResponseType struct {
