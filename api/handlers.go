@@ -1763,52 +1763,56 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
 
 	// filters
-	if err := appendContentLanguagesFilterMods(&mods, r.BaseRequest); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
-		if e, ok := err.(*HttpError); ok {
-			return nil, e
-		} else {
+
+	if utils.IsEmpty(r.IDsFilter.IDs) {
+		if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
+			return nil, NewBadRequestError(err)
+		}
+	} else {
+		if err := appendContentLanguagesFilterMods(&mods, r.BaseRequest); err != nil {
+			return nil, NewBadRequestError(err)
+		}
+		if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+			return nil, NewBadRequestError(err)
+		}
+		if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+			return nil, NewBadRequestError(err)
+		}
+		if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
+			if e, ok := err.(*HttpError); ok {
+				return nil, e
+			} else {
+				return nil, NewInternalError(err)
+			}
+		}
+		appendTagsFilterMods(cm, &mods, r.TagsFilter)
+		if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
 			return nil, NewInternalError(err)
 		}
-	}
-	appendTagsFilterMods(cm, &mods, r.TagsFilter)
-	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendCollectionsFilterMods(db, &mods, r.CollectionsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendDerivedTypesFilterMods(&mods, r.DerivedTypesFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendOriginalLanguageFilterMods(&mods, r.OriginalLanguageFilter, mdbmodels.TableNames.ContentUnits); err != nil {
-		return nil, NewBadRequestError(err)
-	}
+		if err := appendCollectionsFilterMods(db, &mods, r.CollectionsFilter); err != nil {
+			return nil, NewInternalError(err)
+		}
+		if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
+			return nil, NewInternalError(err)
+		}
+		if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
+			return nil, NewInternalError(err)
+		}
+		if err := appendDerivedTypesFilterMods(&mods, r.DerivedTypesFilter); err != nil {
+			return nil, NewBadRequestError(err)
+		}
+		if err := appendOriginalLanguageFilterMods(&mods, r.OriginalLanguageFilter, mdbmodels.TableNames.ContentUnits); err != nil {
+			return nil, NewBadRequestError(err)
+		}
 
-	if err := appendMediaTypeFilterMods(&mods, r.MediaTypeFilter, true); err != nil {
-		return nil, NewInternalError(err)
+		if err := appendMediaTypeFilterMods(&mods, r.MediaTypeFilter, true); err != nil {
+			return nil, NewInternalError(err)
+		}
+		if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
+			return nil, NewInternalError(err)
+		}
+		appendCUNameFilterMods(&mods, r.CuNameFilter)
 	}
-	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	appendCUNameFilterMods(&mods, r.CuNameFilter)
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select(`count(DISTINCT "content_units".id)`)}, mods...)
@@ -4103,25 +4107,24 @@ func setCI18n(c *Collection, r BaseRequest, i18ns map[string]*mdbmodels.Collecti
 	}
 }
 
-
 // UI elements are content elements are split by the following general rule
 // Files are content.
 // Labels, titles, descriptions... are ui elements.
 func BaseRequestToUILanguages(r BaseRequest) []string {
-  if r.UILanguage != "" {
-    // Return list of [ui lang, all content langs, fallback langs]
-    uiLangs := []string{r.UILanguage}
-    for _, lang := range append(r.ContentLanguages, consts.I18N_LANG_ORDER[r.UILanguage]...) {
+	if r.UILanguage != "" {
+		// Return list of [ui lang, all content langs, fallback langs]
+		uiLangs := []string{r.UILanguage}
+		for _, lang := range append(r.ContentLanguages, consts.I18N_LANG_ORDER[r.UILanguage]...) {
 			if !utils.StringInSlice(lang, uiLangs) {
-        uiLangs = append(uiLangs, lang)
-      }
-    }
-    return uiLangs
+				uiLangs = append(uiLangs, lang)
+			}
+		}
+		return uiLangs
 	}
 
-  // Deprecated, should be removed after new client launched with
-  // new languages fields.
-  return consts.I18N_LANG_ORDER[r.Language]
+	// Deprecated, should be removed after new client launched with
+	// new languages fields.
+	return consts.I18N_LANG_ORDER[r.Language]
 }
 
 func BaseRequestToContentLanguages(r BaseRequest) []string {
