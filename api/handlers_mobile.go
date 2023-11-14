@@ -835,9 +835,9 @@ func MobileFeed(c *gin.Context) {
 	var cuIds []string
 	itemsMap := make(map[string]*MobileFeedResponseItem)
 
-	cuMap, err := getContentUnits(language, db)
+	cuMap, err := getContentUnitsByLanguage(language, db)
 
-	if (err != nil) {
+	if err != nil {
 		log.Error(err.Error())
 	}
 
@@ -863,7 +863,7 @@ func MobileFeed(c *gin.Context) {
 	c.JSON(http.StatusOK, mobilefeedResponse)
 }
 
-func getContentUnits(language string, db *sql.DB) (map[string]string, error) {
+func getContentUnitsByLanguage(language string, db *sql.DB) (map[string]string, error) {
 	QUERY_TITLE := `SELECT uid, name
 									FROM content_unit_i18n i18n
 									JOIN content_units cu ON cu.id = i18n.content_unit_id
