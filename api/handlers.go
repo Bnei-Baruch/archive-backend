@@ -1764,7 +1764,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 
 	// filters
 
-	if utils.IsEmpty(r.IDsFilter.IDs) {
+	if !utils.IsEmpty(r.IDsFilter.IDs) {
 		if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
 			return nil, NewBadRequestError(err)
 		}
