@@ -2821,7 +2821,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendDateRangeCUFilterMods(&mods, r.DateRangeFilter); err != nil {
+	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
@@ -3399,11 +3399,7 @@ func appendDerivedTypesFilterMods(mods *[]qm.QueryMod, f DerivedTypesFilter) err
 }
 
 func appendDateRangeFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
-	return appendDRFBaseMods(mods, f, "(properties->>'film_date')::date")
-}
-
-func appendDateRangeCUFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
-	return appendDRFBaseMods(mods, f, "(\"content_units\".properties->>'film_date')::date")
+	return appendDRFBaseMods(mods, f, `("content_units".properties->>'film_date')::date`)
 }
 
 func appendDateRangeCFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
