@@ -63,22 +63,12 @@ There are two more dependencies required to build index:
 
 ## Elasticsearch installation for Windows
 
-1. Disable Go Modules.
-
-    * Type from within the repository directory:
-
-    ```Shell
-    go env -w  GO111MODULE=off
-    ```
-
-    * For disabling go modules in VS Code extension see https://dev.to/codeboten/disabling-go-modules-in-visual-studio-code-31mp
-
-2. Download and install the Java Virtual Machine for Windows from
+1. Download and install the Java Virtual Machine for Windows from
 http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.html
 
 ![alt text](https://image.prntscr.com/image/PzmaOTOMQX2Bds_Dv_cXSA.png)
 
-3. Download Elasticsearch 6.8.21 from
+2. Download Elasticsearch 6.8.21 from
 https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.21.zip
 
     Extract it to C:\elasticsearch-6.8.21
@@ -91,18 +81,18 @@ https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.21.zip
     Xms represents the initial size of total heap space.
     Xmx represents the maximum size of total heap space.
 
-4. Install the Hebrew dictionaries:
+3. Install the Hebrew dictionaries:
 
     * Download: he_IL.aff, he_IL.dic, settings.yml files from https://github.com/elastic/hunspell/tree/master/dicts/he_IL
     * Put these files under C:\elasticsearch-6.8.2\config\hunspell\he_IL
     * Additional dictionary terms are managed in .delta.dic files and located in search/hunspell directory of the repository. Copy these files into corresponding folders inside elasticsearch-6.8.2/config/hunspell/
     * Note that on Linux environment the supported format for Hebrew dictionary files is **ISO 8859-8**. 
 
-5. Download and install Python - **version 2.7.x**
+4. Download and install Python - **version 2.7.x**
 https://www.python.org/downloads/
 
 
-6. Install python-docx (to get text from docx):
+5. Install python-docx (to get text from docx):
 
     * in CMD go to python directory
 
@@ -116,16 +106,16 @@ https://www.python.org/downloads/
     python -m pip install python-docx
     ```
 
-7. Download and install LibreOffice (not OpenOffice!)
+6. Download and install LibreOffice (not OpenOffice!)
 
     https://www.libreoffice.org/donate/dl/win-x86_64/5.4.5/en-US/LibreOffice_5.4.5_Win_x64.msi
 
     Update 'soffice-bin' value with soffice.exe full path in config.toml, [elasticsearch] section:
     "C://Program Files//LibreOffice 5//program//soffice.exe"
 
-8. Copy to config.toml the required commented-out lines from config.sample.toml that are related to Windows.
+7. Copy to config.toml the required commented-out lines from config.sample.toml that are related to Windows.
 
-9. Updating assets:
+8. Updating assets:
 
     In order to make correct data indexing you should update the ES mapping configuration files (JSON files in /data/es/mappings):
 
