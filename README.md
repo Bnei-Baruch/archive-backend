@@ -124,6 +124,13 @@ https://www.python.org/downloads/
     "C://Program Files//LibreOffice 5//program//soffice.exe"
 
 8. Copy to config.toml the required commented-out lines from config.sample.toml that are related to Windows.
+    1. in [elasticsearch] section set the properties: 
+        a. url="http://127.0.0.1:9200"
+        b. data-folder - something like C://BB//archive-backend//data
+        c. sources-folder - something like C://BB//archive-backend//sources-folder
+        d. unzip-url="https://kabbalahmedia.info/assets/api"
+        
+    2. in [mdb] section set url to your postgres db "postgres://localhost/mdb?sslmode=disable&user=postgres&password=123456"
 
 9. Updating assets:
 
