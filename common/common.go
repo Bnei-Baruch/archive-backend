@@ -54,7 +54,7 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		utils.Must(DB.Ping())
 
 		if val := viper.GetInt("mdb.max-idle-conns"); val > 0 {
-			DB.SetMaxIdleConns(2)
+			DB.SetMaxIdleConns(val)
 		}
 		if val := viper.GetInt("mdb.max-open-conns"); val > 0 {
 			DB.SetMaxOpenConns(val)
