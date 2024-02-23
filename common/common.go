@@ -19,10 +19,11 @@ import (
 )
 
 var (
-	DB     *sql.DB
-	ESC    *search.ESManager
-	LOGGER *search.SearchLogger
-	CACHE  cache.CacheManager
+	DB           *sql.DB
+	ESC          *search.ESManager
+	LOGGER       *search.SearchLogger
+	SEARCH_CACHE *search.SearchCache
+	CACHE        cache.CacheManager
 	//GRAMMARS     search.Grammars
 	VARIABLES    search.VariablesV2
 	TOKENS_CACHE *search.TokensCache
@@ -63,6 +64,7 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	ESC = search.MakeESManager(url)
 
 	LOGGER = search.MakeSearchLogger(ESC)
+  SEARCH_CACHE = search.MakeSearchCache()
 
 	esc, err := ESC.GetClient()
 	if esc != nil && err == nil {

@@ -7,6 +7,7 @@ require (
 	github.com/abadojack/whatlanggo v0.0.0-20170729211152-e8691489d402
 	github.com/fortytw2/leaktest v1.3.0 // indirect
 	github.com/gin-gonic/gin v1.1.4 // indirect
+	github.com/jellydator/ttlcache/v2 v2.11.1 // indirect
 	github.com/lib/pq v1.10.2
 	github.com/mailru/easyjson v0.0.0-20180606163543-3fdea8d05856 // indirect
 	github.com/manucorporat/sse v0.0.0-20160126180136-ee05b128a739 // indirect

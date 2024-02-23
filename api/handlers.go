@@ -763,6 +763,7 @@ func SearchHandler(c *gin.Context) {
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
 	logger := c.MustGet("LOGGER").(*search.SearchLogger)
+	searchCache := c.MustGet("SEARCH_CACHE").(*search.SearchCache)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
 	//grammars := c.MustGet("GRAMMARS").(search.Grammars)
 	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
@@ -816,21 +817,26 @@ func SearchHandler(c *gin.Context) {
 
 	timeoutForHighlight := viper.GetDuration("elasticsearch.timeout-for-highlight")
 
-	res, err := se.DoSearch(
-		context.TODO(),
-		query,
-		sortByVal,
-		from,
-		size,
-		preference,
-		checkTypo,
-		true,
-		true,
-		true,
-		timeoutForHighlight,
-	)
+  var res *search.QueryResult
+  if res, err = searchCache.Get(query, sortByVal, from, size); err == nil && res == nil {
+    res, err = se.DoSearch(
+      context.TODO(),
+      query,
+      sortByVal,
+      from,
+      size,
+      preference,
+      checkTypo,
+      true,
+      true,
+      true,
+      timeoutForHighlight,
+    )
+  }
 
 	if err == nil {
+    searchCache.Set(query, sortByVal, from, size, res)
+
 		// TODO: How does this slows the search query? Consider logging in parallel.
 		if !query.Deb {
 			err = logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
