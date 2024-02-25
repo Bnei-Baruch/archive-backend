@@ -13,10 +13,16 @@ type Intent struct {
 	Value    interface{} `json:"value,omitempty"`
 }
 
+type TimeLog struct {
+	Operation string `json:"operation"`
+	Time      int64  `json:"time"`
+}
+
 type QueryResult struct {
-	SearchResult *elastic.SearchResult `json:"search_result,omitempty"`
-	TypoSuggest  null.String           `json:"typo_suggest"`
-	Language     string                `json:"language"`
+	SearchResult     *elastic.SearchResult `json:"search_result,omitempty"`
+	TypoSuggest      null.String           `json:"typo_suggest"`
+	Language         string                `json:"language"`
+	ExecutionTimeLog []TimeLog             `json:"execution_time_log,omitempty"`
 }
 
 type Engine interface {

@@ -752,9 +752,6 @@ func SearchHandler(c *gin.Context) {
 		sortByVal = consts.SORT_BY_SOURCE_FIRST
 	}
 
-	searchId := c.Query("search_id")
-	suggestion := c.Query("suggest")
-
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
 	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
 	preference := fmt.Sprintf("%x", md5.Sum([]byte(c.ClientIP())))
@@ -762,7 +759,6 @@ func SearchHandler(c *gin.Context) {
 	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
-	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
 	//grammars := c.MustGet("GRAMMARS").(search.Grammars)
 	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
@@ -830,15 +826,16 @@ func SearchHandler(c *gin.Context) {
 		timeoutForHighlight,
 	)
 
-	if err == nil {
-		// TODO: How does this slows the search query? Consider logging in parallel.
-		if !query.Deb {
-			err = logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
-			if err != nil {
-				log.Warnf("Error logging search: %+v %+v", err, res)
-			}
-		}
+  if query.Deb {
+    timeLogArr := []search.TimeLog{}
+    for k, v := range se.ExecutionTimeLog.ToMap() {
+      ms := int64(v / time.Millisecond)
+      timeLogArr = append(timeLogArr, search.TimeLog{Operation: k, Time: ms})
+    }
+    res.ExecutionTimeLog = timeLogArr
+  }
 
+	if err == nil {
 		for _, hit := range res.SearchResult.Hits.Hits {
 			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
 				// Move Tweets from innerHits to Source, to make client more consistent (work with source only).
@@ -854,32 +851,8 @@ func SearchHandler(c *gin.Context) {
 
 		c.JSON(http.StatusOK, res)
 	} else {
-		// TODO: Remove following line, we should not log this.
-		log.Infof("Error on search: %+v", err)
-		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, suggestion, err, se.ExecutionTimeLog)
-		if logErr != nil {
-			log.Warnf("Error logging search error: %+v %+v", logErr, err)
-		}
-
 		NewInternalError(err).Abort(c)
 	}
-}
-
-func ClickHandler(c *gin.Context) {
-	mdbUid := c.Query("mdb_uid")
-	index := c.Query("index")
-	resultType := c.Query("result_type")
-	rank, err := strconv.Atoi(c.Query("rank"))
-	if err != nil || rank < 0 {
-		NewBadRequestError(errors.New("rank expects a positive number")).Abort(c)
-		return
-	}
-	searchId := c.Query("search_id")
-	logger := c.MustGet("LOGGER").(*search.SearchLogger)
-	if err = logger.LogClick(mdbUid, index, resultType, rank, searchId); err != nil {
-		log.Warnf("Error logging click: %+v", err)
-	}
-	c.JSON(http.StatusOK, gin.H{})
 }
 
 func AutocompleteHandler(c *gin.Context) {

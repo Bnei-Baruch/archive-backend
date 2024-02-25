@@ -21,7 +21,6 @@ import (
 var (
 	DB     *sql.DB
 	ESC    *search.ESManager
-	LOGGER *search.SearchLogger
 	CACHE  cache.CacheManager
 	//GRAMMARS     search.Grammars
 	VARIABLES    search.VariablesV2
@@ -61,8 +60,6 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	log.Info("Setting up connection to ElasticSearch")
 	url := viper.GetString("elasticsearch.url")
 	ESC = search.MakeESManager(url)
-
-	LOGGER = search.MakeSearchLogger(ESC)
 
 	esc, err := ESC.GetClient()
 	if esc != nil && err == nil {

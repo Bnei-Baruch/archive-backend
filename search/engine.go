@@ -1370,7 +1370,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		if checkTypo && (ret.Hits.MaxScore == nil || *ret.Hits.MaxScore < consts.MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST) {
 			suggestText = <-suggestChannel
 		}
-		return &QueryResult{ret, suggestText, currentLang}, err
+		return &QueryResult{ret, suggestText, currentLang, nil}, err
 	}
 
 	if checkTypo {
@@ -1380,7 +1380,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	if len(mr.Responses) > 0 {
 		// This happens when there are no responses with hits.
 		// Note, we don't filter here intents by language.
-		return &QueryResult{mr.Responses[0], suggestText, currentLang}, err
+		return &QueryResult{mr.Responses[0], suggestText, currentLang, nil}, err
 	}
 	return nil, errors.Wrap(err, "ESEngine.DoSearch - No responses from multi search.")
 }
