@@ -10,6 +10,12 @@ import (
 )
 
 type BaseRequest struct {
+	UILanguage       string   `json:"ui_language" form:"ui_language" binding:"omitempty,len=2"`
+	ContentLanguages []string `json:"content_languages" form:"content_languages" binding:"omitempty"`
+	// UseFallbackLanguages when true will fallback to English or Russian based on consts.I18N_LANG_ORDER
+	UseFallbackLanguages bool `json:"use_fallback_languages" form:"use_fallback_languages" binding:"omitempty"`
+
+	// Deprecated, to be removed after frontend not depending on it any more.
 	Language string `json:"language" form:"language" binding:"omitempty,len=2"`
 }
 
@@ -497,6 +503,7 @@ type Collection struct {
 	DefaultLanguage string         `json:"default_language,omitempty"`
 	HolidayID       string         `json:"holiday_id,omitempty"`
 	SourceID        string         `json:"source_id,omitempty"`
+	LikutimIDs      []string       `json:"likutim_id,omitempty"`
 	TagIDs          []string       `json:"tag_id,omitempty"`
 	Number          int            `json:"number,omitempty"`
 	ContentUnits    []*ContentUnit `json:"content_units,omitempty"`

@@ -94,6 +94,7 @@ def run_command(command, cwd=None, shell=False):
         returncode = process.wait()
         print 'after wait!'
         return (returncode, stdout, stderr)
+    print '%s - %s - %s' % (process.returncode, stdout, stderr)
     return (process.returncode, stdout, stderr)
 
 def backend_dir(name):
@@ -229,7 +230,7 @@ def set_up_frontend(name, branch):
     (returncode, stdout, stderr) = run_command(['git', 'checkout', branch], cwd=frontend_dir(name))
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
-    (returncode, stdout, stderr) = run_command(['cp', '../kmedia-mdb/.env', '%s/.env.demo' % frontend_dir(name)])
+    (returncode, stdout, stderr) = run_command(['cp', '../kmedia-mdb/.env', '%s/.env' % frontend_dir(name)])
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     demos[name]['frontend_port'] = get_frontend_port()
@@ -237,13 +238,13 @@ def set_up_frontend(name, branch):
     (returncode, stdout, stderr) = run_command([
         'sed', '-i', '-E',
         's/REACT_APP_BASE_URL=.*/REACT_APP_BASE_URL=http:\/\/bbdev6.kbb1.com:%d\//g' % demos[name]['frontend_port'],
-        '%s/.env.demo' % frontend_dir(name)])
+        '%s/.env' % frontend_dir(name)])
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     (returncode, stdout, stderr) = run_command([
         'sed', '-i', '-E',
         's/REACT_APP_API_BACKEND=.*/REACT_APP_API_BACKEND=http:\/\/bbdev6.kbb1.com:%d\//g' % demos[name]['backend_port'],
-        '%s/.env.demo' % frontend_dir(name)])
+        '%s/.env' % frontend_dir(name)])
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     (returncode, stdout, stderr) = run_command([
@@ -252,7 +253,7 @@ def set_up_frontend(name, branch):
         '%s/server/app-prod.js' % frontend_dir(name)])
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
-    (returncode, stdout, stderr) = run_command(['yarn', 'install'], cwd=frontend_dir(name))
+    (returncode, stdout, stderr) = run_command(['yarn install >& ./yarn_install.log'], cwd=frontend_dir(name), shell=True)
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     (returncode, stdout, stderr) = run_command(['REACT_APP_ENV=demo yarn build >& ./build.log'], cwd=frontend_dir(name), shell=True)
@@ -502,7 +503,7 @@ class DemoHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             if m:
                 filename = m.groups(1)[1]
                 dirname = backend_dir(m.groups(1)[0])
-                if filename == 'frontend.log' or filename == 'build.log':
+                if filename == 'frontend.log' or filename == 'build.log' or filename == 'yarn_install.log':
                     dirname = frontend_dir(m.groups(1)[0])
                 path = '%s/%s' % (dirname, filename)
                 text = 'Unable to read file'

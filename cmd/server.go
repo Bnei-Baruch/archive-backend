@@ -38,21 +38,26 @@ func serverFn(cmd *cobra.Command, args []string) {
 	rollbar.Environment = viper.GetString("server.rollbar-environment")
 	rollbar.CodeVersion = version.Version
 
-	// cors
-	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowHeaders = append(corsConfig.AllowHeaders, "Authorization", "X-Request-ID")
-	corsConfig.AllowAllOrigins = true
-
 	// Setup gin
 	gin.SetMode(viper.GetString("server.mode"))
-	router := gin.New()
-	router.Use(
+	middleware := []gin.HandlerFunc{
 		utils.LoggerMiddleware(),
 		utils.DataStoresMiddleware(common.DB, common.ESC, common.LOGGER, common.CACHE /*common.GRAMMARS,*/, common.TOKENS_CACHE, common.CMS, common.VARIABLES),
 		utils.ErrorHandlingMiddleware(),
-		cors.New(corsConfig),
-		utils.RecoveryMiddleware())
+	}
 
+	// cors
+	if viper.GetString("server.enable-cors") == "true" {
+		corsConfig := cors.DefaultConfig()
+		corsConfig.AllowHeaders = append(corsConfig.AllowHeaders, "Authorization", "X-Request-ID")
+		corsConfig.AllowAllOrigins = true
+		middleware = append(middleware, cors.New(corsConfig))
+	}
+
+	middleware = append(middleware, utils.RecoveryMiddleware())
+
+	router := gin.New()
+	router.Use(middleware...)
 	api.SetupRoutes(router)
 
 	log.Infoln("Running application")

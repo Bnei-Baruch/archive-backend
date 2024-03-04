@@ -52,6 +52,19 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		DB, err = sql.Open("postgres", viper.GetString("mdb.url"))
 		utils.Must(err)
 		utils.Must(DB.Ping())
+
+		if val := viper.GetInt("mdb.max-idle-conns"); val > 0 {
+			DB.SetMaxIdleConns(val)
+		}
+		if val := viper.GetInt("mdb.max-open-conns"); val > 0 {
+			DB.SetMaxOpenConns(val)
+		}
+		if val := viper.GetDuration("mdb.conn-max-idle-time"); val > 0 {
+			DB.SetConnMaxIdleTime(val)
+		}
+		if val := viper.GetDuration("mdb.conn-max-lifetime"); val > 0 {
+			DB.SetConnMaxLifetime(val)
+		}
 	}
 	boil.SetDB(DB)
 	boil.DebugMode = viper.GetString("server.boiler-mode") == "debug"

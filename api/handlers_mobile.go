@@ -149,7 +149,7 @@ func LessonOverviewHandler(c *gin.Context) {
 		contentUnitUids = append(contentUnitUids, item.ContentUnitUid)
 	}
 
-	if err = setI18ColNameDesc(db, request.Language, collectionIds, cuIds, resp.Items); err != nil {
+	if err = setI18ColNameDesc(db, request.BaseRequest, collectionIds, cuIds, resp.Items); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -305,9 +305,7 @@ SELECT
              			-- ORDER BY ccu.collection_id, cu.created_at
 				),
 				cus AS (
-					SELECT id, uid, type_id, properties, created_at, tag, collection_id, collection_uid, number, date, start_date, end_date
-					-- On PostgreSQL 15 change the above line to: 
-					-- SELECT id::bigint, uid, type_id, properties, created_at, tag, collection_id::bigint, collection_uid, number, date, start_date::date, end_date::date
+					 SELECT id::bigint, uid, type_id, properties, created_at, tag, collection_id::bigint, collection_uid, number, date, start_date::date, end_date::date
 						FROM (%s) cu
 					UNION
 					(SELECT * FROM cusCollectionful)
@@ -405,44 +403,53 @@ func mobileLessonsAddCMods(cm cache.CacheManager, db *sql.DB, r LessonOverviewRe
 	return nil
 }
 
-func setI18ColNameDesc(db *sql.DB, lang string, collectionIds []int64, cuIds []int64, items []*MobileContentUnitResponseItem) error {
-	colNames, err := loadCI18ns(db, lang, collectionIds)
+func setI18ColNameDesc(db *sql.DB, r BaseRequest, collectionIds []int64, cuIds []int64, items []*MobileContentUnitResponseItem) error {
+	colNamesMap, err := loadCI18ns(db, r, collectionIds)
 	if err != nil {
 		return err
 	}
 
-	cuNames, err := loadCUI18ns(db, lang, cuIds)
+	cuNamesMap, err := loadCUI18ns(db, r, cuIds)
 	if err != nil {
 		return err
 	}
 
+	languages := BaseRequestToContentLanguages(r)
 	for _, ri := range items {
 		if ri.internalCollectionId != nil && ri.tag != nil {
-			li18ns, _ := colNames[*ri.internalCollectionId]
-			for _, l := range consts.I18N_LANG_ORDER[lang] {
-				li18n, ok := li18ns[l]
+			i := 0
+			for i < len(languages) && (ri.Title == "" || ri.Description == "") {
+				if ri.internalCollectionId != (*int64)(nil) {
+					if i18ns, ok := colNamesMap[*ri.internalCollectionId]; ok {
+						li18n, ok := i18ns[languages[i]]
+						if ok {
+							if ri.Title == "" && li18n.Name.Valid && li18n.Name.String != "" {
+								ri.Title = li18n.Name.String
+							}
+							if ri.Description == "" && li18n.Description.Valid && li18n.Description.String != "" {
+								ri.Description = li18n.Description.String
+							}
+						}
+					}
+				}
+				i++
+			}
+		}
+
+		i := 0
+		for i < len(languages) && (ri.Title == "" || ri.Description == "") {
+			if i18ns, ok := cuNamesMap[ri.internalUnitId]; ok {
+				li18n, ok := i18ns[languages[i]]
 				if ok {
-					if ri.Title == "" && li18n.Name.Valid {
+					if ri.Title == "" && li18n.Name.Valid && li18n.Name.String != "" {
 						ri.Title = li18n.Name.String
 					}
-					if ri.Description == "" && li18n.Description.Valid {
+					if ri.Description == "" && li18n.Description.Valid && li18n.Description.String != "" {
 						ri.Description = li18n.Description.String
 					}
 				}
 			}
-		}
-
-		culi18ns, _ := cuNames[ri.internalUnitId]
-		for _, l := range consts.I18N_LANG_ORDER[lang] {
-			li18n, ok := culi18ns[l]
-			if ok {
-				if ri.Title == "" && li18n.Name.Valid {
-					ri.Title = li18n.Name.String
-				}
-				if ri.Description == "" && li18n.Description.Valid {
-					ri.Description = li18n.Description.String
-				}
-			}
+			i++
 		}
 	}
 

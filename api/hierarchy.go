@@ -119,10 +119,15 @@ func TagsHierarchyHandler(c *gin.Context) {
 
 func handleSources(db *sql.DB, r HierarchyRequest) (interface{}, *HttpError) {
 	var l string
-	if r.Language == "" {
-		l = consts.LANG_HEBREW
-	} else {
+	// Deprecated field. Remove when frontend moves to new code.
+	if r.Language != "" {
 		l = r.Language
+	} else {
+		if r.UILanguage == "" {
+			l = consts.DEFAULT_UI_LANGUAGE
+		} else {
+			l = r.UILanguage
+		}
 	}
 
 	var depth int
@@ -220,10 +225,14 @@ func handleSources(db *sql.DB, r HierarchyRequest) (interface{}, *HttpError) {
 
 func handleTags(db *sql.DB, r HierarchyRequest) (interface{}, *HttpError) {
 	var l string
-	if r.Language == "" {
-		l = consts.LANG_HEBREW
-	} else {
+	if r.Language != "" {
 		l = r.Language
+	} else {
+		if r.UILanguage == "" {
+			l = consts.DEFAULT_UI_LANGUAGE
+		} else {
+			l = r.UILanguage
+		}
 	}
 
 	var depth int

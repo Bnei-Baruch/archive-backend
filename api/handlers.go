@@ -200,22 +200,22 @@ func ContentUnitHandler(c *gin.Context) {
 	}
 
 	// content units i18n
-	cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
+	cui18nsMap, err := loadCUI18ns(db, r, cuids)
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
 	if i18ns, ok := cui18nsMap[cu.ID]; ok {
-		setCUI18n(u, r.Language, i18ns)
+		setCUI18n(u, r, i18ns)
 	}
 	for k, v := range u.DerivedUnits {
 		if i18ns, ok := cui18nsMap[cuidsMap[k]]; ok {
-			setCUI18n(v, r.Language, i18ns)
+			setCUI18n(v, r, i18ns)
 		}
 	}
 	for k, v := range u.SourceUnits {
 		if i18ns, ok := cui18nsMap[cuidsMap[k]]; ok {
-			setCUI18n(v, r.Language, i18ns)
+			setCUI18n(v, r, i18ns)
 		}
 	}
 
@@ -275,14 +275,14 @@ func ContentUnitHandler(c *gin.Context) {
 		cids = append(cids, v)
 	}
 	if len(cids) > 0 {
-		ci18nsMap, err := loadCI18ns(db, r.Language, cids)
+		ci18nsMap, err := loadCI18ns(db, r, cids)
 		if err != nil {
 			NewInternalError(err).Abort(c)
 			return
 		}
 		for k, v := range u.Collections {
 			if i18ns, ok := ci18nsMap[cidsMap[k]]; ok {
-				setCI18n(v, r.Language, i18ns)
+				setCI18n(v, r, i18ns)
 			}
 		}
 	}
@@ -1167,7 +1167,7 @@ func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) 
 			cids[i] = x.ID
 		}
 
-		ci18nsMap, err := loadCI18ns(db, r.Language, cids)
+		ci18nsMap, err := loadCI18ns(db, r.BaseRequest, cids)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
@@ -1183,7 +1183,7 @@ func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) 
 				return nil, NewInternalError(err)
 			}
 			if i18ns, ok := ci18nsMap[x.ID]; ok {
-				setCI18n(c, r.Language, i18ns)
+				setCI18n(c, r.BaseRequest, i18ns)
 			}
 			resp.Collections[i] = c
 		}
@@ -1209,11 +1209,11 @@ func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) 
 		}
 	}
 
-	ci18nsMap, err := loadCI18ns(db, r.Language, cids)
+	ci18nsMap, err := loadCI18ns(db, r.BaseRequest, cids)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
-	cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
+	cui18nsMap, err := loadCUI18ns(db, r.BaseRequest, cuids)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1229,7 +1229,7 @@ func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) 
 			return nil, NewInternalError(err)
 		}
 		if i18ns, ok := ci18nsMap[x.ID]; ok {
-			setCI18n(c, r.Language, i18ns)
+			setCI18n(c, r.BaseRequest, i18ns)
 		}
 
 		// content units
@@ -1246,7 +1246,7 @@ func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) 
 				return nil, NewInternalError(err)
 			}
 			if i18ns, ok := cui18nsMap[cu.ID]; ok {
-				setCUI18n(u, r.Language, i18ns)
+				setCUI18n(u, r.BaseRequest, i18ns)
 			}
 
 			u.NameInCollection = ccu.Name
@@ -1275,12 +1275,12 @@ func handleCollectionWOCUs(db *sql.DB, r ItemRequest) (*Collection, *HttpError) 
 	}
 
 	// collection i18n
-	ci18nsMap, err := loadCI18ns(db, r.Language, []int64{c.ID})
+	ci18nsMap, err := loadCI18ns(db, r.BaseRequest, []int64{c.ID})
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 	if i18ns, ok := ci18nsMap[c.ID]; ok {
-		setCI18n(cl, r.Language, i18ns)
+		setCI18n(cl, r.BaseRequest, i18ns)
 	}
 	return cl, nil
 }
@@ -1307,12 +1307,12 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 	}
 
 	// collection i18n
-	ci18nsMap, err := loadCI18ns(db, r.Language, []int64{c.ID})
+	ci18nsMap, err := loadCI18ns(db, r.BaseRequest, []int64{c.ID})
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 	if i18ns, ok := ci18nsMap[c.ID]; ok {
-		setCI18n(cl, r.Language, i18ns)
+		setCI18n(cl, r.BaseRequest, i18ns)
 	}
 
 	// content units
@@ -1329,7 +1329,7 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 	}
 
 	// load i18ns
-	cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
+	cui18nsMap, err := loadCUI18ns(db, r.BaseRequest, cuids)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -1349,7 +1349,7 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 			return nil, NewInternalError(err)
 		}
 		if i18ns, ok := cui18nsMap[cu.ID]; ok {
-			setCUI18n(u, r.Language, i18ns)
+			setCUI18n(u, r.BaseRequest, i18ns)
 		}
 
 		u.NameInCollection = ccu.Name
@@ -1360,6 +1360,10 @@ func handleCollection(db *sql.DB, r ItemRequest) (*Collection, *HttpError) {
 }
 
 func handleLatestContentUnits(db *sql.DB, r BaseRequest) ([]*ContentUnit, []*Collection, *HttpError) {
+	inLangs := []string(nil)
+	for _, lang := range BaseRequestToContentLanguages(r) {
+		inLangs = append(inLangs, fmt.Sprintf("'%s'", lang))
+	}
 	const queryTemplate = `
 WITH CUs AS (
 	SELECT ct.id as type_id, uid, cu_id AS id, film_date
@@ -1367,6 +1371,11 @@ WITH CUs AS (
 	INNER JOIN LATERAL (
 		SELECT uid, id AS cu_id, coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE AS film_date
 		FROM content_units cu
+		INNER JOIN (
+			SELECT DISTINCT content_unit_id AS fcontent_unit_id
+			FROM files WHERE secure = 0 AND published IS TRUE
+			AND language IN (%s)
+		) AS f ON cu.id = f.fcontent_unit_id
 		WHERE secure = 0 AND published IS TRUE AND cu.type_id = ct.id
 		ORDER BY coalesce(properties ->> 'film_date', created_at :: TEXT) :: DATE DESC
 		FETCH FIRST 20 ROWS ONLY
@@ -1416,6 +1425,9 @@ order by type_id, film_date desc
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_FRIENDS_GATHERING].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_MEAL].ID,
 
+		// Languages for units.
+		strings.Join(inLangs, ","),
+
 		// Collections (lessons): CT_LESSONS_SERIES x 10, CT_DAILY_LESSON x 1 + 10
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LESSONS_SERIES].ID,
@@ -1423,6 +1435,7 @@ order by type_id, film_date desc
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_HOLIDAY].ID,
 	)
+
 	rows, err := queries.Raw(query).Query(db)
 	if err != nil {
 		return nil, nil, NewInternalError(err)
@@ -1458,37 +1471,44 @@ order by type_id, film_date desc
 	}
 	cuIDs := make([]int64, 0)
 	if _, ok := firstRows[consts.CT_WOMEN_LESSON]; ok {
-		for _, r := range firstRows[consts.CT_WOMEN_LESSON][0:5] {
+		minLen := utils.MinInt(5, len(firstRows[consts.CT_WOMEN_LESSON]))
+		for _, r := range firstRows[consts.CT_WOMEN_LESSON][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_VIRTUAL_LESSON]; ok {
-		for _, r := range firstRows[consts.CT_VIRTUAL_LESSON][0:10] {
+		minLen := utils.MinInt(10, len(firstRows[consts.CT_VIRTUAL_LESSON]))
+		for _, r := range firstRows[consts.CT_VIRTUAL_LESSON][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER]; ok {
-		for _, r := range firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER][0:20] {
+		minLen := utils.MinInt(20, len(firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER]))
+		for _, r := range firstRows[consts.CT_VIDEO_PROGRAM_CHAPTER][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_CLIP]; ok {
-		for _, r := range firstRows[consts.CT_CLIP][0:20] {
+		minLen := utils.MinInt(20, len(firstRows[consts.CT_CLIP]))
+		for _, r := range firstRows[consts.CT_CLIP][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_ARTICLE]; ok {
-		for _, r := range firstRows[consts.CT_ARTICLE][0:20] {
+		minLen := utils.MinInt(20, len(firstRows[consts.CT_ARTICLE]))
+		for _, r := range firstRows[consts.CT_ARTICLE][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_MEAL]; ok {
-		for _, r := range firstRows[consts.CT_MEAL][0:5] {
+		minLen := utils.MinInt(5, len(firstRows[consts.CT_MEAL]))
+		for _, r := range firstRows[consts.CT_MEAL][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
 	if _, ok := firstRows[consts.CT_FRIENDS_GATHERING]; ok {
-		for _, r := range firstRows[consts.CT_FRIENDS_GATHERING][0:5] {
+		minLen := utils.MinInt(5, len(firstRows[consts.CT_FRIENDS_GATHERING]))
+		for _, r := range firstRows[consts.CT_FRIENDS_GATHERING][0:minLen] {
 			cuIDs = append(cuIDs, r.id)
 		}
 	}
@@ -1503,7 +1523,7 @@ order by type_id, film_date desc
 	}
 
 	// response
-	cus, ex := prepareCUs(db, units, r.Language)
+	cus, ex := prepareCUs(db, units, r)
 	if ex != nil {
 		return nil, nil, ex
 	}
@@ -1537,7 +1557,7 @@ order by type_id, film_date desc
 		}
 	}
 
-	//collections data query
+	// Collections data query.
 	csmdb, err := mdbmodels.Collections(
 		qm.WhereIn("id IN ?", utils.ConvertArgsInt64(cIDs)...),
 		qm.Load("CollectionI18ns")).
@@ -1552,20 +1572,11 @@ order by type_id, film_date desc
 			return nil, nil, NewInternalError(err)
 		}
 
-		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
-			for _, i18n := range x.R.CollectionI18ns {
-				if l != i18n.Language {
-					continue
-				}
-
-				if i18n.Name.Valid && c.Name == "" {
-					c.Name = i18n.Name.String
-				}
-				if i18n.Description.Valid && c.Description == "" {
-					c.Description = i18n.Description.String
-				}
-			}
+		ci18ns := make(map[string]*mdbmodels.CollectionI18n)
+		for _, i18n := range x.R.CollectionI18ns {
+			ci18ns[i18n.Language] = i18n
 		}
+		setCI18n(c, r, ci18ns)
 		cs[i] = c
 	}
 
@@ -1630,12 +1641,12 @@ func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool, withF
 	}
 
 	// collection i18n
-	ci18nsMap, err := loadCI18ns(db, r.Language, []int64{c.ID})
+	ci18nsMap, err := loadCI18ns(db, r, []int64{c.ID})
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
 	if i18ns, ok := ci18nsMap[c.ID]; ok {
-		setCI18n(cl, r.Language, i18ns)
+		setCI18n(cl, r, i18ns)
 	}
 
 	if bringContentUnits {
@@ -1653,7 +1664,7 @@ func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool, withF
 		}
 
 		// load i18ns
-		cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
+		cui18nsMap, err := loadCUI18ns(db, r, cuids)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
@@ -1673,7 +1684,7 @@ func handleLatestLesson(db *sql.DB, r BaseRequest, bringContentUnits bool, withF
 				return nil, NewInternalError(err)
 			}
 			if i18ns, ok := cui18nsMap[cu.ID]; ok {
-				setCUI18n(u, r.Language, i18ns)
+				setCUI18n(u, r, i18ns)
 			}
 
 			u.NameInCollection = ccu.Name
@@ -1712,93 +1723,97 @@ func loadFiles(ids []int64, cus []*ContentUnit, db *sql.DB) (err error) {
 	return
 }
 
+var BANNERS = map[string]*Banner{
+	consts.LANG_HEBREW: &Banner{
+		//Section:   "אירועים",
+		Header:    "הפרויקט של החיים שלנו",
+		SubHeader: "הארכיון",
+		Url:       "http://www.kab1.com/he",
+	},
+	consts.LANG_RUSSIAN: &Banner{
+		//Section:   "Конгрессы",
+		Header:    "Проект Нашей Жизни",
+		SubHeader: "АРХИВ",
+		Url:       "http://www.kab1.com/ru",
+	},
+	consts.LANG_SPANISH: &Banner{
+		//Section:   "Конгрессы",
+		Header:    "Proyecto Nuestra Vida",
+		SubHeader: "EL ARCHIVO",
+		Url:       "http://www.kab1.com/es",
+	},
+	consts.LANG_ENGLISH: &Banner{
+		//Section:   "Events",
+		Header:    "The Project of Our Life",
+		SubHeader: "THE ARCHIVE",
+		Url:       "http://www.kab1.com",
+	},
+}
+
 func handleBanner(r BaseRequest) (*Banner, *HttpError) {
-	var banner *Banner
-
-	switch r.Language {
-	case consts.LANG_HEBREW:
-		banner = &Banner{
-			//Section:   "אירועים",
-			Header:    "הפרויקט של החיים שלנו",
-			SubHeader: "הארכיון",
-			Url:       "http://www.kab1.com/he",
-		}
-
-	case consts.LANG_RUSSIAN:
-		banner = &Banner{
-			//Section:   "Конгрессы",
-			Header:    "Проект Нашей Жизни",
-			SubHeader: "АРХИВ",
-			Url:       "http://www.kab1.com/ru",
-		}
-
-	case consts.LANG_SPANISH:
-		banner = &Banner{
-			//Section:   "Конгрессы",
-			Header:    "Proyecto Nuestra Vida",
-			SubHeader: "EL ARCHIVO",
-			Url:       "http://www.kab1.com/es",
-		}
-
-	default:
-		banner = &Banner{
-			//Section:   "Events",
-			Header:    "The Project of Our Life",
-			SubHeader: "THE ARCHIVE",
-			Url:       "http://www.kab1.com",
+	for _, lang := range BaseRequestToContentLanguages(r) {
+		if b, ok := BANNERS[lang]; ok {
+			return b, nil
 		}
 	}
-
-	return banner, nil
+	// Ignores UseFallbackLanguages, will always return a banner.
+	return BANNERS[consts.LANG_ENGLISH], nil
 }
 
 func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest) (*ContentUnitsResponse, *HttpError) {
 	mods := []qm.QueryMod{SECURE_PUBLISHED_MOD_CU_PREFIX}
 
 	// filters
-	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
-		if e, ok := err.(*HttpError); ok {
-			return nil, e
-		} else {
+
+	if !utils.IsEmpty(r.IDsFilter.IDs) {
+		if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
+			return nil, NewBadRequestError(err)
+		}
+	} else {
+		if err := appendContentLanguagesFilterMods(&mods, r.BaseRequest); err != nil {
+			return nil, NewBadRequestError(err)
+		}
+		if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+			return nil, NewBadRequestError(err)
+		}
+		if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
+			return nil, NewBadRequestError(err)
+		}
+		if err := appendSourcesFilterMods(cm, &mods, r.SourcesFilter); err != nil {
+			if e, ok := err.(*HttpError); ok {
+				return nil, e
+			} else {
+				return nil, NewInternalError(err)
+			}
+		}
+		appendTagsFilterMods(cm, &mods, r.TagsFilter)
+		if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
 			return nil, NewInternalError(err)
 		}
-	}
-	appendTagsFilterMods(cm, &mods, r.TagsFilter)
-	if err := appendGenresProgramsFilterMods(db, &mods, r.GenresProgramsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendCollectionsFilterMods(db, &mods, r.CollectionsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	if err := appendDerivedTypesFilterMods(&mods, r.DerivedTypesFilter); err != nil {
-		return nil, NewBadRequestError(err)
-	}
-	if err := appendOriginalLanguageFilterMods(&mods, r.OriginalLanguageFilter, mdbmodels.TableNames.ContentUnits); err != nil {
-		return nil, NewBadRequestError(err)
-	}
+		if err := appendCollectionsFilterMods(db, &mods, r.CollectionsFilter); err != nil {
+			return nil, NewInternalError(err)
+		}
+		if err := appendPublishersFilterMods(db, &mods, r.PublishersFilter); err != nil {
+			return nil, NewInternalError(err)
+		}
+		if err := appendPersonsFilterMods(db, &mods, r.PersonsFilter); err != nil {
+			return nil, NewInternalError(err)
+		}
+		if err := appendDerivedTypesFilterMods(&mods, r.DerivedTypesFilter); err != nil {
+			return nil, NewBadRequestError(err)
+		}
+		if err := appendOriginalLanguageFilterMods(&mods, r.OriginalLanguageFilter, mdbmodels.TableNames.ContentUnits); err != nil {
+			return nil, NewBadRequestError(err)
+		}
 
-	if err := appendMediaTypeFilterMods(&mods, r.MediaTypeFilter, true); err != nil {
-		return nil, NewInternalError(err)
+		if err := appendMediaTypeFilterMods(&mods, r.MediaTypeFilter, true); err != nil {
+			return nil, NewInternalError(err)
+		}
+		if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
+			return nil, NewInternalError(err)
+		}
+		appendCUNameFilterMods(&mods, r.CuNameFilter)
 	}
-	if err := appendMediaLanguageFilterMods(db, &mods, r.MediaLanguageFilter); err != nil {
-		return nil, NewInternalError(err)
-	}
-	appendCUNameFilterMods(&mods, r.CuNameFilter)
 
 	var total int64
 	countMods := append([]qm.QueryMod{qm.Select(`count(DISTINCT "content_units".id)`)}, mods...)
@@ -1854,7 +1869,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 	}
 
 	// response
-	cus, ex := prepareCUs(db, units, r.Language)
+	cus, ex := prepareCUs(db, units, r.BaseRequest)
 	if ex != nil {
 		return nil, ex
 	}
@@ -1911,7 +1926,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 		for _, v := range cuidsMap {
 			cuids = append(cuids, v)
 		}
-		cui18nsMap, err := loadCUI18ns(db, r.Language, cuids)
+		cui18nsMap, err := loadCUI18ns(db, r.BaseRequest, cuids)
 		if err != nil {
 			return nil, NewInternalError(err)
 		}
@@ -1924,7 +1939,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 			// derived content unit i18n
 			for k, v := range cu.DerivedUnits {
 				if i18ns, ok := cui18nsMap[cuidsMap[k]]; ok {
-					setCUI18n(v, r.Language, i18ns)
+					setCUI18n(v, r.BaseRequest, i18ns)
 				}
 			}
 
@@ -2027,7 +2042,7 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 	}
 
 	// load i18ns
-	labelI18nsMap, err := loadLabelsI18ns(db, ids)
+	labelI18nsMap, err := loadLabelsI18ns(db, r.BaseRequest, ids)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2035,19 +2050,8 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 	labels := make([]*Label, len(lsmdb))
 	for i, label := range lsmdb {
 		labels[i] = mdbToLabel(label)
-
-		for _, l := range append(consts.I18N_LANG_ORDER[r.Language], consts.ALL_KNOWN_LANGS[:]...) {
-			li18n, ok := labelI18nsMap[label.ID]
-			if !ok {
-				continue
-			}
-			i18n, ok := li18n[l]
-			if ok && labels[i].Name == "" && i18n.Name.Valid && l == r.Language {
-				labels[i].Name = i18n.Name.String
-			}
-			if ok && i18n.R.User != nil && i18n.R.User.Name.Valid {
-				labels[i].Author = i18n.R.User.Name.String
-			}
+		if li18ns, ok := labelI18nsMap[label.ID]; ok {
+			setLabelI18n(labels[i], r.BaseRequest, li18ns)
 		}
 	}
 
@@ -2059,8 +2063,8 @@ func handleLabels(cm cache.CacheManager, db *sql.DB, r LabelsRequest) (*LabelsRe
 	return resp, nil
 }
 
-// units must be loaded with their CCUs loaded with their collections
-func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]*ContentUnit, *HttpError) {
+// Units must be loaded with their CCUs loaded with their collections.
+func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, r BaseRequest) ([]*ContentUnit, *HttpError) {
 
 	// Filter secure published collections
 	// Load i18n for all content units and all collections - total 2 DB round trips
@@ -2078,11 +2082,11 @@ func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]
 		}
 	}
 
-	cui18nsMap, err := loadCUI18ns(db, language, cuids)
+	cui18nsMap, err := loadCUI18ns(db, r, cuids)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
-	ci18nsMap, err := loadCI18ns(db, language, cids)
+	ci18nsMap, err := loadCI18ns(db, r, cids)
 	if err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2094,7 +2098,7 @@ func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]
 			return nil, NewInternalError(err)
 		}
 		if i18ns, ok := cui18nsMap[x.ID]; ok {
-			setCUI18n(cu, language, i18ns)
+			setCUI18n(cu, r, i18ns)
 		}
 
 		// collections
@@ -2107,7 +2111,7 @@ func prepareCUs(db *sql.DB, units []*mdbmodels.ContentUnit, language string) ([]
 				return nil, NewInternalError(err)
 			}
 			if i18ns, ok := ci18nsMap[cl.ID]; ok {
-				setCI18n(cc, language, i18ns)
+				setCI18n(cc, r, i18ns)
 			}
 
 			key := coKeyInCu(cl.UID, ccu.Name)
@@ -2159,18 +2163,11 @@ func handlePublishers(db *sql.DB, r PublishersRequest) (*PublishersResponse, *Ht
 		}
 
 		// i18ns
-		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
-			for _, i18n := range p.R.PublisherI18ns {
-				if i18n.Language == l {
-					if !pp.Name.Valid && i18n.Name.Valid {
-						pp.Name = i18n.Name
-					}
-					if !pp.Description.Valid && i18n.Description.Valid {
-						pp.Description = i18n.Description
-					}
-				}
-			}
+		pi18ns := make(map[string]*mdbmodels.PublisherI18n)
+		for _, i18n := range p.R.PublisherI18ns {
+			pi18ns[i18n.Language] = i18n
 		}
+		setPublisherI18n(pp, r.BaseRequest, pi18ns)
 
 		ps[i] = pp
 	}
@@ -2201,15 +2198,11 @@ func handlePersons(db *sql.DB, r BaseRequest) ([]*Person, *HttpError) {
 		}
 
 		// i18ns
-		for _, l := range consts.I18N_LANG_ORDER[r.Language] {
-			for _, i18n := range p.R.PersonI18ns {
-				if i18n.Language == l {
-					if !pp.Name.Valid && i18n.Name.Valid {
-						pp.Name = i18n.Name
-					}
-				}
-			}
+		pi18ns := make(map[string]*mdbmodels.PersonI18n)
+		for _, i18n := range p.R.PersonI18ns {
+			pi18ns[i18n.Language] = i18n
 		}
+		setPersonI18n(pp, r, pi18ns)
 
 		resp[i] = pp
 	}
@@ -2492,7 +2485,7 @@ func handleTagsTranslationByID(db *sql.DB, r BaseRequest, uids []string) ([]stri
 			AS label
 		FROM tags t
 		WHERE t.uid IN (`,
-		r.Language)
+		r.UILanguage)
 	args := make([]string, len(uids))
 	for i := range uids {
 		args[i] = fmt.Sprintf("$%d", i+1)
@@ -2537,7 +2530,7 @@ func handleTagsTranslation(db *sql.DB, r BaseRequest, tags map[int64]string) *Ht
 			AS label
 		FROM tags t
 		WHERE t.id IN (`,
-		r.Language)
+		r.UILanguage)
 	args := make([]string, len(ids))
 	for i := range ids {
 		args[i] = fmt.Sprintf("$%d", i+1)
@@ -2545,7 +2538,7 @@ func handleTagsTranslation(db *sql.DB, r BaseRequest, tags map[int64]string) *Ht
 	q += strings.Join(args, ",") + ")"
 	var (
 		id    int64
-		label string
+		label null.String
 	)
 	rows, err := queries.Raw(q, utils.ConvertArgsInt64(ids)...).Query(db)
 	if err != nil {
@@ -2559,7 +2552,7 @@ func handleTagsTranslation(db *sql.DB, r BaseRequest, tags map[int64]string) *Ht
 		if err != nil {
 			return NewInternalError(err)
 		}
-		tags[id] = label
+		tags[id] = label.String
 	}
 	return nil
 }
@@ -3127,7 +3120,7 @@ func handleBlogPosts(db *sql.DB, r BlogPostsRequest) (*BlogPostsResponse, *HttpE
 }
 
 func handleSimpleMode(cm cache.CacheManager, db *sql.DB, r SimpleModeRequest) (*SimpleModeResponse, *HttpError) {
-	// use today if empty (or partially empty) date range was provided
+	// Use today if date range is empty (or partially empty).
 	if r.StartDate == "" {
 		r.StartDate = r.EndDate
 	}
@@ -3139,14 +3132,12 @@ func handleSimpleMode(cm cache.CacheManager, db *sql.DB, r SimpleModeRequest) (*
 		r.EndDate = r.StartDate
 	}
 
-	// All content units in this day
+	// All content units in this day.
 	cur := ContentUnitsRequest{
 		ListRequest: ListRequest{
-			BaseRequest: BaseRequest{
-				Language: r.Language,
-			},
-			PageSize: consts.API_MAX_PAGE_SIZE,
-			OrderBy:  "created_at desc",
+			BaseRequest: r.BaseRequest,
+			PageSize:    consts.API_MAX_PAGE_SIZE,
+			OrderBy:     "created_at desc",
 		},
 		DateRangeFilter: r.DateRangeFilter,
 		WithFiles:       true,
@@ -3791,11 +3782,29 @@ func appendBlogFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f BlogFilter)
 	return nil
 }
 
+func appendContentLanguagesFilterMods(mods *[]qm.QueryMod, r BaseRequest) error {
+	if r.Language != "" {
+		return nil
+	}
+	inLangs := []string(nil)
+	for _, lang := range BaseRequestToContentLanguages(r) {
+		inLangs = append(inLangs, fmt.Sprintf("'%s'", lang))
+	}
+	*mods = append(*mods,
+		qm.InnerJoin(fmt.Sprintf(`
+			(SELECT content_unit_id AS fcontent_unit_id
+			 FROM files WHERE secure = 0 AND published IS TRUE
+			 AND language IN (%s)
+			) AS cuf
+			ON content_units.id = cuf.fcontent_unit_id
+		`, strings.Join(inLangs, ","))))
+	return nil
+}
+
 func appendMediaLanguageFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f MediaLanguageFilter) error {
 	if len(f.MediaLanguage) == 0 {
 		return nil
 	}
-	//TODO: this query should be optimized ASAP and before we do that clients should use it as little as possible
 	*mods = append(*mods,
 		qm.WhereIn(`(content_units.id in ( SELECT DISTINCT cu.id FROM content_units cu
 			INNER JOIN files f
@@ -3962,6 +3971,7 @@ func mdbToC(c *mdbmodels.Collection) (cl *Collection, err error) {
 		DefaultLanguage: props.DefaultLanguage,
 		HolidayID:       props.HolidayTag,
 		SourceID:        props.Source,
+		LikutimIDs:      props.Likutim,
 		TagIDs:          props.Tags,
 		Number:          props.Number,
 	}
@@ -4033,7 +4043,7 @@ func mdbToFile(file *mdbmodels.File) (*File, error) {
 	return f, nil
 }
 
-func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.CollectionI18n, error) {
+func loadCI18ns(db *sql.DB, r BaseRequest, ids []int64) (map[int64]map[string]*mdbmodels.CollectionI18n, error) {
 	i18nsMap := make(map[int64]map[string]*mdbmodels.CollectionI18n, len(ids))
 	if len(ids) == 0 {
 		return i18nsMap, nil
@@ -4042,7 +4052,7 @@ func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]
 	// Load from DB
 	i18ns, err := mdbmodels.CollectionI18ns(
 		qm.WhereIn("collection_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
+		qm.AndIn("language in ?", utils.ConvertArgsString(BaseRequestToUILanguages(r))...)).
 		All(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "Load collections i18ns from DB")
@@ -4062,21 +4072,115 @@ func loadCI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]
 	return i18nsMap, nil
 }
 
-func setCI18n(c *Collection, language string, i18ns map[string]*mdbmodels.CollectionI18n) {
-	for _, l := range consts.I18N_LANG_ORDER[language] {
-		li18n, ok := i18ns[l]
+func setPublisherI18n(p *Publisher, r BaseRequest, i18ns map[string]*mdbmodels.PublisherI18n) {
+	languages := BaseRequestToUILanguages(r)
+	i := 0
+	for i < len(languages) && (p.Name.String == "" || p.Description.String == "") {
+		li18n, ok := i18ns[languages[i]]
 		if ok {
-			if c.Name == "" && li18n.Name.Valid {
-				c.Name = li18n.Name.String
+			if p.Name.String == "" && li18n.Name.Valid && li18n.Name.String != "" {
+				p.Name = li18n.Name
 			}
-			if c.Description == "" && li18n.Description.Valid {
-				c.Description = li18n.Description.String
+			if p.Description.String == "" && li18n.Description.Valid && li18n.Description.String != "" {
+				p.Description = li18n.Description
 			}
 		}
+		i++
 	}
 }
 
-func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string]*mdbmodels.ContentUnitI18n, error) {
+func setPersonI18n(p *Person, r BaseRequest, i18ns map[string]*mdbmodels.PersonI18n) {
+	languages := BaseRequestToUILanguages(r)
+	i := 0
+	for i < len(languages) && p.Name.String == "" {
+		li18n, ok := i18ns[languages[i]]
+		if ok {
+			if p.Name.String == "" && li18n.Name.Valid && li18n.Name.String != "" {
+				p.Name = li18n.Name
+			}
+		}
+		i++
+	}
+}
+
+func setCI18n(c *Collection, r BaseRequest, i18ns map[string]*mdbmodels.CollectionI18n) {
+	languages := BaseRequestToUILanguages(r)
+	i := 0
+	// Name is the dominant ui element and when set, we don't add description even if
+	// we have it in other languages.
+	for i < len(languages) && c.Name == "" {
+		li18n, ok := i18ns[languages[i]]
+		if ok {
+			if c.Name == "" && li18n.Name.Valid && li18n.Name.String != "" {
+				c.Name = li18n.Name.String
+			}
+			if c.Description == "" && li18n.Description.Valid && li18n.Description.String != "" {
+				c.Description = li18n.Description.String
+			}
+		}
+		i++
+	}
+}
+
+// UI elements are content elements are split by the following general rule
+// Files are content.
+// Labels, titles, descriptions... are ui elements.
+func BaseRequestToUILanguages(r BaseRequest) []string {
+	if r.UILanguage != "" {
+		// Return list of [ui lang, all content langs, fallback langs]
+		uiLangs := []string{r.UILanguage}
+		for _, lang := range append(r.ContentLanguages, consts.I18N_LANG_ORDER[r.UILanguage]...) {
+			if !utils.StringInSlice(lang, uiLangs) {
+				uiLangs = append(uiLangs, lang)
+			}
+		}
+		return uiLangs
+	}
+
+	// Deprecated, should be removed after new client launched with
+	// new languages fields.
+	return consts.I18N_LANG_ORDER[r.Language]
+}
+
+func BaseRequestToContentLanguages(r BaseRequest) []string {
+	if !r.UseFallbackLanguages {
+		if len(r.ContentLanguages) > 0 {
+			if r.UILanguage != "" && !utils.StringInSlice(r.UILanguage, r.ContentLanguages) {
+				return append(r.ContentLanguages, r.UILanguage)
+			}
+			return r.ContentLanguages
+		} else {
+			// Deprecated, should be removed after new client launched with
+			// new languages fields.
+			return consts.I18N_LANG_ORDER[r.Language]
+		}
+	}
+
+	exist := make(map[string]bool)
+	langArgs := []string(nil)
+
+	// Order important, use fallback languages only after original languages.
+	for _, lang := range r.ContentLanguages {
+		if _, ok := exist[lang]; !ok {
+			exist[lang] = true
+			langArgs = append(langArgs, lang)
+		}
+	}
+
+	// Add fallback languages.
+	for _, origLang := range r.ContentLanguages {
+		for _, fallbackLang := range consts.I18N_LANG_ORDER[origLang] {
+			if _, ok := exist[fallbackLang]; !ok {
+				exist[fallbackLang] = true
+				langArgs = append(langArgs, fallbackLang)
+			}
+		}
+	}
+
+	return langArgs
+}
+
+func loadCUI18ns(db *sql.DB, r BaseRequest, ids []int64) (map[int64]map[string]*mdbmodels.ContentUnitI18n, error) {
 	i18nsMap := make(map[int64]map[string]*mdbmodels.ContentUnitI18n, len(ids))
 	if len(ids) == 0 {
 		return i18nsMap, nil
@@ -4085,7 +4189,7 @@ func loadCUI18ns(db *sql.DB, language string, ids []int64) (map[int64]map[string
 	// Load from DB
 	i18ns, err := mdbmodels.ContentUnitI18ns(
 		qm.WhereIn("content_unit_id in ?", utils.ConvertArgsInt64(ids)...),
-		qm.AndIn("language in ?", utils.ConvertArgsString(consts.I18N_LANG_ORDER[language])...)).
+		qm.AndIn("language in ?", utils.ConvertArgsString(BaseRequestToUILanguages(r))...)).
 		All(db)
 
 	if err != nil {
@@ -4142,18 +4246,22 @@ func loadCUFiles(db *sql.DB, ids []int64, mediaTypes []string, languages []strin
 	return filesMap, nil
 }
 
-func setCUI18n(cu *ContentUnit, language string, i18ns map[string]*mdbmodels.ContentUnitI18n) {
-	if v, ok := i18ns[language]; ok {
-		cu.Description = v.Description.String
-	}
-
-	for _, l := range consts.I18N_LANG_ORDER[language] {
-		li18n, ok := i18ns[l]
+func setCUI18n(cu *ContentUnit, r BaseRequest, i18ns map[string]*mdbmodels.ContentUnitI18n) {
+	languages := BaseRequestToUILanguages(r)
+	i := 0
+	// Name is the dominant ui element and when set, we don't add description even if
+	// we have it in other languages.
+	for i < len(languages) && cu.Name == "" {
+		li18n, ok := i18ns[languages[i]]
 		if ok {
-			if cu.Name == "" && li18n.Name.Valid {
+			if cu.Name == "" && li18n.Name.Valid && li18n.Name.String != "" {
 				cu.Name = li18n.Name.String
 			}
+			if cu.Description == "" && li18n.Description.Valid && li18n.Description.String != "" {
+				cu.Description = li18n.Description.String
+			}
 		}
+		i++
 	}
 }
 
@@ -4216,7 +4324,7 @@ func mapCU2IDs(contentUnits []*ContentUnit, db *sql.DB) (ids []int64, err error)
 	return
 }
 
-func loadLabelsI18ns(db *sql.DB, ids []int64) (map[int64]map[string]*mdbmodels.LabelI18n, error) {
+func loadLabelsI18ns(db *sql.DB, r BaseRequest, ids []int64) (map[int64]map[string]*mdbmodels.LabelI18n, error) {
 	i18nsMap := make(map[int64]map[string]*mdbmodels.LabelI18n, len(ids))
 	if len(ids) == 0 {
 		return i18nsMap, nil
@@ -4225,6 +4333,7 @@ func loadLabelsI18ns(db *sql.DB, ids []int64) (map[int64]map[string]*mdbmodels.L
 	// Load from DB
 	i18ns, err := mdbmodels.LabelI18ns(
 		qm.WhereIn("label_id in ?", utils.ConvertArgsInt64(ids)...),
+		qm.AndIn("language in ?", utils.ConvertArgsString(BaseRequestToUILanguages(r))...),
 		qm.Load("User"),
 	).All(db)
 	if err != nil {
@@ -4242,6 +4351,25 @@ func loadLabelsI18ns(db *sql.DB, ids []int64) (map[int64]map[string]*mdbmodels.L
 	}
 
 	return i18nsMap, nil
+}
+
+func setLabelI18n(l *Label, r BaseRequest, i18ns map[string]*mdbmodels.LabelI18n) {
+	languages := BaseRequestToUILanguages(r)
+	i := 0
+	// Name is the dominant ui element and when set, we don't add author even if
+	// we have it in other languages.
+	for i < len(languages) && l.Name == "" {
+		li18n, ok := i18ns[languages[i]]
+		if ok {
+			if l.Name == "" && li18n.Name.Valid && li18n.Name.String != "" {
+				l.Name = li18n.Name.String
+			}
+			if l.Author == "" && li18n.R.User != nil && li18n.R.User.Name.Valid && li18n.R.User.Name.String != "" {
+				l.Author = li18n.R.User.Name.String
+			}
+		}
+		i++
+	}
 }
 
 func mdbToLabel(l *mdbmodels.Label) *Label {

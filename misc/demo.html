@@ -118,6 +118,7 @@
 								}
                                 const frontend_cell = [
                                     `Frontend: ${demo.frontend_process || 'Not started yet!'}`,
+									`<a href="${window.location.protocol}//${window.location.host}/logs/${demo.name}/yarn_install.log" target="_blank">yarn_install.log</a>`,
 									`<a href="${window.location.protocol}//${window.location.host}/logs/${demo.name}/build.log" target="_blank">build.log</a>`,
 									`<a href="${window.location.protocol}//${window.location.host}/logs/${demo.name}/frontend.log" target="_blank">frontend.log</a>`,
 									`<a href="${buildUrl(demo.frontend_port)}" target="_blank">${buildUrl(demo.frontend_port)}</a>`,
