@@ -1,22 +1,22 @@
 #!/usr/bin/env python
 
 
-import SimpleHTTPServer
-import SocketServer
 import atexit
+import http.server
 import io
 import json
 import multiprocessing
 import os
 import re
 import signal
+import socketserver
 import subprocess
-import threading
-import urlparse
 import sys
+import threading
+from urllib.parse import urlparse
 
 
-PORT = 8000
+PORT = 10000
 NUM_WORKER_THREADS = 4
 NAME_RE = '[A-Za-z0-9_]+'
 LOG_RE = '[A-Za-z0-9_]+.log'
@@ -53,9 +53,9 @@ def demos_to_json():
     return ret
 
 # Ports management handling.
-BACKEND_PORTS_START = 9700
+BACKEND_PORTS_START = 19700
 backend_ports = {}
-FRONTEND_PORTS_START = 4500
+FRONTEND_PORTS_START = 14500
 frontend_ports = {}
 
 def get_backend_port():
@@ -86,22 +86,28 @@ def run_command(command, cwd=None, shell=False):
     command_str = command
     if type(command) is list:
         command_str = ' '.join(command)
-    print 'running command: [%s]' % command_str
+    print('running command: [%s]' % command_str)
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, shell=shell)
     stdout, stderr = process.communicate()
     if shell:
-        print 'before wait!'
+        print('before wait!')
         returncode = process.wait()
-        print 'after wait!'
+        print('after wait!', returncode)
         return (returncode, stdout, stderr)
-    print '%s - %s - %s' % (process.returncode, stdout, stderr)
+    print('%s - %s - %s' % (process.returncode, stdout, stderr))
     return (process.returncode, stdout, stderr)
 
+def backend_dir_base():
+    return 'archive-backend-demo'
+
 def backend_dir(name):
-    return '../archive-backend-%s' % name
+    return '../%s-%s' % (backend_dir_base(), name)
+
+def frontend_dir_base():
+    return 'kmedia-mdb-demo'
 
 def frontend_dir(name):
-    return '../kmedia-mdb-%s' % name
+    return '../%s-%s' % (frontend_dir_base(), name)
 
 # Start async tasks.
 def start_backend(name):
@@ -110,7 +116,7 @@ def start_backend(name):
         cwd=backend_dir(name),
         shell=True,
         preexec_fn=os.setsid)
-    print 'Started backend_process, pid: %d' % demos[name]['backend_process'].pid
+    print('Started backend_process, pid: %d' % demos[name]['backend_process'].pid)
     
 def kill_backend(name):
     kill_process(name, 'backend_process')
@@ -120,7 +126,7 @@ def start_reindex(name):
         './archive-backend index --index_date=%s --update_alias=false >& ./index.log' % name,
         cwd=backend_dir(name),
         shell=True)
-    print 'Started backend_reindex, pid: %d' % demos[name]['backend_reindex'].pid
+    print('Started backend_reindex, pid: %d' % demos[name]['backend_reindex'].pid)
     demos[name]['backend_reindex'].communicate()
 
 def start_reindex_grammars(name):
@@ -128,7 +134,7 @@ def start_reindex_grammars(name):
         './archive-backend index_grammars --index_date=%s --update_alias=false >& ./grammar_index.log' % name,
         cwd=backend_dir(name),
         shell=True)
-    print 'Started backend_reindex_grammars, pid: %d' % demos[name]['backend_reindex_grammars'].pid
+    print('Started backend_reindex_grammars, pid: %d' % demos[name]['backend_reindex_grammars'].pid)
     demos[name]['backend_reindex_grammars'].communicate()
 
 def start_update_synonyms(name):
@@ -136,46 +142,46 @@ def start_update_synonyms(name):
         './archive-backend update_synonyms --index_date=%s >& ./update_synonyms.log' % name,
         cwd=backend_dir(name),
         shell=True)
-    print 'Started backend_update_synonyms, pid: %d' % demos[name]['backend_update_synonyms'].pid
+    print('Started backend_update_synonyms, pid: %d' % demos[name]['backend_update_synonyms'].pid)
     demos[name]['backend_update_synonyms'].communicate()
 
 def delete_indexes(name):
     (returncode, stdout, stderr) = run_command('./archive-backend delete_index --index_date=%s' % name, backend_dir(name), True)
     if returncode != 0:
-        print 'Failed deleting index stderr: %s, stdout: %s returncode: %d' % (stderr, stdout, returncode)
+        print('Failed deleting index stderr: %s, stdout: %s returncode: %d' % (stderr, stdout, returncode))
         return (returncode, stderr, stdout)
     else:
-        print 'Deleted index %s' % name
+        print('Deleted index %s' % name)
     (returncode, stdout, stderr) = run_command('./archive-backend delete_grammar_index --index_date=%s' % name, backend_dir(name), True)
     if returncode != 0:
-        print 'Failed deleting grammar index stderr: %s, stdout: %s returncode: %d' % (stderr, stdout, returncode)
+        print('Failed deleting grammar index stderr: %s, stdout: %s returncode: %d' % (stderr, stdout, returncode))
         return (returncode, stderr, stdout)
     else:
-        print 'Deleted grammar index %s' % name
+        print('Deleted grammar index %s' % name)
     return (0, "", "")
 
 def start_frontend(name):
     demos[name]['frontend_process'] = subprocess.Popen(
-        'SERVER_PORT=%d NODE_ENV=production node server/index.js >& ./frontend.log' % demos[name]['frontend_port'],
+        'REACT_KC_API_URL=https://auth.2serv.eu/auth REACT_KC_REALM=master REACT_KC_CLIENT_ID=kolman-dev SERVER_PORT=%d NODE_ENV=production node server/index.js >& ./frontend.log' % demos[name]['frontend_port'],
         #'CRA_CLIENT_PORT=%d SERVER_PORT=%d yarn start-server >& ./frontend.log' % (demos[name]['ssr_frontend_port'], demos[name]['frontend_port']),
         cwd=frontend_dir(name),
         shell=True,
         preexec_fn=os.setsid)
-    print 'Started frontend_process, pid: %d' % demos[name]['frontend_process'].pid
+    print('Started frontend_process, pid: %d' % demos[name]['frontend_process'].pid)
     #demos[name]['ssr_frontend_process'] = subprocess.Popen(
     #    'PORT=%d yarn start-js >& ./ssr_frontend.log' % (demos[name]['ssr_frontend_port']),
     #    cwd=frontend_dir(name),
     #    shell=True,
     #    preexec_fn=os.setsid)
-    #print 'Started ssr_frontend_process, pid: %d' % demos[name]['ssr_frontend_process'].pid
+    #print('Started ssr_frontend_process, pid: %d' % demos[name]['ssr_frontend_process'].pid)
 
 def kill_process(name, process):
     try:
         os.killpg(os.getpgid(demos[name][process].pid), signal.SIGTERM)
         returncode = demos[name][process].wait()
-        print 'Killed %s: %d' % (process, returncode)
+        print('Killed %s: %d' % (process, returncode))
     except OSError as e:
-        print 'failed stopping %s %d: %s' % (process, demos[name][process].pid, e)
+        print('failed stopping %s %d: %s' % (process, demos[name][process].pid, e))
     del demos[name][process]
     
 def kill_frontend(name):
@@ -215,7 +221,7 @@ def stop_and_clean(name):
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     del demos[name]
-    print 'stopped and cleaned demo %s' % name
+    print('stopped and cleaned demo %s' % name)
 
 # Register exit cleanup function.
 atexit.register(cleanup)
@@ -230,33 +236,36 @@ def set_up_frontend(name, branch):
     (returncode, stdout, stderr) = run_command(['git', 'checkout', branch], cwd=frontend_dir(name))
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
-    (returncode, stdout, stderr) = run_command(['cp', '../kmedia-mdb/.env', '%s/.env' % frontend_dir(name)])
+    (returncode, stdout, stderr) = run_command(['cp', '../%s/.env' % frontend_dir_base(), '%s/.env' % frontend_dir(name)])
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     demos[name]['frontend_port'] = get_frontend_port()
     #demos[name]['ssr_frontend_port'] = get_frontend_port()
     (returncode, stdout, stderr) = run_command([
         'sed', '-i', '-E',
-        's/REACT_APP_BASE_URL=.*/REACT_APP_BASE_URL=http:\/\/bbdev6.kbb1.com:%d\//g' % demos[name]['frontend_port'],
+        's/REACT_APP_BASE_URL=.*/REACT_APP_BASE_URL=https:\/\/%d.bbdev1.kbb1.com\//g' % demos[name]['frontend_port'],
         '%s/.env' % frontend_dir(name)])
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     (returncode, stdout, stderr) = run_command([
         'sed', '-i', '-E',
-        's/REACT_APP_API_BACKEND=.*/REACT_APP_API_BACKEND=http:\/\/bbdev6.kbb1.com:%d\//g' % demos[name]['backend_port'],
+        's/REACT_APP_API_BACKEND=.*/REACT_APP_API_BACKEND=https:\/\/%d.bbdev1.kbb1.com\//g' % demos[name]['backend_port'],
         '%s/.env' % frontend_dir(name)])
+    if returncode != 0:
+        return 'stderr: %s, stdout: %s' % (stderr, stdout)
+    (returncode, stdout, stderr) = run_command(['cp', '%s/.env' % frontend_dir(name), '%s/.env.production' % frontend_dir(name)])
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     (returncode, stdout, stderr) = run_command([
         'sed', '-i',
-        's/\'default-src\': \[/\'default-src\': [ \'bbdev6.kbb1.com:%d\',/g' % demos[name]['backend_port'],
+        's/\'default-src\': \[/\'default-src\': [ \'*\',/g',
         '%s/server/app-prod.js' % frontend_dir(name)])
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     (returncode, stdout, stderr) = run_command(['yarn install >& ./yarn_install.log'], cwd=frontend_dir(name), shell=True)
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
-    (returncode, stdout, stderr) = run_command(['REACT_APP_ENV=demo yarn build >& ./build.log'], cwd=frontend_dir(name), shell=True)
+    (returncode, stdout, stderr) = run_command(['REACT_APP_ENV=production yarn build >& ./build.log'], cwd=frontend_dir(name), shell=True)
     if returncode != 0:
         return 'stderr: %s, stdout: %s' % (stderr, stdout)
     start_frontend(name)
@@ -269,10 +278,10 @@ def update_reload(name):
             (returncode, stdout, stderr) = run_command(['git', 'status'])
             if returncode != 0:
                 return 'stderr: %s, stdout: %s' % (stderr, stdout)
-            m = re.search(r'# On branch (.*)', stdout)
+            m = re.search(r'On branch (.*)', stdout.decode('utf-8'))
             if not m:
-                print 'git status:\n%s' % stdout 
-                m = re.search(r'# HEAD detached at (.*)', stdout)
+                print('git status:\n%s' % stdout)
+                m = re.search(r'HEAD detached at (.*)', stdout.decode('utf-8'))
                 if not m:
                     return 'Failed extracting git current branch.'
             original_branch = m.groups(1)[0]
@@ -307,10 +316,10 @@ def set_up_backend(name):
         (returncode, stdout, stderr) = run_command(['git', 'status'])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
-        m = re.search(r'# On branch (.*)', stdout)
+        m = re.search(r'On branch (.*)', stdout.decode('utf-8'))
         if not m:
-            print 'git status:\n%s' % stdout 
-            m = re.search(r'# HEAD detached at (.*)', stdout)
+            print('git status:\n%s' % stdout)
+            m = re.search(r'HEAD detached at (.*)', stdout.decode('utf-8'))
             if not m:
                 return 'Failed extracting git current branch.'
         original_branch = m.groups(1)[0]
@@ -354,7 +363,7 @@ def set_up_backend(name):
         demos[name]['backend_port'] = get_backend_port()
         (returncode, stdout, stderr) = run_command([
             'sed', '-i', '-E',
-            's/bind-address=\":[0-9]+\"/bind-address=\":%d\"/g' % demos[name]['backend_port'],
+            's/bind-address=\":[0-9]+\"/bind-address=\":%d\"\\nenable-cors=\"true\"/g' % demos[name]['backend_port'],
             '%s/config.toml' % backend_dir(name)])
         if returncode != 0:
             return 'stderr: %s, stdout: %s' % (stderr, stdout)
@@ -401,7 +410,7 @@ def set_up_backend(name):
 
 def set_up_demo(name):
     # Start backend
-    print 'Setting up demo: %s.' % demos[name]
+    print('Setting up demo: %s.' % demos[name])
     demos[name]['status'].append('Setting up backend')
     error = set_up_backend(name)
     if error:
@@ -422,7 +431,7 @@ def set_up_demo(name):
         demos[name]['status'].append('Cleaning existing indexes for [%s]' % name)
         (returncode, stdout, stderr) = delete_indexes(name)
         if returncode != 0:
-            print 'Failed clening existing indexes: %d %s %s' % (returncode, stdout, stderr)
+            print('Failed clening existing indexes: %d %s %s' % (returncode, stdout, stderr))
             demos[name]['status'].append('Failed clening existing indexes: %d' % returncode)
         demos[name]['status'].append('Reindexing ... will take ~20 minutes.')
         error = start_reindex_grammars(name)
@@ -474,26 +483,26 @@ class MonitorCalls:
         self.printCalls('After')
     def printCalls(self, prefix):
         global calls
-        print '\n%s - %d Calls:' % (prefix, len(calls))
-        for (k, v) in calls.iteritems():
-            print '%s - %s' % (k, v)
-        print
+        print('\n%s - %d Calls:' % (prefix, len(calls)))
+        for (k, v) in iter(calls.items()):
+            print('%s - %s' % (k, v))
+        print()
         sys.stdout.flush()
 
-class DemoHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
+class DemoHandler(http.server.SimpleHTTPRequestHandler):
     def return_response(self, code, message):
-        # print 'returning [%d]: [%s]' % (code, message)
+        # print('returning [%d]: [%s]' % (code, message))
         self.send_response(code)
         self.end_headers()
-        self.wfile.write(message)
+        self.wfile.write(message.encode('utf-8'))
 
     def do_GET(self):
         with MonitorCalls(self.path):
-            parts = urlparse.urlparse(self.path)
-            # print 'get %s' % (parts,)
+            parts = urlparse(self.path)
+            # print('get %s' % (parts,))
             if parts.path == '/':
                 self.path = './misc/demo.html'
-                return SimpleHTTPServer.SimpleHTTPRequestHandler.do_GET(self)
+                return http.server.SimpleHTTPRequestHandler.do_GET(self)
             if parts.path == '/status':
                 self.return_response(200, json.dumps(demos_to_json()))
                 return
@@ -536,8 +545,8 @@ class DemoHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 content_length = int(self.headers['Content-Length'])
                 body = self.rfile.read(content_length)
                 request = json.loads(body)
-                print request
-                print type(request)
+                print(request)
+                print(type(request))
                 fields = ['name', 'comment', 'backend_branch', 'frontend_branch', 'elastic']
                 missing_fields = [f for f in fields if not request[f]]
                 if len(missing_fields):
@@ -558,12 +567,12 @@ class DemoHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
                 self.send_response(200)
 
-class ThreadingTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
+class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     pass
 
-SocketServer.TCPServer.allow_reuse_address = True
+socketserver.TCPServer.allow_reuse_address = True
 httpd = ThreadingTCPServer(("", PORT), DemoHandler)
 
-print "serving at port", PORT
+print("serving at port", PORT)
 httpd.serve_forever()
 start_queue.join()
