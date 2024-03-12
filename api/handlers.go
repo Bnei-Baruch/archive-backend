@@ -318,7 +318,7 @@ func LessonsHandler(c *gin.Context) {
 
 	//append collection filters
 	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
-	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
+	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter, "collections"); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -347,6 +347,7 @@ func LessonsHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
+	appendCPartOfDayFilterMods(&cMods, r.PartOfDayFilter)
 	if len(r.Persons) > 0 {
 		cMods = []qm.QueryMod{qm.Where("id < 0")}
 	}
@@ -357,7 +358,7 @@ func LessonsHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
+	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter, ""); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -396,10 +397,13 @@ func LessonsHandler(c *gin.Context) {
 		NewBadRequestError(err).Abort(c)
 		return
 	}
+	appendCUPartOfDayFilterMods(&cuMods, r.PartOfDayFilter)
 
 	//call DB
 	var cTotal int64
+	boil.DebugMode = true
 	err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
+	boil.DebugMode = false
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -413,7 +417,6 @@ func LessonsHandler(c *gin.Context) {
 	)
 
 	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
-
 	var cuTotal int64
 	err = mdbmodels.ContentUnits(append(cuMods, qm.Select(`COUNT(DISTINCT "content_units".id)`))...).QueryRow(db).Scan(&cuTotal)
 	if err != nil {
@@ -487,7 +490,7 @@ func EventsHandler(c *gin.Context) {
 
 	//append collection filters
 	cMods := []qm.QueryMod{SECURE_PUBLISHED_MOD}
-	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
+	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter, "collections"); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -527,7 +530,7 @@ func EventsHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
+	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter, ""); err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
@@ -1113,7 +1116,7 @@ func handleCollections(cm cache.CacheManager, db *sql.DB, r CollectionsRequest) 
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter, "collections"); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendDateRangeCFilterMods(&mods, r.DateRangeFilter); err != nil {
@@ -1772,7 +1775,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 		if err := appendContentLanguagesFilterMods(&mods, r.BaseRequest); err != nil {
 			return nil, NewBadRequestError(err)
 		}
-		if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+		if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter, ""); err != nil {
 			return nil, NewBadRequestError(err)
 		}
 		if err := appendDateRangeFilterMods(&mods, r.DateRangeFilter); err != nil {
@@ -1812,6 +1815,7 @@ func handleContentUnits(cm cache.CacheManager, db *sql.DB, r ContentUnitsRequest
 			return nil, NewInternalError(err)
 		}
 		appendCUNameFilterMods(&mods, r.CuNameFilter)
+		appendCUPartOfDayFilterMods(&mods, r.PartOfDayFilter)
 	}
 
 	var total int64
@@ -2259,7 +2263,7 @@ func handleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 	if err := appendSourcesFilterMods(cm, &cuMods, r.SourcesFilter); err != nil {
 		return nil, NewInternalError(err)
 	}
-	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
+	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter, ""); err != nil {
 		return nil, NewInternalError(err)
 	}
 	if err := appendDateRangeFilterMods(&cuMods, r.DateRangeFilter); err != nil {
@@ -2306,7 +2310,7 @@ func handleTagDashboard(cm cache.CacheManager, db *sql.DB, r TagDashboardRequest
 	}
 
 	// collections filters
-	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter); err != nil {
+	if err := appendContentTypesFilterMods(&cMods, r.ContentTypesFilter, "collections"); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendDateRangeCFilterMods(&cMods, r.DateRangeFilter); err != nil {
@@ -2768,6 +2772,23 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 		close(mtCh)
 	}
 
+	dpCh := make(chan map[string]int, 1)
+	if r.WithPartOfDay && len(r.PartOfDay) != 0 {
+		g.Go(func() error {
+			dpr := r
+			dpr.PartOfDayFilter = PartOfDayFilter{PartOfDay: nil}
+			dpr.StatsFetchOptions = StatsFetchOptions{}
+			dpr.StatsFetchOptions.WithPartOfDay = true
+			dpRes, err := handler(cm, db, dpr)
+			if err != nil {
+				return err
+			}
+			dpCh <- dpRes.DayPart
+			return nil
+		})
+	} else {
+		close(dpCh)
+	}
 	if err := g.Wait(); err != nil {
 		return nil, NewInternalError(err)
 	}
@@ -2801,6 +2822,9 @@ func handleFilterStatsClass(cm cache.CacheManager, db *sql.DB, r StatsClassReque
 	if v, ok := <-mtCh; ok {
 		result.MediaTypes = v
 	}
+	if v, ok := <-dpCh; ok {
+		result.DayPart = v
+	}
 	return result, nil
 }
 
@@ -2818,7 +2842,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter, ""); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendDateRangeCUFilterMods(&mods, r.DateRangeFilter); err != nil {
@@ -2861,6 +2885,7 @@ func handleStatsCUClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) 
 		return nil, NewBadRequestError(err)
 	}
 	appendCUNameFilterMods(&mods, r.CuNameFilter)
+	appendCUPartOfDayFilterMods(&mods, r.PartOfDayFilter)
 	var err error
 	resp := NewStatsClassResponse()
 
@@ -2955,7 +2980,7 @@ func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (
 	if err := appendIDsFilterMods(&mods, r.IDsFilter); err != nil {
 		return nil, NewBadRequestError(err)
 	}
-	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter); err != nil {
+	if err := appendContentTypesFilterMods(&mods, r.ContentTypesFilter, "collections"); err != nil {
 		return nil, NewBadRequestError(err)
 	}
 	if err := appendDateRangeCFilterMods(&mods, r.DateRangeFilter); err != nil {
@@ -2976,6 +3001,8 @@ func handleStatsCClass(cm cache.CacheManager, db *sql.DB, r StatsClassRequest) (
 	if err := appendOriginalLanguageFilterMods(&mods, r.OriginalLanguageFilter, mdbmodels.TableNames.Collections); err != nil {
 		return nil, NewBadRequestError(err)
 	}
+
+	appendCPartOfDayFilterMods(&mods, r.PartOfDayFilter)
 
 	q, args := queries.BuildQuery(mdbmodels.Collections(mods...).Query)
 	cs := FilterCollectionStats{
@@ -3352,9 +3379,12 @@ func appendIDsFilterBlogPostsMods(mods *[]qm.QueryMod, f IDsFilter) error {
 	return nil
 }
 
-func appendContentTypesFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) error {
+func appendContentTypesFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter, alias string) error {
 	if utils.IsEmpty(f.ContentTypes) {
 		return nil
+	}
+	if alias == "" {
+		alias = "content_units"
 	}
 
 	a := make([]interface{}, len(f.ContentTypes))
@@ -3367,7 +3397,8 @@ func appendContentTypesFilterMods(mods *[]qm.QueryMod, f ContentTypesFilter) err
 		}
 	}
 
-	*mods = append(*mods, qm.WhereIn("type_id IN ?", a...))
+	q := fmt.Sprintf(`"%s".type_id IN ?`, alias)
+	*mods = append(*mods, qm.WhereIn(q, a...))
 
 	return nil
 }
@@ -3849,7 +3880,7 @@ func appendNotForDisplayCU(mods *[]qm.QueryMod) error {
 		ids[i] = mdb.CONTENT_TYPE_REGISTRY.ByName[n].ID
 	}
 
-	*mods = append(*mods, qm.WhereIn("type_id NOT IN ?", utils.ConvertArgsInt64(ids)...))
+	*mods = append(*mods, qm.WhereIn(`"content_units".type_id NOT IN ?`, utils.ConvertArgsInt64(ids)...))
 	return nil
 }
 
@@ -3861,6 +3892,31 @@ func appendCUNameFilterMods(mods *[]qm.QueryMod, f CuNameFilter) {
 	*mods = append(*mods,
 		qm.InnerJoin(`content_unit_i18n cu18 ON "content_units".id = cu18.content_unit_id`),
 		qm.Where("cu18.name ILIKE ?", fmt.Sprintf("%%%s%%", f.CuName)),
+	)
+	return
+}
+
+func appendCUPartOfDayFilterMods(mods *[]qm.QueryMod, f PartOfDayFilter) {
+	if f.PartOfDay == nil {
+		return
+	}
+
+	*mods = append(*mods,
+		qm.InnerJoin(`collections_content_units ccu ON "content_units".id = ccu.content_unit_id`),
+		qm.InnerJoin("collections c ON c.id = ccu.collection_id"),
+		qm.WhereIn(`c.properties->>'number' IN ?`, utils.ConvertArgsString(f.PartOfDay)...),
+		qm.Where(`c.type_id = ?`, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID),
+	)
+	return
+}
+func appendCPartOfDayFilterMods(mods *[]qm.QueryMod, f PartOfDayFilter) {
+	if f.PartOfDay == nil {
+		return
+	}
+
+	*mods = append(*mods,
+		qm.WhereIn(`"collections".properties->>'number' IN ?`, utils.ConvertArgsString(f.PartOfDay)...),
+		qm.Where(`"collections".type_id = ?`, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID),
 	)
 	return
 }

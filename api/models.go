@@ -139,6 +139,9 @@ type MediaTypeFilter struct {
 type CuNameFilter struct {
 	CuName string `json:"q" form:"q" binding:"omitempty"`
 }
+type PartOfDayFilter struct {
+	PartOfDay []string `json:"day_part" form:"day_part" binding:"omitempty"`
+}
 
 type CollectionsRequest struct {
 	ListRequest
@@ -243,6 +246,7 @@ type ContentUnitsRequest struct {
 	OriginalLanguageFilter
 	MediaTypeFilter
 	CuNameFilter
+	PartOfDayFilter
 	WithFiles       bool `json:"with_files" form:"with_files"`
 	WithDerivations bool `json:"with_derivations" form:"with_derivations"`
 	WithTags        bool `json:"with_tags" form:"with_tags"`
@@ -266,6 +270,7 @@ type LessonsRequest struct {
 	PersonsFilter
 	MediaTypeFilter
 	OriginalLanguageFilter
+	PartOfDayFilter
 }
 
 type EventsRequest struct {
@@ -333,6 +338,7 @@ type StatsFetchOptions struct {
 	WithMediaType         bool `json:"with_media" form:"with_media" binding:"omitempty"`
 	WithOriginalLanguages bool `json:"with_original_languages" form:"with_original_languages" binding:"omitempty"`
 	WithLocations         bool `json:"with_locations" form:"with_locations" binding:"omitempty"`
+	WithPartOfDay         bool `json:"with_day_part" form:"with_day_part" binding:"omitempty"`
 }
 
 type StatsClassRequest struct {
@@ -352,6 +358,7 @@ type StatsClassRequest struct {
 	OriginalLanguageFilter
 	LocationsFilter
 	CuNameFilter
+	PartOfDayFilter
 	CountOnly bool `json:"count_only" form:"count_only"`
 	ForFilter bool `json:"for_filter" form:"for_filter"`
 }
@@ -366,6 +373,7 @@ type StatsClassResponse struct {
 	MediaTypes        map[string]int      `json:"media_types"`
 	OriginalLanguages map[string]int      `json:"original_languages"`
 	Locations         map[string]CityItem `json:"locations"`
+	DayPart           map[string]int      `json:"day_part"`
 	Total             int64               `json:"total"`
 }
 
