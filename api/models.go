@@ -217,6 +217,7 @@ type MobileProgramsPageRequest struct {
 	SourcesFilter
 	TagsFilter
 	PersonsFilter
+	CollectionsFilter
 	// more filters should be added here later
 }
 
