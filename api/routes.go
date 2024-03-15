@@ -19,6 +19,7 @@ func SetupRoutes(router *gin.Engine) {
 		mobileApi.GET("/lessons", LessonOverviewHandler)
 		mobileApi.GET("/programs", MobileProgramsPageHandler)
 		mobileApi.GET("/search", MobileSearchHandler)
+		mobileApi.POST("/feed", MobileFeed)
 	}
 
 	router.GET("/content_units", ContentUnitsHandler)
