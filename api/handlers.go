@@ -401,9 +401,7 @@ func LessonsHandler(c *gin.Context) {
 
 	//call DB
 	var cTotal int64
-	boil.DebugMode = true
 	err := mdbmodels.Collections(append(cMods, qm.Select(`COUNT(DISTINCT "collections".id)`))...).QueryRow(db).Scan(&cTotal)
-	boil.DebugMode = false
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -418,7 +416,9 @@ func LessonsHandler(c *gin.Context) {
 
 	qc, args := queries.BuildQuery(mdbmodels.Collections(cMods...).Query)
 	var cuTotal int64
+
 	err = mdbmodels.ContentUnits(append(cuMods, qm.Select(`COUNT(DISTINCT "content_units".id)`))...).QueryRow(db).Scan(&cuTotal)
+
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
@@ -3746,21 +3746,33 @@ func appendPersonsFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f PersonsF
 	if len(f.Persons) == 0 {
 		return nil
 	}
-
+	hasNorav := false
+	for _, p := range f.Persons {
+		if p == consts.PERSON_BNEI_BARUCH_UID {
+			hasNorav = true
+		}
+	}
 	// convert publisher uids to ids
 	var ids pq.Int64Array
 	q := `SELECT array_agg(DISTINCT id) FROM persons WHERE uid = ANY($1)`
 	err := queries.Raw(q, pq.Array(f.Persons)).QueryRow(exec).Scan(&ids)
-	if err != nil {
+	if err != nil && !hasNorav {
 		return err
 	}
 
-	if ids == nil || len(ids) == 0 {
+	if !hasNorav && (ids == nil || len(ids) == 0) {
 		*mods = append(*mods, qm.Where("id < 0")) // so results would be empty
 	} else {
+		orMode := []qm.QueryMod{qm.Or2(qm.WhereIn("cup.person_id in ?", utils.ConvertArgsInt64(ids)...))}
+		if hasNorav {
+			orMode = append(orMode,
+				qm.Or2(qm.Where(`cup IS NULL`)),
+			)
+		}
 		*mods = append(*mods,
-			qm.InnerJoin("content_units_persons cup ON id = cup.content_unit_id"),
-			qm.WhereIn("cup.person_id in ?", utils.ConvertArgsInt64(ids)...))
+			qm.LeftOuterJoin(`content_units_persons cup ON "content_units".id = cup.content_unit_id`),
+			qm.Expr(orMode...),
+		)
 	}
 
 	return nil
@@ -3909,6 +3921,7 @@ func appendCUPartOfDayFilterMods(mods *[]qm.QueryMod, f PartOfDayFilter) {
 	)
 	return
 }
+
 func appendCPartOfDayFilterMods(mods *[]qm.QueryMod, f PartOfDayFilter) {
 	if f.PartOfDay == nil {
 		return

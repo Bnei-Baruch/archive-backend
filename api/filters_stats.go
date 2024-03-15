@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"fmt"
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"strings"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
@@ -402,7 +403,7 @@ GROUP BY c.uid
 	}
 
 	if fs.FetchOptions.WithPersons {
-		qs = append(qs, `
+		qs = append(qs, fmt.Sprintf(`
 SELECT
   0,
   NULL,
@@ -413,7 +414,18 @@ FROM fcu
 INNER JOIN content_units_persons cup ON fcu.id = cup.content_unit_id
 INNER JOIN persons p ON cup.person_id = p.id
 GROUP BY p.uid
-`)
+UNION 
+SELECT
+  0,
+  NULL,
+  concat('pr', '%s'),
+  NULL,
+  count(distinct fcu.id)
+FROM fcu
+LEFT OUTER JOIN content_units_persons cup ON fcu.id = cup.content_unit_id
+WHERE cup IS NULL 
+`, consts.PERSON_BNEI_BARUCH_UID),
+		)
 	}
 
 	if fs.FetchOptions.WithPartOfDay {
