@@ -925,6 +925,7 @@ const (
 	SRC_ZOHAR_FOR_ALL_VOL_12                  = "oau8jvcD"
 	SRC_INTRO_TO_BOOK_OF_ZOHAR                = "ALlyoveA"
 )
+const PERSON_BNEI_BARUCH_UID = "qIiJaey9"
 
 var ES_SUGGEST_SOURCES_WEIGHT = map[string]float64{
 	SRC_NONE_ELSE_BESIDE_HIM:   200,

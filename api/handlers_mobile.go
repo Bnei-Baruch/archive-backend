@@ -183,7 +183,7 @@ func getLessonOverviewsPage(cm cache.CacheManager, db *sql.DB, r LessonOverviewR
 	if err := appendNotForDisplayCU(&cuMods); err != nil {
 		return nil, err
 	}
-	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter); err != nil {
+	if err := appendContentTypesFilterMods(&cuMods, r.ContentTypesFilter, ""); err != nil {
 		return nil, err
 	}
 	if err := appendDateRangeFilterMods(&cuMods, r.DateRangeFilter); err != nil {
@@ -384,7 +384,7 @@ SELECT
 }
 
 func mobileLessonsAddCMods(cm cache.CacheManager, db *sql.DB, r LessonOverviewRequest, cMods *[]qm.QueryMod) error {
-	if err := appendContentTypesFilterMods(cMods, r.ContentTypesFilter); err != nil {
+	if err := appendContentTypesFilterMods(cMods, r.ContentTypesFilter, "collections"); err != nil {
 		return err
 	}
 	if err := appendIDsFilterMods(cMods, r.IDsFilter); err != nil {

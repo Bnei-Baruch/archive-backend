@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"fmt"
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"strings"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
@@ -166,6 +167,7 @@ func (fs *FilterStats) scan(q string) error {
 	byMedia := make(map[string]int)
 	byOLang := make(map[string]int)
 	byLocation := make(map[string]CityItem)
+	byDayPart := make(map[string]int)
 	total := make(map[int64]bool)
 	for rows.Next() {
 		var k string
@@ -214,6 +216,12 @@ func (fs *FilterStats) scan(q string) error {
 			spl := strings.Split(key, CITY_COUNTRY_SEPARATOR)
 			byLocation[spl[0]] = CityItem{Count: count, City: spl[0], Country: spl[1]}
 			continue
+		case "dp":
+			if key == "0" || key == "" {
+				continue
+			}
+			byDayPart[key] = count
+			continue
 		default:
 			continue
 		}
@@ -253,6 +261,7 @@ func (fs *FilterStats) scan(q string) error {
 	fs.Resp.MediaTypes = byMedia
 	fs.Resp.OriginalLanguages = byOLang
 	fs.Resp.Locations = byLocation
+	fs.Resp.DayPart = byDayPart
 
 	fs.Resp.Total = int64(len(total))
 	return nil
@@ -394,7 +403,7 @@ GROUP BY c.uid
 	}
 
 	if fs.FetchOptions.WithPersons {
-		qs = append(qs, `
+		qs = append(qs, fmt.Sprintf(`
 SELECT
   0,
   NULL,
@@ -405,6 +414,32 @@ FROM fcu
 INNER JOIN content_units_persons cup ON fcu.id = cup.content_unit_id
 INNER JOIN persons p ON cup.person_id = p.id
 GROUP BY p.uid
+UNION 
+SELECT
+  0,
+  NULL,
+  concat('pr', '%s'),
+  NULL,
+  count(distinct fcu.id)
+FROM fcu
+LEFT OUTER JOIN content_units_persons cup ON fcu.id = cup.content_unit_id
+WHERE cup IS NULL 
+`, consts.PERSON_BNEI_BARUCH_UID),
+		)
+	}
+
+	if fs.FetchOptions.WithPartOfDay {
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('dp', c.properties->>'number'),
+  NULL,
+  count(distinct fcu.id)
+FROM collections_content_units ccu
+INNER JOIN fcu ON ccu.content_unit_id = fcu.id  
+INNER JOIN collections c ON ccu.collection_id = c.id
+GROUP BY  c.properties->>'number'
 `)
 	}
 
@@ -622,6 +657,19 @@ WHERE c.properties->>'country' IS NOT NULL OR  c.properties->>'city' IS NOT NULL
 GROUP BY  c.properties->>'city', c.properties->>'country'
 `, CITY_COUNTRY_SEPARATOR),
 		)
+	}
+
+	if fs.FetchOptions.WithPartOfDay {
+		qs = append(qs, `
+SELECT
+  0,
+  NULL,
+  concat('dp', c.properties->>'number'),
+  NULL,
+  count(distinct c.id)
+FROM fc c
+GROUP BY  c.properties->>'number'
+`)
 	}
 
 	if len(qs) == 0 {
