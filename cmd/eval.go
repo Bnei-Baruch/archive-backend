@@ -57,6 +57,7 @@ var top int
 var typosPath string
 var language string
 var htmlFileToInject string
+var elasticUrl string
 
 func init() {
 	evalCmd.PersistentFlags().StringVar(&evalSetPath, "eval_set", "", "Path to csv eval set.")
@@ -97,6 +98,8 @@ func init() {
 	testTypoSuggestCmd.MarkFlagRequired("typos_path")
 	testTypoSuggestCmd.PersistentFlags().StringVar(&language, "lang", "", "Index language.")
 	testTypoSuggestCmd.MarkFlagRequired("lang")
+  testTypoSuggestCmd.PersistentFlags().StringVar(&elasticUrl, "elastic", "", "URL of Elastic.")
+  testTypoSuggestCmd.MarkFlagRequired("elastic")
 	RootCmd.AddCommand(testTypoSuggestCmd)
 }
 
