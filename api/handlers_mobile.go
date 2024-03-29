@@ -550,9 +550,6 @@ func MobileSearchHandler(c *gin.Context) {
 		sortByVal = consts.SORT_BY_SOURCE_FIRST
 	}
 
-	searchId := c.Query("search_id")
-	suggestion := c.Query("suggest")
-
 	// We use the MD5 of client IP as preference to resolve the "Bouncing Results" problem
 	// see https://www.elastic.co/guide/en/elasticsearch/guide/current/_search_options.html
 	preference := fmt.Sprintf("%x", md5.Sum([]byte(c.ClientIP())))
@@ -560,7 +557,6 @@ func MobileSearchHandler(c *gin.Context) {
 	esManager := c.MustGet("ES_MANAGER").(*search.ESManager)
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
-	logger := c.MustGet("LOGGER").(*search.SearchLogger)
 	cacheM := c.MustGet("CACHE").(cache.CacheManager)
 	tc := c.MustGet("TOKENS_CACHE").(*search.TokensCache)
 	variables := c.MustGet("VARIABLES").(search.VariablesV2)
@@ -628,14 +624,6 @@ func MobileSearchHandler(c *gin.Context) {
 	)
 
 	if err == nil {
-		// TODO: How does this slows the search query? Consider logging in parallel.
-		if !query.Deb {
-			err = logger.LogSearch(query, sortByVal, from, size, searchId, suggestion, res, se.ExecutionTimeLog)
-			if err != nil {
-				log.Warnf("Error logging search: %+v %+v", err, res)
-			}
-		}
-
 		mapIdsByType := map[string][]string{}
 		mobileRespItemMap := map[string]*MobileSearchResponseItem{}
 		allItems := []*MobileSearchResponseItem{}
@@ -776,11 +764,6 @@ func MobileSearchHandler(c *gin.Context) {
 		c.JSON(http.StatusOK, mobileResponse)
 
 	} else {
-		logErr := logger.LogSearchError(query, sortByVal, from, size, searchId, suggestion, err, se.ExecutionTimeLog)
-		if logErr != nil {
-			log.Warnf("Error logging search error: %+v %+v", logErr, err)
-		}
-
 		NewInternalError(err).Abort(c)
 	}
 }
