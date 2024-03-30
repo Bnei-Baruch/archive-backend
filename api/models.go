@@ -217,10 +217,11 @@ type MobileSearchResponseItem struct {
 type MobileProgramsPageRequest struct {
 	ListRequest
 	ContentTypesFilter
+	DateRangeFilter
 	SourcesFilter
 	TagsFilter
-	PersonsFilter
 	CollectionsFilter
+	PersonsFilter
 	// more filters should be added here later
 }
 

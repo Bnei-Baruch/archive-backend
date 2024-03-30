@@ -53,6 +53,7 @@ func MobileProgramsPageHandler(c *gin.Context) {
 		TagsFilter:         	r.TagsFilter,
 		PersonsFilter:      	r.PersonsFilter,
 		CollectionsFilter: 		r.CollectionsFilter,
+		DateRangeFilter: 		r.DateRangeFilter,
 	}
 
 	resp, err := handleContentUnits(cm, db, cuRequest)

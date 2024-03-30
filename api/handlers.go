@@ -3415,12 +3415,12 @@ func appendDateRangeCFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 		return nil
 	}
 
-	orMode := []qm.QueryMod{}
-
 	startMode := []qm.QueryMod{}
 	if err := appendDRFBaseMods(&startMode, f, `("collections".properties->>'start_date')::date`); err != nil {
 		return err
 	}
+
+	orMode := []qm.QueryMod{}
 	orMode = append(orMode, qm.Or2(qm.Expr(startMode...)))
 
 	endMode := []qm.QueryMod{}
