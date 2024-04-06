@@ -829,14 +829,14 @@ func SearchHandler(c *gin.Context) {
 		timeoutForHighlight,
 	)
 
-  if query.Deb {
-    timeLogArr := []search.TimeLog{}
-    for k, v := range se.ExecutionTimeLog.ToMap() {
-      ms := int64(v / time.Millisecond)
-      timeLogArr = append(timeLogArr, search.TimeLog{Operation: k, Time: ms})
-    }
-    res.ExecutionTimeLog = timeLogArr
-  }
+	if query.Deb {
+		timeLogArr := []search.TimeLog{}
+		for k, v := range se.ExecutionTimeLog.ToMap() {
+			ms := int64(v / time.Millisecond)
+			timeLogArr = append(timeLogArr, search.TimeLog{Operation: k, Time: ms})
+		}
+		res.ExecutionTimeLog = timeLogArr
+	}
 
 	if err == nil {
 		for _, hit := range res.SearchResult.Hits.Hits {
@@ -3420,8 +3420,7 @@ func appendDateRangeCFilterMods(mods *[]qm.QueryMod, f DateRangeFilter) error {
 		return err
 	}
 
-	orMode := []qm.QueryMod{}
-	orMode = append(orMode, qm.Or2(qm.Expr(startMode...)))
+	orMode := []qm.QueryMod{qm.Or2(qm.Expr(startMode...))}
 
 	endMode := []qm.QueryMod{}
 	if err := appendDRFBaseMods(&endMode, f, `("collections".properties->>'end_date')::date`); err != nil {
