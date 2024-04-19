@@ -47,11 +47,13 @@ func MobileProgramsPageHandler(c *gin.Context) {
 	}
 
 	cuRequest := ContentUnitsRequest{
-		ListRequest:        r.ListRequest,
-		ContentTypesFilter: r.ContentTypesFilter,
-		SourcesFilter:      r.SourcesFilter,
-		TagsFilter:         r.TagsFilter,
-		PersonsFilter:      r.PersonsFilter,
+		ListRequest:        	r.ListRequest,
+		ContentTypesFilter: 	r.ContentTypesFilter,
+		SourcesFilter:      	r.SourcesFilter,
+		TagsFilter:         	r.TagsFilter,
+		PersonsFilter:      	r.PersonsFilter,
+		CollectionsFilter: 		r.CollectionsFilter,
+		DateRangeFilter: 		r.DateRangeFilter,
 	}
 
 	resp, err := handleContentUnits(cm, db, cuRequest)
