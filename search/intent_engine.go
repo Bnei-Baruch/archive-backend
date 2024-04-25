@@ -85,7 +85,7 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 			}
 		}
 	} else {
-		checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_LESSON_PART, consts.CT_VIDEO_PROGRAM_CHAPTER)
+		checkContentUnitsTypes = append(checkContentUnitsTypes, consts.CT_LESSON_PART, consts.CT_VIDEO_PROGRAM_CHAPTER, consts.CT_LIKUTIM)
 	}
 
 	queryWithoutFilters := *query

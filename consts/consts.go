@@ -545,6 +545,7 @@ const (
 	INTENT_INDEX_SOURCE      = "intent-source"
 	INTENT_HIT_TYPE_PROGRAMS = "programs"
 	INTENT_HIT_TYPE_LESSONS  = "lessons"
+	INTENT_HIT_TYPE_LIKUTIM  = "likutim"
 )
 
 var ES_INTENT_SUPPORTED_FILTERS = map[string]bool{
@@ -613,6 +614,7 @@ var RESULT_TYPE_BY_INDEX_TYPE = map[string]string{
 var INTENT_HIT_TYPE_BY_CT = map[string]string{
 	CT_LESSON_PART:           INTENT_HIT_TYPE_LESSONS,
 	CT_VIDEO_PROGRAM_CHAPTER: INTENT_HIT_TYPE_PROGRAMS,
+	CT_LIKUTIM:               INTENT_HIT_TYPE_LIKUTIM,
 }
 
 const (
