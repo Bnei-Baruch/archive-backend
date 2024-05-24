@@ -173,6 +173,7 @@ var LANDING_PAGES = map[string]string{
 const (
 	FILTER_NAME_SOURCE       = "source"
 	FILTER_NAME_TOPIC        = "topic"
+	FILTER_NAME_TOPICS       = "topics"
 	FILTER_NAME_CONTENT_TYPE = "contentType"
 	FILTER_NAME_HOLIDAYS     = "holidays"
 	PREFIX_LATEST            = "[latest]"
@@ -596,7 +597,7 @@ func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expect
 		}
 		// Match all filters
 		filter := e.Filters[0]
-		return ((filter.Name == FILTER_NAME_TOPIC && hit.Index == consts.INTENT_INDEX_TAG) ||
+		return (((filter.Name == FILTER_NAME_TOPIC || filter.Name == FILTER_NAME_TOPICS) && hit.Index == consts.INTENT_INDEX_TAG) ||
 			(filter.Name == FILTER_NAME_SOURCE && hit.Index == consts.INTENT_INDEX_SOURCE)) &&
 			FilterValueToUid(filter.Value) == hitSource.MdbUid
 	} else if e.Type == ET_LANDING_PAGE {
@@ -1359,6 +1360,7 @@ func getLatestUIDByFilters(filters []Filter, db *sql.DB) (string, error) {
 				uidStr := fmt.Sprintf("'%s'", FilterValueToUid(filter.Value))
 				sourceUids = append(sourceUids, uidStr)
 			case FILTER_NAME_TOPIC:
+			case FILTER_NAME_TOPICS:
 				uidStr := fmt.Sprintf("'%s'", FilterValueToUid(filter.Value))
 				tagsUids = append(tagsUids, uidStr)
 			case FILTER_NAME_CONTENT_TYPE:
