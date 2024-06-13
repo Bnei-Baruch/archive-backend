@@ -71,17 +71,6 @@ func CollectionHandler(c *gin.Context) {
 	concludeRequest(c, resp, err)
 }
 
-func getFeedApi(path string) (string, error) {
-	baseUrl := viper.GetString("feed_service.url")
-	if strings.HasPrefix(path, "/") {
-		path = path[1:]
-	}
-
-	// NOTICE: it's not supported on golang 1.17
-	//return url.JoinPath(baseUrl, path)
-	return baseUrl + path, nil
-}
-
 func LatestLessonHandler(c *gin.Context) {
 	var r BaseRequest
 	if c.Bind(&r) != nil {
