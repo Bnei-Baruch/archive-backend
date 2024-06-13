@@ -63,6 +63,11 @@
                         "type": "stemmer", 
                         "language": "russian"
                     }, 
+                    "shingle": {
+                        "min_shingle_size": 2, 
+                        "type": "shingle", 
+                        "max_shingle_size": 3
+                    }, 
                     "synonym_graph": {
                         "synonyms": [], 
                         "type": "synonym_graph", 
@@ -110,6 +115,13 @@
                     }
                 }, 
                 "analyzer": {
+                    "typo_suggest": {
+                        "filter": [
+                            "lowercase", 
+                            "shingle"
+                        ], 
+                        "tokenizer": "standard"
+                    }, 
                     "russian_synonym": {
                         "filter": [
                             "lowercase", 
