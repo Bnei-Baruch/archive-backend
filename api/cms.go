@@ -35,6 +35,18 @@ func CMSPerson(c *gin.Context) {
 	concludeRequestFile(c, fileName, err)
 }
 
+func CMSAbout(c *gin.Context) {
+	var r BaseRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	assets := c.MustGet("CMS").(*CMSParams).Assets
+	filePattern := fmt.Sprintf("%sactive/abouts/about-%%s", assets)
+	fileName, err := handleItemRequest(filePattern, BaseRequestToContentLanguages(r))
+	concludeRequestFile(c, fileName, err)
+}
+
 func CMSBanner(c *gin.Context) {
 	var r BaseRequest
 	if c.Bind(&r) != nil {
