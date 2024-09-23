@@ -61,6 +61,9 @@ func SyncCMS() {
 	log.Info("Syncing Persons...")
 	syncPersons()
 
+	log.Info("Syncing Abouts...")
+	syncAbouts()
+
 	//log.Info("Syncing Sources...")
 	//syncSources()
 
@@ -117,6 +120,26 @@ func syncPersons() {
 		person.Content = mediaLibraryRE.ReplaceAllString(person.Content, config.assetsImages)
 		if err = saveItem(filepath.Join(config.workDir, "persons", person.Slug), person); err != nil {
 			log.Fatal("save person", err)
+		}
+	}
+}
+
+func syncAbouts() {
+	var items []item
+	var err error
+
+	if err = getItem("about", config.url+"get-abouts", &items); err != nil {
+		log.Fatal("get items", err)
+	}
+
+	for _, a := range items {
+		log.Info(a.Slug)
+		if err = checkSlug4Language(a.Slug, personsLanguage); err != nil {
+			log.Fatal(err)
+		}
+		a.Content = mediaLibraryRE.ReplaceAllString(a.Content, config.assetsImages)
+		if err = saveItem(filepath.Join(config.workDir, "abouts", a.Slug), a); err != nil {
+			log.Fatal("save about pages", err)
 		}
 	}
 }
@@ -199,7 +222,7 @@ func mkdir(permissions os.FileMode, dirs ...string) (err error) {
 func prepareDirectories() (workDir string, err error) {
 	workDir = filepath.Join(config.assets, fmt.Sprint(time.Now().Unix()))
 
-	for _, folder := range []string{"banners", "persons", "sources"} {
+	for _, folder := range []string{"banners", "persons", "sources", "abouts"} {
 		if err = mkdir(0755, workDir, folder); err != nil {
 			return "", errors.Wrapf(err, "mkdir %s/%s", workDir, folder)
 		}
