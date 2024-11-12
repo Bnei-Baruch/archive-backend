@@ -13,75 +13,82 @@ import (
 
 // we use only base languages and ignore locales + scripts
 var serverLangs = []language.Tag{
-	language.English,    // en fallback
-	language.Hebrew,     // he
-	language.Russian,    // ru
-	language.Spanish,    // es
-	language.Italian,    // es
-	language.German,     // de
-	language.Dutch,      // nl
-	language.French,     // fr
-	language.Portuguese, // pt
-	language.Turkish,    // tr
-	language.Polish,     // pl
-	language.Arabic,     // ar
-	language.Hungarian,  // hu
-	language.Finnish,    // fi
-	language.Lithuanian, // lt
-	language.Japanese,   // ja
-	language.Bulgarian,  // bg
-	language.Georgian,   // ka
-	language.Norwegian,  // no
-	language.Swedish,    // sv
-	language.Croatian,   // hr
-	language.Chinese,    // zh
-	language.Persian,    // fa
-	language.Romanian,   // ro
-	language.Hindi,      // hi
-	language.Ukrainian,  // uk
-	language.Macedonian, // mk
-	language.Slovenian,  // sl
-	language.Latvian,    // lv
-	language.Slovak,     // sk
-	language.Czech,      // cs
-	language.Armenian,   // hy
-	language.Indonesian, // id
+	language.English,     // en fallback
+	language.Hebrew,      // he
+	language.Russian,     // ru
+	language.Spanish,     // es
+	language.Italian,     // es
+	language.German,      // de
+	language.Dutch,       // nl
+	language.French,      // fr
+	language.Portuguese,  // pt
+	language.Turkish,     // tr
+	language.Polish,      // pl
+	language.Arabic,      // ar
+	language.Hungarian,   // hu
+	language.Finnish,     // fi
+	language.Lithuanian,  // lt
+	language.Japanese,    // ja
+	language.Bulgarian,   // bg
+	language.Georgian,    // ka
+	language.Norwegian,   // no
+	language.Swedish,     // sv
+	language.Croatian,    // hr
+	language.Chinese,     // zh
+	language.Persian,     // fa
+	language.Romanian,    // ro
+	language.Hindi,       // hi
+	language.Ukrainian,   // uk
+	language.Macedonian,  // mk
+	language.Slovenian,   // sl
+	language.Latvian,     // lv
+	language.Slovak,      // sk
+	language.Czech,       // cs
+	language.Armenian,    // hy
+	language.Danish,      // da
+	language.Estonian,    // et
+	language.Greek,       // el
+	language.Azerbaijani, // az
 }
 
 var GO_TO_MDB = map[language.Tag]string{
-	language.English:    consts.LANG_ENGLISH,
-	language.Hebrew:     consts.LANG_HEBREW,
-	language.Russian:    consts.LANG_RUSSIAN,
-	language.Spanish:    consts.LANG_SPANISH,
-	language.Italian:    consts.LANG_ITALIAN,
-	language.German:     consts.LANG_GERMAN,
-	language.Dutch:      consts.LANG_DUTCH,
-	language.French:     consts.LANG_FRENCH,
-	language.Portuguese: consts.LANG_PORTUGUESE,
-	language.Turkish:    consts.LANG_TURKISH,
-	language.Polish:     consts.LANG_POLISH,
-	language.Arabic:     consts.LANG_ARABIC,
-	language.Hungarian:  consts.LANG_HUNGARIAN,
-	language.Finnish:    consts.LANG_FINNISH,
-	language.Lithuanian: consts.LANG_LITHUANIAN,
-	language.Japanese:   consts.LANG_JAPANESE,
-	language.Bulgarian:  consts.LANG_BULGARIAN,
-	language.Georgian:   consts.LANG_GEORGIAN,
-	language.Norwegian:  consts.LANG_NORWEGIAN,
-	language.Swedish:    consts.LANG_SWEDISH,
-	language.Croatian:   consts.LANG_CROATIAN,
-	language.Chinese:    consts.LANG_CHINESE,
-	language.Persian:    consts.LANG_PERSIAN,
-	language.Romanian:   consts.LANG_ROMANIAN,
-	language.Hindi:      consts.LANG_HINDI,
-	language.Ukrainian:  consts.LANG_UKRAINIAN,
-	language.Macedonian: consts.LANG_MACEDONIAN,
-	language.Slovenian:  consts.LANG_SLOVENIAN,
-	language.Latvian:    consts.LANG_LATVIAN,
-	language.Slovak:     consts.LANG_SLOVAK,
-	language.Czech:      consts.LANG_CZECH,
-	language.Armenian:   consts.LANG_ARMENIAN,
-	language.Indonesian: consts.LANG_INDONESIAN,
+	language.English:     consts.LANG_ENGLISH,
+	language.Hebrew:      consts.LANG_HEBREW,
+	language.Russian:     consts.LANG_RUSSIAN,
+	language.Spanish:     consts.LANG_SPANISH,
+	language.Italian:     consts.LANG_ITALIAN,
+	language.German:      consts.LANG_GERMAN,
+	language.Dutch:       consts.LANG_DUTCH,
+	language.French:      consts.LANG_FRENCH,
+	language.Portuguese:  consts.LANG_PORTUGUESE,
+	language.Turkish:     consts.LANG_TURKISH,
+	language.Polish:      consts.LANG_POLISH,
+	language.Arabic:      consts.LANG_ARABIC,
+	language.Hungarian:   consts.LANG_HUNGARIAN,
+	language.Finnish:     consts.LANG_FINNISH,
+	language.Lithuanian:  consts.LANG_LITHUANIAN,
+	language.Japanese:    consts.LANG_JAPANESE,
+	language.Bulgarian:   consts.LANG_BULGARIAN,
+	language.Georgian:    consts.LANG_GEORGIAN,
+	language.Norwegian:   consts.LANG_NORWEGIAN,
+	language.Swedish:     consts.LANG_SWEDISH,
+	language.Croatian:    consts.LANG_CROATIAN,
+	language.Chinese:     consts.LANG_CHINESE,
+	language.Persian:     consts.LANG_PERSIAN,
+	language.Romanian:    consts.LANG_ROMANIAN,
+	language.Hindi:       consts.LANG_HINDI,
+	language.Ukrainian:   consts.LANG_UKRAINIAN,
+	language.Macedonian:  consts.LANG_MACEDONIAN,
+	language.Slovenian:   consts.LANG_SLOVENIAN,
+	language.Latvian:     consts.LANG_LATVIAN,
+	language.Slovak:      consts.LANG_SLOVAK,
+	language.Czech:       consts.LANG_CZECH,
+	language.Indonesian:  consts.LANG_INDONESIAN,
+	language.Armenian:    consts.LANG_ARMENIAN,
+	language.Danish:      consts.LANG_DANISH,
+	language.Estonian:    consts.LANG_ESTONIAN,
+	language.Greek:       consts.LANG_GREEK,
+	language.Azerbaijani: consts.LANG_AZERBAIJANI,
 }
 
 func reverseLanguages() map[string]language.Tag {
@@ -128,6 +135,11 @@ var whatlangoWhitelist = map[whatlanggo.Lang]bool{
 	whatlanggo.Lav: true, // Latvian
 	//whatlanggo.Slovak: true,  // Slovak
 	whatlanggo.Ces: true, // Czech
+	whatlanggo.Ind: true, // Indonesian
+	whatlanggo.Dan: true, //Danish
+	whatlanggo.Est: true, //Estonian
+	whatlanggo.Ell: true, //Greek
+	whatlanggo.Azj: true, //Azerbaijani
 }
 
 func DetectLanguage(text string, interfaceLanguage string, acceptLanguage string, uiOrder []string) []string {
