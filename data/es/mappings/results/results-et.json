@@ -1,0 +1,137 @@
+{
+    "mappings": {
+        "result": {
+            "dynamic": "strict", 
+            "properties": {
+                "title_suggest": {
+                    "contexts": [
+                        {
+                            "path": "result_type", 
+                            "type": "category", 
+                            "name": "result_type"
+                        }
+                    ], 
+                    "fields": {
+                        "language": {
+                            "contexts": [
+                                {
+                                    "path": "result_type", 
+                                    "type": "category", 
+                                    "name": "result_type"
+                                }
+                            ], 
+                            "type": "completion", 
+                            "analyzer": "estonian"
+                        }
+                    }, 
+                    "type": "completion", 
+                    "analyzer": "standard"
+                }, 
+                "description": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "estonian"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "standard"
+                }, 
+                "title": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "estonian"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "standard"
+                }, 
+                "index_date": {
+                    "type": "date", 
+                    "format": "strict_date"
+                }, 
+                "mdb_uid": {
+                    "type": "keyword"
+                }, 
+                "content": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "estonian"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "standard"
+                }, 
+                "effective_date": {
+                    "type": "date", 
+                    "format": "strict_date"
+                }, 
+                "filter_values": {
+                    "type": "keyword"
+                }, 
+                "full_title": {
+                    "fields": {
+                        "language": {
+                            "type": "text", 
+                            "analyzer": "estonian"
+                        }
+                    }, 
+                    "type": "text", 
+                    "analyzer": "standard"
+                }, 
+                "typed_uids": {
+                    "type": "keyword"
+                }, 
+                "result_type": {
+                    "type": "keyword"
+                }
+            }
+        }
+    }, 
+    "settings": {
+        "index": {
+            "number_of_replicas": 0, 
+            "analysis": {
+                "char_filter": {
+                    "quotes": {
+                        "type": "mapping", 
+                        "mappings": [
+                            "\\u0027\\u0027=>\\u0029", 
+                            "\\u0091\\u0091=>\\u0029", 
+                            "\\u0092\\u0092=>\\u0029", 
+                            "\\u2018\\u2018=>\\u0029", 
+                            "\\u2019\\u2019=>\\u0029", 
+                            "\\u201B\\u201B=>\\u0029", 
+                            "\\u05F3\\u05F3=>\\u0029", 
+                            "\\u059C\\u059C=>\\u0029", 
+                            "\\u059D\\u059D=>\\u0029", 
+                            "\\u0091=>\\u0027", 
+                            "\\u0092=>\\u0027", 
+                            "\\u2018=>\\u0027", 
+                            "\\u2019=>\\u0027", 
+                            "\\u201B=>\\u0027", 
+                            "\\u05F3=>\\u0027", 
+                            "\\u059C=>\\u0027", 
+                            "\\u059D=>\\u0027", 
+                            "\\u0022=>", 
+                            "\\u201C=>", 
+                            "\\u201D=>", 
+                            "\\u05F4=>"
+                        ]
+                    }
+                }, 
+                "normalizer": {
+                    "case_insensitive_normalizer": {
+                        "filter": [
+                            "lowercase"
+                        ], 
+                        "type": "custom"
+                    }
+                }
+            }, 
+            "number_of_shards": 1
+        }
+    }
+}
