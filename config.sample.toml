@@ -5,6 +5,7 @@ boiler-mode="debug"  # Either debug or something else.
 rollbar-token=""
 rollbar-environment="development"
 http-pprof-pass=""
+log-level="info" # One of: panic, fatal, error, warn, info, debug, trace.
 
 [mdb]
 url="postgres://localhost/mdb?sslmode=disable&user=postgres"
@@ -34,11 +35,6 @@ timeout-for-highlight="8s"
 
 [nats]
 url="nats://localhost:4222"
-client-id="my-sample-nats-client"
-cluster-id="my-nats-cluster-id"
-subject="subject"
-durable=false
-durable-name="test-name" # name for durable subscribtion meaning it will start from where it finished last time
 
 [file_service]
 url1="http://files.kabbalahmedia.info/api/v1/get"
