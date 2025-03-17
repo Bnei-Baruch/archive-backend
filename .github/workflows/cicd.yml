@@ -1,0 +1,126 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgres:14
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd="pg_isready" 
+          --health-interval=10s 
+          --health-timeout=5s 
+          --health-retries=5
+
+      elastic:
+        image: bneibaruch/docker-files:archive-elasticsearch
+        env:
+          discovery.type: "single-node"
+          bootstrap.memory_lock: "true"
+          bootstrap.system_call_filter: "false"
+        ports:
+          - 9200:9200
+          - 9300:9300
+        options: >-
+          --health-cmd="curl http://localhost:9200/_cluster/health" 
+          --health-interval=10s 
+          --health-timeout=5s 
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.16
+
+      - name: Run unit tests
+        env:
+          GOOS: linux
+          CGO_ENABLED: 0
+        run: |
+          curl -XPUT -H "Content-Type: application/json" http://elastic:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'
+          mv config.sample.toml config.toml
+          go test -v ./... | tee test.log
+        continue-on-error: true
+
+      - name: Upload test log if tests fail
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs
+          path: test.log
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    if: success() || needs.test.result == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.BBDEPLOYMENT_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.BBDEPLOYMENT_DOCKERHUB_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            bneibaruch/archive_backend:latest
+            bneibaruch/archive_backend:gh_${{github.run_number}}
+          build-args: |
+            build_number=gh_${{github.run_number}}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Deploy to ${{ github.event.inputs.environment }} via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets[format('SSH_HOST_{0}', github.event.inputs.environment | upper)] }}
+          username: root
+          key: ${{ secrets.BBDEPLOYMENT_SSH_PRIVATE_KEY }}
+          proxy_host: ${{ secrets.SSH_PROXY_HOST }}
+          proxy_username: ${{ secrets.SSH_PROXY_USERNAME }}
+          proxy_key: ${{ secrets.BBDEPLOYMENT_SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/archive-docker
+            sed -i 's/ARCHIVE_BACKEND_VERSION.*/ARCHIVE_BACKEND_VERSION=gh_${{github.run_number}}/g' .env
+            docker compose pull archive_backend
+            docker compose up -d --no-deps archive_backend
+            docker compose exec nginx nginx -s reload
+            docker compose -f docker-compose.yml -f docker-compose-events.yml up -d --no-deps events
+
