@@ -107,10 +107,17 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
 
     steps:
+      - name: Set deployment variables
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+            echo "SSH_HOST=${{ secrets.SSH_HOST_STAGING }}" >> $GITHUB_ENV
+          else
+            echo "SSH_HOST=${{ secrets.SSH_HOST_PRODUCTION }}" >> $GITHUB_ENV
+            
       - name: Deploy to ${{ github.event.inputs.environment }} via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets[format('SSH_HOST_{0}', github.event.inputs.environment | upper)] }}
+          host: ${{ env.SSH_HOST }}
           username: root
           key: ${{ secrets.BBDEPLOYMENT_SSH_PRIVATE_KEY }}
           proxy_host: ${{ secrets.SSH_PROXY_HOST }}
@@ -123,4 +130,3 @@ jobs:
             docker compose up -d --no-deps archive_backend
             docker compose exec nginx nginx -s reload
             docker compose -f docker-compose.yml -f docker-compose-events.yml up -d --no-deps events
-
