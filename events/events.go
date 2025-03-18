@@ -1,13 +1,17 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/nats-io/go-nats-streaming"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+
 	"github.com/spf13/viper"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
@@ -18,13 +22,14 @@ import (
 var indexer *es.Indexer
 var indexerQueue WorkQueue
 
-func shutDown(signalChan chan os.Signal, sc stan.Conn, indexerQueue WorkQueue, cleanupDone chan bool) {
+func shutDown(signalChan chan os.Signal, el *EventListener, indexerQueue WorkQueue, cleanupDone chan bool) {
 	for _ = range signalChan {
 		log.Info("Shutting down...")
 
 		log.Info("Closing connection to nats")
+
 		// Do not unsubscribe a durable on exit, except if asked to.
-		sc.Close()
+		el.Close()
 
 		log.Info("Closing indexer queue")
 		indexerQueue.Close()
@@ -33,33 +38,108 @@ func shutDown(signalChan chan os.Signal, sc stan.Conn, indexerQueue WorkQueue, c
 	}
 }
 
+// Nats
+type EventListener struct {
+	nc         *nats.Conn
+	js         jetstream.JetStream
+	consumer   jetstream.Consumer
+	consumeCtx jetstream.ConsumeContext
+}
+
+func (el *EventListener) Close() {
+	el.consumeCtx.Stop()
+	el.nc.Close()
+}
+
+func (el *EventListener) handleMessage(msg jetstream.Msg) {
+	log.Debugf("EventListener.handleMessage: %+v", msg.Data())
+
+	// don't panic !
+	defer func() {
+		if rval := recover(); rval != nil {
+			log.Errorf("handleMessage panic: %v while handling %v", rval, msg)
+			debug.PrintStack()
+		}
+	}()
+
+	var e Event
+	if err := json.Unmarshal(msg.Data(), &e); err != nil {
+		log.Errorf("EventListener.handleMessage json.Unmarshal: %w", err)
+	}
+
+	handler, ok := messageHandlers[e.Type]
+	if !ok {
+		log.Errorf("Unknown event type: %v", e)
+
+		// Acknowledge the message so we won't stuck on it
+		msg.Ack()
+	}
+
+	if e.ReplicationLocation != "" {
+		log.Infof("Replication location: %s", e.ReplicationLocation)
+		var synced bool
+		err := common.DB.QueryRow("SELECT pg_last_wal_replay_lsn() >= $1", e.ReplicationLocation).Scan(&synced)
+		if err != nil {
+			log.Errorf("Check replica is synced: %+v", err)
+			return
+		}
+
+		if !synced {
+			log.Infof("Replica not synced: %s", e.ReplicationLocation)
+			// sleep maybe ?
+			//time.Sleep(500 * time.Millisecond)
+			return
+		}
+	}
+
+	// Acknowledge the message
+	msg.Ack()
+
+	log.Infof("Handling %+v", e)
+	handler(e)
+}
+
 func RunListener() {
 	log.SetLevel(log.InfoLevel)
-
-	var err error
 
 	log.Info("Initialize data stores")
 	common.Init()
 	defer common.Shutdown()
 
-	log.Info("Initialize connection to nats")
 	natsURL := viper.GetString("nats.url")
-	natsClientID := viper.GetString("nats.client-id")
-	natsClusterID := viper.GetString("nats.cluster-id")
-	natsSubject := viper.GetString("nats.subject")
-	sc, err := stan.Connect(natsClusterID, natsClientID, stan.NatsURL(natsURL))
-	utils.Must(err)
-	defer sc.Close()
-
-	log.Info("Subscribing to nats subject")
-	var startOpt stan.SubscriptionOption
-	if viper.GetBool("nats.durable") == true {
-		startOpt = stan.DurableName(viper.GetString("nats.durable-name"))
-	} else {
-		startOpt = stan.DeliverAllAvailable()
+	log.Infof("Initialize connection to nats: %s", natsURL)
+	var err error
+	el := new(EventListener)
+	el.nc, err = nats.Connect(natsURL)
+	if err != nil {
+		log.Errorf("nats.Connect: %w", err)
+		utils.Must(err)
 	}
-	_, err = sc.Subscribe(natsSubject, msgHandler, startOpt, stan.SetManualAckMode())
-	utils.Must(err)
+
+	el.js, err = jetstream.New(el.nc)
+	if err != nil {
+		log.Errorf("jetstream.New: %w", err)
+		utils.Must(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	el.consumer, err = el.js.CreateOrUpdateConsumer(ctx, "MDB", jetstream.ConsumerConfig{
+		Name:        "Archive-Backend",
+		Durable:     "Archive-Backend",
+		Description: "Events listener of MDB",
+	})
+	if err != nil {
+		log.Errorf("jetstream.CreateOrUpdateConsumer: %w", err)
+		utils.Must(err)
+	}
+
+	el.consumeCtx, err = el.consumer.Consume(el.handleMessage)
+	if err != nil {
+		log.Errorf("jetstream consumer.Consume: %w", err)
+		utils.Must(err)
+	}
 
 	log.Info("Initialize search engine indexer")
 	esc, err := common.ESC.GetClient()
@@ -84,21 +164,21 @@ func RunListener() {
 	signalChan := make(chan os.Signal, 1)
 	cleanupDone := make(chan bool)
 	signal.Notify(signalChan, os.Interrupt)
-	go func() { shutDown(signalChan, sc, indexerQueue, cleanupDone) }()
+	go func() { shutDown(signalChan, el, indexerQueue, cleanupDone) }()
 
 	log.Info("Press Ctrl+C to terminate")
 	<-cleanupDone
 }
 
-// Data struct for unmarshaling data from nats
-type Data struct {
+// Event data struct for unmarshaling data from nats
+type Event struct {
 	ID                  string                 `json:"id"`
 	Type                string                 `json:"type"`
 	ReplicationLocation string                 `json:"rloc"`
 	Payload             map[string]interface{} `json:"payload"`
 }
 
-type MessageHandler func(d Data)
+type MessageHandler func(e Event)
 
 var messageHandlers = map[string]MessageHandler{
 	E_COLLECTION_CREATE:               CollectionCreate,
@@ -143,52 +223,4 @@ var messageHandlers = map[string]MessageHandler{
 	E_TWEET_CREATE: TweetCreate,
 	E_TWEET_UPDATE: TweetUpdate,
 	E_TWEET_DELETE: TweetDelete,
-}
-
-// msgHandler checks message type and calls "eventHandler"
-func msgHandler(msg *stan.Msg) {
-	// don't panic !
-	defer func() {
-		if rval := recover(); rval != nil {
-			log.Errorf("msgHandler panic: %v while handling %v", rval, msg)
-			debug.PrintStack()
-		}
-	}()
-
-	var d Data
-	err := json.Unmarshal(msg.Data, &d)
-	if err != nil {
-		log.Errorf("json.Unmarshal error: %s\n", err)
-	}
-
-	handler, ok := messageHandlers[d.Type]
-	if !ok {
-		log.Errorf("Unknown event type: %v", d)
-
-		// Acknowledge the message so we won't stuck on it
-		msg.Ack()
-	}
-
-	if d.ReplicationLocation != "" {
-		log.Infof("Replication location: %s", d.ReplicationLocation)
-		var synced bool
-		err := common.DB.QueryRow("SELECT pg_last_wal_replay_lsn() >= $1", d.ReplicationLocation).Scan(&synced)
-		if err != nil {
-			log.Errorf("Check replica is synced: %+v", err)
-			return
-		}
-
-		if !synced {
-			log.Infof("Replica not synced: %s", d.ReplicationLocation)
-			// sleep maybe ?
-			//time.Sleep(500 * time.Millisecond)
-			return
-		}
-	}
-
-	// Acknowledge the message
-	msg.Ack()
-
-	log.Infof("Handling %+v", d)
-	handler(d)
 }
