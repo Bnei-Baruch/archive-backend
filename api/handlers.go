@@ -3789,6 +3789,8 @@ func appendBlogFilterMods(exec boil.Executor, mods *[]qm.QueryMod, f BlogFilter)
 }
 
 func appendContentLanguagesFilterMods(mods *[]qm.QueryMod, r BaseRequest) error {
+  return nil
+
 	if r.Language != "" {
 		return nil
 	}
