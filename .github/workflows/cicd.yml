@@ -69,7 +69,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload test log if tests fail
-        if: failure()
+        if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
           name: test-logs
@@ -78,7 +78,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     needs: test
-    if: success() || needs.test.result == 'success'
+    if: ${{ success() || needs.test.result == 'success' }}
 
     steps:
       - name: Checkout code
@@ -113,6 +113,7 @@ jobs:
             echo "SSH_HOST=${{ secrets.SSH_HOST_STAGING }}" >> $GITHUB_ENV
           else
             echo "SSH_HOST=${{ secrets.SSH_HOST_PRODUCTION }}" >> $GITHUB_ENV
+          fi
             
       - name: Deploy to ${{ github.event.inputs.environment }} via SSH
         uses: appleboy/ssh-action@v1.0.0
