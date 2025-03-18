@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -94,24 +95,16 @@ func MobileProgramsPageHandler(c *gin.Context) {
 		result.Items = append(result.Items, item)
 	}
 
-	mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
+	mapViewsToMobileResponseItems[*MobileContentUnitResponseItem](contentUnitUids, itemsMap)
 	concludeRequest(c, result, err)
 }
 
-func mapViewsToMobileContentUnitItems(contentUnitUids []string, itemsMap map[string]*MobileContentUnitResponseItem) {
-	if viewsResp, err := getViewsByCUIds(contentUnitUids); err != nil {
-		log.Error(err.Error())
-	} else {
-		for ix := range viewsResp.Views {
-			viewsCount := viewsResp.Views[ix]
-			uid := contentUnitUids[ix]
-			item := itemsMap[uid]
-			item.Views = &viewsCount
-		}
-	}
+type responseItemType interface {
+	*MobileContentUnitResponseItem | *MobileSearchResponseItem | *MobileFeedResponseItem
+	SetViews(views *int64)
 }
 
-func mapViewsToMobileSearchResponseItems(contentUnitUids []string, itemsMap map[string]*MobileSearchResponseItem) {
+func mapViewsToMobileResponseItems[T responseItemType](contentUnitUids []string, itemsMap map[string]T) {
 	if viewsResp, err := getViewsByCUIds(contentUnitUids); err != nil {
 		log.Error(err.Error())
 	} else {
@@ -119,7 +112,7 @@ func mapViewsToMobileSearchResponseItems(contentUnitUids []string, itemsMap map[
 			viewsCount := viewsResp.Views[ix]
 			uid := contentUnitUids[ix]
 			item := itemsMap[uid]
-			item.Views = &viewsCount
+			item.SetViews(&viewsCount)
 		}
 	}
 }
@@ -156,7 +149,7 @@ func LessonOverviewHandler(c *gin.Context) {
 		return
 	}
 
-	mapViewsToMobileContentUnitItems(contentUnitUids, itemsMap)
+	mapViewsToMobileResponseItems[*MobileContentUnitResponseItem](contentUnitUids, itemsMap)
 	concludeRequest(c, resp, nil)
 }
 
@@ -307,7 +300,9 @@ SELECT
              			-- ORDER BY ccu.collection_id, cu.created_at
 				),
 				cus AS (
-					 SELECT id::bigint, uid, type_id, properties, created_at, tag, collection_id::bigint, collection_uid, number, date, start_date::date, end_date::date
+					SELECT id, uid, type_id, properties, created_at, tag, collection_id, collection_uid, number, date, start_date, end_date
+					-- On PostgreSQL 15 change the above line to:
+					-- SELECT id::bigint, uid, type_id, properties, created_at, tag, collection_id::bigint, collection_uid, number, date, start_date::date, end_date::date
 						FROM (%s) cu
 					UNION
 					(SELECT * FROM cusCollectionful)
@@ -366,13 +361,17 @@ SELECT
 			internalCollectionId: collectionId,
 			tag:                  tag,
 			Image:                fmt.Sprintf(imagesUrlTemplate, contentUnitUid),
-			Views:                views,
 			Number:               number,
+			Title:                "",
+			Description:          "",
+			ContentType:          mdb.CONTENT_TYPE_REGISTRY.ByID[contentType].Name,
 			Date:                 date,
 			StartDate:            startDate,
 			EndDate:              endDate,
 			Duration:             &duration,
-			ContentType:          mdb.CONTENT_TYPE_REGISTRY.ByID[contentType].Name,
+			ViewsType: ViewsType{
+				Views: views,
+			},
 		}
 
 		resp.Items = append(resp.Items, item)
@@ -458,14 +457,14 @@ func setI18ColNameDesc(db *sql.DB, r BaseRequest, collectionIds []int64, cuIds [
 	return nil
 }
 
-func getViewsByCUIds(collectionIds []string) (*viewsResponse, error) {
+func getViewsByCUIds(uIds []string) (*viewsResponse, error) {
 	viewsUrl, err := getFeedApi("views")
 	if err != nil {
 		return nil, err
 	}
 
 	viewsPayload := map[string]interface{}{
-		"uids": collectionIds,
+		"uids": uIds,
 	}
 
 	viewsPayloadJson, err := json.Marshal(viewsPayload)
@@ -495,10 +494,19 @@ type viewsResponse struct {
 	Views []int64 `json:"views"`
 }
 
+func getFeedApi(path string) (string, error) {
+	baseUrl := viper.GetString("feed_service.url")
+	if strings.HasPrefix(path, "/") {
+		path = path[1:]
+	}
+
+	return url.JoinPath(baseUrl, path)
+}
+
 func MobileSearchHandler(c *gin.Context) {
 
 	// Mobile search support all content types of the regular search beside:
-	// 1. Arcticle collections
+	// 1. Article collections
 	// 2. Blog posts
 	// 3. Tweets
 	// 4. Lesson series
@@ -758,7 +766,7 @@ func MobileSearchHandler(c *gin.Context) {
 
 		cuIds, exists := mapIdsByType[consts.ES_RESULT_TYPE_UNITS]
 		if exists {
-			mapViewsToMobileSearchResponseItems(cuIds, mobileRespItemMap)
+			mapViewsToMobileResponseItems[*MobileSearchResponseItem](cuIds, mobileRespItemMap)
 		}
 
 		mobileResponse := MobileSearchResponse{Total: res.SearchResult.Hits.TotalHits, Items: allItems}
@@ -768,4 +776,110 @@ func MobileSearchHandler(c *gin.Context) {
 	} else {
 		NewInternalError(err).Abort(c)
 	}
+}
+
+func MobileFeed(c *gin.Context) {
+	// get input json
+	var r MobileFeedRequest
+	if c.Bind(&r) != nil {
+		return
+	}
+
+	feedInputJson, err := json.Marshal(r)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+	}
+
+	feedApi, err := getFeedApi("feed")
+	if err != nil {
+		NewInternalError(err).Abort(c)
+	}
+
+	feedResponseObj, err := http.Post(feedApi, "application/json", strings.NewReader(string(feedInputJson)))
+	if err != nil {
+		NewInternalError(err).Abort(c)
+	}
+
+	// convert response body to byte arr and then get the feed array
+	feedRespBytes, err := io.ReadAll(feedResponseObj.Body)
+	if err != nil {
+		log.Error(err.Error())
+	}
+
+	feedBody := new(feedResponseType)
+	if err = json.Unmarshal(feedRespBytes, feedBody); err != nil || feedBody == nil {
+		log.Error(err.Error())
+	}
+
+	imagesUrlTemplate := viper.GetString("content_unit_images.url_template")
+	var mobilefeedResponse []*MobileFeedResponseItem
+
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	language := c.Query("language")
+
+	var cuIds []string
+	itemsMap := make(map[string]*MobileFeedResponseItem)
+
+	cuMap, err := getContentUnitsByLanguage(language, db)
+
+	if err != nil {
+		log.Error(err.Error())
+	}
+
+	for _, item := range feedBody.Feed {
+		imageStr := fmt.Sprintf(imagesUrlTemplate, item.ContentUnitUid)
+
+		feedResp := &MobileFeedResponseItem{
+			ContentUnitUid: item.ContentUnitUid,
+			Type:           item.ContentType,
+			Image:          &imageStr,
+			Date:           item.Date,
+			Title:          cuMap[item.ContentUnitUid],
+		}
+
+		itemsMap[item.ContentUnitUid] = feedResp
+		cuIds = append(cuIds, item.ContentUnitUid)
+		mobilefeedResponse = append(mobilefeedResponse, feedResp)
+	}
+
+	// set views
+	mapViewsToMobileResponseItems[*MobileFeedResponseItem](cuIds, itemsMap)
+
+	c.JSON(http.StatusOK, mobilefeedResponse)
+}
+
+func getContentUnitsByLanguage(language string, db *sql.DB) (map[string]string, error) {
+	QUERY_TITLE := `SELECT uid, name
+									FROM content_unit_i18n i18n
+									JOIN content_units cu ON cu.id = i18n.content_unit_id
+									WHERE language = '%s'`
+
+	rsql := fmt.Sprintf(QUERY_TITLE, language)
+	rows, err := queries.Raw(rsql).Query(db)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "getContentUnits queries.Raw(rsql).Query(db)")
+	}
+
+	defer rows.Close()
+
+	cuMap := make(map[string]string) // contentUnits
+
+	for rows.Next() {
+		var uid string
+		var name string
+		err := rows.Scan(&uid, &name)
+		if err != nil {
+			return nil, errors.Wrap(err, "getContentUnits rows.Scan")
+		}
+
+		cuMap[uid] = name
+	}
+
+	return cuMap, nil
+}
+
+type feedResponseType struct {
+	Feed  []MobileFeedItem `json:"feed"`
+	Feeds interface{}      `json:"feeds"`
 }

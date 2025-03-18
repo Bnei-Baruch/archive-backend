@@ -13,3 +13,5 @@ _vendor-*/
 archive-backend
 assets/
 
+archive-backend.exe
+test-log.txt
