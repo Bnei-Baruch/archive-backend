@@ -7,15 +7,15 @@ rollbar-environment="development"
 http-pprof-pass=""
 
 [mdb]
-url="postgres://user@password:localhost/mdb?sslmode=disable"
+url="postgres://user:password@localhost/mdb?sslmode=disable"
 
 [test]
 enable-online-eval=false
 search-data="./search/data/"
 test-source-content-docx="$GOPATH/src/github.com/Bnei-Baruch/archive-backend/es/TEST-CONTENT.docx"
 test-sources-folder="/tmp/test-sources-folder"
-mdb-url="postgres://user@password:localhost/mdb?sslmode=disable"
-url-template="postgres://user@password:localhost/%s?sslmode=disable"
+mdb-url="postgres://user:password@localhost/mdb?sslmode=disable"
+url-template="postgres://user:password@localhost/%s?sslmode=disable"
 #for windows:
 #test-source-content-docx="C://Users//[USERNAME]//go//src//github.com//Bnei-Baruch//archive-backend//es//TEST-CONTENT.docx"
 #test-sources-folder="C://test-sources-folder"
