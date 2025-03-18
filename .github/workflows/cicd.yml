@@ -3,7 +3,7 @@ name: CI/CD Pipeline
 on:
   push:
     branches:
-      - main
+      - master
   workflow_dispatch:
     inputs:
       environment:
@@ -63,7 +63,7 @@ jobs:
           GOOS: linux
           CGO_ENABLED: 0
         run: |
-          curl -XPUT -H "Content-Type: application/json" http://elastic:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'
+          curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'
           mv config.sample.toml config.toml
           go test -v ./... | tee test.log
         continue-on-error: false
