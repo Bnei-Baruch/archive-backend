@@ -25,7 +25,7 @@ jobs:
         ports:
           - 5432:5432
         env:
-          POSTGRES_USER: user
+          POSTGRES_USER: postgres
           POSTGRES_PASSWORD: password
           POSTGRES_DB: testdb
         options: >-
@@ -65,6 +65,7 @@ jobs:
         run: |
           curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'
           mv config.sample.toml config.toml
+          set -o pipefail
           go test -v ./... | tee test.log
         continue-on-error: false
 
