@@ -13,7 +13,7 @@
                             "fields": {
                                 "language": {
                                     "type": "text", 
-                                    "analyzer": "greek"
+                                    "analyzer": "standard"
                                 }, 
                                 "keyword": {
                                     "normalizer": "case_insensitive_normalizer", 
@@ -36,7 +36,7 @@
                             "fields": {
                                 "language": {
                                     "type": "completion", 
-                                    "analyzer": "greek"
+                                    "analyzer": "standard"
                                 }
                             }, 
                             "type": "completion", 

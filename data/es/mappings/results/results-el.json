@@ -21,7 +21,7 @@
                                 }
                             ], 
                             "type": "completion", 
-                            "analyzer": "greek"
+                            "analyzer": "standard"
                         }
                     }, 
                     "type": "completion", 
@@ -31,7 +31,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "greek"
+                            "analyzer": "standard"
                         }
                     }, 
                     "type": "text", 
@@ -41,7 +41,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "greek"
+                            "analyzer": "standard"
                         }
                     }, 
                     "type": "text", 
@@ -58,7 +58,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "greek"
+                            "analyzer": "standard"
                         }
                     }, 
                     "type": "text", 
@@ -75,7 +75,7 @@
                     "fields": {
                         "language": {
                             "type": "text", 
-                            "analyzer": "greek"
+                            "analyzer": "standard"
                         }
                     }, 
                     "type": "text", 
