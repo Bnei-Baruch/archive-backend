@@ -128,11 +128,11 @@ LANGUAGE_ANALYZER = {
     AMHARIC: "standard",
     INDONESIAN: "indonesian",
     ARMENIAN: "armenian",
-	DANISH: "danish",
-	ESTONIAN: "estonian",
-	GREEK: "greek",
-	TAGALOG: "tagalog",
-	AZERBAIJANI: "azerbaijani",
+	DANISH: "standard",
+	ESTONIAN: "standard",
+	GREEK: "standard",
+	TAGALOG: "standard",
+	AZERBAIJANI: "standard",
 }
 
 LANGUAGE_ANALYZER_WITHOUT_SYNONYMS = {
