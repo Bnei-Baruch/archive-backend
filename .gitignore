@@ -13,3 +13,4 @@ _vendor-*/
 archive-backend
 assets/
 
+.DS_Store
