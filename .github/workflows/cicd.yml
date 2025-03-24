@@ -62,6 +62,7 @@ jobs:
         env:
           GOOS: linux
           CGO_ENABLED: 0
+          ELASTICSEARCH_DATA_FOLDER: ${{github.workspace}}/data
         run: |
           curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'
           mv config.sample.toml config.toml
