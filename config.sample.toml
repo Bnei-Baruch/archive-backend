@@ -22,7 +22,7 @@ url-template="postgres://user:password@localhost/%s?sslmode=disable"
 
 [elasticsearch]
 url="http://127.0.0.1:9200"
-data-folder="/tmp/search-data"  # At repo, see: ./data
+data-folder="./data"  # At repo, see: ./data
 sources-folder="/tmp/sources-folder"
 unzip-url=""
 prepare-docs-batch-size=20

@@ -12,10 +12,11 @@ services:
       - 9300:9300
 
   db:
-    image: postgres:9
+    image: postgres:14
     restart: unless-stopped
     environment:
-      POSTGRES_DB: mdb
+      POSTGRES_USER: user
       POSTGRES_PASSWORD: password
+      POSTGRES_DB: mdb
     ports:
       - 5432:5432
