@@ -32,6 +32,7 @@ var (
 
 func ensureFolder(configKey string) (string, error) {
 	path := viper.GetString(fmt.Sprintf("elasticsearch.%s", configKey))
+	log.Infof("ensureFolder %s: %s", configKey, path)
 
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
