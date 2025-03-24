@@ -64,6 +64,7 @@ jobs:
           CGO_ENABLED: 0
           ELASTICSEARCH_DATA_FOLDER: ${{github.workspace}}/data
           ELASTICSEARCH_UNZIP_URL: https://kabbalahmedia.info/assets/api
+          TEST_TEST_SOURCE_CONTENT_DOCX: ${{github.workspace}}/es/TEST-CONTENT.docx
         run: |
           curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'
           mv config.sample.toml config.toml
