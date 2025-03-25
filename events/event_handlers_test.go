@@ -27,3 +27,7 @@ func (suite *HandlersSuite) TestApiGet() {
 	uid := "ZLuOz4ih"
 	AssetsAPI(apiType, uid)
 }
+
+func (suite *HandlersSuite) TestGHActionsFail() {
+	suite.FailNow("Github actions fail now")
+}
