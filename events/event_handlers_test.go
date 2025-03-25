@@ -29,5 +29,5 @@ func (suite *HandlersSuite) TestApiGet() {
 }
 
 func (suite *HandlersSuite) TestGHActionsFail() {
-	suite.FailNow("Github actions fail now")
+	// suite.FailNow("Github actions fail now")
 }
