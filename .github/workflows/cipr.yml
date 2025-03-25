@@ -1,0 +1,72 @@
+name: Pull Request CI
+
+on:
+  pull_request:
+    branches:
+      - 'master'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgres:14
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: mdb
+        options: >-
+          --health-cmd="pg_isready" 
+          --health-interval=10s 
+          --health-timeout=5s 
+          --health-retries=5
+
+      elastic:
+        image: bneibaruch/docker-files:archive-elasticsearch
+        env:
+          discovery.type: "single-node"
+          bootstrap.memory_lock: "true"
+          bootstrap.system_call_filter: "false"
+        ports:
+          - 9200:9200
+          - 9300:9300
+        options: >-
+          --health-cmd="curl http://localhost:9200/_cluster/health" 
+          --health-interval=10s 
+          --health-timeout=5s 
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.16
+
+      - name: Run unit tests
+        env:
+          GOOS: linux
+          CGO_ENABLED: 0
+          ELASTICSEARCH_DATA_FOLDER: ${{github.workspace}}/data
+          ELASTICSEARCH_UNZIP_URL: https://kabbalahmedia.info/assets/api
+          TEST_TEST_SOURCE_CONTENT_DOCX: ${{github.workspace}}/es/TEST-CONTENT.docx
+        run: |
+          curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'
+          mv config.sample.toml config.toml
+          set -o pipefail
+          go test -v ./... | tee test.log
+        continue-on-error: false
+
+      - name: Upload test log if tests fail
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs
+          path: test.log
+
+  

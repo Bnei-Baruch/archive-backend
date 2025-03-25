@@ -68,10 +68,6 @@ jobs:
         run: |
           curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'
           mv config.sample.toml config.toml
-          env
-          pwd
-          ls -la
-          cat config.toml
           set -o pipefail
           go test -v ./... | tee test.log
         continue-on-error: false
