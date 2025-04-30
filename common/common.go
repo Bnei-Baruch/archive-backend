@@ -19,9 +19,9 @@ import (
 )
 
 var (
-	DB     *sql.DB
-	ESC    *search.ESManager
-	CACHE  cache.CacheManager
+	DB    *sql.DB
+	ESC   *search.ESManager
+	CACHE cache.CacheManager
 	//GRAMMARS     search.Grammars
 	VARIABLES    search.VariablesV2
 	TOKENS_CACHE *search.TokensCache
@@ -42,7 +42,14 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	}
 
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
-	//log.SetLevel(log.WarnLevel)
+	logLevelStr := viper.GetString("server.log-level")
+	if logLevelStr == "" {
+		logLevelStr = "info"
+	}
+	logLevel, err := log.ParseLevel(logLevelStr)
+	utils.Must(err)
+	log.Infof("Setting log level: %+v", logLevel)
+	log.SetLevel(logLevel)
 
 	if defaultDb != nil {
 		DB = defaultDb

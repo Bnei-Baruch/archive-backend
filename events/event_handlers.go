@@ -16,47 +16,47 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
-	"github.com/Bnei-Baruch/archive-backend/mdb/models"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 )
 
 var httpClient = &http.Client{
 	Timeout: 5 * time.Second,
 }
 
-func CollectionCreate(d Data) {
-	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
+func CollectionCreate(e Event) {
+	putToIndexer(indexer.CollectionUpdate, e.Payload["uid"].(string))
 }
 
-func CollectionDelete(d Data) {
-	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
+func CollectionDelete(e Event) {
+	putToIndexer(indexer.CollectionUpdate, e.Payload["uid"].(string))
 }
 
-func CollectionUpdate(d Data) {
-	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
+func CollectionUpdate(e Event) {
+	putToIndexer(indexer.CollectionUpdate, e.Payload["uid"].(string))
 }
 
-func CollectionPublishedChange(d Data) {
-	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
+func CollectionPublishedChange(e Event) {
+	putToIndexer(indexer.CollectionUpdate, e.Payload["uid"].(string))
 }
 
-func CollectionContentUnitsChange(d Data) {
-	putToIndexer(indexer.CollectionUpdate, d.Payload["uid"].(string))
+func CollectionContentUnitsChange(e Event) {
+	putToIndexer(indexer.CollectionUpdate, e.Payload["uid"].(string))
 }
 
-func ContentUnitCreate(d Data) {
-	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
+func ContentUnitCreate(e Event) {
+	putToIndexer(indexer.ContentUnitUpdate, e.Payload["uid"].(string))
 }
 
-func ContentUnitDelete(d Data) {
-	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
+func ContentUnitDelete(e Event) {
+	putToIndexer(indexer.ContentUnitUpdate, e.Payload["uid"].(string))
 }
 
-func ContentUnitUpdate(d Data) {
-	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
+func ContentUnitUpdate(e Event) {
+	putToIndexer(indexer.ContentUnitUpdate, e.Payload["uid"].(string))
 }
 
-func ContentUnitPublishedChange(d Data) {
-	uid := d.Payload["uid"].(string)
+func ContentUnitPublishedChange(e Event) {
+	uid := e.Payload["uid"].(string)
 	putToIndexer(indexer.ContentUnitUpdate, uid)
 
 	// Prepare unit thumbnail
@@ -81,30 +81,30 @@ func ContentUnitPublishedChange(d Data) {
 	}
 }
 
-func ContentUnitDerivativesChange(d Data) {
-	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
+func ContentUnitDerivativesChange(e Event) {
+	putToIndexer(indexer.ContentUnitUpdate, e.Payload["uid"].(string))
 }
 
-func ContentUnitSourcesChange(d Data) {
-	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
+func ContentUnitSourcesChange(e Event) {
+	putToIndexer(indexer.ContentUnitUpdate, e.Payload["uid"].(string))
 }
 
-func ContentUnitTagsChange(d Data) {
-	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
+func ContentUnitTagsChange(e Event) {
+	putToIndexer(indexer.ContentUnitUpdate, e.Payload["uid"].(string))
 }
 
-func ContentUnitPersonsChange(d Data) {
-	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
+func ContentUnitPersonsChange(e Event) {
+	putToIndexer(indexer.ContentUnitUpdate, e.Payload["uid"].(string))
 }
 
-func ContentUnitPublishersChange(d Data) {
-	putToIndexer(indexer.ContentUnitUpdate, d.Payload["uid"].(string))
+func ContentUnitPublishersChange(e Event) {
+	putToIndexer(indexer.ContentUnitUpdate, e.Payload["uid"].(string))
 }
 
-func FilePublished(d Data) {
-	putToIndexer(indexer.FileUpdate, d.Payload["uid"].(string))
+func FilePublished(e Event) {
+	putToIndexer(indexer.FileUpdate, e.Payload["uid"].(string))
 
-	uid := d.Payload["uid"].(string)
+	uid := e.Payload["uid"].(string)
 	file, err := mdbmodels.Files(qm.Where("uid=?", uid)).One(common.DB)
 	if err != nil {
 		log.Errorf("Error loading file from mdb %s: %s", uid, err.Error())
@@ -128,83 +128,83 @@ func FilePublished(d Data) {
 	}
 }
 
-func FileReplace(d Data) {
-	oFile := d.Payload["old"].(map[string]interface{})
-	nFile := d.Payload["new"].(map[string]interface{})
+func FileReplace(e Event) {
+	oFile := e.Payload["old"].(map[string]interface{})
+	nFile := e.Payload["new"].(map[string]interface{})
 
 	putToIndexer(indexer.FileUpdate, oFile["uid"].(string))
 	putToIndexer(indexer.FileUpdate, nFile["uid"].(string))
 }
 
-func FileInsert(d Data) {
-	putToIndexer(indexer.FileUpdate, d.Payload["uid"].(string))
+func FileInsert(e Event) {
+	putToIndexer(indexer.FileUpdate, e.Payload["uid"].(string))
 }
 
-func FileUpdate(d Data) {
-	putToIndexer(indexer.FileUpdate, d.Payload["uid"].(string))
+func FileUpdate(e Event) {
+	putToIndexer(indexer.FileUpdate, e.Payload["uid"].(string))
 
-	RemoveFile(d.Payload["uid"].(string))
+	RemoveFile(e.Payload["uid"].(string))
 }
 
-func SourceCreate(d Data) {
-	putToIndexer(indexer.SourceUpdate, d.Payload["uid"].(string))
+func SourceCreate(e Event) {
+	putToIndexer(indexer.SourceUpdate, e.Payload["uid"].(string))
 }
 
-func SourceUpdate(d Data) {
-	putToIndexer(indexer.SourceUpdate, d.Payload["uid"].(string))
+func SourceUpdate(e Event) {
+	putToIndexer(indexer.SourceUpdate, e.Payload["uid"].(string))
 }
 
-func TagCreate(d Data) {
-	putToIndexer(indexer.TagUpdate, d.Payload["uid"].(string))
+func TagCreate(e Event) {
+	putToIndexer(indexer.TagUpdate, e.Payload["uid"].(string))
 }
 
-func TagUpdate(d Data) {
-	putToIndexer(indexer.TagUpdate, d.Payload["uid"].(string))
+func TagUpdate(e Event) {
+	putToIndexer(indexer.TagUpdate, e.Payload["uid"].(string))
 }
 
-func PersonCreate(d Data) {
-	putToIndexer(indexer.PersonUpdate, d.Payload["uid"].(string))
+func PersonCreate(e Event) {
+	putToIndexer(indexer.PersonUpdate, e.Payload["uid"].(string))
 }
 
-func PersonDelete(d Data) {
-	putToIndexer(indexer.PersonUpdate, d.Payload["uid"].(string))
+func PersonDelete(e Event) {
+	putToIndexer(indexer.PersonUpdate, e.Payload["uid"].(string))
 }
 
-func PersonUpdate(d Data) {
-	putToIndexer(indexer.PersonUpdate, d.Payload["uid"].(string))
+func PersonUpdate(e Event) {
+	putToIndexer(indexer.PersonUpdate, e.Payload["uid"].(string))
 }
 
-func PublisherCreate(d Data) {
-	putToIndexer(indexer.PublisherUpdate, d.Payload["uid"].(string))
+func PublisherCreate(e Event) {
+	putToIndexer(indexer.PublisherUpdate, e.Payload["uid"].(string))
 }
 
-func PublisherUpdate(d Data) {
-	putToIndexer(indexer.PublisherUpdate, d.Payload["uid"].(string))
+func PublisherUpdate(e Event) {
+	putToIndexer(indexer.PublisherUpdate, e.Payload["uid"].(string))
 }
 
-func BlogPostUpdate(d Data) {
-	id := fmt.Sprintf("%d-%d", int64(d.Payload["blogId"].(float64)), int64(d.Payload["wpId"].(float64)))
+func BlogPostUpdate(e Event) {
+	id := fmt.Sprintf("%d-%d", int64(e.Payload["blogId"].(float64)), int64(e.Payload["wpId"].(float64)))
 	putToIndexer(indexer.BlogPostUpdate, id)
 }
 
-func BlogPostCreate(d Data) {
-	BlogPostUpdate(d)
+func BlogPostCreate(e Event) {
+	BlogPostUpdate(e)
 }
 
-func BlogPostDelete(d Data) {
-	BlogPostUpdate(d)
+func BlogPostDelete(e Event) {
+	BlogPostUpdate(e)
 }
 
-func TweetCreate(d Data) {
-	putToIndexer(indexer.TweetUpdate, d.Payload["tid"].(string))
+func TweetCreate(e Event) {
+	putToIndexer(indexer.TweetUpdate, e.Payload["tid"].(string))
 }
 
-func TweetUpdate(d Data) {
-	putToIndexer(indexer.TweetUpdate, d.Payload["tid"].(string))
+func TweetUpdate(e Event) {
+	putToIndexer(indexer.TweetUpdate, e.Payload["tid"].(string))
 }
 
-func TweetDelete(d Data) {
-	putToIndexer(indexer.TweetUpdate, d.Payload["tid"].(string))
+func TweetDelete(e Event) {
+	putToIndexer(indexer.TweetUpdate, e.Payload["tid"].(string))
 }
 
 func putToIndexer(f func(string) error, s string) {
