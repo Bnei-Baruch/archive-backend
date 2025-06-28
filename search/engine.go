@@ -818,19 +818,39 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 		}
 	}
+	expectedResults := len(query.LanguageOrder)
 	multiSearchService := e.esc.MultiSearch()
+	baseOptions := SearchRequestOptions{
+		resultTypes:        resultTypes,
+		index:              "",
+		query:              query,
+		sortBy:             sortBy,
+		from:               0,
+		size:               from + size,
+		preference:         preference,
+		useHighlight:       false,
+		partialHighlight:   false,
+		filterOutCUSources: filterOutCUSources,
+	}
+
+	expectedResults *= 2 // Additional requests, one per language ...
+	testMultiOptions := SearchRequestOptions{
+		resultTypes:        resultTypes,
+		index:              "",
+		query:              Query{Term: "חיים חדשים"},
+		sortBy:             sortBy,
+		from:               0,
+		size:               from + size,
+		preference:         preference,
+		useHighlight:       false,
+		partialHighlight:   false,
+		filterOutCUSources: filterOutCUSources,
+	}
 	requests, err := NewResultsSearchRequests(
-		SearchRequestOptions{
-			resultTypes:        resultTypes,
-			index:              "",
-			query:              query,
-			sortBy:             sortBy,
-			from:               0,
-			size:               from + size,
-			preference:         preference,
-			useHighlight:       false,
-			partialHighlight:   false,
-			filterOutCUSources: filterOutCUSources})
+		[]SearchRequestOptions{
+			baseOptions,
+			testMultiOptions,
+		})
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do on creating requests.")
 	}
@@ -851,7 +871,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			break
 		}
 	}
-	if len(mr.Responses) != len(query.LanguageOrder) {
+	if len(mr.Responses) != expectedResults {
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
 			len(mr.Responses), len(query.LanguageOrder)))
 	}
@@ -866,13 +886,17 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		score        float64
 		grammarHitId *string
 	}{}
+	// We have number of responses equal to number of languages * number of different queries.
+	// We will use the first default query to normilize the score of other queries by.
 	for i, currentResults := range mr.Responses {
+		isFirstMultiQuery := i < len(query.LanguageOrder)
+
 		if currentResults.Error != nil {
 			log.Warnf("%+v", currentResults.Error)
 			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
 		}
+		log.Infof("Number of results: %v", len(mr.Responses))
 		if haveHits(currentResults) {
-
 			if len(filterIntents) > 0 {
 				var programCollectionUid *string
 				for _, fi := range filterIntents {
@@ -921,18 +945,41 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				})
 			}
 
-			if currentResults.Hits.MaxScore != nil {
-				if maxRegularScore == nil {
-					maxRegularScore = new(float64)
-					*maxRegularScore = *currentResults.Hits.MaxScore
-				}
-				if shouldMergeResults {
-					if *currentResults.Hits.MaxScore > *maxRegularScore {
+			// Max score should be calculated only for the first default query.
+			// Other queries will be normalized to it.
+			if isFirstMultiQuery {
+				if currentResults.Hits.MaxScore != nil {
+					if maxRegularScore == nil {
+						maxRegularScore = new(float64)
 						*maxRegularScore = *currentResults.Hits.MaxScore
 					}
+					if shouldMergeResults {
+						if *currentResults.Hits.MaxScore > *maxRegularScore {
+							*maxRegularScore = *currentResults.Hits.MaxScore
+						}
+					}
+				}
+				log.Infof("ESEngine.DoSearch - isFirstMultiQuery %v %v", isFirstMultiQuery, *maxRegularScore)
+			} else {
+				// Other queries (not first default query). We need to normilize all results of other queries.
+				if haveHits(currentResults) {
+					var maxQueryScore *float64 // max score for this query that should be normalized by first default query.
+					for _, hit := range currentResults.Hits.Hits {
+						if hit.Score == nil {
+							continue
+						}
+						if maxQueryScore == nil {
+							maxQueryScore = new(float64)
+							*maxQueryScore = *hit.Score
+						}
+						// Normalize score of all non-default regular (elastic) query results.
+						*hit.Score = (*maxRegularScore * *hit.Score) / *maxQueryScore
+					}
+					log.Infof("ESEngine.DoSearch - NOT isFirstMultiQuery %v %v %v", isFirstMultiQuery, *maxRegularScore, *maxQueryScore)
 				}
 			}
-			lang := query.LanguageOrder[i]
+
+			lang := query.LanguageOrder[i%len(query.LanguageOrder)]
 			if _, ok := resultsByLang[lang]; !ok {
 				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
 			}

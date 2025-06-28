@@ -18,7 +18,7 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 	requests, err := NewResultsSearchRequests(
 		// Inside the carousel, the tweets are always sorted by relevance.
 		//The EffectiveDate of the carousel itself will be equal to the EffectiveDate of the most relevant tweet.
-		SearchRequestOptions{
+		[]SearchRequestOptions{SearchRequestOptions{
 			resultTypes:      []string{consts.ES_RESULT_TYPE_TWEETS},
 			index:            "",
 			query:            query,
@@ -27,7 +27,7 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 			size:             consts.TWEETS_SEARCH_COUNT,
 			preference:       preference,
 			useHighlight:     false,
-			partialHighlight: false})
+			partialHighlight: false}})
 	if err != nil {
 		return nil, err
 	}
