@@ -161,7 +161,7 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 		}
 		titlesOnly := contentType == consts.VAR_CT_BOOK_TITLES
 		sourceRequests, err := NewResultsSearchRequests(
-			SearchRequestOptions{
+			[]SearchRequestOptions{SearchRequestOptions{
 				resultTypes:        []string{consts.ES_RESULT_TYPE_SOURCES},
 				index:              "",
 				query:              Query{Term: text, Filters: sourceOnlyFilter, LanguageOrder: []string{language}, Deb: deb},
@@ -172,7 +172,7 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 				useHighlight:       false,
 				partialHighlight:   false,
 				filterOutCUSources: []string{},
-				titlesOnly:         titlesOnly})
+				titlesOnly:         titlesOnly}})
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +181,7 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 	if !isSectionSources {
 		if len(filters) > 0 {
 			nonSourceRequests, err := NewResultsSearchRequests(
-				SearchRequestOptions{
+				[]SearchRequestOptions{SearchRequestOptions{
 					resultTypes:        resultTypes,
 					index:              "",
 					query:              Query{Term: text, Filters: filters, LanguageOrder: []string{language}, Deb: deb},
@@ -191,7 +191,7 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 					preference:         preference,
 					useHighlight:       false,
 					partialHighlight:   false,
-					filterOutCUSources: []string{}})
+					filterOutCUSources: []string{}}})
 			if err != nil {
 				return nil, err
 			}
