@@ -1,9 +1,6 @@
 name: CI/CD Pipeline
 
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
     inputs:
       environment:
@@ -14,6 +11,11 @@ on:
         options:
           - staging
           - production
+      target_branch:
+        description: 'Enter the branch to deploy'
+        required: true
+        default: 'main'
+        type: string
 
 jobs:
   test:
@@ -52,6 +54,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.target_branch }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -87,6 +91,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.target_branch }}
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
