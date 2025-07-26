@@ -54,3 +54,6 @@ url_template="https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2
 
 [cache]
 refresh-search-stats="5m"
+
+[openai]
+token=""
