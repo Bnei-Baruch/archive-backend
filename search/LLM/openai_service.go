@@ -71,7 +71,7 @@ type LLMBotMessage struct {
 }
 
 func (s *OpenAIService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, user *string, reasoningEffort *string, output interface{}) error {
-	msg, err := s.GetChatResponseAsync(model, maxTokens, messages, user, nil, &jsonSchema, reasoningEffort)
+	msg, err := s.GetChatResponse(model, maxTokens, messages, user, nil, &jsonSchema, reasoningEffort)
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func (s *OpenAIService) GetStructuredOutput(jsonSchema string, model string, max
 	return nil
 }
 
-func (s *OpenAIService) GetChatResponseAsync(model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
+func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
 	sysMsgCount := 0
 	for _, m := range messages {
 		if m.Role == "system" || m.Role == "developer" {
@@ -130,7 +130,7 @@ func (s *OpenAIService) GetChatResponseAsync(model string, maxTokens *int, messa
 	return nil, errors.New("no valid chat choices returned")
 }
 
-func (s *OpenAIService) GetEmbeddingsAsync(content string) ([]float64, error) {
+func (s *OpenAIService) GetEmbeddings(content string) ([]float64, error) {
 	payload := map[string]interface{}{
 		"input": content,
 		"model": embeddingModel,
