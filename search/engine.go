@@ -23,6 +23,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
+	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -833,24 +834,48 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		filterOutCUSources: filterOutCUSources,
 	}
 
-	expectedResults *= 2 // Additional requests, one per language ...
-	testMultiOptions := SearchRequestOptions{
-		resultTypes:        resultTypes,
-		index:              "",
-		query:              Query{Term: "חיים חדשים"},
-		sortBy:             sortBy,
-		from:               0,
-		size:               from + size,
-		preference:         preference,
-		useHighlight:       false,
-		partialHighlight:   false,
-		filterOutCUSources: filterOutCUSources,
+	searchRequests := []SearchRequestOptions{
+		baseOptions,
 	}
-	requests, err := NewResultsSearchRequests(
-		[]SearchRequestOptions{
-			baseOptions,
-			testMultiOptions,
-		})
+
+	genQueries, err := llm.GenerateSearchQueries(query.Term) // As part of the demo, we look only on the term and ignore predifined filters.
+	if err != nil {
+		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error generating queries with AI.")
+	}
+	for _, genQuery := range genQueries {
+		filtersMap := make(map[string][]string)
+		if len(genQuery.Filters) > 0 {
+			for _, f := range genQuery.Filters {
+				val, exist := filtersMap[f.Type]
+				if exist {
+					val = append(val, f.Value)
+				} else {
+					val = []string{f.Value}
+				}
+				filtersMap[f.Type] = val
+			}
+		}
+		if genQuery.StartDate != "" && genQuery.EndDate != "" {
+			filtersMap[consts.FILTER_START_DATE] = []string{genQuery.StartDate}
+			filtersMap[consts.FILTER_END_DATE] = []string{genQuery.EndDate}
+		}
+		generatedOptions := SearchRequestOptions{
+			resultTypes:        resultTypes,
+			index:              "",
+			query:              Query{Term: genQuery.TextQuery, Filters: filtersMap},
+			sortBy:             sortBy,
+			from:               0,
+			size:               from + size,
+			preference:         preference,
+			useHighlight:       false,
+			partialHighlight:   false,
+			filterOutCUSources: filterOutCUSources,
+		}
+		searchRequests = append(searchRequests, generatedOptions)
+		expectedResults *= 2 // Additional requests, one per language ...
+	}
+
+	requests, err := NewResultsSearchRequests(searchRequests)
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do on creating requests.")
 	}
