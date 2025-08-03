@@ -1833,8 +1833,7 @@ const schema = `{
                       "source",
                       "author",
                       "original-language",
-                      "media-language",
-                      "topics"
+                      "media-language"
                     ],
                     "type": "string",
                     "description": "The type of filter to apply."
@@ -1851,12 +1850,12 @@ const schema = `{
             "end_date": {
               "type": "string",
               "nullable": true,
-              "description": "The ending date to filter results."
+              "description": "The ending date in yyyy-MM-dd format to filter results."
             },
             "start_date": {
               "type": "string",
               "nullable": true,
-              "description": "The starting date to filter results."
+              "description": "The starting date in yyyy-MM-dd format to filter results."
             },
             "text_query": {
               "type": "string",
