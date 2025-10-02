@@ -872,7 +872,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			filterOutCUSources: filterOutCUSources,
 		}
 		searchRequests = append(searchRequests, generatedOptions)
-		expectedResults *= 2 // Additional requests, one per language ...
+		expectedResults += len(query.LanguageOrder) // Additional requests, one per language.
 	}
 
 	requests, err := NewResultsSearchRequests(searchRequests)
