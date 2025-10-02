@@ -8,6 +8,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+type QueriesResult struct {
+	Queries []Query `json:"queries"`
+}
+
 type Query struct {
 	Filters   []Filter `json:"filters"`
 	EndDate   string   `json:"end_date"`
@@ -1873,9 +1877,8 @@ const schema = `{
 
 func GenerateSearchQueries(query string) ([]Query, error) {
 
-	var queries []Query
 	if query == "" {
-		return queries, nil
+		return []Query{}, nil
 	}
 
 	token := viper.GetString("openai.token")
@@ -1895,9 +1898,10 @@ func GenerateSearchQueries(query string) ([]Query, error) {
 		},
 	}
 	reasoningEffort := "low"
-	err := openaiService.GetStructuredOutput(schema, "o3", nil, messages, nil, &reasoningEffort, &queries)
+	var queriesResult QueriesResult
+	err := openaiService.GetStructuredOutput(schema, "o3", nil, messages, nil, &reasoningEffort, &queriesResult)
 	if err != nil {
 		return nil, err
 	}
-	return queries, nil
+	return queriesResult.Queries, nil
 }

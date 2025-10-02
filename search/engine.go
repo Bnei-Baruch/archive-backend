@@ -840,7 +840,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	genQueries, err := llm.GenerateSearchQueries(query.Term) // As part of the demo, we look only on the term and ignore predifined filters.
 	if err != nil {
-		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error generating queries with AI.")
+		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error generating queries with AI")
 	}
 	for _, genQuery := range genQueries {
 		filtersMap := make(map[string][]string)

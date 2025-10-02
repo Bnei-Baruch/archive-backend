@@ -101,9 +101,14 @@ func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages [
 
 	var respFmt *ResponseFormat
 	if jsonSchema != nil {
+		var JsonSchemaData interface{}
+		err := json.Unmarshal([]byte(*jsonSchema), &JsonSchemaData)
+		if err != nil {
+			return nil, fmt.Errorf("invalid json_schema: %v", err)
+		}
 		respFmt = &ResponseFormat{
 			Type:       "json_schema",
-			JsonSchema: jsonSchema,
+			JsonSchema: JsonSchemaData,
 		}
 	}
 
