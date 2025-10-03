@@ -997,10 +997,16 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							maxQueryScore = new(float64)
 							*maxQueryScore = *hit.Score
 						}
-						// Normalize score of all non-default regular (elastic) query results.
-						*hit.Score = (*maxRegularScore * *hit.Score) / *maxQueryScore
+						if maxRegularScore != nil { // maxRegularScore can be nil if no regular results returned
+							// Normalize score of all non-default regular (elastic) query results.
+							*hit.Score = (*maxRegularScore * *hit.Score) / *maxQueryScore
+						}
 					}
-					log.Infof("ESEngine.DoSearch - NOT isFirstMultiQuery %v %v %v", isFirstMultiQuery, *maxRegularScore, *maxQueryScore)
+					maxRegularScoreLogValue := "nil"
+					if maxRegularScore != nil {
+						maxRegularScoreLogValue = fmt.Sprintf("%f", *maxRegularScore)
+					}
+					log.Infof("ESEngine.DoSearch - NOT isFirstMultiQuery %v %v %v", isFirstMultiQuery, maxRegularScoreLogValue, *maxQueryScore)
 				}
 			}
 
