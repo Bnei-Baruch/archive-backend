@@ -842,6 +842,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error generating queries with AI")
 	}
+	LogIfDeb(&query, fmt.Sprintf("AI generated queries: %+v", genQueries))
 	for _, genQuery := range genQueries {
 		filtersMap := make(map[string][]string)
 		if len(genQuery.Filters) > 0 {
