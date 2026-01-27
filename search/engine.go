@@ -564,7 +564,7 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 	}
 }
 
-func joinResponses(sortBy string, from int, size int, queryTerm string, results ...*elastic.SearchResult) (*elastic.SearchResult, error) {
+func joinResponses(sortBy string, from int, size int, queryTerm string, rankWithAI bool, results ...*elastic.SearchResult) (*elastic.SearchResult, error) {
 	if len(results) == 0 {
 		return nil, nil
 	}
@@ -590,7 +590,7 @@ func joinResponses(sortBy string, from int, size int, queryTerm string, results 
 	)
 
 	aiMaxScore := (*float64)(nil)
-	if sortBy == consts.SORT_BY_RELEVANCE && viper.GetBool("openai.rank-search-results-with-ai") { // TODO: consider applying AI re-ranking for other sort modes.
+	if sortBy == consts.SORT_BY_RELEVANCE && rankWithAI { // TODO: consider applying AI re-ranking for other sort modes.
 		aiScores, err := llm.RankSearchResults(queryTerm, unique)
 		if err != nil {
 			log.Errorf("joinResponses - AI re-ranking failed, falling back to existing ranking: %+v", err)
@@ -708,7 +708,7 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	e.ExecutionTimeLog.Store(operation, elapsed)
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchTweets bool, searchLessonSeries bool, withHighlights bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchTweets bool, searchLessonSeries bool, withHighlights bool, rankWithAI bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
 	initialSearchWithHighlights := withHighlights && viper.GetBool("elasticsearch.initial-search-with-highlights")
@@ -1288,7 +1288,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
-	ret, err := joinResponses(sortBy, from, size, query.Term, results...)
+	ret, err := joinResponses(sortBy, from, size, query.Term, rankWithAI, results...)
 
 	LogIfDeb(&query, "--- AFTER JOIN ---")
 	LogIfDeb(&query, ResultToStringDebug(ret, 20))

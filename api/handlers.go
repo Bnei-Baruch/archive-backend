@@ -815,7 +815,8 @@ func SearchHandler(c *gin.Context) {
 
 	timeoutForHighlight := viper.GetDuration("elasticsearch.timeout-for-highlight")
 	withHighlights := viper.GetBool("elasticsearch.with-highlights")
-	if viper.GetBool("openai.rank-search-results-with-ai") && !withHighlights {
+	rankWithAI := viper.GetBool("openai.rank-search-results-with-ai")
+	if rankWithAI && !withHighlights {
 		log.Warn("SearchHandler - AI re-ranking is enabled but highlights are disabled; AI ranking will run without highlight fields.")
 	}
 
@@ -830,6 +831,7 @@ func SearchHandler(c *gin.Context) {
 		true,
 		true,
 		withHighlights,
+		rankWithAI,
 		timeoutForHighlight,
 	)
 
