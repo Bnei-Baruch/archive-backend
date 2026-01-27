@@ -16,6 +16,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	"github.com/volatiletech/null/v8"
 	"gopkg.in/olivere/elastic.v6"
 
@@ -563,7 +564,7 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 	}
 }
 
-func joinResponses(sortBy string, from int, size int, results ...*elastic.SearchResult) (*elastic.SearchResult, error) {
+func joinResponses(sortBy string, from int, size int, queryTerm string, results ...*elastic.SearchResult) (*elastic.SearchResult, error) {
 	if len(results) == 0 {
 		return nil, nil
 	}
@@ -587,6 +588,36 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 			consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE,
 		},
 	)
+
+	aiMaxScore := (*float64)(nil)
+	if sortBy == consts.SORT_BY_RELEVANCE && viper.GetBool("openai.rank-search-results-with-ai") { // TODO: consider applying AI re-ranking for other sort modes.
+		aiScores, err := llm.RankSearchResults(queryTerm, unique)
+		if err != nil {
+			log.Errorf("joinResponses - AI re-ranking failed, falling back to existing ranking: %+v", err)
+		} else {
+			for _, hit := range unique {
+				if hit == nil || hit.Id == "" || strings.HasPrefix(hit.Index, "intent-") || hit.Type == consts.GRAMMAR_TYPE_LANDING_PAGE || hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
+					continue
+				}
+				if r, ok := aiScores[hit.Id]; ok {
+					score := r.Score
+					hit.Score = &score
+					hit.Explanation = &elastic.SearchExplanation{
+						Value:       score,
+						Description: r.Explanation,
+					}
+				}
+			}
+			for _, hit := range unique {
+				if hit != nil && hit.Score != nil {
+					if aiMaxScore == nil || *hit.Score > *aiMaxScore {
+						s := *hit.Score
+						aiMaxScore = &s
+					}
+				}
+			}
+		}
+	}
 
 	// Apply sorting.
 	if sortBy == consts.SORT_BY_RELEVANCE {
@@ -626,6 +657,10 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 				maxScore = math.Max(maxScore, *result.Hits.MaxScore)
 			}
 		}
+	}
+
+	if sortBy == consts.SORT_BY_RELEVANCE && aiMaxScore != nil {
+		maxScore = math.Max(maxScore, *aiMaxScore)
 	}
 
 	result.Hits.Hits = unique
@@ -675,6 +710,8 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchTweets bool, searchLessonSeries bool, withHighlights bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
+
+	initialSearchWithHighlights := withHighlights && viper.GetBool("elasticsearch.initial-search-with-highlights")
 
 	// Initializing all channels.
 	suggestChannel := make(chan null.String)
@@ -829,7 +866,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		from:               0,
 		size:               from + size,
 		preference:         preference,
-		useHighlight:       false,
+		useHighlight:       initialSearchWithHighlights,
 		partialHighlight:   false,
 		filterOutCUSources: filterOutCUSources,
 	}
@@ -868,7 +905,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			from:               0,
 			size:               from + size,
 			preference:         preference,
-			useHighlight:       false,
+			useHighlight:       initialSearchWithHighlights,
 			partialHighlight:   false,
 			filterOutCUSources: filterOutCUSources,
 		}
@@ -1251,7 +1288,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
-	ret, err := joinResponses(sortBy, from, size, results...)
+	ret, err := joinResponses(sortBy, from, size, query.Term, results...)
 
 	LogIfDeb(&query, "--- AFTER JOIN ---")
 	LogIfDeb(&query, ResultToStringDebug(ret, 20))
@@ -1261,7 +1298,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	if ret != nil && ret.Hits != nil && ret.Hits.Hits != nil {
 
-		if withHighlights {
+		if withHighlights && !initialSearchWithHighlights {
 
 			// Preparing highlights search.
 			// Since some highlight queries are acting like bottlenecks (in cases of scanning large documents)

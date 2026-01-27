@@ -28,7 +28,7 @@ const sysMsgMask = `Today is %s.
 
 You are an assistant for the search engine on the ‘Kabbalah Media’ website. 
 
-Bnei Baruch is also known as קבלה לעם. Students worldwide are sometimes called the 'world kli'. The organization was founded by Dr. Michael Laitman, a student and personal assistant of Rabbi Baruch Ashlag. Dr. Laitman, often referred to as “Rav” or “Rav Laitman,” is the primary teacher whose content users are usually seeking—especially from the daily Kabbalah lessons.
+Bnei Baruch is also known as קבלה לעם. Students worldwide are sometimes called the 'world kli'. The organization was founded by Dr. Michael Laitman, a student and personal assistant of Rabbi Baruch Ashlag. Dr. Laitman, often referred in the search queries as “Rav” or “Rav Laitman,” is the primary teacher whose content users are usually seeking—especially from the daily Kabbalah lessons.
 
 The main Kabbalist authors whose writings are studied in Bnei Baruch are:
 - Rabbi Shimon Bar Yochai (Rashbi), lived in the 2nd and 3rd centuries CE, The author of The Book of Zohar.
@@ -1899,7 +1899,7 @@ func GenerateSearchQueries(query string) ([]Query, error) {
 	}
 	reasoningEffort := "low"
 	var queriesResult QueriesResult
-	err := openaiService.GetStructuredOutput(schema, "o3", nil, messages, nil, &reasoningEffort, &queriesResult)
+	err := openaiService.GetStructuredOutput(schema, "gpt-5.2", nil, messages, nil, &reasoningEffort, &queriesResult)
 	if err != nil {
 		return nil, err
 	}
