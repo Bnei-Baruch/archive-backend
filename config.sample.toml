@@ -32,6 +32,9 @@ prepare-docs-parallelism=2
 check-typo=true
 timeout-for-highlight="8s"
 
+[elasticsearch9]
+url="http://127.0.0.1:9201"
+
 [nats]
 url="nats://localhost:4222"
 client-id="my-sample-nats-client"

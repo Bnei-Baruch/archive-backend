@@ -1,0 +1,409 @@
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+
+      "analysis": {
+
+        // ============================================================
+        // CHAR FILTERS: Pre-process text before tokenization
+        // ============================================================
+        "char_filter": {
+
+          // "quotes" - Normalizes various quote marks to standard forms
+          // WHY: Hebrew uses multiple Unicode quote characters (geresh ׳, gershayim ״)
+          //      English uses different quote marks ('', "", '', "", etc.)
+          //      This ensures all variations are normalized for consistent matching
+          // WHEN: Applied BEFORE tokenization in all Hebrew analyzers
+          "quotes": {
+            "type": "mapping",
+            "mappings": [
+              // Double quotes → Close paren (for pairing)
+              "\\u0027\\u0027=>\\u0029",   // '' → )
+              "\\u0091\\u0091=>\\u0029",   // Curly double quotes
+              "\\u0092\\u0092=>\\u0029",
+              "\\u2018\\u2018=>\\u0029",   // Left single quotes doubled
+              "\\u2019\\u2019=>\\u0029",   // Right single quotes doubled
+              "\\u201B\\u201B=>\\u0029",
+              "\\u05F3\\u05F3=>\\u0029",   // Hebrew geresh doubled → )
+              "\\u059C\\u059C=>\\u0029",   // Hebrew gershayim variants
+              "\\u059D\\u059D=>\\u0029",
+
+              // Single quotes → Standard apostrophe
+              "\\u0091=>\\u0027",          // Windows-1252 left quote
+              "\\u0092=>\\u0027",          // Windows-1252 right quote
+              "\\u2018=>\\u0027",          // Unicode left single quote
+              "\\u2019=>\\u0027",          // Unicode right single quote
+              "\\u201B=>\\u0027",          // Single low quote
+              "\\u05F3=>\\u0027",          // Hebrew geresh (׳)
+              "\\u059C=>\\u0027",          // Hebrew punctuation geresh
+              "\\u059D=>\\u0027",          // Hebrew punctuation gershayim
+
+              // Remove double quotes entirely
+              "\\u0022=>",                // Standard double quote
+              "\\u201C=>",                // Unicode left double quote
+              "\\u201D=>",                // Unicode right double quote
+              "\\u05F4=>"                 // Hebrew gershayim (״) - remove
+            ]
+          }
+        },
+
+        // ============================================================
+        // FILTERS: Process tokens after tokenization
+        // ============================================================
+        "filter": {
+
+          // "he_IL" - Hunspell morphological analysis for Hebrew
+          // WHY: Hebrew is highly inflected - same root appears in many forms
+          //      Example: סדר (order) → מסדר, סידור, סדירות, מסודר
+          //      Hunspell understands these relationships via dictionary
+          // WHAT: Uses he_IL.aff (affix rules) + he_IL.dic (word list)
+          // DEDUP: Removes duplicate tokens after stemming
+          // PROVEN: You're already using this successfully in ES6
+          "he_IL": {
+            "type": "hunspell",
+            "locale": "he_IL",
+            "dedup": true
+          },
+
+          // "synonym_graph" - Handles multi-word synonyms
+          // WHY: Preserves position information for phrases
+          //      Example: "קבלה" ↔ "תורת הסוד" (multi-word synonym)
+          // vs "synonym" filter which breaks phrase matching
+          // EMPTY: You'll populate this from your synonym files later
+          "synonym_graph": {
+            "type": "synonym_graph",
+            "tokenizer": "keyword",
+            "synonyms": []
+          },
+
+          // "icu_normalizer" - Unicode normalization (NFC, NFKC)
+          // WHY: Hebrew can be written with combining characters
+          //      Example: ש + ׁ (shin + dot) vs שׁ (precomposed)
+          //      Ensures both forms match
+          // NAME: nfkc_cf = NFKC (compatibility) + case folding
+          // NOTE: Case folding in ICU only affects cased scripts (English, etc.)
+          //       Hebrew is caseless, so this is safe
+          "icu_normalizer": {
+            "type": "icu_normalizer",
+            "name": "nfkc_cf"
+          },
+
+          // "icu_folding" - Accent/diacritic removal + case folding
+          // WHY: Removes diacritics (niqqud) - vowel points
+          //      Example: בָּרוּךְ → ברוך (removes nikud)
+          //      Most users don't type niqqud, so we strip it
+          // NOTE: Case folding here only affects mixed scripts
+          //       Hebrew letters are unaffected (no case concept)
+          "icu_folding": {
+            "type": "icu_folding"
+          }
+        },
+
+        // ============================================================
+        // ANALYZERS: Complete text processing pipelines
+        // ============================================================
+        "analyzer": {
+
+          // "hebrew_hunspell" - YOUR EXISTING PROVEN SOLUTION
+          // WHY KEEP: Works for you, proven morphological analysis
+          // FLOW: Text → quotes normalization → tokenize → synonyms → hunspell
+          // USE FOR: Morphology-aware matching (handles word forms)
+          "hebrew_hunspell": {
+            "tokenizer": "standard",
+            "char_filter": ["quotes"],
+            "filter": [
+              "synonym_graph",  // Applied BEFORE hunspell per your ES6 setup
+              "he_IL"           // Morphological stemming
+            ]
+          },
+
+          // "hebrew_icu" - MODERN UNICODE HANDLING (NEW)
+          // WHY ADD: Better Unicode normalization than standard tokenizer
+          //          Handles combining characters correctly
+          //          Removes niqqud (vowel points) users don't type
+          // FLOW: Text → quotes → ICU tokenize → normalize → fold → synonyms
+          // USE FOR: Clean, normalized text matching
+          // TRADE-OFF: No morphology (won't match different word forms)
+          "hebrew_icu": {
+            "tokenizer": "icu_tokenizer",  // Better than "standard" for Unicode
+            "char_filter": ["quotes"],
+            "filter": [
+              "icu_normalizer",  // Normalize Unicode forms
+              "icu_folding",     // Remove niqqud
+              "synonym_graph"    // Apply synonyms
+            ]
+          },
+
+          // "hebrew_icu_hunspell" - BEST OF BOTH WORLDS (EXPERIMENTAL)
+          // WHY: Combines ICU's Unicode handling + Hunspell's morphology
+          // FLOW: Text → quotes → ICU tokenize → normalize → synonyms → hunspell
+          // USE FOR: Testing if ICU tokenization + hunspell improves quality
+          // NOTE: We can A/B test this vs pure hunspell
+          "hebrew_icu_hunspell": {
+            "tokenizer": "icu_tokenizer",
+            "char_filter": ["quotes"],
+            "filter": [
+              "icu_normalizer",  // Unicode normalization first
+              "synonym_graph",   // Then synonyms
+              "he_IL"            // Then morphology
+            ]
+          }
+        }
+      }
+    }
+  },
+
+  // ============================================================
+  // MAPPINGS: Field definitions (NO MORE TYPES in ES9!)
+  // ============================================================
+  "mappings": {
+    "properties": {
+
+      // ============================================================
+      // METADATA FIELDS: Used for filtering, not searching
+      // ============================================================
+
+      // "result_type" - Document type (blog, collection, unit, etc.)
+      // WHY keyword: Exact matching, used in filters
+      "result_type": {
+        "type": "keyword"
+      },
+
+      // "index_date" - When document was indexed
+      // WHY: Rollback capability, debugging
+      "index_date": {
+        "type": "date",
+        "format": "strict_date"
+      },
+
+      // "mdb_uid" - Primary key from MDB database
+      // WHY keyword: Exact matching for document identification
+      "mdb_uid": {
+        "type": "keyword"
+      },
+
+      // "typed_uids" - All related entity UIDs (for reindexing)
+      // Example: ["content_unit:lHDLZWxq", "file:0uzDZVqV"]
+      // WHY: When a file changes, find all docs referencing it
+      "typed_uids": {
+        "type": "keyword"
+      },
+
+      // "filter_values" - Pre-computed filter strings
+      // Example: ["content_type:DAILY_LESSON", "tag:0db5BBS3"]
+      // WHY: Fast filtering without joins
+      "filter_values": {
+        "type": "keyword"
+      },
+
+      // ============================================================
+      // SEARCHABLE FIELDS: Multi-field strategy
+      // ============================================================
+
+      // "title" - MULTI-FIELD APPROACH
+      // WHY MULTI-FIELD: Different analyzers for different search strategies
+      //   - Base field (standard): Cross-language baseline
+      //   - .hunspell: Morphology-aware (your proven solution)
+      //   - .icu: Modern Unicode handling
+      //   - .icu_hunspell: Experimental combination
+      // QUERY TIME: Search across all relevant subfields, RRF combines results
+      "title": {
+        "type": "text",
+        "analyzer": "standard",  // Base: language-agnostic
+        "fields": {
+          // HUNSPELL SUBFIELD: Morphological analysis
+          // USE WHEN: User types word form, should match other forms
+          // Example: Query "מסדר" matches "סדור", "סידור"
+          "hunspell": {
+            "type": "text",
+            "analyzer": "hebrew_hunspell"
+          },
+
+          // ICU SUBFIELD: Unicode normalization + niqqud removal
+          // USE WHEN: Text has combining characters or vowel points
+          // Example: Query "ברוך" matches "בָּרוּךְ" (with niqqud)
+          "icu": {
+            "type": "text",
+            "analyzer": "hebrew_icu"
+          },
+
+          // COMBINED SUBFIELD: ICU + Hunspell (experimental)
+          // USE WHEN: Want both Unicode handling AND morphology
+          // A/B TEST: Compare quality vs pure hunspell
+          "icu_hunspell": {
+            "type": "text",
+            "analyzer": "hebrew_icu_hunspell"
+          }
+        }
+      },
+
+      // "title_embedding" - SEMANTIC SEARCH (NEW!)
+      // WHY: Captures meaning, not just words
+      //      Query "קבלה" matches "חכמת הנסתר" (wisdom of hidden)
+      // TYPE: dense_vector = fixed-size array of floats
+      // DIMS: 768 = AlephBERT output size (BERT-base standard)
+      // SIMILARITY: cosine = angle between vectors (magnitude-independent)
+      // INDEX: true = enables kNN search (HNSW algorithm)
+      // NOTE: In ES9, automatically quantized to int8 for memory efficiency
+      "title_embedding": {
+        "type": "dense_vector",
+        "dims": 768,
+        "similarity": "cosine",
+        "index": true
+      },
+
+      // "full_title" - Complete title with hierarchy
+      // Example: "קונגרס 2019 > הרצאה 1 > שיעור בוקר"
+      // WHY SEPARATE FROM title: Different content, different semantic meaning
+      // WHY: May contain contextual info not in short title
+      "full_title": {
+        "type": "text",
+        "analyzer": "standard",
+        "fields": {
+          "hunspell": {
+            "type": "text",
+            "analyzer": "hebrew_hunspell"
+          },
+          "icu": {
+            "type": "text",
+            "analyzer": "hebrew_icu"
+          }
+        }
+      },
+
+      // "full_title_embedding" - Semantic vector for full hierarchical title
+      // WHY SEPARATE FROM title_embedding:
+      //   - Full title has hierarchy: "Congress 2019 > Lecture 1 > Morning Lesson"
+      //   - Short title might just be "Morning Lesson"
+      //   - Hierarchy adds semantic context worth capturing
+      // QUERY: Can search both embeddings and combine via RRF
+      "full_title_embedding": {
+        "type": "dense_vector",
+        "dims": 768,
+        "similarity": "cosine",
+        "index": true
+      },
+
+      // "description" - Summary/abstract text
+      // WHY MULTI-FIELD: Same strategy as title (hunspell + ICU)
+      // SCORING: Usually lower boost than title in queries
+      "description": {
+        "type": "text",
+        "analyzer": "standard",
+        "fields": {
+          "hunspell": {
+            "type": "text",
+            "analyzer": "hebrew_hunspell"
+          },
+          "icu": {
+            "type": "text",
+            "analyzer": "hebrew_icu"
+          }
+        }
+      },
+
+      // "description_embedding" - Semantic vector for description
+      // WHY SEPARATE FROM TITLE: Description has different semantic content
+      //                          Can search/boost independently
+      // QUERY: Can search title_embedding with high boost, description_embedding with lower boost
+      "description_embedding": {
+        "type": "dense_vector",
+        "dims": 768,
+        "similarity": "cosine",
+        "index": true
+      },
+
+      // "content" - Full document text (transcripts, articles)
+      // WHY: Most detailed text, lowest scoring weight
+      // NOTE: Can be very large, consider excluding from _source if memory constrained
+      "content": {
+        "type": "text",
+        "analyzer": "standard",
+        "fields": {
+          "hunspell": {
+            "type": "text",
+            "analyzer": "hebrew_hunspell"
+          },
+          "icu": {
+            "type": "text",
+            "analyzer": "hebrew_icu"
+          }
+        }
+      },
+
+      // "content_embedding" - Semantic vector for full content
+      // TRADE-OFF: Large content → may not fit in 768 dims well
+      // SOLUTION: For very long content, could:
+      //           1. Truncate to first N chars (simple, we'll start here)
+      //           2. Use sliding window + average embeddings
+      //           3. Use passage-level embeddings (advanced)
+      // FOR NOW: Truncate to first ~5000 chars before embedding
+      "content_embedding": {
+        "type": "dense_vector",
+        "dims": 768,
+        "similarity": "cosine",
+        "index": true
+      },
+
+      // ============================================================
+      // AUTOCOMPLETE: Completion suggester
+      // ============================================================
+
+      // "title_suggest" - Type-ahead suggestions (FST-based, NOT semantic)
+      //
+      // IMPORTANT: ES completion suggester is NOT semantic!
+      // - Uses FST (Finite State Transducer) for speed
+      // - Matches prefixes: "קב" suggests "קבלה"
+      // - No semantic understanding: "תורת" WON'T suggest "קבלה"
+      //
+      // FOR SEMANTIC SUGGESTIONS, we would need:
+      // - Option A: kNN search on title_embedding with low k (e.g., k=5)
+      //             PRO: True semantic matching
+      //             CON: Slower than FST (but still fast with HNSW)
+      // - Option B: Hybrid approach - FST for prefix, kNN for semantic fallback
+      //
+      // FOR NOW: Keep FST completion (fast, proven)
+      // FUTURE: Add semantic suggestions as separate endpoint if needed
+      //
+      // CONTEXTS: Filter suggestions by result_type (blog vs lesson vs...)
+      // FIELDS: Standard + hunspell variants for morphology-aware prefix matching
+      "title_suggest": {
+        "type": "completion",
+        "analyzer": "standard",
+        "contexts": [
+          {
+            "name": "result_type",
+            "type": "category",
+            "path": "result_type"  // Filter by document type
+          }
+        ],
+        "fields": {
+          "hunspell": {
+            "type": "completion",
+            "analyzer": "hebrew_hunspell",
+            "contexts": [
+              {
+                "name": "result_type",
+                "type": "category",
+                "path": "result_type"
+              }
+            ]
+          }
+        }
+      },
+
+      // ============================================================
+      // DATE FIELDS: For time-based filtering/sorting
+      // ============================================================
+
+      // "effective_date" - When content was published/occurred
+      // WHY: Sort by date, filter by date range
+      "effective_date": {
+        "type": "date",
+        "format": "strict_date"
+      }
+    }
+  }
+}
