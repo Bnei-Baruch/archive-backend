@@ -100,7 +100,7 @@ func (suite *EngineSuite) TestJoinResponsesNoResults() {
 	fmt.Printf("\n------ TestJoinResponsesNoResults ------\n\n")
 	r := require.New(suite.T())
 	results := make([]*elastic.SearchResult, 0)
-	ret, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 1, "", false, results...)
+	ret, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 1, "", false, false, results...)
 	r.Nil(err)
 	r.Nil(ret)
 }
@@ -110,7 +110,7 @@ func (suite *EngineSuite) TestJoinResponsesTakeFirstOnEqual() {
 	r := require.New(suite.T())
 	r1 := SearchResult([]SRR{SRR{2.4, "a", parse("1111-11-11")}})
 	r2 := SearchResult([]SRR{SRR{2.4, "1", parse("1111-11-11")}})
-	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 1, "", false, r1, r2)
+	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 1, "", false, false, r1, r2)
 	r.Nil(err)
 
 	expected := []SRR{SRR{2.4, "a", parse("1111-11-11")}}
@@ -125,7 +125,7 @@ func (suite *EngineSuite) TestJoinResponsesTakeLargerFirst() {
 	r := require.New(suite.T())
 	r1 := SearchResult([]SRR{SRR{2.4, "a", parse("1111-11-11")}})
 	r2 := SearchResult([]SRR{SRR{2.5, "1", parse("1111-11-11")}})
-	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 1, "", false, r1, r2)
+	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 1, "", false, false, r1, r2)
 	r.Nil(err)
 
 	expected := []SRR{SRR{2.5, "1", parse("1111-11-11")}}
@@ -141,7 +141,7 @@ func (suite *EngineSuite) TestJoinResponsesInterleave() {
 	d := parse("1111-11-11")
 	r1 := SearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
 	r2 := SearchResult([]SRR{SRR{2.5, "1", d}, SRR{2.2, "2", d}, SRR{1.6, "3", d}, SRR{1.0, "4", d}, SRR{0.7, "5", d}})
-	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 4, "", false, r1, r2)
+	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 4, "", false, false, r1, r2)
 	r.Nil(err)
 
 	expected := []SRR{SRR{2.5, "1", parse("1111-11-11")}, SRR{2.4, "a", parse("1111-11-11")}, SRR{2.2, "2", parse("1111-11-11")}, SRR{2.0, "b", parse("1111-11-11")}}
@@ -158,7 +158,7 @@ func (suite *EngineSuite) TestJoinResponsesInterleaveSecondPage() {
 	d := parse("1111-11-11")
 	r1 := SearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
 	r2 := SearchResult([]SRR{SRR{2.5, "1", d}, SRR{2.2, "2", d}, SRR{1.6, "3", d}, SRR{1.0, "4", d}, SRR{0.7, "5", d}})
-	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 4, 4, "", false, r1, r2)
+	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 4, 4, "", false, false, r1, r2)
 	r.Nil(err)
 
 	expected := []SRR{SRR{1.6, "3", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{1.0, "4", d}}
@@ -175,7 +175,7 @@ func (suite *EngineSuite) TestJoinResponsesInterleaveSecondPageOneSide() {
 	d := parse("1111-11-11")
 	r1 := SearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
 	r2 := SearchResult([]SRR{})
-	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 4, 4, "", false, r1, r2)
+	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 4, 4, "", false, false, r1, r2)
 	r.Nil(err)
 
 	expected := []SRR{SRR{0.4, "e", d}}
@@ -192,7 +192,7 @@ func (suite *EngineSuite) TestJoinResponsesNewerToOlder() {
 	r := require.New(suite.T())
 	r1 := SearchResult([]SRR{SRR{2.5, "a", parse("2018-01-06")}, SRR{2.0, "b", parse("2015-05-22")}, SRR{1.5, "c", parse("2015-05-21")}})
 	r2 := SearchResult([]SRR{SRR{2.4, "1", parse("2018-01-16")}, SRR{2.2, "2", parse("2015-05-20")}, SRR{1.6, "3", parse("2014-05-05")}})
-	r3, err := joinResponses(consts.SORT_BY_NEWER_TO_OLDER, 0, 4, "", false, r1, r2)
+	r3, err := joinResponses(consts.SORT_BY_NEWER_TO_OLDER, 0, 4, "", false, false, r1, r2)
 	r.Nil(err)
 
 	expected := []SRR{SRR{2.4, "1", parse("2018-01-16")}, SRR{2.5, "a", parse("2018-01-06")},
@@ -209,7 +209,7 @@ func (suite *EngineSuite) TestJoinResponsesTimeOlderToNewer() {
 	r := require.New(suite.T())
 	r1 := SearchResult([]SRR{SRR{1.5, "c", parse("2015-05-21")}, SRR{2.0, "b", parse("2015-05-22")}, SRR{2.5, "a", parse("2018-01-06")}})
 	r2 := SearchResult([]SRR{SRR{1.6, "3", parse("2014-05-05")}, SRR{2.2, "2", parse("2015-05-21")}, SRR{2.4, "1", parse("2018-01-16")}})
-	r3, err := joinResponses(consts.SORT_BY_OLDER_TO_NEWER, 0, 4, "", false, r1, r2)
+	r3, err := joinResponses(consts.SORT_BY_OLDER_TO_NEWER, 0, 4, "", false, false, r1, r2)
 	r.Nil(err)
 
 	expected := []SRR{SRR{1.6, "3", parse("2014-05-05")}, SRR{2.2, "2", parse("2015-05-21")}, SRR{1.5, "c", parse("2015-05-21")}, SRR{2.0, "b", parse("2015-05-22")}}

@@ -564,7 +564,7 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 	}
 }
 
-func joinResponses(sortBy string, from int, size int, queryTerm string, rankWithAI bool, results ...*elastic.SearchResult) (*elastic.SearchResult, error) {
+func joinResponses(sortBy string, from int, size int, queryTerm string, rankWithAI bool, deb bool, results ...*elastic.SearchResult) (*elastic.SearchResult, error) {
 	if len(results) == 0 {
 		return nil, nil
 	}
@@ -595,6 +595,9 @@ func joinResponses(sortBy string, from int, size int, queryTerm string, rankWith
 		if err != nil {
 			log.Errorf("joinResponses - AI re-ranking failed, falling back to existing ranking: %+v", err)
 		} else {
+			if deb {
+				log.Infof("AI ranking results: %+v", aiScores)
+			}
 			for _, hit := range unique {
 				if hit == nil || hit.Id == "" || strings.HasPrefix(hit.Index, "intent-") || hit.Type == consts.GRAMMAR_TYPE_LANDING_PAGE || hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
 					continue
@@ -1288,7 +1291,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
-	ret, err := joinResponses(sortBy, from, size, query.Term, rankWithAI, results...)
+	ret, err := joinResponses(sortBy, from, size, query.Term, rankWithAI, query.Deb, results...)
 
 	LogIfDeb(&query, "--- AFTER JOIN ---")
 	LogIfDeb(&query, ResultToStringDebug(ret, 20))
