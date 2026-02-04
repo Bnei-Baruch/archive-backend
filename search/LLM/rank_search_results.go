@@ -74,7 +74,7 @@ BLOG_POST – Blog posts by Dr. Laitman
 R_TWEET – Tweets by Dr. Laitman
 
 Your Task:
-- Given a user search query and a list of search results, assign a relevance score and a short explanation to each result.
+- Given a user search query and a list of search results, assign a relevance score and a short explanation in English to each result.
 - Scores are used for ordering results for a search page.
 
 Scoring:
@@ -101,7 +101,8 @@ const rankSchema = `{
           "required": [
             "result_id",
             "score",
-            "explanation"
+            "explanation",
+            "need_result_lookup"
           ],
           "properties": {
             "result_id": {
@@ -116,7 +117,7 @@ const rankSchema = `{
               "type": "string"
             },
 			"need_result_lookup": {
-				"type": "string",
+				"type": "boolean",
 				"description": "Mark as true if a lookup into the result itself is necessary to assign its score more accurate."
 			}
           },
