@@ -16,6 +16,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	"github.com/volatiletech/null/v8"
 	"gopkg.in/olivere/elastic.v6"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
+	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -562,7 +564,7 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 	}
 }
 
-func joinResponses(sortBy string, from int, size int, results ...*elastic.SearchResult) (*elastic.SearchResult, error) {
+func joinResponses(sortBy string, from int, size int, queryTerm string, rankWithAI bool, deb bool, results ...*elastic.SearchResult) (*elastic.SearchResult, error) {
 	if len(results) == 0 {
 		return nil, nil
 	}
@@ -586,6 +588,39 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 			consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE,
 		},
 	)
+
+	aiMaxScore := (*float64)(nil)
+	if sortBy == consts.SORT_BY_RELEVANCE && rankWithAI { // TODO: consider applying AI re-ranking for other sort modes.
+		aiScores, err := llm.RankSearchResults(queryTerm, unique)
+		if err != nil {
+			log.Errorf("joinResponses - AI re-ranking failed, falling back to existing ranking: %+v", err)
+		} else {
+			if deb {
+				log.Infof("AI ranking results: %+v", aiScores)
+			}
+			for _, hit := range unique {
+				if hit == nil || hit.Id == "" || strings.HasPrefix(hit.Index, "intent-") || hit.Type == consts.GRAMMAR_TYPE_LANDING_PAGE || hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
+					continue
+				}
+				if r, ok := aiScores[hit.Id]; ok {
+					score := r.Score
+					hit.Score = &score
+					hit.Explanation = &elastic.SearchExplanation{
+						Value:       score,
+						Description: r.Explanation,
+					}
+				}
+			}
+			for _, hit := range unique {
+				if hit != nil && hit.Score != nil {
+					if aiMaxScore == nil || *hit.Score > *aiMaxScore {
+						s := *hit.Score
+						aiMaxScore = &s
+					}
+				}
+			}
+		}
+	}
 
 	// Apply sorting.
 	if sortBy == consts.SORT_BY_RELEVANCE {
@@ -625,6 +660,10 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 				maxScore = math.Max(maxScore, *result.Hits.MaxScore)
 			}
 		}
+	}
+
+	if sortBy == consts.SORT_BY_RELEVANCE && aiMaxScore != nil {
+		maxScore = math.Max(maxScore, *aiMaxScore)
 	}
 
 	result.Hits.Hits = unique
@@ -672,8 +711,10 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 	e.ExecutionTimeLog.Store(operation, elapsed)
 }
 
-func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchTweets bool, searchLessonSeries bool, withHighlights bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
+func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchTweets bool, searchLessonSeries bool, withHighlights bool, rankWithAI bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
+
+	initialSearchWithHighlights := withHighlights && viper.GetBool("elasticsearch.initial-search-with-highlights")
 
 	// Initializing all channels.
 	suggestChannel := make(chan null.String)
@@ -828,29 +869,54 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		from:               0,
 		size:               from + size,
 		preference:         preference,
-		useHighlight:       false,
+		useHighlight:       initialSearchWithHighlights,
 		partialHighlight:   false,
 		filterOutCUSources: filterOutCUSources,
 	}
 
-	expectedResults *= 2 // Additional requests, one per language ...
-	testMultiOptions := SearchRequestOptions{
-		resultTypes:        resultTypes,
-		index:              "",
-		query:              Query{Term: "חיים חדשים"},
-		sortBy:             sortBy,
-		from:               0,
-		size:               from + size,
-		preference:         preference,
-		useHighlight:       false,
-		partialHighlight:   false,
-		filterOutCUSources: filterOutCUSources,
+	searchRequests := []SearchRequestOptions{
+		baseOptions,
 	}
-	requests, err := NewResultsSearchRequests(
-		[]SearchRequestOptions{
-			baseOptions,
-			testMultiOptions,
-		})
+
+	genQueries, err := llm.GenerateSearchQueries(query.Term) // As part of the demo, we look only on the term and ignore predifined filters.
+	if err != nil {
+		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error generating queries with AI")
+	}
+	LogIfDeb(&query, fmt.Sprintf("AI generated queries: %+v", genQueries))
+	for _, genQuery := range genQueries {
+		filtersMap := make(map[string][]string)
+		if len(genQuery.Filters) > 0 {
+			for _, f := range genQuery.Filters {
+				val, exist := filtersMap[f.Type]
+				if exist {
+					val = append(val, f.Value)
+				} else {
+					val = []string{f.Value}
+				}
+				filtersMap[f.Type] = val
+			}
+		}
+		if genQuery.StartDate != "" && genQuery.EndDate != "" {
+			filtersMap[consts.FILTER_START_DATE] = []string{genQuery.StartDate}
+			filtersMap[consts.FILTER_END_DATE] = []string{genQuery.EndDate}
+		}
+		generatedOptions := SearchRequestOptions{
+			resultTypes:        resultTypes,
+			index:              "",
+			query:              Query{Term: genQuery.TextQuery, Filters: filtersMap},
+			sortBy:             sortBy,
+			from:               0,
+			size:               from + size,
+			preference:         preference,
+			useHighlight:       initialSearchWithHighlights,
+			partialHighlight:   false,
+			filterOutCUSources: filterOutCUSources,
+		}
+		searchRequests = append(searchRequests, generatedOptions)
+		expectedResults += len(query.LanguageOrder) // Additional requests, one per language.
+	}
+
+	requests, err := NewResultsSearchRequests(searchRequests)
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do on creating requests.")
 	}
@@ -972,10 +1038,16 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							maxQueryScore = new(float64)
 							*maxQueryScore = *hit.Score
 						}
-						// Normalize score of all non-default regular (elastic) query results.
-						*hit.Score = (*maxRegularScore * *hit.Score) / *maxQueryScore
+						if maxRegularScore != nil { // maxRegularScore can be nil if no regular results returned
+							// Normalize score of all non-default regular (elastic) query results.
+							*hit.Score = (*maxRegularScore * *hit.Score) / *maxQueryScore
+						}
 					}
-					log.Infof("ESEngine.DoSearch - NOT isFirstMultiQuery %v %v %v", isFirstMultiQuery, *maxRegularScore, *maxQueryScore)
+					maxRegularScoreLogValue := "nil"
+					if maxRegularScore != nil {
+						maxRegularScoreLogValue = fmt.Sprintf("%f", *maxRegularScore)
+					}
+					log.Infof("ESEngine.DoSearch - NOT isFirstMultiQuery %v %v %v", isFirstMultiQuery, maxRegularScoreLogValue, *maxQueryScore)
 				}
 			}
 
@@ -1219,7 +1291,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 
-	ret, err := joinResponses(sortBy, from, size, results...)
+	ret, err := joinResponses(sortBy, from, size, query.Term, rankWithAI, query.Deb, results...)
 
 	LogIfDeb(&query, "--- AFTER JOIN ---")
 	LogIfDeb(&query, ResultToStringDebug(ret, 20))
@@ -1229,7 +1301,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	if ret != nil && ret.Hits != nil && ret.Hits.Hits != nil {
 
-		if withHighlights {
+		if withHighlights && !initialSearchWithHighlights {
 
 			// Preparing highlights search.
 			// Since some highlight queries are acting like bottlenecks (in cases of scanning large documents)

@@ -610,6 +610,7 @@ func MobileSearchHandler(c *gin.Context) {
 	checkTypo := false // Currently not supported in mobile
 	searchTweets := c.Query("search_tweets") == "true"
 	searchLessonSeries := c.Query("search_lesson_series") == "true"
+	rankWithAI := viper.GetBool("openai.rank-search-results-with-ai")
 
 	res, err := se.DoSearch(
 		context.TODO(),
@@ -622,6 +623,7 @@ func MobileSearchHandler(c *gin.Context) {
 		searchTweets,
 		searchLessonSeries,
 		false, // Highlights are not currently supported in mobile
+		rankWithAI,
 		time.Duration(0),
 	)
 

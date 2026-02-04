@@ -814,6 +814,11 @@ func SearchHandler(c *gin.Context) {
 		(c.Query("language") == consts.LANG_ENGLISH || c.Query("language") == consts.LANG_RUSSIAN || c.Query("language") == consts.LANG_HEBREW)
 
 	timeoutForHighlight := viper.GetDuration("elasticsearch.timeout-for-highlight")
+	withHighlights := viper.GetBool("elasticsearch.with-highlights")
+	rankWithAI := viper.GetBool("openai.rank-search-results-with-ai")
+	if rankWithAI && !withHighlights {
+		log.Warn("SearchHandler - AI re-ranking is enabled but highlights are disabled; AI ranking will run without highlight fields.")
+	}
 
 	res, err := se.DoSearch(
 		context.TODO(),
@@ -825,7 +830,8 @@ func SearchHandler(c *gin.Context) {
 		checkTypo,
 		true,
 		true,
-		true,
+		withHighlights,
+		rankWithAI,
 		timeoutForHighlight,
 	)
 
