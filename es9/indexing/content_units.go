@@ -44,6 +44,7 @@ func NewContentUnitsIndexer(manager *common.ES9Manager, db *sql.DB, indexNameBas
 }
 
 // IndexAll indexes all content units from MDB to ES9 (all language indices)
+// Uses batching to handle large SQL IN clauses (200K+ UIDs)
 func (idx *ContentUnitsIndexer) IndexAll(ctx context.Context) error {
 	log.Info("Starting content units indexing to ES9")
 
@@ -53,6 +54,7 @@ func (idx *ContentUnitsIndexer) IndexAll(ctx context.Context) error {
 	}
 
 	// Get all content units from MDB with default filtering
+	// Loading 200K units into memory is fine (~2GB max)
 	contentUnits, err := idx.fetchContentUnits(ctx, defaultContentUnitScope())
 	if err != nil {
 		return errors.Wrap(err, "fetch content units")
@@ -65,14 +67,10 @@ func (idx *ContentUnitsIndexer) IndexAll(ctx context.Context) error {
 		return nil
 	}
 
-	// Load supplementary data (sources, tags, media languages, transcripts)
-	indexData, err := idx.loadIndexData(ctx, contentUnits)
-	if err != nil {
-		return errors.Wrap(err, "load index data")
-	}
-
-	// Index to all languages in parallel
-	return idx.indexToAllLanguages(ctx, contentUnits, indexData)
+	// Index in batches to avoid SQL IN clause length limits
+	// Problem: SQL query "cu.uid IN ('uid1', 'uid2', ..., 'uid200000')" is too long
+	// Solution: Process in batches of 5000 UIDs
+	return idx.indexInBatches(ctx, contentUnits)
 }
 
 // defaultContentUnitScope returns the default SQL scope for content units
@@ -227,8 +225,51 @@ func (idx *ContentUnitsIndexer) loadMappingFile(lang string) (map[string]interfa
 	return mapping, nil
 }
 
+// indexInBatches processes content units in batches to avoid SQL IN clause length limits
+func (idx *ContentUnitsIndexer) indexInBatches(ctx context.Context, contentUnits []*mdbmodels.ContentUnit) error {
+	const batchSize = 5000 // Process 5000 units at a time to keep SQL IN clauses manageable
+	total := len(contentUnits)
+
+	log.Infof("Indexing %d content units in batches of %d", total, batchSize)
+
+	// Initialize statistics tracker
+	stats := NewIndexingStats(total, batchSize)
+
+	for offset := 0; offset < total; offset += batchSize {
+		end := offset + batchSize
+		if end > total {
+			end = total
+		}
+
+		batch := contentUnits[offset:end]
+
+		// Load supplementary data (sources, tags, media languages, transcripts) for this batch only
+		// This keeps the SQL IN clause to max 5000 UIDs instead of 200K
+		indexData, err := idx.loadIndexData(ctx, batch)
+		if err != nil {
+			return errors.Wrapf(err, "load index data for batch %d/%d", stats.BatchesProcessed+1, stats.TotalBatches)
+		}
+
+		// Index this batch to all languages
+		if err := idx.indexToAllLanguages(ctx, batch, indexData, stats); err != nil {
+			return errors.Wrapf(err, "index batch %d/%d to all languages", stats.BatchesProcessed+1, stats.TotalBatches)
+		}
+
+		// Record batch completion
+		stats.RecordBatch(len(batch))
+
+		// Print progress
+		stats.PrintBatchProgress()
+	}
+
+	// Print final summary
+	stats.PrintFinalSummary()
+
+	return nil
+}
+
 // indexToAllLanguages indexes content units to all language indices in parallel
-func (idx *ContentUnitsIndexer) indexToAllLanguages(ctx context.Context, contentUnits []*mdbmodels.ContentUnit, indexData *es.IndexData) error {
+func (idx *ContentUnitsIndexer) indexToAllLanguages(ctx context.Context, contentUnits []*mdbmodels.ContentUnit, indexData *es.IndexData, stats *IndexingStats) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(consts.ALL_KNOWN_LANGS))
 
@@ -237,12 +278,10 @@ func (idx *ContentUnitsIndexer) indexToAllLanguages(ctx context.Context, content
 		go func(language string) {
 			defer wg.Done()
 
-			log.Infof("Indexing content units to language: %s", language)
-			if err := idx.indexToLanguage(ctx, language, contentUnits, indexData); err != nil {
+			if err := idx.indexToLanguage(ctx, language, contentUnits, indexData, stats); err != nil {
 				log.Errorf("Failed to index language %s: %v", language, err)
+				stats.RecordIndexingError(language, err)
 				errChan <- fmt.Errorf("language %s: %w", language, err)
-			} else {
-				log.Infof("✓ Successfully indexed content units for language: %s", language)
 			}
 		}(lang)
 	}
@@ -260,40 +299,46 @@ func (idx *ContentUnitsIndexer) indexToAllLanguages(ctx context.Context, content
 		return fmt.Errorf("indexing failed for %d languages: %v", len(errs), errs)
 	}
 
-	log.Info("✓ All languages indexed successfully")
 	return nil
 }
 
 // indexToLanguage indexes content units to a specific language index
-func (idx *ContentUnitsIndexer) indexToLanguage(ctx context.Context, lang string, contentUnits []*mdbmodels.ContentUnit, indexData *es.IndexData) error {
+func (idx *ContentUnitsIndexer) indexToLanguage(ctx context.Context, lang string, contentUnits []*mdbmodels.ContentUnit, indexData *es.IndexData, stats *IndexingStats) error {
 	// Build index name: results_en, results_he, etc.
 	indexName := fmt.Sprintf("%s_%s", idx.indexNameBase, lang)
 
 	// Prepare documents for this language
-	docs, err := idx.prepareDocuments(lang, contentUnits, indexData)
+	docs, skipped, err := idx.prepareDocuments(lang, contentUnits, indexData, stats)
 	if err != nil {
 		return errors.Wrap(err, "prepare documents")
 	}
 
-	if len(docs) == 0 {
-		log.Debugf("No documents to index for language: %s", lang)
-		return nil
+	// Record skipped documents
+	for i := 0; i < skipped; i++ {
+		stats.RecordSkipped(lang)
 	}
 
-	log.Infof("Indexing %d documents to %s", len(docs), indexName)
+	if len(docs) == 0 {
+		return nil
+	}
 
 	// Bulk index documents
 	if err := idx.bulkIndex(ctx, indexName, docs); err != nil {
 		return errors.Wrap(err, "bulk index")
 	}
 
+	// Record successfully indexed documents
+	stats.RecordIndexed(lang, len(docs))
+
 	return nil
 }
 
 // prepareDocuments creates Result documents for a specific language
-func (idx *ContentUnitsIndexer) prepareDocuments(lang string, contentUnits []*mdbmodels.ContentUnit, indexData *es.IndexData) ([]*es.Result, error) {
+// Returns: docs, skippedCount, error
+func (idx *ContentUnitsIndexer) prepareDocuments(lang string, contentUnits []*mdbmodels.ContentUnit, indexData *es.IndexData, stats *IndexingStats) ([]*es.Result, int, error) {
 	docs := make([]*es.Result, 0, len(contentUnits))
 	indexDate := utils.Date{Time: time.Now()}
+	skipped := 0
 
 	for _, cu := range contentUnits {
 		// Find i18n for this language
@@ -307,11 +352,13 @@ func (idx *ContentUnitsIndexer) prepareDocuments(lang string, contentUnits []*md
 
 		// Skip if no translation for this language
 		if i18n == nil {
+			skipped++
 			continue
 		}
 
 		// Skip if no name
 		if !i18n.Name.Valid || i18n.Name.String == "" {
+			skipped++
 			continue
 		}
 
@@ -344,7 +391,7 @@ func (idx *ContentUnitsIndexer) prepareDocuments(lang string, contentUnits []*md
 		doc.FilterValues = idx.buildFilterValues(cu, indexData)
 
 		// Extract content from transcript (if available)
-		doc.Content = idx.extractContent(cu, indexData, lang)
+		doc.Content = idx.extractContent(cu, indexData, lang, stats)
 
 		// Build full content for LLM/vector search (combines all fields)
 		doc.FullContent = idx.buildFullContent(doc)
@@ -355,7 +402,7 @@ func (idx *ContentUnitsIndexer) prepareDocuments(lang string, contentUnits []*md
 		docs = append(docs, doc)
 	}
 
-	return docs, nil
+	return docs, skipped, nil
 }
 
 // buildFullTitle constructs the full hierarchical title from collections
@@ -506,16 +553,18 @@ func (idx *ContentUnitsIndexer) buildFilterValues(cu *mdbmodels.ContentUnit, ind
 }
 
 // extractContent extracts text content from transcripts
-func (idx *ContentUnitsIndexer) extractContent(cu *mdbmodels.ContentUnit, indexData *es.IndexData, lang string) string {
+func (idx *ContentUnitsIndexer) extractContent(cu *mdbmodels.ContentUnit, indexData *es.IndexData, lang string, stats *IndexingStats) string {
 	// Get transcript file UIDs for this content unit
 	transcripts, ok := indexData.Transcripts[cu.UID]
 	if !ok || len(transcripts) == 0 {
+		stats.RecordTranscript(false, false, nil)
 		return ""
 	}
 
 	// Get transcripts for this specific language
 	langTranscripts, ok := transcripts[lang]
 	if !ok || len(langTranscripts) == 0 {
+		stats.RecordTranscript(false, false, nil)
 		return ""
 	}
 
@@ -526,13 +575,17 @@ func (idx *ContentUnitsIndexer) extractContent(cu *mdbmodels.ContentUnit, indexD
 	content, err := idx.assetsService.Doc2Text(fileUID)
 	if err != nil {
 		log.Warnf("Content Units Index - Error converting transcript to text: %s (file: %s): %v", cu.UID, fileUID, err)
+		stats.RecordTranscript(true, false, err)
 		return ""
 	}
 
 	if content == "" {
 		log.Warnf("Content Units Index - Transcript empty: %s (file: %s)", cu.UID, fileUID)
+		stats.RecordTranscript(true, false, fmt.Errorf("empty transcript for %s (file: %s)", cu.UID, fileUID))
+		return ""
 	}
 
+	stats.RecordTranscript(true, true, nil)
 	return content
 }
 
