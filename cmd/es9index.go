@@ -35,11 +35,16 @@ Future support:
 	Run: func(cmd *cobra.Command, args []string) {
 		contentType := cmd.Flag("type").Value.String()
 		indexName := cmd.Flag("index").Value.String()
+		reset, _ := cmd.Flags().GetBool("reset")
 
-		log.Infof("Starting ES9 indexing for content type: %s", contentType)
+		mode := "incremental"
+		if reset {
+			mode = "full reset"
+		}
+		log.Infof("Starting ES9 indexing for content type: %s (mode: %s)", contentType, mode)
 
-		// Initialize common (MDB, ES6, cache, etc.)
-		common.Init()
+		// Initialize common resources WITHOUT ES6 (not needed for ES9 indexing)
+		common.InitWithOptions(nil, nil, false)
 		defer common.Shutdown()
 
 		// Get ES9 URL from config
@@ -67,7 +72,7 @@ Future support:
 		startTime := time.Now()
 		switch contentType {
 		case "content-units":
-			if err := indexContentUnits(ctx, manager, indexName); err != nil {
+			if err := indexContentUnits(ctx, manager, indexName, reset); err != nil {
 				log.Fatalf("Failed to index content units: %v", err)
 			}
 
@@ -96,10 +101,17 @@ func init() {
 		"results",
 		"Base index name (e.g., 'results' creates results_en, results_he, etc.)",
 	)
+
+	es9indexCmd.Flags().BoolP(
+		"reset",
+		"r",
+		false,
+		"Reset mode: delete all documents of this type before reindexing (default: incremental mode - skip existing)",
+	)
 }
 
 // indexContentUnits indexes all content units to ES9
-func indexContentUnits(ctx context.Context, manager *es9common.ES9Manager, indexNameBase string) error {
+func indexContentUnits(ctx context.Context, manager *es9common.ES9Manager, indexNameBase string, reset bool) error {
 	log.Info("Indexing content units to ES9")
 
 	// Get assets service URL from config
@@ -114,7 +126,7 @@ func indexContentUnits(ctx context.Context, manager *es9common.ES9Manager, index
 	// Create indexer with assets service
 	indexer := indexing.NewContentUnitsIndexer(manager, common.DB, indexNameBase, assetsService)
 
-	if err := indexer.IndexAll(ctx); err != nil {
+	if err := indexer.IndexAll(ctx, reset); err != nil {
 		return fmt.Errorf("index all content units: %w", err)
 	}
 

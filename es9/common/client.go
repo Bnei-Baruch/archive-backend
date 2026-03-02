@@ -240,6 +240,186 @@ func (m *ES9Manager) DeleteIndex(ctx context.Context, indexName string) error {
 	return nil
 }
 
+// DeleteByResultType deletes all documents with a specific result_type from an index
+func (m *ES9Manager) DeleteByResultType(ctx context.Context, indexName string, resultType string) (int, error) {
+	client, err := m.GetClient()
+	if err != nil {
+		return 0, err
+	}
+
+	// Build delete-by-query request
+	query := map[string]interface{}{
+		"query": map[string]interface{}{
+			"term": map[string]interface{}{
+				"result_type": resultType,
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(query); err != nil {
+		return 0, fmt.Errorf("error encoding query: %w", err)
+	}
+
+	// Execute delete by query
+	res, err := client.DeleteByQuery(
+		[]string{indexName},
+		&buf,
+		client.DeleteByQuery.WithContext(ctx),
+		client.DeleteByQuery.WithRefresh(true), // Refresh immediately to make visible
+	)
+	if err != nil {
+		return 0, fmt.Errorf("error executing delete by query: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		return 0, fmt.Errorf("delete by query failed: %s", res.String())
+	}
+
+	// Parse response to get deleted count
+	var result map[string]interface{}
+	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+		return 0, fmt.Errorf("error parsing delete response: %w", err)
+	}
+
+	deleted := 0
+	if deletedVal, ok := result["deleted"].(float64); ok {
+		deleted = int(deletedVal)
+	}
+
+	return deleted, nil
+}
+
+// GetExistingUIDs retrieves all _id values for documents with a specific result_type
+// Returns a map[string]bool for fast lookup
+func (m *ES9Manager) GetExistingUIDs(ctx context.Context, indexName string, resultType string) (map[string]bool, error) {
+	client, err := m.GetClient()
+	if err != nil {
+		return nil, err
+	}
+
+	existingUIDs := make(map[string]bool)
+
+	// Use scroll API to fetch all document IDs
+	// We only need _id field, not the full document (_source: false)
+	query := map[string]interface{}{
+		"query": map[string]interface{}{
+			"term": map[string]interface{}{
+				"result_type": resultType,
+			},
+		},
+		"_source": false, // Don't return document source, only IDs
+		"size":    10000, // Batch size per scroll
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(query); err != nil {
+		return nil, fmt.Errorf("error encoding query: %w", err)
+	}
+
+	// Initial search request with scroll
+	res, err := client.Search(
+		client.Search.WithContext(ctx),
+		client.Search.WithIndex(indexName),
+		client.Search.WithBody(&buf),
+		client.Search.WithScroll(time.Minute),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error executing search: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		// Index might not exist yet, return empty set
+		if res.StatusCode == 404 {
+			return existingUIDs, nil
+		}
+		return nil, fmt.Errorf("search failed: %s", res.String())
+	}
+
+	var searchResult map[string]interface{}
+	if err := json.NewDecoder(res.Body).Decode(&searchResult); err != nil {
+		return nil, fmt.Errorf("error parsing search response: %w", err)
+	}
+
+	// Extract scroll ID
+	scrollID, ok := searchResult["_scroll_id"].(string)
+	if !ok {
+		return nil, fmt.Errorf("no scroll_id in response")
+	}
+
+	// Process initial batch
+	hits := searchResult["hits"].(map[string]interface{})["hits"].([]interface{})
+	for _, hit := range hits {
+		hitMap := hit.(map[string]interface{})
+		if id, ok := hitMap["_id"].(string); ok {
+			existingUIDs[id] = true
+		}
+	}
+
+	// Continue scrolling until no more results
+	for {
+		scrollQuery := map[string]interface{}{
+			"scroll":    "1m",
+			"scroll_id": scrollID,
+		}
+
+		var scrollBuf bytes.Buffer
+		if err := json.NewEncoder(&scrollBuf).Encode(scrollQuery); err != nil {
+			return nil, fmt.Errorf("error encoding scroll query: %w", err)
+		}
+
+		res, err := client.Scroll(
+			client.Scroll.WithContext(ctx),
+			client.Scroll.WithBody(&scrollBuf),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error executing scroll: %w", err)
+		}
+
+		if res.IsError() {
+			res.Body.Close()
+			return nil, fmt.Errorf("scroll failed: %s", res.String())
+		}
+
+		var scrollResult map[string]interface{}
+		if err := json.NewDecoder(res.Body).Decode(&scrollResult); err != nil {
+			res.Body.Close()
+			return nil, fmt.Errorf("error parsing scroll response: %w", err)
+		}
+		res.Body.Close()
+
+		// Update scroll ID
+		if newScrollID, ok := scrollResult["_scroll_id"].(string); ok {
+			scrollID = newScrollID
+		}
+
+		// Process hits
+		hits := scrollResult["hits"].(map[string]interface{})["hits"].([]interface{})
+		if len(hits) == 0 {
+			break // No more results
+		}
+
+		for _, hit := range hits {
+			hitMap := hit.(map[string]interface{})
+			if id, ok := hitMap["_id"].(string); ok {
+				existingUIDs[id] = true
+			}
+		}
+	}
+
+	// Clean up scroll
+	clearScrollQuery := map[string]interface{}{
+		"scroll_id": []string{scrollID},
+	}
+	var clearBuf bytes.Buffer
+	json.NewEncoder(&clearBuf).Encode(clearScrollQuery)
+	client.ClearScroll(client.ClearScroll.WithBody(&clearBuf))
+
+	return existingUIDs, nil
+}
+
 // HealthInfo contains information about Elasticsearch cluster health
 type HealthInfo struct {
 	ClusterName   string    `json:"cluster_name"`

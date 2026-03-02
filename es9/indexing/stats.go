@@ -15,6 +15,11 @@ import (
 type IndexingStats struct {
 	StartTime time.Time
 
+	// Mode tracking
+	ResetMode         bool // true = full reset, false = incremental
+	UnitsAlreadyExist int  // Units skipped because already indexed (incremental mode)
+	UnitsDeleted      int  // Units deleted in reset mode
+
 	// Per-batch counters
 	BatchesProcessed int
 	TotalBatches     int
@@ -43,9 +48,10 @@ type IndexingStats struct {
 }
 
 // NewIndexingStats creates a new statistics tracker
-func NewIndexingStats(totalUnits int, batchSize int) *IndexingStats {
+func NewIndexingStats(totalUnits int, batchSize int, resetMode bool) *IndexingStats {
 	return &IndexingStats{
 		StartTime:       time.Now(),
+		ResetMode:       resetMode,
 		TotalUnits:      totalUnits,
 		TotalBatches:    (totalUnits + batchSize - 1) / batchSize,
 		DocsIndexed:     make(map[string]int),
@@ -172,6 +178,24 @@ func (s *IndexingStats) PrintFinalSummary() {
 	log.Info("================================================================================")
 	log.Info("  Indexing Complete - Final Statistics")
 	log.Info("================================================================================")
+
+	// Mode info
+	mode := "Incremental"
+	if s.ResetMode {
+		mode = "Full Reset"
+	}
+	log.Infof("Mode:             %s", mode)
+
+	// Reset mode stats
+	if s.ResetMode && s.UnitsDeleted > 0 {
+		log.Infof("Units Deleted:    %d (before reindexing)", s.UnitsDeleted)
+	}
+
+	// Incremental mode stats
+	if !s.ResetMode && s.UnitsAlreadyExist > 0 {
+		log.Infof("Already Indexed:  %d units (skipped)", s.UnitsAlreadyExist)
+	}
+
 	log.Infof("Total Time:       %s", elapsed.Round(time.Second))
 	log.Infof("Units Processed:  %d", s.UnitsProcessed)
 	log.Infof("Batches:          %d", s.BatchesProcessed)
