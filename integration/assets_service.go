@@ -31,20 +31,27 @@ func NewAssetsService(url string) AssetsService {
 }
 
 func (s *DefaultAssetsService) Doc2Text(uid string) (string, error) {
-	resp, err := s.client.Get(fmt.Sprintf("%s/doc2text/%s", s.baseUrl, uid))
+	url := fmt.Sprintf("%s/doc2text/%s", s.baseUrl, uid)
+	resp, err := s.client.Get(url)
 
 	if err != nil {
-		return "", errors.Wrap(err,"client.Get")
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", errors.Errorf("%d %s", resp.StatusCode , resp.Status)
+		return "", errors.Wrap(err, "client.Get")
 	}
 
 	defer resp.Body.Close()
 
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", errors.Wrap(err,"ioutil.ReadAll")
+		return "", errors.Wrap(err, "ioutil.ReadAll")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		// Include response body in error for better debugging
+		errorBody := string(bodyBytes)
+		if len(errorBody) > 500 {
+			errorBody = errorBody[:500] + "... (truncated)"
+		}
+		return "", errors.Errorf("%d %s - URL: %s - Response: %s", resp.StatusCode, resp.Status, url, errorBody)
 	}
 
 	return string(bodyBytes), nil
