@@ -948,7 +948,7 @@ func (idx *ContentUnitsIndexer) prepareDocumentForLanguage(
 	}
 
 	// Build typed UIDs
-	doc.TypedUids = idx.buildTypedUids(cu, indexData)
+	doc.TypedUids = idx.buildTypedUids(cu, lang, indexData)
 
 	// Build filter values
 	doc.FilterValues = idx.buildFilterValues(cu, indexData)
@@ -1072,7 +1072,7 @@ func (idx *ContentUnitsIndexer) prepareDocuments(lang string, contentUnits []*md
 		}
 
 		// Build typed UIDs
-		doc.TypedUids = idx.buildTypedUids(cu, indexData)
+		doc.TypedUids = idx.buildTypedUids(cu, lang, indexData)
 
 		// Build filter values
 		doc.FilterValues = idx.buildFilterValues(cu, indexData)
@@ -1142,7 +1142,7 @@ func (idx *ContentUnitsIndexer) extractEffectiveDate(propertiesJSON string) *uti
 }
 
 // buildTypedUids creates the typed_uids array for relation tracking
-func (idx *ContentUnitsIndexer) buildTypedUids(cu *mdbmodels.ContentUnit, indexData *es.IndexData) []string {
+func (idx *ContentUnitsIndexer) buildTypedUids(cu *mdbmodels.ContentUnit, lang string, indexData *es.IndexData) []string {
 	uids := []string{es.KeyValue(consts.ES_UID_TYPE_CONTENT_UNIT, cu.UID)}
 
 	// Add collections
@@ -1164,13 +1164,13 @@ func (idx *ContentUnitsIndexer) buildTypedUids(cu *mdbmodels.ContentUnit, indexD
 		uids = append(uids, es.KeyValues(consts.ES_UID_TYPE_TAG, tags)...)
 	}
 
-	// Add transcript file UIDs if available
-	// Transcripts is map[cuUID]map[language][]fileUIDs
+	// Add transcript file UID for the current language if available
+	// Note: Transcripts structure is map[cuUID]map[language][]TranscriptFile
+	// We use the first file which is already prioritized by insert_type and created_at
 	if transcriptLangs, ok := indexData.Transcripts[cu.UID]; ok {
-		for _, fileUIDs := range transcriptLangs {
-			for _, fileUID := range fileUIDs {
-				uids = append(uids, es.KeyValue(consts.ES_UID_TYPE_FILE, fileUID))
-			}
+		if langTranscripts, ok := transcriptLangs[lang]; ok && len(langTranscripts) > 0 {
+			file := langTranscripts[0]
+			uids = append(uids, es.KeyValue(consts.ES_UID_TYPE_FILE, file.UID))
 		}
 	}
 
@@ -1240,8 +1240,9 @@ func (idx *ContentUnitsIndexer) buildFilterValues(cu *mdbmodels.ContentUnit, ind
 }
 
 // extractContent extracts text content from transcripts
+// Handles Pattern 1 (duplicate filenames) and Pattern 3 (sequential parts)
 func (idx *ContentUnitsIndexer) extractContent(cu *mdbmodels.ContentUnit, indexData *es.IndexData, lang string, progress *ProgressTracker) string {
-	// Get transcript file UIDs for this content unit
+	// Get transcript files for this content unit
 	transcripts, ok := indexData.Transcripts[cu.UID]
 	if !ok || len(transcripts) == 0 {
 		progress.RecordTranscript(false, false, nil)
@@ -1249,25 +1250,29 @@ func (idx *ContentUnitsIndexer) extractContent(cu *mdbmodels.ContentUnit, indexD
 	}
 
 	// Get transcripts for this specific language
-	langTranscripts, ok := transcripts[lang]
-	if !ok || len(langTranscripts) == 0 {
+	files, ok := transcripts[lang]
+	if !ok || len(files) == 0 {
 		progress.RecordTranscript(false, false, nil)
 		return ""
 	}
 
-	// langTranscripts = [fileUID, fileName]
-	if len(langTranscripts) < 2 {
-		progress.RecordTranscript(false, false, nil)
-		return ""
+	// Pattern 1: Duplicate filenames (same name, different content)
+	// Try each file in order (latest first) until one succeeds
+	if idx.hasDuplicateFilenames(files) {
+		return idx.extractWithFallback(cu, files, lang, progress)
 	}
 
-	fileUID := langTranscripts[0]
-	fileName := langTranscripts[1]
+	// Pattern 3: Sequential parts (_1_c, _2_c, _01, _02, etc.)
+	// Concatenate files in the correct order
+	if idx.hasSequentialParts(files) {
+		return idx.extractAndConcatenate(cu, files, lang, progress)
+	}
 
-	// Convert DOCX to text using assets service
-	content, err := idx.assetsService.Doc2Text(fileUID)
+	// Default: Use first file (already prioritized by insert_type and created_at)
+	file := files[0]
+	content, err := idx.assetsService.Doc2Text(file.UID)
 	if err != nil {
-		log.Warnf("⚠ Transcript failed: %s | %s | %s (%s) | %v", cu.UID, lang, fileUID, fileName, err)
+		log.Warnf("⚠ Transcript failed: %s | %s | %s (%s) | %v", cu.UID, lang, file.UID, file.Name, err)
 		progress.RecordTranscript(true, false, err)
 		return ""
 	}
@@ -1279,6 +1284,102 @@ func (idx *ContentUnitsIndexer) extractContent(cu *mdbmodels.ContentUnit, indexD
 
 	progress.RecordTranscript(true, true, nil)
 	return content
+}
+
+// hasDuplicateFilenames checks if multiple files have the same filename
+func (idx *ContentUnitsIndexer) hasDuplicateFilenames(files []es.TranscriptFile) bool {
+	if len(files) <= 1 {
+		return false
+	}
+	nameMap := make(map[string]int)
+	for _, f := range files {
+		nameMap[f.Name]++
+		if nameMap[f.Name] > 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// hasSequentialParts checks if files have sequential naming patterns
+// Patterns: _1_c, _2_c or _01, _02 or _001_, _002_ or _part1, _part2
+func (idx *ContentUnitsIndexer) hasSequentialParts(files []es.TranscriptFile) bool {
+	if len(files) <= 1 {
+		return false
+	}
+	// Check for common sequential patterns in filenames
+	for _, f := range files {
+		// Pattern: _N_c (where N is a digit)
+		if strings.Contains(f.Name, "_1_c") || strings.Contains(f.Name, "_2_c") {
+			return true
+		}
+		// Pattern: _NN. (two or more digits before extension)
+		if strings.Contains(f.Name, "_01") || strings.Contains(f.Name, "_02") {
+			return true
+		}
+		// Pattern: _NNN_ (three digits with underscores)
+		if strings.Contains(f.Name, "_001_") || strings.Contains(f.Name, "_002_") {
+			return true
+		}
+		// Pattern: _partN or -partN
+		if strings.Contains(f.Name, "_part") || strings.Contains(f.Name, "-part") {
+			return true
+		}
+	}
+	return false
+}
+
+// extractWithFallback tries each file in order until one succeeds (Pattern 1)
+func (idx *ContentUnitsIndexer) extractWithFallback(cu *mdbmodels.ContentUnit, files []es.TranscriptFile, lang string, progress *ProgressTracker) string {
+	var lastErr error
+	for i, file := range files {
+		content, err := idx.assetsService.Doc2Text(file.UID)
+		if err == nil && content != "" {
+			if i > 0 {
+				log.Infof("✓ Fallback success: %s | %s | tried %d files, used %s (%s)", cu.UID, lang, i+1, file.UID, file.Name)
+			}
+			progress.RecordTranscript(true, true, nil)
+			return content
+		}
+		if err != nil {
+			lastErr = err
+		}
+	}
+	log.Warnf("⚠ All %d duplicate files failed: %s | %s | %v", len(files), cu.UID, lang, lastErr)
+	progress.RecordTranscript(true, false, lastErr)
+	return ""
+}
+
+// extractAndConcatenate concatenates sequential files in order (Pattern 3)
+func (idx *ContentUnitsIndexer) extractAndConcatenate(cu *mdbmodels.ContentUnit, files []es.TranscriptFile, lang string, progress *ProgressTracker) string {
+	var parts []string
+	var failedFiles []string
+
+	for _, file := range files {
+		content, err := idx.assetsService.Doc2Text(file.UID)
+		if err != nil {
+			log.Warnf("⚠ Sequential part failed: %s | %s | %s (%s) | %v", cu.UID, lang, file.UID, file.Name, err)
+			failedFiles = append(failedFiles, file.Name)
+			continue
+		}
+		if content != "" {
+			parts = append(parts, content)
+		}
+	}
+
+	if len(parts) == 0 {
+		progress.RecordTranscript(true, false, fmt.Errorf("all %d sequential parts failed", len(files)))
+		return ""
+	}
+
+	if len(failedFiles) > 0 {
+		log.Warnf("⚠ Partial concatenation: %s | %s | succeeded: %d/%d | failed: %v", cu.UID, lang, len(parts), len(files), failedFiles)
+	} else {
+		log.Infof("✓ Concatenated %d parts: %s | %s", len(parts), cu.UID, lang)
+	}
+
+	progress.RecordTranscript(true, true, nil)
+	return strings.Join(parts, "\n\n")
 }
 
 // buildFullContent creates a combined content field for LLM/RAG search
