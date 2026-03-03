@@ -3,6 +3,7 @@ package es
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -12,6 +13,14 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 )
 
+// TranscriptFile holds metadata for a single transcript file
+type TranscriptFile struct {
+	UID        string
+	Name       string
+	CreatedAt  time.Time
+	InsertType string
+}
+
 type IndexData struct {
 	DB      *sql.DB
 	Sources map[string][]string
@@ -19,7 +28,7 @@ type IndexData struct {
 	// Persons      map[string][]string
 	// Translations map[string][][]string
 	MediaLanguages map[string][]string
-	Transcripts    map[string]map[string][]string
+	Transcripts    map[string]map[string][]TranscriptFile
 }
 
 func MakeIndexData(db *sql.DB, sqlScope string) (*IndexData, error) {
@@ -172,22 +181,47 @@ GROUP BY cu.uid;`, sqlScope)).Query()
 	return indexData.rowsToIdToUIDsAndValues(rows)
 }*/
 
-func (indexData *IndexData) loadTranscripts(sqlScope string) (map[string]map[string][]string, error) {
-	kmID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID
+func (indexData *IndexData) loadTranscripts(sqlScope string) (map[string]map[string][]TranscriptFile, error) {
+	// Exclude content types that aren't transcripts
+	kmID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID        // Sources - not transcripts
+	bookID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID             // Books - actual content, not transcripts
+	booksID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOKS].ID           // Book collections
+	songID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID             // Songs - actual content, not transcripts
+	songsID := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONGS].ID           // Song collections
 	rows, err := queries.Raw(fmt.Sprintf(`
 SELECT
     f.uid,
     f.name,
     f.language,
-    cu.uid
+    cu.uid,
+    f.created_at,
+    COALESCE(f.properties->>'insert_type', '') as insert_type
 FROM files AS f
     INNER JOIN content_units AS cu ON f.content_unit_id = cu.id
-WHERE f.secure = 0  and f.published = true AND
-    name ~ '.docx?' AND name not like '%%tzitutim.do%%' AND name not like '%%quotation.do%%' AND
-    f.language NOT IN ('zz', 'xx') AND
-    f.content_unit_id IS NOT NULL AND
-    cu.type_id != %d AND
-    %s;`, kmID, sqlScope)).Query(indexData.DB)
+WHERE f.secure = 0
+    AND f.published = true
+    AND f.removed_at IS NULL
+    AND f.type NOT IN ('audio', 'video', 'subtitles')
+    AND (
+        f.type = 'text'
+        OR f.mime_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        OR f.mime_type = 'application/msword'
+    )
+    AND f.language NOT IN ('zz', 'xx')
+    AND f.content_unit_id IS NOT NULL
+    AND cu.type_id NOT IN (%d, %d, %d, %d, %d)
+    AND %s
+ORDER BY
+    cu.uid,
+    f.language,
+    CASE
+        WHEN f.properties->>'insert_type' = 'tamlil' THEN 1
+        WHEN f.properties->>'insert_type' = 'akladot' THEN 2
+        WHEN f.properties->>'insert_type' IS NOT NULL THEN 3
+        ELSE 4
+    END,
+    f.created_at DESC,
+    f.name;`, kmID, bookID, booksID, songID, songsID, sqlScope)).Query(indexData.DB)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Load transcripts")
@@ -197,22 +231,29 @@ WHERE f.secure = 0  and f.published = true AND
 	return loadTranscriptsMap(rows)
 }
 
-func loadTranscriptsMap(rows *sql.Rows) (map[string]map[string][]string, error) {
-	m := make(map[string]map[string][]string)
+func loadTranscriptsMap(rows *sql.Rows) (map[string]map[string][]TranscriptFile, error) {
+	m := make(map[string]map[string][]TranscriptFile)
 
 	for rows.Next() {
 		var fUID string
 		var name string
 		var language string
 		var cuUID string
-		err := rows.Scan(&fUID, &name, &language, &cuUID)
+		var createdAt time.Time
+		var insertType string
+		err := rows.Scan(&fUID, &name, &language, &cuUID, &createdAt, &insertType)
 		if err != nil {
 			return nil, errors.Wrap(err, "rows.Scan")
 		}
 		if _, ok := m[cuUID]; !ok {
-			m[cuUID] = make(map[string][]string)
+			m[cuUID] = make(map[string][]TranscriptFile)
 		}
-		m[cuUID][language] = []string{fUID, name}
+		m[cuUID][language] = append(m[cuUID][language], TranscriptFile{
+			UID:        fUID,
+			Name:       name,
+			CreatedAt:  createdAt,
+			InsertType: insertType,
+		})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, errors.Wrap(err, "rows.Err()")
