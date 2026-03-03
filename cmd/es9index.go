@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
-	"github.com/Bnei-Baruch/archive-backend/es9/indexing"
+	"github.com/Bnei-Baruch/archive-backend/es9/indexing/types"
 	es9common "github.com/Bnei-Baruch/archive-backend/es9/common"
 	"github.com/Bnei-Baruch/archive-backend/integration"
 )
@@ -124,7 +124,7 @@ func indexContentUnits(ctx context.Context, manager *es9common.ES9Manager, index
 	assetsService := integration.NewAssetsService(unzipURL)
 
 	// Create indexer with assets service
-	indexer := indexing.NewContentUnitsIndexer(manager, common.DB, indexNameBase, assetsService)
+	indexer := types.NewContentUnitsIndexer(manager, common.DB, indexNameBase, assetsService)
 
 	if err := indexer.IndexAll(ctx, reset); err != nil {
 		return fmt.Errorf("index all content units: %w", err)
