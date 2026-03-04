@@ -15,19 +15,19 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )
 
-// ContentUnitsComparator compares content units between ES6 and ES9
-type ContentUnitsComparator struct {
+// CollectionsComparator compares collections between ES6 and ES9
+type CollectionsComparator struct {
 	es6Client      *elastic.Client
 	es9Client      *elasticsearch.Client
 	es9IndexBase   string // Custom ES9 index base (default: "results")
 }
 
-// NewContentUnitsComparator creates a new content units comparator
-func NewContentUnitsComparator(es6Client *elastic.Client, es9Client *elasticsearch.Client, es9IndexBase string) *ContentUnitsComparator {
+// NewCollectionsComparator creates a new collections comparator
+func NewCollectionsComparator(es6Client *elastic.Client, es9Client *elasticsearch.Client, es9IndexBase string) *CollectionsComparator {
 	if es9IndexBase == "" {
-		es9IndexBase = "results"
+		es9IndexBase = "results" // Collections share the same index as content units
 	}
-	return &ContentUnitsComparator{
+	return &CollectionsComparator{
 		es6Client:    es6Client,
 		es9Client:    es9Client,
 		es9IndexBase: es9IndexBase,
@@ -35,23 +35,23 @@ func NewContentUnitsComparator(es6Client *elastic.Client, es9Client *elasticsear
 }
 
 // GetResultType returns the result type
-func (c *ContentUnitsComparator) GetResultType() string {
-	return consts.ES_RESULT_TYPE_UNITS
+func (c *CollectionsComparator) GetResultType() string {
+	return consts.ES_RESULT_TYPE_COLLECTIONS
 }
 
 // GetES6IndexName returns ES6 index name for a language
 // Uses the alias format: prod_results_{lang}
-func (c *ContentUnitsComparator) GetES6IndexName(lang string) string {
+func (c *CollectionsComparator) GetES6IndexName(lang string) string {
 	return fmt.Sprintf("prod_%s_%s", consts.ES_RESULTS_INDEX, lang)
 }
 
 // GetES9IndexName returns ES9 index name for a language
-func (c *ContentUnitsComparator) GetES9IndexName(lang string) string {
+func (c *CollectionsComparator) GetES9IndexName(lang string) string {
 	return fmt.Sprintf("%s_%s", c.es9IndexBase, lang)
 }
 
 // GetES6Count returns total document count in ES6 for this result type
-func (c *ContentUnitsComparator) GetES6Count(ctx context.Context, lang string) (int64, error) {
+func (c *CollectionsComparator) GetES6Count(ctx context.Context, lang string) (int64, error) {
 	indexName := c.GetES6IndexName(lang)
 	query := elastic.NewBoolQuery().
 		Filter(elastic.NewTermQuery("result_type", c.GetResultType()))
@@ -69,7 +69,7 @@ func (c *ContentUnitsComparator) GetES6Count(ctx context.Context, lang string) (
 }
 
 // GetES9Count returns total document count in ES9 for this result type
-func (c *ContentUnitsComparator) GetES9Count(ctx context.Context, lang string) (int64, error) {
+func (c *CollectionsComparator) GetES9Count(ctx context.Context, lang string) (int64, error) {
 	indexName := c.GetES9IndexName(lang)
 
 	query := map[string]interface{}{
@@ -113,7 +113,7 @@ func (c *ContentUnitsComparator) GetES9Count(ctx context.Context, lang string) (
 }
 
 // Sample retrieves random document UIDs from ES6
-func (c *ContentUnitsComparator) Sample(ctx context.Context, lang string, size int) ([]string, error) {
+func (c *CollectionsComparator) Sample(ctx context.Context, lang string, size int) ([]string, error) {
 	indexName := c.GetES6IndexName(lang)
 
 	query := elastic.NewBoolQuery().
@@ -186,7 +186,7 @@ func (c *ContentUnitsComparator) Sample(ctx context.Context, lang string, size i
 }
 
 // FetchES6Document retrieves a document from ES6
-func (c *ContentUnitsComparator) FetchES6Document(ctx context.Context, lang string, uid string) (map[string]interface{}, error) {
+func (c *CollectionsComparator) FetchES6Document(ctx context.Context, lang string, uid string) (map[string]interface{}, error) {
 	indexName := c.GetES6IndexName(lang)
 
 	query := elastic.NewBoolQuery().
@@ -216,7 +216,7 @@ func (c *ContentUnitsComparator) FetchES6Document(ctx context.Context, lang stri
 }
 
 // FetchES9Document retrieves a document from ES9
-func (c *ContentUnitsComparator) FetchES9Document(ctx context.Context, lang string, uid string) (map[string]interface{}, error) {
+func (c *CollectionsComparator) FetchES9Document(ctx context.Context, lang string, uid string) (map[string]interface{}, error) {
 	indexName := c.GetES9IndexName(lang)
 
 	// Build ES9 query
@@ -280,25 +280,25 @@ func (c *ContentUnitsComparator) FetchES9Document(ctx context.Context, lang stri
 }
 
 // Compare performs field-by-field comparison
-func (c *ContentUnitsComparator) Compare(es6Doc, es9Doc map[string]interface{}) *ComparisonResult {
+func (c *CollectionsComparator) Compare(es6Doc, es9Doc map[string]interface{}) *ComparisonResult {
 	return CompareDocuments(es6Doc, es9Doc, c.GetCriticalFields(), c.GetIgnoredFields())
 }
 
 // GetCriticalFields returns fields that must match exactly
-func (c *ContentUnitsComparator) GetCriticalFields() []string {
+func (c *CollectionsComparator) GetCriticalFields() []string {
 	return []string{
 		"mdb_uid",
 		"result_type",
 		"title",
-		"content",        // Transcript text
-		"typed_uids",     // Relations
-		"filter_values",  // Facets
-		"effective_date", // Film date
+		"description",    // Collection description
+		"typed_uids",     // Relations (collection, content_units, sources, tags, etc.)
+		"filter_values",  // Facets (collection content type, child unit types)
+		"effective_date", // Calculated from child content units
 	}
 }
 
 // GetIgnoredFields returns fields that are expected to differ
-func (c *ContentUnitsComparator) GetIgnoredFields() []string {
+func (c *CollectionsComparator) GetIgnoredFields() []string {
 	return []string{
 		"index_date", // Expected to differ (indexing time)
 		"_score",     // ES internal scoring

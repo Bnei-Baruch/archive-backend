@@ -17,6 +17,10 @@ type ResultTypeComparator interface {
 	GetES6IndexName(lang string) string
 	GetES9IndexName(lang string) string
 
+	// GetCount returns total document count for the result type
+	GetES6Count(ctx context.Context, lang string) (int64, error)
+	GetES9Count(ctx context.Context, lang string) (int64, error)
+
 	// Sample retrieves random document UIDs from both indices
 	Sample(ctx context.Context, lang string, size int) ([]string, error)
 
@@ -95,9 +99,14 @@ type ComparisonSummary struct {
 	TotalCompared    int
 	PerfectMatches   int
 	WithDifferences  int
-	MissingInES9     int
-	MissingInES6     int
+	MissingInES9     int // Documents with missing fields in ES9
+	MissingInES6     int // Documents with missing fields in ES6
 	CriticalErrors   int
+
+	// Document-level fetch failures
+	TotalAttempted        int      // Total documents attempted to compare
+	DocsNotFoundInES9     []string // UIDs that couldn't be fetched from ES9
+	DocsNotFoundInES6     []string // UIDs that couldn't be fetched from ES6
 
 	// Field-level aggregation
 	TotalFields        int
@@ -118,6 +127,8 @@ func NewComparisonSummary(resultType, language string) *ComparisonSummary {
 		Language:          language,
 		CommonDifferences: make(map[string]int),
 		Results:           make([]*ComparisonResult, 0),
+		DocsNotFoundInES9: make([]string, 0),
+		DocsNotFoundInES6: make([]string, 0),
 	}
 }
 
@@ -150,6 +161,23 @@ func (s *ComparisonSummary) AddResult(result *ComparisonResult) {
 	for field := range result.Different {
 		s.CommonDifferences[field]++
 	}
+}
+
+// RecordNotFoundInES9 records a document that couldn't be fetched from ES9
+func (s *ComparisonSummary) RecordNotFoundInES9(uid string) {
+	s.TotalAttempted++
+	s.DocsNotFoundInES9 = append(s.DocsNotFoundInES9, uid)
+}
+
+// RecordNotFoundInES6 records a document that couldn't be fetched from ES6
+func (s *ComparisonSummary) RecordNotFoundInES6(uid string) {
+	s.TotalAttempted++
+	s.DocsNotFoundInES6 = append(s.DocsNotFoundInES6, uid)
+}
+
+// RecordAttempt records that a comparison was attempted (increments TotalAttempted)
+func (s *ComparisonSummary) RecordAttempt() {
+	s.TotalAttempted++
 }
 
 // CompareDocuments performs generic field-by-field comparison
@@ -250,35 +278,33 @@ func CompareDocuments(es6Doc, es9Doc map[string]interface{}, criticalFields, ign
 				diffType = DiffTypeTypeMismatch
 			}
 
-			// For critical fields, determine if ES9 has less data (critical) or more data (info)
+			// For critical fields, ANY difference is critical (data loss, gain, or change)
 			if criticalMap[field] {
-				// Check if both are arrays to determine direction
+				severity = SeverityCritical
+				result.CriticalMatch = false
+
 				es6Slice, es6IsSlice := tryGetSliceLength(es6Val)
 				es9Slice, es9IsSlice := tryGetSliceLength(es9Val)
 
 				if es6IsSlice && es9IsSlice {
 					if es9Slice < es6Slice {
-						// ES9 has LESS data than ES6 - this is critical (data loss)
-						severity = SeverityCritical
-						result.CriticalMatch = false
 						result.CriticalErrors = append(result.CriticalErrors,
-							fmt.Sprintf("Critical field has less data in ES9: %s (%d items in ES6 → %d items in ES9)",
-								field, es6Slice, es9Slice))
-						note = fmt.Sprintf("ES9 missing %d items compared to ES6", es6Slice-es9Slice)
+							fmt.Sprintf("%s: ES9 missing %d items (%d in ES6 → %d in ES9)",
+								field, es6Slice-es9Slice, es6Slice, es9Slice))
+						note = fmt.Sprintf("ES9 missing %d items", es6Slice-es9Slice)
 					} else if es9Slice > es6Slice {
-						// ES9 has MORE data than ES6 - this is good (enhancement)
-						severity = SeverityInfo
-						note = fmt.Sprintf("ES9 has %d additional items (enhancement)", es9Slice-es6Slice)
+						result.CriticalErrors = append(result.CriticalErrors,
+							fmt.Sprintf("%s: ES9 has %d extra items (%d in ES6 → %d in ES9)",
+								field, es9Slice-es6Slice, es6Slice, es9Slice))
+						note = fmt.Sprintf("ES9 has %d extra items", es9Slice-es6Slice)
 					} else {
-						// Same length but different items
-						severity = SeverityWarning
+						result.CriticalErrors = append(result.CriticalErrors,
+							fmt.Sprintf("%s: Different items (same count: %d)", field, es6Slice))
 						note = "Different items (same count)"
 					}
 				} else {
-					// Non-array critical field differs
-					severity = SeverityCritical
-					result.CriticalMatch = false
-					result.CriticalErrors = append(result.CriticalErrors, fmt.Sprintf("Critical field differs: %s", field))
+					result.CriticalErrors = append(result.CriticalErrors, fmt.Sprintf("%s: Values differ", field))
+					note = "Values differ"
 				}
 			}
 

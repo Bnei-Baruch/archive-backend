@@ -194,7 +194,7 @@ func defaultContentUnitScope() []qm.QueryMod {
 	log.Debugf("Building SQL scope with excluded type IDs: %v", excludedTypeIDs)
 
 	// Manually build NOT IN clause string (more reliable than SQLBoiler's WhereNotIn)
-	excludedIDsStr := int64SliceToString(excludedTypeIDs)
+	excludedIDsStr := utils.JoinInt64(excludedTypeIDs, ",")
 	notInClause := fmt.Sprintf("type_id NOT IN (%s)", excludedIDsStr)
 
 	scope := []qm.QueryMod{
@@ -207,19 +207,6 @@ func defaultContentUnitScope() []qm.QueryMod {
 
 	log.Debug("SQL scope built WITHOUT eager loading (will load per batch)")
 	return scope
-}
-
-// int64SliceToString converts []int64 to comma-separated string "1,2,3"
-func int64SliceToString(ids []int64) string {
-	if len(ids) == 0 {
-		return ""
-	}
-
-	strs := make([]string, len(ids))
-	for i, id := range ids {
-		strs[i] = fmt.Sprintf("%d", id)
-	}
-	return strings.Join(strs, ",")
 }
 
 // fetchContentUnits loads content units from MDB

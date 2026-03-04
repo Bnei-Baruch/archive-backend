@@ -147,6 +147,7 @@ func (index *CollectionsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 			qm.Load("CollectionsContentUnits"),
 			qm.Load("CollectionsContentUnits.ContentUnit"),
 			qm.Where(sqlScope),
+			qm.OrderBy("id"),
 			qm.Offset(offset),
 			qm.Limit(limit)).
 			Bind(nil, index.db, &collections); err != nil {

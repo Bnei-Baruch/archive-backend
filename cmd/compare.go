@@ -49,15 +49,17 @@ var (
 	compareIDs        string
 	compareFormat     string
 	compareOutput     string
+	compareES9Index   string
 )
 
 func init() {
-	compareCmd.Flags().StringVar(&compareType, "type", "content_units", "Result type to compare (content_units, tweets, sources, tags)")
+	compareCmd.Flags().StringVar(&compareType, "type", "content_units", "Result type to compare (content_units, collections, tweets, sources, tags)")
 	compareCmd.Flags().StringVar(&compareLanguage, "language", "he", "Language to compare (he, en, ru, es, de, etc.)")
 	compareCmd.Flags().IntVar(&compareSampleSize, "sample-size", 10, "Number of random documents to sample")
 	compareCmd.Flags().StringVar(&compareIDs, "ids", "", "Specific mdb_uids to compare (comma-separated)")
 	compareCmd.Flags().StringVar(&compareFormat, "format", "summary", "Output format: summary, diff, json, raw")
 	compareCmd.Flags().StringVar(&compareOutput, "output", "", "Write output to file instead of stdout")
+	compareCmd.Flags().StringVar(&compareES9Index, "es9-index", "", "ES9 index base name (default: 'results' for content_units, 'collections' for collections)")
 
 	RootCmd.AddCommand(compareCmd)
 }
@@ -99,9 +101,11 @@ func compareIndicesHandler(cmd *cobra.Command, args []string) {
 	var comparator compare.ResultTypeComparator
 	switch compareType {
 	case "content_units":
-		comparator = compare.NewContentUnitsComparator(es6Client, es9Client)
+		comparator = compare.NewContentUnitsComparator(es6Client, es9Client, compareES9Index)
+	case "collections":
+		comparator = compare.NewCollectionsComparator(es6Client, es9Client, compareES9Index)
 	default:
-		log.Fatalf("Unsupported result type: %s (only 'content_units' supported currently)", compareType)
+		log.Fatalf("Unsupported result type: %s (supported: content_units, collections)", compareType)
 	}
 
 	// Validate language
@@ -114,6 +118,37 @@ func compareIndicesHandler(cmd *cobra.Command, args []string) {
 	}
 	if !validLanguage {
 		log.Fatalf("Invalid language: %s", compareLanguage)
+	}
+
+	// Get total document counts from both indices
+	log.Info("Getting document counts from ES6 and ES9...")
+	es6Count, err := comparator.GetES6Count(ctx, compareLanguage)
+	if err != nil {
+		log.Warnf("Failed to get ES6 count: %v", err)
+		es6Count = -1
+	}
+	es9Count, err := comparator.GetES9Count(ctx, compareLanguage)
+	if err != nil {
+		log.Warnf("Failed to get ES9 count: %v", err)
+		es9Count = -1
+	}
+
+	if es6Count >= 0 && es9Count >= 0 {
+		diff := es9Count - es6Count
+		diffPercent := 0.0
+		if es6Count > 0 {
+			diffPercent = float64(diff) / float64(es6Count) * 100
+		}
+		log.Infof("ES6 total: %d | ES9 total: %d | Difference: %+d (%+.1f%%)",
+			es6Count, es9Count, diff, diffPercent)
+
+		if diff < 0 {
+			log.Warnf("⚠ ES9 has %d fewer documents than ES6", -diff)
+		} else if diff > 0 {
+			log.Infof("✓ ES9 has %d more documents than ES6", diff)
+		} else {
+			log.Info("✓ ES6 and ES9 have the same number of documents")
+		}
 	}
 
 	// Get document UIDs to compare
@@ -155,6 +190,7 @@ func compareIndicesHandler(cmd *cobra.Command, args []string) {
 		es6Doc, err := comparator.FetchES6Document(ctx, compareLanguage, uid)
 		if err != nil {
 			log.Warnf("Failed to fetch %s from ES6: %v", uid, err)
+			summary.RecordNotFoundInES6(uid)
 			continue
 		}
 
@@ -162,10 +198,12 @@ func compareIndicesHandler(cmd *cobra.Command, args []string) {
 		es9Doc, err := comparator.FetchES9Document(ctx, compareLanguage, uid)
 		if err != nil {
 			log.Warnf("Failed to fetch %s from ES9: %v", uid, err)
+			summary.RecordNotFoundInES9(uid)
 			continue
 		}
 
 		// Compare
+		summary.RecordAttempt()
 		result := comparator.Compare(es6Doc, es9Doc)
 		result.Language = compareLanguage
 		result.ResultType = compareType
@@ -174,6 +212,15 @@ func compareIndicesHandler(cmd *cobra.Command, args []string) {
 
 	elapsed := time.Since(startTime)
 	log.Infof("✓ Compared %d documents in %v", summary.TotalCompared, elapsed)
+
+	// Check for fetch failures
+	if summary.TotalCompared == 0 {
+		log.Errorf("Failed to compare any documents: %d not found in ES9, %d not found in ES6",
+			len(summary.DocsNotFoundInES9), len(summary.DocsNotFoundInES6))
+	} else if len(summary.DocsNotFoundInES9) > 0 {
+		log.Warnf("Some documents missing from ES9: %d/%d documents not found",
+			len(summary.DocsNotFoundInES9), summary.TotalAttempted)
+	}
 
 	// Format output
 	var output string
@@ -201,9 +248,24 @@ func compareIndicesHandler(cmd *cobra.Command, args []string) {
 		fmt.Println(output)
 	}
 
-	// Exit with error code if critical mismatches found
+	// Exit with error code if issues found
+	if summary.TotalCompared == 0 {
+		log.Error("✗ Comparison failed: no documents could be compared")
+		os.Exit(1)
+	}
+
+	if len(summary.DocsNotFoundInES9) > 0 {
+		log.Errorf("✗ %d documents not found in ES9", len(summary.DocsNotFoundInES9))
+		os.Exit(1)
+	}
+
+	if len(summary.DocsNotFoundInES6) > 0 {
+		log.Errorf("✗ %d documents not found in ES6", len(summary.DocsNotFoundInES6))
+		os.Exit(1)
+	}
+
 	if summary.CriticalErrors > 0 {
-		log.Errorf("Found %d documents with critical field mismatches", summary.CriticalErrors)
+		log.Errorf("✗ Found %d documents with critical field mismatches", summary.CriticalErrors)
 		os.Exit(1)
 	}
 
