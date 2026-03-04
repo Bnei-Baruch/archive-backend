@@ -25,9 +25,9 @@ sources, tags, and other entities from the MDB to ES9 indices.
 
 Currently supports:
 - Content units (lesson parts, lectures, etc.)
+- Collections (programs, congresses, etc.)
 
 Future support:
-- Collections
 - Sources
 - Tags
 - Blog posts
@@ -76,8 +76,13 @@ Future support:
 				log.Fatalf("Failed to index content units: %v", err)
 			}
 
+		case "collections":
+			if err := indexCollections(ctx, manager, indexName, reset); err != nil {
+				log.Fatalf("Failed to index collections: %v", err)
+			}
+
 		default:
-			log.Fatalf("Unknown content type: %s (supported: content-units)", contentType)
+			log.Fatalf("Unknown content type: %s (supported: content-units, collections)", contentType)
 		}
 
 		duration := time.Since(startTime)
@@ -131,5 +136,20 @@ func indexContentUnits(ctx context.Context, manager *es9common.ES9Manager, index
 	}
 
 	log.Info("✓ Content units indexed successfully")
+	return nil
+}
+
+// indexCollections indexes all collections to ES9
+func indexCollections(ctx context.Context, manager *es9common.ES9Manager, indexNameBase string, reset bool) error {
+	log.Info("Indexing collections to ES9")
+
+	// Create indexer
+	indexer := types.NewCollectionsIndexer(manager, common.DB, indexNameBase)
+
+	if err := indexer.IndexAll(ctx, reset); err != nil {
+		return fmt.Errorf("index all collections: %w", err)
+	}
+
+	log.Info("✓ Collections indexed successfully")
 	return nil
 }

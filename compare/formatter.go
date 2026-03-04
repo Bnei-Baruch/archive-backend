@@ -25,10 +25,36 @@ func (s *ComparisonSummary) FormatSummary() string {
 
 	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 	sb.WriteString(fmt.Sprintf("ES6 vs ES9 COMPARISON: %s\n", s.ResultType))
-	sb.WriteString(fmt.Sprintf("Language: %s | Sample Size: %d documents\n", s.Language, s.TotalCompared))
+	sb.WriteString(fmt.Sprintf("Language: %s | Attempted: %d | Successfully Compared: %d\n", s.Language, s.TotalAttempted, s.TotalCompared))
 	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
 
-	// Summary stats
+	// Document-level fetch stats
+	if len(s.DocsNotFoundInES9) > 0 || len(s.DocsNotFoundInES6) > 0 {
+		sb.WriteString("FETCH FAILURES:\n")
+		if len(s.DocsNotFoundInES9) > 0 {
+			sb.WriteString(fmt.Sprintf("  ✗ Documents not found in ES9: %d\n", len(s.DocsNotFoundInES9)))
+			if len(s.DocsNotFoundInES9) <= 10 {
+				for _, uid := range s.DocsNotFoundInES9 {
+					sb.WriteString(fmt.Sprintf("    - %s\n", uid))
+				}
+			} else {
+				sb.WriteString(fmt.Sprintf("    (First 10): %v...\n", s.DocsNotFoundInES9[:10]))
+			}
+		}
+		if len(s.DocsNotFoundInES6) > 0 {
+			sb.WriteString(fmt.Sprintf("  ✗ Documents not found in ES6: %d\n", len(s.DocsNotFoundInES6)))
+			if len(s.DocsNotFoundInES6) <= 10 {
+				for _, uid := range s.DocsNotFoundInES6 {
+					sb.WriteString(fmt.Sprintf("    - %s\n", uid))
+				}
+			} else {
+				sb.WriteString(fmt.Sprintf("    (First 10): %v...\n", s.DocsNotFoundInES6[:10]))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	// Summary stats (only for successfully compared documents)
 	perfectPercent := 0.0
 	diffPercent := 0.0
 	if s.TotalCompared > 0 {
@@ -36,12 +62,12 @@ func (s *ComparisonSummary) FormatSummary() string {
 		diffPercent = float64(s.WithDifferences) / float64(s.TotalCompared) * 100
 	}
 
-	sb.WriteString("SUMMARY:\n")
+	sb.WriteString("COMPARISON RESULTS (successfully compared documents):\n")
 	sb.WriteString(fmt.Sprintf("  Total Compared: %d\n", s.TotalCompared))
 	sb.WriteString(fmt.Sprintf("  Perfect Match:  %d  (%.1f%%)\n", s.PerfectMatches, perfectPercent))
 	sb.WriteString(fmt.Sprintf("  Differences:    %d  (%.1f%%)\n", s.WithDifferences, diffPercent))
-	sb.WriteString(fmt.Sprintf("  Missing in ES9: %d  (%.1f%%)\n", s.MissingInES9, float64(s.MissingInES9)/float64(s.TotalCompared)*100))
-	sb.WriteString(fmt.Sprintf("  Missing in ES6: %d  (%.1f%%)\n\n", s.MissingInES6, float64(s.MissingInES6)/float64(s.TotalCompared)*100))
+	sb.WriteString(fmt.Sprintf("  Missing Fields in ES9: %d  (%.1f%%)\n", s.MissingInES9, float64(s.MissingInES9)/float64(s.TotalCompared)*100))
+	sb.WriteString(fmt.Sprintf("  Missing Fields in ES6: %d  (%.1f%%)\n\n", s.MissingInES6, float64(s.MissingInES6)/float64(s.TotalCompared)*100))
 
 	// Critical fields
 	sb.WriteString("CRITICAL FIELDS:\n")
