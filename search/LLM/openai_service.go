@@ -21,6 +21,8 @@ type OpenAIService struct {
 	token string
 }
 
+var _ Service = (*OpenAIService)(nil)
+
 func NewOpenAIService(token string) *OpenAIService {
 	service := &OpenAIService{
 		token: token,
