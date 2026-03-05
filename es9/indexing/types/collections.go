@@ -114,7 +114,7 @@ func (idx *CollectionsIndexer) IndexAll(ctx context.Context, reset bool) error {
 	}
 
 	// Get all collections from MDB
-	collections, err := idx.fetchCollections(ctx, defaultCollectionsScope())
+	collections, err := idx.FetchCollections(ctx, DefaultCollectionsScope())
 	if err != nil {
 		return errors.Wrap(err, "fetch collections")
 	}
@@ -128,7 +128,7 @@ func (idx *CollectionsIndexer) IndexAll(ctx context.Context, reset bool) error {
 
 	// Filter out already-indexed collections in incremental mode
 	if !reset {
-		collections, err = idx.filterExistingCollections(ctx, collections)
+		collections, err = idx.FilterExistingCollections(ctx, collections)
 		if err != nil {
 			return errors.Wrap(err, "filter existing collections")
 		}
@@ -162,7 +162,7 @@ func (idx *CollectionsIndexer) IndexAll(ctx context.Context, reset bool) error {
 
 // defaultCollectionsScope returns the default SQL scope for collections
 // Excludes certain collection types per ES6 logic
-func defaultCollectionsScope() []qm.QueryMod {
+func DefaultCollectionsScope() []qm.QueryMod {
 	excludedTypeIDs := []int64{
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_DAILY_LESSON].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SPECIAL_LESSON].ID,
@@ -186,7 +186,7 @@ func defaultCollectionsScope() []qm.QueryMod {
 }
 
 // fetchCollections loads collections from MDB with the given scope
-func (idx *CollectionsIndexer) fetchCollections(ctx context.Context, scope []qm.QueryMod) ([]*mdbmodels.Collection, error) {
+func (idx *CollectionsIndexer) FetchCollections(ctx context.Context, scope []qm.QueryMod) ([]*mdbmodels.Collection, error) {
 	collections, err := mdbmodels.Collections(scope...).All(idx.db)
 	if err != nil {
 		return nil, errors.Wrap(err, "query collections")
@@ -301,7 +301,7 @@ func (idx *CollectionsIndexer) deleteExistingCollections(ctx context.Context) er
 }
 
 // filterExistingCollections filters out collections that are already indexed
-func (idx *CollectionsIndexer) filterExistingCollections(ctx context.Context, collections []*mdbmodels.Collection) ([]*mdbmodels.Collection, error) {
+func (idx *CollectionsIndexer) FilterExistingCollections(ctx context.Context, collections []*mdbmodels.Collection) ([]*mdbmodels.Collection, error) {
 	if len(collections) == 0 {
 		return collections, nil
 	}

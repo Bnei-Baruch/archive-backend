@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -191,7 +192,28 @@ func (m *ES9Manager) CreateIndex(ctx context.Context, indexName string, mapping 
 		return fmt.Errorf("error checking if index exists: %w", err)
 	}
 	if exists {
-		log.Infof("Index already exists: %s", indexName)
+		// Validate existing index has correct mapping
+		log.Debugf("Index already exists, validating mapping: %s", indexName)
+		if err := m.ValidateIndexMapping(ctx, indexName, mapping); err != nil {
+			log.Errorf("⚠ MAPPING MISMATCH: Index %s has incorrect mapping", indexName)
+			log.Errorf("  This usually happens when index creation was interrupted (Ctrl+C)")
+			log.Errorf("  Validation error: %v", err)
+			log.Errorf("")
+			log.Errorf("  To fix, delete the index and re-run:")
+
+			// Extract language from index name (e.g., "results_20260305_0_en" -> "en")
+			parts := strings.Split(indexName, "_")
+			if len(parts) > 0 {
+				lang := parts[len(parts)-1]
+				log.Errorf("    ./archive-backend es9-delete-indices -l %s --force", lang)
+			} else {
+				log.Errorf("    ./archive-backend es9-delete-indices --index \"%s\" --force", indexName)
+			}
+			log.Errorf("    ./archive-backend es9index --reset")
+			log.Errorf("")
+			return fmt.Errorf("index %s has incorrect mapping (interrupted creation?): %w", indexName, err)
+		}
+		log.Infof("Index already exists with correct mapping: %s", indexName)
 		return nil
 	}
 
@@ -216,6 +238,30 @@ func (m *ES9Manager) CreateIndex(ctx context.Context, indexName string, mapping 
 	}
 
 	log.Infof("✓ Index created successfully: %s", indexName)
+
+	// Verify the mapping was applied correctly (catch partial creations from Ctrl+C)
+	if err := m.ValidateIndexMapping(ctx, indexName, mapping); err != nil {
+		log.Errorf("⚠ CRITICAL: Index created but mapping validation failed!")
+		log.Errorf("  Index: %s", indexName)
+		log.Errorf("  Validation error: %v", err)
+		log.Errorf("  This indicates a serious ES issue or interrupted creation")
+		log.Errorf("")
+		log.Errorf("  To fix: Delete and recreate:")
+
+		// Extract language from index name
+		parts := strings.Split(indexName, "_")
+		if len(parts) > 0 {
+			lang := parts[len(parts)-1]
+			log.Errorf("    ./archive-backend es9-delete-indices -l %s --force", lang)
+		} else {
+			log.Errorf("    ./archive-backend es9-delete-indices --index \"%s\" --force", indexName)
+		}
+		log.Errorf("    # Then re-run the indexing")
+		log.Errorf("")
+		return fmt.Errorf("index created but mapping incorrect: %w", err)
+	}
+
+	log.Debugf("✓ Mapping validated for: %s", indexName)
 	return nil
 }
 
@@ -237,6 +283,97 @@ func (m *ES9Manager) DeleteIndex(ctx context.Context, indexName string) error {
 	}
 
 	log.Infof("✓ Index deleted: %s", indexName)
+	return nil
+}
+
+// ValidateIndexMapping validates that an index has the expected mapping
+// Returns error if critical fields have wrong types (e.g., result_type as text instead of keyword)
+func (m *ES9Manager) ValidateIndexMapping(ctx context.Context, indexName string, expectedMapping map[string]interface{}) error {
+	client, err := m.GetClient()
+	if err != nil {
+		return err
+	}
+
+	// Get actual mapping from ES
+	res, err := client.Indices.GetMapping(
+		client.Indices.GetMapping.WithIndex(indexName),
+		client.Indices.GetMapping.WithContext(ctx),
+	)
+	if err != nil {
+		return fmt.Errorf("error getting mapping: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		return fmt.Errorf("error getting mapping: %s", res.String())
+	}
+
+	// Parse response
+	var mappingResp map[string]interface{}
+	if err := json.NewDecoder(res.Body).Decode(&mappingResp); err != nil {
+		return fmt.Errorf("error decoding mapping response: %w", err)
+	}
+
+	// Extract actual properties
+	indexMapping, ok := mappingResp[indexName].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("index not found in mapping response")
+	}
+
+	mappings, ok := indexMapping["mappings"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("mappings not found in response")
+	}
+
+	actualProperties, ok := mappings["properties"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("properties not found in mappings")
+	}
+
+	// Extract expected properties
+	expectedProperties, ok := expectedMapping["mappings"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid expected mapping structure")
+	}
+	expectedProps, ok := expectedProperties["properties"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("expected properties not found")
+	}
+
+	// Validate critical fields
+	criticalFields := []string{"result_type", "mdb_uid", "typed_uids", "filter_values"}
+
+	for _, fieldName := range criticalFields {
+		expectedField, hasExpected := expectedProps[fieldName]
+		actualField, hasActual := actualProperties[fieldName]
+
+		if !hasExpected {
+			continue // Skip if not in expected mapping
+		}
+
+		if !hasActual {
+			return fmt.Errorf("field '%s' missing in actual mapping", fieldName)
+		}
+
+		// Check field type
+		expectedFieldMap, ok1 := expectedField.(map[string]interface{})
+		actualFieldMap, ok2 := actualField.(map[string]interface{})
+		if !ok1 || !ok2 {
+			continue
+		}
+
+		expectedType, ok1 := expectedFieldMap["type"].(string)
+		actualType, ok2 := actualFieldMap["type"].(string)
+		if !ok1 || !ok2 {
+			continue
+		}
+
+		if expectedType != actualType {
+			return fmt.Errorf("field '%s' type mismatch: expected '%s', got '%s'",
+				fieldName, expectedType, actualType)
+		}
+	}
+
 	return nil
 }
 
