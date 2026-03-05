@@ -112,7 +112,7 @@ func (idx *ContentUnitsIndexer) IndexAll(ctx context.Context, reset bool) error 
 	log.Infof("Starting ES9 indexing (%s mode)", mode)
 
 	// Ensure all language indices exist (create if needed)
-	if err := idx.ensureIndicesExist(ctx); err != nil {
+	if err := idx.EnsureIndicesExist(ctx); err != nil {
 		return errors.Wrap(err, "ensure indices exist")
 	}
 
@@ -124,7 +124,7 @@ func (idx *ContentUnitsIndexer) IndexAll(ctx context.Context, reset bool) error 
 	}
 
 	// Get all content units from MDB with default filtering
-	contentUnits, err := idx.fetchContentUnits(ctx, defaultContentUnitScope())
+	contentUnits, err := idx.FetchContentUnits(ctx, DefaultContentUnitScope())
 	if err != nil {
 		return errors.Wrap(err, "fetch content units")
 	}
@@ -138,7 +138,7 @@ func (idx *ContentUnitsIndexer) IndexAll(ctx context.Context, reset bool) error 
 
 	// Filter out already-indexed units in incremental mode
 	if !reset {
-		contentUnits, err = idx.filterExistingUnits(ctx, contentUnits)
+		contentUnits, err = idx.FilterExistingUnits(ctx, contentUnits)
 		if err != nil {
 			return errors.Wrap(err, "filter existing units")
 		}
@@ -178,7 +178,7 @@ func (idx *ContentUnitsIndexer) IndexAll(ctx context.Context, reset bool) error 
 
 // defaultContentUnitScope returns the default SQL scope for content units
 // Matches ES6 logic: only published, public units, excluding certain types
-func defaultContentUnitScope() []qm.QueryMod {
+func DefaultContentUnitScope() []qm.QueryMod {
 	// Exclude certain content types
 	excludedTypeIDs := []int64{
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
@@ -210,7 +210,7 @@ func defaultContentUnitScope() []qm.QueryMod {
 }
 
 // fetchContentUnits loads content units from MDB
-func (idx *ContentUnitsIndexer) fetchContentUnits(ctx context.Context, scope []qm.QueryMod) ([]*mdbmodels.ContentUnit, error) {
+func (idx *ContentUnitsIndexer) FetchContentUnits(ctx context.Context, scope []qm.QueryMod) ([]*mdbmodels.ContentUnit, error) {
 	units, err := mdbmodels.ContentUnits(scope...).All(idx.db)
 	if err != nil {
 		return nil, err
@@ -374,7 +374,7 @@ func (idx *ContentUnitsIndexer) deleteExistingUnits(ctx context.Context) error {
 
 // filterExistingUnits removes content units that are already indexed in ES9
 // Returns only units that need to be indexed (new units)
-func (idx *ContentUnitsIndexer) filterExistingUnits(ctx context.Context, contentUnits []*mdbmodels.ContentUnit) ([]*mdbmodels.ContentUnit, error) {
+func (idx *ContentUnitsIndexer) FilterExistingUnits(ctx context.Context, contentUnits []*mdbmodels.ContentUnit) ([]*mdbmodels.ContentUnit, error) {
 	log.Info("Loading existing content unit IDs from ES9 indices")
 
 	// Collect existing UIDs from all language indices
@@ -413,9 +413,11 @@ func (idx *ContentUnitsIndexer) filterExistingUnits(ctx context.Context, content
 	return newUnits, nil
 }
 
-// ensureIndicesExist creates all language indices if they don't exist
-func (idx *ContentUnitsIndexer) ensureIndicesExist(ctx context.Context) error {
+// EnsureIndicesExist creates all language indices if they don't exist
+// Also validates existing indices have correct mapping
+func (idx *ContentUnitsIndexer) EnsureIndicesExist(ctx context.Context) error {
 	log.Info("Ensuring ES9 indices exist for all languages")
+	log.Info("(This will validate mappings for existing indices)")
 
 	languages := consts.ALL_KNOWN_LANGS[:]
 	var wg sync.WaitGroup

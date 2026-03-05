@@ -23,6 +23,7 @@ type PipelineConfig struct {
 	QueueCapacity          int     // Bounded queue size for backpressure
 	RelationshipChunkSize  int     // Load relationships from DB in chunks of this size
 	ConsumerBatchSizeMaxMB float64 // Maximum bulk request size in MB
+	ConsumerBatchMaxDocs   int     // Maximum documents per batch (flush when reached)
 	ProgressIntervalSec    int     // Print progress stats every N seconds
 }
 
@@ -30,11 +31,12 @@ type PipelineConfig struct {
 // Tuned for content units indexing with transcript loading (I/O-bound)
 func DefaultPipelineConfig() *PipelineConfig {
 	return &PipelineConfig{
-		NumProducers:           20,   // High for I/O-bound transcript loading
-		NumConsumers:           3,    // Low to avoid overwhelming ES
+		NumProducers:           20,    // High for I/O-bound transcript loading
+		NumConsumers:           3,     // Low to avoid overwhelming ES
 		QueueCapacity:          10000, // Large buffer for backpressure
 		RelationshipChunkSize:  300,   // DB query batch size
 		ConsumerBatchSizeMaxMB: 90.0,  // Max bulk request size
+		ConsumerBatchMaxDocs:   1000,  // Max docs per batch (flush when reached)
 		ProgressIntervalSec:    10,    // Progress update frequency
 	}
 }
@@ -45,6 +47,14 @@ type IndexTask struct {
 	IndexName string     // Target index (e.g., "results_he", "collections_en")
 	Doc       *es.Result // Fully prepared document ready for indexing
 	Lang      string     // Language for stats tracking
+}
+
+// ItemTask represents a raw item to be processed by its indexer
+// Used in the unified pipeline to feed items from multiple types
+type ItemTask struct {
+	Item     interface{} // Raw item from MDB
+	Indexer  Indexer     // Indexer that knows how to process this item
+	Type     string      // Type name for progress tracking ("content-units", "collections", etc.)
 }
 
 // Pipeline orchestrates the producer-consumer pattern for indexing
@@ -133,6 +143,69 @@ func (p *Pipeline) RunPipeline(
 	return nil
 }
 
+// RunUnifiedPipeline executes the indexing pipeline for multiple types concurrently
+// Items from all types are fed into a shared channel and processed together
+//
+// Flow:
+//  1. Create bounded task queues (itemQueue -> indexTaskQueue)
+//  2. Start progress monitor
+//  3. Start producer workers (prepare documents from mixed item types)
+//  4. Start consumer workers (bulk index to ES)
+//  5. Wait for completion
+//  6. Return errors if any
+func (p *Pipeline) RunUnifiedPipeline(
+	ctx context.Context,
+	itemQueue <-chan ItemTask,
+	indexData *es.IndexData,
+	progress *ProgressTracker,
+) error {
+	// Create bounded queue for prepared documents
+	indexTaskQueue := make(chan IndexTask, p.config.QueueCapacity)
+
+	log.Info("Starting unified pipeline for all types")
+
+	// Start progress monitor
+	monitorDone := make(chan bool)
+	go p.monitorProgress(ctx, indexTaskQueue, progress, monitorDone)
+	defer func() { monitorDone <- true }()
+
+	// Start producers (parallel document preparation from mixed types)
+	p.startUnifiedProducers(ctx, indexTaskQueue, itemQueue, indexData, progress)
+
+	// Start consumers (parallel bulk indexing)
+	var consumerWg sync.WaitGroup
+	errChan := make(chan error, p.config.NumConsumers)
+
+	for workerID := 0; workerID < p.config.NumConsumers; workerID++ {
+		consumerWg.Add(1)
+		go func(id int) {
+			defer consumerWg.Done()
+			if err := p.consumeIndexTasks(ctx, id, indexTaskQueue, progress); err != nil {
+				errChan <- fmt.Errorf("consumer %d: %w", id, err)
+			}
+		}(workerID)
+	}
+
+	consumerWg.Wait()
+	close(errChan)
+
+	// Check for errors
+	var errs []error
+	for err := range errChan {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("indexing failed for %d consumers: %v", len(errs), errs)
+	}
+
+	// Print final summary
+	log.Info("━━━━━━━━━━━━━━━━━━ FINAL SUMMARY ━━━━━━━━━━━━━━━━━━")
+	progress.PrintProgress(0, p.config.QueueCapacity)
+	log.Info("✓ All types indexed successfully")
+	return nil
+}
+
 // startProducers starts multiple producer goroutines to prepare documents
 func (p *Pipeline) startProducers(
 	ctx context.Context,
@@ -168,6 +241,137 @@ func (p *Pipeline) startProducers(
 		producerWg.Wait()
 		close(taskQueue)
 	}()
+}
+
+// startUnifiedProducers starts producer workers that consume from itemQueue
+// and produce IndexTasks for all types
+func (p *Pipeline) startUnifiedProducers(
+	ctx context.Context,
+	indexTaskQueue chan<- IndexTask,
+	itemQueue <-chan ItemTask,
+	indexData *es.IndexData,
+	progress *ProgressTracker,
+) {
+	var producerWg sync.WaitGroup
+
+	for i := 0; i < p.config.NumProducers; i++ {
+		producerWg.Add(1)
+		go func(producerID int) {
+			defer producerWg.Done()
+			p.produceFromUnifiedQueue(ctx, indexTaskQueue, itemQueue, indexData, progress, producerID)
+		}(i)
+	}
+
+	// Close indexTaskQueue when all producers are done
+	go func() {
+		producerWg.Wait()
+		close(indexTaskQueue)
+	}()
+}
+
+// produceFromUnifiedQueue consumes ItemTasks and produces IndexTasks
+func (p *Pipeline) produceFromUnifiedQueue(
+	ctx context.Context,
+	indexTaskQueue chan<- IndexTask,
+	itemQueue <-chan ItemTask,
+	indexData *es.IndexData,
+	progress *ProgressTracker,
+	producerID int,
+) {
+	indexDate := &utils.Date{Time: time.Now()}
+
+	// Batch items by indexer for relationship loading efficiency
+	const batchSize = 100
+	itemBatch := make(map[Indexer][]ItemTask)
+
+	flushBatch := func() {
+		for indexer, items := range itemBatch {
+			if len(items) == 0 {
+				continue
+			}
+
+			// Extract raw items for LoadRelationships
+			rawItems := make([]interface{}, len(items))
+			for i, it := range items {
+				rawItems[i] = it.Item
+			}
+
+			// Load relationships for this batch
+			if err := indexer.LoadRelationships(ctx, rawItems); err != nil {
+				log.Errorf("Producer %d: failed to load relationships: %v", producerID, err)
+				continue
+			}
+
+			// Process each item
+			for _, itemTask := range items {
+				languages := itemTask.Indexer.GetLanguages()
+				indexNameBase := itemTask.Indexer.GetIndexNameBase()
+
+				// Expand to all languages
+				for _, lang := range languages {
+					doc, skip := itemTask.Indexer.PrepareDocument(
+						ctx, itemTask.Item, lang, indexData, indexDate, progress)
+					if skip || doc == nil {
+						continue
+					}
+
+					indexName := fmt.Sprintf("%s_%s", indexNameBase, lang)
+
+					progress.RecordTaskCreated()
+					progress.RecordLanguage(lang, 1)
+
+					// Push to index task queue
+					select {
+					case indexTaskQueue <- IndexTask{
+						IndexName: indexName,
+						Doc:       doc,
+						Lang:      lang,
+					}:
+						progress.RecordTaskQueued()
+					case <-ctx.Done():
+						log.Warnf("Producer %d: context cancelled", producerID)
+						return
+					}
+				}
+
+				// Record item completion for type tracking
+				progress.RecordItemProcessed()
+				progress.RecordTypeItemProcessed(itemTask.Type)
+			}
+		}
+
+		// Clear batch
+		for indexer := range itemBatch {
+			itemBatch[indexer] = itemBatch[indexer][:0]
+		}
+	}
+
+	// Consume items from queue
+	for {
+		select {
+		case itemTask, ok := <-itemQueue:
+			if !ok {
+				// Queue closed, flush remaining batch
+				flushBatch()
+				return
+			}
+
+			// Add to batch
+			if itemBatch[itemTask.Indexer] == nil {
+				itemBatch[itemTask.Indexer] = make([]ItemTask, 0, batchSize)
+			}
+			itemBatch[itemTask.Indexer] = append(itemBatch[itemTask.Indexer], itemTask)
+
+			// Flush if batch is full
+			if len(itemBatch[itemTask.Indexer]) >= batchSize {
+				flushBatch()
+			}
+
+		case <-ctx.Done():
+			log.Warnf("Producer %d: context cancelled", producerID)
+			return
+		}
+	}
 }
 
 // produceIndexTasks prepares documents and pushes them to the queue
@@ -265,8 +469,14 @@ func (p *Pipeline) consumeIndexTasks(
 			taskSize := estimateTaskSize(task)
 			taskSizeMB := float64(taskSize) / 1024 / 1024
 
-			// Check if adding this task would exceed max batch size
-			if len(batch) > 0 && currentSize+taskSizeMB > p.config.ConsumerBatchSizeMaxMB {
+			// Check if we should flush the batch:
+			// 1. Size exceeds limit OR
+			// 2. Document count exceeds limit
+			shouldFlush := len(batch) > 0 && (
+				currentSize+taskSizeMB > p.config.ConsumerBatchSizeMaxMB ||
+				len(batch) >= p.config.ConsumerBatchMaxDocs)
+
+			if shouldFlush {
 				// Send current batch before adding new task
 				if err := p.sendBulkBatch(ctx, batch, progress); err != nil {
 					return err
