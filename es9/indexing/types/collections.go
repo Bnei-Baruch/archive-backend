@@ -582,6 +582,7 @@ func (idx *CollectionsIndexer) extractSourceAndTags(c *mdbmodels.Collection) (st
 }
 
 // extractContentTypes extracts unique content types from content units
+// Matches ES6 logic: only includes published, non-secure units, excluding certain types
 func (idx *CollectionsIndexer) extractContentTypes(c *mdbmodels.Collection) []string {
 	if c.R == nil {
 		return []string{}
@@ -591,8 +592,11 @@ func (idx *CollectionsIndexer) extractContentTypes(c *mdbmodels.Collection) []st
 	for _, ccu := range c.R.CollectionsContentUnits {
 		if ccu.R != nil && ccu.R.ContentUnit != nil {
 			cu := ccu.R.ContentUnit
-			typeName := mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name
-			typeMap[typeName] = true
+			// Match ES6's defaultContentUnit() filtering (es/content_units_index.go:41-55)
+			if idx.isDefaultContentUnit(cu) {
+				typeName := mdb.CONTENT_TYPE_REGISTRY.ByID[cu.TypeID].Name
+				typeMap[typeName] = true
+			}
 		}
 	}
 
@@ -602,4 +606,36 @@ func (idx *CollectionsIndexer) extractContentTypes(c *mdbmodels.Collection) []st
 	}
 
 	return types
+}
+
+// isDefaultContentUnit matches ES6's defaultContentUnit() logic
+// Returns true if content unit should be included in filter_values
+func (idx *CollectionsIndexer) isDefaultContentUnit(cu *mdbmodels.ContentUnit) bool {
+	// Must be published and not secure
+	if cu.Secure != 0 || !cu.Published {
+		return false
+	}
+
+	// Must not be an excluded type (matches es/content_units_index.go:42-54)
+	excludedTypeIDs := []int64{
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_RESEARCH_MATERIAL].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KTAIM_NIVCHARIM].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID,
+	}
+
+	for _, excludedID := range excludedTypeIDs {
+		if cu.TypeID == excludedID {
+			return false
+		}
+	}
+
+	return true
 }

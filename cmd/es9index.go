@@ -402,6 +402,16 @@ func deleteTypesInParallel(
 		return fmt.Errorf("get ES9 client: %w", err)
 	}
 
+	// Deletion statistics tracking
+	type deleteStats struct {
+		typeName      string
+		langStats     map[string]int // lang -> deleted count
+		totalDeleted  int
+		skippedLangs  int
+	}
+
+	statsChan := make(chan *deleteStats, len(contentTypes))
+
 	for _, contentType := range contentTypes {
 		resultType, ok := resultTypes[contentType]
 		if !ok {
@@ -414,8 +424,10 @@ func deleteTypesInParallel(
 			defer wg.Done()
 
 			languages := consts.ALL_KNOWN_LANGS[:]
-			deletedCount := 0
-			skippedCount := 0
+			stats := &deleteStats{
+				typeName:  typeName,
+				langStats: make(map[string]int),
+			}
 
 			for _, lang := range languages {
 				indexName := fmt.Sprintf("%s_%s", indexNameBase, lang)
@@ -433,33 +445,65 @@ func deleteTypesInParallel(
 
 				if resp.StatusCode == 404 {
 					// Index doesn't exist, skip
-					skippedCount++
+					stats.skippedLangs++
 					continue
 				}
 
 				// Index exists, delete documents
-				if _, err := manager.DeleteByResultType(ctx, indexName, resType); err != nil {
+				deletedCount, err := manager.DeleteByResultType(ctx, indexName, resType)
+				if err != nil {
 					errChan <- fmt.Errorf("delete %s from %s: %w", typeName, indexName, err)
 					return
 				}
-				deletedCount++
+
+				if deletedCount > 0 {
+					stats.langStats[lang] = deletedCount
+					stats.totalDeleted += deletedCount
+				}
 			}
 
-			if deletedCount > 0 {
-				log.Infof("  ✓ Deleted %s from %d indices", typeName, deletedCount)
-			}
-			if skippedCount > 0 {
-				log.Warnf("  ⊘ Skipped %s: %d indices don't exist yet", typeName, skippedCount)
-			}
+			statsChan <- stats
 		}(contentType, resultType)
 	}
 
 	wg.Wait()
 	close(errChan)
+	close(statsChan)
 
 	// Check for errors
 	if len(errChan) > 0 {
 		return <-errChan
+	}
+
+	// Display deletion statistics
+	log.Info("\n=== Deletion Summary ===")
+	grandTotal := 0
+	for stats := range statsChan {
+		if stats.totalDeleted == 0 && stats.skippedLangs > 0 {
+			log.Infof("  ⊘ %s: skipped (%d indices don't exist yet)", stats.typeName, stats.skippedLangs)
+			continue
+		}
+
+		if stats.totalDeleted > 0 {
+			log.Infof("  ✓ %s: deleted %d documents", stats.typeName, stats.totalDeleted)
+
+			// Show per-language breakdown (only languages with deletions)
+			for _, lang := range consts.ALL_KNOWN_LANGS {
+				if count, ok := stats.langStats[lang]; ok && count > 0 {
+					log.Infof("      %s: %d docs", lang, count)
+				}
+			}
+
+			grandTotal += stats.totalDeleted
+		}
+
+		if stats.skippedLangs > 0 {
+			log.Infof("      (skipped %d languages - indices don't exist)", stats.skippedLangs)
+		}
+	}
+
+	if grandTotal > 0 {
+		log.Infof("\nTotal deleted: %d documents across all types", grandTotal)
 	}
 
 	return nil

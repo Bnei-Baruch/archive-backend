@@ -12,29 +12,32 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	es9common "github.com/Bnei-Baruch/archive-backend/es9/common"
 )
 
 var es9switchAliasCmd = &cobra.Command{
 	Use:   "es9-switch-alias",
-	Short: "Switch ES9 alias to point to a different index",
-	Long: `Switch an Elasticsearch 9 alias to point to a different index.
+	Short: "Switch ES9 alias to point to a different index (atomic)",
+	Long: `Switch an Elasticsearch 9 alias to point to a different index atomically.
 If the alias doesn't exist, it will be created.
-If it exists, it will be atomically updated to point to the new index.
+If it exists, it will be atomically updated to point to the new index (removing from old indices).
+
+By default, switches the alias for ALL known languages.
 
 Examples:
-  # Using language flag (recommended)
-  es9-switch-alias --lang en --alias results --index results_pipeline
+  # Switch for all languages (default)
+  es9-switch-alias -a prod_results -i results_v2
 
-  # Using short flags
-  es9-switch-alias -l ru --alias results --index results_pipeline
+  # Switch for specific language
+  es9-switch-alias -l en -a prod_results -i results_v2
 
-  # Without language flag (manual full names)
-  es9-switch-alias --alias results_en --index results_pipeline_en`,
+  # Switch for multiple specific languages
+  es9-switch-alias -l en,ru,he -a prod_results -i results_v2`,
 	Run: func(cmd *cobra.Command, args []string) {
 		aliasName := cmd.Flag("alias").Value.String()
 		indexName := cmd.Flag("index").Value.String()
-		language := cmd.Flag("language").Value.String()
+		languages, _ := cmd.Flags().GetStringSlice("language")
 
 		if aliasName == "" {
 			log.Fatal("--alias flag is required")
@@ -42,23 +45,6 @@ Examples:
 		if indexName == "" {
 			log.Fatal("--index flag is required")
 		}
-
-		// If language provided, append it to both alias and index
-		if language != "" {
-			if !strings.Contains(aliasName, "_") {
-				aliasName = aliasName + "_" + language
-			}
-			if !strings.Contains(indexName, "_"+language) {
-				indexName = indexName + "_" + language
-			}
-		}
-
-		// Add default prefix if not present and no language specified
-		if language == "" && !strings.Contains(aliasName, "_") {
-			aliasName = "results_" + aliasName
-		}
-
-		log.Infof("Switching alias '%s' to index '%s'", aliasName, indexName)
 
 		// Get ES9 URL from config
 		es9URL := viper.GetString("elasticsearch9.url")
@@ -77,33 +63,62 @@ Examples:
 		}
 
 		// Create context with timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 
-		// Switch alias
-		if err := switchAlias(ctx, manager, aliasName, indexName); err != nil {
-			log.Fatalf("Failed to switch alias: %v", err)
+		// If no languages specified, use all known languages
+		if len(languages) == 0 || (len(languages) == 1 && languages[0] == "") {
+			languages = consts.ALL_KNOWN_LANGS[:]
+			log.Infof("Switching alias for all languages: %v", languages)
+		} else {
+			log.Infof("Switching alias for languages: %v", languages)
 		}
 
-		log.Infof("Alias '%s' now points to '%s'", aliasName, indexName)
+		// Switch alias for each language
+		successCount := 0
+		errorCount := 0
+		for _, lang := range languages {
+			fullAliasName := aliasName + "_" + lang
+			fullIndexName := indexName + "_" + lang
+
+			log.Infof("\n[%s] Switching '%s' to '%s'", lang, fullAliasName, fullIndexName)
+
+			if err := switchAlias(ctx, manager, fullAliasName, fullIndexName); err != nil {
+				log.Errorf("[%s] Failed: %v", lang, err)
+				errorCount++
+				continue
+			}
+
+			log.Infof("[%s] ✓ Success", lang)
+			successCount++
+		}
+
+		// Summary
+		log.Infof("\n=== Summary ===")
+		log.Infof("Successful: %d/%d", successCount, len(languages))
+		if errorCount > 0 {
+			log.Errorf("Failed: %d/%d", errorCount, len(languages))
+			log.Fatal("Some alias switches failed")
+		}
+		log.Info("✓ All alias switches completed successfully")
 	},
 }
 
 func init() {
 	RootCmd.AddCommand(es9switchAliasCmd)
 
-	es9switchAliasCmd.Flags().StringP(
+	es9switchAliasCmd.Flags().StringSliceP(
 		"language",
 		"l",
-		"",
-		"Language code (e.g., en, ru, he) - will be appended to both alias and index names",
+		[]string{},
+		"Language codes (e.g., en, ru, he). Multiple values supported. Default: all languages",
 	)
 
 	es9switchAliasCmd.Flags().StringP(
 		"alias",
 		"a",
-		"results",
-		"Alias base name (default: results)",
+		"prod_results",
+		"Alias base name (default: prod_results)",
 	)
 
 	es9switchAliasCmd.Flags().StringP(

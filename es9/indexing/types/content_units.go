@@ -179,16 +179,19 @@ func (idx *ContentUnitsIndexer) IndexAll(ctx context.Context, reset bool) error 
 // defaultContentUnitScope returns the default SQL scope for content units
 // Matches ES6 logic: only published, public units, excluding certain types
 func DefaultContentUnitScope() []qm.QueryMod {
-	// Exclude certain content types
+	// Exclude certain content types (must match ES6: es/content_units_index.go:58-70)
 	excludedTypeIDs := []int64{
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BOOK].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_BLOG_POST].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_RESEARCH_MATERIAL].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KTAIM_NIVCHARIM].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_ARTICLE].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
+		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID,
 	}
 
 	log.Debugf("Building SQL scope with excluded type IDs: %v", excludedTypeIDs)
