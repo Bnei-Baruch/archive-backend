@@ -24,9 +24,6 @@ type CollectionsComparator struct {
 
 // NewCollectionsComparator creates a new collections comparator
 func NewCollectionsComparator(es6Client *elastic.Client, es9Client *elasticsearch.Client, es9IndexBase string) *CollectionsComparator {
-	if es9IndexBase == "" {
-		es9IndexBase = "results" // Collections share the same index as content units
-	}
 	return &CollectionsComparator{
 		es6Client:    es6Client,
 		es9Client:    es9Client,

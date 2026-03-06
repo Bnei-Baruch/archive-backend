@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/elastic/go-elasticsearch/v9"
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -18,11 +19,12 @@ import (
 
 var es9listCmd = &cobra.Command{
 	Use:   "es9-list-indices",
-	Short: "List all ES9 indices with statistics",
+	Short: "List all ES9 indices with statistics and aliases",
 	Long: `List all Elasticsearch 9 indices showing:
 - Index names grouped by base name
 - Document counts per index and per result type
 - Index sizes
+- Aliases and their targets
 - Summary statistics by language and result type`,
 	Run: func(cmd *cobra.Command, args []string) {
 		pattern := cmd.Flag("pattern").Value.String()
@@ -73,6 +75,9 @@ type IndexInfo struct {
 	Size       string
 	SizeBytes  int64
 	ResultType map[string]int64 // result_type -> count
+	Aliases    []string         // Alias names pointing to this index
+	IsAlias    bool             // True if this name is an alias (not a real index)
+	AliasFor   []string         // If IsAlias=true, the indices this alias points to
 }
 
 type IndexStats struct {
@@ -121,6 +126,13 @@ func listIndices(ctx context.Context, manager *es9common.ES9Manager, pattern str
 		return nil
 	}
 
+	// Get alias information for all indices
+	aliasMap, err := getAllAliases(ctx, client, pattern)
+	if err != nil {
+		log.Warnf("Failed to get aliases: %v", err)
+		aliasMap = make(map[string][]string) // Continue without aliases
+	}
+
 	// Collect detailed stats for each index
 	stats := &IndexStats{
 		BaseGroups:   make(map[string][]IndexInfo),
@@ -143,12 +155,16 @@ func listIndices(ctx context.Context, manager *es9common.ES9Manager, pattern str
 			resultTypeCounts = make(map[string]int64)
 		}
 
+		// Get aliases for this index
+		aliases := aliasMap[indexName]
+
 		info := IndexInfo{
 			Name:       indexName,
 			DocCount:   docCount,
 			Size:       storeSize,
 			SizeBytes:  sizeBytes,
 			ResultType: resultTypeCounts,
+			Aliases:    aliases,
 		}
 
 		// Extract base name and language
@@ -176,6 +192,48 @@ func listIndices(ctx context.Context, manager *es9common.ES9Manager, pattern str
 	printIndexStats(stats)
 
 	return nil
+}
+
+func getAllAliases(ctx context.Context, client *elasticsearch.Client, pattern string) (map[string][]string, error) {
+	// Get aliases for all indices matching pattern
+	// Returns map[indexName][]aliasName
+	aliasResp, err := client.Indices.GetAlias(
+		client.Indices.GetAlias.WithIndex(pattern),
+		client.Indices.GetAlias.WithContext(ctx),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get aliases: %w", err)
+	}
+	defer aliasResp.Body.Close()
+
+	if aliasResp.IsError() {
+		// No aliases is not an error, just return empty map
+		if aliasResp.StatusCode == 404 {
+			return make(map[string][]string), nil
+		}
+		return nil, fmt.Errorf("get aliases error: %s", aliasResp.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(aliasResp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode aliases response: %w", err)
+	}
+
+	// Parse response: { "index_name": { "aliases": { "alias1": {}, "alias2": {} } } }
+	aliasMap := make(map[string][]string)
+	for indexName, indexData := range result {
+		if indexInfo, ok := indexData.(map[string]interface{}); ok {
+			if aliases, ok := indexInfo["aliases"].(map[string]interface{}); ok {
+				for aliasName := range aliases {
+					aliasMap[indexName] = append(aliasMap[indexName], aliasName)
+				}
+				// Sort aliases for consistent display
+				sort.Strings(aliasMap[indexName])
+			}
+		}
+	}
+
+	return aliasMap, nil
 }
 
 func getResultTypeBreakdown(ctx context.Context, manager *es9common.ES9Manager, indexName string) (map[string]int64, error) {
@@ -257,7 +315,7 @@ func printIndexStats(stats *IndexStats) {
 		totalLanguages := len(indices)
 		fmt.Printf("Base: %s (%d languages)\n", baseName, totalLanguages)
 		fmt.Printf("------------------------------------------------------------------------------\n")
-		fmt.Printf("%-25s %10s %10s  %s\n", "Index", "Docs", "Size", "Result Types")
+		fmt.Printf("%-25s %10s %10s  %-30s %s\n", "Index", "Docs", "Size", "Result Types", "Aliases")
 		fmt.Printf("------------------------------------------------------------------------------\n")
 
 		// Show only top 10 languages
@@ -288,11 +346,22 @@ func printIndexStats(stats *IndexStats) {
 				resultTypeSummary = strings.Join(parts, " ")
 			}
 
-			fmt.Printf("%-25s %10s %10s  %s\n",
+			// Build alias summary
+			aliasSummary := ""
+			if len(idx.Aliases) > 0 {
+				if len(idx.Aliases) == 1 {
+					aliasSummary = fmt.Sprintf("→ %s", idx.Aliases[0])
+				} else {
+					aliasSummary = fmt.Sprintf("→ %s +%d", idx.Aliases[0], len(idx.Aliases)-1)
+				}
+			}
+
+			fmt.Printf("%-25s %10s %10s  %-30s %s\n",
 				idx.Name,
 				formatCompact(idx.DocCount),
 				idx.Size,
-				resultTypeSummary)
+				resultTypeSummary,
+				aliasSummary)
 		}
 
 		// Show message if there are more languages
