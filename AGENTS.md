@@ -31,10 +31,13 @@ Instructions for coding agents working in this repository.
 - Register tools with `ReasoningToolManager`.
 - Pass `manager.ToolCalls()` and `manager.ToolHandlers()` into `GetReasoningResponseWithTools`.
 
-## Implemented Tool
+## Implemented Tools
 - `source_lookup` in `search/LLM/source_lookup_tool.go`.
 - Input: `source_id` (required), `language` (optional).
 - Behavior: find public source doc/docx file UID, fetch text via `Doc2Text`, cache in memory, return text.
+- `transcript_lookup` in `search/LLM/transcript_lookup_tool.go`.
+- Input: `content_unit_id` (required), `language` (optional).
+- Behavior: find transcript doc/docx for the content unit, fetch text via `Doc2Text`, cache in memory, return text.
 
 ## Coding Notes
 - Prefer explicit errors over silent failures.
