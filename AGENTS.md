@@ -38,6 +38,10 @@ Instructions for coding agents working in this repository.
 - `transcript_lookup` in `search/LLM/transcript_lookup_tool.go`.
 - Input: `content_unit_id` (required), `language` (optional).
 - Behavior: find transcript doc/docx for the content unit, fetch text via `Doc2Text`, cache in memory, return text.
+- PostgreSQL list tools in `search/LLM/postgresql_tools.go`.
+- `get_sources_by_author`: return sources by `author_id` (author code or MDB id).
+- `get_collections`: return public collections, optionally filtered by `collection_id`, `content_type`, or text query.
+- `get_content_units_by_collection`: return public content units for a `collection_id`.
 
 ## Coding Notes
 - Prefer explicit errors over silent failures.

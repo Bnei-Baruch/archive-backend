@@ -75,3 +75,20 @@ func TestReasoningToolManagerGeneratesToolCallsAndHandlers(t *testing.T) {
 		t.Fatalf("unexpected handler result: %s", result)
 	}
 }
+
+func TestPostgreSQLToolDefinitions(t *testing.T) {
+	sourcesByAuthor := NewGetSourcesByAuthorTool(nil).Definition()
+	if sourcesByAuthor.Name != "get_sources_by_author" {
+		t.Fatalf("unexpected get_sources_by_author tool name: %s", sourcesByAuthor.Name)
+	}
+
+	collections := NewGetCollectionsTool(nil).Definition()
+	if collections.Name != "get_collections" {
+		t.Fatalf("unexpected get_collections tool name: %s", collections.Name)
+	}
+
+	contentUnitsByCollection := NewGetContentUnitsByCollectionTool(nil).Definition()
+	if contentUnitsByCollection.Name != "get_content_units_by_collection" {
+		t.Fatalf("unexpected get_content_units_by_collection tool name: %s", contentUnitsByCollection.Name)
+	}
+}
