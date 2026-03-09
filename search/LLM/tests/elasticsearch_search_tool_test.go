@@ -67,7 +67,7 @@ func TestElasticsearchSearchToolExecuteExactPhrase(t *testing.T) {
 	}
 	tool := llmtools.NewElasticsearchSearchTool(engine, 2*time.Second)
 
-	result, err := tool.Execute(json.RawMessage(`{
+	result, err := tool.Execute(context.Background(), json.RawMessage(`{
 		"query":"\"love friends\"",
 		"filters":{"content_type":"lesson","media_language":["he"]},
 		"language":"es",
@@ -138,7 +138,7 @@ func TestElasticsearchSearchToolExecuteMergesParsedFilters(t *testing.T) {
 	}
 	tool := llmtools.NewElasticsearchSearchTool(engine, time.Second)
 
-	_, err := tool.Execute(json.RawMessage(`{
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{
 		"query":"tag:daily author:rav transcript",
 		"filters":{"person":["p1"]}
 	}`))
@@ -172,7 +172,7 @@ func TestElasticsearchSearchToolExecuteFilterOnlySearch(t *testing.T) {
 	}
 	tool := llmtools.NewElasticsearchSearchTool(engine, 0)
 
-	_, err := tool.Execute(json.RawMessage(`{
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{
 		"filters":{"content_type":["lesson"]}
 	}`))
 	if err != nil {
@@ -190,7 +190,7 @@ func TestElasticsearchSearchToolExecuteFilterOnlySearch(t *testing.T) {
 func TestElasticsearchSearchToolExecuteRejectsUnknownFilter(t *testing.T) {
 	tool := llmtools.NewElasticsearchSearchTool(&fakeElasticsearchSearchEngine{}, 0)
 
-	_, err := tool.Execute(json.RawMessage(`{
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{
 		"filters":{"unsupported":["x"]}
 	}`))
 	if err == nil {

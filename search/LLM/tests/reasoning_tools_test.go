@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"strings"
@@ -19,7 +20,8 @@ func (t *fakeReasoningTool) Definition() llm.ReasoningToolDefinition {
 	return t.definition
 }
 
-func (t *fakeReasoningTool) Execute(arguments json.RawMessage) (string, error) {
+func (t *fakeReasoningTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
+	_ = ctx
 	return "ok", nil
 }
 
@@ -73,7 +75,7 @@ func TestReasoningToolManagerGeneratesToolCallsAndHandlers(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing handler for source_lookup")
 	}
-	result, err := handler(json.RawMessage(`{"source_id":"abc123"}`))
+	result, err := handler(context.Background(), json.RawMessage(`{"source_id":"abc123"}`))
 	if err != nil {
 		t.Fatalf("unexpected handler error: %v", err)
 	}

@@ -2,6 +2,7 @@ package llm
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,7 +61,7 @@ type MessageToolCall struct {
 	Function ToolCallFunction `json:"function"`
 }
 
-type ToolHandler func(arguments json.RawMessage) (string, error)
+type ToolHandler func(ctx context.Context, arguments json.RawMessage) (string, error)
 
 type ResponsesRequest struct {
 	Model              string                   `json:"model"`
@@ -208,6 +209,7 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 	toolHandlers map[string]ToolHandler,
 	user *string,
 	reasoningEffort *string,
+	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
 	if len(tools) == 0 {
@@ -219,6 +221,7 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 	if maxIterations <= 0 {
 		maxIterations = 8
 	}
+	reasoningCtx := ContextWithDeb(context.Background(), deb)
 
 	sysMsgCount := 0
 	var instructions string
@@ -320,7 +323,7 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 				return nil, fmt.Errorf("invalid arguments for tool '%s': %s", toolCall.Name, toolCall.Arguments)
 			}
 
-			result, err := handler(rawArgs)
+			result, err := handler(reasoningCtx, rawArgs)
 			if err != nil {
 				return nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Name, err)
 			}

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -130,7 +131,7 @@ func (t *SourceLookupTool) Definition() llm.ReasoningToolDefinition {
 	}
 }
 
-func (t *SourceLookupTool) Execute(arguments json.RawMessage) (string, error) {
+func (t *SourceLookupTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	if t.db == nil {
 		return "", fmt.Errorf("source_lookup: db is nil")
 	}
@@ -148,9 +149,11 @@ func (t *SourceLookupTool) Execute(arguments json.RawMessage) (string, error) {
 		return "", fmt.Errorf("source_lookup: source_id is required")
 	}
 	language := strings.ToLower(strings.TrimSpace(args.Language))
+	llm.LogIfDeb(ctx, "source_lookup: start source_id=%q language=%q", sourceID, language)
 
 	cacheKey := sourceID + "|" + language
 	if value, ok := t.getFromCache(cacheKey); ok {
+		llm.LogIfDeb(ctx, "source_lookup: cache hit source_id=%q language=%q content_len=%d", sourceID, language, len(value))
 		return value, nil
 	}
 
@@ -159,9 +162,11 @@ func (t *SourceLookupTool) Execute(arguments json.RawMessage) (string, error) {
 		return "", err
 	}
 	if fileUID == "" {
+		llm.LogIfDeb(ctx, "source_lookup: no file uid found source_id=%q language=%q", sourceID, language)
 		t.setCache(cacheKey, "")
 		return "", nil
 	}
+	llm.LogIfDeb(ctx, "source_lookup: resolved file uid source_id=%q language=%q file_uid=%q", sourceID, language, fileUID)
 
 	content, err := t.assetsService.Doc2Text(fileUID)
 	if err != nil {
@@ -169,6 +174,7 @@ func (t *SourceLookupTool) Execute(arguments json.RawMessage) (string, error) {
 	}
 
 	t.setCache(cacheKey, content)
+	llm.LogIfDeb(ctx, "source_lookup: completed source_id=%q language=%q file_uid=%q content_len=%d", sourceID, language, fileUID, len(content))
 	return content, nil
 }
 

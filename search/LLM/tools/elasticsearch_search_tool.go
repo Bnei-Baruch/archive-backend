@@ -121,7 +121,7 @@ func (t *ElasticsearchSearchTool) Definition() llm.ReasoningToolDefinition {
 	}
 }
 
-func (t *ElasticsearchSearchTool) Execute(arguments json.RawMessage) (string, error) {
+func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	engine, err := t.getEngine()
 	if err != nil {
 		return "", err
@@ -131,11 +131,13 @@ func (t *ElasticsearchSearchTool) Execute(arguments json.RawMessage) (string, er
 	if err := json.Unmarshal(arguments, &args); err != nil {
 		return "", fmt.Errorf("elasticsearch_search: failed to parse arguments: %w", err)
 	}
+	llm.LogIfDeb(ctx, "elasticsearch_search: start query=%q language=%q sort_by=%q from=%d size=%d exact_phrase=%t", args.Query, args.Language, args.SortBy, args.From, args.Size, args.ExactPhrase)
 
 	filters, err := normalizeElasticsearchSearchFilters(args.Filters)
 	if err != nil {
 		return "", err
 	}
+	llm.LogIfDeb(ctx, "elasticsearch_search: normalized filters=%v", filters)
 
 	queryText := strings.TrimSpace(args.Query)
 	if queryText == "" && len(filters) == 0 {
@@ -150,6 +152,7 @@ func (t *ElasticsearchSearchTool) Execute(arguments json.RawMessage) (string, er
 		return "", fmt.Errorf("elasticsearch_search: exact_phrase requires a non-empty query")
 	}
 	query.Filters = mergeElasticsearchSearchFilters(query.Filters, filters)
+	query.Deb = llm.DebFromContext(ctx)
 
 	language := normalizeElasticsearchSearchLanguage(args.Language)
 	setElasticsearchSearchLanguageOrder(&query, language)
@@ -165,6 +168,7 @@ func (t *ElasticsearchSearchTool) Execute(arguments json.RawMessage) (string, er
 	if err != nil {
 		return "", fmt.Errorf("elasticsearch_search: failed to build search preference: %w", err)
 	}
+	llm.LogIfDeb(ctx, "elasticsearch_search: prepared query term=%q exact_terms=%v filters=%v language_order=%v sort_by=%q from=%d size=%d preference=%q", query.Term, query.ExactTerms, query.Filters, query.LanguageOrder, sortBy, from, size, preference)
 
 	result, err := engine.DoSearch(
 		context.Background(),
@@ -182,6 +186,15 @@ func (t *ElasticsearchSearchTool) Execute(arguments json.RawMessage) (string, er
 	if err != nil {
 		return "", fmt.Errorf("elasticsearch_search: DoSearch failed: %w", err)
 	}
+	hitCount := int64(0)
+	if result != nil && result.SearchResult != nil && result.SearchResult.Hits != nil {
+		hitCount = result.SearchResult.Hits.TotalHits
+	}
+	resultLanguage := ""
+	if result != nil {
+		resultLanguage = result.Language
+	}
+	llm.LogIfDeb(ctx, "elasticsearch_search: completed language=%q hits=%d", resultLanguage, hitCount)
 
 	return marshalPostgreSQLToolResult(elasticsearchSearchToolResult{
 		Query:  query,

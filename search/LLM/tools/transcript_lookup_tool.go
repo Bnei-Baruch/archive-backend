@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -137,7 +138,7 @@ func (t *TranscriptLookupTool) Definition() llm.ReasoningToolDefinition {
 	}
 }
 
-func (t *TranscriptLookupTool) Execute(arguments json.RawMessage) (string, error) {
+func (t *TranscriptLookupTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	if t.db == nil {
 		return "", fmt.Errorf("transcript_lookup: db is nil")
 	}
@@ -160,12 +161,15 @@ func (t *TranscriptLookupTool) Execute(arguments json.RawMessage) (string, error
 		return "", fmt.Errorf("transcript_lookup: content_unit_id is required")
 	}
 	language := strings.ToLower(strings.TrimSpace(args.Language))
+	llm.LogIfDeb(ctx, "transcript_lookup: start content_unit_id=%q language=%q", contentUnitID, language)
 
 	cacheKey := contentUnitID + "|" + language
 	if value, ok := t.getFromCache(cacheKey); ok {
 		if value == "" {
+			llm.LogIfDeb(ctx, "transcript_lookup: cached miss content_unit_id=%q language=%q", contentUnitID, language)
 			return "", transcriptNotFoundError(contentUnitID, language)
 		}
+		llm.LogIfDeb(ctx, "transcript_lookup: cache hit content_unit_id=%q language=%q content_len=%d", contentUnitID, language, len(value))
 		return value, nil
 	}
 
@@ -174,9 +178,11 @@ func (t *TranscriptLookupTool) Execute(arguments json.RawMessage) (string, error
 		return "", err
 	}
 	if fileUID == "" {
+		llm.LogIfDeb(ctx, "transcript_lookup: no transcript file found content_unit_id=%q language=%q", contentUnitID, language)
 		t.setCache(cacheKey, "")
 		return "", transcriptNotFoundError(contentUnitID, language)
 	}
+	llm.LogIfDeb(ctx, "transcript_lookup: resolved file uid content_unit_id=%q language=%q file_uid=%q", contentUnitID, language, fileUID)
 
 	content, err := t.assetsService.Doc2Text(fileUID)
 	if err != nil {
@@ -184,6 +190,7 @@ func (t *TranscriptLookupTool) Execute(arguments json.RawMessage) (string, error
 	}
 
 	t.setCache(cacheKey, content)
+	llm.LogIfDeb(ctx, "transcript_lookup: completed content_unit_id=%q language=%q file_uid=%q content_len=%d", contentUnitID, language, fileUID, len(content))
 	return content, nil
 }
 

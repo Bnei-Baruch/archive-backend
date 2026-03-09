@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -368,7 +369,7 @@ func (t *GetContentUnitsByCollectionTool) Definition() llm.ReasoningToolDefiniti
 	}
 }
 
-func (t *GetSourcesByAuthorTool) Execute(arguments json.RawMessage) (string, error) {
+func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	if t.db == nil {
 		return "", fmt.Errorf("get_sources_by_author: db is nil")
 	}
@@ -385,11 +386,13 @@ func (t *GetSourcesByAuthorTool) Execute(arguments json.RawMessage) (string, err
 
 	language := normalizePostgreSQLToolLanguage(args.Language)
 	limit := normalizePostgreSQLToolLimit(args.Limit)
+	llm.LogIfDeb(ctx, "get_sources_by_author: start author_id=%q language=%q limit=%d", authorID, language, limit)
 
 	author, err := loadAuthorToolResult(t.db, authorID, language)
 	if err != nil {
 		return "", err
 	}
+	llm.LogIfDeb(ctx, "get_sources_by_author: resolved author mdb_id=%d code=%q", author.MDBID, author.Code)
 
 	rows, err := t.db.Query(sourcesByAuthorQuery, language, author.MDBID, consts.SEC_PUBLIC, limit)
 	if err != nil {
@@ -418,6 +421,7 @@ func (t *GetSourcesByAuthorTool) Execute(arguments json.RawMessage) (string, err
 	if err := rows.Err(); err != nil {
 		return "", fmt.Errorf("get_sources_by_author: rows iteration failed: %w", err)
 	}
+	llm.LogIfDeb(ctx, "get_sources_by_author: completed author_id=%q returned_count=%d", authorID, len(items))
 
 	return marshalPostgreSQLToolResult(sourcesByAuthorToolResult{
 		Author:        author,
@@ -426,7 +430,7 @@ func (t *GetSourcesByAuthorTool) Execute(arguments json.RawMessage) (string, err
 	})
 }
 
-func (t *GetCollectionsTool) Execute(arguments json.RawMessage) (string, error) {
+func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	if t.db == nil {
 		return "", fmt.Errorf("get_collections: db is nil")
 	}
@@ -441,6 +445,7 @@ func (t *GetCollectionsTool) Execute(arguments json.RawMessage) (string, error) 
 	collectionID := strings.TrimSpace(args.CollectionID)
 	contentType := strings.TrimSpace(args.ContentType)
 	textQuery := strings.TrimSpace(args.Query)
+	llm.LogIfDeb(ctx, "get_collections: start collection_id=%q content_type=%q query=%q language=%q limit=%d", collectionID, contentType, textQuery, language, limit)
 
 	queryArgs := []interface{}{language, consts.SEC_PUBLIC}
 	query := strings.Builder{}
@@ -493,8 +498,10 @@ func (t *GetCollectionsTool) Execute(arguments json.RawMessage) (string, error) 
 	}
 
 	if collectionID != "" && len(items) == 0 {
+		llm.LogIfDeb(ctx, "get_collections: collection not found collection_id=%q", collectionID)
 		return "", fmt.Errorf("get_collections: collection not found for collection_id '%s'", collectionID)
 	}
+	llm.LogIfDeb(ctx, "get_collections: completed collection_id=%q returned_count=%d", collectionID, len(items))
 
 	return marshalPostgreSQLToolResult(collectionsToolResult{
 		ReturnedCount: len(items),
@@ -502,7 +509,7 @@ func (t *GetCollectionsTool) Execute(arguments json.RawMessage) (string, error) 
 	})
 }
 
-func (t *GetContentUnitsByCollectionTool) Execute(arguments json.RawMessage) (string, error) {
+func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	if t.db == nil {
 		return "", fmt.Errorf("get_content_units_by_collection: db is nil")
 	}
@@ -519,11 +526,13 @@ func (t *GetContentUnitsByCollectionTool) Execute(arguments json.RawMessage) (st
 
 	language := normalizePostgreSQLToolLanguage(args.Language)
 	limit := normalizePostgreSQLToolLimit(args.Limit)
+	llm.LogIfDeb(ctx, "get_content_units_by_collection: start collection_id=%q language=%q limit=%d", collectionID, language, limit)
 
 	collection, err := loadCollectionToolResult(t.db, collectionID, language)
 	if err != nil {
 		return "", err
 	}
+	llm.LogIfDeb(ctx, "get_content_units_by_collection: resolved collection mdb_id=%d uid=%q", collection.MDBID, collection.UID)
 
 	rows, err := t.db.Query(contentUnitsByCollectionQuery, language, collection.MDBID, consts.SEC_PUBLIC, limit)
 	if err != nil {
@@ -553,6 +562,7 @@ func (t *GetContentUnitsByCollectionTool) Execute(arguments json.RawMessage) (st
 	if err := rows.Err(); err != nil {
 		return "", fmt.Errorf("get_content_units_by_collection: rows iteration failed: %w", err)
 	}
+	llm.LogIfDeb(ctx, "get_content_units_by_collection: completed collection_id=%q returned_count=%d", collectionID, len(items))
 
 	return marshalPostgreSQLToolResult(contentUnitsByCollectionToolResult{
 		Collection:    collection,

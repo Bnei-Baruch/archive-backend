@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 )
@@ -13,7 +14,7 @@ type ReasoningToolDefinition struct {
 
 type ReasoningTool interface {
 	Definition() ReasoningToolDefinition
-	Execute(arguments json.RawMessage) (string, error)
+	Execute(ctx context.Context, arguments json.RawMessage) (string, error)
 }
 
 type ReasoningToolManager struct {
