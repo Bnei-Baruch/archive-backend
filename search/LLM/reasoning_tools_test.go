@@ -92,3 +92,10 @@ func TestPostgreSQLToolDefinitions(t *testing.T) {
 		t.Fatalf("unexpected get_content_units_by_collection tool name: %s", contentUnitsByCollection.Name)
 	}
 }
+
+func TestElasticsearchSearchToolDefinition(t *testing.T) {
+	elasticsearchSearch := NewElasticsearchSearchTool(nil, 0).Definition()
+	if elasticsearchSearch.Name != "elasticsearch_search" {
+		t.Fatalf("unexpected elasticsearch_search tool name: %s", elasticsearchSearch.Name)
+	}
+}

@@ -42,6 +42,9 @@ Instructions for coding agents working in this repository.
 - `get_sources_by_author`: return sources by `author_id` (author code or MDB id).
 - `get_collections`: return public collections, optionally filtered by `collection_id`, `content_type`, or text query.
 - `get_content_units_by_collection`: return public content units for a `collection_id`.
+- `elasticsearch_search` in `search/LLM/elasticsearch_search_tool.go`.
+- Input: `query` (optional if filters are provided), `filters`, `language`, `sort_by`, `from`, `size`, `exact_phrase`.
+- Behavior: normalize filters, build `search.Query`, run `search.ESEngine.DoSearch`, return JSON.
 
 ## Coding Notes
 - Prefer explicit errors over silent failures.
