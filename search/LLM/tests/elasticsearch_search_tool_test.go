@@ -1,4 +1,4 @@
-package llm
+package tests
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/search"
+	llmtools "github.com/Bnei-Baruch/archive-backend/search/LLM/tools"
 )
 
 type fakeElasticsearchSearchEngine struct {
@@ -26,6 +27,11 @@ type fakeElasticsearchSearchEngine struct {
 
 	result *search.QueryResult
 	err    error
+}
+
+type elasticsearchSearchToolPayload struct {
+	SortBy string              `json:"sort_by"`
+	Result *search.QueryResult `json:"result,omitempty"`
 }
 
 func (e *fakeElasticsearchSearchEngine) DoSearch(
@@ -59,7 +65,7 @@ func TestElasticsearchSearchToolExecuteExactPhrase(t *testing.T) {
 	engine := &fakeElasticsearchSearchEngine{
 		result: &search.QueryResult{Language: consts.LANG_SPANISH},
 	}
-	tool := NewElasticsearchSearchTool(engine, 2*time.Second)
+	tool := llmtools.NewElasticsearchSearchTool(engine, 2*time.Second)
 
 	result, err := tool.Execute(json.RawMessage(`{
 		"query":"\"love friends\"",
@@ -114,7 +120,7 @@ func TestElasticsearchSearchToolExecuteExactPhrase(t *testing.T) {
 		t.Fatalf("unexpected timeout: %s", engine.timeout)
 	}
 
-	payload := elasticsearchSearchToolResult{}
+	payload := elasticsearchSearchToolPayload{}
 	if err := json.Unmarshal([]byte(result), &payload); err != nil {
 		t.Fatalf("failed to unmarshal tool result: %v", err)
 	}
@@ -130,7 +136,7 @@ func TestElasticsearchSearchToolExecuteMergesParsedFilters(t *testing.T) {
 	engine := &fakeElasticsearchSearchEngine{
 		result: &search.QueryResult{Language: consts.LANG_ENGLISH},
 	}
-	tool := NewElasticsearchSearchTool(engine, time.Second)
+	tool := llmtools.NewElasticsearchSearchTool(engine, time.Second)
 
 	_, err := tool.Execute(json.RawMessage(`{
 		"query":"tag:daily author:rav transcript",
@@ -164,7 +170,7 @@ func TestElasticsearchSearchToolExecuteFilterOnlySearch(t *testing.T) {
 	engine := &fakeElasticsearchSearchEngine{
 		result: &search.QueryResult{Language: consts.LANG_ENGLISH},
 	}
-	tool := NewElasticsearchSearchTool(engine, 0)
+	tool := llmtools.NewElasticsearchSearchTool(engine, 0)
 
 	_, err := tool.Execute(json.RawMessage(`{
 		"filters":{"content_type":["lesson"]}
@@ -182,7 +188,7 @@ func TestElasticsearchSearchToolExecuteFilterOnlySearch(t *testing.T) {
 }
 
 func TestElasticsearchSearchToolExecuteRejectsUnknownFilter(t *testing.T) {
-	tool := NewElasticsearchSearchTool(&fakeElasticsearchSearchEngine{}, 0)
+	tool := llmtools.NewElasticsearchSearchTool(&fakeElasticsearchSearchEngine{}, 0)
 
 	_, err := tool.Execute(json.RawMessage(`{
 		"filters":{"unsupported":["x"]}

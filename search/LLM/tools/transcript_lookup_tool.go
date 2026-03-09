@@ -1,4 +1,4 @@
-package llm
+package tools
 
 import (
 	"database/sql"
@@ -11,6 +11,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/integration"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
+	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 )
 
 const (
@@ -114,8 +115,8 @@ func NewTranscriptLookupTool(db *sql.DB, assetsService integration.AssetsService
 	}
 }
 
-func (t *TranscriptLookupTool) Definition() ReasoningToolDefinition {
-	return ReasoningToolDefinition{
+func (t *TranscriptLookupTool) Definition() llm.ReasoningToolDefinition {
+	return llm.ReasoningToolDefinition{
 		Name:        "transcript_lookup",
 		Description: "Retrieve transcript text by content_unit_id.",
 		Parameters: map[string]interface{}{

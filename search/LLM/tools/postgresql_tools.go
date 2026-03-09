@@ -1,4 +1,4 @@
-package llm
+package tools
 
 import (
 	"database/sql"
@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 )
 
 const (
@@ -282,8 +283,8 @@ func NewGetContentUnitsByCollectionTool(db *sql.DB) *GetContentUnitsByCollection
 	return &GetContentUnitsByCollectionTool{db: db}
 }
 
-func (t *GetSourcesByAuthorTool) Definition() ReasoningToolDefinition {
-	return ReasoningToolDefinition{
+func (t *GetSourcesByAuthorTool) Definition() llm.ReasoningToolDefinition {
+	return llm.ReasoningToolDefinition{
 		Name:        "get_sources_by_author",
 		Description: "Return sources linked to an author from PostgreSQL by author_id.",
 		Parameters: map[string]interface{}{
@@ -308,8 +309,8 @@ func (t *GetSourcesByAuthorTool) Definition() ReasoningToolDefinition {
 	}
 }
 
-func (t *GetCollectionsTool) Definition() ReasoningToolDefinition {
-	return ReasoningToolDefinition{
+func (t *GetCollectionsTool) Definition() llm.ReasoningToolDefinition {
+	return llm.ReasoningToolDefinition{
 		Name:        "get_collections",
 		Description: "Return public collections from PostgreSQL, optionally filtered by collection_id, content_type, or text query.",
 		Parameters: map[string]interface{}{
@@ -341,8 +342,8 @@ func (t *GetCollectionsTool) Definition() ReasoningToolDefinition {
 	}
 }
 
-func (t *GetContentUnitsByCollectionTool) Definition() ReasoningToolDefinition {
-	return ReasoningToolDefinition{
+func (t *GetContentUnitsByCollectionTool) Definition() llm.ReasoningToolDefinition {
+	return llm.ReasoningToolDefinition{
 		Name:        "get_content_units_by_collection",
 		Description: "Return public content units that belong to a collection from PostgreSQL by collection_id.",
 		Parameters: map[string]interface{}{

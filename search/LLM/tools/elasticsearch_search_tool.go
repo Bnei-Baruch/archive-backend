@@ -1,4 +1,4 @@
-package llm
+package tools
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/search"
+	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
@@ -60,8 +61,8 @@ func NewElasticsearchSearchTool(engine ElasticsearchSearchEngine, timeoutForHigh
 	}
 }
 
-func (t *ElasticsearchSearchTool) Definition() ReasoningToolDefinition {
-	return ReasoningToolDefinition{
+func (t *ElasticsearchSearchTool) Definition() llm.ReasoningToolDefinition {
+	return llm.ReasoningToolDefinition{
 		Name:        "elasticsearch_search",
 		Description: "Search archive content through Elasticsearch with optional filters and exact phrase search.",
 		Parameters: map[string]interface{}{

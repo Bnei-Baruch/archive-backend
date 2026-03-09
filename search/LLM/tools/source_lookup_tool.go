@@ -1,4 +1,4 @@
-package llm
+package tools
 
 import (
 	"database/sql"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/integration"
+	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 )
 
 const (
@@ -107,8 +108,8 @@ func NewSourceLookupTool(db *sql.DB, assetsService integration.AssetsService) *S
 	}
 }
 
-func (t *SourceLookupTool) Definition() ReasoningToolDefinition {
-	return ReasoningToolDefinition{
+func (t *SourceLookupTool) Definition() llm.ReasoningToolDefinition {
+	return llm.ReasoningToolDefinition{
 		Name:        "source_lookup",
 		Description: "Retrieve source document text from CDN by source_id.",
 		Parameters: map[string]interface{}{
