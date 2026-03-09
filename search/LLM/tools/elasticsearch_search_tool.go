@@ -31,8 +31,11 @@ type ElasticsearchSearchEngine interface {
 	) (*search.QueryResult, error)
 }
 
+type ElasticsearchSearchEngineFactory func() (ElasticsearchSearchEngine, error)
+
 type ElasticsearchSearchTool struct {
 	engine              ElasticsearchSearchEngine
+	engineFactory       ElasticsearchSearchEngineFactory
 	timeoutForHighlight time.Duration
 }
 
@@ -57,6 +60,13 @@ type elasticsearchSearchToolResult struct {
 func NewElasticsearchSearchTool(engine ElasticsearchSearchEngine, timeoutForHighlight time.Duration) *ElasticsearchSearchTool {
 	return &ElasticsearchSearchTool{
 		engine:              engine,
+		timeoutForHighlight: timeoutForHighlight,
+	}
+}
+
+func NewElasticsearchSearchToolWithFactory(engineFactory ElasticsearchSearchEngineFactory, timeoutForHighlight time.Duration) *ElasticsearchSearchTool {
+	return &ElasticsearchSearchTool{
+		engineFactory:       engineFactory,
 		timeoutForHighlight: timeoutForHighlight,
 	}
 }
@@ -112,8 +122,9 @@ func (t *ElasticsearchSearchTool) Definition() llm.ReasoningToolDefinition {
 }
 
 func (t *ElasticsearchSearchTool) Execute(arguments json.RawMessage) (string, error) {
-	if t.engine == nil {
-		return "", fmt.Errorf("elasticsearch_search: engine is nil")
+	engine, err := t.getEngine()
+	if err != nil {
+		return "", err
 	}
 
 	args := elasticsearchSearchToolArgs{}
@@ -155,7 +166,7 @@ func (t *ElasticsearchSearchTool) Execute(arguments json.RawMessage) (string, er
 		return "", fmt.Errorf("elasticsearch_search: failed to build search preference: %w", err)
 	}
 
-	result, err := t.engine.DoSearch(
+	result, err := engine.DoSearch(
 		context.Background(),
 		query,
 		sortBy,
@@ -179,6 +190,23 @@ func (t *ElasticsearchSearchTool) Execute(arguments json.RawMessage) (string, er
 		Size:   size,
 		Result: result,
 	})
+}
+
+func (t *ElasticsearchSearchTool) getEngine() (ElasticsearchSearchEngine, error) {
+	if t.engineFactory != nil {
+		engine, err := t.engineFactory()
+		if err != nil {
+			return nil, fmt.Errorf("elasticsearch_search: failed to build engine: %w", err)
+		}
+		if engine == nil {
+			return nil, fmt.Errorf("elasticsearch_search: engine factory returned nil")
+		}
+		return engine, nil
+	}
+	if t.engine == nil {
+		return nil, fmt.Errorf("elasticsearch_search: engine is nil")
+	}
+	return t.engine, nil
 }
 
 func buildElasticsearchSearchQuery(queryText string, exactPhrase bool) search.Query {

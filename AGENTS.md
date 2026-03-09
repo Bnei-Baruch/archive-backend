@@ -32,6 +32,8 @@ Instructions for coding agents working in this repository.
 - Generic tool abstractions live in `search/LLM/reasoning_tools.go`.
 - Register tools with `ReasoningToolManager`.
 - Pass `manager.ToolCalls()` and `manager.ToolHandlers()` into `GetReasoningResponseWithTools`.
+- App-scoped manager builder lives in `search/LLM/tools/manager.go`.
+- `common.Init()` builds the shared tool manager and exposes it as `common.LLM_TOOLS`.
 
 ## Implemented Tools
 - `source_lookup` in `search/LLM/tools/source_lookup_tool.go`.

@@ -13,19 +13,24 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
+	"github.com/Bnei-Baruch/archive-backend/integration"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/search"
+	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
+	llmtools "github.com/Bnei-Baruch/archive-backend/search/LLM/tools"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 var (
-	DB     *sql.DB
-	ESC    *search.ESManager
-	CACHE  cache.CacheManager
+	DB    *sql.DB
+	ESC   *search.ESManager
+	CACHE cache.CacheManager
 	//GRAMMARS     search.Grammars
 	VARIABLES    search.VariablesV2
 	TOKENS_CACHE *search.TokensCache
 	CMS          *api.CMSParams
+	ASSETS       integration.AssetsService
+	LLM_TOOLS    *llm.ReasoningToolManager
 )
 
 func Init() time.Time {
@@ -99,6 +104,21 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	} else {
 		CACHE = *defaultCache
 	}
+
+	ASSETS = integration.NewAssetsService(viper.GetString("assets_service.url"))
+	LLM_TOOLS, err = llmtools.NewAppScopedManager(llmtools.AppScopedManagerDeps{
+		DB:            DB,
+		AssetsService: ASSETS,
+		NewElasticsearchSearchEngine: func() (llmtools.ElasticsearchSearchEngine, error) {
+			esc, err := ESC.GetClient()
+			if err != nil {
+				return nil, err
+			}
+			return search.NewESEngine(esc, DB, CACHE, TOKENS_CACHE, VARIABLES, consts.ES_SEARCH_RESULT_TYPES), nil
+		},
+		TimeoutForHighlight: viper.GetDuration("elasticsearch.timeout-for-highlight"),
+	})
+	utils.Must(err)
 
 	return clock
 }

@@ -1,9 +1,12 @@
 package tests
 
 import (
+	"database/sql"
 	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/Bnei-Baruch/archive-backend/integration"
 	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 	llmtools "github.com/Bnei-Baruch/archive-backend/search/LLM/tools"
 )
@@ -100,5 +103,100 @@ func TestElasticsearchSearchToolDefinition(t *testing.T) {
 	elasticsearchSearch := llmtools.NewElasticsearchSearchTool(nil, 0).Definition()
 	if elasticsearchSearch.Name != "elasticsearch_search" {
 		t.Fatalf("unexpected elasticsearch_search tool name: %s", elasticsearchSearch.Name)
+	}
+}
+
+type fakeAssetsService struct{}
+
+func (s *fakeAssetsService) Doc2Text(uid string) (string, error) {
+	return uid, nil
+}
+
+func (s *fakeAssetsService) Prepare(uids []string) (bool, map[string]int, error) {
+	return false, map[string]int{}, nil
+}
+
+var _ integration.AssetsService = (*fakeAssetsService)(nil)
+
+func TestNewAppScopedManager(t *testing.T) {
+	manager, err := llmtools.NewAppScopedManager(llmtools.AppScopedManagerDeps{
+		DB:            &sql.DB{},
+		AssetsService: &fakeAssetsService{},
+		NewElasticsearchSearchEngine: func() (llmtools.ElasticsearchSearchEngine, error) {
+			return &fakeElasticsearchSearchEngine{}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error creating app-scoped manager: %v", err)
+	}
+
+	if manager.Len() != 6 {
+		t.Fatalf("unexpected tool count: %d", manager.Len())
+	}
+
+	names := make([]string, 0, len(manager.Definitions()))
+	for _, definition := range manager.Definitions() {
+		names = append(names, definition.Name)
+	}
+
+	expected := []string{
+		"source_lookup",
+		"transcript_lookup",
+		"get_sources_by_author",
+		"get_collections",
+		"get_content_units_by_collection",
+		"elasticsearch_search",
+	}
+	for i, name := range expected {
+		if names[i] != name {
+			t.Fatalf("unexpected tool order at %d: got %s want %s", i, names[i], name)
+		}
+	}
+}
+
+func TestNewAppScopedManagerRejectsMissingDeps(t *testing.T) {
+	testCases := []struct {
+		name string
+		deps llmtools.AppScopedManagerDeps
+		want string
+	}{
+		{
+			name: "missing db",
+			deps: llmtools.AppScopedManagerDeps{
+				AssetsService: &fakeAssetsService{},
+				NewElasticsearchSearchEngine: func() (llmtools.ElasticsearchSearchEngine, error) {
+					return &fakeElasticsearchSearchEngine{}, nil
+				},
+			},
+			want: "db is nil",
+		},
+		{
+			name: "missing assets service",
+			deps: llmtools.AppScopedManagerDeps{
+				DB: &sql.DB{},
+				NewElasticsearchSearchEngine: func() (llmtools.ElasticsearchSearchEngine, error) {
+					return &fakeElasticsearchSearchEngine{}, nil
+				},
+			},
+			want: "assets service is nil",
+		},
+		{
+			name: "missing engine factory",
+			deps: llmtools.AppScopedManagerDeps{
+				DB:            &sql.DB{},
+				AssetsService: &fakeAssetsService{},
+			},
+			want: "engine factory is nil",
+		},
+	}
+
+	for _, tc := range testCases {
+		_, err := llmtools.NewAppScopedManager(tc.deps)
+		if err == nil {
+			t.Fatalf("%s: expected error", tc.name)
+		}
+		if !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: unexpected error: %v", tc.name, err)
+		}
 	}
 }
