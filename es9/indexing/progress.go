@@ -2,6 +2,7 @@ package indexing
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,6 +14,13 @@ import (
 type TypeProgress struct {
 	totalItems     int64
 	itemsProcessed int64
+}
+
+// TranscriptFailureSnapshot is a snapshot of transcript failure statistics
+type TranscriptFailureSnapshot struct {
+	ByFileType  map[string]int            // file extension -> count
+	ByErrorCode map[int]int               // HTTP error code -> count
+	ByCombo     map[string]map[int]int    // file extension -> (error code -> count)
 }
 
 // ProgressTracker tracks indexing progress with atomic counters for thread-safe aggregation
@@ -174,7 +182,8 @@ func (pt *ProgressTracker) GetStats() map[string]interface{} {
 }
 
 // PrintProgress prints aggregated progress to log
-func (pt *ProgressTracker) PrintProgress(queueSize, queueCap int) {
+// transcriptStats: optional transcript failure statistics snapshot
+func (pt *ProgressTracker) PrintProgress(queueSize, queueCap int, transcriptStats *TranscriptFailureSnapshot) {
 	stats := pt.GetStats()
 	queuePercent := float64(queueSize) / float64(queueCap) * 100
 
@@ -187,6 +196,9 @@ func (pt *ProgressTracker) PrintProgress(queueSize, queueCap int) {
 		typeNames = append(typeNames, typeName)
 	}
 	pt.mu.Unlock()
+
+	// Sort type names alphabetically for consistent ordering
+	sort.Strings(typeNames)
 
 	if len(typeNames) > 0 {
 		// Build progress line: Overall + per-type
@@ -236,6 +248,87 @@ func (pt *ProgressTracker) PrintProgress(queueSize, queueCap int) {
 	log.Infof("CONTENT: Found=%d | Failed=%d | Empty=%d | Skipped=%d",
 		stats["content_found"], stats["content_failed"],
 		stats["content_empty"], stats["content_skipped"])
+
+	// Print transcript failure stats (if provided)
+	if transcriptStats != nil && len(transcriptStats.ByFileType) > 0 {
+		// Calculate total
+		total := 0
+		for _, count := range transcriptStats.ByFileType {
+			total += count
+		}
+
+		// Print by file type
+		fileTypes := make([]string, 0, len(transcriptStats.ByFileType))
+		for ft := range transcriptStats.ByFileType {
+			fileTypes = append(fileTypes, ft)
+		}
+		sort.Strings(fileTypes)
+
+		failureParts := make([]string, 0, len(fileTypes))
+		for _, ft := range fileTypes {
+			count := transcriptStats.ByFileType[ft]
+			percentage := float64(count) / float64(total) * 100
+			failureParts = append(failureParts, fmt.Sprintf("%s=%d (%.0f%%)", ft, count, percentage))
+		}
+		log.Infof("FAILURES BY TYPE: %s", strings.Join(failureParts, " | "))
+
+		// Print by error code
+		if len(transcriptStats.ByErrorCode) > 0 {
+			errorCodes := make([]int, 0, len(transcriptStats.ByErrorCode))
+			for code := range transcriptStats.ByErrorCode {
+				errorCodes = append(errorCodes, code)
+			}
+			// Simple bubble sort for error codes
+			for i := 0; i < len(errorCodes)-1; i++ {
+				for j := i + 1; j < len(errorCodes); j++ {
+					if errorCodes[j] < errorCodes[i] {
+						errorCodes[i], errorCodes[j] = errorCodes[j], errorCodes[i]
+					}
+				}
+			}
+
+			errorParts := make([]string, 0, len(errorCodes))
+			for _, code := range errorCodes {
+				count := transcriptStats.ByErrorCode[code]
+				percentage := float64(count) / float64(total) * 100
+				errorParts = append(errorParts, fmt.Sprintf("%d=%d (%.0f%%)", code, count, percentage))
+			}
+			log.Infof("FAILURES BY ERROR: %s", strings.Join(errorParts, " | "))
+		}
+
+		// Print by combination (file type + error code)
+		if len(transcriptStats.ByCombo) > 0 {
+			type comboKey struct {
+				fileType  string
+				errorCode int
+				count     int
+			}
+			combos := make([]comboKey, 0)
+			for fileType, errorMap := range transcriptStats.ByCombo {
+				for errorCode, count := range errorMap {
+					combos = append(combos, comboKey{fileType, errorCode, count})
+				}
+			}
+
+			// Sort by file type, then by error code
+			for i := 0; i < len(combos)-1; i++ {
+				for j := i + 1; j < len(combos); j++ {
+					if combos[j].fileType < combos[i].fileType ||
+						(combos[j].fileType == combos[i].fileType && combos[j].errorCode < combos[i].errorCode) {
+						combos[i], combos[j] = combos[j], combos[i]
+					}
+				}
+			}
+
+			comboParts := make([]string, 0, len(combos))
+			for _, combo := range combos {
+				percentage := float64(combo.count) / float64(total) * 100
+				comboParts = append(comboParts, fmt.Sprintf("%s+%d=%d (%.0f%%)", combo.fileType, combo.errorCode, combo.count, percentage))
+			}
+			log.Infof("FAILURES BY TYPE+ERROR: %s", strings.Join(comboParts, " | "))
+		}
+	}
+
 	log.Infof("BULK REQUESTS: Sent=%d | Avg=%.2f MB | Total=%.2f GB",
 		stats["bulk_requests"], stats["bulk_avg_size_mb"], stats["bulk_total_size_gb"])
 	log.Infof("DOCUMENTS: Indexed=%d | Failed=%d",

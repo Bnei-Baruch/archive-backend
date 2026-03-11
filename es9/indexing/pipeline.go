@@ -59,8 +59,9 @@ type ItemTask struct {
 
 // Pipeline orchestrates the producer-consumer pattern for indexing
 type Pipeline struct {
-	config  *PipelineConfig
-	manager *common.ES9Manager
+	config                *PipelineConfig
+	manager               *common.ES9Manager
+	transcriptStatsGetter func() *TranscriptFailureSnapshot // Optional: returns transcript failure stats
 }
 
 // NewPipeline creates a new indexing pipeline with the given configuration
@@ -72,6 +73,11 @@ func NewPipeline(manager *common.ES9Manager, config *PipelineConfig) *Pipeline {
 		config:  config,
 		manager: manager,
 	}
+}
+
+// SetTranscriptStatsGetter sets a function to retrieve transcript failure statistics
+func (p *Pipeline) SetTranscriptStatsGetter(getter func() *TranscriptFailureSnapshot) {
+	p.transcriptStatsGetter = getter
 }
 
 // RunPipeline executes the full indexing pipeline for the given items
@@ -123,7 +129,30 @@ func (p *Pipeline) RunPipeline(
 		}(workerID)
 	}
 
-	consumerWg.Wait()
+	// Wait for consumers to drain the queue
+	// During normal operation, give consumers unlimited time to process all tasks
+	// Only apply timeout if context is cancelled (shutdown signal)
+	consumerDone := make(chan struct{})
+	go func() {
+		consumerWg.Wait()
+		close(consumerDone)
+	}()
+
+	select {
+	case <-consumerDone:
+		// Consumers finished normally
+		log.Info("All consumers finished")
+	case <-ctx.Done():
+		// Context cancelled (shutdown), wait up to 60s for consumers to finish
+		log.Warn("Context cancelled, waiting up to 60s for consumers to finish...")
+		select {
+		case <-consumerDone:
+			log.Info("Consumers finished after context cancellation")
+		case <-time.After(60 * time.Second):
+			log.Warn("Consumers did not finish within 60s - forcing shutdown")
+		}
+	}
+
 	close(errChan)
 
 	// Check for errors
@@ -138,7 +167,12 @@ func (p *Pipeline) RunPipeline(
 
 	// Print final summary
 	log.Info("━━━━━━━━━━━━━━━━━━ FINAL SUMMARY ━━━━━━━━━━━━━━━━━━")
-	progress.PrintProgress(0, p.config.QueueCapacity)
+	// Get transcript failure stats if available
+	var transcriptStats *TranscriptFailureSnapshot
+	if p.transcriptStatsGetter != nil {
+		transcriptStats = p.transcriptStatsGetter()
+	}
+	progress.PrintProgress(0, p.config.QueueCapacity, transcriptStats)
 	log.Info("✓ Indexing completed successfully")
 	return nil
 }
@@ -186,7 +220,30 @@ func (p *Pipeline) RunUnifiedPipeline(
 		}(workerID)
 	}
 
-	consumerWg.Wait()
+	// Wait for consumers to drain the queue
+	// During normal operation, give consumers unlimited time to process all tasks
+	// Only apply timeout if context is cancelled (shutdown signal)
+	consumerDone := make(chan struct{})
+	go func() {
+		consumerWg.Wait()
+		close(consumerDone)
+	}()
+
+	select {
+	case <-consumerDone:
+		// Consumers finished normally
+		log.Info("All consumers finished")
+	case <-ctx.Done():
+		// Context cancelled (shutdown), wait up to 60s for consumers to finish
+		log.Warn("Context cancelled, waiting up to 60s for consumers to finish...")
+		select {
+		case <-consumerDone:
+			log.Info("Consumers finished after context cancellation")
+		case <-time.After(60 * time.Second):
+			log.Warn("Consumers did not finish within 60s - forcing shutdown")
+		}
+	}
+
 	close(errChan)
 
 	// Check for errors
@@ -201,7 +258,12 @@ func (p *Pipeline) RunUnifiedPipeline(
 
 	// Print final summary
 	log.Info("━━━━━━━━━━━━━━━━━━ FINAL SUMMARY ━━━━━━━━━━━━━━━━━━")
-	progress.PrintProgress(0, p.config.QueueCapacity)
+	// Get transcript failure stats if available
+	var transcriptStats *TranscriptFailureSnapshot
+	if p.transcriptStatsGetter != nil {
+		transcriptStats = p.transcriptStatsGetter()
+	}
+	progress.PrintProgress(0, p.config.QueueCapacity, transcriptStats)
 	log.Info("✓ All types indexed successfully")
 	return nil
 }
@@ -237,9 +299,31 @@ func (p *Pipeline) startProducers(
 	}
 
 	// Close queue when all producers are done
+	// If context is cancelled, force close after timeout to prevent deadlock
 	go func() {
-		producerWg.Wait()
-		close(taskQueue)
+		doneChan := make(chan struct{})
+		go func() {
+			producerWg.Wait()
+			close(doneChan)
+		}()
+
+		select {
+		case <-doneChan:
+			// All producers finished normally
+			close(taskQueue)
+			log.Info("All producers finished, closing taskQueue")
+		case <-ctx.Done():
+			// Context cancelled, wait up to 30 seconds for producers to finish
+			select {
+			case <-doneChan:
+				close(taskQueue)
+				log.Info("Producers finished after context cancellation, closing taskQueue")
+			case <-time.After(30 * time.Second):
+				// Force close after timeout to prevent deadlock
+				close(taskQueue)
+				log.Warn("Force closing taskQueue after 30s timeout - some producers may be stuck")
+			}
+		}
 	}()
 }
 
@@ -263,9 +347,31 @@ func (p *Pipeline) startUnifiedProducers(
 	}
 
 	// Close indexTaskQueue when all producers are done
+	// If context is cancelled, force close after timeout to prevent deadlock
 	go func() {
-		producerWg.Wait()
-		close(indexTaskQueue)
+		doneChan := make(chan struct{})
+		go func() {
+			producerWg.Wait()
+			close(doneChan)
+		}()
+
+		select {
+		case <-doneChan:
+			// All producers finished normally
+			close(indexTaskQueue)
+			log.Info("All producers finished, closing indexTaskQueue")
+		case <-ctx.Done():
+			// Context cancelled, wait up to 30 seconds for producers to finish
+			select {
+			case <-doneChan:
+				close(indexTaskQueue)
+				log.Info("Producers finished after context cancellation, closing indexTaskQueue")
+			case <-time.After(30 * time.Second):
+				// Force close after timeout to prevent deadlock
+				close(indexTaskQueue)
+				log.Warn("Force closing indexTaskQueue after 30s timeout - some producers may be stuck")
+			}
+		}
 	}()
 }
 
@@ -591,7 +697,12 @@ func (p *Pipeline) monitorProgress(
 		select {
 		case <-ticker.C:
 			queueSize := len(taskQueue)
-			progress.PrintProgress(queueSize, p.config.QueueCapacity)
+			// Get transcript failure stats if available
+			var transcriptStats *TranscriptFailureSnapshot
+			if p.transcriptStatsGetter != nil {
+				transcriptStats = p.transcriptStatsGetter()
+			}
+			progress.PrintProgress(queueSize, p.config.QueueCapacity, transcriptStats)
 		case <-done:
 			return
 		case <-ctx.Done():
