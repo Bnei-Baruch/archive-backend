@@ -25,21 +25,52 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
+// TranscriptFailureStats tracks transcript extraction failures
+type TranscriptFailureStats struct {
+	mu          sync.Mutex
+	byFileType  map[string]int            // e.g., "html": 5, "docx": 3
+	byErrorCode map[int]int               // e.g., 404: 2, 500: 8
+	byCombo     map[string]map[int]int    // e.g., "html": {500: 5}, "docx": {404: 1}
+}
+
+func NewTranscriptFailureStats() *TranscriptFailureStats {
+	return &TranscriptFailureStats{
+		byFileType:  make(map[string]int),
+		byErrorCode: make(map[int]int),
+		byCombo:     make(map[string]map[int]int),
+	}
+}
+
+func (s *TranscriptFailureStats) Record(fileType string, errorCode int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.byFileType[fileType]++
+	s.byErrorCode[errorCode]++
+
+	if s.byCombo[fileType] == nil {
+		s.byCombo[fileType] = make(map[int]int)
+	}
+	s.byCombo[fileType][errorCode]++
+}
+
 // ContentUnitsIndexer handles ES9 indexing for content units
 type ContentUnitsIndexer struct {
-	manager       *common.ES9Manager
-	db            *sql.DB
-	indexNameBase string // e.g., "results"
-	assetsService integration.AssetsService
+	manager            *common.ES9Manager
+	db                 *sql.DB
+	indexNameBase      string // e.g., "results"
+	assetsService      integration.AssetsService
+	transcriptFailures *TranscriptFailureStats
 }
 
 // NewContentUnitsIndexer creates a new content units indexer for ES9
 func NewContentUnitsIndexer(manager *common.ES9Manager, db *sql.DB, indexNameBase string, assetsService integration.AssetsService) *ContentUnitsIndexer {
 	return &ContentUnitsIndexer{
-		manager:       manager,
-		db:            db,
-		indexNameBase: indexNameBase,
-		assetsService: assetsService,
+		manager:            manager,
+		db:                 db,
+		indexNameBase:      indexNameBase,
+		assetsService:      assetsService,
+		transcriptFailures: NewTranscriptFailureStats(),
 	}
 }
 
@@ -171,6 +202,9 @@ func (idx *ContentUnitsIndexer) IndexAll(ctx context.Context, reset bool) error 
 	if err := pipeline.RunPipeline(ctx, idx, items, allIndexData); err != nil {
 		return errors.Wrap(err, "run indexing pipeline")
 	}
+
+	// Log transcript failure statistics
+	idx.LogTranscriptFailureStats()
 
 	log.Infof("✓ Indexing completed in %v", time.Since(startTime))
 	return nil
@@ -749,6 +783,11 @@ func (idx *ContentUnitsIndexer) extractContent(cu *mdbmodels.ContentUnit, indexD
 	file := files[0]
 	content, err := idx.assetsService.Doc2Text(file.UID)
 	if err != nil {
+		// Extract file extension and error code for statistics
+		fileExt := idx.getFileExtension(file.Name)
+		errorCode := idx.extractHTTPCode(err)
+		idx.transcriptFailures.Record(fileExt, errorCode)
+
 		log.Warnf("⚠ Transcript failed: %s | %s | %s (%s) | %v", cu.UID, lang, file.UID, file.Name, err)
 		progress.RecordTranscript(true, false, err)
 		return ""
@@ -819,6 +858,10 @@ func (idx *ContentUnitsIndexer) extractWithFallback(cu *mdbmodels.ContentUnit, f
 			return content
 		}
 		if err != nil {
+			// Track each failure
+			fileExt := idx.getFileExtension(file.Name)
+			errorCode := idx.extractHTTPCode(err)
+			idx.transcriptFailures.Record(fileExt, errorCode)
 			lastErr = err
 		}
 	}
@@ -835,6 +878,11 @@ func (idx *ContentUnitsIndexer) extractAndConcatenate(cu *mdbmodels.ContentUnit,
 	for _, file := range files {
 		content, err := idx.assetsService.Doc2Text(file.UID)
 		if err != nil {
+			// Track failure
+			fileExt := idx.getFileExtension(file.Name)
+			errorCode := idx.extractHTTPCode(err)
+			idx.transcriptFailures.Record(fileExt, errorCode)
+
 			log.Warnf("⚠ Sequential part failed: %s | %s | %s (%s) | %v", cu.UID, lang, file.UID, file.Name, err)
 			failedFiles = append(failedFiles, file.Name)
 			continue
@@ -910,5 +958,115 @@ func (idx *ContentUnitsIndexer) buildTitleSuggest(cu *mdbmodels.ContentUnit, tit
 	return es.SuggestField{
 		Input:  suffixes,
 		Weight: 1.0,
+	}
+}
+
+// getFileExtension extracts the file extension from a filename
+func (idx *ContentUnitsIndexer) getFileExtension(filename string) string {
+	parts := strings.Split(filename, ".")
+	if len(parts) < 2 {
+		return "unknown"
+	}
+	ext := strings.ToLower(parts[len(parts)-1])
+	// Normalize common variants
+	if ext == "doc" || ext == "docx" {
+		return "doc/docx"
+	}
+	return ext
+}
+
+// extractHTTPCode extracts HTTP status code from error message
+// Error format from Doc2Text: "500 500 Internal Server Error - URL: ..."
+func (idx *ContentUnitsIndexer) extractHTTPCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	errStr := err.Error()
+	// Try to extract status code from error string
+	if strings.Contains(errStr, "404") {
+		return 404
+	}
+	if strings.Contains(errStr, "500") {
+		return 500
+	}
+	if strings.Contains(errStr, "503") {
+		return 503
+	}
+	if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "Timeout") {
+		return 504
+	}
+	// Default to 500 for other errors
+	return 500
+}
+
+// GetTranscriptFailureStats returns a snapshot of current failure stats
+func (idx *ContentUnitsIndexer) GetTranscriptFailureStats() *indexing.TranscriptFailureSnapshot {
+	idx.transcriptFailures.mu.Lock()
+	defer idx.transcriptFailures.mu.Unlock()
+
+	snapshot := &indexing.TranscriptFailureSnapshot{
+		ByFileType:  make(map[string]int),
+		ByErrorCode: make(map[int]int),
+		ByCombo:     make(map[string]map[int]int),
+	}
+
+	for fileType, count := range idx.transcriptFailures.byFileType {
+		snapshot.ByFileType[fileType] = count
+	}
+
+	for errorCode, count := range idx.transcriptFailures.byErrorCode {
+		snapshot.ByErrorCode[errorCode] = count
+	}
+
+	// Deep copy the combo map
+	for fileType, errorMap := range idx.transcriptFailures.byCombo {
+		snapshot.ByCombo[fileType] = make(map[int]int)
+		for errorCode, count := range errorMap {
+			snapshot.ByCombo[fileType][errorCode] = count
+		}
+	}
+
+	return snapshot
+}
+
+// LogTranscriptFailureStats logs the transcript failure statistics summary
+func (idx *ContentUnitsIndexer) LogTranscriptFailureStats() {
+	idx.transcriptFailures.mu.Lock()
+	defer idx.transcriptFailures.mu.Unlock()
+
+	if len(idx.transcriptFailures.byFileType) == 0 {
+		return
+	}
+
+	log.Info("\n=== Transcript Failure Statistics ===")
+
+	// Total failures
+	total := 0
+	for _, count := range idx.transcriptFailures.byFileType {
+		total += count
+	}
+	log.Infof("Total failures: %d", total)
+
+	// By file type
+	log.Info("\nBy File Type:")
+	for fileType, count := range idx.transcriptFailures.byFileType {
+		percentage := float64(count) / float64(total) * 100
+		log.Infof("  %s: %d (%.1f%%)", fileType, count, percentage)
+	}
+
+	// By error code
+	log.Info("\nBy Error Code:")
+	for code, count := range idx.transcriptFailures.byErrorCode {
+		percentage := float64(count) / float64(total) * 100
+		log.Infof("  %d: %d (%.1f%%)", code, count, percentage)
+	}
+
+	// By file type and error code combination
+	log.Info("\nBy File Type + Error Code:")
+	for fileType, codes := range idx.transcriptFailures.byCombo {
+		for code, count := range codes {
+			percentage := float64(count) / float64(total) * 100
+			log.Infof("  %s + %d: %d (%.1f%%)", fileType, code, count, percentage)
+		}
 	}
 }

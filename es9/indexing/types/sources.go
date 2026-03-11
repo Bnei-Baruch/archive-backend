@@ -41,6 +41,8 @@ type SourcesIndexer struct {
 	hierarchyMu    sync.RWMutex
 	skippedSources map[string]bool                  // Track sources without author hierarchy
 	skippedMu      sync.Mutex
+	loggedErrors   map[string]bool                  // Track sources we've already logged i18n errors for
+	loggedMu       sync.Mutex
 }
 
 // NewSourcesIndexer creates a new sources indexer
@@ -54,6 +56,7 @@ func NewSourcesIndexer(mgr *common.ES9Manager, db *sql.DB, indexNameBase string,
 		indexNameBase:  indexNameBase,
 		assetsService:  integration.NewAssetsService(unzipUrl),
 		skippedSources: make(map[string]bool),
+		loggedErrors:   make(map[string]bool),
 	}
 }
 
@@ -82,7 +85,13 @@ func (idx *SourcesIndexer) PrepareDocument(ctx context.Context, item interface{}
 
 	// Check if we have relationships loaded
 	if source.R == nil || source.R.SourceI18ns == nil {
-		log.Errorf("Source %s missing i18n relationships", source.UID)
+		// Only log this error once per source (not once per language)
+		idx.loggedMu.Lock()
+		if !idx.loggedErrors[source.UID] {
+			log.Errorf("Source %s missing i18n relationships", source.UID)
+			idx.loggedErrors[source.UID] = true
+		}
+		idx.loggedMu.Unlock()
 		return nil, true
 	}
 

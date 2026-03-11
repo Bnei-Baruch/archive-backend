@@ -279,7 +279,9 @@ func runUnifiedIndexing(
 		fetchWg.Add(1)
 		go func(typeName string, idx indexing.Indexer) {
 			defer fetchWg.Done()
+			log.Infof("  → Fetching %s...", typeName)
 			items, err := fetchItemsForType(ctx, typeName, idx, reset)
+
 			resultChan <- fetchResult{
 				contentType: typeName,
 				items:       items,
@@ -288,7 +290,7 @@ func runUnifiedIndexing(
 		}(contentType, indexer)
 	}
 
-	// Close channel when all fetchers are done
+	// Close result channel when all fetchers are done
 	go func() {
 		fetchWg.Wait()
 		close(resultChan)
@@ -305,7 +307,7 @@ func runUnifiedIndexing(
 		log.Infof("  ✓ %s: %d items", result.contentType, len(result.items))
 	}
 
-	// Wait for all parallel operations to complete
+	// Wait for index data loading to complete
 	fetchWg.Wait()
 
 	// Check for index data loading error
@@ -318,7 +320,7 @@ func runUnifiedIndexing(
 		return nil
 	}
 
-	log.Infof("Total items to process: %d", totalItems)
+	log.Infof("Total items to index: %d\n", totalItems)
 
 	// Phase 4: Create unified pipeline and feed items
 	itemQueue := make(chan indexing.ItemTask, 10000) // Large buffer
@@ -331,6 +333,12 @@ func runUnifiedIndexing(
 
 	// Start pipeline in background
 	pipeline := indexing.NewPipeline(manager, nil)
+
+	// Set transcript stats getter if content-units indexer is available
+	if cuIndexer, ok := indexers["content-units"].(*types.ContentUnitsIndexer); ok {
+		pipeline.SetTranscriptStatsGetter(cuIndexer.GetTranscriptFailureStats)
+	}
+
 	errChan := make(chan error, 1)
 	go func() {
 		errChan <- pipeline.RunUnifiedPipeline(ctx, itemQueue, indexData, progress)
@@ -374,6 +382,11 @@ func runUnifiedIndexing(
 	// Wait for pipeline to complete
 	if err := <-errChan; err != nil {
 		return fmt.Errorf("unified pipeline: %w", err)
+	}
+
+	// Log transcript failure statistics for content units
+	if cuIndexer, ok := indexers["content-units"].(*types.ContentUnitsIndexer); ok {
+		cuIndexer.LogTranscriptFailureStats()
 	}
 
 	return nil

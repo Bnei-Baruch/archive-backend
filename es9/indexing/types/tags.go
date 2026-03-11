@@ -35,6 +35,8 @@ type TagsIndexer struct {
 	indexNameBase string
 	hierarchy     map[string]*TagHierarchyNode // UID -> node (loaded once, reused for all items)
 	hierarchyMu   sync.RWMutex
+	loggedErrors  map[string]bool // Track tags we've already logged errors for (to avoid spam)
+	loggedMu      sync.Mutex
 }
 
 // NewTagsIndexer creates a new tags indexer
@@ -46,6 +48,7 @@ func NewTagsIndexer(mgr *common.ES9Manager, db *sql.DB, indexNameBase string) *T
 		manager:       mgr,
 		db:            db,
 		indexNameBase: indexNameBase,
+		loggedErrors:  make(map[string]bool),
 	}
 }
 
@@ -80,7 +83,13 @@ func (idx *TagsIndexer) PrepareDocument(ctx context.Context, item interface{}, l
 
 	// Check if we have relationships loaded
 	if tag.R == nil || tag.R.TagI18ns == nil {
-		log.Errorf("Tag %s missing i18n relationships", tag.UID)
+		// Only log this error once per tag (not once per language)
+		idx.loggedMu.Lock()
+		if !idx.loggedErrors[tag.UID] {
+			log.Errorf("Tag %s missing i18n relationships", tag.UID)
+			idx.loggedErrors[tag.UID] = true
+		}
+		idx.loggedMu.Unlock()
 		return nil, true
 	}
 
