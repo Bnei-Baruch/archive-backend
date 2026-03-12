@@ -108,23 +108,22 @@ func (p *Pipeline) RunPipeline(
 	progress := NewProgressTracker(len(items))
 
 	// Start progress monitor (prints aggregated stats periodically)
-	monitorDone := make(chan bool)
-	go p.monitorProgress(ctx, taskQueue, progress, monitorDone)
-	defer func() { monitorDone <- true }()
+	// Monitor will exit when context is cancelled
+	go p.monitorProgress(ctx, taskQueue, progress)
 
 	// Start producers (parallel document preparation)
 	p.startProducers(ctx, taskQueue, indexer, items, indexData, progress)
 
 	// Start consumers (parallel bulk indexing)
 	var consumerWg sync.WaitGroup
-	errChan := make(chan error, p.config.NumConsumers)
+	errCollector := NewErrorCollector()
 
 	for workerID := 0; workerID < p.config.NumConsumers; workerID++ {
 		consumerWg.Add(1)
 		go func(id int) {
 			defer consumerWg.Done()
 			if err := p.consumeIndexTasks(ctx, id, taskQueue, progress); err != nil {
-				errChan <- fmt.Errorf("consumer %d: %w", id, err)
+				errCollector.Add(fmt.Errorf("consumer %d: %w", id, err))
 			}
 		}(workerID)
 	}
@@ -132,37 +131,24 @@ func (p *Pipeline) RunPipeline(
 	// Wait for consumers to drain the queue
 	// During normal operation, give consumers unlimited time to process all tasks
 	// Only apply timeout if context is cancelled (shutdown signal)
-	consumerDone := make(chan struct{})
-	go func() {
-		consumerWg.Wait()
-		close(consumerDone)
-	}()
-
 	select {
-	case <-consumerDone:
+	case <-waitWithContext(&consumerWg):
 		// Consumers finished normally
 		log.Info("All consumers finished")
 	case <-ctx.Done():
 		// Context cancelled (shutdown), wait up to 60s for consumers to finish
 		log.Warn("Context cancelled, waiting up to 60s for consumers to finish...")
 		select {
-		case <-consumerDone:
+		case <-waitWithContext(&consumerWg):
 			log.Info("Consumers finished after context cancellation")
 		case <-time.After(60 * time.Second):
 			log.Warn("Consumers did not finish within 60s - forcing shutdown")
 		}
 	}
 
-	close(errChan)
-
 	// Check for errors
-	var errs []error
-	for err := range errChan {
-		errs = append(errs, err)
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("indexing failed for %d consumers: %v", len(errs), errs)
+	if err := errCollector.Error(); err != nil {
+		return err
 	}
 
 	// Print final summary
@@ -198,24 +184,22 @@ func (p *Pipeline) RunUnifiedPipeline(
 
 	log.Info("Starting unified pipeline for all types")
 
-	// Start progress monitor
-	monitorDone := make(chan bool)
-	go p.monitorProgress(ctx, indexTaskQueue, progress, monitorDone)
-	defer func() { monitorDone <- true }()
+	// Start progress monitor (exits when context is cancelled)
+	go p.monitorProgress(ctx, indexTaskQueue, progress)
 
 	// Start producers (parallel document preparation from mixed types)
 	p.startUnifiedProducers(ctx, indexTaskQueue, itemQueue, indexData, progress)
 
 	// Start consumers (parallel bulk indexing)
 	var consumerWg sync.WaitGroup
-	errChan := make(chan error, p.config.NumConsumers)
+	errCollector := NewErrorCollector()
 
 	for workerID := 0; workerID < p.config.NumConsumers; workerID++ {
 		consumerWg.Add(1)
 		go func(id int) {
 			defer consumerWg.Done()
 			if err := p.consumeIndexTasks(ctx, id, indexTaskQueue, progress); err != nil {
-				errChan <- fmt.Errorf("consumer %d: %w", id, err)
+				errCollector.Add(fmt.Errorf("consumer %d: %w", id, err))
 			}
 		}(workerID)
 	}
@@ -223,37 +207,24 @@ func (p *Pipeline) RunUnifiedPipeline(
 	// Wait for consumers to drain the queue
 	// During normal operation, give consumers unlimited time to process all tasks
 	// Only apply timeout if context is cancelled (shutdown signal)
-	consumerDone := make(chan struct{})
-	go func() {
-		consumerWg.Wait()
-		close(consumerDone)
-	}()
-
 	select {
-	case <-consumerDone:
+	case <-waitWithContext(&consumerWg):
 		// Consumers finished normally
 		log.Info("All consumers finished")
 	case <-ctx.Done():
 		// Context cancelled (shutdown), wait up to 60s for consumers to finish
 		log.Warn("Context cancelled, waiting up to 60s for consumers to finish...")
 		select {
-		case <-consumerDone:
+		case <-waitWithContext(&consumerWg):
 			log.Info("Consumers finished after context cancellation")
 		case <-time.After(60 * time.Second):
 			log.Warn("Consumers did not finish within 60s - forcing shutdown")
 		}
 	}
 
-	close(errChan)
-
 	// Check for errors
-	var errs []error
-	for err := range errChan {
-		errs = append(errs, err)
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("indexing failed for %d consumers: %v", len(errs), errs)
+	if err := errCollector.Error(); err != nil {
+		return err
 	}
 
 	// Print final summary
@@ -301,21 +272,15 @@ func (p *Pipeline) startProducers(
 	// Close queue when all producers are done
 	// If context is cancelled, force close after timeout to prevent deadlock
 	go func() {
-		doneChan := make(chan struct{})
-		go func() {
-			producerWg.Wait()
-			close(doneChan)
-		}()
-
 		select {
-		case <-doneChan:
+		case <-waitWithContext(&producerWg):
 			// All producers finished normally
 			close(taskQueue)
 			log.Info("All producers finished, closing taskQueue")
 		case <-ctx.Done():
 			// Context cancelled, wait up to 30 seconds for producers to finish
 			select {
-			case <-doneChan:
+			case <-waitWithContext(&producerWg):
 				close(taskQueue)
 				log.Info("Producers finished after context cancellation, closing taskQueue")
 			case <-time.After(30 * time.Second):
@@ -349,21 +314,15 @@ func (p *Pipeline) startUnifiedProducers(
 	// Close indexTaskQueue when all producers are done
 	// If context is cancelled, force close after timeout to prevent deadlock
 	go func() {
-		doneChan := make(chan struct{})
-		go func() {
-			producerWg.Wait()
-			close(doneChan)
-		}()
-
 		select {
-		case <-doneChan:
+		case <-waitWithContext(&producerWg):
 			// All producers finished normally
 			close(indexTaskQueue)
 			log.Info("All producers finished, closing indexTaskQueue")
 		case <-ctx.Done():
 			// Context cancelled, wait up to 30 seconds for producers to finish
 			select {
-			case <-doneChan:
+			case <-waitWithContext(&producerWg):
 				close(indexTaskQueue)
 				log.Info("Producers finished after context cancellation, closing indexTaskQueue")
 			case <-time.After(30 * time.Second):
@@ -684,11 +643,11 @@ func (p *Pipeline) sendBulkBatch(
 }
 
 // monitorProgress prints progress stats periodically
+// Exits when context is cancelled
 func (p *Pipeline) monitorProgress(
 	ctx context.Context,
 	taskQueue <-chan IndexTask,
 	progress *ProgressTracker,
-	done <-chan bool,
 ) {
 	ticker := time.NewTicker(time.Duration(p.config.ProgressIntervalSec) * time.Second)
 	defer ticker.Stop()
@@ -703,8 +662,6 @@ func (p *Pipeline) monitorProgress(
 				transcriptStats = p.transcriptStatsGetter()
 			}
 			progress.PrintProgress(queueSize, p.config.QueueCapacity, transcriptStats)
-		case <-done:
-			return
 		case <-ctx.Done():
 			return
 		}
