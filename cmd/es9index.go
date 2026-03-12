@@ -93,49 +93,45 @@ Supports:
 			errChan <- runUnifiedIndexing(ctx, manager, indexName, contentTypes, reset)
 		}()
 
+		// Track signal state
+		firstSignal := false
+
 		// Wait for completion or signal
-		select {
-		case err := <-errChan:
-			// Indexing completed
-			if err != nil {
-				log.Fatalf("Failed to index: %v", err)
-			}
-			duration := time.Since(startTime)
-			log.Infof("\n=== Summary ===")
-			log.Infof("Total time: %s", duration.Round(time.Second))
-			log.Info("✓ All indexing completed successfully")
-
-		case sig := <-sigChan:
-			// Received interrupt signal
-			log.Warnf("\n⚠ Received signal: %v", sig)
-			log.Warn("⚠ Gracefully shutting down (finishing current index creation)...")
-			log.Warn("⚠ Press Ctrl+C again to force quit (may leave indices in bad state!)")
-
-			// Cancel context to stop new work
-			cancel()
-
-			// Setup force-quit handler
-			forceQuitChan := make(chan os.Signal, 1)
-			signal.Notify(forceQuitChan, os.Interrupt, syscall.SIGTERM)
-
-			// Wait for graceful completion or force quit
+		for {
 			select {
 			case err := <-errChan:
-				duration := time.Since(startTime)
-				if err != nil && err != context.Canceled {
-					log.Errorf("⚠ Indexing interrupted with error: %v", err)
-					log.Errorf("⚠ Some indices may be partially created")
-					log.Errorf("⚠ Run with --reset to clean up, or delete bad indices manually")
-					os.Exit(1)
+				// Indexing completed
+				if err != nil {
+					if err == context.Canceled && firstSignal {
+						// User cancelled, exit cleanly
+						duration := time.Since(startTime)
+						log.Infof("✓ Graceful shutdown completed in %s", duration.Round(time.Second))
+						log.Info("✓ All in-progress index creations finished cleanly")
+						return
+					}
+					log.Fatalf("Failed to index: %v", err)
 				}
-				log.Infof("✓ Graceful shutdown completed in %s", duration.Round(time.Second))
-				log.Info("✓ All in-progress index creations finished cleanly")
+				duration := time.Since(startTime)
+				log.Infof("\n=== Summary ===")
+				log.Infof("Total time: %s", duration.Round(time.Second))
+				log.Info("✓ All indexing completed successfully")
+				return
 
-			case <-forceQuitChan:
-				log.Error("⚠⚠⚠ FORCE QUIT! Indices may be left in inconsistent state!")
-				log.Error("⚠⚠⚠ You may need to delete partially created indices manually:")
-				log.Error("⚠⚠⚠   curl -X DELETE 'localhost:9200/{index_name}'")
-				os.Exit(2)
+			case sig := <-sigChan:
+				if !firstSignal {
+					// First signal - initiate graceful shutdown
+					firstSignal = true
+					log.Warnf("\n⚠ Received signal: %v", sig)
+					log.Warn("⚠ Gracefully shutting down (finishing current index creation)...")
+					log.Warn("⚠ Press Ctrl+C again to force quit (may leave indices in bad state!)")
+					cancel() // Cancel context to stop new work
+				} else {
+					// Second signal - force quit
+					log.Error("⚠⚠⚠ FORCE QUIT! Indices may be left in inconsistent state!")
+					log.Error("⚠⚠⚠ You may need to delete partially created indices manually:")
+					log.Error("⚠⚠⚠   curl -X DELETE 'localhost:9200/{index_name}'")
+					os.Exit(2)
+				}
 			}
 		}
 	},
@@ -273,7 +269,7 @@ func runUnifiedIndexing(
 		err         error
 	}
 
-	resultChan := make(chan fetchResult, len(indexers))
+	resultCollector := indexing.NewResultCollector[fetchResult](len(indexers))
 
 	for contentType, indexer := range indexers {
 		fetchWg.Add(1)
@@ -282,7 +278,7 @@ func runUnifiedIndexing(
 			log.Infof("  → Fetching %s...", typeName)
 			items, err := fetchItemsForType(ctx, typeName, idx, reset)
 
-			resultChan <- fetchResult{
+			resultCollector.Chan() <- fetchResult{
 				contentType: typeName,
 				items:       items,
 				err:         err,
@@ -290,14 +286,14 @@ func runUnifiedIndexing(
 		}(contentType, indexer)
 	}
 
-	// Close result channel when all fetchers are done
+	// Close result channel when all fetchers are done and collect results
 	go func() {
 		fetchWg.Wait()
-		close(resultChan)
+		resultCollector.Close()
 	}()
 
 	// Collect results
-	for result := range resultChan {
+	for _, result := range resultCollector.Collect() {
 		if result.err != nil {
 			return fmt.Errorf("fetch %s: %w", result.contentType, result.err)
 		}
@@ -400,7 +396,7 @@ func deleteTypesInParallel(
 	contentTypes []string,
 ) error {
 	var wg sync.WaitGroup
-	errChan := make(chan error, len(contentTypes)*len(consts.ALL_KNOWN_LANGS))
+	errCollector := indexing.NewErrorCollector()
 
 	resultTypes := make(map[string]string)
 	resultTypes["content-units"] = consts.ES_RESULT_TYPE_UNITS
@@ -423,7 +419,7 @@ func deleteTypesInParallel(
 		skippedLangs  int
 	}
 
-	statsChan := make(chan *deleteStats, len(contentTypes))
+	statsCollector := indexing.NewResultCollector[*deleteStats](len(contentTypes))
 
 	for _, contentType := range contentTypes {
 		resultType, ok := resultTypes[contentType]
@@ -451,7 +447,7 @@ func deleteTypesInParallel(
 					client.Indices.Exists.WithContext(ctx),
 				)
 				if err != nil {
-					errChan <- fmt.Errorf("check if %s exists: %w", indexName, err)
+					errCollector.Add(fmt.Errorf("check if %s exists: %w", indexName, err))
 					return
 				}
 				resp.Body.Close()
@@ -465,7 +461,7 @@ func deleteTypesInParallel(
 				// Index exists, delete documents
 				deletedCount, err := manager.DeleteByResultType(ctx, indexName, resType)
 				if err != nil {
-					errChan <- fmt.Errorf("delete %s from %s: %w", typeName, indexName, err)
+					errCollector.Add(fmt.Errorf("delete %s from %s: %w", typeName, indexName, err))
 					return
 				}
 
@@ -475,23 +471,23 @@ func deleteTypesInParallel(
 				}
 			}
 
-			statsChan <- stats
+			statsCollector.Chan() <- stats
 		}(contentType, resultType)
 	}
 
 	wg.Wait()
-	close(errChan)
-	close(statsChan)
+	
+	statsCollector.Close()
 
 	// Check for errors
-	if len(errChan) > 0 {
-		return <-errChan
+	if err := errCollector.Error(); err != nil {
+		return err
 	}
 
 	// Display deletion statistics
 	log.Info("\n=== Deletion Summary ===")
 	grandTotal := 0
-	for stats := range statsChan {
+	for _, stats := range statsCollector.Collect() {
 		if stats.totalDeleted == 0 && stats.skippedLangs > 0 {
 			log.Infof("  ⊘ %s: skipped (%d indices don't exist yet)", stats.typeName, stats.skippedLangs)
 			continue
