@@ -85,7 +85,7 @@ func (t *ElasticsearchSearchTool) Definition() llm.ReasoningToolDefinition {
 				},
 				"filters": map[string]interface{}{
 					"type":        "object",
-					"description": "Optional search filters. Keys should use filter names such as content_type, source, tag (currently should be used only for holidays and observances), media_language (the language in which the content is available - translation), original_language (the language the content was originally spoken or written in - useful if the user wants, for example, only original Russian lessons), person (speaker/author of the media content, not books), start_date, end_date, or collection.",
+					"description": "Optional search filters. Keys should use filter names such as content_type, source, tag (currently should be used only for holidays and observances), media_language (the language in which the content is available - translation), original_language (the language the content was originally spoken or written in - useful if the user wants, for example, only original Russian lessons), person (speaker/author of the media content, not books), start_date (in yyyy-MM-dd format), end_date (in yyyy-MM-dd format), or collection.",
 					"additionalProperties": map[string]interface{}{
 						"type": "array",
 						"items": map[string]interface{}{
