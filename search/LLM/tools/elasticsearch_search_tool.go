@@ -72,6 +72,7 @@ func NewElasticsearchSearchToolWithFactory(engineFactory ElasticsearchSearchEngi
 }
 
 func (t *ElasticsearchSearchTool) Definition() llm.ReasoningToolDefinition {
+	// Note: In the filter descriptions we mention that tag filter should currently be used only for holidays and observances, because current human generated tags are not efficient. In the future, we may want to update the tags using AI and remove this note.
 	return llm.ReasoningToolDefinition{
 		Name:        "elasticsearch_search",
 		Description: "Search archive content through Elasticsearch with optional filters and exact phrase search.",
@@ -84,7 +85,7 @@ func (t *ElasticsearchSearchTool) Definition() llm.ReasoningToolDefinition {
 				},
 				"filters": map[string]interface{}{
 					"type":        "object",
-					"description": "Optional search filters. Keys should use archive filter names such as content_type, source, tag, media_language, original_language, person, start_date, end_date, or collection.",
+					"description": "Optional search filters. Keys should use filter names such as content_type, source, tag (currently should be used only for holidays and observances), media_language (the language in which the content is available - translation), original_language (the language the content was originally spoken or written in - useful if the user wants, for example, only original Russian lessons), person (speaker/author of the media content, not books), start_date, end_date, or collection.",
 					"additionalProperties": map[string]interface{}{
 						"type": "array",
 						"items": map[string]interface{}{
