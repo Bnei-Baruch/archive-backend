@@ -18,13 +18,15 @@ func NewGetSourceFilterValuesTool() *GetSourceFilterValuesTool {
 func (t *GetSourceFilterValuesTool) Definition() llm.ReasoningToolDefinition {
 	return llm.ReasoningToolDefinition{
 		Name:        "get_source_filter_values",
-		Description: "Return the cached list of all available source filter values. This tool does not accept arguments.",
+		Description: "Return the cached list of all available source (library items) filter values. This tool does not accept arguments.",
 	}
 }
 
 func (t *GetSourceFilterValuesTool) UsageExplanation() string {
 	return `Tool: get_source_filter_values
 Use this tool when you need the full list of valid source filter values, with English and Hebrew names, including the full hierarchy parents path (like book->part->chapter). This is useful for building an elasticsearch_search request with a source filter.
+Sources here are items that available in the site Library section. Sources can be an article, a chapter of a book or other text. Sources are managed as tree, means we have a different Id for a book, volume, chapter.
+Source is also referred to an Author. For example the source with the code 'bs' is referred to Baal Ha-Sulam that is a parent node of all Baal Ha-Sulam books.
 Arguments:
 - none. Do not pass arguments.
 Behavior:
