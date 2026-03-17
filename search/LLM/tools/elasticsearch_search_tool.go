@@ -85,7 +85,7 @@ func (t *ElasticsearchSearchTool) Definition() llm.ReasoningToolDefinition {
 				},
 				"filters": map[string]interface{}{
 					"type":        "object",
-					"description": "Optional search filters. Keys should use filter names such as content_type, source, tag (currently should be used only for holidays and observances), media_language (the language in which the content is available - translation), original_language (the language the content was originally spoken or written in - useful if the user wants, for example, only original Russian lessons), person (speaker/author of the media content, not books), start_date (in yyyy-MM-dd format), end_date (in yyyy-MM-dd format), or collection.",
+					"description": "Optional search filters. Supported filters (keys) and their values are described in the usage explanation.",
 					"additionalProperties": map[string]interface{}{
 						"type": "array",
 						"items": map[string]interface{}{
@@ -120,6 +120,82 @@ func (t *ElasticsearchSearchTool) Definition() llm.ReasoningToolDefinition {
 			"additionalProperties": false,
 		},
 	}
+}
+
+func (t *ElasticsearchSearchTool) UsageExplanation() string {
+	return `Tool: elasticsearch_search
+Use this tool for archive search when you need relevant results by text query, filters, or both.
+Important note: Since the search engine is technically limited and based on lexical match, you should make multiple searches with the necessary variations of the query: Using similar words to the original query and different filter combinations.  Limit the text query to a simple term since multiple terms may miss the match.
+
+The following search filters are supported and can be used in combination: 
+
+1. content_type – Filters by type of content. Multiple types can be used. Supported values:
+SOURCE – Library texts like articles or book chapters
+LECTURE – General or beginner lectures
+LESSONS_SERIES – Series of lessons on a topic or source
+LESSON_PART – A part of the daily morning lesson (broadcast globally from Petah Tikva)
+WOMEN_LESSON – Lessons primarily for women
+EVENT_PART – Items from conventions or special events (e.g. Unity Day)
+FRIENDS_GATHERING – Social events (Yeshivat Haverim / ישיבת חברים)
+MEAL – Events with songs and intentional content
+VIDEO_PROGRAM_CHAPTER – Chapters of TV/video programs
+CLIP – Video clips, sometimes lesson or program segments
+ARTICLE – Articles (including external publications)
+BLOG_POST – Blog posts by Dr. Laitman
+R_TWEET – Tweets by Dr. Laitman
+If the user is looking for a lesson, include all lesson-related content types: LECTURE, LESSONS_SERIES, LESSON_PART, WOMEN_LESSON
+
+2. source – Filters by source (library item). Multiple sources can be used. Use the get_source_filter_values tool to obtain source values.
+Including the sources filter in the query, means that we want to find various content that related to that sources like TV programs, lessons or the sources (library pages).
+When we filter by the parent source (like book name) we mean that the content we look for should be related also to all the child sources (chapters). In that case it is enough to apply only the parent source.
+The source parameter is also referred to an Author. For example the source with the code 'bs' is referred to Baal Ha-Sulam that is a parent node of all Baal Ha-Sulam books. Means that is the user want to find content that related to all writing of the author, enough to include the author code in the 'sources' parameter.
+Note: For Dr. Laitman’s content, do not use source filter ('ml' value) — use the person filter instead.
+
+3. person – Filters by speaker/author of media content (not books). Values:
+abcdefgh – Dr. Michael Laitman
+KxApZ4pI – Baruch Shalom HaLevi Ashlag (Rabash). Use this filter when looking for original recordings by a specific teacher. When you add this filter, do not add other content_type filters.
+
+4. start_date and end_date – Filter by date range. The date format is yyyy-MM-dd. If only start_date is provided, it filters from that date to the future. If only end_date is provided, it filters from the past until that date.
+
+5. topics - Filter by topic. Currently we support topics related to Holidays and Observances.
+- "topic id": "ksh1gGBM", "name": "אלול"
+- "topic id": "k3OHIbDd", "name": "הושענא רבה"
+- "topic id": "rxNl0zXg", "name": "חנוכה"
+- "topic id": "8NOejqZq", "name": "ט' באב"
+- "topic id": "aG35w3xs", "name": "ט\"ו באב"
+- "topic id": "SuqPuYoZ", "name": "ט\"ו בשבט"
+- "topic id": "XuTr8IEN", "name": "יום הזיכרון לחללי מערכות ישראל"
+- "topic id": "HhQuyXga", "name": "יום הזיכרון לשואה ולגבורה"
+- "topic id": "oXRmGfzj", "name": "יום הכיפורים"
+- "topic id": "mnr1gzAk", "name": "יום העצמאות"
+- "topic id": "2Amyg207", "name": "יום ירושלים"
+- "topic id": "9BV2fKxL", "name": "י\"ז בתמוז"
+- "topic id": "MkVeezxY", "name": "ימי בין המצרים"
+- "topic id": "arE77pz5", "name": "ל\"ג בעומר"
+- "topic id": "Q2ZFsb9a", "name": "סוכות"
+- "topic id": "paN1Ehbq", "name": "ספירת העומר"
+- "topic id": "ZjqGWdYE", "name": "שבת הגדול"
+- "topic id": "RWqjxgkj", "name": "פסח"
+- "topic id": "PkEfPB9i", "name": "ראש השנה"
+- "topic id": "MyLcuAgH", "name": "שבועות"
+- "topic id": "3r8kzv2E", "name": "לילה דכלה"
+- "topic id": "9eCd3GLo", "name": "שבועות", "name": "שבעה באוקטובר"
+- "topic id": "sDsGrrTH", "name": "שמחת תורה"
+- "topic id": "n4F3bUjd", "name": "שמיני עצרת"
+
+6. collection - Filter by collection id's. Use the get_collection_filter_values tool to obtain collection values. Collections are groups of related content units. Each daily lesson is a collection, and there are also collections for conventions and special events.
+
+Arguments:
+- query: optional search text. Required when exact_phrase is true.
+- filters: optional structured filters as described above.
+- language: optional UI language used for language ordering. Example values: en, ru, es, he. If not specified or invalid, defaults to en. Note that the search results may contain content in various languages regardless of this parameter, since it is only used for language ordering based on detected language and language filters.
+- sort_by: optional result sort.
+- from: optional zero-based offset.
+- size: optional page size.
+- exact_phrase: optional boolean. When true, the full query is treated as one exact phrase and requires a non-empty query.
+Behavior:
+- Returns JSON with the normalized search query, selected sort, pagination, and Elasticsearch result payload.
+- Use this as the main discovery tool. If you need the full text of a specific source or transcript after search, follow up with source_lookup or transcript_lookup.`
 }
 
 func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
