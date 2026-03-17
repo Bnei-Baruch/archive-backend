@@ -13,11 +13,16 @@ import (
 )
 
 type fakeReasoningTool struct {
-	definition llm.ReasoningToolDefinition
+	definition       llm.ReasoningToolDefinition
+	usageExplanation string
 }
 
 func (t *fakeReasoningTool) Definition() llm.ReasoningToolDefinition {
 	return t.definition
+}
+
+func (t *fakeReasoningTool) UsageExplanation() string {
+	return t.usageExplanation
 }
 
 func (t *fakeReasoningTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
@@ -56,6 +61,7 @@ func TestReasoningToolManagerGeneratesToolCallsAndHandlers(t *testing.T) {
 					"type": "object",
 				},
 			},
+			usageExplanation: "Tool: source_lookup",
 		},
 	)
 	if err != nil {
@@ -81,6 +87,36 @@ func TestReasoningToolManagerGeneratesToolCallsAndHandlers(t *testing.T) {
 	}
 	if result != "ok" {
 		t.Fatalf("unexpected handler result: %s", result)
+	}
+}
+
+func TestGenerateSystemMessageForReasoningSearchIncludesToolUsage(t *testing.T) {
+	manager, err := llm.NewReasoningToolManager(
+		&fakeReasoningTool{
+			definition:       llm.ReasoningToolDefinition{Name: "tool_a"},
+			usageExplanation: "Tool: tool_a\nUse it first.",
+		},
+		&fakeReasoningTool{
+			definition:       llm.ReasoningToolDefinition{Name: "tool_b"},
+			usageExplanation: "Tool: tool_b\nUse it second.",
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error creating manager: %v", err)
+	}
+
+	message := llm.GenerateSystemMessageForReasoningSearch(manager.Tools())
+	if !strings.Contains(message, "Available tools and usage instructions:") {
+		t.Fatalf("expected tool usage header in message: %s", message)
+	}
+	if !strings.Contains(message, "Tool: tool_a\nUse it first.") {
+		t.Fatalf("expected first tool usage explanation in message: %s", message)
+	}
+	if !strings.Contains(message, "Tool: tool_b\nUse it second.") {
+		t.Fatalf("expected second tool usage explanation in message: %s", message)
+	}
+	if strings.Index(message, "Tool: tool_a") > strings.Index(message, "Tool: tool_b") {
+		t.Fatalf("expected tool explanations to preserve manager order: %s", message)
 	}
 }
 
