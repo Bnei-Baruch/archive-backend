@@ -30,6 +30,7 @@ func NewAppScopedManager(deps AppScopedManagerDeps) (*llm.ReasoningToolManager, 
 	return llm.NewReasoningToolManager(
 		NewSourceLookupTool(deps.DB, deps.AssetsService),
 		NewTranscriptLookupTool(deps.DB, deps.AssetsService),
+		NewGetSourceFilterValuesTool(),
 		NewGetSourcesByAuthorTool(deps.DB),
 		NewGetCollectionsTool(deps.DB),
 		NewGetContentUnitsByCollectionTool(deps.DB),

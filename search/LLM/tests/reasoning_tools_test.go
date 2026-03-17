@@ -121,6 +121,11 @@ func TestGenerateSystemMessageForReasoningSearchIncludesToolUsage(t *testing.T) 
 }
 
 func TestPostgreSQLToolDefinitions(t *testing.T) {
+	sourceFilterValues := llmtools.NewGetSourceFilterValuesTool().Definition()
+	if sourceFilterValues.Name != "get_source_filter_values" {
+		t.Fatalf("unexpected get_source_filter_values tool name: %s", sourceFilterValues.Name)
+	}
+
 	sourcesByAuthor := llmtools.NewGetSourcesByAuthorTool(nil).Definition()
 	if sourcesByAuthor.Name != "get_sources_by_author" {
 		t.Fatalf("unexpected get_sources_by_author tool name: %s", sourcesByAuthor.Name)
@@ -168,7 +173,7 @@ func TestNewAppScopedManager(t *testing.T) {
 		t.Fatalf("unexpected error creating app-scoped manager: %v", err)
 	}
 
-	if manager.Len() != 6 {
+	if manager.Len() != 7 {
 		t.Fatalf("unexpected tool count: %d", manager.Len())
 	}
 
@@ -180,6 +185,7 @@ func TestNewAppScopedManager(t *testing.T) {
 	expected := []string{
 		"source_lookup",
 		"transcript_lookup",
+		"get_source_filter_values",
 		"get_sources_by_author",
 		"get_collections",
 		"get_content_units_by_collection",
