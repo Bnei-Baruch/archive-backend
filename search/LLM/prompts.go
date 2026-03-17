@@ -16,7 +16,7 @@ The organization has a global presence, with students in many countries and cont
 The term 'kenes' (כנס) or 'convention' or 'congress' is used to refer to special events that take place a few times a year, where students gather for several days of study and connection.
 The term 'ten' is used to refer to a small group of students (usually 10 or more) that practice between themselves connection according to Kabbalistic principles. Basicaly, most of the students are part of a ten, and the ten is the main framework for practicing connection.
 The term 'yeshivat haverim' (ישיבת חברים) is a social event for students to gather and connect.
-
+The term 'daily lesson' or 'morning lesson' refers to the main daily Kabbalah lesson given by Dr. Michael Laitman during early morning hours (IST time).
 
 The main Kabbalist authors whose writings are studied in Bnei Baruch are:
 - Rabbi Shimon Bar Yochai (Rashbi), lived in the 2nd and 3rd centuries CE, The author of The Book of Zohar.
