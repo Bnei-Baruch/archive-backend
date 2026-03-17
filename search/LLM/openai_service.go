@@ -107,6 +107,7 @@ type ResponsesResponse struct {
 	Output            []ResponsesOutputItem       `json:"output"`
 	Error             *ResponsesAPIError          `json:"error,omitempty"`
 	IncompleteDetails *ResponsesIncompleteDetails `json:"incomplete_details,omitempty"`
+	Usage             *OpenAIUsage                `json:"usage,omitempty"`
 }
 
 type ResponseFormat struct {
@@ -119,6 +120,7 @@ type ChatResponse struct {
 		Index   int           `json:"index"`
 		Message LLMBotMessage `json:"message"`
 	} `json:"choices"`
+	Usage *OpenAIUsage `json:"usage,omitempty"`
 }
 
 type EmbeddingResponse struct {
@@ -126,6 +128,11 @@ type EmbeddingResponse struct {
 		Index     int       `json:"index"`
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
+	Usage *OpenAIUsage `json:"usage,omitempty"`
+}
+
+type OpenAIUsage struct {
+	TotalTokens int `json:"total_tokens,omitempty"`
 }
 
 type LLMBotMessage struct {
@@ -137,7 +144,10 @@ type LLMBotMessage struct {
 }
 
 func (s *OpenAIService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, user *string, reasoningEffort *string, output interface{}) error {
-	msg, err := s.GetChatResponse(model, maxTokens, messages, user, nil, &jsonSchema, reasoningEffort)
+	msg, totalTokens, err := s.getChatResponseWithUsage(model, maxTokens, messages, user, nil, &jsonSchema, reasoningEffort)
+	if totalTokens > 0 {
+		log.Printf("OpenAI GetStructuredOutput total tokens: %d", totalTokens)
+	}
 	if err != nil {
 		return err
 	}
@@ -155,6 +165,17 @@ func (s *OpenAIService) GetStructuredOutput(jsonSchema string, model string, max
 }
 
 func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
+	msg, totalTokens, err := s.getChatResponseWithUsage(model, maxTokens, messages, user, frequencyPenalty, jsonSchema, reasoningEffort)
+	if totalTokens > 0 {
+		log.Printf("OpenAI GetChatResponse total tokens: %d", totalTokens)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return msg, nil
+}
+
+func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, int, error) {
 	sysMsgCount := 0
 	for _, m := range messages {
 		if m.Role == "system" || m.Role == "developer" {
@@ -162,7 +183,7 @@ func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages [
 		}
 	}
 	if sysMsgCount != 1 {
-		return nil, fmt.Errorf("must include exactly one system message, found %d", sysMsgCount)
+		return nil, 0, fmt.Errorf("must include exactly one system message, found %d", sysMsgCount)
 	}
 
 	var respFmt *ResponseFormat
@@ -170,7 +191,7 @@ func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages [
 		var JsonSchemaData interface{}
 		err := json.Unmarshal([]byte(*jsonSchema), &JsonSchemaData)
 		if err != nil {
-			return nil, fmt.Errorf("invalid json_schema: %v", err)
+			return nil, 0, fmt.Errorf("invalid json_schema: %v", err)
 		}
 		respFmt = &ResponseFormat{
 			Type:       "json_schema",
@@ -190,15 +211,19 @@ func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages [
 
 	var chatResp ChatResponse
 	if err := s.callAPI(req, chatEndpoint, &chatResp); err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	totalTokens := 0
+	if chatResp.Usage != nil {
+		totalTokens = chatResp.Usage.TotalTokens
 	}
 
 	for _, choice := range chatResp.Choices {
 		if choice.Index == 0 {
-			return &choice.Message, nil
+			return &choice.Message, totalTokens, nil
 		}
 	}
-	return nil, errors.New("no valid chat choices returned")
+	return nil, totalTokens, errors.New("no valid chat choices returned")
 }
 
 func (s *OpenAIService) GetReasoningResponseWithTools(
@@ -212,6 +237,13 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
+	totalTokens := 0
+	defer func() {
+		if totalTokens > 0 {
+			log.Printf("OpenAI GetReasoningResponseWithTools total tokens: %d", totalTokens)
+		}
+	}()
+
 	if len(tools) == 0 {
 		return nil, errors.New("tools must contain at least one tool definition")
 	}
@@ -277,6 +309,9 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 		var responsesResp ResponsesResponse
 		if err := s.callAPI(req, responsesEndpoint, &responsesResp); err != nil {
 			return nil, err
+		}
+		if responsesResp.Usage != nil {
+			totalTokens += responsesResp.Usage.TotalTokens
 		}
 
 		if responsesResp.Error != nil {
@@ -388,6 +423,13 @@ func (s *OpenAIService) GetEmbeddings(content string) ([]float64, error) {
 	var resp EmbeddingResponse
 	if err := s.callAPI(payload, embeddingsEndpoint, &resp); err != nil {
 		return nil, err
+	}
+	totalTokens := 0
+	if resp.Usage != nil {
+		totalTokens = resp.Usage.TotalTokens
+	}
+	if totalTokens > 0 {
+		log.Printf("OpenAI GetEmbeddings total tokens: %d", totalTokens)
 	}
 
 	for _, d := range resp.Data {
