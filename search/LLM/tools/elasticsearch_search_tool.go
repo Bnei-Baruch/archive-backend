@@ -183,7 +183,7 @@ KxApZ4pI – Baruch Shalom HaLevi Ashlag (Rabash). Use this filter when looking 
 - "topic id": "sDsGrrTH", "name": "שמחת תורה"
 - "topic id": "n4F3bUjd", "name": "שמיני עצרת"
 
-6. collection - Filter by collection id's. Use the get_collection_filter_values tool to obtain collection values. Collections are groups of related content units. Each daily lesson is a collection, and there are also collections for conventions and special events.
+6. collection - Filter by collection id's. Use the get_collection_filter_values tool to obtain collection values. Collections are groups of related content units. Each daily lesson is a collection, a TV series (program) is also a collection, and there are also collections for conventions and special events.
 
 Arguments:
 - query: optional search text. Required when exact_phrase is true.
