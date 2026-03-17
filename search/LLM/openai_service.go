@@ -71,11 +71,23 @@ type ResponsesRequest struct {
 	MaxOutputTokens    *int                     `json:"max_output_tokens,omitempty"`
 	User               *string                  `json:"user,omitempty"`
 	Reasoning          *ResponsesReasoning      `json:"reasoning,omitempty"`
+	Text               *ResponsesText           `json:"text,omitempty"`
 	Tools              []map[string]interface{} `json:"tools,omitempty"`
 }
 
 type ResponsesReasoning struct {
 	Effort string `json:"effort,omitempty"`
+}
+
+type ResponsesText struct {
+	Format *ResponsesTextFormat `json:"format,omitempty"`
+}
+
+type ResponsesTextFormat struct {
+	Type   string      `json:"type"`
+	Name   string      `json:"name,omitempty"`
+	Schema interface{} `json:"schema,omitempty"`
+	Strict bool        `json:"strict,omitempty"`
 }
 
 type ResponsesOutputContent struct {
@@ -237,10 +249,51 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
+	return s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, user, reasoningEffort, deb, maxIterations)
+}
+
+func (s *OpenAIService) GetReasoningStructuredOutputWithTools(
+	jsonSchema string,
+	model string,
+	maxTokens *int,
+	messages []LLMBotMessage,
+	tools []ToolCall,
+	toolHandlers map[string]ToolHandler,
+	user *string,
+	reasoningEffort *string,
+	deb bool,
+	maxIterations int,
+	output interface{},
+) error {
+	msg, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, user, reasoningEffort, deb, maxIterations)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
+		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
+		return err
+	}
+	return nil
+}
+
+func (s *OpenAIService) getReasoningResponseWithTools(
+	methodName string,
+	jsonSchema *string,
+	model string,
+	maxTokens *int,
+	messages []LLMBotMessage,
+	tools []ToolCall,
+	toolHandlers map[string]ToolHandler,
+	user *string,
+	reasoningEffort *string,
+	deb bool,
+	maxIterations int,
+) (*LLMBotMessage, error) {
 	totalTokens := 0
 	defer func() {
 		if totalTokens > 0 {
-			log.Printf("OpenAI GetReasoningResponseWithTools total tokens: %d", totalTokens)
+			log.Printf("OpenAI %s total tokens: %d", methodName, totalTokens)
 		}
 	}()
 
@@ -289,6 +342,11 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 		return nil, err
 	}
 
+	text, err := buildResponsesText(jsonSchema)
+	if err != nil {
+		return nil, err
+	}
+
 	var previousResponseID *string
 	nextInput := initialInput
 
@@ -300,6 +358,7 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 			PreviousResponseID: previousResponseID,
 			MaxOutputTokens:    maxTokens,
 			User:               user,
+			Text:               text,
 			Tools:              normalizedTools,
 		}
 		if reasoningEffort != nil {
@@ -373,6 +432,26 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 	}
 
 	return nil, fmt.Errorf("max reasoning iterations reached (%d)", maxIterations)
+}
+
+func buildResponsesText(jsonSchema *string) (*ResponsesText, error) {
+	if jsonSchema == nil {
+		return nil, nil
+	}
+
+	var schema interface{}
+	if err := json.Unmarshal([]byte(*jsonSchema), &schema); err != nil {
+		return nil, fmt.Errorf("invalid json_schema: %v", err)
+	}
+
+	return &ResponsesText{
+		Format: &ResponsesTextFormat{
+			Type:   "json_schema",
+			Name:   "structured_output",
+			Schema: schema,
+			Strict: true,
+		},
+	}, nil
 }
 
 func normalizeResponseTools(tools []ToolCall) ([]map[string]interface{}, error) {
