@@ -14,6 +14,7 @@ type ReasoningToolDefinition struct {
 
 type ReasoningTool interface {
 	Definition() ReasoningToolDefinition
+	UsageExplanation() string
 	Execute(ctx context.Context, arguments json.RawMessage) (string, error)
 }
 
@@ -89,6 +90,14 @@ func (m *ReasoningToolManager) ToolHandlers() map[string]ToolHandler {
 		handlers[name] = tool.Execute
 	}
 	return handlers
+}
+
+func (m *ReasoningToolManager) Tools() []ReasoningTool {
+	tools := make([]ReasoningTool, 0, len(m.order))
+	for _, name := range m.order {
+		tools = append(tools, m.toolsByName[name])
+	}
+	return tools
 }
 
 func (m *ReasoningToolManager) Len() int {
