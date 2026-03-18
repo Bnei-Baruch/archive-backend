@@ -310,6 +310,28 @@ func (t *GetSourcesByAuthorTool) Definition() llm.ReasoningToolDefinition {
 	}
 }
 
+func (t *GetSourcesByAuthorTool) UsageExplanation() string {
+	return `Tool: get_sources_by_author
+This tool allows you to retrieve structured metadata about sources (library items) linked to a specific author from PostgreSQL.
+The available author codes are:
+"vk" -	"various"
+"bs" -	"Baal HaSulam"
+"rb" -	"Rabash"
+"ml" -	"Michael Laitman"
+"bb" -	"Bnei Baruch"
+"mr" -	"Moshe Rabbenu"
+"rh" -	"Rashbi"
+"ar" -	"Ari"
+"rl" -	"Ramchal"
+"ag" -	"Agra"
+Arguments:
+- author_id: required. Author code (like "bs") or numeric MDB id.
+- language: optional language for localized names and descriptions (e.g., "en", "he").
+- limit: optional maximum number of rows.
+Behavior:
+- Returns JSON with the resolved author and a list of public published sources in the library linked to that author.`
+}
+
 func (t *GetCollectionsTool) Definition() llm.ReasoningToolDefinition {
 	return llm.ReasoningToolDefinition{
 		Name:        "get_collections",
@@ -343,6 +365,22 @@ func (t *GetCollectionsTool) Definition() llm.ReasoningToolDefinition {
 	}
 }
 
+func (t *GetCollectionsTool) UsageExplanation() string {
+	return `Tool: get_collections
+This tool allows you to retrieve structured metadata about public collections from PostgreSQL.
+Collections are groups of related content units. Each daily lesson is a collection, a TV series (program) is also a collection, and there are also collections for conventions and special events. You can use this tool to find collections by their identifier, content type, or by a text query that matches their UID, name, or description.
+This tool is to efficient to be used as a first step to find collections, and then you can use get_content_units_by_collection to retrieve the items inside a collection you are interested in.
+Available content types include: ARTICLES, BOOKS, CHILDREN_LESSONS, CLIPS, CONGRESS, DAILY_LESSON, FRIENDS_GATHERINGS, HOLIDAY, LECTURE_SERIES, LESSONS_SERIES, MEALS, PICNIC, SONGS, SPECIAL_LESSON, UNITY_DAY, VIDEO_PROGRAM, VIRTUAL_LESSONS, WOMEN_LESSONS
+Arguments:
+- collection_id: optional exact lookup by collection UID or numeric MDB id.
+- content_type: optional collection content type filter.
+- query: optional text filter over collection uid, name, and description.
+- language: optional UI language for localized names and descriptions.
+- limit: optional maximum number of rows.
+Behavior:
+- Returns JSON with matching public published collections and their public content unit counts.`
+}
+
 func (t *GetContentUnitsByCollectionTool) Definition() llm.ReasoningToolDefinition {
 	return llm.ReasoningToolDefinition{
 		Name:        "get_content_units_by_collection",
@@ -367,6 +405,19 @@ func (t *GetContentUnitsByCollectionTool) Definition() llm.ReasoningToolDefiniti
 			"additionalProperties": false,
 		},
 	}
+}
+
+func (t *GetContentUnitsByCollectionTool) UsageExplanation() string {
+	return `Tool: get_content_units_by_collection
+This tool allows you to retrieve structured metadata about public content units that belong to a specific collection from PostgreSQL.
+Use this tool after you know the collection and need its member content units.
+Arguments:
+- collection_id: required. Collection UID or numeric MDB id.
+- language: optional language for localized names and descriptions.
+- limit: optional maximum number of rows.
+Behavior:
+- Returns JSON with the resolved public collection and its public published content units.
+- This is the right follow-up tool after get_collections when the user wants items inside a collection.`
 }
 
 func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
