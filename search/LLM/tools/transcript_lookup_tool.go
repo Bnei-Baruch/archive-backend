@@ -138,6 +138,18 @@ func (t *TranscriptLookupTool) Definition() llm.ReasoningToolDefinition {
 	}
 }
 
+func (t *TranscriptLookupTool) UsageExplanation() string {
+	return `Tool: transcript_lookup
+	Use this tool to retrieve the text content of a transcript related to some content unit from the CDN using its identifier. This is useful when the highlights of the search results are not sufficient and you need to access the full text of the transcript document for better understanding.
+Arguments:
+- content_unit_id: required. Content unit UID or numeric MDB id.
+- language: optional preferred transcript language code.
+Behavior:
+- Looks up a public transcript document for the content unit, converts it to plain text with Doc2Text, and returns the text.
+- If language is omitted or not found, the tool falls back by language preference.
+- If no transcript exists, the tool returns an explicit not-found error.`
+}
+
 func (t *TranscriptLookupTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	if t.db == nil {
 		return "", fmt.Errorf("transcript_lookup: db is nil")
