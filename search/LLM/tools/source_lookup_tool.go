@@ -131,6 +131,18 @@ func (t *SourceLookupTool) Definition() llm.ReasoningToolDefinition {
 	}
 }
 
+func (t *SourceLookupTool) UsageExplanation() string {
+	return `Tool: source_lookup
+	Use this tool to retrieve the text content of a source (library item) document from the CDN using its identifier. This is useful when the highlights of the search results are not sufficient and you need to access the full text of the source document for better understanding.
+Arguments:
+- source_id: required. Source UID or numeric MDB source id.
+- language: optional preferred language code.
+Behavior:
+- Looks up a public source document file from CDN, converts it to plain text with Doc2Text, and returns the text.
+- If language is omitted or not found, the tool falls back by language preference.
+- If no public source document is found, it returns an empty string.`
+}
+
 func (t *SourceLookupTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	if t.db == nil {
 		return "", fmt.Errorf("source_lookup: db is nil")
