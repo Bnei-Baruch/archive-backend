@@ -123,6 +123,7 @@ func (t *ElasticsearchSearchTool) Definition() llm.ReasoningToolDefinition {
 }
 
 func (t *ElasticsearchSearchTool) UsageExplanation() string {
+	// TBC - The "Recommendation for the agent" in the bottom may be need to be updated.
 	return `Tool: elasticsearch_search
 Elasticsearch holds an index of the archive content retrieved from PostgreSQL (the DB that stores various metadata about the content like content type, source, title and more) and docx/pdf files of sources (library items) and lessons/programs transcripts.
 Use this tool for archive search when you need relevant results by text query, filters, or both.
@@ -184,7 +185,7 @@ KxApZ4pI – Baruch Shalom HaLevi Ashlag (Rabash). Use this filter when looking 
 - "topic id": "sDsGrrTH", "name": "שמחת תורה"
 - "topic id": "n4F3bUjd", "name": "שמיני עצרת"
 
-6. collection - Filter by collection id's. Use the get_collection_filter_values tool to obtain collection values. Collections are groups of related content units. Each daily lesson is a collection, a TV series (program) is also a collection, and there are also collections for conventions and special events.
+6. collection - Filter by collection ids. Use the get_collections tool to obtain collection ids. Collections are groups of related content units. Each daily lesson is a collection, a TV series (program) is also a collection, and there are also collections for conventions and special events.
 
 Arguments:
 - query: optional search text. Required when exact_phrase is true.
@@ -196,7 +197,32 @@ Arguments:
 - exact_phrase: optional boolean. When true, the full query is treated as one exact phrase and requires a non-empty query.
 Behavior:
 - Returns JSON with the normalized search query, selected sort, pagination, and Elasticsearch result payload.
-- Use this as the main discovery tool. If you need the full text of a specific source or transcript after search, follow up with source_lookup or transcript_lookup.`
+- Use this as the main discovery tool. If you need the full text of a specific source or transcript after search, follow up with source_lookup or transcript_lookup.
+Returned data:
+- query: the normalized search.Query that was actually executed. Inspect query.term, query.exact_terms, query.filters, and query.language_order to understand the final search request.
+- sort_by, from, size: the resolved sort and pagination actually used.
+- result: a search.QueryResult object.
+- result.language: the language used for search ordering.
+- result.typo_suggest: optional typo suggestion string.
+- result.search_result.hits.total_hits: total number of matching results.
+- result.search_result.hits.hits: the actual page of results. Each hit is a raw Elasticsearch hit.
+- For each hit, inspect _source.result_type to understand the kind of result:
+  - units: individual content items such as lesson parts, lectures, clips, event parts, articles, and similar searchable media/text items.
+  - sources: library/source texts such as books, articles, volumes, and chapters from the Library section.
+  - collections: grouped content such as daily lessons, program series, conventions, and special events.
+  - posts: blog posts.
+  - tweets: tweets.
+  - tags: tag/topic results.
+- Important distinction:
+  - units, sources, posts are usually direct content results. They normally point to one concrete item.
+  - collections, tags, and tweets are often narrowing/grouping results, not a final concrete item. A collection usually represents a group of related content units. A tag usually represents a topic bucket that can lead to many matching items.
+  - These grouping results exist to narrow the search space and avoid pushing many weak individual hits above a stronger grouped result.
+- Recommendation for the agent:
+  - If the user wants a concrete item to watch, read, quote, or summarize, do not stop at a collection or tag hit. Use that hit as a clue and run a follow-up search with the collection or topic/tag filter, then return the best concrete content units or sources inside it.
+  - If the user intent is broad exploration, browsing, or discovery, it can be appropriate to present a collection or tag as a useful answer, but explain that it is a group/topic and not one specific content item.
+  - If both direct content hits and grouping hits are relevant, prefer direct content for final recommendations and use grouping hits as supporting navigation or refinement hints.
+- Useful _source fields usually include mdb_uid, title, full_title, description, content, effective_date, and typed_uids.
+- Some hits may also contain highlight fragments under hit.highlight. Use those to explain why the hit matched.`
 }
 
 func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
