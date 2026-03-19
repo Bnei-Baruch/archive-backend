@@ -371,6 +371,7 @@ This tool allows you to retrieve structured metadata about public collections fr
 Collections are groups of related content units. Each daily lesson is a collection, a TV series (program) is also a collection, and there are also collections for conventions and special events. You can use this tool to find collections by their identifier, content type, or by a text query that matches their UID, name, or description.
 This tool is to efficient to be used as a first step to find collections, and then you can use get_content_units_by_collection to retrieve the items inside a collection you are interested in.
 Available content types include: ARTICLES, BOOKS, CHILDREN_LESSONS, CLIPS, CONGRESS, DAILY_LESSON, FRIENDS_GATHERINGS, HOLIDAY, LECTURE_SERIES, LESSONS_SERIES, MEALS, PICNIC, SONGS, SPECIAL_LESSON, UNITY_DAY, VIDEO_PROGRAM, VIRTUAL_LESSONS, WOMEN_LESSONS
+To get the list of collections that related to a program (TV series), use content_type filter with value "VIDEO_PROGRAM" and from the returned collections look for the name that matches user's query. If it is not clear what is the user asking for, you can assume he asking for some program name and use this approach to find the program collection.
 Arguments:
 - collection_id: optional exact lookup by collection UID or numeric MDB id.
 - content_type: optional collection content type filter.
