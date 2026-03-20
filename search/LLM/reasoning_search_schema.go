@@ -4,16 +4,16 @@ type ReasoningSearchResponse struct {
 	Query   string                  `json:"query"`
 	Summary string                  `json:"summary"`
 	Results []ReasoningSearchResult `json:"results"`
-	Notes   []string                `json:"notes,omitempty"`
+	Notes   []string                `json:"notes"`
 }
 
 type ReasoningSearchResult struct {
 	MDBUID           string   `json:"mdb_uid"`
 	ResultType       string   `json:"result_type"`
 	Title            string   `json:"title"`
-	FullTitle        string   `json:"full_title,omitempty"`
-	Description      string   `json:"description,omitempty"`
-	ContentType      string   `json:"content_type,omitempty"`
+	FullTitle        string   `json:"full_title"`
+	Description      string   `json:"description"`
+	ContentType      string   `json:"content_type"`
 	Language         string   `json:"language"`
 	Date             string   `json:"date"`
 	Reason           string   `json:"reason"`
@@ -56,15 +56,15 @@ func GenerateReasoningSearchResponseJSONSchema() string {
           },
           "full_title": {
             "type": "string",
-            "description": "Full title if available."
+            "description": "Full title if available, otherwise an empty string."
           },
           "description": {
             "type": "string",
-            "description": "Short description if available."
+            "description": "Short description if available, otherwise an empty string."
           },
           "content_type": {
             "type": "string",
-            "description": "Content type if available."
+            "description": "Content type if available, otherwise an empty string."
           },
           "language": {
             "type": "string",
@@ -94,6 +94,9 @@ func GenerateReasoningSearchResponseJSONSchema() string {
           "mdb_uid",
           "result_type",
           "title",
+          "full_title",
+          "description",
+          "content_type",
           "language",
           "date",
           "reason",
@@ -104,12 +107,12 @@ func GenerateReasoningSearchResponseJSONSchema() string {
     },
     "notes": {
       "type": "array",
-      "description": "Optional short notes, caveats, or follow-up guidance.",
+      "description": "Short notes, caveats, or follow-up guidance. Return an empty array if there are no notes.",
       "items": {
         "type": "string"
       }
     }
   },
-  "required": ["query", "summary", "results"]
+  "required": ["query", "summary", "results", "notes"]
 }`
 }
