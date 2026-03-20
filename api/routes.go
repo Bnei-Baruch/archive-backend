@@ -32,6 +32,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/publishers", PublishersHandler)
 	router.GET("/recently_updated", RecentlyUpdatedHandler)
 	router.GET("/search", SearchHandler)
+	router.POST("/search/reasoning", ReasoningSearchHandler)
 	router.GET("/stats/search_class", SearchStatsHandler)
 	router.GET("/autocomplete", AutocompleteHandler)
 	router.GET("/home", HomePageHandler)

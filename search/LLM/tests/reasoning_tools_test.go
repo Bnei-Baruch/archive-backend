@@ -120,6 +120,29 @@ func TestGenerateSystemMessageForReasoningSearchIncludesToolUsage(t *testing.T) 
 	}
 }
 
+func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *testing.T) {
+	schema := llm.GenerateReasoningSearchResponseJSONSchema()
+
+	requiredSnippets := []string{
+		`"query"`,
+		`"summary"`,
+		`"results"`,
+		`"mdb_uid"`,
+		`"result_type"`,
+		`"reason"`,
+		`"highlights"`,
+		`"language"`,
+		`"date"`,
+		`"is_grouping_result"`,
+	}
+
+	for _, snippet := range requiredSnippets {
+		if !strings.Contains(schema, snippet) {
+			t.Fatalf("expected schema to contain %s", snippet)
+		}
+	}
+}
+
 func TestPostgreSQLToolDefinitions(t *testing.T) {
 	sourceFilterValues := llmtools.NewGetSourceFilterValuesTool().Definition()
 	if sourceFilterValues.Name != "get_source_filter_values" {
