@@ -31,7 +31,11 @@ func NewServiceFromConfig() (Service, error) {
 		if token == "" {
 			return nil, fmt.Errorf("openai.token is empty")
 		}
-		return NewOpenAIService(token), nil
+		pricing := []OpenAIModelPricing{}
+		if err := viper.UnmarshalKey("openai.pricing", &pricing); err != nil {
+			return nil, fmt.Errorf("failed to read openai.pricing: %w", err)
+		}
+		return NewOpenAIServiceWithPricing(token, pricing), nil
 	default:
 		return nil, fmt.Errorf("unsupported llm provider: %s", provider)
 	}

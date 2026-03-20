@@ -61,6 +61,12 @@ provider="openai"
 [openai]
 token="sk-..."
 reasoning-search-model="gpt-5.4"
-reasoning-search-effort="xhigh"
+reasoning-search-effort="high" # "xhigh" is also available
 reasoning-search-max-output-tokens=8000
 reasoning-search-max-iterations=16
+
+[[openai.pricing]]
+model="gpt-5.4"
+input_per_1m_tokens_usd=2.50
+cached_input_per_1m_tokens_usd=0.25
+output_per_1m_tokens_usd=15.00
