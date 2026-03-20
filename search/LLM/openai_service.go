@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -76,7 +77,8 @@ type ResponsesRequest struct {
 }
 
 type ResponsesReasoning struct {
-	Effort string `json:"effort,omitempty"`
+	Effort  string `json:"effort,omitempty"`
+	Summary string `json:"summary,omitempty"`
 }
 
 type ResponsesText struct {
@@ -102,6 +104,7 @@ type ResponsesOutputItem struct {
 	Arguments string                   `json:"arguments,omitempty"`
 	Role      string                   `json:"role,omitempty"`
 	Content   []ResponsesOutputContent `json:"content,omitempty"`
+	Summary   []ResponsesOutputContent `json:"summary,omitempty"`
 }
 
 type ResponsesAPIError struct {
@@ -120,6 +123,10 @@ type ResponsesResponse struct {
 	Error             *ResponsesAPIError          `json:"error,omitempty"`
 	IncompleteDetails *ResponsesIncompleteDetails `json:"incomplete_details,omitempty"`
 	Usage             *OpenAIUsage                `json:"usage,omitempty"`
+}
+
+type reasoningSummarySetter interface {
+	SetReasoningSummary(string)
 }
 
 type ResponseFormat struct {
@@ -249,7 +256,8 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	return s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, user, reasoningEffort, deb, maxIterations)
+	msg, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, user, reasoningEffort, deb, maxIterations)
+	return msg, err
 }
 
 func (s *OpenAIService) GetReasoningStructuredOutputWithTools(
@@ -265,7 +273,7 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, user, reasoningEffort, deb, maxIterations)
+	msg, reasoningSummary, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, user, reasoningEffort, deb, maxIterations)
 	if err != nil {
 		return err
 	}
@@ -273,6 +281,11 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithTools(
 	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
 		return err
+	}
+	if deb && reasoningSummary != "" {
+		if setter, ok := output.(reasoningSummarySetter); ok {
+			setter.SetReasoningSummary(reasoningSummary)
+		}
 	}
 	return nil
 }
@@ -289,19 +302,20 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 	reasoningEffort *string,
 	deb bool,
 	maxIterations int,
-) (*LLMBotMessage, error) {
+) (*LLMBotMessage, string, error) {
 	totalTokens := 0
 	defer func() {
 		if totalTokens > 0 {
 			log.Printf("OpenAI %s total tokens: %d", methodName, totalTokens)
 		}
 	}()
+	reasoningSummaries := []string{}
 
 	if len(tools) == 0 {
-		return nil, errors.New("tools must contain at least one tool definition")
+		return nil, "", errors.New("tools must contain at least one tool definition")
 	}
 	if len(toolHandlers) == 0 {
-		return nil, errors.New("toolHandlers must contain at least one handler")
+		return nil, "", errors.New("toolHandlers must contain at least one handler")
 	}
 	if maxIterations <= 0 {
 		maxIterations = 8
@@ -319,7 +333,7 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 		}
 		if m.Role == "tool" {
 			if m.ToolCallID == "" {
-				return nil, errors.New("tool message is missing tool_call_id")
+				return nil, "", errors.New("tool message is missing tool_call_id")
 			}
 			initialInput = append(initialInput, map[string]string{
 				"type":    "function_call_output",
@@ -334,17 +348,17 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 		})
 	}
 	if sysMsgCount != 1 {
-		return nil, fmt.Errorf("must include exactly one system message, found %d", sysMsgCount)
+		return nil, "", fmt.Errorf("must include exactly one system message, found %d", sysMsgCount)
 	}
 
 	normalizedTools, err := normalizeResponseTools(tools)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	text, err := buildResponsesText(jsonSchema)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var previousResponseID *string
@@ -361,23 +375,34 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 			Text:               text,
 			Tools:              normalizedTools,
 		}
-		if reasoningEffort != nil {
-			req.Reasoning = &ResponsesReasoning{Effort: *reasoningEffort}
+		if reasoningEffort != nil || deb {
+			req.Reasoning = &ResponsesReasoning{}
+			if reasoningEffort != nil {
+				req.Reasoning.Effort = *reasoningEffort
+			}
+			if deb {
+				req.Reasoning.Summary = "auto"
+			}
 		}
 
 		var responsesResp ResponsesResponse
 		if err := s.callAPI(req, responsesEndpoint, &responsesResp); err != nil {
-			return nil, err
+			return nil, "", err
 		}
+		iterationSummary := strings.Join(extractReasoningSummaryText(responsesResp.Output), "\n\n")
+		if strings.TrimSpace(iterationSummary) != "" {
+			reasoningSummaries = append(reasoningSummaries, iterationSummary)
+		}
+		printReasoningOutputIfDeb(deb, i+1, responsesResp.Output)
 		if responsesResp.Usage != nil {
 			totalTokens += responsesResp.Usage.TotalTokens
 		}
 
 		if responsesResp.Error != nil {
 			if responsesResp.Error.Code != "" {
-				return nil, fmt.Errorf("responses API error (%s): %s", responsesResp.Error.Code, responsesResp.Error.Message)
+				return nil, "", fmt.Errorf("responses API error (%s): %s", responsesResp.Error.Code, responsesResp.Error.Message)
 			}
-			return nil, fmt.Errorf("responses API error: %s", responsesResp.Error.Message)
+			return nil, "", fmt.Errorf("responses API error: %s", responsesResp.Error.Message)
 		}
 
 		functionCalls := []ResponsesOutputItem{}
@@ -390,23 +415,23 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 		if len(functionCalls) == 0 {
 			content := extractAssistantOutputText(responsesResp.Output)
 			if content == "" && responsesResp.IncompleteDetails != nil && responsesResp.IncompleteDetails.Reason != "" {
-				return nil, fmt.Errorf("responses API returned incomplete output: %s", responsesResp.IncompleteDetails.Reason)
+				return nil, "", fmt.Errorf("responses API returned incomplete output: %s", responsesResp.IncompleteDetails.Reason)
 			}
 			return &LLMBotMessage{
 				Role:    "assistant",
 				Content: content,
-			}, nil
+			}, strings.Join(reasoningSummaries, "\n\n"), nil
 		}
 
 		nextInput = []interface{}{}
 		for _, toolCall := range functionCalls {
 			if toolCall.CallID == "" {
-				return nil, fmt.Errorf("tool call for '%s' is missing call_id", toolCall.Name)
+				return nil, "", fmt.Errorf("tool call for '%s' is missing call_id", toolCall.Name)
 			}
 
 			handler, ok := toolHandlers[toolCall.Name]
 			if !ok {
-				return nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Name)
+				return nil, "", fmt.Errorf("missing handler for tool '%s'", toolCall.Name)
 			}
 
 			rawArgs := json.RawMessage(toolCall.Arguments)
@@ -414,12 +439,12 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 				rawArgs = json.RawMessage("{}")
 			}
 			if !json.Valid(rawArgs) {
-				return nil, fmt.Errorf("invalid arguments for tool '%s': %s", toolCall.Name, toolCall.Arguments)
+				return nil, "", fmt.Errorf("invalid arguments for tool '%s': %s", toolCall.Name, toolCall.Arguments)
 			}
 
 			result, err := handler(reasoningCtx, rawArgs)
 			if err != nil {
-				return nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Name, err)
+				return nil, "", fmt.Errorf("tool '%s' execution failed: %w", toolCall.Name, err)
 			}
 
 			nextInput = append(nextInput, map[string]string{
@@ -431,7 +456,7 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 		previousResponseID = &responsesResp.ID
 	}
 
-	return nil, fmt.Errorf("max reasoning iterations reached (%d)", maxIterations)
+	return nil, "", fmt.Errorf("max reasoning iterations reached (%d)", maxIterations)
 }
 
 func buildResponsesText(jsonSchema *string) (*ResponsesText, error) {
@@ -491,6 +516,39 @@ func extractAssistantOutputText(items []ResponsesOutputItem) string {
 		}
 	}
 	return content
+}
+
+func extractReasoningSummaryText(items []ResponsesOutputItem) []string {
+	parts := []string{}
+	for _, item := range items {
+		if item.Type != "reasoning" {
+			continue
+		}
+		for _, summary := range item.Summary {
+			if summary.Type == "summary_text" && strings.TrimSpace(summary.Text) != "" {
+				parts = append(parts, summary.Text)
+			}
+		}
+		for _, content := range item.Content {
+			if content.Type == "reasoning_text" && strings.TrimSpace(content.Text) != "" {
+				parts = append(parts, content.Text)
+			}
+		}
+	}
+	return parts
+}
+
+func printReasoningOutputIfDeb(deb bool, iteration int, items []ResponsesOutputItem) {
+	if !deb {
+		return
+	}
+
+	parts := extractReasoningSummaryText(items)
+	if len(parts) == 0 {
+		return
+	}
+
+	log.Printf("OpenAI reasoning summary iteration %d:\n%s", iteration, strings.Join(parts, "\n\n"))
 }
 
 func (s *OpenAIService) GetEmbeddings(content string) ([]float64, error) {

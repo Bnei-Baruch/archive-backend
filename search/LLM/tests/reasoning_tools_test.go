@@ -126,6 +126,7 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 	requiredSnippets := []string{
 		`"query"`,
 		`"summary"`,
+		`"reasoning_summary"`,
 		`"results"`,
 		`"mdb_uid"`,
 		`"result_type"`,

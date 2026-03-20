@@ -1,10 +1,11 @@
 package llm
 
 type ReasoningSearchResponse struct {
-	Query   string                  `json:"query"`
-	Summary string                  `json:"summary"`
-	Results []ReasoningSearchResult `json:"results"`
-	Notes   []string                `json:"notes"`
+	Query            string                  `json:"query"`
+	Summary          string                  `json:"summary"`
+	ReasoningSummary string                  `json:"reasoning_summary"`
+	Results          []ReasoningSearchResult `json:"results"`
+	Notes            []string                `json:"notes"`
 }
 
 type ReasoningSearchResult struct {
@@ -33,6 +34,10 @@ func GenerateReasoningSearchResponseJSONSchema() string {
     "summary": {
       "type": "string",
       "description": "A short explanation of the best results found for the user."
+    },
+    "reasoning_summary": {
+      "type": "string",
+      "description": "A short summary of the reasoning process when debug mode is enabled, otherwise an empty string."
     },
     "results": {
       "type": "array",
@@ -113,6 +118,10 @@ func GenerateReasoningSearchResponseJSONSchema() string {
       }
     }
   },
-  "required": ["query", "summary", "results", "notes"]
+  "required": ["query", "summary", "reasoning_summary", "results", "notes"]
 }`
+}
+
+func (r *ReasoningSearchResponse) SetReasoningSummary(summary string) {
+	r.ReasoningSummary = summary
 }
