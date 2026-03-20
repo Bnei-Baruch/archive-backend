@@ -256,7 +256,7 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 		return "", fmt.Errorf("elasticsearch_search: exact_phrase requires a non-empty query")
 	}
 	query.Filters = mergeElasticsearchSearchFilters(query.Filters, filters)
-	query.Deb = llm.DebFromContext(ctx)
+	query.Deb = false // Set false to avoid putting debug data into LLM context and reaching token usage limits.
 
 	language := normalizeElasticsearchSearchLanguage(args.Language)
 	setElasticsearchSearchLanguageOrder(&query, language)
