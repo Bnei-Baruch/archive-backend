@@ -1,11 +1,13 @@
 package llm
 
 type ReasoningSearchResponse struct {
-	Query            string                  `json:"query"`
-	Summary          string                  `json:"summary"`
-	ReasoningSummary string                  `json:"reasoning_summary"`
-	Results          []ReasoningSearchResult `json:"results"`
-	Notes            []string                `json:"notes"`
+	Query               string                  `json:"query"`
+	Summary             string                  `json:"summary"`
+	ReasoningSummary    string                  `json:"reasoning_summary"`
+	UsedTokens          int                     `json:"used_tokens"`
+	ReasoningIterations int                     `json:"reasoning_iterations"`
+	Results             []ReasoningSearchResult `json:"results"`
+	Notes               []string                `json:"notes"`
 }
 
 type ReasoningSearchResult struct {
@@ -38,6 +40,14 @@ func GenerateReasoningSearchResponseJSONSchema() string {
     "reasoning_summary": {
       "type": "string",
       "description": "A short summary of the reasoning process when debug mode is enabled, otherwise an empty string."
+    },
+    "used_tokens": {
+      "type": "integer",
+      "description": "The actual number of tokens used by the reasoning process."
+    },
+    "reasoning_iterations": {
+      "type": "integer",
+      "description": "The actual number of reasoning iterations executed."
     },
     "results": {
       "type": "array",
@@ -118,10 +128,15 @@ func GenerateReasoningSearchResponseJSONSchema() string {
       }
     }
   },
-  "required": ["query", "summary", "reasoning_summary", "results", "notes"]
+  "required": ["query", "summary", "reasoning_summary", "used_tokens", "reasoning_iterations", "results", "notes"]
 }`
 }
 
 func (r *ReasoningSearchResponse) SetReasoningSummary(summary string) {
 	r.ReasoningSummary = summary
+}
+
+func (r *ReasoningSearchResponse) SetReasoningProcessStats(usedTokens int, reasoningIterations int) {
+	r.UsedTokens = usedTokens
+	r.ReasoningIterations = reasoningIterations
 }
