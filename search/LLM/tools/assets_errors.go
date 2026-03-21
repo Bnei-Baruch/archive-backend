@@ -21,3 +21,14 @@ func doc2TextToolOutput(toolName string, fileUID string, err error) string {
 	}
 	return fmt.Sprintf("%s: file uid '%s': %s. Continue with other tools or approaches.", toolName, fileUID, message)
 }
+
+func lookupToolErrorOutput(toolName string, err error) string {
+	return fmt.Sprintf("%s: lookup could not be completed: %v. Continue with other tools or approaches.", toolName, err)
+}
+
+func transcriptNotFoundToolOutput(contentUnitID string, language string) string {
+	if language != "" {
+		return fmt.Sprintf("transcript_lookup: no transcript was found for content_unit_id '%s' and language '%s'. Continue with other tools or approaches.", contentUnitID, language)
+	}
+	return fmt.Sprintf("transcript_lookup: no transcript was found for content_unit_id '%s'. Continue with other tools or approaches.", contentUnitID)
+}

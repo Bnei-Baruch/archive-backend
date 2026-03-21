@@ -147,8 +147,8 @@ Arguments:
 Behavior:
 - Looks up a public transcript document for the content unit, converts it to plain text with Doc2Text, and returns the text.
 - If language is omitted or not found, the tool falls back by language preference.
-- If no transcript exists, the tool returns an explicit not-found error.
-- If text retrieval from CDN/Doc2Text fails, it returns an acknowledgment message so the agent can continue with other tools.`
+- If no transcript exists, it returns an acknowledgment message so the agent can continue with other tools.
+- If a runtime lookup or text-retrieval error happens, it also returns an acknowledgment message so the agent can continue.`
 }
 
 func (t *TranscriptLookupTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
@@ -178,31 +178,25 @@ func (t *TranscriptLookupTool) Execute(ctx context.Context, arguments json.RawMe
 
 	cacheKey := contentUnitID + "|" + language
 	if value, ok := t.getFromCache(cacheKey); ok {
-		if value == "" {
-			llm.LogIfDeb(ctx, "transcript_lookup: cached miss content_unit_id=%q language=%q", contentUnitID, language)
-			return "", transcriptNotFoundError(contentUnitID, language)
-		}
 		llm.LogIfDeb(ctx, "transcript_lookup: cache hit content_unit_id=%q language=%q content_len=%d", contentUnitID, language, len(value))
 		return value, nil
 	}
 
 	fileUID, err := t.resolveTranscriptFileUID(contentUnitID, language, kiteiMakorType.ID)
 	if err != nil {
-		return "", err
+		llm.LogIfDeb(ctx, "transcript_lookup: lookup fallback content_unit_id=%q language=%q err=%v", contentUnitID, language, err)
+		return lookupToolErrorOutput("transcript_lookup", err), nil
 	}
 	if fileUID == "" {
+		content := transcriptNotFoundToolOutput(contentUnitID, language)
 		llm.LogIfDeb(ctx, "transcript_lookup: no transcript file found content_unit_id=%q language=%q", contentUnitID, language)
-		t.setCache(cacheKey, "")
-		return "", transcriptNotFoundError(contentUnitID, language)
+		return content, nil
 	}
 	llm.LogIfDeb(ctx, "transcript_lookup: resolved file uid content_unit_id=%q language=%q file_uid=%q", contentUnitID, language, fileUID)
 
 	content, err := t.assetsService.Doc2Text(fileUID)
 	if err != nil {
 		content = doc2TextToolOutput("transcript_lookup", fileUID, err)
-		if isMissingCDNFileError(err) {
-			t.setCache(cacheKey, content)
-		}
 		llm.LogIfDeb(ctx, "transcript_lookup: doc2text fallback content_unit_id=%q language=%q file_uid=%q err=%v", contentUnitID, language, fileUID, err)
 		return content, nil
 	}
@@ -210,13 +204,6 @@ func (t *TranscriptLookupTool) Execute(ctx context.Context, arguments json.RawMe
 	t.setCache(cacheKey, content)
 	llm.LogIfDeb(ctx, "transcript_lookup: completed content_unit_id=%q language=%q file_uid=%q content_len=%d", contentUnitID, language, fileUID, len(content))
 	return content, nil
-}
-
-func transcriptNotFoundError(contentUnitID string, language string) error {
-	if language != "" {
-		return fmt.Errorf("transcript_lookup: transcript not found for content_unit_id '%s' and language '%s'", contentUnitID, language)
-	}
-	return fmt.Errorf("transcript_lookup: transcript not found for content_unit_id '%s'", contentUnitID)
 }
 
 func (t *TranscriptLookupTool) resolveTranscriptFileUID(contentUnitID string, language string, excludedTypeID int64) (string, error) {

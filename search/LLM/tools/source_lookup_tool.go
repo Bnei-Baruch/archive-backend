@@ -141,7 +141,7 @@ Behavior:
 - Looks up a public source document file from CDN, converts it to plain text with Doc2Text, and returns the text.
 - If language is omitted or not found, the tool falls back by language preference.
 - If no public source document is found, it returns an empty string.
-- If text retrieval from CDN/Doc2Text fails, it returns an acknowledgment message so the agent can continue with other tools.`
+- If a runtime lookup or text-retrieval error happens, it returns an acknowledgment message so the agent can continue with other tools.`
 }
 
 func (t *SourceLookupTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
@@ -172,7 +172,8 @@ func (t *SourceLookupTool) Execute(ctx context.Context, arguments json.RawMessag
 
 	fileUID, err := t.resolveFileUID(sourceID, language)
 	if err != nil {
-		return "", err
+		llm.LogIfDeb(ctx, "source_lookup: lookup fallback source_id=%q language=%q err=%v", sourceID, language, err)
+		return lookupToolErrorOutput("source_lookup", err), nil
 	}
 	if fileUID == "" {
 		llm.LogIfDeb(ctx, "source_lookup: no file uid found source_id=%q language=%q", sourceID, language)
@@ -184,9 +185,6 @@ func (t *SourceLookupTool) Execute(ctx context.Context, arguments json.RawMessag
 	content, err := t.assetsService.Doc2Text(fileUID)
 	if err != nil {
 		content = doc2TextToolOutput("source_lookup", fileUID, err)
-		if isMissingCDNFileError(err) {
-			t.setCache(cacheKey, content)
-		}
 		llm.LogIfDeb(ctx, "source_lookup: doc2text fallback source_id=%q language=%q file_uid=%q err=%v", sourceID, language, fileUID, err)
 		return content, nil
 	}
