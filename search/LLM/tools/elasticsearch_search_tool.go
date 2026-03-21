@@ -140,7 +140,7 @@ WOMEN_LESSON – Lessons primarily for women
 EVENT_PART – Items from conventions or special events (e.g. Unity Day)
 FRIENDS_GATHERING – Social events (Yeshivat Haverim / ישיבת חברים)
 MEAL – Events with songs and intentional content
-VIDEO_PROGRAM_CHAPTER – Chapters of TV/video programs
+VIDEO_PROGRAM_CHAPTER – Single program of TV/video programs collection
 CLIP – Video clips, sometimes lesson or program segments
 ARTICLE – Articles (including external publications)
 BLOG_POST – Blog posts by Dr. Laitman
