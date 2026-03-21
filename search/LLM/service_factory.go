@@ -12,7 +12,7 @@ const ProviderOpenAI = "openai"
 const (
 	defaultReasoningSearchEffort        = "xhigh"
 	defaultReasoningSearchMaxTokens     = 8000
-	defaultReasoningSearchMaxIterations = 16
+	defaultReasoningSearchMaxIterations = 20
 )
 
 type ReasoningSearchConfig struct {
