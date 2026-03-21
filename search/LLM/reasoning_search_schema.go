@@ -9,7 +9,6 @@ type ReasoningSearchResponse struct {
 	ReasoningIterations int                       `json:"reasoning_iterations"`
 	UsedTools           []string                  `json:"used_tools"`
 	Results             []ReasoningSearchResult   `json:"results"`
-	Notes               []string                  `json:"notes"`
 	Debug               *ReasoningSearchDebugInfo `json:"debug,omitempty"`
 }
 
@@ -58,7 +57,7 @@ func GenerateReasoningSearchResponseJSONSchema() string {
     },
     "summary": {
       "type": "string",
-      "description": "A short explanation of the best results found for the user."
+      "description": "A short explanation of the best results found for the user. Include caveats, clarification requests, or follow-up guidance here when needed."
     },
     "reasoning_summary": {
       "type": "string",
@@ -142,16 +141,9 @@ func GenerateReasoningSearchResponseJSONSchema() string {
           "is_grouping_result"
         ]
       }
-    },
-    "notes": {
-      "type": "array",
-      "description": "Short notes, caveats, or follow-up guidance. Return an empty array if there are no notes.",
-      "items": {
-        "type": "string"
-      }
     }
   },
-  "required": ["query", "summary", "reasoning_summary", "used_tokens", "reasoning_iterations", "results", "notes"]
+  "required": ["query", "summary", "reasoning_summary", "used_tokens", "reasoning_iterations", "results"]
 }`
 }
 
