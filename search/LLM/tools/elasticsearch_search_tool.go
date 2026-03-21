@@ -206,20 +206,25 @@ Returned data:
 - result.typo_suggest: optional typo suggestion string.
 - result.search_result.hits.total_hits: total number of matching results.
 - result.search_result.hits.hits: the actual page of results. Each hit is a raw Elasticsearch hit.
-- For each hit, inspect _source.result_type to understand the kind of result:
+- For each hit, inspect _source.result_type when _source is a normal object, and also inspect hit.type because some grouped/synthetic results are identified by hit.type:
   - units: individual content items such as lesson parts, lectures, clips, event parts, articles, and similar searchable media/text items.
   - sources: library/source texts such as books, articles, volumes, and chapters from the Library section.
   - collections: grouped content such as daily lessons, program series, conventions, and special events.
   - posts: blog posts.
   - tweets: tweets.
   - tags: tag/topic results.
+- Important special grouped/synthetic hit types:
+  - tweets_many: a grouped tweet bundle/carousel, not one concrete tweet. In this case hit._source is an array of raw tweet hits. Inspect the items inside that array and choose the most relevant individual tweet or small set of tweets.
+  - lessons_series_by_source: a grouped lesson-series result. It represents lesson-series collections grouped by source. Treat it as a narrowing/grouping clue, not as one final concrete lesson item.
+  - lessons_series_by_tag: a grouped lesson-series result. It represents lesson-series collections grouped by tag. Treat it as a narrowing/grouping clue, not as one final concrete lesson item.
 - Important distinction:
   - units, sources, posts are usually direct content results. They normally point to one concrete item.
-  - collections, tags, and tweets are often narrowing/grouping results, not a final concrete item. A collection usually represents a group of related content units. A tag usually represents a topic bucket that can lead to many matching items.
+  - collections, tags, tweets_many, lessons_series_by_source, and lessons_series_by_tag are narrowing/grouping results, not a final concrete item. A collection usually represents a group of related content units. A tag usually represents a topic bucket that can lead to many matching items.
   - These grouping results exist to narrow the search space and avoid pushing many weak individual hits above a stronger grouped result.
 - Recommendation for the agent:
-  - If the user wants a concrete item to watch, read, quote, or summarize, do not stop at a collection or tag hit. Use that hit as a clue and run a follow-up search with the collection or topic/tag filter, then return the best concrete content units or sources inside it.
-  - If the user intent is broad exploration, browsing, or discovery, it can be appropriate to present a collection or tag as a useful answer, but explain that it is a group/topic and not one specific content item.
+  - If the user wants a concrete item to watch, read, quote, or summarize, do not stop at a collection, tag, or grouped lesson-series hit. Use that hit as a clue and run a follow-up filtered search, then return the best concrete content units or sources inside it.
+  - If the user wants a concrete tweet or quote and a tweets_many hit is returned, inspect the tweets inside the hit._source array and return the most relevant individual tweet or a very small set of tweets, not the wrapper itself.
+  - If the user intent is broad exploration, browsing, or discovery, it can be appropriate to present a collection, tag, grouped lesson-series hit, or grouped tweet hit as a useful answer, but explain that it is a group/bundle and not one specific content item.
   - If both direct content hits and grouping hits are relevant, prefer direct content for final recommendations and use grouping hits as supporting navigation or refinement hints.
 - Useful _source fields usually include mdb_uid, title, full_title, description, content, effective_date, and typed_uids.
 - Some hits may also contain highlight fragments under hit.highlight. Use those to explain why the hit matched.`
