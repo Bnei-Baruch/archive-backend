@@ -147,7 +147,8 @@ Arguments:
 Behavior:
 - Looks up a public transcript document for the content unit, converts it to plain text with Doc2Text, and returns the text.
 - If language is omitted or not found, the tool falls back by language preference.
-- If no transcript exists, the tool returns an explicit not-found error.`
+- If no transcript exists, the tool returns an explicit not-found error.
+- If text retrieval from CDN/Doc2Text fails, it returns an acknowledgment message so the agent can continue with other tools.`
 }
 
 func (t *TranscriptLookupTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
@@ -198,7 +199,12 @@ func (t *TranscriptLookupTool) Execute(ctx context.Context, arguments json.RawMe
 
 	content, err := t.assetsService.Doc2Text(fileUID)
 	if err != nil {
-		return "", fmt.Errorf("transcript_lookup: doc2text failed for file uid '%s': %w", fileUID, err)
+		content = doc2TextToolOutput("transcript_lookup", fileUID, err)
+		if isMissingCDNFileError(err) {
+			t.setCache(cacheKey, content)
+		}
+		llm.LogIfDeb(ctx, "transcript_lookup: doc2text fallback content_unit_id=%q language=%q file_uid=%q err=%v", contentUnitID, language, fileUID, err)
+		return content, nil
 	}
 
 	t.setCache(cacheKey, content)
