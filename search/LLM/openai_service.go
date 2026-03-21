@@ -624,7 +624,7 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 		previousResponseID = &responsesResp.ID
 	}
 
-	return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("max reasoning iterations reached (%d)", maxIterations)
+	return nil, "", OpenAIUsageTotals{}, 0, nil, "", &MaxReasoningIterationsError{MaxIterations: maxIterations}
 }
 
 func buildResponsesText(jsonSchema *string) (*ResponsesText, error) {

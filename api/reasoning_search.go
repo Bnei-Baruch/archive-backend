@@ -53,7 +53,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 	messages := []llm.LLMBotMessage{
 		{
 			Role:    "system",
-			Content: llm.GenerateSystemMessageForReasoningSearch(manager.Tools()),
+			Content: llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), reasoningConfig.MaxIterations),
 		},
 		{
 			Role:    "user",
@@ -83,6 +83,11 @@ func ReasoningSearchHandler(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		var maxIterationsErr *llm.MaxReasoningIterationsError
+		if errors.As(err, &maxIterationsErr) {
+			NewHttpError(http.StatusUnprocessableEntity, err, gin.ErrorTypePublic).Abort(c)
 			return
 		}
 		NewInternalError(err).Abort(c)

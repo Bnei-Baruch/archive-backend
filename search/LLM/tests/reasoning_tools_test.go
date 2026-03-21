@@ -105,9 +105,12 @@ func TestGenerateSystemMessageForReasoningSearchIncludesToolUsage(t *testing.T) 
 		t.Fatalf("unexpected error creating manager: %v", err)
 	}
 
-	message := llm.GenerateSystemMessageForReasoningSearch(manager.Tools())
+	message := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), 20)
 	if !strings.Contains(message, "Available tools and usage instructions:") {
 		t.Fatalf("expected tool usage header in message: %s", message)
+	}
+	if !strings.Contains(message, "Current request tool rounds remaining: 20.") {
+		t.Fatalf("expected remaining iterations text in message: %s", message)
 	}
 	if !strings.Contains(message, "Tool: tool_a\nUse it first.") {
 		t.Fatalf("expected first tool usage explanation in message: %s", message)
