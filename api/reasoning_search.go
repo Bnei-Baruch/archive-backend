@@ -12,8 +12,9 @@ import (
 )
 
 type ReasoningSearchRequest struct {
-	Query string `json:"q" form:"q" binding:"required"`
-	Deb   bool   `json:"deb" form:"deb" binding:"omitempty"`
+	SessionID *string `json:"session_id" form:"session_id"`
+	Query     string  `json:"q" form:"q" binding:"required"`
+	Deb       bool    `json:"deb" form:"deb" binding:"omitempty"`
 }
 
 func ReasoningSearchHandler(c *gin.Context) {
@@ -27,6 +28,14 @@ func ReasoningSearchHandler(c *gin.Context) {
 		NewBadRequestError(errors.New("q is required")).Abort(c)
 		return
 	}
+	if r.SessionID != nil {
+		trimmedSessionID := strings.TrimSpace(*r.SessionID)
+		if trimmedSessionID == "" {
+			NewBadRequestError(errors.New("session_id cannot be empty")).Abort(c)
+			return
+		}
+		r.SessionID = &trimmedSessionID
+	}
 
 	manager := c.MustGet("LLM_TOOLS").(*llm.ReasoningToolManager)
 	if manager == nil {
@@ -34,11 +43,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 		return
 	}
 
-	service, err := llm.NewServiceFromConfig()
-	if err != nil {
-		NewInternalError(err).Abort(c)
-		return
-	}
+	service := c.MustGet("LLM_SERVICE").(llm.Service)
 	reasoningConfig, err := llm.ReasoningSearchConfigFromConfig()
 	if err != nil {
 		NewInternalError(err).Abort(c)
@@ -61,7 +66,8 @@ func ReasoningSearchHandler(c *gin.Context) {
 
 	log.Infof("Reasoning Search Query: [%s]", r.Query)
 
-	err = service.GetReasoningStructuredOutputWithTools(
+	sessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
+		r.SessionID,
 		llm.GenerateReasoningSearchResponseJSONSchema(),
 		reasoningConfig.Model,
 		&reasoningConfig.MaxTokens,
@@ -75,9 +81,14 @@ func ReasoningSearchHandler(c *gin.Context) {
 		&response,
 	)
 	if err != nil {
+		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
 		NewInternalError(err).Abort(c)
 		return
 	}
+	response.SetSessionID(sessionID)
 
 	c.JSON(http.StatusOK, response)
 }

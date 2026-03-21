@@ -1,6 +1,7 @@
 package llm
 
 type ReasoningSearchResponse struct {
+	SessionID           string                    `json:"session_id"`
 	Query               string                    `json:"query"`
 	Summary             string                    `json:"summary"`
 	ReasoningSummary    string                    `json:"reasoning_summary"`
@@ -173,4 +174,8 @@ func (r *ReasoningSearchResponse) SetUsedTools(usedTools []string) {
 		return
 	}
 	r.UsedTools = usedTools
+}
+
+func (r *ReasoningSearchResponse) SetSessionID(sessionID string) {
+	r.SessionID = sessionID
 }

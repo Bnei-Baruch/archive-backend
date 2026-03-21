@@ -64,6 +64,7 @@ reasoning-search-model="gpt-5.4"
 reasoning-search-effort="high" # "xhigh" is also available
 reasoning-search-max-output-tokens=8000
 reasoning-search-max-iterations=16
+reasoning-session-ttl="30m"
 
 [[openai.pricing]]
 model="gpt-5.4"

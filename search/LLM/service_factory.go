@@ -35,7 +35,11 @@ func NewServiceFromConfig() (Service, error) {
 		if err := viper.UnmarshalKey("openai.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read openai.pricing: %w", err)
 		}
-		return NewOpenAIServiceWithPricing(token, pricing), nil
+		sessionTTL := viper.GetDuration("openai.reasoning-session-ttl")
+		if sessionTTL <= 0 {
+			sessionTTL = defaultOpenAIReasoningSessionTTL
+		}
+		return NewOpenAIServiceWithOptions(token, pricing, NewOpenAIReasoningSessionStore(sessionTTL)), nil
 	default:
 		return nil, fmt.Errorf("unsupported llm provider: %s", provider)
 	}

@@ -31,6 +31,7 @@ var (
 	CMS          *api.CMSParams
 	ASSETS       integration.AssetsService
 	LLM_TOOLS    *llm.ReasoningToolManager
+	LLM_SERVICE  llm.Service
 )
 
 func Init() time.Time {
@@ -119,11 +120,16 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		TimeoutForHighlight: viper.GetDuration("elasticsearch.timeout-for-highlight"),
 	})
 	utils.Must(err)
+	LLM_SERVICE, err = llm.NewServiceFromConfig()
+	utils.Must(err)
 
 	return clock
 }
 
 func Shutdown() {
+	if closer, ok := LLM_SERVICE.(interface{ Close() error }); ok {
+		utils.Must(closer.Close())
+	}
 	utils.Must(DB.Close())
 	ESC.Stop()
 	CACHE.Close()

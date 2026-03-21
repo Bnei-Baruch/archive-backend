@@ -25,6 +25,7 @@ Instructions for coding agents working in this repository.
 - Use the provider-agnostic `llm.Service` interface in `search/LLM/service.go`.
 - `OpenAIService` is the current implementation.
 - Reasoning + tools flow uses OpenAI `v1/responses` with iteration via `previous_response_id`.
+- `common.Init()` builds an app-scoped `common.LLM_SERVICE`; do not construct a new LLM service per request.
 - Tool implementations live under `search/LLM/tools/`.
 - LLM package tests live under `search/LLM/tests/`.
 
@@ -34,6 +35,19 @@ Instructions for coding agents working in this repository.
 - Pass `manager.ToolCalls()` and `manager.ToolHandlers()` into `GetReasoningResponseWithTools`.
 - App-scoped manager builder lives in `search/LLM/tools/manager.go`.
 - `common.Init()` builds the shared tool manager and exposes it as `common.LLM_TOOLS`.
+
+## Reasoning Search
+- API endpoint: `POST /search/reasoning`.
+- Request supports `q`, optional `deb`, optional `session_id`.
+- Response includes `session_id`, `used_tools`, token stats, and debug/cost details when `deb=true`.
+- OpenAI short-lived reasoning sessions are stored in memory only, with TTL from `openai.reasoning-session-ttl`.
+- If client sends a missing or expired `session_id`, the API returns an error; it does not silently start a new session.
+- Session state stores OpenAI continuation data (`last_response_id`, model, effort), not the full prompt or hidden reasoning.
+
+## OpenAI Config
+- Provider selection uses `[llm].provider`; default is `openai`.
+- Reasoning search config is read from `[openai]` only when provider is `openai`.
+- Pricing for cost estimation is configured with `[[openai.pricing]]`.
 
 ## Implemented Tools
 - `source_lookup` in `search/LLM/tools/source_lookup_tool.go`.
