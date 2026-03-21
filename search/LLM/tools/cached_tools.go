@@ -27,6 +27,7 @@ func (t *GetSourceFilterValuesTool) UsageExplanation() string {
 Use this tool when you need the full list of valid source filter values, with English and Hebrew names, including the full hierarchy parents path (like book->part->chapter). This is useful for building an elasticsearch_search request with a source filter.
 Sources here are items that available in the site Library section. Sources can be an article, a chapter of a book or other text. Sources are managed as tree, means we have a different Id for a book, volume, chapter.
 Source is also referred to an Author. For example the source with the code 'bs' is referred to Baal Ha-Sulam that is a parent node of all Baal Ha-Sulam books.
+Note that Rabash articles in the past were been published in the book named "שלבי הסולם", today they are published in the book named "כתבי הרב״ש".
 Arguments:
 - none. Do not pass arguments.
 Behavior:
