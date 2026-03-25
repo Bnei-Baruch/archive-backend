@@ -61,7 +61,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 		},
 	}
 
-	user := "archive-backend-reasoning-search"
+	user := "kabbalah-media-reasoning-search" // TBD use real user info when available
 	response := llm.ReasoningSearchResponse{}
 
 	log.Infof("Reasoning Search Query: [%s]", r.Query)
