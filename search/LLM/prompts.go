@@ -29,7 +29,7 @@ The main Kabbalist authors whose writings are studied in Bnei Baruch are:
 
 - Daily Kabbalah Lessons (video/audio)
 - Other Kabbalah lessons, lectures, TV programs, music, clips
-- Books, texts, and articles.`
+- Books, articles, and excerpts.`
 
 func GenerateSystemMessageForReasoningSearch(tools []ReasoningTool, remainingIterations int) string {
 	msg := fmt.Sprintf("Today is %s. \n%s", time.Now().Format("Monday, January 2, 2006"), GeneralReasoningSearchInstruction)
