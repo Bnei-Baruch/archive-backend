@@ -10,7 +10,7 @@ import (
 const ProviderOpenAI = "openai"
 
 const (
-	defaultReasoningSearchEffort        = "xhigh"
+	defaultReasoningSearchEffort        = "high" // "low", "medium", "high", "xhigh"
 	defaultReasoningSearchMaxTokens     = 8000
 	defaultReasoningSearchMaxIterations = 20
 )
