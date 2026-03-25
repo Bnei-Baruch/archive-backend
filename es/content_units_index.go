@@ -55,7 +55,9 @@ func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
 }
 
 func defaultContentUnitSql() string {
-	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d)",
+	// Note that CT_LIKUTIM is not filtered out and will be indexed,
+	// but it is not supported by the search (only optional in the elasticsearch_search agent tool).
+	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d)",
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
@@ -66,7 +68,6 @@ func defaultContentUnitSql() string {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KTAIM_NIVCHARIM].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID,
 	)
 }
 
