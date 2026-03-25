@@ -145,6 +145,7 @@ CLIP – Video clips, sometimes lesson or program segments
 ARTICLE – Articles (including external publications)
 BLOG_POST – Blog posts by Dr. Laitman
 R_TWEET – Tweets by Dr. Laitman
+LIKUTIM - Selected Excerpts from the Sources. These are special content units that contain selected excerpts from the sources (library items) that are used in the lessons (not the full sources themselves). They are focused on a specific topic or concept. Use this content type when user is looking for excerpts (ליקוטים) or citations.
 If the user is looking for a lesson, include all lesson-related content types: LECTURE, LESSONS_SERIES, LESSON_PART, WOMEN_LESSON
 
 2. source – Filters by source (library item). Multiple sources can be used. Use the get_source_filter_values tool to obtain source values.
@@ -159,7 +160,7 @@ KxApZ4pI – Baruch Shalom HaLevi Ashlag (Rabash). Use this filter when looking 
 
 4. start_date and end_date – Filter by date range. The date format is yyyy-MM-dd. If only start_date is provided, it filters from that date to the future. If only end_date is provided, it filters from the past until that date.
 
-5. topics - Filter by topic. Currently we support topics related to Holidays and Observances.
+5. tag - Filter by topic. Currently we support topics related to Holidays and Observances.
 - "topic id": "ksh1gGBM", "name": "אלול"
 - "topic id": "k3OHIbDd", "name": "הושענא רבה"
 - "topic id": "rxNl0zXg", "name": "חנוכה"
