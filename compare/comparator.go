@@ -103,6 +103,10 @@ type ComparisonSummary struct {
 	MissingInES6     int // Documents with missing fields in ES6
 	CriticalErrors   int
 
+	// Total document counts from each index (-1 if unknown)
+	ES6Count int64
+	ES9Count int64
+
 	// Document-level fetch failures
 	TotalAttempted        int      // Total documents attempted to compare
 	DocsNotFoundInES9     []string // UIDs that couldn't be fetched from ES9
@@ -129,6 +133,8 @@ func NewComparisonSummary(resultType, language string) *ComparisonSummary {
 		Results:           make([]*ComparisonResult, 0),
 		DocsNotFoundInES9: make([]string, 0),
 		DocsNotFoundInES6: make([]string, 0),
+		ES6Count:          -1,
+		ES9Count:          -1,
 	}
 }
 

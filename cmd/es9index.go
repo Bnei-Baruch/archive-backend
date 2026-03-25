@@ -590,6 +590,13 @@ func fetchCollections(ctx context.Context, indexer indexing.Indexer, reset bool)
 
 func fetchSources(ctx context.Context, indexer indexing.Indexer, reset bool) ([]interface{}, error) {
 	srcIndexer := indexer.(*types.SourcesIndexer)
+
+	log.Info("  → Loading sources hierarchy (paths and authors)...")
+	if err := srcIndexer.LoadHierarchy(ctx); err != nil {
+		return nil, fmt.Errorf("load sources hierarchy: %w", err)
+	}
+	log.Info("  ✓ Sources hierarchy loaded")
+
 	scope := types.DefaultSourcesScope()
 	sources, err := srcIndexer.FetchSources(ctx, scope)
 	if err != nil {

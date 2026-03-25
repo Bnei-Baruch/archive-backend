@@ -220,6 +220,8 @@ func compareIndicesHandler(cmd *cobra.Command, args []string) {
 
 		// Create comparison summary
 		summary := compare.NewComparisonSummary(compareType, compareLanguage)
+		summary.ES6Count = es6Count
+		summary.ES9Count = es9Count
 
 		// Compare each document
 		log.Info("Comparing documents...")

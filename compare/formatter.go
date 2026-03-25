@@ -28,6 +28,25 @@ func (s *ComparisonSummary) FormatSummary() string {
 	sb.WriteString(fmt.Sprintf("Language: %s | Attempted: %d | Successfully Compared: %d\n", s.Language, s.TotalAttempted, s.TotalCompared))
 	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
 
+	// Document counts
+	if s.ES6Count >= 0 && s.ES9Count >= 0 {
+		diff := s.ES9Count - s.ES6Count
+		diffPercent := 0.0
+		if s.ES6Count > 0 {
+			diffPercent = float64(diff) / float64(s.ES6Count) * 100
+		}
+		sb.WriteString("DOCUMENT COUNTS:\n")
+		sb.WriteString(fmt.Sprintf("  ES6: %d\n", s.ES6Count))
+		sb.WriteString(fmt.Sprintf("  ES9: %d\n", s.ES9Count))
+		if diff < 0 {
+			sb.WriteString(fmt.Sprintf("  ✗ ES9 missing %d documents (%+.1f%%)\n\n", -diff, diffPercent))
+		} else if diff > 0 {
+			sb.WriteString(fmt.Sprintf("  ✓ ES9 has %d extra documents (%+.1f%%)\n\n", diff, diffPercent))
+		} else {
+			sb.WriteString("  ✓ Counts match\n\n")
+		}
+	}
+
 	// Document-level fetch stats
 	if len(s.DocsNotFoundInES9) > 0 || len(s.DocsNotFoundInES6) > 0 {
 		sb.WriteString("FETCH FAILURES:\n")
