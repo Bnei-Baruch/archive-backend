@@ -466,6 +466,12 @@ func (idx *SourcesIndexer) IndexAll(ctx context.Context, reset bool) error {
 	return nil
 }
 
+// LoadHierarchy loads the hierarchical paths and authors for all sources.
+// Must be called before PrepareDocument.
+func (idx *SourcesIndexer) LoadHierarchy(ctx context.Context) error {
+	return idx.loadSourcesHierarchy(ctx)
+}
+
 // loadSourcesHierarchy loads the hierarchical paths and authors for all sources using recursive SQL
 func (idx *SourcesIndexer) loadSourcesHierarchy(ctx context.Context) error {
 	rows, err := queries.Raw(`
