@@ -475,7 +475,7 @@ func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.Raw
 	}
 	llm.LogIfDeb(ctx, "get_sources_by_author: completed author_id=%q returned_count=%d", authorID, len(items))
 
-	return marshalPostgreSQLToolResult(sourcesByAuthorToolResult{
+	return marshalToolResult(sourcesByAuthorToolResult{
 		Author:        author,
 		ReturnedCount: len(items),
 		Items:         items,
@@ -555,7 +555,7 @@ func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMess
 	}
 	llm.LogIfDeb(ctx, "get_collections: completed collection_id=%q returned_count=%d", collectionID, len(items))
 
-	return marshalPostgreSQLToolResult(collectionsToolResult{
+	return marshalToolResult(collectionsToolResult{
 		ReturnedCount: len(items),
 		Items:         items,
 	})
@@ -616,7 +616,7 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 	}
 	llm.LogIfDeb(ctx, "get_content_units_by_collection: completed collection_id=%q returned_count=%d", collectionID, len(items))
 
-	return marshalPostgreSQLToolResult(contentUnitsByCollectionToolResult{
+	return marshalToolResult(contentUnitsByCollectionToolResult{
 		Collection:    collection,
 		ReturnedCount: len(items),
 		Items:         items,
@@ -693,7 +693,7 @@ func scanCollectionToolResult(scanner interface {
 	return item, err
 }
 
-func marshalPostgreSQLToolResult(v interface{}) (string, error) {
+func marshalToolResult(v interface{}) (string, error) {
 	payload, err := json.Marshal(v)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal tool result: %w", err)

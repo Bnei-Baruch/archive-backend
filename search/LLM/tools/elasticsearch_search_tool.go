@@ -306,7 +306,7 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 	}
 	llm.LogIfDeb(ctx, "elasticsearch_search: completed language=%q hits=%d", resultLanguage, hitCount)
 
-	return marshalPostgreSQLToolResult(elasticsearchSearchToolResult{
+	return marshalToolResult(elasticsearchSearchToolResult{
 		Query:  query,
 		SortBy: sortBy,
 		From:   from,
