@@ -281,7 +281,7 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 	llm.LogIfDeb(ctx, "elasticsearch_search: prepared query term=%q exact_terms=%v filters=%v language_order=%v sort_by=%q from=%d size=%d preference=%q", query.Term, query.ExactTerms, query.Filters, query.LanguageOrder, sortBy, from, size, preference)
 
 	result, err := engine.DoSearch(
-		context.Background(),
+		ctx,
 		query,
 		sortBy,
 		from,
@@ -289,7 +289,7 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 		preference,
 		false,
 		true,
-		true,
+		false, // searchLessonSeries is false since the synthetic result is not usable for the agent. The agent can use LESSONS_SERIES content_type filter to find real lesson series collections.
 		true,
 		t.timeoutForHighlight,
 	)
