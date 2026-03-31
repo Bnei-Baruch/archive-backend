@@ -633,6 +633,9 @@ func (p *Pipeline) sendBulkBatch(
 			successCount++
 		} else {
 			failCount++
+			if failCount <= 3 {
+				log.Errorf("Bulk index item failed (status %d): %v", item.Index.Status, item.Index.Error)
+			}
 		}
 	}
 

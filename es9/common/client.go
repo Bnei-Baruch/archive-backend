@@ -130,6 +130,29 @@ func (m *ES9Manager) HealthCheck(ctx context.Context) (*HealthInfo, error) {
 	}, nil
 }
 
+// WaitForYellow waits until all indices matching the pattern reach at least yellow status,
+// meaning all primary shards are active. Times out after the given duration.
+func (m *ES9Manager) WaitForYellow(ctx context.Context, indexPattern string, timeout time.Duration) error {
+	client, err := m.GetClient()
+	if err != nil {
+		return err
+	}
+	res, err := client.Cluster.Health(
+		client.Cluster.Health.WithContext(ctx),
+		client.Cluster.Health.WithIndex(indexPattern),
+		client.Cluster.Health.WithWaitForStatus("yellow"),
+		client.Cluster.Health.WithTimeout(timeout),
+	)
+	if err != nil {
+		return fmt.Errorf("cluster health wait: %w", err)
+	}
+	defer res.Body.Close()
+	if res.IsError() {
+		return fmt.Errorf("cluster health wait failed: %s", res.Status())
+	}
+	return nil
+}
+
 // Ping checks if the Elasticsearch cluster is reachable
 func (m *ES9Manager) Ping(ctx context.Context) error {
 	client, err := m.GetClient()

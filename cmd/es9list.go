@@ -143,7 +143,7 @@ func listIndices(ctx context.Context, manager *es9common.ES9Manager, pattern str
 	for _, idx := range indices {
 		indexName := idx["index"].(string)
 		docCount := parseInt64(idx["docs.count"])
-		storeSize := idx["store.size"].(string)
+		storeSize, _ := idx["store.size"].(string)
 
 		// Parse size in bytes
 		sizeBytes := parseSizeToBytes(storeSize)
