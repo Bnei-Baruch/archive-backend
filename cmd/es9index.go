@@ -41,6 +41,7 @@ Supports:
 		contentTypes, _ := cmd.Flags().GetStringSlice("type")
 		indexName := cmd.Flag("index").Value.String()
 		reset, _ := cmd.Flags().GetBool("reset")
+		timeoutHours, _ := cmd.Flags().GetInt("timeout")
 
 		mode := "incremental"
 		if reset {
@@ -78,7 +79,7 @@ Supports:
 		log.Info("✓ ES9 connection successful")
 
 		// Setup graceful shutdown on Ctrl+C
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutHours)*time.Hour)
 		defer cancel()
 
 		// Handle SIGINT (Ctrl+C) and SIGTERM gracefully
@@ -160,6 +161,13 @@ func init() {
 		false,
 		"Reset mode: delete all documents of this type before reindexing (default: incremental mode - skip existing)",
 	)
+
+	es9indexCmd.Flags().IntP(
+		"timeout",
+		"",
+		2,
+		"Overall indexing timeout in hours (default: 2)",
+	)
 }
 
 // runUnifiedIndexing runs the unified indexing pipeline for all specified types
@@ -239,6 +247,17 @@ func runUnifiedIndexing(
 		return fmt.Errorf("ensure indices exist: %w", err)
 	}
 	log.Info("✓ All indices ready with correct mapping")
+
+	// Wait for all primary shards to become active before sending bulk requests.
+	// Newly created indices can take time to initialize shards, causing 503
+	// unavailable_shards_exception if bulk indexing starts too early.
+	log.Infof("Waiting for indices to reach yellow status (shards active)...")
+	indexPattern := fmt.Sprintf("%s_*", indexNameBase)
+	if err := manager.WaitForYellow(ctx, indexPattern, 5*time.Minute); err != nil {
+		log.Warnf("Shard readiness wait failed (will proceed anyway): %v", err)
+	} else {
+		log.Info("✓ All shards active")
+	}
 
 	// Phase 3: Fetch items AND load index data in parallel
 	log.Info("Fetching items and loading index data (parallel)...")

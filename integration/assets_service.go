@@ -31,7 +31,7 @@ func NewAssetsService(url string) AssetsService {
 }
 
 func (s *DefaultAssetsService) Doc2Text(uid string) (string, error) {
-	url := fmt.Sprintf("%s/doc2text/%s", s.baseUrl, uid)
+	url := fmt.Sprintf("%s/uid2text/%s", s.baseUrl, uid)
 	resp, err := s.client.Get(url)
 
 	if err != nil {

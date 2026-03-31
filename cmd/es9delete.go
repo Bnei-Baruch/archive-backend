@@ -374,7 +374,7 @@ func getIndexStats(ctx context.Context, client *elasticsearch.Client, indexName 
 	}
 
 	docCount = parseInt64(indices[0]["docs.count"])
-	size = indices[0]["store.size"].(string)
+	size, _ = indices[0]["store.size"].(string)
 
 	return docCount, size, nil
 }
