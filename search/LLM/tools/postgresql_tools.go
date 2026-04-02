@@ -97,6 +97,117 @@ WHERE aus.author_id = $2
 ORDER BY s.parent_id NULLS FIRST, s.position ASC, s.id ASC
 LIMIT $4`
 
+const sourceSelectQuery = `
+SELECT
+	s.id,
+	s.uid,
+	COALESCE(parent.uid, '') AS parent_uid,
+	COALESCE(st.name, '') AS source_type,
+	COALESCE(
+		(SELECT name FROM source_i18n WHERE source_id = s.id AND language = $1),
+		(SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'en'),
+		(SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'he'),
+		''
+	) AS name,
+	COALESCE(
+		(SELECT description FROM source_i18n WHERE source_id = s.id AND language = $1),
+		(SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'en'),
+		(SELECT description FROM source_i18n WHERE source_id = s.id AND language = 'he'),
+		''
+	) AS description,
+	COALESCE(s.properties->>'year', '') AS year,
+	COALESCE(s.properties->>'number', '') AS number,
+	COALESCE(s.position, 0) AS position,
+	EXISTS (
+		SELECT 1
+		FROM sources child
+		WHERE child.parent_id = s.id
+	) AS has_children
+FROM sources s
+LEFT JOIN sources parent ON parent.id = s.parent_id
+LEFT JOIN source_types st ON st.id = s.type_id
+`
+
+const sourceByMDBIDQuery = sourceSelectQuery + `
+WHERE s.id = $2
+LIMIT 1`
+
+const sourceByUIDQuery = sourceSelectQuery + `
+WHERE s.uid = $2
+LIMIT 1`
+
+const sourcesBySourceQuery = sourceSelectQuery + `
+WHERE s.parent_id = $2
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM content_units cu
+      WHERE cu.uid = s.uid
+        AND cu.secure = $3
+        AND cu.published IS TRUE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM sources child
+      WHERE child.parent_id = s.id
+    )
+  )
+ORDER BY s.position ASC, s.id ASC
+LIMIT $4`
+
+const availableBooksQuery = `
+SELECT
+	a.code AS author_code,
+	COALESCE(
+		(SELECT name FROM author_i18n WHERE author_id = a.id AND language = 'en'),
+		a.name,
+		''
+	) AS author_name_en,
+	COALESCE(
+		(SELECT name FROM author_i18n WHERE author_id = a.id AND language = 'he'),
+		a.name,
+		''
+	) AS author_name_he,
+	s.uid AS source_uid,
+	COALESCE(parent.uid, '') AS parent_uid,
+	COALESCE(grandparent.uid, '') AS grandparent_uid,
+	COALESCE(
+		(SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'en'),
+		''
+	) AS source_name_en,
+	COALESCE(
+		(SELECT name FROM source_i18n WHERE source_id = s.id AND language = 'he'),
+		''
+	) AS source_name_he,
+	COALESCE(
+		(SELECT name FROM source_i18n WHERE source_id = parent.id AND language = 'en'),
+		''
+	) AS parent_name_en,
+	COALESCE(
+		(SELECT name FROM source_i18n WHERE source_id = parent.id AND language = 'he'),
+		''
+	) AS parent_name_he
+FROM authors a
+INNER JOIN authors_sources aus ON aus.author_id = a.id
+INNER JOIN sources s ON s.id = aus.source_id
+LEFT JOIN sources parent ON parent.id = s.parent_id
+LEFT JOIN sources grandparent ON grandparent.id = parent.parent_id
+WHERE (
+	EXISTS (
+		SELECT 1
+		FROM content_units cu
+		WHERE cu.uid = s.uid
+		  AND cu.secure = $1
+		  AND cu.published IS TRUE
+	)
+	OR EXISTS (
+		SELECT 1
+		FROM sources child
+		WHERE child.parent_id = s.id
+	)
+)
+ORDER BY a.id ASC, s.parent_id NULLS FIRST, s.position ASC, s.id ASC`
+
 const collectionsSelectQuery = `
 SELECT
 	c.id,
@@ -181,6 +292,14 @@ type GetSourcesByAuthorTool struct {
 	db *sql.DB
 }
 
+type GetAvailableBooksTool struct {
+	db *sql.DB
+}
+
+type GetSourcesBySourceTool struct {
+	db *sql.DB
+}
+
 type GetCollectionsTool struct {
 	db *sql.DB
 }
@@ -191,6 +310,39 @@ type GetContentUnitsByCollectionTool struct {
 
 type getSourcesByAuthorArgs struct {
 	AuthorID string `json:"author_id,omitempty"`
+	Language string `json:"language,omitempty"`
+	Limit    int    `json:"limit,omitempty"`
+}
+
+type availableBookToolItem struct {
+	AuthorID string `json:"author_id"`
+	AuthorEN string `json:"author_en"`
+	AuthorHE string `json:"author_he"`
+	SourceID string `json:"source_id"`
+	SourceEN string `json:"source_en"`
+	SourceHE string `json:"source_he"`
+}
+
+type availableBooksToolResult struct {
+	ReturnedCount int                     `json:"returned_count"`
+	Items         []availableBookToolItem `json:"items"`
+}
+
+type availableBookCandidate struct {
+	AuthorID       string
+	AuthorEN       string
+	AuthorHE       string
+	SourceID       string
+	ParentUID      string
+	GrandparentUID string
+	SourceEN       string
+	SourceHE       string
+	ParentEN       string
+	ParentHE       string
+}
+
+type getSourcesBySourceArgs struct {
+	SourceID string `json:"source_id,omitempty"`
 	Language string `json:"language,omitempty"`
 	Limit    int    `json:"limit,omitempty"`
 }
@@ -232,6 +384,25 @@ type sourcesByAuthorToolResult struct {
 	Author        *authorToolResult  `json:"author,omitempty"`
 	ReturnedCount int                `json:"returned_count"`
 	Items         []sourceToolResult `json:"items"`
+}
+
+type sourceNodeToolResult struct {
+	MDBID       int64  `json:"mdb_id"`
+	UID         string `json:"uid"`
+	ParentUID   string `json:"parent_uid,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Year        string `json:"year,omitempty"`
+	Number      string `json:"number,omitempty"`
+	Position    int    `json:"position"`
+	HasChildren bool   `json:"has_children"`
+}
+
+type sourcesBySourceToolResult struct {
+	Source        *sourceNodeToolResult  `json:"source,omitempty"`
+	ReturnedCount int                    `json:"returned_count"`
+	Items         []sourceNodeToolResult `json:"items"`
 }
 
 type collectionToolResult struct {
@@ -276,6 +447,14 @@ func NewGetSourcesByAuthorTool(db *sql.DB) *GetSourcesByAuthorTool {
 	return &GetSourcesByAuthorTool{db: db}
 }
 
+func NewGetAvailableBooksTool(db *sql.DB) *GetAvailableBooksTool {
+	return &GetAvailableBooksTool{db: db}
+}
+
+func NewGetSourcesBySourceTool(db *sql.DB) *GetSourcesBySourceTool {
+	return &GetSourcesBySourceTool{db: db}
+}
+
 func NewGetCollectionsTool(db *sql.DB) *GetCollectionsTool {
 	return &GetCollectionsTool{db: db}
 }
@@ -310,6 +489,18 @@ func (t *GetSourcesByAuthorTool) Definition() llm.ReasoningToolDefinition {
 	}
 }
 
+func (t *GetAvailableBooksTool) Definition() llm.ReasoningToolDefinition {
+	return llm.ReasoningToolDefinition{
+		Name:        "get_available_books",
+		Description: "Return top-level books under authors from PostgreSQL. This tool does not accept arguments.",
+		Parameters: map[string]interface{}{
+			"type":                 "object",
+			"properties":           map[string]interface{}{},
+			"additionalProperties": false,
+		},
+	}
+}
+
 func (t *GetSourcesByAuthorTool) UsageExplanation() string {
 	return `Tool: get_sources_by_author
 This tool allows you to retrieve structured metadata about sources (library items) linked to a specific author from PostgreSQL.
@@ -329,7 +520,131 @@ Arguments:
 - language: optional language for localized names and descriptions (e.g., "en", "he").
 - limit: optional maximum number of rows.
 Behavior:
-- Returns JSON with the resolved author and a list of public published sources in the library linked to that author.`
+- Returns JSON with the resolved author and a list of public published sources in the library linked to that author.
+- Each returned item uid can be used directly as a source filter value in elasticsearch_search or as source_id input to get_sources_by_source.`
+}
+
+func (t *GetAvailableBooksTool) UsageExplanation() string {
+	return `Tool: get_available_books
+		Use this tool when you need top-level author->books discovery before building a source filter for elasticsearch_search.
+		This tool is backed by PostgreSQL and returns top-level books under authors, not a cached static list.
+		If the author is already known, prefer get_sources_by_author first. Use get_available_books mainly when the relevant book/article root under an author is still unknown or ambiguous.
+		Use this tool to find the relevant source id first, and then use get_sources_by_source to drill deeper and get the concrete child source ids.
+	Arguments:
+	- none. Do not pass arguments.
+Behavior:
+	- Returns structured JSON items with author_id, author_en, author_he, source_id, source_en, and source_he.
+	- source_id values can be used as source_id input to get_sources_by_source or as source filter values in elasticsearch_search.`
+}
+
+func (t *GetSourcesBySourceTool) Definition() llm.ReasoningToolDefinition {
+	return llm.ReasoningToolDefinition{
+		Name:        "get_sources_by_source",
+		Description: "Return direct child sources of a source from PostgreSQL by source_id.",
+		Parameters: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"source_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Source identifier (UID or numeric MDB id).",
+				},
+				"language": map[string]interface{}{
+					"type":        "string",
+					"description": "Preferred UI language for names and descriptions.",
+				},
+				"limit": map[string]interface{}{
+					"type":        "integer",
+					"description": "Maximum number of child sources to return.",
+				},
+			},
+			"required":             []string{"source_id"},
+			"additionalProperties": false,
+		},
+	}
+}
+
+func (t *GetSourcesBySourceTool) UsageExplanation() string {
+	return `Tool: get_sources_by_source
+This tool allows you to retrieve direct child sources (library items) of a specific source from PostgreSQL.
+Use it after you already know a book/source id and need to drill down to more concrete child sources for source filtering.
+Arguments:
+- source_id: required. Source UID or numeric MDB id.
+- language: optional language for localized names and descriptions (e.g., "en", "he").
+- limit: optional maximum number of rows.
+Behavior:
+- Returns JSON with the resolved source and a list of direct child sources.
+- Child items include has_children so you can decide whether to drill deeper again or use the uid directly in elasticsearch_search filters.`
+}
+
+func (t *GetAvailableBooksTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
+	trimmed := strings.TrimSpace(string(arguments))
+	if trimmed != "" && trimmed != "null" && trimmed != "{}" {
+		return "", fmt.Errorf("get_available_books: this tool does not accept arguments")
+	}
+	if t.db == nil {
+		return "", fmt.Errorf("get_available_books: db is nil")
+	}
+
+	rows, err := t.db.Query(availableBooksQuery, consts.SEC_PUBLIC)
+	if err != nil {
+		return "", fmt.Errorf("get_available_books: query failed: %w", err)
+	}
+	defer rows.Close()
+
+	candidates := make([]availableBookCandidate, 0)
+	linkedUIDsByAuthor := map[string]map[string]struct{}{}
+	for rows.Next() {
+		candidate := availableBookCandidate{}
+		if err := rows.Scan(
+			&candidate.AuthorID,
+			&candidate.AuthorEN,
+			&candidate.AuthorHE,
+			&candidate.SourceID,
+			&candidate.ParentUID,
+			&candidate.GrandparentUID,
+			&candidate.SourceEN,
+			&candidate.SourceHE,
+			&candidate.ParentEN,
+			&candidate.ParentHE,
+		); err != nil {
+			return "", fmt.Errorf("get_available_books: rows.Scan failed: %w", err)
+		}
+		candidates = append(candidates, candidate)
+		if linkedUIDsByAuthor[candidate.AuthorID] == nil {
+			linkedUIDsByAuthor[candidate.AuthorID] = map[string]struct{}{}
+		}
+		linkedUIDsByAuthor[candidate.AuthorID][candidate.SourceID] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return "", fmt.Errorf("get_available_books: rows iteration failed: %w", err)
+	}
+
+	items := make([]availableBookToolItem, 0)
+	seen := map[string]struct{}{}
+	for _, candidate := range candidates {
+		if !shouldIncludeAvailableBook(candidate, linkedUIDsByAuthor[candidate.AuthorID]) {
+			continue
+		}
+		key := candidate.AuthorID + "|" + candidate.SourceID
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		items = append(items, availableBookToolItem{
+			AuthorID: candidate.AuthorID,
+			AuthorEN: candidate.AuthorEN,
+			AuthorHE: candidate.AuthorHE,
+			SourceID: candidate.SourceID,
+			SourceEN: candidate.SourceEN,
+			SourceHE: candidate.SourceHE,
+		})
+	}
+
+	llm.LogIfDeb(ctx, "get_available_books: returning count=%d", len(items))
+	return marshalToolResult(availableBooksToolResult{
+		ReturnedCount: len(items),
+		Items:         items,
+	})
 }
 
 func (t *GetCollectionsTool) Definition() llm.ReasoningToolDefinition {
@@ -482,6 +797,57 @@ func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.Raw
 	})
 }
 
+func (t *GetSourcesBySourceTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
+	if t.db == nil {
+		return "", fmt.Errorf("get_sources_by_source: db is nil")
+	}
+
+	args := getSourcesBySourceArgs{}
+	if err := json.Unmarshal(arguments, &args); err != nil {
+		return "", fmt.Errorf("get_sources_by_source: failed to parse arguments: %w", err)
+	}
+
+	sourceID := strings.TrimSpace(args.SourceID)
+	if sourceID == "" {
+		return "", fmt.Errorf("get_sources_by_source: source_id is required")
+	}
+
+	language := normalizePostgreSQLToolLanguage(args.Language)
+	limit := normalizePostgreSQLToolLimit(args.Limit)
+	llm.LogIfDeb(ctx, "get_sources_by_source: start source_id=%q language=%q limit=%d", sourceID, language, limit)
+
+	source, err := loadSourceNodeToolResult(t.db, sourceID, language)
+	if err != nil {
+		return "", err
+	}
+	llm.LogIfDeb(ctx, "get_sources_by_source: resolved source mdb_id=%d uid=%q", source.MDBID, source.UID)
+
+	rows, err := t.db.Query(sourcesBySourceQuery, language, source.MDBID, consts.SEC_PUBLIC, limit)
+	if err != nil {
+		return "", fmt.Errorf("get_sources_by_source: query failed: %w", err)
+	}
+	defer rows.Close()
+
+	items := []sourceNodeToolResult{}
+	for rows.Next() {
+		item, err := scanSourceNodeToolResult(rows)
+		if err != nil {
+			return "", fmt.Errorf("get_sources_by_source: rows.Scan failed: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return "", fmt.Errorf("get_sources_by_source: rows iteration failed: %w", err)
+	}
+	llm.LogIfDeb(ctx, "get_sources_by_source: completed source_id=%q returned_count=%d", sourceID, len(items))
+
+	return marshalToolResult(sourcesBySourceToolResult{
+		Source:        source,
+		ReturnedCount: len(items),
+		Items:         items,
+	})
+}
+
 func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	if t.db == nil {
 		return "", fmt.Errorf("get_collections: db is nil")
@@ -623,6 +989,26 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 	})
 }
 
+func loadSourceNodeToolResult(db *sql.DB, sourceID string, language string) (*sourceNodeToolResult, error) {
+	rowQuery := sourceByUIDQuery
+	queryValue := interface{}(sourceID)
+	if numericID, ok := parsePostgreSQLToolNumericID(sourceID); ok {
+		rowQuery = sourceByMDBIDQuery
+		queryValue = numericID
+	}
+
+	row := db.QueryRow(rowQuery, language, queryValue)
+	item, err := scanSourceNodeToolResult(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("get_sources_by_source: source not found for source_id '%s'", sourceID)
+		}
+		return nil, fmt.Errorf("get_sources_by_source: source lookup failed: %w", err)
+	}
+
+	return &item, nil
+}
+
 func loadAuthorToolResult(db *sql.DB, authorID string, language string) (*authorToolResult, error) {
 	author := &authorToolResult{}
 	var err error
@@ -691,6 +1077,49 @@ func scanCollectionToolResult(scanner interface {
 		&item.ContentUnitsCount,
 	)
 	return item, err
+}
+
+func scanSourceNodeToolResult(scanner interface {
+	Scan(dest ...interface{}) error
+}) (sourceNodeToolResult, error) {
+	item := sourceNodeToolResult{}
+	err := scanner.Scan(
+		&item.MDBID,
+		&item.UID,
+		&item.ParentUID,
+		&item.Type,
+		&item.Name,
+		&item.Description,
+		&item.Year,
+		&item.Number,
+		&item.Position,
+		&item.HasChildren,
+	)
+	return item, err
+}
+
+func shouldIncludeAvailableBook(candidate availableBookCandidate, linkedUIDs map[string]struct{}) bool {
+	if candidate.SourceID == candidate.AuthorID {
+		return false
+	}
+	if candidate.ParentUID == candidate.AuthorID {
+		return true
+	}
+	if candidate.AuthorID == "bs" &&
+		candidate.GrandparentUID == candidate.AuthorID &&
+		isPrefacesAvailableBookParent(candidate.ParentEN, candidate.ParentHE) {
+		return true
+	}
+	if candidate.ParentUID == "" {
+		return true
+	}
+	_, parentLinked := linkedUIDs[candidate.ParentUID]
+	return !parentLinked
+}
+
+func isPrefacesAvailableBookParent(parentEN string, parentHE string) bool {
+	return strings.EqualFold(strings.TrimSpace(parentEN), "Prefaces") ||
+		strings.TrimSpace(parentHE) == "הקדמות"
 }
 
 func marshalToolResult(v interface{}) (string, error) {

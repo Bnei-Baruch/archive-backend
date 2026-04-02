@@ -148,10 +148,10 @@ R_TWEET – Tweets by Dr. Laitman
 LIKUTIM - Selected Excerpts from the Sources. These are special content units that contain selected excerpts from the sources (library items) that are used in the lessons (not the full sources themselves). They are focused on a specific topic or concept. Use this content type when user is looking for excerpts (ליקוטים) or citations.
 If the user is looking for a lesson, include all lesson-related content types: LECTURE, LESSONS_SERIES, LESSON_PART, WOMEN_LESSON
 
-2. source – Filters by source (library item). Multiple sources can be used. Use the get_source_filter_values tool to obtain source values.
+2. source – Filters by source (library item). Multiple sources can be used. Use get_available_books to find relevant top-level books when the book root is unknown or ambiguous, get_sources_by_source to drill down to child source ids, or get_sources_by_author when you already know the author and need sources linked to that author.
 Including the sources filter in the query, means that we want to find various content that related to that sources like TV programs, lessons or the sources (library pages).
 When we filter by the parent source (like book name) we mean that the content we look for should be related also to all the child sources (chapters). In that case it is enough to apply only the parent source.
-The source parameter is also referred to an Author. For example the source with the code 'bs' is referred to Baal Ha-Sulam that is a parent node of all Baal Ha-Sulam books. Means that is the user want to find content that related to all writing of the author, enough to include the author code in the 'sources' parameter.
+The source filter accepts source ids and some author root codes. Prefer values returned by get_available_books, get_sources_by_source, or get_sources_by_author instead of guessing them.
 Note: For Dr. Laitman’s content, do not use source filter ('ml' value) — use the person filter instead.
 
 3. person – Filters by speaker/author of media content (not books). Values:

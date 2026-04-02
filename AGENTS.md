@@ -63,13 +63,11 @@ Instructions for coding agents working in this repository.
 
 - PostgreSQL list tools
   Path: `search/LLM/tools/postgresql_tools.go`
+  `get_available_books`: return top-level books under authors
   `get_sources_by_author`: return sources by `author_id` (author code or MDB id)
+  `get_sources_by_source`: return direct child sources by `source_id` (source UID or MDB id)
   `get_collections`: return public collections, optionally filtered by `collection_id`, `content_type`, or text query
   `get_content_units_by_collection`: return public content units for a `collection_id`
-
-- Cached tools
-  Path: `search/LLM/tools/cached_tools.go`
-  `get_source_filter_values`: takes no arguments and returns the cached list of all valid `source` filter values.
 
 - `elasticsearch_search`
   Path: `search/LLM/tools/elasticsearch_search_tool.go`

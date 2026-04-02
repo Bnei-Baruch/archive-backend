@@ -163,14 +163,30 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 }
 
 func TestPostgreSQLToolDefinitions(t *testing.T) {
-	sourceFilterValues := llmtools.NewGetSourceFilterValuesTool().Definition()
-	if sourceFilterValues.Name != "get_source_filter_values" {
-		t.Fatalf("unexpected get_source_filter_values tool name: %s", sourceFilterValues.Name)
+	availableBooks := llmtools.NewGetAvailableBooksTool(nil).Definition()
+	if availableBooks.Name != "get_available_books" {
+		t.Fatalf("unexpected get_available_books tool name: %s", availableBooks.Name)
+	}
+	parameters, ok := availableBooks.Parameters.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected get_available_books parameters map, got %T", availableBooks.Parameters)
+	}
+	properties, ok := parameters["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected get_available_books properties map, got %T", parameters["properties"])
+	}
+	if len(properties) != 0 {
+		t.Fatalf("expected get_available_books to define no properties, got %v", properties)
 	}
 
 	sourcesByAuthor := llmtools.NewGetSourcesByAuthorTool(nil).Definition()
 	if sourcesByAuthor.Name != "get_sources_by_author" {
 		t.Fatalf("unexpected get_sources_by_author tool name: %s", sourcesByAuthor.Name)
+	}
+
+	sourcesBySource := llmtools.NewGetSourcesBySourceTool(nil).Definition()
+	if sourcesBySource.Name != "get_sources_by_source" {
+		t.Fatalf("unexpected get_sources_by_source tool name: %s", sourcesBySource.Name)
 	}
 
 	collections := llmtools.NewGetCollectionsTool(nil).Definition()
@@ -181,6 +197,30 @@ func TestPostgreSQLToolDefinitions(t *testing.T) {
 	contentUnitsByCollection := llmtools.NewGetContentUnitsByCollectionTool(nil).Definition()
 	if contentUnitsByCollection.Name != "get_content_units_by_collection" {
 		t.Fatalf("unexpected get_content_units_by_collection tool name: %s", contentUnitsByCollection.Name)
+	}
+}
+
+func TestGetAvailableBooksToolReturnsItems(t *testing.T) {
+	tool := llmtools.NewGetAvailableBooksTool(nil)
+
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{}`))
+	if err == nil {
+		t.Fatalf("expected get_available_books to fail when db is nil")
+	}
+	if !strings.Contains(err.Error(), "db is nil") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGetAvailableBooksToolRejectsArguments(t *testing.T) {
+	tool := llmtools.NewGetAvailableBooksTool(nil)
+
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{"author_id":"bs"}`))
+	if err == nil {
+		t.Fatalf("expected get_available_books to reject arguments")
+	}
+	if !strings.Contains(err.Error(), "does not accept arguments") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -242,10 +282,6 @@ func TestNewAppScopedManager(t *testing.T) {
 		t.Fatalf("unexpected error creating app-scoped manager: %v", err)
 	}
 
-	if manager.Len() != 7 {
-		t.Fatalf("unexpected tool count: %d", manager.Len())
-	}
-
 	names := make([]string, 0, len(manager.Definitions()))
 	for _, definition := range manager.Definitions() {
 		names = append(names, definition.Name)
@@ -254,11 +290,15 @@ func TestNewAppScopedManager(t *testing.T) {
 	expected := []string{
 		"source_lookup",
 		"transcript_lookup",
-		"get_source_filter_values",
+		"get_available_books",
 		"get_sources_by_author",
+		"get_sources_by_source",
 		"get_collections",
 		"get_content_units_by_collection",
 		"elasticsearch_search",
+	}
+	if manager.Len() != len(expected) {
+		t.Fatalf("unexpected tool count: %d", manager.Len())
 	}
 	for i, name := range expected {
 		if names[i] != name {
