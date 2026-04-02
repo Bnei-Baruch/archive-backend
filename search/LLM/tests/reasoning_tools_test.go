@@ -130,8 +130,6 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 		`"query"`,
 		`"summary"`,
 		`"reasoning_summary"`,
-		`"used_tokens"`,
-		`"reasoning_iterations"`,
 		`"results"`,
 		`"mdb_uid"`,
 		`"result_type"`,

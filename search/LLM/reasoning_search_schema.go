@@ -121,14 +121,6 @@ func GenerateReasoningSearchResponseJSONSchema() string {
       "type": "string",
       "description": "A short summary of the reasoning process when debug mode is enabled, otherwise an empty string."
     },
-    "used_tokens": {
-      "type": "integer",
-      "description": "The actual number of tokens used by the reasoning process."
-    },
-    "reasoning_iterations": {
-      "type": "integer",
-      "description": "The actual number of reasoning iterations executed."
-    },
     "results": {
       "type": "array",
       "description": "Best matching results from the archive. Prefer direct content results when possible.",
@@ -197,7 +189,7 @@ func GenerateReasoningSearchResponseJSONSchema() string {
       }
     }
   },
-  "required": ["query", "summary", "reasoning_summary", "used_tokens", "reasoning_iterations", "results"]
+  "required": ["query", "summary", "reasoning_summary", "results"]
 }`, string(contentTypeEnumJSON))
 }
 
