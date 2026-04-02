@@ -187,7 +187,7 @@ Behavior:
 	  1. Small sources are returned in full.
 	  2. Medium sources are returned in full by default, but support targeted chunk retrieval when query or chunk_number is provided.
 	  3. Very large sources are always handled in chunk mode.
-	- If query is provided in chunk mode without chunk_number, the tool returns the top lexical matches from the cached text.
+	- If query is provided in chunk mode without chunk_number, the tool returns the top lexical matches from the cached text, each with one neighboring chunk on each side when available.
 	- If query and chunk_number are both provided in chunk mode, the tool treats chunk_number as the match number within the query results and returns that selected match plus one neighboring chunk on each side when available.
 	- If only chunk_number is provided in chunk mode, the tool returns that absolute document chunk plus one neighboring chunk on each side when available.
 	- If neither query nor chunk_number is provided in chunk mode, the tool returns a short preview of the beginning of the source plus chunk numbering guidance.
@@ -563,15 +563,33 @@ func renderSourceLookupQueryMatches(chunks []string, query string) string {
 		return matches[i].ChunkIndex < matches[j].ChunkIndex
 	})
 
-	indexes := make([]int, 0, len(matches))
+	indexes := make([]int, 0, len(matches)*(1+sourceLookupChunkWindowNeighbors*2))
+	seenIndexes := map[int]bool{}
 	for _, match := range matches {
-		indexes = append(indexes, match.ChunkIndex)
+		// Query mode returns each matched chunk with its immediate neighbors so the model
+		// gets enough local context without having to spend another tool call right away.
+		start := match.ChunkIndex - sourceLookupChunkWindowNeighbors
+		if start < 0 {
+			start = 0
+		}
+		end := match.ChunkIndex + sourceLookupChunkWindowNeighbors + 1
+		if end > len(chunks) {
+			end = len(chunks)
+		}
+		for i := start; i < end; i++ {
+			if seenIndexes[i] {
+				continue
+			}
+			seenIndexes[i] = true
+			indexes = append(indexes, i)
+		}
 	}
+	sort.Ints(indexes)
 
 	return renderSourceLookupChunkSelection(
 		chunks,
 		indexes,
-		fmt.Sprintf("Mode: query\nTotal chunks: %d\nReturned chunks: %d\nQuery: %q\nOnly part of the document was returned. To retrieve more, either refine the query to target another lexical match or use chunk_number together with the same query to inspect a specific lexical match in more detail.", len(chunks), len(indexes), query),
+		fmt.Sprintf("Mode: query\nTotal chunks: %d\nReturned chunks: %d\nQuery: %q\nThe top lexical matches were returned with one neighboring chunk on each side when available. Only part of the document was returned. To retrieve more, either refine the query to target another lexical match or use chunk_number together with the same query to inspect a specific lexical match in more detail.", len(chunks), len(indexes), query),
 	)
 }
 
