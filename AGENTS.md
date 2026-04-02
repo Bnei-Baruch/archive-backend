@@ -50,21 +50,31 @@ Instructions for coding agents working in this repository.
 - Pricing for cost estimation is configured with `[[openai.pricing]]`.
 
 ## Implemented Tools
-- `source_lookup` in `search/LLM/tools/source_lookup_tool.go`.
-- Input: `source_id` (required), `language` (optional).
-- Behavior: find public source doc/docx file UID, fetch text via `Doc2Text`, cache in memory, return text.
-- `transcript_lookup` in `search/LLM/tools/transcript_lookup_tool.go`.
-- Input: `content_unit_id` (required), `language` (optional).
-- Behavior: find transcript doc/docx for the content unit, fetch text via `Doc2Text`, cache in memory, return text.
-- PostgreSQL list tools in `search/LLM/tools/postgresql_tools.go`.
-- `get_sources_by_author`: return sources by `author_id` (author code or MDB id).
-- `get_collections`: return public collections, optionally filtered by `collection_id`, `content_type`, or text query.
-- `get_content_units_by_collection`: return public content units for a `collection_id`.
-- Cached tools in `search/LLM/tools/cached_tools.go`.
-- `get_source_filter_values`: takes no arguments and returns the cached list of all valid `source` filter values.
-- `elasticsearch_search` in `search/LLM/tools/elasticsearch_search_tool.go`.
-- Input: `query` (optional if filters are provided), `filters`, `language`, `sort_by`, `from`, `size`, `exact_phrase`.
-- Behavior: normalize filters, build `search.Query`, run `search.ESEngine.DoSearch`, return JSON.
+- `source_lookup`
+  Path: `search/LLM/tools/source_lookup_tool.go`
+  Input: `source_id` (required), `language` (optional), plus optional `query`, `chunk_number`
+  Behavior: find public source doc/docx file UID, fetch text via `Doc2Text`, cache full text in memory, and use a 3-tier policy
+  Small sources return full text; medium sources return full text by default but support targeted chunk retrieval; very large sources use chunk mode. Query mode returns the top matching chunks, and `chunk_number` returns the requested chunk plus one neighboring chunk on each side. Chunk retrieval for the same source is limited per reasoning request.
+
+- `transcript_lookup`
+  Path: `search/LLM/tools/transcript_lookup_tool.go`
+  Input: `content_unit_id` (required), `language` (optional)
+  Behavior: find transcript doc/docx for the content unit, fetch text via `Doc2Text`, cache in memory, return text.
+
+- PostgreSQL list tools
+  Path: `search/LLM/tools/postgresql_tools.go`
+  `get_sources_by_author`: return sources by `author_id` (author code or MDB id)
+  `get_collections`: return public collections, optionally filtered by `collection_id`, `content_type`, or text query
+  `get_content_units_by_collection`: return public content units for a `collection_id`
+
+- Cached tools
+  Path: `search/LLM/tools/cached_tools.go`
+  `get_source_filter_values`: takes no arguments and returns the cached list of all valid `source` filter values.
+
+- `elasticsearch_search`
+  Path: `search/LLM/tools/elasticsearch_search_tool.go`
+  Input: `query` (optional if filters are provided), `filters`, `language`, `sort_by`, `from`, `size`, `exact_phrase`
+  Behavior: normalize filters, build `search.Query`, run `search.ESEngine.DoSearch`, return JSON.
 
 ## Coding Notes
 - Prefer explicit errors over silent failures.

@@ -193,6 +193,33 @@ func TestElasticsearchSearchToolDefinition(t *testing.T) {
 	}
 }
 
+func TestSourceLookupToolDefinitionIncludesChunkArguments(t *testing.T) {
+	sourceLookup := llmtools.NewSourceLookupTool(nil, nil).Definition()
+	if sourceLookup.Name != "source_lookup" {
+		t.Fatalf("unexpected source_lookup tool name: %s", sourceLookup.Name)
+	}
+
+	parameters, ok := sourceLookup.Parameters.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map parameters, got %T", sourceLookup.Parameters)
+	}
+	properties, ok := parameters["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map properties, got %T", parameters["properties"])
+	}
+
+	for _, property := range []string{"query", "chunk_number"} {
+		if _, ok := properties[property]; !ok {
+			t.Fatalf("expected source_lookup to define %q", property)
+		}
+	}
+	for _, property := range []string{"neighbor_chunks", "max_chunks"} {
+		if _, ok := properties[property]; ok {
+			t.Fatalf("did not expect source_lookup to define %q", property)
+		}
+	}
+}
+
 type fakeAssetsService struct{}
 
 func (s *fakeAssetsService) Doc2Text(uid string) (string, error) {

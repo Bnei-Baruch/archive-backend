@@ -485,7 +485,7 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 	if maxIterations <= 0 {
 		maxIterations = 8
 	}
-	reasoningCtx := ContextWithDeb(context.Background(), deb)
+	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(context.Background(), deb))
 
 	sysMsgCount := 0
 	var instructions string
@@ -588,6 +588,7 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 		}
 
 		nextInput = []interface{}{}
+		toolCallLogs := []string{}
 		for _, toolCall := range functionCalls {
 			if toolCall.CallID == "" {
 				return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("tool call for '%s' is missing call_id", toolCall.Name)
@@ -609,6 +610,9 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 			if !json.Valid(rawArgs) {
 				return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("invalid arguments for tool '%s': %s", toolCall.Name, toolCall.Arguments)
 			}
+			if deb {
+				toolCallLogs = append(toolCallLogs, fmt.Sprintf("- %s args: %s", toolCall.Name, compactToolCallArguments(rawArgs)))
+			}
 
 			result, err := handler(reasoningCtx, rawArgs)
 			if err != nil {
@@ -620,6 +624,9 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 				"call_id": toolCall.CallID,
 				"output":  result,
 			})
+		}
+		if deb && len(toolCallLogs) > 0 {
+			reasoningSummaries = append(reasoningSummaries, "Tool calls:\n"+strings.Join(toolCallLogs, "\n"))
 		}
 		previousResponseID = &responsesResp.ID
 	}
@@ -717,6 +724,23 @@ func printReasoningOutputIfDeb(deb bool, iteration int, items []ResponsesOutputI
 	}
 
 	log.Printf("OpenAI reasoning summary iteration %d:\n%s", iteration, strings.Join(parts, "\n\n"))
+}
+
+func compactToolCallArguments(arguments json.RawMessage) string {
+	if len(arguments) == 0 {
+		return "{}"
+	}
+
+	buffer := bytes.NewBuffer(nil)
+	if err := json.Compact(buffer, arguments); err == nil {
+		return buffer.String()
+	}
+
+	trimmed := strings.TrimSpace(string(arguments))
+	if trimmed == "" {
+		return "{}"
+	}
+	return trimmed
 }
 
 func (s *OpenAIService) buildReasoningDebugInfo(model string, reasoningEffort *string, usageTotals OpenAIUsageTotals) *ReasoningSearchDebugInfo {

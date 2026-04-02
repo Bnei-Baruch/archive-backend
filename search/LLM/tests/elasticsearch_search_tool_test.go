@@ -113,8 +113,11 @@ func TestElasticsearchSearchToolExecuteExactPhrase(t *testing.T) {
 	if engine.checkTypo {
 		t.Fatalf("expected checkTypo=false")
 	}
-	if !engine.searchTweets || !engine.searchLessonSeries || !engine.withHighlights {
-		t.Fatalf("expected search flags to be enabled")
+	if !engine.searchTweets || !engine.withHighlights {
+		t.Fatalf("expected searchTweets and withHighlights to be enabled")
+	}
+	if engine.searchLessonSeries {
+		t.Fatalf("expected searchLessonSeries=false")
 	}
 	if engine.timeout != 2*time.Second {
 		t.Fatalf("unexpected timeout: %s", engine.timeout)
