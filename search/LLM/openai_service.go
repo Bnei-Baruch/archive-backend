@@ -12,34 +12,42 @@ import (
 	"strings"
 )
 
-const (
-	chatEndpoint       = "https://api.openai.com/v1/chat/completions"
-	responsesEndpoint  = "https://api.openai.com/v1/responses"
-	embeddingsEndpoint = "https://api.openai.com/v1/embeddings"
-	embeddingModel     = "text-embedding-3-large"
-)
+const embeddingModel = "text-embedding-3-large"
+const defaultOpenAIAPIBaseURL = "https://api.openai.com/v1"
 
 type OpenAIService struct {
-	token    string
-	pricing  []OpenAIModelPricing
-	sessions *OpenAIReasoningSessionStore
+	token      string
+	pricing    []OpenAIModelPricing
+	sessions   *OpenAIReasoningSessionStore
+	apiBaseURL string
 }
 
 var _ Service = (*OpenAIService)(nil)
 
 func NewOpenAIService(token string) *OpenAIService {
-	return NewOpenAIServiceWithOptions(token, nil, nil)
+	return NewOpenAIServiceWithOptions(token, nil, nil, "")
 }
 
 func NewOpenAIServiceWithPricing(token string, pricing []OpenAIModelPricing) *OpenAIService {
-	return NewOpenAIServiceWithOptions(token, pricing, nil)
+	return NewOpenAIServiceWithOptions(token, pricing, nil, "")
 }
 
-func NewOpenAIServiceWithOptions(token string, pricing []OpenAIModelPricing, sessions *OpenAIReasoningSessionStore) *OpenAIService {
+func NewOpenAIServiceWithOptions(token string, pricing []OpenAIModelPricing, sessions *OpenAIReasoningSessionStore, apiBaseURL string) *OpenAIService {
+	apiBaseURL = strings.TrimSpace(apiBaseURL)
+	if apiBaseURL == "" {
+		apiBaseURL = defaultOpenAIAPIBaseURL
+	} else {
+		apiBaseURL = strings.TrimRight(apiBaseURL, "/")
+		if !strings.HasSuffix(apiBaseURL, "/v1") {
+			apiBaseURL += "/v1"
+		}
+	}
+
 	service := &OpenAIService{
-		token:    token,
-		pricing:  pricing,
-		sessions: sessions,
+		token:      token,
+		pricing:    pricing,
+		sessions:   sessions,
+		apiBaseURL: apiBaseURL,
 	}
 
 	return service
@@ -231,6 +239,15 @@ func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages [
 }
 
 func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, int, error) {
+	if reasoningEffort != nil {
+		if strings.HasPrefix(model, "gpt-oss") {
+			switch *reasoningEffort {
+			case "low", "medium", "high":
+			default:
+				return nil, 0, fmt.Errorf("reasoning effort %q is not supported for model %q; gpt-oss supports only low, medium, high", *reasoningEffort, model)
+			}
+		}
+	}
 	sysMsgCount := 0
 	for _, m := range messages {
 		if m.Role == "system" || m.Role == "developer" {
@@ -265,7 +282,7 @@ func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, m
 	}
 
 	var chatResp ChatResponse
-	if err := s.callAPI(req, chatEndpoint, &chatResp); err != nil {
+	if err := s.callAPI(req, s.apiBaseURL+"/chat/completions", &chatResp); err != nil {
 		return nil, 0, err
 	}
 	totalTokens := 0
@@ -447,6 +464,15 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 	maxIterations int,
 	initialPreviousResponseID *string,
 ) (*LLMBotMessage, string, OpenAIUsageTotals, int, []string, string, error) {
+	if reasoningEffort != nil {
+		if strings.HasPrefix(model, "gpt-oss") {
+			switch *reasoningEffort {
+			case "low", "medium", "high":
+			default:
+				return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("reasoning effort %q is not supported for model %q; gpt-oss supports only low, medium, high", *reasoningEffort, model)
+			}
+		}
+	}
 	usageTotals := OpenAIUsageTotals{}
 	iterations := 0
 	usedTools := []string{}
@@ -551,7 +577,7 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 		}
 
 		var responsesResp ResponsesResponse
-		if err := s.callAPI(req, responsesEndpoint, &responsesResp); err != nil {
+		if err := s.callAPI(req, s.apiBaseURL+"/responses", &responsesResp); err != nil {
 			return nil, "", OpenAIUsageTotals{}, 0, nil, "", err
 		}
 		iterations = i + 1
@@ -785,7 +811,7 @@ func (s *OpenAIService) GetEmbeddings(content string) ([]float64, error) {
 	}
 
 	var resp EmbeddingResponse
-	if err := s.callAPI(payload, embeddingsEndpoint, &resp); err != nil {
+	if err := s.callAPI(payload, s.apiBaseURL+"/embeddings", &resp); err != nil {
 		return nil, err
 	}
 	totalTokens := 0
@@ -817,7 +843,9 @@ func (s *OpenAIService) callAPI(data interface{}, endpoint string, result interf
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+s.token)
+	if strings.TrimSpace(s.token) != "" {
+		req.Header.Set("Authorization", "Bearer "+s.token)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}

@@ -10,7 +10,7 @@ import (
 const ProviderOpenAI = "openai"
 
 const (
-	defaultReasoningSearchEffort        = "high" // "low", "medium", "high", "xhigh"
+	defaultReasoningSearchEffort        = "high" // "low", "medium", "high", "xhigh" (not for oss models)
 	defaultReasoningSearchMaxTokens     = 8000
 	defaultReasoningSearchMaxIterations = 20
 )
@@ -28,7 +28,8 @@ func NewServiceFromConfig() (Service, error) {
 	switch provider {
 	case ProviderOpenAI:
 		token := viper.GetString("openai.token")
-		if token == "" {
+		apiEndpoint := viper.GetString("openai.api-endpoint")
+		if token == "" && strings.TrimSpace(apiEndpoint) == "" {
 			return nil, fmt.Errorf("openai.token is empty")
 		}
 		pricing := []OpenAIModelPricing{}
@@ -39,7 +40,7 @@ func NewServiceFromConfig() (Service, error) {
 		if sessionTTL <= 0 {
 			sessionTTL = defaultOpenAIReasoningSessionTTL
 		}
-		return NewOpenAIServiceWithOptions(token, pricing, NewOpenAIReasoningSessionStore(sessionTTL)), nil
+		return NewOpenAIServiceWithOptions(token, pricing, NewOpenAIReasoningSessionStore(sessionTTL), apiEndpoint), nil
 	default:
 		return nil, fmt.Errorf("unsupported llm provider: %s", provider)
 	}
@@ -67,6 +68,13 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 		}
 		if effort == "" {
 			effort = defaultReasoningSearchEffort
+		}
+		if strings.HasPrefix(model, "gpt-oss") {
+			switch effort {
+			case "low", "medium", "high":
+			default:
+				return nil, fmt.Errorf("reasoning effort %q is not supported for model %q; gpt-oss supports only low, medium, high", effort, model)
+			}
 		}
 
 		maxTokens := viper.GetInt("openai.reasoning-search-max-output-tokens")
