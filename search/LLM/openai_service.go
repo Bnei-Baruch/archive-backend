@@ -59,7 +59,7 @@ type ChatRequest struct {
 	Model            string          `json:"model"`
 	Messages         []LLMBotMessage `json:"messages"`
 	MaxTokens        *int            `json:"max_tokens,omitempty"`
-	User             *string         `json:"user,omitempty"`
+	PromptCacheKey   *string         `json:"prompt_cache_key,omitempty"`
 	FrequencyPenalty *float64        `json:"frequency_penalty,omitempty"`
 	ResponseFormat   *ResponseFormat `json:"response_format,omitempty"`
 	ReasoningEffort  *string         `json:"reasoning_effort,omitempty"`
@@ -90,7 +90,7 @@ type ResponsesRequest struct {
 	Instructions       *string                  `json:"instructions,omitempty"`
 	PreviousResponseID *string                  `json:"previous_response_id,omitempty"`
 	MaxOutputTokens    *int                     `json:"max_output_tokens,omitempty"`
-	User               *string                  `json:"user,omitempty"`
+	PromptCacheKey     *string                  `json:"prompt_cache_key,omitempty"`
 	Reasoning          *ResponsesReasoning      `json:"reasoning,omitempty"`
 	Text               *ResponsesText           `json:"text,omitempty"`
 	Tools              []map[string]interface{} `json:"tools,omitempty"`
@@ -206,8 +206,8 @@ type LLMBotMessage struct {
 	ToolCallID string            `json:"tool_call_id,omitempty"`
 }
 
-func (s *OpenAIService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, user *string, reasoningEffort *string, output interface{}) error {
-	msg, totalTokens, err := s.getChatResponseWithUsage(model, maxTokens, messages, user, nil, &jsonSchema, reasoningEffort)
+func (s *OpenAIService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) error {
+	msg, totalTokens, err := s.getChatResponseWithUsage(model, maxTokens, messages, promptCacheKey, nil, &jsonSchema, reasoningEffort)
 	if totalTokens > 0 {
 		log.Printf("OpenAI GetStructuredOutput total tokens: %d", totalTokens)
 	}
@@ -227,8 +227,8 @@ func (s *OpenAIService) GetStructuredOutput(jsonSchema string, model string, max
 	return nil
 }
 
-func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
-	msg, totalTokens, err := s.getChatResponseWithUsage(model, maxTokens, messages, user, frequencyPenalty, jsonSchema, reasoningEffort)
+func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
+	msg, totalTokens, err := s.getChatResponseWithUsage(model, maxTokens, messages, promptCacheKey, frequencyPenalty, jsonSchema, reasoningEffort)
 	if totalTokens > 0 {
 		log.Printf("OpenAI GetChatResponse total tokens: %d", totalTokens)
 	}
@@ -238,7 +238,7 @@ func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages [
 	return msg, nil
 }
 
-func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, int, error) {
+func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, int, error) {
 	if reasoningEffort != nil {
 		if strings.HasPrefix(model, "gpt-oss") {
 			switch *reasoningEffort {
@@ -275,7 +275,7 @@ func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, m
 		Model:            model,
 		Messages:         messages,
 		MaxTokens:        maxTokens,
-		User:             user,
+		PromptCacheKey:   promptCacheKey,
 		FrequencyPenalty: frequencyPenalty,
 		ResponseFormat:   respFmt,
 		ReasoningEffort:  reasoningEffort,
@@ -304,12 +304,12 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 	messages []LLMBotMessage,
 	tools []ToolCall,
 	toolHandlers map[string]ToolHandler,
-	user *string,
+	promptCacheKey *string,
 	reasoningEffort *string,
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, user, reasoningEffort, deb, maxIterations, nil)
+	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, promptCacheKey, reasoningEffort, deb, maxIterations, nil)
 	return msg, err
 }
 
@@ -320,13 +320,13 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithTools(
 	messages []LLMBotMessage,
 	tools []ToolCall,
 	toolHandlers map[string]ToolHandler,
-	user *string,
+	promptCacheKey *string,
 	reasoningEffort *string,
 	deb bool,
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, user, reasoningEffort, deb, maxIterations, nil)
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, promptCacheKey, reasoningEffort, deb, maxIterations, nil)
 	if err != nil {
 		return err
 	}
@@ -362,7 +362,7 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithToolsForSession(
 	messages []LLMBotMessage,
 	tools []ToolCall,
 	toolHandlers map[string]ToolHandler,
-	user *string,
+	promptCacheKey *string,
 	reasoningEffort *string,
 	deb bool,
 	maxIterations int,
@@ -400,7 +400,7 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithToolsForSession(
 		messages,
 		tools,
 		toolHandlers,
-		user,
+		promptCacheKey,
 		effectiveReasoningEffort,
 		deb,
 		maxIterations,
@@ -458,7 +458,7 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 	messages []LLMBotMessage,
 	tools []ToolCall,
 	toolHandlers map[string]ToolHandler,
-	user *string,
+	promptCacheKey *string,
 	reasoningEffort *string,
 	deb bool,
 	maxIterations int,
@@ -562,7 +562,7 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 			Instructions:       &instructions,
 			PreviousResponseID: previousResponseID,
 			MaxOutputTokens:    maxTokens,
-			User:               user,
+			PromptCacheKey:     promptCacheKey,
 			Text:               text,
 			Tools:              normalizedTools,
 		}

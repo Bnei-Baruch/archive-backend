@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -61,7 +62,16 @@ func ReasoningSearchHandler(c *gin.Context) {
 		},
 	}
 
-	user := "kabbalah-media-reasoning-search" // TBD use real user info when available
+	toolNames := make([]string, 0, manager.Len())
+	for _, definition := range manager.Definitions() {
+		toolNames = append(toolNames, definition.Name)
+	}
+	promptCacheKey := fmt.Sprintf(
+		"kabbalah-media-reasoning-search:model=%s:effort=%s:tools=%s",
+		reasoningConfig.Model,
+		reasoningConfig.Effort,
+		strings.Join(toolNames, ","),
+	)
 	response := llm.ReasoningSearchResponse{}
 
 	log.Infof("Reasoning Search Query: [%s]", r.Query)
@@ -74,7 +84,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 		messages,
 		manager.ToolCalls(),
 		manager.ToolHandlers(),
-		&user,
+		&promptCacheKey,
 		&reasoningConfig.Effort,
 		r.Deb,
 		reasoningConfig.MaxIterations,
