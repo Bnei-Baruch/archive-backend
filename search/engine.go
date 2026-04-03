@@ -45,19 +45,19 @@ type ClassificationIntent struct {
 	FullTitle  string `json:"full_title"`
 
 	// Intent fields.
-	ContentType    string                    `json:"content_type"`
-	Exist          bool                      `json:"exist"`
-	Score          *float64                  `json:"score,omitempty"`
-	Explanation    elastic.SearchExplanation `json:"explanation,omitempty"`
-	MaxScore       *float64                  `json:"max_score,omitempty"`
-	MaxExplanation elastic.SearchExplanation `json:"max_explanation,omitempty"`
+	ContentType    string            `json:"content_type"`
+	Exist          bool              `json:"exist"`
+	Score          *float64          `json:"score,omitempty"`
+	Explanation    SearchExplanation `json:"explanation,omitempty"`
+	MaxScore       *float64          `json:"max_score,omitempty"`
+	MaxExplanation SearchExplanation `json:"max_explanation,omitempty"`
 }
 
 type FilteredSearchResult struct {
 	Term                     string
 	PreserveTermForHighlight bool //Use the term as highlight term even if we have same hit result from regular search
 	HitIdsMap                map[string]bool
-	Results                  []*elastic.SearchResult
+	Results                  []*SearchResult
 	MaxScore                 *float64
 	ProgramCollection        *string
 }
@@ -97,10 +97,10 @@ func (c *TimeLogMap) ToMap() map[string]time.Duration {
 	return copyMap
 }
 
-type byRelevance []*elastic.SearchHit
-type byNewerToOlder []*elastic.SearchHit
-type byOlderToNewer []*elastic.SearchHit
-type bySourceFirst []*elastic.SearchHit
+type byRelevance []*SearchHit
+type byNewerToOlder []*SearchHit
+type byOlderToNewer []*SearchHit
+type bySourceFirst []*SearchHit
 
 func (s byRelevance) Len() int {
 	return len(s)
@@ -173,7 +173,7 @@ func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager /*, g
 	}
 }
 
-func SuggestionHasOptions(ss elastic.SearchSuggest) bool {
+func SuggestionHasOptions(ss SearchSuggest) bool {
 	for _, v := range ss {
 		for _, s := range v {
 			if len(s.Options) > 0 {
@@ -239,8 +239,11 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 		return nil, errors.Wrap(err, "ESEngine.GetSuggestions")
 	}
 
+	// Convert olivere responses to shared types at the ES6 boundary.
+	responses := fromOlivereResponses(mr.Responses)
+
 	//  Nativize response to client - Replace title with full title
-	for _, r := range mr.Responses {
+	for _, r := range responses {
 		for key := range r.Suggest {
 			for j := range r.Suggest[key] {
 				for opIdx, op := range r.Suggest[key][j].Options {
@@ -270,13 +273,13 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	grammarSuggestions = <-grammarSuggestionsChannel
 
 	for i, lang := range query.LanguageOrder {
-		if langSuggestions, ok := grammarSuggestions[lang]; ok && len(langSuggestions) > 0 && mr != nil && len(mr.Responses) > i {
-			r := mr.Responses[i]
+		if langSuggestions, ok := grammarSuggestions[lang]; ok && len(langSuggestions) > 0 && len(responses) > i {
+			r := responses[i]
 			if r.Suggest == nil {
-				r.Suggest = make(map[string][]elastic.SearchSuggestion)
+				r.Suggest = make(map[string][]SearchSuggestion)
 			}
 			if len(r.Suggest) == 0 {
-				r.Suggest["title_suggest"] = []elastic.SearchSuggestion{}
+				r.Suggest["title_suggest"] = []SearchSuggestion{}
 			}
 			for key := range r.Suggest {
 				for j := range r.Suggest[key] {
@@ -291,11 +294,11 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 								return nil, err
 							}
 							raw := json.RawMessage(sourceRawMessage)
-							option := elastic.SearchSuggestionOption{
+							option := SearchSuggestionOption{
 								Text:   suggestion,
 								Source: &raw,
 							}
-							r.Suggest[key][j].Options = append([]elastic.SearchSuggestionOption{option}, r.Suggest[key][j].Options...)
+							r.Suggest[key][j].Options = append([]SearchSuggestionOption{option}, r.Suggest[key][j].Options...)
 						}
 					}
 				}
@@ -304,16 +307,16 @@ func (e *ESEngine) GetSuggestions(ctx context.Context, query Query, preference s
 	}
 
 	// Process response
-	sRes := (*elastic.SearchResult)(nil)
-	for _, r := range mr.Responses {
+	sRes := (*SearchResult)(nil)
+	for _, r := range responses {
 		if r != nil && SuggestionHasOptions(r.Suggest) {
 			sRes = r
 			break
 		}
 	}
 
-	if sRes == nil && len(mr.Responses) > 0 {
-		sRes = mr.Responses[0]
+	if sRes == nil && len(responses) > 0 {
+		sRes = responses[0]
 	}
 
 	return sRes, nil
@@ -341,7 +344,7 @@ func IntentsToStringDebug(label string, intents []Intent) string {
 	return strings.Join(parts, "\n")
 }
 
-func ResultsSliceMapToStringDebug(label string, m map[string][]*elastic.SearchResult, limit int) string {
+func ResultsSliceMapToStringDebug(label string, m map[string][]*SearchResult, limit int) string {
 	parts := []string{fmt.Sprintf("--- %s ----", label), fmt.Sprintf("%d items", len(m))}
 	for k, v := range m {
 		parts = append(parts, fmt.Sprintf("%s: %d", k, len(v)))
@@ -353,7 +356,7 @@ func ResultsSliceMapToStringDebug(label string, m map[string][]*elastic.SearchRe
 	return strings.Join(parts, "\n")
 }
 
-func ResultsMapToStringDebug(label string, m map[string]*elastic.SearchResult, limit int) string {
+func ResultsMapToStringDebug(label string, m map[string]*SearchResult, limit int) string {
 	parts := []string{fmt.Sprintf("--- %s ----", label), fmt.Sprintf("%d items", len(m))}
 	for k, v := range m {
 		parts = append(parts, fmt.Sprintf("%s: %s", k, ResultToStringDebug(v, limit)))
@@ -381,7 +384,7 @@ func IntentToStringDebug(intent Intent) string {
 	return str
 }
 
-func ResultToStringDebug(r *elastic.SearchResult, limit int) string {
+func ResultToStringDebug(r *SearchResult, limit int) string {
 	if r == nil || r.Hits == nil {
 		return "Results or Hits are nil."
 	}
@@ -397,25 +400,25 @@ func ResultToStringDebug(r *elastic.SearchResult, limit int) string {
 	return strings.Join(parts, "\n")
 }
 
-func HitToStringDebug(prefix string, h *elastic.SearchHit) string {
+func HitToStringDebug(prefix string, h *SearchHit) string {
 	if h == nil {
 		return "nil"
 	}
 	parts := []string(nil)
 	var src es.Result
 	if err := json.Unmarshal(*h.Source, &src); err != nil {
-		parts = append(parts, fmt.Sprintf("%s%s %s %s %s failed unmarshling source.", prefix, FloatOrNil(h.Score), h.Index, h.Id, h.Type))
+		parts = append(parts, fmt.Sprintf("%s%s %s %s %s failed unmarshling source.", prefix, FloatOrNil(h.Score), h.Index, h.ID, h.Type))
 	} else {
-		parts = append(parts, fmt.Sprintf("%s%s %s %s %s %+v", prefix, FloatOrNil(h.Score), h.Index, h.Id, h.Type, src))
+		parts = append(parts, fmt.Sprintf("%s%s %s %s %s %+v", prefix, FloatOrNil(h.Score), h.Index, h.ID, h.Type, src))
 	}
 	return strings.Join(parts, "\n")
 }
 
-func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.SearchResult) {
-	srMap := make(map[string]*elastic.SearchResult)
+func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*SearchResult) {
+	srMap := make(map[string]*SearchResult)
 	for _, lang := range query.LanguageOrder {
-		sh := &elastic.SearchHits{TotalHits: 0}
-		sr := &elastic.SearchResult{Hits: sh}
+		sh := &SearchHits{TotalHits: 0}
+		sr := &SearchResult{Hits: sh}
 		srMap[lang] = sr
 	}
 
@@ -458,7 +461,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 				} else {
 					sh.MaxScore = &boostedScore
 				}
-				intentHit := &elastic.SearchHit{}
+				intentHit := &SearchHit{}
 				intentHit.Explanation = &intentValue.Explanation
 				intentHit.Score = &boostedScore
 				intentHit.Index = consts.INTENT_INDEX_BY_TYPE[intent.Type]
@@ -484,13 +487,13 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 			} else {
 				sh.MaxScore = &boostedScore
 			}
-			var intentHit *elastic.SearchHit
+			var intentHit *SearchHit
 			convertedToSingleHit := false
 			if intentValue.SingleHit != nil {
 				intentHit = intentValue.SingleHit
 				convertedToSingleHit = true
 			} else {
-				intentHit = &elastic.SearchHit{}
+				intentHit = &SearchHit{}
 			}
 			if intentValue.Explanation != nil {
 				intentHit.Explanation = intentValue.Explanation
@@ -511,7 +514,7 @@ func (e *ESEngine) IntentsToResults(query *Query) (error, map[string]*elastic.Se
 	return nil, srMap
 }
 
-func haveHits(r *elastic.SearchResult) bool {
+func haveHits(r *SearchResult) bool {
 	return r != nil && r.Hits != nil && r.Hits.Hits != nil && len(r.Hits.Hits) > 0
 }
 
@@ -523,7 +526,7 @@ func score(score *float64) float64 {
 	}
 }
 
-func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (bool, error) {
+func compareHits(h1 *SearchHit, h2 *SearchHit, sortBy string) (bool, error) {
 	if sortBy == consts.SORT_BY_RELEVANCE {
 		return score(h1.Score) > score(h2.Score), nil
 	} else if sortBy == consts.SORT_BY_SOURCE_FIRST {
@@ -562,13 +565,13 @@ func compareHits(h1 *elastic.SearchHit, h2 *elastic.SearchHit, sortBy string) (b
 	}
 }
 
-func joinResponses(sortBy string, from int, size int, results ...*elastic.SearchResult) (*elastic.SearchResult, error) {
+func joinResponses(sortBy string, from int, size int, results ...*SearchResult) (*SearchResult, error) {
 	if len(results) == 0 {
 		return nil, nil
 	}
 
 	// Concatenate all result hits to single slice.
-	concatenated := make([]*elastic.SearchHit, 0)
+	concatenated := make([]*SearchHit, 0)
 	for _, result := range results {
 		concatenated = append(concatenated, result.Hits.Hits...)
 	}
@@ -600,7 +603,7 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 
 	if from >= len(unique) {
 		// Edge case when we cannot calculate totalHits correctly due to many duplications of grammar and regular results (that we filter out only when loading a specific page).
-		unique = []*elastic.SearchHit{}
+		unique = []*SearchHit{}
 	} else {
 		// Filter by relevant page.
 		unique = unique[from:utils.Min(from+size, len(unique))]
@@ -634,9 +637,9 @@ func joinResponses(sortBy string, from int, size int, results ...*elastic.Search
 	return result, nil
 }
 
-func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string, typesToIgnore []string) []*elastic.SearchHit {
-	unique := make([]*elastic.SearchHit, 0)
-	mdbMap := make(map[string]*elastic.SearchHit)
+func uniqueHitsByMdbUid(hits []*SearchHit, indexesToIgnore []string, typesToIgnore []string) []*SearchHit {
+	unique := make([]*SearchHit, 0)
+	mdbMap := make(map[string]*SearchHit)
 	for _, hit := range hits {
 		var mdbUid es.MdbUid
 		if hit.Score != nil && !utils.Contains(utils.Is(indexesToIgnore), hit.Index) && !utils.Contains(utils.Is(typesToIgnore), hit.Type) {
@@ -654,7 +657,7 @@ func uniqueHitsByMdbUid(hits []*elastic.SearchHit, indexesToIgnore []string, typ
 					unique = append(unique, hit)
 				}
 			} else {
-				log.Warnf("Unable to unmarshal source for hit ''%s.", hit.Id)
+				log.Warnf("Unable to unmarshal source for hit ''%s.", hit.ID)
 				unique = append(unique, hit)
 			}
 		} else {
@@ -680,13 +683,13 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	grammarsSingleHitIntentsChannel := make(chan []Intent, 1)
 	grammarsFilterIntentsChannel := make(chan []Intent, 1)
 	grammarsFilteredResultsByLangChannel := make(chan map[string][]FilteredSearchResult)
-	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
-	seriesLangChannel := make(chan map[string]*elastic.SearchResult)
+	tweetsByLangChannel := make(chan map[string]*SearchResult)
+	seriesLangChannel := make(chan map[string]*SearchResult)
 
 	filterIntents := []Intent{}
 	filteredByLang := map[string][]FilteredSearchResult{}
-	tweetsByLang := map[string]*elastic.SearchResult{}
-	seriesByLang := map[string]*elastic.SearchResult{}
+	tweetsByLang := map[string]*SearchResult{}
+	seriesByLang := map[string]*SearchResult{}
 
 	var resultTypes []string
 	if sortBy == consts.SORT_BY_NEWER_TO_OLDER || sortBy == consts.SORT_BY_OLDER_TO_NEWER {
@@ -733,12 +736,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			defer func() {
 				if err := recover(); err != nil {
 					log.Errorf("ESEngine.DoSearch - Panic searching tweets: %+v", err)
-					tweetsByLangChannel <- map[string]*elastic.SearchResult{}
+					tweetsByLangChannel <- map[string]*SearchResult{}
 				}
 			}()
 			if tweetsByLang, err := e.SearchTweets(query, sortBy, from, size, preference); err != nil {
 				log.Errorf("ESEngine.DoSearch - Error searching tweets: %+v", err)
-				tweetsByLangChannel <- map[string]*elastic.SearchResult{}
+				tweetsByLangChannel <- map[string]*SearchResult{}
 			} else {
 				tweetsByLangChannel <- tweetsByLang
 			}
@@ -751,12 +754,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			defer func() {
 				if err := recover(); err != nil {
 					log.Errorf("ESEngine.DoSearch - Panic searching lesson series: %+v", err)
-					seriesLangChannel <- map[string]*elastic.SearchResult{}
+					seriesLangChannel <- map[string]*SearchResult{}
 				}
 			}()
 			if byLang, err := e.LessonsSeries(query, preference); err != nil {
 				log.Errorf("ESEngine.DoSearch - Error searching lesson series: %+v", err)
-				seriesLangChannel <- map[string]*elastic.SearchResult{}
+				seriesLangChannel <- map[string]*SearchResult{}
 			} else {
 				seriesLangChannel <- byLang
 			}
@@ -855,8 +858,16 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
 			len(mr.Responses), len(query.LanguageOrder)))
 	}
+	// Pre-check shard/query errors, then convert to shared types at the ES6 boundary.
+	for _, r := range mr.Responses {
+		if r.Error != nil {
+			log.Warnf("%+v", r.Error)
+			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", r.Error))
+		}
+	}
+	mainResponses := fromOlivereResponses(mr.Responses)
 
-	resultsByLang := make(map[string][]*elastic.SearchResult)
+	resultsByLang := make(map[string][]*SearchResult)
 
 	// Responses are ordered by language by index, i.e., for languages [bg, ru, en].
 	// We want the first matching language that has at least any result.
@@ -866,11 +877,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		score        float64
 		grammarHitId *string
 	}{}
-	for i, currentResults := range mr.Responses {
-		if currentResults.Error != nil {
-			log.Warnf("%+v", currentResults.Error)
-			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
-		}
+	for i, currentResults := range mainResponses {
 		if haveHits(currentResults) {
 
 			if len(filterIntents) > 0 {
@@ -895,7 +902,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						var src es.Result
 						err = json.Unmarshal(*hit.Source, &src)
 						if err != nil {
-							log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
+							log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.ID)
 							continue
 						}
 						if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
@@ -906,7 +913,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 										score        float64
 										grammarHitId *string
 									}{
-										hit.Id,
+										hit.ID,
 										*hit.Score,
 										nil,
 									})
@@ -934,7 +941,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 			}
 			lang := query.LanguageOrder[i]
 			if _, ok := resultsByLang[lang]; !ok {
-				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+				resultsByLang[lang] = make([]*SearchResult, 0)
 			}
 			resultsByLang[lang] = append(resultsByLang[lang], currentResults)
 		}
@@ -955,7 +962,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	for lang, intentResults := range intentResultsMap {
 		if haveHits(intentResults) {
 			if _, ok := resultsByLang[lang]; !ok {
-				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+				resultsByLang[lang] = make([]*SearchResult, 0)
 			}
 			resultsByLang[lang] = append(resultsByLang[lang], intentResults)
 		}
@@ -966,7 +973,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		LogIfDeb(&query, ResultsMapToStringDebug("TWEETS", tweetsByLang, 3))
 		for lang, tweets := range tweetsByLang {
 			if _, ok := resultsByLang[lang]; !ok {
-				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+				resultsByLang[lang] = make([]*SearchResult, 0)
 			}
 			resultsByLang[lang] = append(resultsByLang[lang], tweets)
 		}
@@ -977,7 +984,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		LogIfDeb(&query, ResultsMapToStringDebug("SERIES", seriesByLang, 3))
 		for lang, s := range seriesByLang {
 			if _, ok := resultsByLang[lang]; !ok {
-				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+				resultsByLang[lang] = make([]*SearchResult, 0)
 			}
 			resultsByLang[lang] = append(resultsByLang[lang], s)
 		}
@@ -1000,7 +1007,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	if len(programsToReplaceWithGrammarResults) > 0 {
 		for lang, filtered := range filteredByLang {
 			if _, ok := resultsByLang[lang]; !ok {
-				resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+				resultsByLang[lang] = make([]*SearchResult, 0)
 			}
 			for _, fr := range filtered {
 				if fr.ProgramCollection != nil {
@@ -1009,14 +1016,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							var src es.Result
 							err = json.Unmarshal(*hit.Source, &src)
 							if err != nil {
-								log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
+								log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.ID)
 								continue
 							}
 							if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
 								if utils.Contains(utils.Is(src.TypedUids), es.KeyValue(consts.ES_UID_TYPE_COLLECTION, *fr.ProgramCollection)) {
 									if programToReplaceIndex < len(programsToReplaceWithGrammarResults) {
 										hit.Score = &programsToReplaceWithGrammarResults[programToReplaceIndex].score
-										programsToReplaceWithGrammarResults[programToReplaceIndex].grammarHitId = &hit.Id
+										programsToReplaceWithGrammarResults[programToReplaceIndex].grammarHitId = &hit.ID
 										// TBD update hit explanation
 										programToReplaceIndex++
 									} else {
@@ -1035,24 +1042,24 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	// Loop over grammar filtered results to apply the score logic for combination with regular results
 	for lang, filtered := range filteredByLang {
 		if _, ok := resultsByLang[lang]; !ok {
-			resultsByLang[lang] = make([]*elastic.SearchResult, 0)
+			resultsByLang[lang] = make([]*SearchResult, 0)
 		}
 		for _, fr := range filtered {
 			for _, result := range fr.Results {
 				sort.Strings(filterOutCUSources)
-				withoutCarouselDuplications := []*elastic.SearchHit{}
+				withoutCarouselDuplications := []*SearchHit{}
 				var maxScore float64
 				for _, hit := range result.Hits.Hits {
 					var src es.Result
 					err = json.Unmarshal(*hit.Source, &src)
 					if err != nil {
-						log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.Id)
+						log.Errorf("ESEngine.DoSearch - cannot unmarshal source for hit '%v'.", hit.ID)
 						continue
 					}
 					if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
 						hitSources, err := es.KeyValuesToValues(consts.ES_UID_TYPE_SOURCE, src.TypedUids)
 						if err != nil {
-							log.Errorf("ESEngine.DoSearch - cannot read TypedUids for hit '%v'.", hit.Id)
+							log.Errorf("ESEngine.DoSearch - cannot read TypedUids for hit '%v'.", hit.ID)
 							continue
 						}
 						sort.Strings(hitSources)
@@ -1108,7 +1115,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					for _, hit := range result.Hits.Hits {
 						replaced := false
 						for _, p := range programsToReplaceWithGrammarResults {
-							if p.grammarHitId != nil && *p.grammarHitId == hit.Id {
+							if p.grammarHitId != nil && *p.grammarHitId == hit.ID {
 								replaced = true
 								break
 							}
@@ -1128,8 +1135,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					if len(programsToReplaceWithGrammarResults) > 0 {
 						// Assign results score to zero if the results are to be replaced by program grammar
 						for i := 0; i < programToReplaceIndex; i++ {
-							if hit.Id == programsToReplaceWithGrammarResults[i].hitId {
-								LogIfDeb(&query, fmt.Sprintf("Setting zero score for %s.", hit.Id))
+							if hit.ID == programsToReplaceWithGrammarResults[i].hitId {
+								LogIfDeb(&query, fmt.Sprintf("Setting zero score for %s.", hit.ID))
 								zero := 0.0
 								hit.Score = &zero
 								break
@@ -1137,14 +1144,14 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 						}
 					}
 					for _, fr := range filtered {
-						if _, hasId := fr.HitIdsMap[hit.Id]; hasId {
-							LogIfDeb(&query, fmt.Sprintf("Same hit found for both regular and grammar filtered results: %v", hit.Id))
+						if _, hasId := fr.HitIdsMap[hit.ID]; hasId {
+							LogIfDeb(&query, fmt.Sprintf("Same hit found for both regular and grammar filtered results: %v", hit.ID))
 							if hit.Score != nil && *hit.Score > 5 { // We will increment the score only if the result is relevant enough (score > 5)
 								*hit.Score += consts.FILTER_GRAMMAR_INCREMENT_FOR_MATCH_TO_FULL_TERM
 							}
 							if !fr.PreserveTermForHighlight {
 								// We remove this hit id from HitIdsMap in order to highlight the original search term and not $Text val.
-								delete(fr.HitIdsMap, hit.Id)
+								delete(fr.HitIdsMap, hit.ID)
 							}
 						}
 					}
@@ -1157,7 +1164,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	var currentLang string
-	results := make([]*elastic.SearchResult, 0)
+	results := make([]*SearchResult, 0)
 	for _, lang := range query.LanguageOrder {
 		if r, ok := resultsByLang[lang]; ok {
 			if shouldMergeResults {
@@ -1203,7 +1210,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							req, err := NewResultsSearchRequest(
 								SearchRequestOptions{
 									resultTypes:          []string{consts.ES_RESULT_TYPE_TWEETS},
-									docIds:               []string{th.Id},
+									docIds:               []string{th.ID},
 									index:                th.Index,
 									query:                Query{ExactTerms: query.ExactTerms, Term: query.Term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
 									sortBy:               consts.SORT_BY_RELEVANCE,
@@ -1221,7 +1228,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					}
 					continue
 				}
-				if h.Id == "" || strings.HasPrefix(h.Index, "intent-") {
+				if h.ID == "" || strings.HasPrefix(h.Index, "intent-") {
 					// Bypass intent
 					continue
 				}
@@ -1231,7 +1238,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				for _, lang := range highlightsLangs {
 					if filtered, ok := filteredByLang[lang]; ok {
 						for _, fr := range filtered {
-							if _, hasId := fr.HitIdsMap[h.Id]; hasId {
+							if _, hasId := fr.HitIdsMap[h.ID]; hasId {
 								// set highlight search term as the grammar filter search term
 								term = fr.Term
 								break
@@ -1245,7 +1252,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				req, err := NewResultsSearchRequest(
 					SearchRequestOptions{
 						resultTypes:      resultTypes,
-						docIds:           []string{h.Id},
+						docIds:           []string{h.ID},
 						index:            h.Index,
 						query:            Query{ExactTerms: query.ExactTerms, Term: term, Filters: query.Filters, LanguageOrder: highlightsLangs, Deb: query.Deb},
 						sortBy:           consts.SORT_BY_RELEVANCE,
@@ -1287,7 +1294,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				}
 				wg.Wait()
 				e.timeTrack(beforeHighlightsDoSearch, consts.LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO)
-				responses := []*elastic.SearchResult{}
+				responses := []*SearchResult{}
 				for i, mhResult := range mhResults {
 					if mhErrors[i] == context.DeadlineExceeded {
 						continue
@@ -1295,17 +1302,20 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 					if mhErrors[i] != nil {
 						return nil, errors.Wrap(mhErrors[i], "ESEngine.DoSearch - Error mssHighlights Do.")
 					}
-					responses = append(responses, mhResult.Responses...)
+					// Pre-check olivere errors, then convert to shared types at the ES6 boundary.
+					for _, r := range mhResult.Responses {
+						if r.Error != nil {
+							log.Warnf("%+v", r.Error)
+							return nil, errors.New(fmt.Sprintf("Failed multi get highlights: %+v", r.Error))
+						}
+					}
+					responses = append(responses, fromOlivereResponses(mhResult.Responses)...)
 				}
 				for _, highlightedResults := range responses {
-					if highlightedResults.Error != nil {
-						log.Warnf("%+v", highlightedResults.Error)
-						return nil, errors.New(fmt.Sprintf("Failed multi get highlights: %+v", highlightedResults.Error))
-					}
 					if haveHits(highlightedResults) {
 						for _, hr := range highlightedResults.Hits.Hits {
 							for i, h := range ret.Hits.Hits {
-								if h.Id == hr.Id {
+								if h.ID == hr.ID {
 									//  Replacing original search result with highlighted result.
 									ret.Hits.Hits[i] = hr
 									//  Keep the score of the original hit (possibly incr. by grammar)
@@ -1313,7 +1323,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 								} else if h.Type == consts.SEARCH_RESULT_TWEETS_MANY && h.InnerHits != nil {
 									if tweetHits, ok := h.InnerHits[consts.SEARCH_RESULT_TWEETS_MANY]; ok {
 										for k, th := range tweetHits.Hits.Hits {
-											if th.Id == hr.Id {
+											if th.ID == hr.ID {
 												//  Replacing original tweet result with highlighted tweet result.
 												tweetHits.Hits.Hits[k] = hr
 											}
@@ -1364,7 +1374,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 			//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
 			if hit.Highlight == nil {
-				hit.Highlight = elastic.SearchHitHighlight{}
+				hit.Highlight = SearchHitHighlight{}
 			}
 		}
 		if checkTypo && (ret.Hits.MaxScore == nil || *ret.Hits.MaxScore < consts.MIN_RESULTS_SCORE_TO_IGNOGRE_TYPO_SUGGEST) {
@@ -1377,10 +1387,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		suggestText = <-suggestChannel
 	}
 
-	if len(mr.Responses) > 0 {
+	if len(mainResponses) > 0 {
 		// This happens when there are no responses with hits.
 		// Note, we don't filter here intents by language.
-		return &QueryResult{mr.Responses[0], suggestText, currentLang, nil}, err
+		return &QueryResult{mainResponses[0], suggestText, currentLang, nil}, err
 	}
 	return nil, errors.Wrap(err, "ESEngine.DoSearch - No responses from multi search.")
 }

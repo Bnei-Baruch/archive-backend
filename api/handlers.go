@@ -23,7 +23,6 @@ import (
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"gopkg.in/gin-gonic/gin.v1"
-	elastic "gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -848,7 +847,7 @@ func SearchHandler(c *gin.Context) {
 			//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
 			//	TBD check if already fixed in client
 			if hit.Highlight == nil {
-				hit.Highlight = elastic.SearchHitHighlight{}
+				hit.Highlight = search.SearchHitHighlight{}
 			}
 		}
 

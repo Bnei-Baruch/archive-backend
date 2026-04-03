@@ -73,15 +73,15 @@ func parse(date string) utils.Date {
 	return utils.Date{Time: val}
 }
 
-func SearchResult(hits []SRR) *elastic.SearchResult {
-	res := new(elastic.SearchResult)
-	res.Hits = new(elastic.SearchHits)
+func makeSearchResult(hits []SRR) *SearchResult {
+	res := new(SearchResult)
+	res.Hits = new(SearchHits)
 	res.Hits.TotalHits = int64(len(hits))
 	for _, srr := range hits {
 		if res.Hits.MaxScore == nil || srr.Score > *res.Hits.MaxScore {
 			res.Hits.MaxScore = &srr.Score
 		}
-		sh := new(elastic.SearchHit)
+		sh := new(SearchHit)
 		sh.Score = new(float64)
 		*sh.Score = srr.Score
 		sh.Uid = srr.Uid
@@ -99,7 +99,7 @@ func SearchResult(hits []SRR) *elastic.SearchResult {
 func (suite *EngineSuite) TestJoinResponsesNoResults() {
 	fmt.Printf("\n------ TestJoinResponsesNoResults ------\n\n")
 	r := require.New(suite.T())
-	results := make([]*elastic.SearchResult, 0)
+	results := make([]*SearchResult, 0)
 	ret, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 1, results...)
 	r.Nil(err)
 	r.Nil(ret)
@@ -108,8 +108,8 @@ func (suite *EngineSuite) TestJoinResponsesNoResults() {
 func (suite *EngineSuite) TestJoinResponsesTakeFirstOnEqual() {
 	fmt.Printf("\n------ TestJoinResponsesTakeFirstOnEqual ------\n\n")
 	r := require.New(suite.T())
-	r1 := SearchResult([]SRR{SRR{2.4, "a", parse("1111-11-11")}})
-	r2 := SearchResult([]SRR{SRR{2.4, "1", parse("1111-11-11")}})
+	r1 := makeSearchResult([]SRR{SRR{2.4, "a", parse("1111-11-11")}})
+	r2 := makeSearchResult([]SRR{SRR{2.4, "1", parse("1111-11-11")}})
 	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 1, r1, r2)
 	r.Nil(err)
 
@@ -123,8 +123,8 @@ func (suite *EngineSuite) TestJoinResponsesTakeFirstOnEqual() {
 func (suite *EngineSuite) TestJoinResponsesTakeLargerFirst() {
 	fmt.Printf("\n------ TestJoinResponsesTakeLargerFirst ------\n\n")
 	r := require.New(suite.T())
-	r1 := SearchResult([]SRR{SRR{2.4, "a", parse("1111-11-11")}})
-	r2 := SearchResult([]SRR{SRR{2.5, "1", parse("1111-11-11")}})
+	r1 := makeSearchResult([]SRR{SRR{2.4, "a", parse("1111-11-11")}})
+	r2 := makeSearchResult([]SRR{SRR{2.5, "1", parse("1111-11-11")}})
 	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 1, r1, r2)
 	r.Nil(err)
 
@@ -139,8 +139,8 @@ func (suite *EngineSuite) TestJoinResponsesInterleave() {
 	fmt.Printf("\n------ TestJoinResponsesInterleave ------\n\n")
 	r := require.New(suite.T())
 	d := parse("1111-11-11")
-	r1 := SearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
-	r2 := SearchResult([]SRR{SRR{2.5, "1", d}, SRR{2.2, "2", d}, SRR{1.6, "3", d}, SRR{1.0, "4", d}, SRR{0.7, "5", d}})
+	r1 := makeSearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
+	r2 := makeSearchResult([]SRR{SRR{2.5, "1", d}, SRR{2.2, "2", d}, SRR{1.6, "3", d}, SRR{1.0, "4", d}, SRR{0.7, "5", d}})
 	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 0, 4, r1, r2)
 	r.Nil(err)
 
@@ -156,8 +156,8 @@ func (suite *EngineSuite) TestJoinResponsesInterleaveSecondPage() {
 	fmt.Printf("\n------ TestJoinResponsesInterleaveSecondPage ------\n\n")
 	r := require.New(suite.T())
 	d := parse("1111-11-11")
-	r1 := SearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
-	r2 := SearchResult([]SRR{SRR{2.5, "1", d}, SRR{2.2, "2", d}, SRR{1.6, "3", d}, SRR{1.0, "4", d}, SRR{0.7, "5", d}})
+	r1 := makeSearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
+	r2 := makeSearchResult([]SRR{SRR{2.5, "1", d}, SRR{2.2, "2", d}, SRR{1.6, "3", d}, SRR{1.0, "4", d}, SRR{0.7, "5", d}})
 	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 4, 4, r1, r2)
 	r.Nil(err)
 
@@ -173,8 +173,8 @@ func (suite *EngineSuite) TestJoinResponsesInterleaveSecondPageOneSide() {
 	fmt.Printf("\n------ TestJoinResponsesInterleaveSecondPageOneSide ------\n\n")
 	r := require.New(suite.T())
 	d := parse("1111-11-11")
-	r1 := SearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
-	r2 := SearchResult([]SRR{})
+	r1 := makeSearchResult([]SRR{SRR{2.4, "a", d}, SRR{2.0, "b", d}, SRR{1.5, "c", d}, SRR{1.2, "d", d}, SRR{0.4, "e", d}})
+	r2 := makeSearchResult([]SRR{})
 	r3, err := joinResponses(consts.SORT_BY_RELEVANCE, 4, 4, r1, r2)
 	r.Nil(err)
 
@@ -190,8 +190,8 @@ func (suite *EngineSuite) TestJoinResponsesInterleaveSecondPageOneSide() {
 func (suite *EngineSuite) TestJoinResponsesNewerToOlder() {
 	fmt.Printf("\n------ TestJoinResponsesNewerToOlder ------\n\n")
 	r := require.New(suite.T())
-	r1 := SearchResult([]SRR{SRR{2.5, "a", parse("2018-01-06")}, SRR{2.0, "b", parse("2015-05-22")}, SRR{1.5, "c", parse("2015-05-21")}})
-	r2 := SearchResult([]SRR{SRR{2.4, "1", parse("2018-01-16")}, SRR{2.2, "2", parse("2015-05-20")}, SRR{1.6, "3", parse("2014-05-05")}})
+	r1 := makeSearchResult([]SRR{SRR{2.5, "a", parse("2018-01-06")}, SRR{2.0, "b", parse("2015-05-22")}, SRR{1.5, "c", parse("2015-05-21")}})
+	r2 := makeSearchResult([]SRR{SRR{2.4, "1", parse("2018-01-16")}, SRR{2.2, "2", parse("2015-05-20")}, SRR{1.6, "3", parse("2014-05-05")}})
 	r3, err := joinResponses(consts.SORT_BY_NEWER_TO_OLDER, 0, 4, r1, r2)
 	r.Nil(err)
 
@@ -207,8 +207,8 @@ func (suite *EngineSuite) TestJoinResponsesNewerToOlder() {
 func (suite *EngineSuite) TestJoinResponsesTimeOlderToNewer() {
 	fmt.Printf("\n------ TestJoinResponsesTimeOlderToNewer ------\n\n")
 	r := require.New(suite.T())
-	r1 := SearchResult([]SRR{SRR{1.5, "c", parse("2015-05-21")}, SRR{2.0, "b", parse("2015-05-22")}, SRR{2.5, "a", parse("2018-01-06")}})
-	r2 := SearchResult([]SRR{SRR{1.6, "3", parse("2014-05-05")}, SRR{2.2, "2", parse("2015-05-21")}, SRR{2.4, "1", parse("2018-01-16")}})
+	r1 := makeSearchResult([]SRR{SRR{1.5, "c", parse("2015-05-21")}, SRR{2.0, "b", parse("2015-05-22")}, SRR{2.5, "a", parse("2018-01-06")}})
+	r2 := makeSearchResult([]SRR{SRR{1.6, "3", parse("2014-05-05")}, SRR{2.2, "2", parse("2015-05-21")}, SRR{2.4, "1", parse("2018-01-16")}})
 	r3, err := joinResponses(consts.SORT_BY_OLDER_TO_NEWER, 0, 4, r1, r2)
 	r.Nil(err)
 
@@ -224,7 +224,7 @@ func (suite *EngineSuite) TestFilterOutDuplicateHits() {
 	fmt.Printf("\n------ TestFilterOutDuplicateHits ------\n\n")
 	r := require.New(suite.T())
 
-	hits := make([]*elastic.SearchHit, 0)
+	hits := make([]*SearchHit, 0)
 	var scoreL float64 = 1
 	var scoreM float64 = 2
 	var scoreH float64 = 3
@@ -242,10 +242,10 @@ func (suite *EngineSuite) TestFilterOutDuplicateHits() {
 
 	//  Add 4 hits with a same uid - A
 
-	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreL, Index: "I1"})
-	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreM, Index: "I1"})
-	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreL, Index: "I1"})
-	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreL, Index: "I1"})
+	hits = append(hits, &SearchHit{Source: srcUidA, Score: &scoreL, Index: "I1"})
+	hits = append(hits, &SearchHit{Source: srcUidA, Score: &scoreM, Index: "I1"})
+	hits = append(hits, &SearchHit{Source: srcUidA, Score: &scoreL, Index: "I1"})
+	hits = append(hits, &SearchHit{Source: srcUidA, Score: &scoreL, Index: "I1"})
 
 	expected := uniqueHitsByMdbUid(hits, []string{"I2", "I3"}, []string{})
 	r.Equal(len(expected), 1)
@@ -253,15 +253,15 @@ func (suite *EngineSuite) TestFilterOutDuplicateHits() {
 
 	// Add another hit with uid A but with an ignored index
 
-	hits = append(hits, &elastic.SearchHit{Source: srcUidA, Score: &scoreL, Index: "I2"})
+	hits = append(hits, &SearchHit{Source: srcUidA, Score: &scoreL, Index: "I2"})
 	expected = uniqueHitsByMdbUid(hits, []string{"I2", "I3"}, []string{})
 	r.Equal(len(expected), 2)
 
 	// Add another 3 hits with uid B where one of the hits has an ignored index
 
-	hits = append(hits, &elastic.SearchHit{Source: srcUidB, Score: &scoreL, Index: "I4"})
-	hits = append(hits, &elastic.SearchHit{Source: srcUidB, Score: &scoreL, Index: "I1"})
-	hits = append(hits, &elastic.SearchHit{Source: srcUidB, Score: &scoreH, Index: "I3"})
+	hits = append(hits, &SearchHit{Source: srcUidB, Score: &scoreL, Index: "I4"})
+	hits = append(hits, &SearchHit{Source: srcUidB, Score: &scoreL, Index: "I1"})
+	hits = append(hits, &SearchHit{Source: srcUidB, Score: &scoreH, Index: "I3"})
 	expected = uniqueHitsByMdbUid(hits, []string{"I2", "I3"}, []string{})
 	r.Equal(len(expected), 4)
 

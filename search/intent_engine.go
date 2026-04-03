@@ -10,14 +10,12 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
-
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	log "github.com/Sirupsen/logrus"
 )
 
-func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, query Query) (error, *Intent, *Query) {
+func (e *ESEngine) AddIntentSecondRound(h *SearchHit, intent Intent, query Query) (error, *Intent, *Query) {
 	var classificationIntent ClassificationIntent
 	if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
 		return err, nil, nil
@@ -197,12 +195,15 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 	// Build second request to evaluate how close the search is toward the full name.
 	mssSecondRound := e.esc.MultiSearch()
 	finalIntents := make([]Intent, 0)
-	for i := 0; i < len(potentialIntents); i++ {
-		res := mr.Responses[i]
-		if res.Error != nil {
-			log.Warnf("ESEngine.AddIntents - First Run %+v", res.Error)
+	for _, r := range mr.Responses {
+		if r.Error != nil {
+			log.Warnf("ESEngine.AddIntents - First Run %+v", r.Error)
 			return intents, errors.New("ESEngine.AddIntents - First Run Failed multi get (S).")
 		}
+	}
+	firstRoundResponses := fromOlivereResponses(mr.Responses)
+	for i := 0; i < len(potentialIntents); i++ {
+		res := firstRoundResponses[i]
 		if haveHits(res) {
 			for _, h := range res.Hits.Hits {
 				err, intent, secondRoundQuery := e.AddIntentSecondRound(h, potentialIntents[i], queryWithoutFilters)
@@ -237,13 +238,18 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 	beforeSecondRoundDo := time.Now()
 	mr, err = mssSecondRound.Do(context.TODO())
 	e.timeTrack(beforeSecondRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO)
-	for i := 0; i < len(finalIntents); i++ {
-		res := mr.Responses[i]
-		if res.Error != nil {
-			log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error)
-			log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error.RootCause[0])
+	for _, r := range mr.Responses {
+		if r.Error != nil {
+			log.Warnf("ESEngine.AddIntents - Second Run %+v", r.Error)
+			if len(r.Error.RootCause) > 0 {
+				log.Warnf("ESEngine.AddIntents - Second Run %+v", r.Error.RootCause[0])
+			}
 			return intents, errors.New("ESEngine.AddIntents - Second Run Failed multi get (S).")
 		}
+	}
+	secondRoundResponses := fromOlivereResponses(mr.Responses)
+	for i := 0; i < len(finalIntents); i++ {
+		res := secondRoundResponses[i]
 		intentValue, intentOk := finalIntents[i].Value.(ClassificationIntent)
 		if !intentOk {
 			return intents, errors.New(fmt.Sprintf("ESEngine.AddIntents - Unexpected intent value: %+v", finalIntents[i].Value))

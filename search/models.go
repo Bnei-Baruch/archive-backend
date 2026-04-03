@@ -2,10 +2,78 @@ package search
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/volatiletech/null/v8"
-	"gopkg.in/olivere/elastic.v6"
 )
+
+// ---------------------------------------------------------------------------
+// Shared result types — used by both ES6 and ES9 engines
+// ---------------------------------------------------------------------------
+
+// SearchHitHighlight maps field name to highlighted fragments.
+type SearchHitHighlight map[string][]string
+
+// SearchExplanation holds the relevance score explanation for a hit.
+type SearchExplanation struct {
+	Value       float64             `json:"value"`
+	Description string              `json:"description"`
+	Details     []SearchExplanation `json:"details,omitempty"`
+}
+
+// SearchHitInnerHits holds nested inner hits (used by tweets aggregation).
+type SearchHitInnerHits struct {
+	Hits *SearchHits `json:"hits,omitempty"`
+}
+
+// SearchHit represents a single document match returned by Elasticsearch.
+type SearchHit struct {
+	Index       string                         `json:"_index"`
+	Type        string                         `json:"_type,omitempty"` // populated by ES6, empty in ES9
+	ID          string                         `json:"_id"`
+	Uid         string                         `json:"_uid,omitempty"` // ES6 meta field; also used internally as a grouping key
+	Score       *float64                       `json:"_score,omitempty"`
+	Source      *json.RawMessage               `json:"_source,omitempty"`
+	Highlight   SearchHitHighlight             `json:"highlight,omitempty"`
+	InnerHits   map[string]*SearchHitInnerHits `json:"inner_hits,omitempty"`
+	Explanation *SearchExplanation             `json:"_explanation,omitempty"`
+}
+
+// SearchHits holds a page of search hits plus aggregate metadata.
+type SearchHits struct {
+	TotalHits int64        `json:"total"`
+	MaxScore  *float64     `json:"max_score,omitempty"`
+	Hits      []*SearchHit `json:"hits"`
+}
+
+// SearchResult is the top-level response from an Elasticsearch search.
+type SearchResult struct {
+	Hits    *SearchHits   `json:"hits"`
+	Suggest SearchSuggest `json:"suggest,omitempty"`
+}
+
+// SearchSuggest maps suggester name to its list of suggestions.
+type SearchSuggest map[string][]SearchSuggestion
+
+// SearchSuggestion is one entry returned by a suggester.
+type SearchSuggestion struct {
+	Text    string                 `json:"text"`
+	Offset  int                    `json:"offset"`
+	Length  int                    `json:"length"`
+	Options []SearchSuggestionOption `json:"options"`
+}
+
+// SearchSuggestionOption is a single candidate within a suggestion.
+type SearchSuggestionOption struct {
+	Text   string           `json:"text"`
+	Score  float64          `json:"score"`
+	Freq   int              `json:"freq,omitempty"`
+	Source *json.RawMessage `json:"_source,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
+// Engine-level types
+// ---------------------------------------------------------------------------
 
 type Intent struct {
 	Type     string      `json:"type"`
@@ -19,10 +87,10 @@ type TimeLog struct {
 }
 
 type QueryResult struct {
-	SearchResult     *elastic.SearchResult `json:"search_result,omitempty"`
-	TypoSuggest      null.String           `json:"typo_suggest"`
-	Language         string                `json:"language"`
-	ExecutionTimeLog []TimeLog             `json:"execution_time_log,omitempty"`
+	SearchResult     *SearchResult `json:"search_result,omitempty"`
+	TypoSuggest      null.String   `json:"typo_suggest"`
+	Language         string        `json:"language"`
+	ExecutionTimeLog []TimeLog     `json:"execution_time_log,omitempty"`
 }
 
 type Engine interface {
