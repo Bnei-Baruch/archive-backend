@@ -709,8 +709,10 @@ func (t *GetCollectionsTool) UsageExplanation() string {
 	return `Tool: get_collections
 This tool allows you to retrieve structured metadata about public collections from PostgreSQL.
 Collections are groups of related content units. Each daily lesson is a collection, a TV series (program) is also a collection, and there are also collections for conventions and special events.
-Use this tool when you already know the collection id or when you need collections of a specific content type. This is not a general text-discovery tool; use elasticsearch_search first when you need to discover relevant collections by free text.
-Available content types include: ARTICLES, BOOKS, CHILDREN_LESSONS, CLIPS, CONGRESS, DAILY_LESSON, FRIENDS_GATHERINGS, HOLIDAY, LECTURE_SERIES, LESSONS_SERIES, MEALS, PICNIC, SONGS, SPECIAL_LESSON, UNITY_DAY, VIDEO_PROGRAM, VIRTUAL_LESSONS, WOMEN_LESSONS
+Use this tool when you already know the collection id or when you need collections of a specific content type.
+Once you identify the relevant collection, prefer elasticsearch_search with collection filter when you still need query-based ranking, matching highlights, or the best matching concrete item inside the collection. Use get_content_units_by_collection only when you need to browse or list the collection members themselves.
+Available content types filter values: ARTICLES, BOOKS, CHILDREN_LESSONS, CLIPS, CONGRESS, DAILY_LESSON, FRIENDS_GATHERINGS, HOLIDAY, LECTURE_SERIES, LESSONS_SERIES, MEALS, PICNIC, SONGS, SPECIAL_LESSON, UNITY_DAY, VIDEO_PROGRAM, VIRTUAL_LESSONS, WOMEN_LESSONS.
+To retrieve all TV series (programs), use content_type = VIDEO_PROGRAM without collection_id. To retrieve a specific daily lesson, use its collection_id.
 Arguments:
 - collection_id: optional exact lookup by collection UID or numeric MDB id.
 - content_type: optional collection content type filter.
@@ -749,14 +751,15 @@ func (t *GetContentUnitsByCollectionTool) Definition() llm.ReasoningToolDefiniti
 func (t *GetContentUnitsByCollectionTool) UsageExplanation() string {
 	return `Tool: get_content_units_by_collection
 This tool allows you to retrieve structured metadata about public content units that belong to a specific collection from PostgreSQL.
-Use this tool after you know the collection and need its member content units.
+Use this tool after you know the collection and need to browse or list its member content units.
 Arguments:
 - collection_id: required. Collection UID or numeric MDB id.
 - language: optional language for localized names and descriptions.
 - limit: optional maximum number of rows.
 Behavior:
 - Returns JSON with the resolved public collection and its public published content units.
-- This is the right follow-up tool after get_collections when the user wants items inside a collection.`
+- This tool returns collection members in collection order, not by text-query relevance.
+- If you need the best matching concrete item inside a known collection for a user query, prefer elasticsearch_search with collection filter instead.`
 }
 
 func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
