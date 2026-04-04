@@ -369,7 +369,6 @@ type getSourcesBySourceArgs struct {
 type getCollectionsArgs struct {
 	CollectionID string `json:"collection_id,omitempty"`
 	ContentType  string `json:"content_type,omitempty"`
-	Query        string `json:"query,omitempty"`
 	Language     string `json:"language,omitempty"`
 	Limit        int    `json:"limit,omitempty"`
 }
@@ -680,7 +679,7 @@ func (t *GetAvailableBooksTool) Execute(ctx context.Context, arguments json.RawM
 func (t *GetCollectionsTool) Definition() llm.ReasoningToolDefinition {
 	return llm.ReasoningToolDefinition{
 		Name:        "get_collections",
-		Description: "Return public collections from PostgreSQL, optionally filtered by collection_id, content_type, or text query.",
+		Description: "Return public collections from PostgreSQL, optionally filtered by collection_id or content_type.",
 		Parameters: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -691,10 +690,6 @@ func (t *GetCollectionsTool) Definition() llm.ReasoningToolDefinition {
 				"content_type": map[string]interface{}{
 					"type":        "string",
 					"description": "Optional collection content type name filter.",
-				},
-				"query": map[string]interface{}{
-					"type":        "string",
-					"description": "Optional text search over collection UID, name, and description.",
 				},
 				"language": map[string]interface{}{
 					"type":        "string",
@@ -713,14 +708,12 @@ func (t *GetCollectionsTool) Definition() llm.ReasoningToolDefinition {
 func (t *GetCollectionsTool) UsageExplanation() string {
 	return `Tool: get_collections
 This tool allows you to retrieve structured metadata about public collections from PostgreSQL.
-Collections are groups of related content units. Each daily lesson is a collection, a TV series (program) is also a collection, and there are also collections for conventions and special events. You can use this tool to find collections by their identifier, content type, or by a text query that matches their UID, name, or description.
-This tool is to efficient to be used as a first step to find collections, and then you can use get_content_units_by_collection to retrieve the items inside a collection you are interested in.
+Collections are groups of related content units. Each daily lesson is a collection, a TV series (program) is also a collection, and there are also collections for conventions and special events.
+Use this tool when you already know the collection id or when you need collections of a specific content type. This is not a general text-discovery tool; use elasticsearch_search first when you need to discover relevant collections by free text.
 Available content types include: ARTICLES, BOOKS, CHILDREN_LESSONS, CLIPS, CONGRESS, DAILY_LESSON, FRIENDS_GATHERINGS, HOLIDAY, LECTURE_SERIES, LESSONS_SERIES, MEALS, PICNIC, SONGS, SPECIAL_LESSON, UNITY_DAY, VIDEO_PROGRAM, VIRTUAL_LESSONS, WOMEN_LESSONS
-To get the list of collections that related to a program (TV series), use content_type filter with value "VIDEO_PROGRAM" and from the returned collections look for the name that matches user's query. If it is not clear what is the user asking for, you can assume he asking for some program name and use this approach to find the program collection.
 Arguments:
 - collection_id: optional exact lookup by collection UID or numeric MDB id.
 - content_type: optional collection content type filter.
-- query: optional text filter over collection uid, name, and description.
 - language: optional UI language for localized names and descriptions.
 - limit: optional maximum number of rows.
 Behavior:
@@ -916,18 +909,16 @@ func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMess
 	limit := normalizePostgreSQLToolLimit(args.Limit)
 	collectionID := strings.TrimSpace(args.CollectionID)
 	contentType := strings.TrimSpace(args.ContentType)
-	textQuery := strings.TrimSpace(args.Query)
-	llm.LogIfDeb(ctx, "get_collections: start collection_id=%q content_type=%q query=%q language=%q limit=%d", collectionID, contentType, textQuery, language, limit)
+	llm.LogIfDeb(ctx, "get_collections: start collection_id=%q content_type=%q language=%q limit=%d", collectionID, contentType, language, limit)
 	cacheKey := fmt.Sprintf(
-		"get_collections|collection_id=%s|content_type=%s|query=%s|language=%s|limit=%d",
+		"get_collections|collection_id=%s|content_type=%s|language=%s|limit=%d",
 		collectionID,
 		contentType,
-		textQuery,
 		language,
 		limit,
 	)
 	if cached, ok := t.cache.get(cacheKey); ok {
-		llm.LogIfDeb(ctx, "get_collections: cache hit collection_id=%q content_type=%q query=%q language=%q limit=%d", collectionID, contentType, textQuery, language, limit)
+		llm.LogIfDeb(ctx, "get_collections: cache hit collection_id=%q content_type=%q language=%q limit=%d", collectionID, contentType, language, limit)
 		return cached, nil
 	}
 
@@ -945,19 +936,6 @@ func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMess
 	}
 	if contentType != "" {
 		query.WriteString(fmt.Sprintf("  AND LOWER(ct.name) = LOWER(%s)\n", appendPostgreSQLToolQueryArg(&queryArgs, contentType)))
-	}
-	if textQuery != "" {
-		pattern := "%" + textQuery + "%"
-		query.WriteString(fmt.Sprintf(`  AND (
-    c.uid ILIKE %s
-    OR EXISTS (
-      SELECT 1
-      FROM collection_i18n ci
-      WHERE ci.collection_id = c.id
-        AND (ci.name ILIKE %s OR ci.description ILIKE %s)
-    )
-  )
-`, appendPostgreSQLToolQueryArg(&queryArgs, pattern), appendPostgreSQLToolQueryArg(&queryArgs, pattern), appendPostgreSQLToolQueryArg(&queryArgs, pattern)))
 	}
 
 	query.WriteString("ORDER BY COALESCE(NULLIF(c.properties->>'film_date', '')::date, c.created_at::date) DESC, c.created_at DESC\n")

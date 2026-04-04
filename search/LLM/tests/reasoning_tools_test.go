@@ -193,6 +193,17 @@ func TestPostgreSQLToolDefinitions(t *testing.T) {
 	if collections.Name != "get_collections" {
 		t.Fatalf("unexpected get_collections tool name: %s", collections.Name)
 	}
+	collectionsParameters, ok := collections.Parameters.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected get_collections parameters map, got %T", collections.Parameters)
+	}
+	collectionsProperties, ok := collectionsParameters["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected get_collections properties map, got %T", collectionsParameters["properties"])
+	}
+	if _, ok := collectionsProperties["query"]; ok {
+		t.Fatalf("did not expect get_collections to define query")
+	}
 
 	contentUnitsByCollection := llmtools.NewGetContentUnitsByCollectionTool(nil, 0).Definition()
 	if contentUnitsByCollection.Name != "get_content_units_by_collection" {
