@@ -62,15 +62,10 @@ func ReasoningSearchHandler(c *gin.Context) {
 		},
 	}
 
-	toolNames := make([]string, 0, manager.Len())
-	for _, definition := range manager.Definitions() {
-		toolNames = append(toolNames, definition.Name)
-	}
 	promptCacheKey := fmt.Sprintf(
-		"kabbalah-media-reasoning-search:model=%s:effort=%s:tools=%s",
+		"reasoning-search:m=%s:e=%s",
 		reasoningConfig.Model,
 		reasoningConfig.Effort,
-		strings.Join(toolNames, ","),
 	)
 	response := llm.ReasoningSearchResponse{}
 
