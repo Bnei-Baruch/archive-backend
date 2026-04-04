@@ -14,6 +14,7 @@ type AppScopedManagerDeps struct {
 	AssetsService                integration.AssetsService
 	NewElasticsearchSearchEngine ElasticsearchSearchEngineFactory
 	TimeoutForHighlight          time.Duration
+	PostgreSQLToolCacheTTL       *time.Duration
 }
 
 func NewAppScopedManager(deps AppScopedManagerDeps) (*llm.ReasoningToolManager, error) {
@@ -27,14 +28,19 @@ func NewAppScopedManager(deps AppScopedManagerDeps) (*llm.ReasoningToolManager, 
 		return nil, fmt.Errorf("app-scoped reasoning tool manager: elasticsearch engine factory is nil")
 	}
 
+	postgreSQLToolCacheTTL := defaultPostgreSQLToolCacheTTL
+	if deps.PostgreSQLToolCacheTTL != nil {
+		postgreSQLToolCacheTTL = *deps.PostgreSQLToolCacheTTL
+	}
+
 	return llm.NewReasoningToolManager(
 		NewSourceLookupTool(deps.DB, deps.AssetsService),
 		NewTranscriptLookupTool(deps.DB, deps.AssetsService),
-		NewGetAvailableBooksTool(deps.DB),
-		NewGetSourcesByAuthorTool(deps.DB),
-		NewGetSourcesBySourceTool(deps.DB),
-		NewGetCollectionsTool(deps.DB),
-		NewGetContentUnitsByCollectionTool(deps.DB),
+		NewGetAvailableBooksTool(deps.DB, postgreSQLToolCacheTTL),
+		NewGetSourcesByAuthorTool(deps.DB, postgreSQLToolCacheTTL),
+		NewGetSourcesBySourceTool(deps.DB, postgreSQLToolCacheTTL),
+		NewGetCollectionsTool(deps.DB, postgreSQLToolCacheTTL),
+		NewGetContentUnitsByCollectionTool(deps.DB, postgreSQLToolCacheTTL),
 		NewElasticsearchSearchToolWithFactory(deps.NewElasticsearchSearchEngine, deps.TimeoutForHighlight),
 	)
 }

@@ -7,14 +7,17 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 )
 
 const (
-	defaultPostgreSQLToolLimit = 25
-	maxPostgreSQLToolLimit     = 100
+	defaultPostgreSQLToolLimit    = 25
+	maxPostgreSQLToolLimit        = 100
+	defaultPostgreSQLToolCacheTTL = 3 * time.Hour
 )
 
 const authorMetadataByMDBIDQuery = `
@@ -289,23 +292,39 @@ ORDER BY ccu.position ASC, COALESCE(NULLIF(cu.properties->>'film_date', '')::dat
 LIMIT $4`
 
 type GetSourcesByAuthorTool struct {
-	db *sql.DB
+	db    *sql.DB
+	cache *postgreSQLToolCache
 }
 
 type GetAvailableBooksTool struct {
-	db *sql.DB
+	db    *sql.DB
+	cache *postgreSQLToolCache
 }
 
 type GetSourcesBySourceTool struct {
-	db *sql.DB
+	db    *sql.DB
+	cache *postgreSQLToolCache
 }
 
 type GetCollectionsTool struct {
-	db *sql.DB
+	db    *sql.DB
+	cache *postgreSQLToolCache
 }
 
 type GetContentUnitsByCollectionTool struct {
-	db *sql.DB
+	db    *sql.DB
+	cache *postgreSQLToolCache
+}
+
+type postgreSQLToolCache struct {
+	mu    sync.RWMutex
+	ttl   time.Duration
+	items map[string]postgreSQLToolCacheItem
+}
+
+type postgreSQLToolCacheItem struct {
+	value     string
+	expiresAt time.Time
 }
 
 type getSourcesByAuthorArgs struct {
@@ -443,24 +462,24 @@ type contentUnitsByCollectionToolResult struct {
 	Items         []contentUnitToolResult `json:"items"`
 }
 
-func NewGetSourcesByAuthorTool(db *sql.DB) *GetSourcesByAuthorTool {
-	return &GetSourcesByAuthorTool{db: db}
+func NewGetSourcesByAuthorTool(db *sql.DB, cacheTTL time.Duration) *GetSourcesByAuthorTool {
+	return &GetSourcesByAuthorTool{db: db, cache: newPostgreSQLToolCache(cacheTTL)}
 }
 
-func NewGetAvailableBooksTool(db *sql.DB) *GetAvailableBooksTool {
-	return &GetAvailableBooksTool{db: db}
+func NewGetAvailableBooksTool(db *sql.DB, cacheTTL time.Duration) *GetAvailableBooksTool {
+	return &GetAvailableBooksTool{db: db, cache: newPostgreSQLToolCache(cacheTTL)}
 }
 
-func NewGetSourcesBySourceTool(db *sql.DB) *GetSourcesBySourceTool {
-	return &GetSourcesBySourceTool{db: db}
+func NewGetSourcesBySourceTool(db *sql.DB, cacheTTL time.Duration) *GetSourcesBySourceTool {
+	return &GetSourcesBySourceTool{db: db, cache: newPostgreSQLToolCache(cacheTTL)}
 }
 
-func NewGetCollectionsTool(db *sql.DB) *GetCollectionsTool {
-	return &GetCollectionsTool{db: db}
+func NewGetCollectionsTool(db *sql.DB, cacheTTL time.Duration) *GetCollectionsTool {
+	return &GetCollectionsTool{db: db, cache: newPostgreSQLToolCache(cacheTTL)}
 }
 
-func NewGetContentUnitsByCollectionTool(db *sql.DB) *GetContentUnitsByCollectionTool {
-	return &GetContentUnitsByCollectionTool{db: db}
+func NewGetContentUnitsByCollectionTool(db *sql.DB, cacheTTL time.Duration) *GetContentUnitsByCollectionTool {
+	return &GetContentUnitsByCollectionTool{db: db, cache: newPostgreSQLToolCache(cacheTTL)}
 }
 
 func (t *GetSourcesByAuthorTool) Definition() llm.ReasoningToolDefinition {
@@ -584,6 +603,10 @@ func (t *GetAvailableBooksTool) Execute(ctx context.Context, arguments json.RawM
 	if t.db == nil {
 		return "", fmt.Errorf("get_available_books: db is nil")
 	}
+	if cached, ok := t.cache.get("get_available_books"); ok {
+		llm.LogIfDeb(ctx, "get_available_books: cache hit")
+		return cached, nil
+	}
 
 	rows, err := t.db.Query(availableBooksQuery, consts.SEC_PUBLIC)
 	if err != nil {
@@ -640,11 +663,18 @@ func (t *GetAvailableBooksTool) Execute(ctx context.Context, arguments json.RawM
 		})
 	}
 
-	llm.LogIfDeb(ctx, "get_available_books: returning count=%d", len(items))
-	return marshalToolResult(availableBooksToolResult{
+	result, err := marshalToolResult(availableBooksToolResult{
 		ReturnedCount: len(items),
 		Items:         items,
 	})
+	if err != nil {
+		return "", err
+	}
+	if len(items) > 0 {
+		t.cache.set("get_available_books", result)
+	}
+	llm.LogIfDeb(ctx, "get_available_books: returning count=%d", len(items))
+	return result, nil
 }
 
 func (t *GetCollectionsTool) Definition() llm.ReasoningToolDefinition {
@@ -754,6 +784,11 @@ func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.Raw
 	language := normalizePostgreSQLToolLanguage(args.Language)
 	limit := normalizePostgreSQLToolLimit(args.Limit)
 	llm.LogIfDeb(ctx, "get_sources_by_author: start author_id=%q language=%q limit=%d", authorID, language, limit)
+	cacheKey := fmt.Sprintf("get_sources_by_author|author_id=%s|language=%s|limit=%d", authorID, language, limit)
+	if cached, ok := t.cache.get(cacheKey); ok {
+		llm.LogIfDeb(ctx, "get_sources_by_author: cache hit author_id=%q language=%q limit=%d", authorID, language, limit)
+		return cached, nil
+	}
 
 	author, err := loadAuthorToolResult(t.db, authorID, language)
 	if err != nil {
@@ -790,11 +825,18 @@ func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.Raw
 	}
 	llm.LogIfDeb(ctx, "get_sources_by_author: completed author_id=%q returned_count=%d", authorID, len(items))
 
-	return marshalToolResult(sourcesByAuthorToolResult{
+	result, err := marshalToolResult(sourcesByAuthorToolResult{
 		Author:        author,
 		ReturnedCount: len(items),
 		Items:         items,
 	})
+	if err != nil {
+		return "", err
+	}
+	if len(items) > 0 {
+		t.cache.set(cacheKey, result)
+	}
+	return result, nil
 }
 
 func (t *GetSourcesBySourceTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
@@ -815,6 +857,11 @@ func (t *GetSourcesBySourceTool) Execute(ctx context.Context, arguments json.Raw
 	language := normalizePostgreSQLToolLanguage(args.Language)
 	limit := normalizePostgreSQLToolLimit(args.Limit)
 	llm.LogIfDeb(ctx, "get_sources_by_source: start source_id=%q language=%q limit=%d", sourceID, language, limit)
+	cacheKey := fmt.Sprintf("get_sources_by_source|source_id=%s|language=%s|limit=%d", sourceID, language, limit)
+	if cached, ok := t.cache.get(cacheKey); ok {
+		llm.LogIfDeb(ctx, "get_sources_by_source: cache hit source_id=%q language=%q limit=%d", sourceID, language, limit)
+		return cached, nil
+	}
 
 	source, err := loadSourceNodeToolResult(t.db, sourceID, language)
 	if err != nil {
@@ -841,11 +888,18 @@ func (t *GetSourcesBySourceTool) Execute(ctx context.Context, arguments json.Raw
 	}
 	llm.LogIfDeb(ctx, "get_sources_by_source: completed source_id=%q returned_count=%d", sourceID, len(items))
 
-	return marshalToolResult(sourcesBySourceToolResult{
+	result, err := marshalToolResult(sourcesBySourceToolResult{
 		Source:        source,
 		ReturnedCount: len(items),
 		Items:         items,
 	})
+	if err != nil {
+		return "", err
+	}
+	if len(items) > 0 {
+		t.cache.set(cacheKey, result)
+	}
+	return result, nil
 }
 
 func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
@@ -864,6 +918,18 @@ func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMess
 	contentType := strings.TrimSpace(args.ContentType)
 	textQuery := strings.TrimSpace(args.Query)
 	llm.LogIfDeb(ctx, "get_collections: start collection_id=%q content_type=%q query=%q language=%q limit=%d", collectionID, contentType, textQuery, language, limit)
+	cacheKey := fmt.Sprintf(
+		"get_collections|collection_id=%s|content_type=%s|query=%s|language=%s|limit=%d",
+		collectionID,
+		contentType,
+		textQuery,
+		language,
+		limit,
+	)
+	if cached, ok := t.cache.get(cacheKey); ok {
+		llm.LogIfDeb(ctx, "get_collections: cache hit collection_id=%q content_type=%q query=%q language=%q limit=%d", collectionID, contentType, textQuery, language, limit)
+		return cached, nil
+	}
 
 	queryArgs := []interface{}{language, consts.SEC_PUBLIC}
 	query := strings.Builder{}
@@ -921,10 +987,17 @@ func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMess
 	}
 	llm.LogIfDeb(ctx, "get_collections: completed collection_id=%q returned_count=%d", collectionID, len(items))
 
-	return marshalToolResult(collectionsToolResult{
+	result, err := marshalToolResult(collectionsToolResult{
 		ReturnedCount: len(items),
 		Items:         items,
 	})
+	if err != nil {
+		return "", err
+	}
+	if len(items) > 0 {
+		t.cache.set(cacheKey, result)
+	}
+	return result, nil
 }
 
 func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
@@ -945,6 +1018,11 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 	language := normalizePostgreSQLToolLanguage(args.Language)
 	limit := normalizePostgreSQLToolLimit(args.Limit)
 	llm.LogIfDeb(ctx, "get_content_units_by_collection: start collection_id=%q language=%q limit=%d", collectionID, language, limit)
+	cacheKey := fmt.Sprintf("get_content_units_by_collection|collection_id=%s|language=%s|limit=%d", collectionID, language, limit)
+	if cached, ok := t.cache.get(cacheKey); ok {
+		llm.LogIfDeb(ctx, "get_content_units_by_collection: cache hit collection_id=%q language=%q limit=%d", collectionID, language, limit)
+		return cached, nil
+	}
 
 	collection, err := loadCollectionToolResult(t.db, collectionID, language)
 	if err != nil {
@@ -982,11 +1060,64 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 	}
 	llm.LogIfDeb(ctx, "get_content_units_by_collection: completed collection_id=%q returned_count=%d", collectionID, len(items))
 
-	return marshalToolResult(contentUnitsByCollectionToolResult{
+	result, err := marshalToolResult(contentUnitsByCollectionToolResult{
 		Collection:    collection,
 		ReturnedCount: len(items),
 		Items:         items,
 	})
+	if err != nil {
+		return "", err
+	}
+	if len(items) > 0 {
+		t.cache.set(cacheKey, result)
+	}
+	return result, nil
+}
+
+func newPostgreSQLToolCache(ttl time.Duration) *postgreSQLToolCache {
+	if ttl <= 0 {
+		return nil
+	}
+
+	return &postgreSQLToolCache{
+		ttl:   ttl,
+		items: map[string]postgreSQLToolCacheItem{},
+	}
+}
+
+func (c *postgreSQLToolCache) get(key string) (string, bool) {
+	if c == nil {
+		return "", false
+	}
+
+	now := time.Now()
+
+	c.mu.RLock()
+	item, ok := c.items[key]
+	c.mu.RUnlock()
+	if !ok {
+		return "", false
+	}
+	if now.After(item.expiresAt) {
+		c.mu.Lock()
+		delete(c.items, key)
+		c.mu.Unlock()
+		return "", false
+	}
+	return item.value, true
+}
+
+func (c *postgreSQLToolCache) set(key string, value string) {
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	c.items[key] = postgreSQLToolCacheItem{
+		value:     value,
+		expiresAt: time.Now().Add(c.ttl),
+	}
+	c.mu.Unlock()
 }
 
 func loadSourceNodeToolResult(db *sql.DB, sourceID string, language string) (*sourceNodeToolResult, error) {

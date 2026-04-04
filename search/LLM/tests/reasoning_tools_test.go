@@ -163,7 +163,7 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 }
 
 func TestPostgreSQLToolDefinitions(t *testing.T) {
-	availableBooks := llmtools.NewGetAvailableBooksTool(nil).Definition()
+	availableBooks := llmtools.NewGetAvailableBooksTool(nil, 0).Definition()
 	if availableBooks.Name != "get_available_books" {
 		t.Fatalf("unexpected get_available_books tool name: %s", availableBooks.Name)
 	}
@@ -179,29 +179,29 @@ func TestPostgreSQLToolDefinitions(t *testing.T) {
 		t.Fatalf("expected get_available_books to define no properties, got %v", properties)
 	}
 
-	sourcesByAuthor := llmtools.NewGetSourcesByAuthorTool(nil).Definition()
+	sourcesByAuthor := llmtools.NewGetSourcesByAuthorTool(nil, 0).Definition()
 	if sourcesByAuthor.Name != "get_sources_by_author" {
 		t.Fatalf("unexpected get_sources_by_author tool name: %s", sourcesByAuthor.Name)
 	}
 
-	sourcesBySource := llmtools.NewGetSourcesBySourceTool(nil).Definition()
+	sourcesBySource := llmtools.NewGetSourcesBySourceTool(nil, 0).Definition()
 	if sourcesBySource.Name != "get_sources_by_source" {
 		t.Fatalf("unexpected get_sources_by_source tool name: %s", sourcesBySource.Name)
 	}
 
-	collections := llmtools.NewGetCollectionsTool(nil).Definition()
+	collections := llmtools.NewGetCollectionsTool(nil, 0).Definition()
 	if collections.Name != "get_collections" {
 		t.Fatalf("unexpected get_collections tool name: %s", collections.Name)
 	}
 
-	contentUnitsByCollection := llmtools.NewGetContentUnitsByCollectionTool(nil).Definition()
+	contentUnitsByCollection := llmtools.NewGetContentUnitsByCollectionTool(nil, 0).Definition()
 	if contentUnitsByCollection.Name != "get_content_units_by_collection" {
 		t.Fatalf("unexpected get_content_units_by_collection tool name: %s", contentUnitsByCollection.Name)
 	}
 }
 
 func TestGetAvailableBooksToolReturnsItems(t *testing.T) {
-	tool := llmtools.NewGetAvailableBooksTool(nil)
+	tool := llmtools.NewGetAvailableBooksTool(nil, 0)
 
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{}`))
 	if err == nil {
@@ -213,7 +213,7 @@ func TestGetAvailableBooksToolReturnsItems(t *testing.T) {
 }
 
 func TestGetAvailableBooksToolRejectsArguments(t *testing.T) {
-	tool := llmtools.NewGetAvailableBooksTool(nil)
+	tool := llmtools.NewGetAvailableBooksTool(nil, 0)
 
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{"author_id":"bs"}`))
 	if err == nil {

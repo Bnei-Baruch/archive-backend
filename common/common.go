@@ -107,6 +107,11 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	}
 
 	ASSETS = integration.NewAssetsService(viper.GetString("assets_service.url"))
+	var postgreSQLToolCacheTTL *time.Duration
+	if viper.IsSet("llm.postgresql-tool-cache-ttl") {
+		ttl := viper.GetDuration("llm.postgresql-tool-cache-ttl")
+		postgreSQLToolCacheTTL = &ttl
+	}
 	LLM_TOOLS, err = llmtools.NewAppScopedManager(llmtools.AppScopedManagerDeps{
 		DB:            DB,
 		AssetsService: ASSETS,
@@ -117,7 +122,8 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 			}
 			return search.NewESEngine(esc, DB, CACHE, TOKENS_CACHE, VARIABLES, consts.ES_SEARCH_RESULT_TYPES), nil
 		},
-		TimeoutForHighlight: viper.GetDuration("elasticsearch.timeout-for-highlight"),
+		TimeoutForHighlight:    viper.GetDuration("elasticsearch.timeout-for-highlight"),
+		PostgreSQLToolCacheTTL: postgreSQLToolCacheTTL,
 	})
 	utils.Must(err)
 	LLM_SERVICE, err = llm.NewServiceFromConfig()

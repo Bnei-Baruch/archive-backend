@@ -57,6 +57,7 @@ refresh-search-stats="5m"
 
 [llm]
 provider="openai"
+postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache
 
 [openai]
 token="sk-..."
