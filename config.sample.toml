@@ -62,7 +62,7 @@ postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disabl
 [openai]
 token="sk-..."
 api-endpoint="" # optional custom OpenAI-compatible API base URL for gpt-oss, e.g. http://localhost:1234 or http://localhost:1234/v1
-reasoning-search-model="gpt-5.4" # "gpt-5.4-mini", "gpt-oss-20b", "gpt-oss-120b"
+reasoning-search-model="gpt-5.4" # "gpt-5.4-mini", "gpt-5.4-nano", "gpt-oss-20b", "gpt-oss-120b"
 reasoning-search-effort="high" # gpt-oss supports only "low", "medium", "high"; invalid values return an error
 reasoning-search-max-output-tokens=8000
 reasoning-search-max-iterations=20
@@ -79,3 +79,9 @@ model="gpt-5.4-mini"
 input_per_1m_tokens_usd=0.75
 cached_input_per_1m_tokens_usd=0.075
 output_per_1m_tokens_usd=4.50
+
+[[openai.pricing]]
+model="gpt-5.4-nano"
+input_per_1m_tokens_usd=0.20
+cached_input_per_1m_tokens_usd=0.02
+output_per_1m_tokens_usd=1.25
