@@ -109,8 +109,8 @@ func TestGenerateSystemMessageForReasoningSearchIncludesToolUsage(t *testing.T) 
 	if !strings.Contains(message, "Available tools and usage instructions:") {
 		t.Fatalf("expected tool usage header in message: %s", message)
 	}
-	if !strings.Contains(message, "Current request tool rounds remaining: 20.") {
-		t.Fatalf("expected remaining iterations text in message: %s", message)
+	if strings.Contains(message, "Current request tool rounds remaining: 20.") {
+		t.Fatalf("did not expect remaining iterations text when tool budget is high: %s", message)
 	}
 	if !strings.Contains(message, "Tool: tool_a\nUse it first.") {
 		t.Fatalf("expected first tool usage explanation in message: %s", message)
@@ -120,6 +120,11 @@ func TestGenerateSystemMessageForReasoningSearchIncludesToolUsage(t *testing.T) 
 	}
 	if strings.Index(message, "Tool: tool_a") > strings.Index(message, "Tool: tool_b") {
 		t.Fatalf("expected tool explanations to preserve manager order: %s", message)
+	}
+
+	lowBudgetMessage := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), 4)
+	if !strings.Contains(lowBudgetMessage, "Current request tool rounds remaining: 4.") {
+		t.Fatalf("expected remaining iterations text when tool budget is low: %s", lowBudgetMessage)
 	}
 }
 

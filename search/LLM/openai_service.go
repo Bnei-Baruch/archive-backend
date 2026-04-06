@@ -10,16 +10,19 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const embeddingModel = "text-embedding-3-large"
 const defaultOpenAIAPIBaseURL = "https://api.openai.com/v1"
+const defaultLLMHTTPRequestTimeout = 2 * time.Minute
 
 type OpenAIService struct {
 	token      string
 	pricing    []OpenAIModelPricing
 	sessions   *OpenAIReasoningSessionStore
 	apiBaseURL string
+	client     *http.Client
 }
 
 var _ Service = (*OpenAIService)(nil)
@@ -48,6 +51,7 @@ func NewOpenAIServiceWithOptions(token string, pricing []OpenAIModelPricing, ses
 		pricing:    pricing,
 		sessions:   sessions,
 		apiBaseURL: apiBaseURL,
+		client:     &http.Client{},
 	}
 
 	return service
@@ -84,83 +88,6 @@ type MessageToolCall struct {
 
 type ToolHandler func(ctx context.Context, arguments json.RawMessage) (string, error)
 
-type ResponsesRequest struct {
-	Model              string                   `json:"model"`
-	Input              []interface{}            `json:"input,omitempty"`
-	Instructions       *string                  `json:"instructions,omitempty"`
-	PreviousResponseID *string                  `json:"previous_response_id,omitempty"`
-	MaxOutputTokens    *int                     `json:"max_output_tokens,omitempty"`
-	PromptCacheKey     *string                  `json:"prompt_cache_key,omitempty"`
-	Reasoning          *ResponsesReasoning      `json:"reasoning,omitempty"`
-	Text               *ResponsesText           `json:"text,omitempty"`
-	Tools              []map[string]interface{} `json:"tools,omitempty"`
-}
-
-type ResponsesReasoning struct {
-	Effort  string `json:"effort,omitempty"`
-	Summary string `json:"summary,omitempty"`
-}
-
-type ResponsesText struct {
-	Format *ResponsesTextFormat `json:"format,omitempty"`
-}
-
-type ResponsesTextFormat struct {
-	Type   string      `json:"type"`
-	Name   string      `json:"name,omitempty"`
-	Schema interface{} `json:"schema,omitempty"`
-	Strict bool        `json:"strict,omitempty"`
-}
-
-type ResponsesOutputContent struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
-}
-
-type ResponsesOutputItem struct {
-	Type      string                   `json:"type"`
-	CallID    string                   `json:"call_id,omitempty"`
-	Name      string                   `json:"name,omitempty"`
-	Arguments string                   `json:"arguments,omitempty"`
-	Role      string                   `json:"role,omitempty"`
-	Content   []ResponsesOutputContent `json:"content,omitempty"`
-	Summary   []ResponsesOutputContent `json:"summary,omitempty"`
-}
-
-type ResponsesAPIError struct {
-	Code    string `json:"code,omitempty"`
-	Message string `json:"message,omitempty"`
-}
-
-type ResponsesIncompleteDetails struct {
-	Reason string `json:"reason,omitempty"`
-}
-
-type ResponsesResponse struct {
-	ID                string                      `json:"id"`
-	Status            string                      `json:"status"`
-	Output            []ResponsesOutputItem       `json:"output"`
-	Error             *ResponsesAPIError          `json:"error,omitempty"`
-	IncompleteDetails *ResponsesIncompleteDetails `json:"incomplete_details,omitempty"`
-	Usage             *OpenAIUsage                `json:"usage,omitempty"`
-}
-
-type reasoningSummarySetter interface {
-	SetReasoningSummary(string)
-}
-
-type reasoningProcessStatsSetter interface {
-	SetReasoningProcessStats(int, int)
-}
-
-type reasoningDebugInfoSetter interface {
-	SetReasoningDebugInfo(*ReasoningSearchDebugInfo)
-}
-
-type reasoningUsedToolsSetter interface {
-	SetUsedTools([]string)
-}
-
 type ResponseFormat struct {
 	Type       string      `json:"type"`
 	JsonSchema interface{} `json:"json_schema"`
@@ -180,22 +107,6 @@ type EmbeddingResponse struct {
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
 	Usage *OpenAIUsage `json:"usage,omitempty"`
-}
-
-type OpenAIUsage struct {
-	InputTokens         int                        `json:"input_tokens,omitempty"`
-	InputTokensDetails  *OpenAIInputTokensDetails  `json:"input_tokens_details,omitempty"`
-	OutputTokens        int                        `json:"output_tokens,omitempty"`
-	OutputTokensDetails *OpenAIOutputTokensDetails `json:"output_tokens_details,omitempty"`
-	TotalTokens         int                        `json:"total_tokens,omitempty"`
-}
-
-type OpenAIInputTokensDetails struct {
-	CachedTokens int `json:"cached_tokens,omitempty"`
-}
-
-type OpenAIOutputTokensDetails struct {
-	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
 }
 
 type LLMBotMessage struct {
@@ -588,11 +499,12 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 		printReasoningOutputIfDeb(deb, i+1, responsesResp.Output)
 		usageTotals.Add(responsesResp.Usage)
 
-		if responsesResp.Error != nil {
-			if responsesResp.Error.Code != "" {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("responses API error (%s): %s", responsesResp.Error.Code, responsesResp.Error.Message)
-			}
-			return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("responses API error: %s", responsesResp.Error.Message)
+		if err := responsesCompletionError(&responsesResp); err != nil {
+			return nil, "", OpenAIUsageTotals{}, 0, nil, "", err
+		}
+
+		if len(responsesResp.Output) == 0 {
+			return nil, "", OpenAIUsageTotals{}, 0, nil, "", errors.New("responses API returned no output")
 		}
 
 		functionCalls := []ResponsesOutputItem{}
@@ -604,8 +516,8 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 
 		if len(functionCalls) == 0 {
 			content := extractAssistantOutputText(responsesResp.Output)
-			if content == "" && responsesResp.IncompleteDetails != nil && responsesResp.IncompleteDetails.Reason != "" {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("responses API returned incomplete output: %s", responsesResp.IncompleteDetails.Reason)
+			if content == "" {
+				return nil, "", OpenAIUsageTotals{}, 0, nil, "", errors.New("responses API returned empty assistant output")
 			}
 			return &LLMBotMessage{
 				Role:    "assistant",
@@ -658,115 +570,6 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 	}
 
 	return nil, "", OpenAIUsageTotals{}, 0, nil, "", &MaxReasoningIterationsError{MaxIterations: maxIterations}
-}
-
-func buildResponsesText(jsonSchema *string) (*ResponsesText, error) {
-	if jsonSchema == nil {
-		return nil, nil
-	}
-
-	var schema interface{}
-	if err := json.Unmarshal([]byte(*jsonSchema), &schema); err != nil {
-		return nil, fmt.Errorf("invalid json_schema: %v", err)
-	}
-
-	return &ResponsesText{
-		Format: &ResponsesTextFormat{
-			Type:   "json_schema",
-			Name:   "structured_output",
-			Schema: schema,
-			Strict: true,
-		},
-	}, nil
-}
-
-func normalizeResponseTools(tools []ToolCall) ([]map[string]interface{}, error) {
-	normalized := make([]map[string]interface{}, 0, len(tools))
-	for _, t := range tools {
-		tool := map[string]interface{}{
-			"type": t.Type,
-		}
-		if t.Function != nil {
-			functionBytes, err := json.Marshal(t.Function)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal tool definition: %w", err)
-			}
-			functionPayload := map[string]interface{}{}
-			if err := json.Unmarshal(functionBytes, &functionPayload); err != nil {
-				return nil, fmt.Errorf("failed to parse tool definition: %w", err)
-			}
-			for k, v := range functionPayload {
-				tool[k] = v
-			}
-		}
-		normalized = append(normalized, tool)
-	}
-	return normalized, nil
-}
-
-func extractAssistantOutputText(items []ResponsesOutputItem) string {
-	content := ""
-	for _, item := range items {
-		if item.Type != "message" || item.Role != "assistant" {
-			continue
-		}
-		for _, c := range item.Content {
-			if c.Type == "output_text" {
-				content += c.Text
-			}
-		}
-	}
-	return content
-}
-
-func extractReasoningSummaryText(items []ResponsesOutputItem) []string {
-	parts := []string{}
-	for _, item := range items {
-		if item.Type != "reasoning" {
-			continue
-		}
-		for _, summary := range item.Summary {
-			if summary.Type == "summary_text" && strings.TrimSpace(summary.Text) != "" {
-				parts = append(parts, summary.Text)
-			}
-		}
-		for _, content := range item.Content {
-			if content.Type == "reasoning_text" && strings.TrimSpace(content.Text) != "" {
-				parts = append(parts, content.Text)
-			}
-		}
-	}
-	return parts
-}
-
-func printReasoningOutputIfDeb(deb bool, iteration int, items []ResponsesOutputItem) {
-	if !deb {
-		return
-	}
-
-	parts := extractReasoningSummaryText(items)
-	if len(parts) == 0 {
-		return
-	}
-
-	log.Printf("OpenAI reasoning summary iteration %d:\n%s", iteration, strings.Join(parts, "\n\n"))
-}
-
-func compactToolCallArguments(arguments json.RawMessage) string {
-	if len(arguments) == 0 {
-		return "{}"
-	}
-
-	buffer := bytes.NewBuffer(nil)
-	if err := json.Compact(buffer, arguments); err == nil {
-		return buffer.String()
-	}
-
-	trimmed := strings.TrimSpace(string(arguments))
-	if trimmed == "" {
-		return "{}"
-	}
-	return trimmed
 }
 
 func (s *OpenAIService) buildReasoningDebugInfo(model string, reasoningEffort *string, usageTotals OpenAIUsageTotals) *ReasoningSearchDebugInfo {
@@ -848,12 +651,19 @@ func (s *OpenAIService) callAPI(data interface{}, endpoint string, result interf
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	client := s.client
+	if client == nil {
+		client = &http.Client{Timeout: defaultLLMHTTPRequestTimeout}
+	}
+	startedAt := time.Now()
+	log.Printf("LLM API request start endpoint=%s", endpoint)
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("LLM API request error endpoint=%s elapsed=%s err=%v", endpoint, time.Since(startedAt), err)
 		return err
 	}
 	defer resp.Body.Close()
+	log.Printf("LLM API response endpoint=%s status=%d elapsed=%s", endpoint, resp.StatusCode, time.Since(startedAt))
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {

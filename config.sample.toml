@@ -56,7 +56,7 @@ url_template="https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2
 refresh-search-stats="5m"
 
 [llm]
-provider="openai"
+provider="openai" # "openai", "openrouter", "ollama"
 postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache
 
 [openai]
@@ -67,6 +67,7 @@ reasoning-search-effort="high" # gpt-oss supports only "low", "medium", "high"; 
 reasoning-search-max-output-tokens=8000
 reasoning-search-max-iterations=20
 reasoning-session-ttl="30m"
+request-timeout="2m"
 
 [[openai.pricing]]
 model="gpt-5.4"
@@ -85,3 +86,60 @@ model="gpt-5.4-nano"
 input_per_1m_tokens_usd=0.20
 cached_input_per_1m_tokens_usd=0.02
 output_per_1m_tokens_usd=1.25
+
+[openrouter]
+token="sk-or-..."
+api-endpoint="" # optional; defaults to https://openrouter.ai/api/v1
+reasoning-search-model="openai/gpt-oss-120b" # "openai/gpt-oss-20b", "openai/gpt-oss-120b", "google/gemma-4-31b-it", "google/gemma-4-26b-a4b-it"
+reasoning-search-effort="high" # "minimal", "low", "medium", "high"
+reasoning-search-max-output-tokens=3000
+reasoning-search-max-iterations=8
+reasoning-session-ttl="30m"
+request-timeout="2m"
+enforced-tool-use-iterations=1
+provider-sort="latency" # "latency", "price", "throughput"
+provider-require-parameters=false # set true only when you want strict provider capability matching
+# provider-allow-fallbacks=true
+# provider-only=["openai"]
+# provider-ignore=["novita"]
+# provider-preferred-max-latency=60
+
+[[openrouter.pricing]]
+model="openai/gpt-oss-20b"
+input_per_1m_tokens_usd=0.03
+output_per_1m_tokens_usd=0.14
+
+[[openrouter.pricing]]
+model="openai/gpt-oss-120b"
+input_per_1m_tokens_usd=0.039
+output_per_1m_tokens_usd=0.19
+
+[[openrouter.pricing]]
+model="google/gemma-4-31b-it"
+input_per_1m_tokens_usd=0.14
+output_per_1m_tokens_usd=0.40
+
+[[openrouter.pricing]]
+model="google/gemma-4-26b-a4b-it"
+input_per_1m_tokens_usd=0.13
+output_per_1m_tokens_usd=0.40
+
+[ollama]
+token="" # optional bearer token for Ollama-compatible servers
+api-endpoint="https://ollama.kab.sh" # base URL; also accepts a full /api/generate or /api/chat URL
+reasoning-search-model="gemma4:31b" # "gemma4:31b", "gpt-oss:20b", "gpt-oss:120b"
+reasoning-search-effort="high" # "minimal", "low", "medium", "high"
+reasoning-search-max-output-tokens=8000
+reasoning-search-max-iterations=20
+reasoning-session-ttl="30m"
+request-timeout="5m"
+num-ctx=32768
+structured-output-prompt-schema=false # when true, also embed the JSON schema and explicit JSON-only instruction into the prompt
+# temperature=0
+# keep-alive="5m"
+
+# Optional pricing entries for self-hosted or metered Ollama-compatible servers:
+# [[ollama.pricing]]
+# model="gemma4:31b"
+# input_per_1m_tokens_usd=0
+# output_per_1m_tokens_usd=0

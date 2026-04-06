@@ -23,8 +23,10 @@ Instructions for coding agents working in this repository.
 
 ## LLM Architecture
 - Use the provider-agnostic `llm.Service` interface in `search/LLM/service.go`.
-- `OpenAIService` is the current implementation.
-- Reasoning + tools flow uses OpenAI `v1/responses` with iteration via `previous_response_id`.
+- Provider selection is driven by `[llm].provider`.
+- OpenAI reasoning + tools flow uses `v1/responses` with iteration via `previous_response_id`.
+- OpenRouter also uses `v1/responses`, but continues sessions by replaying full message history instead of `previous_response_id`.
+- Ollama uses `/api/chat` with message-history replay; it does not use `tool_choice`.
 - `common.Init()` builds an app-scoped `common.LLM_SERVICE`; do not construct a new LLM service per request.
 - Tool implementations live under `search/LLM/tools/`.
 - LLM package tests live under `search/LLM/tests/`.
@@ -41,13 +43,19 @@ Instructions for coding agents working in this repository.
 - Request supports `q`, optional `deb`, optional `session_id`.
 - Response includes `session_id`, `used_tools`, token stats, and debug/cost details when `deb=true`.
 - OpenAI short-lived reasoning sessions are stored in memory only, with TTL from `openai.reasoning-session-ttl`.
+- OpenRouter and Ollama sessions also live in memory, but store full replayable conversation history via `chat_reasoning_sessions.go`.
 - If client sends a missing or expired `session_id`, the API returns an error; it does not silently start a new session.
-- Session state stores OpenAI continuation data (`last_response_id`, model, effort), not the full prompt or hidden reasoning.
+- OpenAI session state stores continuation data (`last_response_id`, model, effort), not the full prompt or hidden reasoning.
 
-## OpenAI Config
+## LLM Config
 - Provider selection uses `[llm].provider`; default is `openai`.
-- Reasoning search config is read from `[openai]` only when provider is `openai`.
-- Pricing for cost estimation is configured with `[[openai.pricing]]`.
+- Reasoning search config is provider-specific:
+  - `[openai]` for OpenAI
+  - `[openrouter]` for OpenRouter
+  - `[ollama]` for Ollama
+- OpenRouter supports configurable provider routing and `openrouter.enforced-tool-use-iterations` (default `1`).
+- Ollama supports `ollama.num-ctx`; `ollama.temperature` and `ollama.structured-output-prompt-schema` are optional.
+- Pricing for cost estimation is configured per provider with `[[<provider>.pricing]]`.
 
 ## Implemented Tools
 - `source_lookup`
