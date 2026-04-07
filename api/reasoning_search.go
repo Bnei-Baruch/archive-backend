@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,9 +14,10 @@ import (
 )
 
 type ReasoningSearchRequest struct {
-	SessionID *string `json:"session_id" form:"session_id"`
-	Query     string  `json:"q" form:"q" binding:"required"`
-	Deb       bool    `json:"deb" form:"deb" binding:"omitempty"`
+	SessionID  *string `json:"session_id" form:"session_id"`
+	Query      string  `json:"q" form:"q" binding:"required"`
+	Deb        bool    `json:"deb" form:"deb" binding:"omitempty"`
+	UILanguage string  `json:"ui_language" form:"ui_language" binding:"omitempty,len=2"`
 }
 
 func ReasoningSearchHandler(c *gin.Context) {
@@ -29,6 +31,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 		NewBadRequestError(errors.New("q is required")).Abort(c)
 		return
 	}
+	r.UILanguage = strings.ToLower(strings.TrimSpace(r.UILanguage))
 	if r.SessionID != nil {
 		trimmedSessionID := strings.TrimSpace(*r.SessionID)
 		if trimmedSessionID == "" {
@@ -45,6 +48,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 	}
 
 	service := c.MustGet("LLM_SERVICE").(llm.Service)
+	db := c.MustGet("MDB_DB").(*sql.DB)
 	reasoningConfig, err := llm.ReasoningSearchConfigFromConfig()
 	if err != nil {
 		NewInternalError(err).Abort(c)
@@ -99,6 +103,10 @@ func ReasoningSearchHandler(c *gin.Context) {
 		return
 	}
 	response.SetSessionID(sessionID)
+	if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
 
 	c.JSON(http.StatusOK, response)
 }

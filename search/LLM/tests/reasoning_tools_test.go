@@ -138,11 +138,9 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 		`"results"`,
 		`"mdb_uid"`,
 		`"result_type"`,
-		`"content_type"`,
 		`"reason"`,
 		`"highlights"`,
 		`"language"`,
-		`"date"`,
 		`"is_grouping_result"`,
 	}
 
@@ -152,19 +150,6 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 		}
 	}
 
-	enumSnippets := []string{
-		`"ARTICLES"`,
-		`"DAILY_LESSON"`,
-		`"ARTICLE"`,
-		`"FULL_LESSON"`,
-		`"SOURCE"`,
-	}
-
-	for _, snippet := range enumSnippets {
-		if !strings.Contains(schema, snippet) {
-			t.Fatalf("expected schema to contain content_type enum value %s", snippet)
-		}
-	}
 }
 
 func TestPostgreSQLToolDefinitions(t *testing.T) {

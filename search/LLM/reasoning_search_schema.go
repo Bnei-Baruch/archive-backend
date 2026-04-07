@@ -1,12 +1,5 @@
 package llm
 
-import (
-	"encoding/json"
-	"fmt"
-
-	"github.com/Bnei-Baruch/archive-backend/consts"
-)
-
 type ReasoningSearchResponse struct {
 	SessionID           string                    `json:"session_id"`
 	Query               string                    `json:"query"`
@@ -23,7 +16,6 @@ type ReasoningSearchResult struct {
 	MDBUID           string   `json:"mdb_uid"`
 	ResultType       string   `json:"result_type"`
 	Title            string   `json:"title"`
-	FullTitle        string   `json:"full_title"`
 	Description      string   `json:"description"`
 	ContentType      string   `json:"content_type"`
 	Language         string   `json:"language"`
@@ -53,59 +45,8 @@ type ReasoningSearchDebugInfo struct {
 	EstimatedCostUSD            float64 `json:"estimated_cost_usd"`
 }
 
-var reasoningSearchContentTypeEnum = []string{
-	"",
-	consts.CT_ARTICLES,
-	consts.CT_BOOKS,
-	// consts.CT_CHILDREN_LESSONS,
-	consts.CT_CLIPS,
-	consts.CT_CONGRESS,
-	consts.CT_DAILY_LESSON,
-	consts.CT_FRIENDS_GATHERINGS,
-	consts.CT_HOLIDAY,
-	consts.CT_LECTURE_SERIES,
-	consts.CT_LESSONS_SERIES,
-	consts.CT_MEALS,
-	consts.CT_PICNIC,
-	consts.CT_SONGS,
-	consts.CT_SPECIAL_LESSON,
-	consts.CT_UNITY_DAY,
-	consts.CT_VIDEO_PROGRAM,
-	consts.CT_VIRTUAL_LESSONS,
-	consts.CT_WOMEN_LESSONS,
-	consts.CT_ARTICLE,
-	consts.CT_BLOG_POST,
-	consts.CT_BOOK,
-	// consts.CT_CHILDREN_LESSON,
-	consts.CT_CLIP,
-	consts.CT_EVENT_PART,
-	consts.CT_FRIENDS_GATHERING,
-	consts.CT_FULL_LESSON,
-	consts.CT_KITEI_MAKOR,
-	consts.CT_LECTURE,
-	// consts.CT_LELO_MIKUD,
-	consts.CT_LESSON_PART,
-	consts.CT_MEAL,
-	consts.CT_PUBLICATION,
-	consts.CT_RESEARCH_MATERIAL,
-	// consts.CT_KTAIM_NIVCHARIM,
-	consts.CT_SONG,
-	consts.CT_TRAINING,
-	consts.CT_UNKNOWN,
-	consts.CT_VIDEO_PROGRAM_CHAPTER,
-	consts.CT_VIRTUAL_LESSON,
-	consts.CT_WOMEN_LESSON,
-	consts.CT_SOURCE,
-	consts.CT_LIKUTIM,
-}
-
 func GenerateReasoningSearchResponseJSONSchema() string {
-	contentTypeEnumJSON, err := json.Marshal(reasoningSearchContentTypeEnum)
-	if err != nil {
-		panic(fmt.Sprintf("failed to marshal reasoning search content_type enum: %v", err))
-	}
-
-	return fmt.Sprintf(`{
+	return `{
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -137,26 +78,9 @@ func GenerateReasoningSearchResponseJSONSchema() string {
             "enum": ["units", "sources", "collections", "posts", "tweets", "tags"],
             "description": "Elasticsearch result type."
           },
-          "title": {
-            "type": "string",
-            "description": "Title as returned by elasticsearch or mdb"
-          },
-          "full_title": {
-            "type": "string",
-            "description": "Full title as returned by elasticsearch or mdb if available, otherwise an empty string."
-          },
-          "content_type": {
-            "type": "string",
-            "description": "filter_values.content_type value for the result, or empty string if unavailable (ignore if result_type is 'sources').",
-            "enum": %s
-          },
           "language": {
             "type": "string",
             "description": "Best available language code for the result, or empty string if unavailable."
-          },
-          "date": {
-            "type": "string",
-            "description": "Best available result date in YYYY-MM-DD format, or empty string if unavailable."
           },
           "reason": {
             "type": "string",
@@ -177,11 +101,7 @@ func GenerateReasoningSearchResponseJSONSchema() string {
         "required": [
           "mdb_uid",
           "result_type",
-          "title",
-          "full_title",
-          "content_type",
           "language",
-          "date",
           "reason",
           "highlights",
           "is_grouping_result"
@@ -190,7 +110,7 @@ func GenerateReasoningSearchResponseJSONSchema() string {
     }
   },
   "required": ["query", "summary", "reasoning_summary", "results"]
-}`, string(contentTypeEnumJSON))
+}`
 }
 
 func (r *ReasoningSearchResponse) SetReasoningSummary(summary string) {
