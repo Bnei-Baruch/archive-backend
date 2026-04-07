@@ -42,7 +42,7 @@ func serverFn(cmd *cobra.Command, args []string) {
 	gin.SetMode(viper.GetString("server.mode"))
 	middleware := []gin.HandlerFunc{
 		utils.LoggerMiddleware(),
-		utils.DataStoresMiddleware(common.DB, common.ESC, common.CACHE /*common.GRAMMARS,*/, common.TOKENS_CACHE, common.CMS, common.VARIABLES, common.LLM_TOOLS, common.LLM_SERVICE),
+		utils.DataStoresMiddleware(common.DB, common.ESC, common.CACHE /*common.GRAMMARS,*/, common.TOKENS_CACHE, common.CMS, common.VARIABLES, common.LLM_TOOLS, common.LLM_SERVICE, common.LLM_PROGRESS, common.LLM_WORKFLOW),
 		utils.ErrorHandlingMiddleware(),
 	}
 

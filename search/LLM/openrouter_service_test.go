@@ -387,6 +387,7 @@ func TestOpenRouterReasoningSessionReplaysHistory(t *testing.T) {
 	}
 	sessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
 		nil,
+		nil,
 		schema,
 		"google/gemma-4-31b-it",
 		&maxTokens,
@@ -414,6 +415,7 @@ func TestOpenRouterReasoningSessionReplaysHistory(t *testing.T) {
 	}
 	_, err = service.GetReasoningStructuredOutputWithToolsForSession(
 		&sessionID,
+		nil,
 		schema,
 		"ignored-model",
 		&maxTokens,

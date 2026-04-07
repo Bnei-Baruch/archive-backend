@@ -20,6 +20,67 @@ type ReasoningSearchRequest struct {
 	UILanguage string  `json:"ui_language" form:"ui_language" binding:"omitempty,len=2"`
 }
 
+func ReasoningSearchStartHandler(c *gin.Context) {
+	service := c.MustGet("LLM_SERVICE").(llm.Service)
+	progressStore, _ := c.MustGet("LLM_REASONING_PROGRESS").(*llm.ReasoningProgressStore)
+	workflowStore, _ := c.MustGet("LLM_REASONING_WORKFLOW").(*llm.ReasoningWorkflowSessionStore)
+	if progressStore == nil || workflowStore == nil {
+		NewInternalError(errors.New("reasoning workflow is not initialized")).Abort(c)
+		return
+	}
+	reasoningConfig, err := llm.ReasoningSearchConfigFromConfig()
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	providerSessionID, err := service.ReserveReasoningSession(reasoningConfig.Model, &reasoningConfig.Effort)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	sessionID, err := workflowStore.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:          llm.ProviderFromConfig(),
+		Model:             reasoningConfig.Model,
+		ReasoningEffort:   reasoningConfig.Effort,
+		ProviderSessionID: providerSessionID,
+	})
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	progressStore.Reserve(sessionID)
+
+	c.JSON(http.StatusOK, gin.H{"session_id": sessionID})
+}
+
+func ReasoningSearchStatusHandler(c *gin.Context) {
+	sessionID := strings.TrimSpace(c.Query("session_id"))
+	if sessionID == "" {
+		NewBadRequestError(errors.New("session_id is required")).Abort(c)
+		return
+	}
+
+	progressStore, _ := c.MustGet("LLM_REASONING_PROGRESS").(*llm.ReasoningProgressStore)
+	if progressStore == nil {
+		NewInternalError(errors.New("LLM_REASONING_PROGRESS is not initialized")).Abort(c)
+		return
+	}
+
+	status, err := progressStore.Get(sessionID)
+	if err != nil {
+		if errors.Is(err, llm.ErrReasoningProgressNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
 func ReasoningSearchHandler(c *gin.Context) {
 	r := ReasoningSearchRequest{}
 	if c.Bind(&r) != nil {
@@ -49,6 +110,12 @@ func ReasoningSearchHandler(c *gin.Context) {
 
 	service := c.MustGet("LLM_SERVICE").(llm.Service)
 	db := c.MustGet("MDB_DB").(*sql.DB)
+	workflowStore, _ := c.MustGet("LLM_REASONING_WORKFLOW").(*llm.ReasoningWorkflowSessionStore)
+	progressStore, _ := c.MustGet("LLM_REASONING_PROGRESS").(*llm.ReasoningProgressStore)
+	if workflowStore == nil || progressStore == nil {
+		NewInternalError(errors.New("reasoning workflow is not initialized")).Abort(c)
+		return
+	}
 	reasoningConfig, err := llm.ReasoningSearchConfigFromConfig()
 	if err != nil {
 		NewInternalError(err).Abort(c)
@@ -72,11 +139,62 @@ func ReasoningSearchHandler(c *gin.Context) {
 		reasoningConfig.Effort,
 	)
 	response := llm.ReasoningSearchResponse{}
+	responseSessionID := ""
+	var providerSessionID *string
+	var progressSessionID *string
+
+	if r.SessionID != nil {
+		workflowSession, err := workflowStore.Get(*r.SessionID)
+		if err != nil {
+			if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+				NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+				return
+			}
+			NewInternalError(err).Abort(c)
+			return
+		}
+		stage, ok := workflowSession.Stages[llm.ReasoningWorkflowStageReasoning]
+		if !ok || strings.TrimSpace(stage.ProviderSessionID) == "" {
+			NewHttpError(http.StatusNotFound, llm.ErrReasoningSessionNotFoundOrExpired, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		if stage.Provider != llm.ProviderFromConfig() {
+			NewHttpError(http.StatusConflict, errors.New("reasoning session provider does not match configured provider"), gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		responseSessionID = workflowSession.ID
+		providerID := strings.TrimSpace(stage.ProviderSessionID)
+		providerSessionID = &providerID
+		progressID := workflowSession.ID
+		progressSessionID = &progressID
+	} else {
+		reservedProviderSessionID, err := service.ReserveReasoningSession(reasoningConfig.Model, &reasoningConfig.Effort)
+		if err != nil {
+			NewInternalError(err).Abort(c)
+			return
+		}
+		responseSessionID, err = workflowStore.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+			Provider:          llm.ProviderFromConfig(),
+			Model:             reasoningConfig.Model,
+			ReasoningEffort:   reasoningConfig.Effort,
+			ProviderSessionID: reservedProviderSessionID,
+		})
+		if err != nil {
+			NewInternalError(err).Abort(c)
+			return
+		}
+		progressStore.Reserve(responseSessionID)
+		providerID := reservedProviderSessionID
+		providerSessionID = &providerID
+		progressID := responseSessionID
+		progressSessionID = &progressID
+	}
 
 	log.Infof("Reasoning Search Query: [%s]", r.Query)
 
-	sessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
-		r.SessionID,
+	resolvedProviderSessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
+		providerSessionID,
+		progressSessionID,
 		llm.GenerateReasoningSearchResponseJSONSchema(),
 		reasoningConfig.Model,
 		&reasoningConfig.MaxTokens,
@@ -102,7 +220,16 @@ func ReasoningSearchHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	response.SetSessionID(sessionID)
+	if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:          llm.ProviderFromConfig(),
+		Model:             reasoningConfig.Model,
+		ReasoningEffort:   reasoningConfig.Effort,
+		ProviderSessionID: resolvedProviderSessionID,
+	}); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	response.SetSessionID(responseSessionID)
 	if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
 		NewInternalError(err).Abort(c)
 		return

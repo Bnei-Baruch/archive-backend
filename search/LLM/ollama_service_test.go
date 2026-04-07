@@ -331,6 +331,7 @@ func TestOllamaReasoningSessionReplaysHistory(t *testing.T) {
 	}
 	sessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
 		nil,
+		nil,
 		schema,
 		"gemma4:31b",
 		&maxTokens,
@@ -355,6 +356,7 @@ func TestOllamaReasoningSessionReplaysHistory(t *testing.T) {
 	}
 	_, err = service.GetReasoningStructuredOutputWithToolsForSession(
 		&sessionID,
+		nil,
 		schema,
 		"ignored-model",
 		&maxTokens,

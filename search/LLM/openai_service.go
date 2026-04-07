@@ -21,6 +21,7 @@ type OpenAIService struct {
 	token      string
 	pricing    []OpenAIModelPricing
 	sessions   *OpenAIReasoningSessionStore
+	progress   *ReasoningProgressStore
 	apiBaseURL string
 	client     *http.Client
 }
@@ -220,7 +221,7 @@ func (s *OpenAIService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, promptCacheKey, reasoningEffort, deb, maxIterations, nil)
+	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, promptCacheKey, reasoningEffort, deb, maxIterations, nil, "")
 	return msg, err
 }
 
@@ -237,7 +238,7 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, promptCacheKey, reasoningEffort, deb, maxIterations, nil)
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, promptCacheKey, reasoningEffort, deb, maxIterations, nil, "")
 	if err != nil {
 		return err
 	}
@@ -267,6 +268,7 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithTools(
 
 func (s *OpenAIService) GetReasoningStructuredOutputWithToolsForSession(
 	sessionID *string,
+	progressSessionID *string,
 	jsonSchema string,
 	model string,
 	maxTokens *int,
@@ -284,6 +286,7 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithToolsForSession(
 	}
 
 	effectiveSessionID := ""
+	effectiveProgressSessionID := ""
 	effectiveModel := model
 	effectiveReasoningEffort := reasoningEffort
 	var previousResponseID *string
@@ -300,7 +303,12 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithToolsForSession(
 			effort := session.ReasoningEffort
 			effectiveReasoningEffort = &effort
 		}
-		previousResponseID = &session.LastResponseID
+		if session.LastResponseID != "" {
+			previousResponseID = &session.LastResponseID
+		}
+	}
+	if progressSessionID != nil && strings.TrimSpace(*progressSessionID) != "" {
+		effectiveProgressSessionID = strings.TrimSpace(*progressSessionID)
 	}
 
 	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, finalResponseID, err := s.getReasoningResponseWithTools(
@@ -316,13 +324,20 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithToolsForSession(
 		deb,
 		maxIterations,
 		previousResponseID,
+		effectiveProgressSessionID,
 	)
 	if err != nil {
+		if s.progress != nil && effectiveProgressSessionID != "" {
+			s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
+		}
 		return "", err
 	}
 
 	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
+		if s.progress != nil && effectiveProgressSessionID != "" {
+			s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
+		}
 		return "", err
 	}
 
@@ -354,11 +369,33 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithToolsForSession(
 		}
 	} else {
 		if err := s.sessions.Update(effectiveSessionID, finalResponseID); err != nil {
+			if s.progress != nil && effectiveProgressSessionID != "" {
+				s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
+			}
 			return "", err
 		}
 	}
+	if s.progress != nil && effectiveProgressSessionID != "" {
+		s.progress.Complete(effectiveProgressSessionID, reasoningIterations)
+	}
 
 	return effectiveSessionID, nil
+}
+
+func (s *OpenAIService) ReserveReasoningSession(model string, reasoningEffort *string) (string, error) {
+	if s.sessions == nil {
+		return "", errors.New("reasoning sessions are not enabled")
+	}
+
+	storedReasoningEffort := ""
+	if reasoningEffort != nil {
+		storedReasoningEffort = *reasoningEffort
+	}
+	sessionID, err := s.sessions.CreateReserved(model, storedReasoningEffort)
+	if err != nil {
+		return "", err
+	}
+	return sessionID, nil
 }
 
 func (s *OpenAIService) getReasoningResponseWithTools(
@@ -374,6 +411,7 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 	initialPreviousResponseID *string,
+	progressSessionID string,
 ) (*LLMBotMessage, string, OpenAIUsageTotals, int, []string, string, error) {
 	if reasoningEffort != nil {
 		if strings.HasPrefix(model, "gpt-oss") {
@@ -467,6 +505,9 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 	nextInput := initialInput
 
 	for i := 0; i < maxIterations; i++ {
+		if s.progress != nil && progressSessionID != "" {
+			s.progress.Thinking(progressSessionID, i+1)
+		}
 		req := ResponsesRequest{
 			Model:              model,
 			Input:              nextInput,
@@ -552,6 +593,9 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 				toolCallLogs = append(toolCallLogs, fmt.Sprintf("- %s args: %s", toolCall.Name, compactToolCallArguments(rawArgs)))
 			}
 
+			if s.progress != nil && progressSessionID != "" {
+				s.progress.RunningTool(progressSessionID, i+1, toolCall.Name)
+			}
 			result, err := handler(reasoningCtx, rawArgs)
 			if err != nil {
 				return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("tool '%s' execution failed: %w", toolCall.Name, err)

@@ -41,7 +41,9 @@ Instructions for coding agents working in this repository.
 ## Reasoning Search
 - API endpoint: `POST /search/reasoning`.
 - Request supports `q`, optional `deb`, optional `session_id`.
+- The API `session_id` is a workflow session id owned by the backend, not a provider-native LLM session id.
 - Response includes `session_id`, `used_tools`, token stats, and debug/cost details when `deb=true`.
+- The backend currently uses one workflow stage (`reasoning`), which stores the provider-native session id internally so future stages/providers can be added without changing the API session format.
 - OpenAI short-lived reasoning sessions are stored in memory only, with TTL from `openai.reasoning-session-ttl`.
 - OpenRouter and Ollama sessions also live in memory, but store full replayable conversation history via `chat_reasoning_sessions.go`.
 - If client sends a missing or expired `session_id`, the API returns an error; it does not silently start a new session.

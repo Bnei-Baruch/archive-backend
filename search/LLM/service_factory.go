@@ -28,7 +28,11 @@ type ReasoningSearchConfig struct {
 }
 
 func NewServiceFromConfig() (Service, error) {
-	provider := providerFromConfig()
+	return NewServiceFromConfigWithProgress(nil)
+}
+
+func NewServiceFromConfigWithProgress(progress *ReasoningProgressStore) (Service, error) {
+	provider := ProviderFromConfig()
 
 	switch provider {
 	case ProviderOpenAI:
@@ -46,6 +50,7 @@ func NewServiceFromConfig() (Service, error) {
 			sessionTTL = defaultOpenAIReasoningSessionTTL
 		}
 		service := NewOpenAIServiceWithOptions(token, pricing, NewOpenAIReasoningSessionStore(sessionTTL), apiEndpoint)
+		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("openai.request-timeout")
 		return service, nil
 	case ProviderOpenRouter:
@@ -63,6 +68,7 @@ func NewServiceFromConfig() (Service, error) {
 			sessionTTL = defaultOpenAIReasoningSessionTTL
 		}
 		service := NewOpenRouterServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint)
+		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("openrouter.request-timeout")
 		providerPreferences, err := openRouterProviderPreferencesFromConfig()
 		if err != nil {
@@ -97,6 +103,7 @@ func NewServiceFromConfig() (Service, error) {
 		}
 		structuredOutputPromptSchema := viper.GetBool("ollama.structured-output-prompt-schema")
 		service := NewOllamaServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint, numCtx, keepAlive, temperature, structuredOutputPromptSchema)
+		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("ollama.request-timeout")
 		return service, nil
 	default:
@@ -104,8 +111,33 @@ func NewServiceFromConfig() (Service, error) {
 	}
 }
 
+func ReasoningSessionTTLFromConfig() time.Duration {
+	switch ProviderFromConfig() {
+	case ProviderOpenAI:
+		ttl := viper.GetDuration("openai.reasoning-session-ttl")
+		if ttl <= 0 {
+			return defaultOpenAIReasoningSessionTTL
+		}
+		return ttl
+	case ProviderOpenRouter:
+		ttl := viper.GetDuration("openrouter.reasoning-session-ttl")
+		if ttl <= 0 {
+			return defaultOpenAIReasoningSessionTTL
+		}
+		return ttl
+	case ProviderOllama:
+		ttl := viper.GetDuration("ollama.reasoning-session-ttl")
+		if ttl <= 0 {
+			return defaultOpenAIReasoningSessionTTL
+		}
+		return ttl
+	default:
+		return defaultOpenAIReasoningSessionTTL
+	}
+}
+
 func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
-	provider := providerFromConfig()
+	provider := ProviderFromConfig()
 
 	switch provider {
 	case ProviderOpenAI:
@@ -238,7 +270,7 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 	}
 }
 
-func providerFromConfig() string {
+func ProviderFromConfig() string {
 	provider := strings.ToLower(strings.TrimSpace(viper.GetString("llm.provider")))
 	if provider == "" {
 		provider = ProviderOpenAI

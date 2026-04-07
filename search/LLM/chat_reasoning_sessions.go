@@ -8,6 +8,8 @@ import (
 // ChatReasoningSessionStore keeps full replayable conversation history for chat-style
 // reasoning providers such as OpenRouter and Ollama. It is not used by OpenAI,
 // which continues reasoning sessions via previous_response_id instead of history replay.
+// The store lives only in local process memory, so it works on a single machine;
+// multi-instance deployments need sticky routing or shared storage.
 type ChatReasoningSession struct {
 	ID              string
 	Model           string
@@ -47,7 +49,18 @@ func (s *ChatReasoningSessionStore) Create(history []LLMBotMessage, model string
 	if err != nil {
 		return "", err
 	}
+	return s.createWithID(sessionID, history, model, reasoningEffort)
+}
 
+func (s *ChatReasoningSessionStore) CreateReserved(model string, reasoningEffort string) (string, error) {
+	sessionID, err := newOpenAIReasoningSessionID()
+	if err != nil {
+		return "", err
+	}
+	return s.createWithID(sessionID, nil, model, reasoningEffort)
+}
+
+func (s *ChatReasoningSessionStore) createWithID(sessionID string, history []LLMBotMessage, model string, reasoningEffort string) (string, error) {
 	now := time.Now()
 	session := &ChatReasoningSession{
 		ID:              sessionID,

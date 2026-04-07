@@ -32,6 +32,8 @@ var (
 	ASSETS       integration.AssetsService
 	LLM_TOOLS    *llm.ReasoningToolManager
 	LLM_SERVICE  llm.Service
+	LLM_PROGRESS *llm.ReasoningProgressStore
+	LLM_WORKFLOW *llm.ReasoningWorkflowSessionStore
 )
 
 func Init() time.Time {
@@ -126,7 +128,9 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		PostgreSQLToolCacheTTL: postgreSQLToolCacheTTL,
 	})
 	utils.Must(err)
-	LLM_SERVICE, err = llm.NewServiceFromConfig()
+	LLM_PROGRESS = llm.NewReasoningProgressStore(llm.ReasoningSessionTTLFromConfig())
+	LLM_WORKFLOW = llm.NewReasoningWorkflowSessionStore(llm.ReasoningSessionTTLFromConfig())
+	LLM_SERVICE, err = llm.NewServiceFromConfigWithProgress(LLM_PROGRESS)
 	utils.Must(err)
 
 	return clock
@@ -135,6 +139,12 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 func Shutdown() {
 	if closer, ok := LLM_SERVICE.(interface{ Close() error }); ok {
 		utils.Must(closer.Close())
+	}
+	if LLM_PROGRESS != nil {
+		utils.Must(LLM_PROGRESS.Close())
+	}
+	if LLM_WORKFLOW != nil {
+		utils.Must(LLM_WORKFLOW.Close())
 	}
 	utils.Must(DB.Close())
 	ESC.Stop()

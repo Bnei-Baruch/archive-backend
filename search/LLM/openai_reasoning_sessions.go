@@ -12,6 +12,9 @@ const defaultOpenAIReasoningSessionTTL = 30 * time.Minute
 
 var ErrReasoningSessionNotFoundOrExpired = errors.New("reasoning session not found or expired")
 
+// OpenAIReasoningSessionStore keeps reasoning continuation state in local process
+// memory only. It works on a single machine; multi-instance deployments need sticky
+// routing or a shared backing store to keep a session available across instances.
 type OpenAIReasoningSession struct {
 	ID              string
 	LastResponseID  string
@@ -51,7 +54,18 @@ func (s *OpenAIReasoningSessionStore) Create(lastResponseID string, model string
 	if err != nil {
 		return "", err
 	}
+	return s.createWithID(sessionID, lastResponseID, model, reasoningEffort)
+}
 
+func (s *OpenAIReasoningSessionStore) CreateReserved(model string, reasoningEffort string) (string, error) {
+	sessionID, err := newOpenAIReasoningSessionID()
+	if err != nil {
+		return "", err
+	}
+	return s.createWithID(sessionID, "", model, reasoningEffort)
+}
+
+func (s *OpenAIReasoningSessionStore) createWithID(sessionID string, lastResponseID string, model string, reasoningEffort string) (string, error) {
 	now := time.Now()
 	session := &OpenAIReasoningSession{
 		ID:              sessionID,

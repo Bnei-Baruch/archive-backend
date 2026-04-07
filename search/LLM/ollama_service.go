@@ -136,7 +136,7 @@ func (s *OllamaService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	msg, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations)
+	msg, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations, "")
 	return msg, err
 }
 
@@ -153,7 +153,7 @@ func (s *OllamaService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations)
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -183,6 +183,7 @@ func (s *OllamaService) GetReasoningStructuredOutputWithTools(
 
 func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 	sessionID *string,
+	progressSessionID *string,
 	jsonSchema string,
 	model string,
 	maxTokens *int,
@@ -200,6 +201,7 @@ func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 	}
 
 	effectiveSessionID := ""
+	effectiveProgressSessionID := ""
 	effectiveModel := model
 	effectiveReasoningEffort := reasoningEffort
 	effectiveMessages := append([]LLMBotMessage(nil), messages...)
@@ -222,9 +224,14 @@ func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 			effectiveReasoningEffort = &effort
 		}
 		effectiveMessages = []LLMBotMessage{{Role: "system", Content: instructions}}
-		effectiveMessages = append(effectiveMessages, session.History...)
+		if len(session.History) > 0 {
+			effectiveMessages = append(effectiveMessages, session.History...)
+			priorHistory = append(priorHistory, session.History...)
+		}
 		effectiveMessages = append(effectiveMessages, currentConversation...)
-		priorHistory = append(priorHistory, session.History...)
+	}
+	if progressSessionID != nil && strings.TrimSpace(*progressSessionID) != "" {
+		effectiveProgressSessionID = strings.TrimSpace(*progressSessionID)
 	}
 
 	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, err := s.getReasoningResponseWithTools(
@@ -238,13 +245,20 @@ func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 		effectiveReasoningEffort,
 		deb,
 		maxIterations,
+		effectiveProgressSessionID,
 	)
 	if err != nil {
+		if s.progress != nil && effectiveProgressSessionID != "" {
+			s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
+		}
 		return "", err
 	}
 
 	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
+		if s.progress != nil && effectiveProgressSessionID != "" {
+			s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
+		}
 		return "", err
 	}
 	if deb && reasoningSummary != "" {
@@ -282,11 +296,33 @@ func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 		}
 	} else {
 		if err := s.sessions.Update(effectiveSessionID, newHistory); err != nil {
+			if s.progress != nil && effectiveProgressSessionID != "" {
+				s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
+			}
 			return "", err
 		}
 	}
+	if s.progress != nil && effectiveProgressSessionID != "" {
+		s.progress.Complete(effectiveProgressSessionID, reasoningIterations)
+	}
 
 	return effectiveSessionID, nil
+}
+
+func (s *OllamaService) ReserveReasoningSession(model string, reasoningEffort *string) (string, error) {
+	if s.sessions == nil {
+		return "", errors.New("reasoning sessions are not enabled")
+	}
+
+	storedReasoningEffort := ""
+	if reasoningEffort != nil {
+		storedReasoningEffort = *reasoningEffort
+	}
+	sessionID, err := s.sessions.CreateReserved(model, storedReasoningEffort)
+	if err != nil {
+		return "", err
+	}
+	return sessionID, nil
 }
 
 func (s *OllamaService) GetEmbeddings(content string) ([]float64, error) {
@@ -350,6 +386,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 	reasoningEffort *string,
 	deb bool,
 	maxIterations int,
+	progressSessionID string,
 ) (*LLMBotMessage, string, OpenAIUsageTotals, int, []string, error) {
 	usageTotals := OpenAIUsageTotals{}
 	iterations := 0
@@ -405,6 +442,9 @@ func (s *OllamaService) getReasoningResponseWithTools(
 	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(context.Background(), deb))
 
 	for i := 0; i < maxIterations; i++ {
+		if s.progress != nil && progressSessionID != "" {
+			s.progress.Thinking(progressSessionID, i+1)
+		}
 		req := s.newChatRequest(model, maxTokens, ollamaMessages, tools, format, think)
 
 		var resp OllamaChatResponse
@@ -456,6 +496,9 @@ func (s *OllamaService) getReasoningResponseWithTools(
 				toolCallLogs = append(toolCallLogs, fmt.Sprintf("- %s args: %s", toolCall.Function.Name, compactToolCallArguments(rawArgs)))
 			}
 
+			if s.progress != nil && progressSessionID != "" {
+				s.progress.RunningTool(progressSessionID, i+1, toolCall.Function.Name)
+			}
 			result, err := handler(reasoningCtx, rawArgs)
 			if err != nil {
 				return nil, "", OpenAIUsageTotals{}, 0, nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Function.Name, err)
