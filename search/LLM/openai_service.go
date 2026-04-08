@@ -119,9 +119,9 @@ type LLMBotMessage struct {
 }
 
 func (s *OpenAIService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) error {
-	msg, totalTokens, err := s.getChatResponseWithUsage(model, maxTokens, messages, promptCacheKey, nil, &jsonSchema, reasoningEffort)
-	if totalTokens > 0 {
-		log.Printf("OpenAI GetStructuredOutput total tokens: %d", totalTokens)
+	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, nil)
+	if usageTotals.TotalTokens > 0 {
+		log.Printf("OpenAI GetStructuredOutput total tokens: %d", usageTotals.TotalTokens)
 	}
 	if err != nil {
 		return err
@@ -139,10 +139,113 @@ func (s *OpenAIService) GetStructuredOutput(jsonSchema string, model string, max
 	return nil
 }
 
+func (s *OpenAIService) GetStructuredOutputWithDebug(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) (*ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, nil)
+	if usageTotals.TotalTokens > 0 {
+		log.Printf("OpenAI GetStructuredOutputWithDebug total tokens: %d", usageTotals.TotalTokens)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if msg.Refusal != nil {
+		log.Printf("Received a 'Refusal': %s", *msg.Refusal)
+		return s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals), nil
+	}
+
+	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
+		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
+		return nil, err
+	}
+	return s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals), nil
+}
+
+func (s *OpenAIService) getStructuredOutputWithUsage(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, jsonSchema string, reasoningEffort *string, provider *ResponsesProvider) (*LLMBotMessage, OpenAIUsageTotals, error) {
+	if reasoningEffort != nil {
+		if strings.HasPrefix(model, "gpt-oss") {
+			switch *reasoningEffort {
+			case "low", "medium", "high":
+			default:
+				return nil, OpenAIUsageTotals{}, fmt.Errorf("reasoning effort %q is not supported for model %q; gpt-oss supports only low, medium, high", *reasoningEffort, model)
+			}
+		}
+	}
+
+	instructions := ""
+	input := []interface{}{}
+	sysMsgCount := 0
+	for _, m := range messages {
+		if m.Role == "system" || m.Role == "developer" {
+			sysMsgCount++
+			instructions = m.Content
+			continue
+		}
+		if m.Role == "tool" {
+			if m.ToolCallID == "" {
+				return nil, OpenAIUsageTotals{}, errors.New("tool message is missing tool_call_id")
+			}
+			input = append(input, map[string]string{
+				"type":    "function_call_output",
+				"call_id": m.ToolCallID,
+				"output":  m.Content,
+			})
+			continue
+		}
+		input = append(input, map[string]string{
+			"role":    m.Role,
+			"content": m.Content,
+		})
+	}
+	if sysMsgCount != 1 {
+		return nil, OpenAIUsageTotals{}, fmt.Errorf("must include exactly one system message, found %d", sysMsgCount)
+	}
+
+	text, err := buildResponsesText(&jsonSchema)
+	if err != nil {
+		return nil, OpenAIUsageTotals{}, err
+	}
+
+	req := ResponsesRequest{
+		Model:           model,
+		Input:           input,
+		Instructions:    &instructions,
+		MaxOutputTokens: maxTokens,
+		PromptCacheKey:  promptCacheKey,
+		Text:            text,
+		Provider:        provider,
+	}
+	if reasoningEffort != nil {
+		req.Reasoning = &ResponsesReasoning{Effort: *reasoningEffort}
+	}
+
+	var responsesResp ResponsesResponse
+	if err := s.callAPI(req, s.apiBaseURL+"/responses", &responsesResp); err != nil {
+		return nil, OpenAIUsageTotals{}, err
+	}
+	usageTotals := OpenAIUsageTotals{}
+	usageTotals.Add(responsesResp.Usage)
+
+	if err := responsesCompletionError(&responsesResp); err != nil {
+		return nil, usageTotals, err
+	}
+	if len(responsesResp.Output) == 0 {
+		return nil, usageTotals, errors.New("responses API returned no output")
+	}
+
+	content := extractAssistantOutputText(responsesResp.Output)
+	if content == "" {
+		return nil, usageTotals, errors.New("responses API returned empty assistant output")
+	}
+
+	return &LLMBotMessage{
+		Role:    "assistant",
+		Content: content,
+	}, usageTotals, nil
+}
+
 func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
-	msg, totalTokens, err := s.getChatResponseWithUsage(model, maxTokens, messages, promptCacheKey, frequencyPenalty, jsonSchema, reasoningEffort)
-	if totalTokens > 0 {
-		log.Printf("OpenAI GetChatResponse total tokens: %d", totalTokens)
+	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, promptCacheKey, frequencyPenalty, jsonSchema, reasoningEffort)
+	if usageTotals.TotalTokens > 0 {
+		log.Printf("OpenAI GetChatResponse total tokens: %d", usageTotals.TotalTokens)
 	}
 	if err != nil {
 		return nil, err
@@ -150,13 +253,13 @@ func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages [
 	return msg, nil
 }
 
-func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, int, error) {
+func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, OpenAIUsageTotals, error) {
 	if reasoningEffort != nil {
 		if strings.HasPrefix(model, "gpt-oss") {
 			switch *reasoningEffort {
 			case "low", "medium", "high":
 			default:
-				return nil, 0, fmt.Errorf("reasoning effort %q is not supported for model %q; gpt-oss supports only low, medium, high", *reasoningEffort, model)
+				return nil, OpenAIUsageTotals{}, fmt.Errorf("reasoning effort %q is not supported for model %q; gpt-oss supports only low, medium, high", *reasoningEffort, model)
 			}
 		}
 	}
@@ -167,7 +270,7 @@ func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, m
 		}
 	}
 	if sysMsgCount != 1 {
-		return nil, 0, fmt.Errorf("must include exactly one system message, found %d", sysMsgCount)
+		return nil, OpenAIUsageTotals{}, fmt.Errorf("must include exactly one system message, found %d", sysMsgCount)
 	}
 
 	var respFmt *ResponseFormat
@@ -175,7 +278,7 @@ func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, m
 		var JsonSchemaData interface{}
 		err := json.Unmarshal([]byte(*jsonSchema), &JsonSchemaData)
 		if err != nil {
-			return nil, 0, fmt.Errorf("invalid json_schema: %v", err)
+			return nil, OpenAIUsageTotals{}, fmt.Errorf("invalid json_schema: %v", err)
 		}
 		respFmt = &ResponseFormat{
 			Type:       "json_schema",
@@ -195,19 +298,17 @@ func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, m
 
 	var chatResp ChatResponse
 	if err := s.callAPI(req, s.apiBaseURL+"/chat/completions", &chatResp); err != nil {
-		return nil, 0, err
+		return nil, OpenAIUsageTotals{}, err
 	}
-	totalTokens := 0
-	if chatResp.Usage != nil {
-		totalTokens = chatResp.Usage.TotalTokens
-	}
+	usageTotals := OpenAIUsageTotals{}
+	usageTotals.Add(chatResp.Usage)
 
 	for _, choice := range chatResp.Choices {
 		if choice.Index == 0 {
-			return &choice.Message, totalTokens, nil
+			return &choice.Message, usageTotals, nil
 		}
 	}
-	return nil, totalTokens, errors.New("no valid chat choices returned")
+	return nil, usageTotals, errors.New("no valid chat choices returned")
 }
 
 func (s *OpenAIService) GetReasoningResponseWithTools(
@@ -375,10 +476,6 @@ func (s *OpenAIService) GetReasoningStructuredOutputWithToolsForSession(
 			return "", err
 		}
 	}
-	if s.progress != nil && effectiveProgressSessionID != "" {
-		s.progress.Complete(effectiveProgressSessionID, reasoningIterations)
-	}
-
 	return effectiveSessionID, nil
 }
 

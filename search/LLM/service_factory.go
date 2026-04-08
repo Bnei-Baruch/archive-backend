@@ -18,13 +18,24 @@ const (
 	defaultReasoningSearchEffort        = "high" // "low", "medium", "high", "xhigh" (not for oss models)
 	defaultReasoningSearchMaxTokens     = 8000
 	defaultReasoningSearchMaxIterations = 20
+	defaultReasoningSearchRerunMaxIters = 2
 )
 
 type ReasoningSearchConfig struct {
-	Model         string
-	Effort        string
-	MaxTokens     int
-	MaxIterations int
+	Provider           string
+	Model              string
+	Effort             string
+	MaxTokens          int
+	MaxIterations      int
+	RerunMaxIterations int
+	Verification       *ReasoningSearchVerificationConfig
+}
+
+type ReasoningSearchVerificationConfig struct {
+	Provider  string
+	Model     string
+	Effort    string
+	MaxTokens int
 }
 
 func NewServiceFromConfig() (Service, error) {
@@ -32,8 +43,10 @@ func NewServiceFromConfig() (Service, error) {
 }
 
 func NewServiceFromConfigWithProgress(progress *ReasoningProgressStore) (Service, error) {
-	provider := ProviderFromConfig()
+	return NewServiceForProviderWithProgress(ProviderFromConfig(), progress)
+}
 
+func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgressStore) (Service, error) {
 	switch provider {
 	case ProviderOpenAI:
 		token := viper.GetString("openai.token")
@@ -138,6 +151,8 @@ func ReasoningSessionTTLFromConfig() time.Duration {
 
 func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 	provider := ProviderFromConfig()
+	verificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
+	verificationProvider := ReasoningSearchVerificationProviderFromConfig()
 
 	switch provider {
 	case ProviderOpenAI:
@@ -176,12 +191,28 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 		if maxIterations <= 0 {
 			maxIterations = defaultReasoningSearchMaxIterations
 		}
+		rerunMaxIterations := viper.GetInt("openai.reasoning-search-rerun-max-iterations")
+		if rerunMaxIterations <= 0 {
+			rerunMaxIterations = defaultReasoningSearchRerunMaxIters
+		}
+
+		var verification *ReasoningSearchVerificationConfig
+		if verificationEnabled {
+			var err error
+			verification, err = reasoningSearchVerificationConfigFromProvider(verificationProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
 
 		return &ReasoningSearchConfig{
-			Model:         model,
-			Effort:        effort,
-			MaxTokens:     maxTokens,
-			MaxIterations: maxIterations,
+			Provider:           provider,
+			Model:              model,
+			Effort:             effort,
+			MaxTokens:          maxTokens,
+			MaxIterations:      maxIterations,
+			RerunMaxIterations: rerunMaxIterations,
+			Verification:       verification,
 		}, nil
 	case ProviderOpenRouter:
 		model := viper.GetString("openrouter.reasoning-search-model")
@@ -217,12 +248,28 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 		if maxIterations <= 0 {
 			maxIterations = 8
 		}
+		rerunMaxIterations := viper.GetInt("openrouter.reasoning-search-rerun-max-iterations")
+		if rerunMaxIterations <= 0 {
+			rerunMaxIterations = defaultReasoningSearchRerunMaxIters
+		}
+
+		var verification *ReasoningSearchVerificationConfig
+		if verificationEnabled {
+			var err error
+			verification, err = reasoningSearchVerificationConfigFromProvider(verificationProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
 
 		return &ReasoningSearchConfig{
-			Model:         model,
-			Effort:        effort,
-			MaxTokens:     maxTokens,
-			MaxIterations: maxIterations,
+			Provider:           provider,
+			Model:              model,
+			Effort:             effort,
+			MaxTokens:          maxTokens,
+			MaxIterations:      maxIterations,
+			RerunMaxIterations: rerunMaxIterations,
+			Verification:       verification,
 		}, nil
 	case ProviderOllama:
 		model := viper.GetString("ollama.reasoning-search-model")
@@ -258,12 +305,28 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 		if maxIterations <= 0 {
 			maxIterations = defaultReasoningSearchMaxIterations
 		}
+		rerunMaxIterations := viper.GetInt("ollama.reasoning-search-rerun-max-iterations")
+		if rerunMaxIterations <= 0 {
+			rerunMaxIterations = defaultReasoningSearchRerunMaxIters
+		}
+
+		var verification *ReasoningSearchVerificationConfig
+		if verificationEnabled {
+			var err error
+			verification, err = reasoningSearchVerificationConfigFromProvider(verificationProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
 
 		return &ReasoningSearchConfig{
-			Model:         model,
-			Effort:        effort,
-			MaxTokens:     maxTokens,
-			MaxIterations: maxIterations,
+			Provider:           provider,
+			Model:              model,
+			Effort:             effort,
+			MaxTokens:          maxTokens,
+			MaxIterations:      maxIterations,
+			RerunMaxIterations: rerunMaxIterations,
+			Verification:       verification,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported llm provider: %s", provider)
@@ -276,6 +339,95 @@ func ProviderFromConfig() string {
 		provider = ProviderOpenAI
 	}
 	return provider
+}
+
+func ReasoningSearchVerificationProviderFromConfig() string {
+	provider := strings.ToLower(strings.TrimSpace(viper.GetString("llm.reasoning-search-verification-provider")))
+	if provider == "" {
+		return ProviderFromConfig()
+	}
+	return provider
+}
+
+func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffort string) (*ReasoningSearchVerificationConfig, error) {
+	switch provider {
+	case ProviderOpenAI:
+		model := strings.TrimSpace(viper.GetString("openai.reasoning-search-verification-model"))
+		if model == "" {
+			return nil, fmt.Errorf("openai.reasoning-search-verification-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("openai.reasoning-search-verification-effort"))
+		if effort == "" {
+			effort = defaultEffort
+		}
+		if strings.HasPrefix(model, "gpt-oss") {
+			switch effort {
+			case "low", "medium", "high":
+			default:
+				return nil, fmt.Errorf("reasoning effort %q is not supported for model %q; gpt-oss supports only low, medium, high", effort, model)
+			}
+		}
+		maxTokens := viper.GetInt("openai.reasoning-search-verification-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+		return &ReasoningSearchVerificationConfig{
+			Provider:  provider,
+			Model:     model,
+			Effort:    effort,
+			MaxTokens: maxTokens,
+		}, nil
+	case ProviderOpenRouter:
+		model := strings.TrimSpace(viper.GetString("openrouter.reasoning-search-verification-model"))
+		if model == "" {
+			return nil, fmt.Errorf("openrouter.reasoning-search-verification-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("openrouter.reasoning-search-verification-effort"))
+		if effort == "" {
+			effort = defaultEffort
+		}
+		switch effort {
+		case "minimal", "low", "medium", "high":
+		default:
+			return nil, fmt.Errorf("reasoning effort %q is not supported for OpenRouter models; supported values are minimal, low, medium, high", effort)
+		}
+		maxTokens := viper.GetInt("openrouter.reasoning-search-verification-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+		return &ReasoningSearchVerificationConfig{
+			Provider:  provider,
+			Model:     model,
+			Effort:    effort,
+			MaxTokens: maxTokens,
+		}, nil
+	case ProviderOllama:
+		model := strings.TrimSpace(viper.GetString("ollama.reasoning-search-verification-model"))
+		if model == "" {
+			return nil, fmt.Errorf("ollama.reasoning-search-verification-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("ollama.reasoning-search-verification-effort"))
+		if effort == "" {
+			effort = defaultEffort
+		}
+		switch effort {
+		case "minimal", "low", "medium", "high":
+		default:
+			return nil, fmt.Errorf("reasoning effort %q is not supported for Ollama models; supported values are minimal, low, medium, high", effort)
+		}
+		maxTokens := viper.GetInt("ollama.reasoning-search-verification-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+		return &ReasoningSearchVerificationConfig{
+			Provider:  provider,
+			Model:     model,
+			Effort:    effort,
+			MaxTokens: maxTokens,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported verification provider: %s", provider)
+	}
 }
 
 func requestTimeoutFromConfig(key string) time.Duration {

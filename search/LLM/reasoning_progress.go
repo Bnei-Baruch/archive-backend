@@ -15,6 +15,7 @@ const (
 	ReasoningProgressPhasePending     = "pending"
 	ReasoningProgressPhaseThinking    = "thinking"
 	ReasoningProgressPhaseRunningTool = "running_tool"
+	ReasoningProgressPhaseVerifying   = "verifying"
 	ReasoningProgressPhaseDone        = "done"
 	ReasoningProgressPhaseError       = "error"
 )
@@ -90,6 +91,17 @@ func (s *ReasoningProgressStore) RunningTool(sessionID string, iteration int, to
 		status.Iteration = iteration
 		status.ToolName = toolName
 		status.Message = reasoningProgressToolMessage(toolName)
+		status.Done = false
+	})
+}
+
+func (s *ReasoningProgressStore) Verifying(sessionID string, iteration int) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.State = ReasoningProgressStateRunning
+		status.Phase = ReasoningProgressPhaseVerifying
+		status.Iteration = iteration
+		status.ToolName = ""
+		status.Message = "Verifing results..."
 		status.Done = false
 	})
 }

@@ -1,15 +1,16 @@
 package llm
 
 type ReasoningSearchResponse struct {
-	SessionID           string                    `json:"session_id"`
-	Query               string                    `json:"query"`
-	Summary             string                    `json:"summary"`
-	ReasoningSummary    string                    `json:"reasoning_summary"`
-	UsedTokens          int                       `json:"used_tokens"`
-	ReasoningIterations int                       `json:"reasoning_iterations"`
-	UsedTools           []string                  `json:"used_tools"`
-	Results             []ReasoningSearchResult   `json:"results"`
-	Debug               *ReasoningSearchDebugInfo `json:"debug,omitempty"`
+	SessionID           string                               `json:"session_id"`
+	Query               string                               `json:"query"`
+	Summary             string                               `json:"summary"`
+	ReasoningSummary    string                               `json:"reasoning_summary"`
+	VerificationOutput  *ReasoningSearchVerificationResponse `json:"verification_output,omitempty"`
+	UsedTokens          int                                  `json:"used_tokens"`
+	ReasoningIterations int                                  `json:"reasoning_iterations"`
+	UsedTools           []string                             `json:"used_tools"`
+	Results             []ReasoningSearchResult              `json:"results"`
+	Debug               *ReasoningSearchDebugInfo            `json:"debug,omitempty"`
 }
 
 type ReasoningSearchResult struct {
@@ -26,23 +27,32 @@ type ReasoningSearchResult struct {
 }
 
 type ReasoningSearchDebugInfo struct {
-	Enabled                     bool    `json:"enabled"`
-	Model                       string  `json:"model"`
-	ReasoningEffort             string  `json:"reasoning_effort"`
-	TotalTokens                 int     `json:"total_tokens"`
-	InputTokens                 int     `json:"input_tokens"`
-	CachedInputTokens           int     `json:"cached_input_tokens"`
-	UncachedInputTokens         int     `json:"uncached_input_tokens"`
-	OutputTokens                int     `json:"output_tokens"`
-	ReasoningTokens             int     `json:"reasoning_tokens"`
-	PricingConfigured           bool    `json:"pricing_configured"`
-	InputPer1MTokensUSD         float64 `json:"input_per_1m_tokens_usd"`
-	CachedInputPer1MTokensUSD   float64 `json:"cached_input_per_1m_tokens_usd"`
-	OutputPer1MTokensUSD        float64 `json:"output_per_1m_tokens_usd"`
-	EstimatedInputCostUSD       float64 `json:"estimated_input_cost_usd"`
-	EstimatedCachedInputCostUSD float64 `json:"estimated_cached_input_cost_usd"`
-	EstimatedOutputCostUSD      float64 `json:"estimated_output_cost_usd"`
-	EstimatedCostUSD            float64 `json:"estimated_cost_usd"`
+	Enabled                      bool    `json:"enabled"`
+	Model                        string  `json:"model"`
+	ReasoningEffort              string  `json:"reasoning_effort"`
+	VerificationModel            string  `json:"verification_model,omitempty"`
+	VerificationReasoningEffort  string  `json:"verification_reasoning_effort,omitempty"`
+	VerificationTotalTokens      int     `json:"verification_total_tokens,omitempty"`
+	VerificationEstimatedCostUSD float64 `json:"verification_estimated_cost_usd,omitempty"`
+	TotalTokens                  int     `json:"total_tokens"`
+	InputTokens                  int     `json:"input_tokens"`
+	CachedInputTokens            int     `json:"cached_input_tokens"`
+	UncachedInputTokens          int     `json:"uncached_input_tokens"`
+	OutputTokens                 int     `json:"output_tokens"`
+	ReasoningTokens              int     `json:"reasoning_tokens"`
+	PricingConfigured            bool    `json:"pricing_configured"`
+	InputPer1MTokensUSD          float64 `json:"input_per_1m_tokens_usd"`
+	CachedInputPer1MTokensUSD    float64 `json:"cached_input_per_1m_tokens_usd"`
+	OutputPer1MTokensUSD         float64 `json:"output_per_1m_tokens_usd"`
+	EstimatedInputCostUSD        float64 `json:"estimated_input_cost_usd"`
+	EstimatedCachedInputCostUSD  float64 `json:"estimated_cached_input_cost_usd"`
+	EstimatedOutputCostUSD       float64 `json:"estimated_output_cost_usd"`
+	EstimatedCostUSD             float64 `json:"estimated_cost_usd"`
+}
+
+type ReasoningSearchVerificationResponse struct {
+	NeedsAnotherIteration bool   `json:"needs_another_iteration"`
+	Recommendation        string `json:"recommendation"`
 }
 
 func GenerateReasoningSearchResponseJSONSchema() string {
@@ -136,4 +146,42 @@ func (r *ReasoningSearchResponse) SetUsedTools(usedTools []string) {
 
 func (r *ReasoningSearchResponse) SetSessionID(sessionID string) {
 	r.SessionID = sessionID
+}
+
+func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {
+	if d == nil || other == nil {
+		return
+	}
+
+	d.TotalTokens += other.TotalTokens
+	d.InputTokens += other.InputTokens
+	d.CachedInputTokens += other.CachedInputTokens
+	d.UncachedInputTokens += other.UncachedInputTokens
+	d.OutputTokens += other.OutputTokens
+	d.ReasoningTokens += other.ReasoningTokens
+	d.EstimatedInputCostUSD += other.EstimatedInputCostUSD
+	d.EstimatedCachedInputCostUSD += other.EstimatedCachedInputCostUSD
+	d.EstimatedOutputCostUSD += other.EstimatedOutputCostUSD
+	d.EstimatedCostUSD += other.EstimatedCostUSD
+	if !other.PricingConfigured {
+		d.PricingConfigured = false
+	}
+}
+
+func GenerateReasoningSearchVerificationResponseJSONSchema() string {
+	return `{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "needs_another_iteration": {
+      "type": "boolean",
+      "description": "True when the reasoning step should run one more time using the recommendation below."
+    },
+    "recommendation": {
+      "type": "string",
+      "description": "A short recommendation on how to improve the current results. Return an empty string when no extra iteration is needed."
+    }
+  },
+  "required": ["needs_another_iteration", "recommendation"]
+}`
 }

@@ -37,6 +37,36 @@ func NewOpenRouterServiceWithOptions(token string, pricing []OpenAIModelPricing,
 	}
 }
 
+func (s *OpenRouterService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) error {
+	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.providerPreferences)
+	if usageTotals.TotalTokens > 0 {
+		log.Printf("OpenRouter GetStructuredOutput total tokens: %d", usageTotals.TotalTokens)
+	}
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
+		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
+		return err
+	}
+	return nil
+}
+
+func (s *OpenRouterService) GetStructuredOutputWithDebug(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) (*ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.providerPreferences)
+	if usageTotals.TotalTokens > 0 {
+		log.Printf("OpenRouter GetStructuredOutputWithDebug total tokens: %d", usageTotals.TotalTokens)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
+		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
+		return nil, err
+	}
+	return s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals), nil
+}
+
 func (s *OpenRouterService) GetReasoningResponseWithTools(
 	model string,
 	maxTokens *int,
@@ -216,10 +246,6 @@ func (s *OpenRouterService) GetReasoningStructuredOutputWithToolsForSession(
 			return "", err
 		}
 	}
-	if s.progress != nil && effectiveProgressSessionID != "" {
-		s.progress.Complete(effectiveProgressSessionID, reasoningIterations)
-	}
-
 	return effectiveSessionID, nil
 }
 

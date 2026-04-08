@@ -107,21 +107,39 @@ func TestNewServiceFromConfigSupportsOllama(t *testing.T) {
 
 func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
+	oldVerificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
+	oldVerificationProvider := viper.GetString("llm.reasoning-search-verification-provider")
 	oldModel := viper.GetString("openai.reasoning-search-model")
 	oldEffort := viper.GetString("openai.reasoning-search-effort")
 	oldMaxTokens := viper.GetInt("openai.reasoning-search-max-output-tokens")
 	oldMaxIterations := viper.GetInt("openai.reasoning-search-max-iterations")
+	oldRerunMaxIterations := viper.GetInt("openai.reasoning-search-rerun-max-iterations")
+	oldVerificationModel := viper.GetString("openai.reasoning-search-verification-model")
+	oldVerificationEffort := viper.GetString("openai.reasoning-search-verification-effort")
+	oldVerificationMaxTokens := viper.GetInt("openai.reasoning-search-verification-max-output-tokens")
 	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-verification-enabled", oldVerificationEnabled)
+	defer viper.Set("llm.reasoning-search-verification-provider", oldVerificationProvider)
 	defer viper.Set("openai.reasoning-search-model", oldModel)
 	defer viper.Set("openai.reasoning-search-effort", oldEffort)
 	defer viper.Set("openai.reasoning-search-max-output-tokens", oldMaxTokens)
 	defer viper.Set("openai.reasoning-search-max-iterations", oldMaxIterations)
+	defer viper.Set("openai.reasoning-search-rerun-max-iterations", oldRerunMaxIterations)
+	defer viper.Set("openai.reasoning-search-verification-model", oldVerificationModel)
+	defer viper.Set("openai.reasoning-search-verification-effort", oldVerificationEffort)
+	defer viper.Set("openai.reasoning-search-verification-max-output-tokens", oldVerificationMaxTokens)
 
 	viper.Set("llm.provider", "openai")
 	viper.Set("openai.reasoning-search-model", "test-model")
 	viper.Set("openai.reasoning-search-effort", "high")
 	viper.Set("openai.reasoning-search-max-output-tokens", 1234)
 	viper.Set("openai.reasoning-search-max-iterations", 6)
+	viper.Set("openai.reasoning-search-rerun-max-iterations", 2)
+	viper.Set("llm.reasoning-search-verification-enabled", true)
+	viper.Set("llm.reasoning-search-verification-provider", "openai")
+	viper.Set("openai.reasoning-search-verification-model", "verifier-model")
+	viper.Set("openai.reasoning-search-verification-effort", "medium")
+	viper.Set("openai.reasoning-search-verification-max-output-tokens", 4321)
 
 	cfg, err := llm.ReasoningSearchConfigFromConfig()
 	if err != nil {
@@ -129,6 +147,9 @@ func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	}
 	if cfg.Model != "test-model" {
 		t.Fatalf("unexpected model: %s", cfg.Model)
+	}
+	if cfg.Provider != "openai" {
+		t.Fatalf("unexpected provider: %s", cfg.Provider)
 	}
 	if cfg.Effort != "high" {
 		t.Fatalf("unexpected effort: %s", cfg.Effort)
@@ -139,6 +160,72 @@ func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	if cfg.MaxIterations != 6 {
 		t.Fatalf("unexpected max iterations: %d", cfg.MaxIterations)
 	}
+	if cfg.RerunMaxIterations != 2 {
+		t.Fatalf("unexpected rerun max iterations: %d", cfg.RerunMaxIterations)
+	}
+	if cfg.Verification == nil {
+		t.Fatalf("expected verification config")
+	}
+	if cfg.Verification.Provider != "openai" {
+		t.Fatalf("unexpected verification provider: %s", cfg.Verification.Provider)
+	}
+	if cfg.Verification.Model != "verifier-model" {
+		t.Fatalf("unexpected verification model: %s", cfg.Verification.Model)
+	}
+	if cfg.Verification.Effort != "medium" {
+		t.Fatalf("unexpected verification effort: %s", cfg.Verification.Effort)
+	}
+	if cfg.Verification.MaxTokens != 4321 {
+		t.Fatalf("unexpected verification max tokens: %d", cfg.Verification.MaxTokens)
+	}
+}
+
+func TestReasoningSearchConfigFromConfigSupportsCrossProviderVerification(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldVerificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
+	oldVerificationProvider := viper.GetString("llm.reasoning-search-verification-provider")
+	oldModel := viper.GetString("openai.reasoning-search-model")
+	oldEffort := viper.GetString("openai.reasoning-search-effort")
+	oldVerificationModel := viper.GetString("openrouter.reasoning-search-verification-model")
+	oldVerificationEffort := viper.GetString("openrouter.reasoning-search-verification-effort")
+	oldVerificationMaxTokens := viper.GetInt("openrouter.reasoning-search-verification-max-output-tokens")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-verification-enabled", oldVerificationEnabled)
+	defer viper.Set("llm.reasoning-search-verification-provider", oldVerificationProvider)
+	defer viper.Set("openai.reasoning-search-model", oldModel)
+	defer viper.Set("openai.reasoning-search-effort", oldEffort)
+	defer viper.Set("openrouter.reasoning-search-verification-model", oldVerificationModel)
+	defer viper.Set("openrouter.reasoning-search-verification-effort", oldVerificationEffort)
+	defer viper.Set("openrouter.reasoning-search-verification-max-output-tokens", oldVerificationMaxTokens)
+
+	viper.Set("llm.provider", "openai")
+	viper.Set("llm.reasoning-search-verification-enabled", true)
+	viper.Set("llm.reasoning-search-verification-provider", "openrouter")
+	viper.Set("openai.reasoning-search-model", "test-model")
+	viper.Set("openai.reasoning-search-effort", "high")
+	viper.Set("openrouter.reasoning-search-verification-model", "openai/gpt-oss-20b")
+	viper.Set("openrouter.reasoning-search-verification-effort", "minimal")
+	viper.Set("openrouter.reasoning-search-verification-max-output-tokens", 2222)
+
+	cfg, err := llm.ReasoningSearchConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Verification == nil {
+		t.Fatalf("expected verification config")
+	}
+	if cfg.Verification.Provider != "openrouter" {
+		t.Fatalf("unexpected verification provider: %s", cfg.Verification.Provider)
+	}
+	if cfg.Verification.Model != "openai/gpt-oss-20b" {
+		t.Fatalf("unexpected verification model: %s", cfg.Verification.Model)
+	}
+	if cfg.Verification.Effort != "minimal" {
+		t.Fatalf("unexpected verification effort: %s", cfg.Verification.Effort)
+	}
+	if cfg.Verification.MaxTokens != 2222 {
+		t.Fatalf("unexpected verification max tokens: %d", cfg.Verification.MaxTokens)
+	}
 }
 
 func TestReasoningSearchConfigFromConfigUsesOpenRouterSection(t *testing.T) {
@@ -147,17 +234,20 @@ func TestReasoningSearchConfigFromConfigUsesOpenRouterSection(t *testing.T) {
 	oldEffort := viper.GetString("openrouter.reasoning-search-effort")
 	oldMaxTokens := viper.GetInt("openrouter.reasoning-search-max-output-tokens")
 	oldMaxIterations := viper.GetInt("openrouter.reasoning-search-max-iterations")
+	oldRerunMaxIterations := viper.GetInt("openrouter.reasoning-search-rerun-max-iterations")
 	defer viper.Set("llm.provider", oldProvider)
 	defer viper.Set("openrouter.reasoning-search-model", oldModel)
 	defer viper.Set("openrouter.reasoning-search-effort", oldEffort)
 	defer viper.Set("openrouter.reasoning-search-max-output-tokens", oldMaxTokens)
 	defer viper.Set("openrouter.reasoning-search-max-iterations", oldMaxIterations)
+	defer viper.Set("openrouter.reasoning-search-rerun-max-iterations", oldRerunMaxIterations)
 
 	viper.Set("llm.provider", "openrouter")
 	viper.Set("openrouter.reasoning-search-model", "openai/gpt-oss-120b")
 	viper.Set("openrouter.reasoning-search-effort", "minimal")
 	viper.Set("openrouter.reasoning-search-max-output-tokens", 2345)
 	viper.Set("openrouter.reasoning-search-max-iterations", 7)
+	viper.Set("openrouter.reasoning-search-rerun-max-iterations", 3)
 
 	cfg, err := llm.ReasoningSearchConfigFromConfig()
 	if err != nil {
@@ -165,6 +255,9 @@ func TestReasoningSearchConfigFromConfigUsesOpenRouterSection(t *testing.T) {
 	}
 	if cfg.Model != "openai/gpt-oss-120b" {
 		t.Fatalf("unexpected model: %s", cfg.Model)
+	}
+	if cfg.Provider != "openrouter" {
+		t.Fatalf("unexpected provider: %s", cfg.Provider)
 	}
 	if cfg.Effort != "minimal" {
 		t.Fatalf("unexpected effort: %s", cfg.Effort)
@@ -174,6 +267,9 @@ func TestReasoningSearchConfigFromConfigUsesOpenRouterSection(t *testing.T) {
 	}
 	if cfg.MaxIterations != 7 {
 		t.Fatalf("unexpected max iterations: %d", cfg.MaxIterations)
+	}
+	if cfg.RerunMaxIterations != 3 {
+		t.Fatalf("unexpected rerun max iterations: %d", cfg.RerunMaxIterations)
 	}
 }
 
@@ -201,6 +297,9 @@ func TestReasoningSearchConfigFromConfigUsesOllamaSection(t *testing.T) {
 	}
 	if cfg.Model != "gemma4:31b" {
 		t.Fatalf("unexpected model: %s", cfg.Model)
+	}
+	if cfg.Provider != "ollama" {
+		t.Fatalf("unexpected provider: %s", cfg.Provider)
 	}
 	if cfg.Effort != "minimal" {
 		t.Fatalf("unexpected effort: %s", cfg.Effort)

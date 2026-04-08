@@ -114,6 +114,22 @@ func (s *OllamaService) GetStructuredOutput(jsonSchema string, model string, max
 	return nil
 }
 
+func (s *OllamaService) GetStructuredOutputWithDebug(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, output interface{}) (*ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, false)
+	if usageTotals.TotalTokens > 0 {
+		log.Printf("Ollama GetStructuredOutputWithDebug total tokens: %d", usageTotals.TotalTokens)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
+		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
+		return nil, err
+	}
+	return s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals), nil
+}
+
 func (s *OllamaService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
 	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, jsonSchema, reasoningEffort, false)
 	if usageTotals.TotalTokens > 0 {
@@ -302,10 +318,6 @@ func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 			return "", err
 		}
 	}
-	if s.progress != nil && effectiveProgressSessionID != "" {
-		s.progress.Complete(effectiveProgressSessionID, reasoningIterations)
-	}
-
 	return effectiveSessionID, nil
 }
 

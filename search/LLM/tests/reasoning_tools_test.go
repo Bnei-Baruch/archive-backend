@@ -152,6 +152,21 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 
 }
 
+func TestGenerateReasoningSearchVerificationResponseJSONSchemaIncludesRequiredFields(t *testing.T) {
+	schema := llm.GenerateReasoningSearchVerificationResponseJSONSchema()
+
+	requiredSnippets := []string{
+		`"needs_another_iteration"`,
+		`"recommendation"`,
+	}
+
+	for _, snippet := range requiredSnippets {
+		if !strings.Contains(schema, snippet) {
+			t.Fatalf("expected schema to contain %s", snippet)
+		}
+	}
+}
+
 func TestPostgreSQLToolDefinitions(t *testing.T) {
 	availableBooks := llmtools.NewGetAvailableBooksTool(nil, 0).Definition()
 	if availableBooks.Name != "get_available_books" {

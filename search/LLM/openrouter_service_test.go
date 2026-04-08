@@ -316,6 +316,105 @@ func TestOpenRouterUsesConfiguredRequiredToolIterations(t *testing.T) {
 	}
 }
 
+func TestOpenRouterGetStructuredOutputWithDebugReturnsUsage(t *testing.T) {
+	service := NewOpenRouterServiceWithOptions("test-token", nil, nil, "https://openrouter.test")
+	service.providerPreferences = &ResponsesProvider{
+		Sort:              "latency",
+		RequireParameters: boolPtr(true),
+	}
+	service.OpenAIService.client = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Path != "/v1/responses" {
+				t.Fatalf("unexpected path: %s", req.URL.Path)
+			}
+
+			var payload map[string]interface{}
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if payload["text"] == nil {
+				t.Fatalf("expected text.format in request")
+			}
+			if payload["max_output_tokens"] != float64(64) {
+				t.Fatalf("unexpected max_output_tokens: %#v", payload["max_output_tokens"])
+			}
+			provider, ok := payload["provider"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("expected provider object, got %T", payload["provider"])
+			}
+			if provider["sort"] != "latency" {
+				t.Fatalf("unexpected provider sort: %#v", provider["sort"])
+			}
+			if provider["require_parameters"] != true {
+				t.Fatalf("unexpected provider require_parameters: %#v", provider["require_parameters"])
+			}
+
+			body := mustJSON(t, map[string]interface{}{
+				"id":     "resp_structured",
+				"status": "completed",
+				"output": []map[string]interface{}{
+					{
+						"type": "message",
+						"role": "assistant",
+						"content": []map[string]interface{}{
+							{
+								"type": "output_text",
+								"text": `{"answer":"done"}`,
+							},
+						},
+					},
+				},
+				"usage": map[string]interface{}{
+					"input_tokens":  10,
+					"output_tokens": 5,
+					"total_tokens":  15,
+				},
+			})
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(bytes.NewReader(body)),
+			}, nil
+		}),
+	}
+
+	schema := `{"type":"object","additionalProperties":false,"properties":{"answer":{"type":"string"}},"required":["answer"]}`
+	effort := "high"
+	maxTokens := 64
+	var output struct {
+		Answer string `json:"answer"`
+	}
+
+	debug, err := service.GetStructuredOutputWithDebug(
+		schema,
+		"moonshotai/kimi-k2.5",
+		&maxTokens,
+		[]LLMBotMessage{
+			{Role: "system", Content: "You are a search assistant."},
+			{Role: "user", Content: "מצא לי זוהר"},
+		},
+		nil,
+		&effort,
+		&output,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output.Answer != "done" {
+		t.Fatalf("unexpected answer: %s", output.Answer)
+	}
+	if debug == nil {
+		t.Fatalf("expected debug info")
+	}
+	if debug.TotalTokens != 15 {
+		t.Fatalf("unexpected total tokens: %d", debug.TotalTokens)
+	}
+	if debug.Model != "moonshotai/kimi-k2.5" {
+		t.Fatalf("unexpected model: %s", debug.Model)
+	}
+}
+
 func TestOpenRouterReasoningSessionReplaysHistory(t *testing.T) {
 	requests := []map[string]interface{}{}
 	service := NewOpenRouterServiceWithOptions("test-token", nil, NewChatReasoningSessionStore(time.Minute), "https://openrouter.test")

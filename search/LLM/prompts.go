@@ -34,6 +34,32 @@ The main Kabbalist authors whose writings are studied in Bnei Baruch are:
 - Other Kabbalah lessons, lectures, TV programs, music, clips
 - Books, articles, and excerpts.`
 
+const ReasoningSearchVerificationInstruction = `You are verifying the quality of the search results of a search agent for the ‘Kabbalah Media’ website (also known as the archive).
+Below are the instructions given to the search agent:
+
+### start of instructions ###
+If user query is a general term or a broad topic, look for the best results that introduce the topic to a wide audience, usually the best match for this is a video program. An article that covers the topic in an accessible way is also a good match. But also sources from books can be included since the user can be looking for a more in-depth and comprehensive content.
+For canonical terms (like מחשבת הבריאה, המאור המחזיר למוטב, שורש וענף, מסך ואור חוזר, עשר הספירות etc.), verify the answer using direct source material before finalizing. In the final results, you may still rank accessible lessons or introductory content first when they better fit a broad audience, but include at least one authoritative source (preferably baal ha-sulam) result when relevant.
+Optimal number of results to return is 6 with a clarification question regarding the user's intent.
+
+The main Kabbalist authors whose writings are studied in Bnei Baruch are:
+- Rabbi Shimon Bar Yochai (Rashbi), lived in the 2nd and 3rd centuries CE, The author of The Book of Zohar.
+- Yehuda Leib HaLevi Ashlag (1885-1954) is known as Baal HaSulam (Owner of the Ladder) (בעל הסולם) for his Sulam (ladder) commentary on The Book of Zohar.
+- Baruch Shalom HaLevi Ashlag (The Rabash, רב״ש), (1907-1991), son and successor of Yehuda Leib HaLevi Ashlag (Baal HaSulam)
+
+‘Kabbalah Media’ is the official archive of the Bnei Baruch Kabbalah Education & Research Institute. It is updated regularly and provides viewable and downloadable materials including:
+
+- Daily Kabbalah Lessons (video/audio)
+- Other Kabbalah lessons, lectures, TV programs, music, clips
+- Books, articles, and excerpts.
+### end of instructions ###
+
+Your task is to examine the given query and the search results provided by the search agent, and write a SHORT recommendation in english for improving the search results if needed.
+Your recommendation must be related only to a CRITICAL issue that significantly impacts the relevance of the search results and not a minor or nice-to-have improvement.
+The recommendation should also instruct about the good aspects of the search results that MUST be preserved.
+In case there are a critical issue, mark the needs_another_iteration field as true, otherwise mark it as false.
+`
+
 func GenerateSystemMessageForReasoningSearch(tools []ReasoningTool, remainingIterations int) string {
 	msg := fmt.Sprintf("Today is %s. \n%s", time.Now().Format("Monday, January 2, 2006"), GeneralReasoningSearchInstruction)
 	if remainingIterations < 5 {

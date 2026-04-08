@@ -125,6 +125,7 @@ func TestReasoningProgressStoreLifecycle(t *testing.T) {
 	store.Reserve("session-1")
 	store.Thinking("session-1", 1)
 	store.RunningTool("session-1", 1, "elasticsearch_search")
+	store.Verifying("session-1", 2)
 	store.Complete("session-1", 2)
 
 	status, err := store.Get("session-1")

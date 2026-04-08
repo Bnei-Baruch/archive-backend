@@ -30,10 +30,7 @@ var (
 	TOKENS_CACHE *search.TokensCache
 	CMS          *api.CMSParams
 	ASSETS       integration.AssetsService
-	LLM_TOOLS    *llm.ReasoningToolManager
-	LLM_SERVICE  llm.Service
-	LLM_PROGRESS *llm.ReasoningProgressStore
-	LLM_WORKFLOW *llm.ReasoningWorkflowSessionStore
+	LLM_RUNTIME  *llm.Runtime
 )
 
 func Init() time.Time {
@@ -114,7 +111,7 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		ttl := viper.GetDuration("llm.postgresql-tool-cache-ttl")
 		postgreSQLToolCacheTTL = &ttl
 	}
-	LLM_TOOLS, err = llmtools.NewAppScopedManager(llmtools.AppScopedManagerDeps{
+	tools, err := llmtools.NewAppScopedManager(llmtools.AppScopedManagerDeps{
 		DB:            DB,
 		AssetsService: ASSETS,
 		NewElasticsearchSearchEngine: func() (llmtools.ElasticsearchSearchEngine, error) {
@@ -128,23 +125,50 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		PostgreSQLToolCacheTTL: postgreSQLToolCacheTTL,
 	})
 	utils.Must(err)
-	LLM_PROGRESS = llm.NewReasoningProgressStore(llm.ReasoningSessionTTLFromConfig())
-	LLM_WORKFLOW = llm.NewReasoningWorkflowSessionStore(llm.ReasoningSessionTTLFromConfig())
-	LLM_SERVICE, err = llm.NewServiceFromConfigWithProgress(LLM_PROGRESS)
+
+	progress := llm.NewReasoningProgressStore(llm.ReasoningSessionTTLFromConfig())
+	workflow := llm.NewReasoningWorkflowSessionStore(llm.ReasoningSessionTTLFromConfig())
+	defaultProvider := llm.ProviderFromConfig()
+	verificationProvider := llm.ReasoningSearchVerificationProviderFromConfig()
+	services := map[string]llm.Service{}
+
+	services[defaultProvider], err = llm.NewServiceForProviderWithProgress(defaultProvider, progress)
 	utils.Must(err)
+	if viper.GetBool("llm.reasoning-search-verification-enabled") {
+		if _, ok := services[verificationProvider]; !ok {
+			services[verificationProvider], err = llm.NewServiceForProviderWithProgress(verificationProvider, nil)
+			utils.Must(err)
+		}
+	}
+
+	LLM_RUNTIME = &llm.Runtime{
+		Tools:    tools,
+		Progress: progress,
+		Workflow: workflow,
+		Services: services,
+	}
 
 	return clock
 }
 
 func Shutdown() {
-	if closer, ok := LLM_SERVICE.(interface{ Close() error }); ok {
-		utils.Must(closer.Close())
-	}
-	if LLM_PROGRESS != nil {
-		utils.Must(LLM_PROGRESS.Close())
-	}
-	if LLM_WORKFLOW != nil {
-		utils.Must(LLM_WORKFLOW.Close())
+	if LLM_RUNTIME != nil {
+		closed := map[llm.Service]bool{}
+		for _, service := range LLM_RUNTIME.Services {
+			if service == nil || closed[service] {
+				continue
+			}
+			if closer, ok := service.(interface{ Close() error }); ok {
+				utils.Must(closer.Close())
+			}
+			closed[service] = true
+		}
+		if LLM_RUNTIME.Progress != nil {
+			utils.Must(LLM_RUNTIME.Progress.Close())
+		}
+		if LLM_RUNTIME.Workflow != nil {
+			utils.Must(LLM_RUNTIME.Workflow.Close())
+		}
 	}
 	utils.Must(DB.Close())
 	ESC.Stop()

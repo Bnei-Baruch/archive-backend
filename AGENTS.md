@@ -27,7 +27,8 @@ Instructions for coding agents working in this repository.
 - OpenAI reasoning + tools flow uses `v1/responses` with iteration via `previous_response_id`.
 - OpenRouter also uses `v1/responses`, but continues sessions by replaying full message history instead of `previous_response_id`.
 - Ollama uses `/api/chat` with message-history replay; it does not use `tool_choice`.
-- `common.Init()` builds an app-scoped `common.LLM_SERVICE`; do not construct a new LLM service per request.
+- `common.Init()` builds one app-scoped `common.LLM_RUNTIME`; do not construct new LLM services per request.
+- `common.LLM_RUNTIME` stores the shared tool manager, progress/workflow stores, and provider services keyed by provider.
 - Tool implementations live under `search/LLM/tools/`.
 - LLM package tests live under `search/LLM/tests/`.
 
@@ -36,14 +37,16 @@ Instructions for coding agents working in this repository.
 - Register tools with `ReasoningToolManager`.
 - Pass `manager.ToolCalls()` and `manager.ToolHandlers()` into `GetReasoningResponseWithTools`.
 - App-scoped manager builder lives in `search/LLM/tools/manager.go`.
-- `common.Init()` builds the shared tool manager and exposes it as `common.LLM_TOOLS`.
+- `common.Init()` builds the shared tool manager inside `common.LLM_RUNTIME`.
 
 ## Reasoning Search
-- API endpoint: `POST /search/reasoning`.
+- API endpoints: `POST /search/reasoning/start`, `GET /search/reasoning/status`, `POST /search/reasoning`.
 - Request supports `q`, optional `deb`, optional `session_id`.
 - The API `session_id` is a workflow session id owned by the backend, not a provider-native LLM session id.
 - Response includes `session_id`, `used_tools`, token stats, and debug/cost details when `deb=true`.
-- The backend currently uses one workflow stage (`reasoning`), which stores the provider-native session id internally so future stages/providers can be added without changing the API session format.
+- The backend persists a `reasoning` workflow stage and, when enabled, a `verification` workflow stage.
+- Workflow stages own their provider/model/effort settings; handlers should execute a stage from stored workflow state, not by re-reading current config for existing sessions.
+- Verification is currently a one-shot structured call, so its stored stage metadata may have an empty provider-native session id.
 - OpenAI short-lived reasoning sessions are stored in memory only, with TTL from `openai.reasoning-session-ttl`.
 - OpenRouter and Ollama sessions also live in memory, but store full replayable conversation history via `chat_reasoning_sessions.go`.
 - If client sends a missing or expired `session_id`, the API returns an error; it does not silently start a new session.
@@ -51,10 +54,17 @@ Instructions for coding agents working in this repository.
 
 ## LLM Config
 - Provider selection uses `[llm].provider`; default is `openai`.
+- Verification enable/provider selection lives under `[llm]`:
+  - `llm.reasoning-search-verification-enabled`
+  - `llm.reasoning-search-verification-provider`
 - Reasoning search config is provider-specific:
   - `[openai]` for OpenAI
   - `[openrouter]` for OpenRouter
   - `[ollama]` for Ollama
+- Verification model settings are also provider-specific:
+  - `<provider>.reasoning-search-verification-model`
+  - `<provider>.reasoning-search-verification-effort`
+  - `<provider>.reasoning-search-verification-max-output-tokens`
 - OpenRouter supports configurable provider routing and `openrouter.enforced-tool-use-iterations` (default `1`).
 - Ollama supports `ollama.num-ctx`; `ollama.temperature` and `ollama.structured-output-prompt-schema` are optional.
 - Pricing for cost estimation is configured per provider with `[[<provider>.pricing]]`.
