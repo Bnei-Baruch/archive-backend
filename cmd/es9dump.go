@@ -22,7 +22,7 @@ var dumpCmd = &cobra.Command{
 	Use:   "es9_dump",
 	Short: "Dump all ES9 documents to a JSONL file",
 	Long: `Dump all documents from all ES9 indices (all languages, all types) to a JSONL file.
-Each line is a JSON object with ES9 metadata (es9_id, es9_index, es9_index_lang) plus all document fields.
+Each line is a JSON object with ES metadata (es_id, es_index, es_index_lang) plus all document fields.
 
 Examples:
   # Dump to default file (dump.jsonl)
@@ -219,9 +219,9 @@ func writeHits(hits []interface{}, indexName, lang string, writer *bufio.Writer)
 			source = make(map[string]interface{})
 		}
 
-		source["es9_id"] = hitMap["_id"]
-		source["es9_index"] = indexName
-		source["es9_index_lang"] = lang
+		source["es_id"] = hitMap["_id"]
+		source["es_index"] = indexName
+		source["es_index_lang"] = lang
 
 		line, err := json.Marshal(source)
 		if err != nil {
