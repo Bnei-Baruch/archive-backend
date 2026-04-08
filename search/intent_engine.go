@@ -235,9 +235,16 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 		}
 	}
 
+	if len(finalIntents) == 0 {
+		return intents, nil
+	}
+
 	beforeSecondRoundDo := time.Now()
 	mr, err = mssSecondRound.Do(context.TODO())
 	e.timeTrack(beforeSecondRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO)
+	if err != nil {
+		return intents, errors.Wrap(err, "ESEngine.AddIntents - Second round Do failed")
+	}
 	for _, r := range mr.Responses {
 		if r.Error != nil {
 			log.Warnf("ESEngine.AddIntents - Second Run %+v", r.Error)

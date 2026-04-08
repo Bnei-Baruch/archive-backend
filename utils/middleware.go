@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -46,12 +47,19 @@ func LoggerMiddleware() gin.HandlerFunc {
 	}
 }
 
+const stackTailLines = 30
+
 // Recover with error
 func RecoveryMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if rval := recover(); rval != nil {
-				debug.PrintStack()
+				stack := debug.Stack()
+				lines := strings.Split(string(stack), "\n")
+				if len(lines) > stackTailLines {
+					lines = lines[len(lines)-stackTailLines:]
+				}
+				log.Errorf("panic stack (last %d lines):\n%s", stackTailLines, strings.Join(lines, "\n"))
 				err, ok := rval.(error)
 				if !ok {
 					err = errors.Errorf("panic: %s", rval)
