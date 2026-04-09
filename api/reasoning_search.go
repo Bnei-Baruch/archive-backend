@@ -330,6 +330,21 @@ func ReasoningSearchHandler(c *gin.Context) {
 				if err != nil {
 					log.Warnf("Reasoning Search verification failed: %v", err)
 				} else {
+					// Keep a clean fallback in case verification asks for a rerun and
+					// that repair pass fails. In that case we want to return the
+					// original first-pass results, not a partially annotated response.
+					originalResponse := response
+					if response.UsedTools != nil {
+						originalResponse.UsedTools = append([]string(nil), response.UsedTools...)
+					}
+					if response.Results != nil {
+						originalResponse.Results = append([]llm.ReasoningSearchResult(nil), response.Results...)
+					}
+					if response.Debug != nil {
+						debugCopy := *response.Debug
+						originalResponse.Debug = &debugCopy
+					}
+
 					if r.Deb {
 						verificationOutput := verificationResponse
 						response.VerificationOutput = &verificationOutput
@@ -383,44 +398,17 @@ func ReasoningSearchHandler(c *gin.Context) {
 							)
 							if err != nil {
 								log.Warnf("Reasoning Search rerun after verification failed: %v", err)
-								if verificationDebug != nil {
-									response.UsedTokens += verificationDebug.TotalTokens
-									if response.Debug != nil {
-										response.Debug.VerificationModel = verificationDebug.Model
-										response.Debug.VerificationReasoningEffort = verificationDebug.ReasoningEffort
-										response.Debug.VerificationTotalTokens = verificationDebug.TotalTokens
-										response.Debug.VerificationEstimatedCostUSD = verificationDebug.EstimatedCostUSD
-										response.Debug.Add(verificationDebug)
-									}
-								}
+								response = originalResponse
 							} else {
 								reasoningStage.ProviderSessionID = resolvedProviderSessionID
 								if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStageReasoning, reasoningStage); err != nil {
 									log.Warnf("Reasoning Search failed to persist rerun session state: %v", err)
-									if verificationDebug != nil {
-										response.UsedTokens += verificationDebug.TotalTokens
-										if response.Debug != nil {
-											response.Debug.VerificationModel = verificationDebug.Model
-											response.Debug.VerificationReasoningEffort = verificationDebug.ReasoningEffort
-											response.Debug.VerificationTotalTokens = verificationDebug.TotalTokens
-											response.Debug.VerificationEstimatedCostUSD = verificationDebug.EstimatedCostUSD
-											response.Debug.Add(verificationDebug)
-										}
-									}
+									response = originalResponse
 								} else {
 									rerunResponse.SetSessionID(responseSessionID)
 									if err := enrichReasoningSearchResults(db, r.UILanguage, rerunResponse.Results); err != nil {
 										log.Warnf("Reasoning Search failed to enrich rerun results: %v", err)
-										if verificationDebug != nil {
-											response.UsedTokens += verificationDebug.TotalTokens
-											if response.Debug != nil {
-												response.Debug.VerificationModel = verificationDebug.Model
-												response.Debug.VerificationReasoningEffort = verificationDebug.ReasoningEffort
-												response.Debug.VerificationTotalTokens = verificationDebug.TotalTokens
-												response.Debug.VerificationEstimatedCostUSD = verificationDebug.EstimatedCostUSD
-												response.Debug.Add(verificationDebug)
-											}
-										}
+										response = originalResponse
 									} else {
 										rerunResponse.UsedTokens += initialUsedTokens
 										rerunResponse.ReasoningIterations += initialReasoningIterations
