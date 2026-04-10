@@ -19,7 +19,6 @@ type ReasoningSearchResult struct {
 	Title            string   `json:"title"`
 	Description      string   `json:"description"`
 	ContentType      string   `json:"content_type"`
-	Language         string   `json:"language"`
 	Date             string   `json:"date"`
 	Reason           string   `json:"reason"`
 	Highlights       []string `json:"highlights"`
@@ -88,10 +87,6 @@ func GenerateReasoningSearchResponseJSONSchema() string {
             "enum": ["units", "sources", "collections", "posts", "tweets", "tags"],
             "description": "Elasticsearch result type."
           },
-          "language": {
-            "type": "string",
-            "description": "Best available language code for the result, or empty string if unavailable."
-          },
           "reason": {
             "type": "string",
             "description": "Short description of the result and explanation of why this result was selected for the user."
@@ -111,7 +106,6 @@ func GenerateReasoningSearchResponseJSONSchema() string {
         "required": [
           "mdb_uid",
           "result_type",
-          "language",
           "reason",
           "highlights",
           "is_grouping_result"

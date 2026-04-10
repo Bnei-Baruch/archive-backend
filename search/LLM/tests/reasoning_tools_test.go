@@ -140,7 +140,6 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 		`"result_type"`,
 		`"reason"`,
 		`"highlights"`,
-		`"language"`,
 		`"is_grouping_result"`,
 	}
 
