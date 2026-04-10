@@ -105,6 +105,27 @@ func TestNewServiceFromConfigSupportsOllama(t *testing.T) {
 	}
 }
 
+func TestNewServiceFromConfigSupportsZAI(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldToken := viper.GetString("zai.token")
+	oldEndpoint := viper.GetString("zai.api-endpoint")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("zai.token", oldToken)
+	defer viper.Set("zai.api-endpoint", oldEndpoint)
+
+	viper.Set("llm.provider", "zai")
+	viper.Set("zai.token", "test-token")
+	viper.Set("zai.api-endpoint", "")
+
+	service, err := llm.NewServiceFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := service.(*llm.ZAIService); !ok {
+		t.Fatalf("unexpected service type: %T", service)
+	}
+}
+
 func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldVerificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
@@ -312,6 +333,51 @@ func TestReasoningSearchConfigFromConfigUsesOllamaSection(t *testing.T) {
 	}
 }
 
+func TestReasoningSearchConfigFromConfigUsesZAISection(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldModel := viper.GetString("zai.reasoning-search-model")
+	oldEffort := viper.GetString("zai.reasoning-search-effort")
+	oldMaxTokens := viper.GetInt("zai.reasoning-search-max-output-tokens")
+	oldMaxIterations := viper.GetInt("zai.reasoning-search-max-iterations")
+	oldRerunMaxIterations := viper.GetInt("zai.reasoning-search-rerun-max-iterations")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("zai.reasoning-search-model", oldModel)
+	defer viper.Set("zai.reasoning-search-effort", oldEffort)
+	defer viper.Set("zai.reasoning-search-max-output-tokens", oldMaxTokens)
+	defer viper.Set("zai.reasoning-search-max-iterations", oldMaxIterations)
+	defer viper.Set("zai.reasoning-search-rerun-max-iterations", oldRerunMaxIterations)
+
+	viper.Set("llm.provider", "zai")
+	viper.Set("zai.reasoning-search-model", "glm-5.1")
+	viper.Set("zai.reasoning-search-effort", "xhigh")
+	viper.Set("zai.reasoning-search-max-output-tokens", 4567)
+	viper.Set("zai.reasoning-search-max-iterations", 11)
+	viper.Set("zai.reasoning-search-rerun-max-iterations", 4)
+
+	cfg, err := llm.ReasoningSearchConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Model != "glm-5.1" {
+		t.Fatalf("unexpected model: %s", cfg.Model)
+	}
+	if cfg.Provider != "zai" {
+		t.Fatalf("unexpected provider: %s", cfg.Provider)
+	}
+	if cfg.Effort != "xhigh" {
+		t.Fatalf("unexpected effort: %s", cfg.Effort)
+	}
+	if cfg.MaxTokens != 4567 {
+		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
+	}
+	if cfg.MaxIterations != 11 {
+		t.Fatalf("unexpected max iterations: %d", cfg.MaxIterations)
+	}
+	if cfg.RerunMaxIterations != 4 {
+		t.Fatalf("unexpected rerun max iterations: %d", cfg.RerunMaxIterations)
+	}
+}
+
 func TestReasoningSearchConfigFromConfigRejectsInvalidGPTOssEffort(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldModel := viper.GetString("openai.reasoning-search-model")
@@ -371,6 +437,69 @@ func TestReasoningSearchConfigFromConfigRejectsInvalidOllamaEffort(t *testing.T)
 		t.Fatalf("expected error for invalid ollama effort")
 	}
 	if !strings.Contains(err.Error(), "supported values are minimal, low, medium, high") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestReasoningSearchConfigFromConfigRejectsInvalidZAIEffort(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldModel := viper.GetString("zai.reasoning-search-model")
+	oldEffort := viper.GetString("zai.reasoning-search-effort")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("zai.reasoning-search-model", oldModel)
+	defer viper.Set("zai.reasoning-search-effort", oldEffort)
+
+	viper.Set("llm.provider", "zai")
+	viper.Set("zai.reasoning-search-model", "glm-5.1")
+	viper.Set("zai.reasoning-search-effort", "ultra")
+
+	_, err := llm.ReasoningSearchConfigFromConfig()
+	if err == nil {
+		t.Fatalf("expected error for invalid Z.AI effort")
+	}
+	if !strings.Contains(err.Error(), "supported values are minimal, low, medium, high, xhigh") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewServiceFromConfigRejectsInvalidZAITemperature(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldToken := viper.GetString("zai.token")
+	oldTemperature := viper.Get("zai.temperature")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("zai.token", oldToken)
+	defer viper.Set("zai.temperature", oldTemperature)
+
+	viper.Set("llm.provider", "zai")
+	viper.Set("zai.token", "test-token")
+	viper.Set("zai.temperature", 1.5)
+
+	_, err := llm.NewServiceFromConfig()
+	if err == nil {
+		t.Fatalf("expected error for invalid Z.AI temperature")
+	}
+	if !strings.Contains(err.Error(), "zai.temperature must be between 0 and 1") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewServiceFromConfigRejectsInvalidZAITopP(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldToken := viper.GetString("zai.token")
+	oldTopP := viper.Get("zai.top-p")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("zai.token", oldToken)
+	defer viper.Set("zai.top-p", oldTopP)
+
+	viper.Set("llm.provider", "zai")
+	viper.Set("zai.token", "test-token")
+	viper.Set("zai.top-p", 0.0)
+
+	_, err := llm.NewServiceFromConfig()
+	if err == nil {
+		t.Fatalf("expected error for invalid Z.AI top-p")
+	}
+	if !strings.Contains(err.Error(), "zai.top-p must be > 0 and <= 1") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

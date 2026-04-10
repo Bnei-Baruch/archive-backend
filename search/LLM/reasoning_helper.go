@@ -196,6 +196,49 @@ func buildResponsesText(jsonSchema *string) (*ResponsesText, error) {
 	}, nil
 }
 
+func appendStructuredOutputInstruction(instructions string, jsonSchema *string) string {
+	if jsonSchema == nil {
+		return instructions
+	}
+
+	grounding := fmt.Sprintf(
+		"Return only valid JSON that matches this JSON Schema exactly. Do not add prose, markdown, or code fences.\nJSON Schema:\n%s",
+		*jsonSchema,
+	)
+	if strings.TrimSpace(instructions) == "" {
+		return grounding
+	}
+	return instructions + "\n\n" + grounding
+}
+
+func validateJSONRequiredTopLevelFields(content string, jsonSchema string) error {
+	var schema struct {
+		Type     string   `json:"type"`
+		Required []string `json:"required"`
+	}
+	if err := json.Unmarshal([]byte(jsonSchema), &schema); err != nil {
+		return fmt.Errorf("invalid json_schema: %v", err)
+	}
+	if schema.Type != "object" || len(schema.Required) == 0 {
+		return nil
+	}
+
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(content), &payload); err != nil {
+		return err
+	}
+	for _, field := range schema.Required {
+		value, ok := payload[field]
+		if !ok {
+			return fmt.Errorf("structured output is missing required field %q", field)
+		}
+		if strings.TrimSpace(string(value)) == "null" {
+			return fmt.Errorf("structured output field %q is null", field)
+		}
+	}
+	return nil
+}
+
 func normalizeResponseTools(tools []ToolCall) ([]map[string]interface{}, error) {
 	normalized := make([]map[string]interface{}, 0, len(tools))
 	for _, t := range tools {

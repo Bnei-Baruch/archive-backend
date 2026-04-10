@@ -1,21 +1,17 @@
 package llm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strings"
-	"time"
 )
 
 const embeddingModel = "text-embedding-3-large"
 const defaultOpenAIAPIBaseURL = "https://api.openai.com/v1"
-const defaultLLMHTTPRequestTimeout = 2 * time.Minute
 
 type OpenAIService struct {
 	token      string
@@ -119,7 +115,7 @@ type LLMBotMessage struct {
 }
 
 func (s *OpenAIService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) error {
-	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, nil)
+	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, nil, false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("OpenAI GetStructuredOutput total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -140,7 +136,7 @@ func (s *OpenAIService) GetStructuredOutput(jsonSchema string, model string, max
 }
 
 func (s *OpenAIService) GetStructuredOutputWithDebug(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) (*ReasoningSearchDebugInfo, error) {
-	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, nil)
+	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, nil, true)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("OpenAI GetStructuredOutputWithDebug total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -159,7 +155,7 @@ func (s *OpenAIService) GetStructuredOutputWithDebug(jsonSchema string, model st
 	return s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals), nil
 }
 
-func (s *OpenAIService) getStructuredOutputWithUsage(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, jsonSchema string, reasoningEffort *string, provider *ResponsesProvider) (*LLMBotMessage, OpenAIUsageTotals, error) {
+func (s *OpenAIService) getStructuredOutputWithUsage(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, jsonSchema string, reasoningEffort *string, provider *ResponsesProvider, logRawBody bool) (*LLMBotMessage, OpenAIUsageTotals, error) {
 	if reasoningEffort != nil {
 		if strings.HasPrefix(model, "gpt-oss") {
 			switch *reasoningEffort {
@@ -218,7 +214,7 @@ func (s *OpenAIService) getStructuredOutputWithUsage(model string, maxTokens *in
 	}
 
 	var responsesResp ResponsesResponse
-	if err := s.callAPI(req, s.apiBaseURL+"/responses", &responsesResp); err != nil {
+	if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/responses", &responsesResp, logRawBody); err != nil {
 		return nil, OpenAIUsageTotals{}, err
 	}
 	usageTotals := OpenAIUsageTotals{}
@@ -243,7 +239,7 @@ func (s *OpenAIService) getStructuredOutputWithUsage(model string, maxTokens *in
 }
 
 func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, promptCacheKey, frequencyPenalty, jsonSchema, reasoningEffort)
+	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, promptCacheKey, frequencyPenalty, jsonSchema, reasoningEffort, false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("OpenAI GetChatResponse total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -253,7 +249,7 @@ func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages [
 	return msg, nil
 }
 
-func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, OpenAIUsageTotals, error) {
+func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string, logRawBody bool) (*LLMBotMessage, OpenAIUsageTotals, error) {
 	if reasoningEffort != nil {
 		if strings.HasPrefix(model, "gpt-oss") {
 			switch *reasoningEffort {
@@ -297,7 +293,7 @@ func (s *OpenAIService) getChatResponseWithUsage(model string, maxTokens *int, m
 	}
 
 	var chatResp ChatResponse
-	if err := s.callAPI(req, s.apiBaseURL+"/chat/completions", &chatResp); err != nil {
+	if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, logRawBody); err != nil {
 		return nil, OpenAIUsageTotals{}, err
 	}
 	usageTotals := OpenAIUsageTotals{}
@@ -626,7 +622,7 @@ func (s *OpenAIService) getReasoningResponseWithTools(
 		}
 
 		var responsesResp ResponsesResponse
-		if err := s.callAPI(req, s.apiBaseURL+"/responses", &responsesResp); err != nil {
+		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/responses", &responsesResp, deb); err != nil {
 			return nil, "", OpenAIUsageTotals{}, 0, nil, "", err
 		}
 		iterations = i + 1
@@ -755,7 +751,7 @@ func (s *OpenAIService) GetEmbeddings(content string) ([]float64, error) {
 	}
 
 	var resp EmbeddingResponse
-	if err := s.callAPI(payload, s.apiBaseURL+"/embeddings", &resp); err != nil {
+	if err := callLLMAPI(s.client, s.token, payload, s.apiBaseURL+"/embeddings", &resp, false); err != nil {
 		return nil, err
 	}
 	totalTokens := 0
@@ -775,48 +771,4 @@ func (s *OpenAIService) GetEmbeddings(content string) ([]float64, error) {
 		}
 	}
 	return nil, errors.New("embedding response missing")
-}
-
-func (s *OpenAIService) callAPI(data interface{}, endpoint string, result interface{}) error {
-	jsonBytes, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(jsonBytes))
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(s.token) != "" {
-		req.Header.Set("Authorization", "Bearer "+s.token)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := s.client
-	if client == nil {
-		client = &http.Client{Timeout: defaultLLMHTTPRequestTimeout}
-	}
-	startedAt := time.Now()
-	log.Printf("LLM API request start endpoint=%s", endpoint)
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("LLM API request error endpoint=%s elapsed=%s err=%v", endpoint, time.Since(startedAt), err)
-		return err
-	}
-	defer resp.Body.Close()
-	log.Printf("LLM API response endpoint=%s status=%d elapsed=%s", endpoint, resp.StatusCode, time.Since(startedAt))
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %v", err)
-	}
-
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("HTTP error %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	if err := json.Unmarshal(bodyBytes, result); err != nil {
-		return fmt.Errorf("json.Unmarshal error: %v\nResponse: %s", err, string(bodyBytes))
-	}
-	return nil
 }

@@ -12,6 +12,7 @@ const (
 	ProviderOpenAI     = "openai"
 	ProviderOpenRouter = "openrouter"
 	ProviderOllama     = "ollama"
+	ProviderZAI        = "zai"
 )
 
 const (
@@ -119,6 +120,55 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("ollama.request-timeout")
 		return service, nil
+	case ProviderZAI:
+		token := viper.GetString("zai.token")
+		if strings.TrimSpace(token) == "" {
+			return nil, fmt.Errorf("zai.token is empty")
+		}
+		apiEndpoint := viper.GetString("zai.api-endpoint")
+		pricing := []OpenAIModelPricing{}
+		if err := viper.UnmarshalKey("zai.pricing", &pricing); err != nil {
+			return nil, fmt.Errorf("failed to read zai.pricing: %w", err)
+		}
+		sessionTTL := viper.GetDuration("zai.reasoning-session-ttl")
+		if sessionTTL <= 0 {
+			sessionTTL = defaultOpenAIReasoningSessionTTL
+		}
+		var doSample *bool
+		if viper.IsSet("zai.do-sample") {
+			value := viper.GetBool("zai.do-sample")
+			doSample = &value
+		}
+		var temperature *float64
+		if viper.IsSet("zai.temperature") {
+			value := viper.GetFloat64("zai.temperature")
+			if value < 0 || value > 1 {
+				return nil, fmt.Errorf("zai.temperature must be between 0 and 1")
+			}
+			temperature = &value
+		}
+		var topP *float64
+		if viper.IsSet("zai.top-p") {
+			value := viper.GetFloat64("zai.top-p")
+			if value <= 0 || value > 1 {
+				return nil, fmt.Errorf("zai.top-p must be > 0 and <= 1")
+			}
+			topP = &value
+		}
+		stop := []string{}
+		if viper.IsSet("zai.stop") {
+			for _, value := range viper.GetStringSlice("zai.stop") {
+				value = strings.TrimSpace(value)
+				if value == "" {
+					continue
+				}
+				stop = append(stop, value)
+			}
+		}
+		service := NewZAIServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint, doSample, temperature, topP, stop)
+		service.progress = progress
+		service.client.Timeout = requestTimeoutFromConfig("zai.request-timeout")
+		return service, nil
 	default:
 		return nil, fmt.Errorf("unsupported llm provider: %s", provider)
 	}
@@ -140,6 +190,12 @@ func ReasoningSessionTTLFromConfig() time.Duration {
 		return ttl
 	case ProviderOllama:
 		ttl := viper.GetDuration("ollama.reasoning-session-ttl")
+		if ttl <= 0 {
+			return defaultOpenAIReasoningSessionTTL
+		}
+		return ttl
+	case ProviderZAI:
+		ttl := viper.GetDuration("zai.reasoning-session-ttl")
 		if ttl <= 0 {
 			return defaultOpenAIReasoningSessionTTL
 		}
@@ -328,6 +384,60 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			RerunMaxIterations: rerunMaxIterations,
 			Verification:       verification,
 		}, nil
+	case ProviderZAI:
+		model := viper.GetString("zai.reasoning-search-model")
+		if model == "" {
+			model = viper.GetString("zai.reasoning-model")
+		}
+		if model == "" {
+			model = "glm-5.1"
+		}
+
+		effort := viper.GetString("zai.reasoning-search-effort")
+		if effort == "" {
+			effort = viper.GetString("zai.reasoning-effort")
+		}
+		if effort == "" {
+			effort = defaultReasoningSearchEffort
+		}
+		switch effort {
+		case "minimal", "low", "medium", "high", "xhigh":
+		default:
+			return nil, fmt.Errorf("reasoning effort %q is not supported for Z.AI models; supported values are minimal, low, medium, high, xhigh", effort)
+		}
+
+		maxTokens := viper.GetInt("zai.reasoning-search-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+
+		maxIterations := viper.GetInt("zai.reasoning-search-max-iterations")
+		if maxIterations <= 0 {
+			maxIterations = defaultReasoningSearchMaxIterations
+		}
+		rerunMaxIterations := viper.GetInt("zai.reasoning-search-rerun-max-iterations")
+		if rerunMaxIterations <= 0 {
+			rerunMaxIterations = defaultReasoningSearchRerunMaxIters
+		}
+
+		var verification *ReasoningSearchVerificationConfig
+		if verificationEnabled {
+			var err error
+			verification, err = reasoningSearchVerificationConfigFromProvider(verificationProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return &ReasoningSearchConfig{
+			Provider:           provider,
+			Model:              model,
+			Effort:             effort,
+			MaxTokens:          maxTokens,
+			MaxIterations:      maxIterations,
+			RerunMaxIterations: rerunMaxIterations,
+			Verification:       verification,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported llm provider: %s", provider)
 	}
@@ -416,6 +526,30 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			return nil, fmt.Errorf("reasoning effort %q is not supported for Ollama models; supported values are minimal, low, medium, high", effort)
 		}
 		maxTokens := viper.GetInt("ollama.reasoning-search-verification-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+		return &ReasoningSearchVerificationConfig{
+			Provider:  provider,
+			Model:     model,
+			Effort:    effort,
+			MaxTokens: maxTokens,
+		}, nil
+	case ProviderZAI:
+		model := strings.TrimSpace(viper.GetString("zai.reasoning-search-verification-model"))
+		if model == "" {
+			return nil, fmt.Errorf("zai.reasoning-search-verification-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("zai.reasoning-search-verification-effort"))
+		if effort == "" {
+			effort = defaultEffort
+		}
+		switch effort {
+		case "minimal", "low", "medium", "high", "xhigh":
+		default:
+			return nil, fmt.Errorf("reasoning effort %q is not supported for Z.AI models; supported values are minimal, low, medium, high, xhigh", effort)
+		}
+		maxTokens := viper.GetInt("zai.reasoning-search-verification-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultReasoningSearchMaxTokens
 		}

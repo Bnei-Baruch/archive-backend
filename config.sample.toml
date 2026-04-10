@@ -56,10 +56,10 @@ url_template="https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2
 refresh-search-stats="5m"
 
 [llm]
-provider="openai" # "openai", "openrouter", "ollama"
+provider="openai" # "openai", "openrouter", "ollama", "zai"
 postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache
 reasoning-search-verification-enabled=false
-reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama"; defaults to llm.provider when empty
+reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "zai"; defaults to llm.provider when empty
 
 [openai]
 token="sk-..."
@@ -157,3 +157,33 @@ structured-output-prompt-schema=false # when true, also embed the JSON schema an
 # model="gemma4:31b"
 # input_per_1m_tokens_usd=0
 # output_per_1m_tokens_usd=0
+
+[zai]
+token="zai-..."
+api-endpoint="" # optional; defaults to https://api.z.ai/api/paas/v4 and also accepts a full /chat/completions URL
+do-sample=false # lower variance; good default for search/ranking consistency
+# temperature=0.1 # supported range is 0..1; lower is usually more stable
+# top-p=0.8 # supported range is >0..1; usually tune this instead of temperature, not both
+# stop=["</json>"] # optional stop sequences from the provider API
+reasoning-search-model="glm-5.1"
+reasoning-search-effort="high" # "minimal", "low", "medium", "high", "xhigh"; non-minimal values map to Z.AI thinking enabled
+reasoning-search-max-output-tokens=8000
+reasoning-search-max-iterations=20
+reasoning-search-rerun-max-iterations=2 # post-verification reasoning rerun
+# reasoning-search-verification-model="glm-5.1"
+# reasoning-search-verification-effort="low"
+# reasoning-search-verification-max-output-tokens=2000
+reasoning-session-ttl="30m"
+request-timeout="2m"
+
+[[zai.pricing]]
+model="glm-5"
+input_per_1m_tokens_usd=1.00
+cached_input_per_1m_tokens_usd=0.20
+output_per_1m_tokens_usd=3.20
+
+[[zai.pricing]]
+model="glm-5.1"
+input_per_1m_tokens_usd=1.00
+cached_input_per_1m_tokens_usd=0.20
+output_per_1m_tokens_usd=3.20

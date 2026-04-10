@@ -99,7 +99,7 @@ func NewOllamaServiceWithOptions(token string, pricing []OpenAIModelPricing, ses
 }
 
 func (s *OllamaService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, output interface{}) error {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, false)
+	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, false, false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("Ollama GetStructuredOutput total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -115,7 +115,7 @@ func (s *OllamaService) GetStructuredOutput(jsonSchema string, model string, max
 }
 
 func (s *OllamaService) GetStructuredOutputWithDebug(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, output interface{}) (*ReasoningSearchDebugInfo, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, false)
+	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, false, true)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("Ollama GetStructuredOutputWithDebug total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -131,7 +131,7 @@ func (s *OllamaService) GetStructuredOutputWithDebug(jsonSchema string, model st
 }
 
 func (s *OllamaService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, jsonSchema, reasoningEffort, false)
+	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, jsonSchema, reasoningEffort, false, false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("Ollama GetChatResponse total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -355,6 +355,7 @@ func (s *OllamaService) getChatResponseWithUsage(
 	jsonSchema *string,
 	reasoningEffort *string,
 	deb bool,
+	logRawBody bool,
 ) (*LLMBotMessage, OpenAIUsageTotals, error) {
 	usageTotals := OpenAIUsageTotals{}
 	ollamaMessages, err := buildInitialOllamaMessages(messages, jsonSchema, s.structuredOutputPromptSchema)
@@ -372,7 +373,7 @@ func (s *OllamaService) getChatResponseWithUsage(
 
 	req := s.newChatRequest(model, maxTokens, ollamaMessages, nil, format, think)
 	var resp OllamaChatResponse
-	if err := s.callAPI(req, s.apiBaseURL+"/api/chat", &resp); err != nil {
+	if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/api/chat", &resp, logRawBody); err != nil {
 		return nil, usageTotals, err
 	}
 	usageTotals = resp.usageTotals()
@@ -460,7 +461,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 		req := s.newChatRequest(model, maxTokens, ollamaMessages, tools, format, think)
 
 		var resp OllamaChatResponse
-		if err := s.callAPI(req, s.apiBaseURL+"/api/chat", &resp); err != nil {
+		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/api/chat", &resp, deb); err != nil {
 			return nil, "", OpenAIUsageTotals{}, 0, nil, err
 		}
 		iterations = i + 1

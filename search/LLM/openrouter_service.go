@@ -38,7 +38,7 @@ func NewOpenRouterServiceWithOptions(token string, pricing []OpenAIModelPricing,
 }
 
 func (s *OpenRouterService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) error {
-	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.providerPreferences)
+	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.providerPreferences, false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("OpenRouter GetStructuredOutput total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -53,7 +53,7 @@ func (s *OpenRouterService) GetStructuredOutput(jsonSchema string, model string,
 }
 
 func (s *OpenRouterService) GetStructuredOutputWithDebug(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) (*ReasoningSearchDebugInfo, error) {
-	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.providerPreferences)
+	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.providerPreferences, true)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("OpenRouter GetStructuredOutputWithDebug total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -369,7 +369,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 		}
 
 		var responsesResp ResponsesResponse
-		if err := s.callAPI(req, s.apiBaseURL+"/responses", &responsesResp); err != nil {
+		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/responses", &responsesResp, deb); err != nil {
 			return nil, "", OpenAIUsageTotals{}, 0, nil, "", err
 		}
 		iterations = i + 1
