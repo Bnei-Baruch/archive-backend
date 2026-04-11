@@ -604,6 +604,7 @@ func (t *GetAvailableBooksTool) Execute(ctx context.Context, arguments json.RawM
 	}
 	if cached, ok := t.cache.get("get_available_books"); ok {
 		llm.LogIfDeb(ctx, "get_available_books: cache hit")
+		llm.LogIfDeb(ctx, "get_available_books: output=%s", cached)
 		return cached, nil
 	}
 
@@ -673,6 +674,7 @@ func (t *GetAvailableBooksTool) Execute(ctx context.Context, arguments json.RawM
 		t.cache.set("get_available_books", result)
 	}
 	llm.LogIfDeb(ctx, "get_available_books: returning count=%d", len(items))
+	llm.LogIfDeb(ctx, "get_available_books: output=%s", result)
 	return result, nil
 }
 
