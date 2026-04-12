@@ -10,7 +10,7 @@ type OpenAIModelPricing struct {
 	OutputPer1MTokensUSD      float64 `mapstructure:"output_per_1m_tokens_usd"`
 }
 
-type OpenAIUsageTotals struct {
+type LLMUsageTotals struct {
 	InputTokens       int
 	CachedInputTokens int
 	OutputTokens      int
@@ -29,7 +29,7 @@ type OpenAICostBreakdown struct {
 	EstimatedCostUSD            float64
 }
 
-func (u *OpenAIUsageTotals) Add(usage *OpenAIUsage) {
+func (u *LLMUsageTotals) Add(usage *OpenAIUsage) {
 	if usage == nil {
 		return
 	}
@@ -46,7 +46,7 @@ func (u *OpenAIUsageTotals) Add(usage *OpenAIUsage) {
 	}
 }
 
-func (u OpenAIUsageTotals) UncachedInputTokens() int {
+func (u LLMUsageTotals) UncachedInputTokens() int {
 	uncached := u.InputTokens - u.CachedInputTokens
 	if uncached < 0 {
 		return 0
@@ -54,7 +54,7 @@ func (u OpenAIUsageTotals) UncachedInputTokens() int {
 	return uncached
 }
 
-func (s *OpenAIService) estimateCost(model string, effort string, usage OpenAIUsageTotals) OpenAICostBreakdown {
+func (s *OpenAIService) estimateCost(model string, effort string, usage LLMUsageTotals) OpenAICostBreakdown {
 	pricing, ok := s.findPricing(model, effort)
 	if !ok {
 		return OpenAICostBreakdown{}

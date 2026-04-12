@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+const ResponsesAPIEmptyAssistantOutputError = "responses API returned empty assistant output"
+
 type ResponsesRequest struct {
 	Model              string                   `json:"model"`
 	Input              []interface{}            `json:"input,omitempty"`

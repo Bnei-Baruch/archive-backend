@@ -392,8 +392,8 @@ func (s *ZAIService) Close() error {
 	return s.sessions.Close()
 }
 
-func (s *ZAIService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, jsonSchema *string, reasoningEffort *string, logRawBody bool) (*LLMBotMessage, OpenAIUsageTotals, error) {
-	usageTotals := OpenAIUsageTotals{}
+func (s *ZAIService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, jsonSchema *string, reasoningEffort *string, logRawBody bool) (*LLMBotMessage, LLMUsageTotals, error) {
+	usageTotals := LLMUsageTotals{}
 	normalizedMessages, err := normalizeZAIMessages(messages)
 	if err != nil {
 		return nil, usageTotals, err
@@ -449,8 +449,8 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 	progressSessionID string,
-) (*LLMBotMessage, string, OpenAIUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
-	usageTotals := OpenAIUsageTotals{}
+) (*LLMBotMessage, string, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
+	usageTotals := LLMUsageTotals{}
 	iterations := 0
 	usedTools := []string{}
 	usedToolsSet := map[string]bool{}
@@ -480,10 +480,10 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	reasoningSummaries := []string{}
 
 	if len(tools) == 0 {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
+		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
 	}
 	if len(toolHandlers) == 0 {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
+		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
 	}
 	if maxIterations <= 0 {
 		maxIterations = 8
@@ -491,7 +491,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 	normalizedMessages, err := normalizeZAIMessages(messages)
 	if err != nil {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
+		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 	}
 	if jsonSchema != nil {
 		// Same grounding as the one-shot path. Without this, glm-5.1 often
@@ -500,7 +500,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	}
 	thinking, err := zaiThinkingValue(reasoningEffort)
 	if err != nil {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
+		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 	}
 	responseFormat := zaiResponseFormat(jsonSchema)
 	toolChoice := "auto"
@@ -528,14 +528,14 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 		var chatResp ZAIChatResponse
 		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
-			return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
+			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
 		usageTotals.Add(chatResp.Usage)
 
 		message, err := firstZAIChoice(&chatResp)
 		if err != nil {
-			return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
+			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 		}
 		if strings.TrimSpace(message.ReasoningContent) != "" {
 			summary := strings.TrimSpace(message.ReasoningContent)
@@ -547,7 +547,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 		if len(message.ToolCalls) == 0 {
 			if strings.TrimSpace(message.Content) == "" {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("zai chat returned empty assistant output")
+				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("zai chat returned empty assistant output")
 			}
 			return &LLMBotMessage{
 				Role:    "assistant",
@@ -557,14 +557,14 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 		assistantMessage, err := zaiAssistantMessage(message)
 		if err != nil {
-			return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
+			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 		}
 		normalizedMessages = append(normalizedMessages, *assistantMessage)
 
 		toolCallLogs := []string{}
 		for _, toolCall := range message.ToolCalls {
 			if toolCall.Function.Name == "" {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("zai tool call is missing function name")
+				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("zai tool call is missing function name")
 			}
 			if !usedToolsSet[toolCall.Function.Name] {
 				usedTools = append(usedTools, toolCall.Function.Name)
@@ -573,7 +573,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 			handler, ok := toolHandlers[toolCall.Function.Name]
 			if !ok {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Function.Name)
+				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Function.Name)
 			}
 
 			rawArgs := toolCall.Function.Arguments.Raw
@@ -589,7 +589,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 			}
 			result, err := handler(reasoningCtx, rawArgs)
 			if err != nil {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Function.Name, err)
+				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Function.Name, err)
 			}
 
 			normalizedMessages = append(normalizedMessages, LLMBotMessage{
@@ -604,7 +604,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 		}
 	}
 
-	return nil, "", OpenAIUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
+	return nil, "", LLMUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
 }
 
 func normalizeZAIMessages(messages []LLMBotMessage) ([]LLMBotMessage, error) {

@@ -372,8 +372,8 @@ func (s *OllamaService) getChatResponseWithUsage(
 	reasoningEffort *string,
 	deb bool,
 	logRawBody bool,
-) (*LLMBotMessage, OpenAIUsageTotals, error) {
-	usageTotals := OpenAIUsageTotals{}
+) (*LLMBotMessage, LLMUsageTotals, error) {
+	usageTotals := LLMUsageTotals{}
 	ollamaMessages, err := buildInitialOllamaMessages(messages, jsonSchema, s.structuredOutputPromptSchema)
 	if err != nil {
 		return nil, usageTotals, err
@@ -416,8 +416,8 @@ func (s *OllamaService) getReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 	progressSessionID string,
-) (*LLMBotMessage, string, OpenAIUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
-	usageTotals := OpenAIUsageTotals{}
+) (*LLMBotMessage, string, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
+	usageTotals := LLMUsageTotals{}
 	iterations := 0
 	usedTools := []string{}
 	usedToolsSet := map[string]bool{}
@@ -447,10 +447,10 @@ func (s *OllamaService) getReasoningResponseWithTools(
 	reasoningSummaries := []string{}
 
 	if len(tools) == 0 {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
+		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
 	}
 	if len(toolHandlers) == 0 {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
+		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
 	}
 	if maxIterations <= 0 {
 		maxIterations = 8
@@ -458,15 +458,15 @@ func (s *OllamaService) getReasoningResponseWithTools(
 
 	ollamaMessages, err := buildInitialOllamaMessages(messages, jsonSchema, s.structuredOutputPromptSchema)
 	if err != nil {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
+		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 	}
 	format, err := buildOllamaFormat(jsonSchema)
 	if err != nil {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
+		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 	}
 	think, err := ollamaThinkValue(reasoningEffort, deb)
 	if err != nil {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
+		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 	}
 	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(context.Background(), deb))
 
@@ -478,7 +478,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 
 		var resp OllamaChatResponse
 		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/api/chat", &resp, deb); err != nil {
-			return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
+			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
 		usageTotals.Add(resp.usage())
@@ -490,7 +490,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 
 		if len(resp.Message.ToolCalls) == 0 {
 			if strings.TrimSpace(resp.Message.Content) == "" {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("ollama chat returned empty assistant output")
+				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("ollama chat returned empty assistant output")
 			}
 			return &LLMBotMessage{
 				Role:    "assistant",
@@ -502,7 +502,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 		toolCallLogs := []string{}
 		for _, toolCall := range resp.Message.ToolCalls {
 			if toolCall.Function.Name == "" {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("ollama tool call is missing function name")
+				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("ollama tool call is missing function name")
 			}
 			if !usedToolsSet[toolCall.Function.Name] {
 				usedTools = append(usedTools, toolCall.Function.Name)
@@ -511,12 +511,12 @@ func (s *OllamaService) getReasoningResponseWithTools(
 
 			handler, ok := toolHandlers[toolCall.Function.Name]
 			if !ok {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Function.Name)
+				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Function.Name)
 			}
 
 			rawArgs, err := json.Marshal(toolCall.Function.Arguments)
 			if err != nil {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, fmt.Errorf("failed to encode arguments for tool '%s': %w", toolCall.Function.Name, err)
+				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("failed to encode arguments for tool '%s': %w", toolCall.Function.Name, err)
 			}
 			if len(rawArgs) == 0 {
 				rawArgs = json.RawMessage("{}")
@@ -530,7 +530,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 			}
 			result, err := handler(reasoningCtx, rawArgs)
 			if err != nil {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Function.Name, err)
+				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Function.Name, err)
 			}
 
 			ollamaMessages = append(ollamaMessages, OllamaMessage{
@@ -545,7 +545,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 		}
 	}
 
-	return nil, "", OpenAIUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
+	return nil, "", LLMUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
 }
 
 func (s *OllamaService) newChatRequest(model string, maxTokens *int, messages []OllamaMessage, tools []ToolCall, format interface{}, think interface{}) OllamaChatRequest {
@@ -603,8 +603,8 @@ func (r *OllamaChatResponse) usage() *OpenAIUsage {
 	}
 }
 
-func (r *OllamaChatResponse) usageTotals() OpenAIUsageTotals {
-	totals := OpenAIUsageTotals{}
+func (r *OllamaChatResponse) usageTotals() LLMUsageTotals {
+	totals := LLMUsageTotals{}
 	totals.Add(r.usage())
 	return totals
 }

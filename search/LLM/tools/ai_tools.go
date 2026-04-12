@@ -606,18 +606,34 @@ func selectAIQueryBatch(ctx context.Context, service llm.Service, config *llm.AI
 		{Role: "user", Content: prompt},
 	}
 	if debugMode {
-		response := &aiQueryChunkSelectionWithReasons{}
-		debug, err := service.GetStructuredOutputWithDebugInfo(schema, config.Model, &config.MaxTokens, messages, nil, &config.Effort, true, response)
+		run := func() ([]aiQuerySelectedChunk, *llm.ReasoningSearchDebugInfo, error) {
+			response := &aiQueryChunkSelectionWithReasons{}
+			debug, err := service.GetStructuredOutputWithDebugInfo(schema, config.Model, &config.MaxTokens, messages, nil, &config.Effort, true, response)
+			return aiQuerySelectedChunksFromReasons(response), debug, err
+		}
+		selected, debug, err := run()
+		if aiQueryShouldRetrySelection(err) {
+			llm.LogIfDeb(ctx, "ai_query_selector: retrying once after empty assistant output model=%q debug=%t", config.Model, debugMode)
+			selected, debug, err = run()
+		}
 		llm.AddToolDebugInfo(ctx, debug)
-		return aiQuerySelectedChunksFromReasons(response), debug, err
+		return selected, debug, err
 	}
-	response := &aiQueryChunkSelection{}
-	debug, err := service.GetStructuredOutputWithDebugInfo(schema, config.Model, &config.MaxTokens, messages, nil, &config.Effort, false, response)
+	run := func() ([]aiQuerySelectedChunk, *llm.ReasoningSearchDebugInfo, error) {
+		response := &aiQueryChunkSelection{}
+		debug, err := service.GetStructuredOutputWithDebugInfo(schema, config.Model, &config.MaxTokens, messages, nil, &config.Effort, false, response)
+		return aiQuerySelectedChunksFromPlain(response), debug, err
+	}
+	selected, debug, err := run()
+	if aiQueryShouldRetrySelection(err) {
+		llm.LogIfDeb(ctx, "ai_query_selector: retrying once after empty assistant output model=%q debug=%t", config.Model, debugMode)
+		selected, debug, err = run()
+	}
 	if err != nil {
 		return nil, nil, err
 	}
 	llm.AddToolDebugInfo(ctx, debug)
-	return aiQuerySelectedChunksFromPlain(response), debug, nil
+	return selected, debug, nil
 }
 
 func loadSourceDocumentEntry(tool *aiSourceDocumentLoader, sourceID string, language string) (*aiQueryDocumentCacheEntry, error) {
@@ -1270,6 +1286,10 @@ func aiQuerySelectedChunksFromReasons(response *aiQueryChunkSelectionWithReasons
 
 func aiQueryToolErrorOutput(toolName string, err error) string {
 	return fmt.Sprintf("%s: semantic retrieval could not be completed: %v. Continue with other tools or approaches.", toolName, err)
+}
+
+func aiQueryShouldRetrySelection(err error) bool {
+	return err != nil && strings.Contains(err.Error(), llm.ResponsesAPIEmptyAssistantOutputError)
 }
 
 func minAIQueryInt(a int, b int) int {
