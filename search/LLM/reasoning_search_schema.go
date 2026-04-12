@@ -86,7 +86,7 @@ func GenerateReasoningSearchResponseJSONSchema() string {
     },
     "summary": {
       "type": "string",
-      "description": "A short explanation of the best results found for the user. Include caveats, clarification requests, or follow-up guidance here when needed."
+      "description": "A short explanation of the best results found for the user. Include clarification requests, or follow-up guidance here when needed."
     },
     "reasoning_summary": {
       "type": "string",
