@@ -37,14 +37,14 @@ func TestReasoningToolManagerRegisterDuplicate(t *testing.T) {
 	}
 
 	err = manager.Register(&fakeReasoningTool{
-		definition: llm.ReasoningToolDefinition{Name: "source_lookup"},
+		definition: llm.ReasoningToolDefinition{Name: "fake_lookup"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error registering first tool: %v", err)
 	}
 
 	err = manager.Register(&fakeReasoningTool{
-		definition: llm.ReasoningToolDefinition{Name: "source_lookup"},
+		definition: llm.ReasoningToolDefinition{Name: "fake_lookup"},
 	})
 	if err == nil {
 		t.Fatalf("expected duplicate tool registration error")
@@ -55,13 +55,13 @@ func TestReasoningToolManagerGeneratesToolCallsAndHandlers(t *testing.T) {
 	manager, err := llm.NewReasoningToolManager(
 		&fakeReasoningTool{
 			definition: llm.ReasoningToolDefinition{
-				Name:        "source_lookup",
+				Name:        "fake_lookup",
 				Description: "Lookup source text",
 				Parameters: map[string]interface{}{
 					"type": "object",
 				},
 			},
-			usageExplanation: "Tool: source_lookup",
+			usageExplanation: "Tool: fake_lookup",
 		},
 	)
 	if err != nil {
@@ -77,9 +77,9 @@ func TestReasoningToolManagerGeneratesToolCallsAndHandlers(t *testing.T) {
 	}
 
 	handlers := manager.ToolHandlers()
-	handler, ok := handlers["source_lookup"]
+	handler, ok := handlers["fake_lookup"]
 	if !ok {
-		t.Fatalf("missing handler for source_lookup")
+		t.Fatalf("missing handler for fake_lookup")
 	}
 	result, err := handler(context.Background(), json.RawMessage(`{"source_id":"abc123"}`))
 	if err != nil {
@@ -246,10 +246,15 @@ func TestElasticsearchSearchToolDefinition(t *testing.T) {
 	}
 }
 
-func TestSourceLookupToolDefinitionIncludesChunkArguments(t *testing.T) {
-	sourceLookup := llmtools.NewSourceLookupTool(nil, nil).Definition()
-	if sourceLookup.Name != "source_lookup" {
-		t.Fatalf("unexpected source_lookup tool name: %s", sourceLookup.Name)
+func TestQuerySourceAIToolDefinitionIncludesQueryArguments(t *testing.T) {
+	sourceLookup := llmtools.NewQuerySourceAITool(nil, &fakeLLMService{}, &llm.AIToolsConfig{
+		Provider:  "openai",
+		Model:     "test-model",
+		Effort:    "low",
+		MaxTokens: 256,
+	}).Definition()
+	if sourceLookup.Name != "query_source_ai" {
+		t.Fatalf("unexpected query_source_ai tool name: %s", sourceLookup.Name)
 	}
 
 	parameters, ok := sourceLookup.Parameters.(map[string]interface{})
@@ -261,14 +266,14 @@ func TestSourceLookupToolDefinitionIncludesChunkArguments(t *testing.T) {
 		t.Fatalf("expected map properties, got %T", parameters["properties"])
 	}
 
-	for _, property := range []string{"query", "chunk_number"} {
+	for _, property := range []string{"query", "max_chunks"} {
 		if _, ok := properties[property]; !ok {
-			t.Fatalf("expected source_lookup to define %q", property)
+			t.Fatalf("expected query_source_ai to define %q", property)
 		}
 	}
-	for _, property := range []string{"neighbor_chunks", "max_chunks"} {
+	for _, property := range []string{"neighbor_chunks", "chunk_number"} {
 		if _, ok := properties[property]; ok {
-			t.Fatalf("did not expect source_lookup to define %q", property)
+			t.Fatalf("did not expect query_source_ai to define %q", property)
 		}
 	}
 }
@@ -285,10 +290,51 @@ func (s *fakeAssetsService) Prepare(uids []string) (bool, map[string]int, error)
 
 var _ integration.AssetsService = (*fakeAssetsService)(nil)
 
+type fakeLLMService struct{}
+
+func (s *fakeLLMService) GetStructuredOutput(string, string, *int, []llm.LLMBotMessage, *string, *string, interface{}) error {
+	return nil
+}
+
+func (s *fakeLLMService) GetStructuredOutputWithDebugInfo(string, string, *int, []llm.LLMBotMessage, *string, *string, bool, interface{}) (*llm.ReasoningSearchDebugInfo, error) {
+	return nil, nil
+}
+
+func (s *fakeLLMService) GetChatResponse(string, *int, []llm.LLMBotMessage, *string, *float64, *string, *string) (*llm.LLMBotMessage, error) {
+	return nil, nil
+}
+
+func (s *fakeLLMService) GetReasoningResponseWithTools(string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int) (*llm.LLMBotMessage, error) {
+	return nil, nil
+}
+
+func (s *fakeLLMService) GetReasoningStructuredOutputWithTools(string, string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int, interface{}) error {
+	return nil
+}
+
+func (s *fakeLLMService) GetReasoningStructuredOutputWithToolsForSession(*string, *string, string, string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int, interface{}) (string, error) {
+	return "", nil
+}
+
+func (s *fakeLLMService) ReserveReasoningSession(string, *string) (string, error) {
+	return "", nil
+}
+
+func (s *fakeLLMService) GetEmbeddings(string) ([]float64, error) {
+	return nil, nil
+}
+
 func TestNewAppScopedManager(t *testing.T) {
 	manager, err := llmtools.NewAppScopedManager(llmtools.AppScopedManagerDeps{
-		DB:            &sql.DB{},
-		AssetsService: &fakeAssetsService{},
+		DB:             &sql.DB{},
+		AssetsService:  &fakeAssetsService{},
+		AIQueryService: &fakeLLMService{},
+		AIQueryConfig: &llm.AIToolsConfig{
+			Provider:  "openai",
+			Model:     "test-model",
+			Effort:    "low",
+			MaxTokens: 256,
+		},
 		NewElasticsearchSearchEngine: func() (llmtools.ElasticsearchSearchEngine, error) {
 			return &fakeElasticsearchSearchEngine{}, nil
 		},
@@ -303,8 +349,8 @@ func TestNewAppScopedManager(t *testing.T) {
 	}
 
 	expected := []string{
-		"source_lookup",
-		"transcript_lookup",
+		"query_source_ai",
+		"query_transcript_ai",
 		"get_available_books",
 		"get_sources_by_author",
 		"get_sources_by_source",
@@ -331,7 +377,14 @@ func TestNewAppScopedManagerRejectsMissingDeps(t *testing.T) {
 		{
 			name: "missing db",
 			deps: llmtools.AppScopedManagerDeps{
-				AssetsService: &fakeAssetsService{},
+				AssetsService:  &fakeAssetsService{},
+				AIQueryService: &fakeLLMService{},
+				AIQueryConfig: &llm.AIToolsConfig{
+					Provider:  "openai",
+					Model:     "test-model",
+					Effort:    "low",
+					MaxTokens: 256,
+				},
 				NewElasticsearchSearchEngine: func() (llmtools.ElasticsearchSearchEngine, error) {
 					return &fakeElasticsearchSearchEngine{}, nil
 				},
@@ -341,7 +394,14 @@ func TestNewAppScopedManagerRejectsMissingDeps(t *testing.T) {
 		{
 			name: "missing assets service",
 			deps: llmtools.AppScopedManagerDeps{
-				DB: &sql.DB{},
+				DB:             &sql.DB{},
+				AIQueryService: &fakeLLMService{},
+				AIQueryConfig: &llm.AIToolsConfig{
+					Provider:  "openai",
+					Model:     "test-model",
+					Effort:    "low",
+					MaxTokens: 256,
+				},
 				NewElasticsearchSearchEngine: func() (llmtools.ElasticsearchSearchEngine, error) {
 					return &fakeElasticsearchSearchEngine{}, nil
 				},
@@ -351,10 +411,46 @@ func TestNewAppScopedManagerRejectsMissingDeps(t *testing.T) {
 		{
 			name: "missing engine factory",
 			deps: llmtools.AppScopedManagerDeps{
-				DB:            &sql.DB{},
-				AssetsService: &fakeAssetsService{},
+				DB:             &sql.DB{},
+				AssetsService:  &fakeAssetsService{},
+				AIQueryService: &fakeLLMService{},
+				AIQueryConfig: &llm.AIToolsConfig{
+					Provider:  "openai",
+					Model:     "test-model",
+					Effort:    "low",
+					MaxTokens: 256,
+				},
 			},
 			want: "engine factory is nil",
+		},
+		{
+			name: "missing ai service",
+			deps: llmtools.AppScopedManagerDeps{
+				DB:            &sql.DB{},
+				AssetsService: &fakeAssetsService{},
+				AIQueryConfig: &llm.AIToolsConfig{
+					Provider:  "openai",
+					Model:     "test-model",
+					Effort:    "low",
+					MaxTokens: 256,
+				},
+				NewElasticsearchSearchEngine: func() (llmtools.ElasticsearchSearchEngine, error) {
+					return &fakeElasticsearchSearchEngine{}, nil
+				},
+			},
+			want: "ai query service is nil",
+		},
+		{
+			name: "missing ai config",
+			deps: llmtools.AppScopedManagerDeps{
+				DB:             &sql.DB{},
+				AssetsService:  &fakeAssetsService{},
+				AIQueryService: &fakeLLMService{},
+				NewElasticsearchSearchEngine: func() (llmtools.ElasticsearchSearchEngine, error) {
+					return &fakeElasticsearchSearchEngine{}, nil
+				},
+			},
+			want: "ai query config is nil",
 		},
 	}
 

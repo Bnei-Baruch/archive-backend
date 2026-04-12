@@ -245,7 +245,7 @@ func TestZAIGetStructuredOutputWithDebugUsesJSONMode(t *testing.T) {
 	effort := "low"
 	maxTokens := 128
 	output := ReasoningSearchVerificationResponse{}
-	debug, err := service.GetStructuredOutputWithDebug(
+	debug, err := service.GetStructuredOutputWithDebugInfo(
 		GenerateReasoningSearchVerificationResponseJSONSchema(),
 		"glm-5.1",
 		&maxTokens,
@@ -255,6 +255,7 @@ func TestZAIGetStructuredOutputWithDebugUsesJSONMode(t *testing.T) {
 		},
 		nil,
 		&effort,
+		true,
 		&output,
 	)
 	if err != nil {
@@ -378,7 +379,7 @@ func TestZAIChatRequestIncludesSamplingControls(t *testing.T) {
 	maxTokens := 128
 	effort := "low"
 	output := ReasoningSearchVerificationResponse{}
-	if _, err := service.GetStructuredOutputWithDebug(
+	if _, err := service.GetStructuredOutputWithDebugInfo(
 		GenerateReasoningSearchVerificationResponseJSONSchema(),
 		"glm-5.1",
 		&maxTokens,
@@ -388,6 +389,7 @@ func TestZAIChatRequestIncludesSamplingControls(t *testing.T) {
 		},
 		nil,
 		&effort,
+		true,
 		&output,
 	); err != nil {
 		t.Fatalf("unexpected error: %v", err)

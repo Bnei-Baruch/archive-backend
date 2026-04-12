@@ -1,6 +1,8 @@
 package llm
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"sync"
 	"time"
 )
@@ -58,7 +60,7 @@ func NewReasoningWorkflowSessionStore(ttl time.Duration) *ReasoningWorkflowSessi
 }
 
 func (s *ReasoningWorkflowSessionStore) Create(stageName string, stage ReasoningWorkflowStageSession) (string, error) {
-	sessionID, err := newOpenAIReasoningSessionID()
+	sessionID, err := newReasoningSessionID()
 	if err != nil {
 		return "", err
 	}
@@ -161,4 +163,13 @@ func (s *ReasoningWorkflowSessionStore) deleteExpired() {
 			delete(s.sessions, sessionID)
 		}
 	}
+}
+
+func newReasoningSessionID() (string, error) {
+	// Generate a random 16-byte session ID and encode it as a hex string.
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
 }

@@ -210,9 +210,9 @@ func reasoningProgressToolMessage(toolName string) string {
 	switch toolName {
 	case "elasticsearch_search":
 		return "Searching archive..."
-	case "source_lookup":
+	case "query_source_ai":
 		return "Checking source text..."
-	case "transcript_lookup":
+	case "query_transcript_ai":
 		return "Checking transcript..."
 	case "get_available_books":
 		return "Looking up books..."

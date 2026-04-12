@@ -1,8 +1,6 @@
 package llm
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"sync"
 	"time"
@@ -50,7 +48,7 @@ func NewOpenAIReasoningSessionStore(ttl time.Duration) *OpenAIReasoningSessionSt
 }
 
 func (s *OpenAIReasoningSessionStore) Create(lastResponseID string, model string, reasoningEffort string) (string, error) {
-	sessionID, err := newOpenAIReasoningSessionID()
+	sessionID, err := newReasoningSessionID()
 	if err != nil {
 		return "", err
 	}
@@ -58,7 +56,7 @@ func (s *OpenAIReasoningSessionStore) Create(lastResponseID string, model string
 }
 
 func (s *OpenAIReasoningSessionStore) CreateReserved(model string, reasoningEffort string) (string, error) {
-	sessionID, err := newOpenAIReasoningSessionID()
+	sessionID, err := newReasoningSessionID()
 	if err != nil {
 		return "", err
 	}
@@ -169,12 +167,4 @@ func openAIReasoningSessionCleanupInterval(ttl time.Duration) time.Duration {
 		return time.Minute
 	}
 	return 5 * time.Minute
-}
-
-func newOpenAIReasoningSessionID() (string, error) {
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
 }

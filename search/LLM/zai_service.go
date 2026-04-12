@@ -135,10 +135,10 @@ func (s *ZAIService) GetStructuredOutput(jsonSchema string, model string, maxTok
 	return nil
 }
 
-func (s *ZAIService) GetStructuredOutputWithDebug(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, output interface{}) (*ReasoningSearchDebugInfo, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, true)
+func (s *ZAIService) GetStructuredOutputWithDebugInfo(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, debug)
 	if usageTotals.TotalTokens > 0 {
-		log.Printf("ZAI GetStructuredOutputWithDebug total tokens: %d", usageTotals.TotalTokens)
+		log.Printf("ZAI GetStructuredOutputWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
 	}
 	if err != nil {
 		return nil, err
@@ -175,7 +175,7 @@ func (s *ZAIService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	msg, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations, "")
+	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations, "")
 	return msg, err
 }
 
@@ -192,7 +192,7 @@ func (s *ZAIService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -209,15 +209,23 @@ func (s *ZAIService) GetReasoningStructuredOutputWithTools(
 			setter.SetReasoningSummary(reasoningSummary)
 		}
 	}
+	totalTokens := usageTotals.TotalTokens
+	if toolDebug != nil {
+		totalTokens += toolDebug.TotalTokens
+	}
 	if setter, ok := output.(reasoningProcessStatsSetter); ok {
-		setter.SetReasoningProcessStats(usageTotals.TotalTokens, reasoningIterations)
+		setter.SetReasoningProcessStats(totalTokens, reasoningIterations)
 	}
 	if setter, ok := output.(reasoningUsedToolsSetter); ok {
 		setter.SetUsedTools(usedTools)
 	}
 	if deb {
 		if setter, ok := output.(reasoningDebugInfoSetter); ok {
-			setter.SetReasoningDebugInfo(s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals))
+			debugInfo := s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals)
+			debugInfo.MainModelUsage = debugInfo.UsageBreakdown()
+			debugInfo.AIToolsUsage = toolDebug.UsageBreakdown()
+			debugInfo.Add(toolDebug)
+			setter.SetReasoningDebugInfo(debugInfo)
 		}
 	}
 	return nil
@@ -276,7 +284,7 @@ func (s *ZAIService) GetReasoningStructuredOutputWithToolsForSession(
 		effectiveProgressSessionID = strings.TrimSpace(*progressSessionID)
 	}
 
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, err := s.getReasoningResponseWithTools(
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
 		"GetReasoningStructuredOutputWithToolsForSession",
 		&jsonSchema,
 		effectiveModel,
@@ -314,15 +322,23 @@ func (s *ZAIService) GetReasoningStructuredOutputWithToolsForSession(
 			setter.SetReasoningSummary(reasoningSummary)
 		}
 	}
+	totalTokens := usageTotals.TotalTokens
+	if toolDebug != nil {
+		totalTokens += toolDebug.TotalTokens
+	}
 	if setter, ok := output.(reasoningProcessStatsSetter); ok {
-		setter.SetReasoningProcessStats(usageTotals.TotalTokens, reasoningIterations)
+		setter.SetReasoningProcessStats(totalTokens, reasoningIterations)
 	}
 	if setter, ok := output.(reasoningUsedToolsSetter); ok {
 		setter.SetUsedTools(usedTools)
 	}
 	if deb {
 		if setter, ok := output.(reasoningDebugInfoSetter); ok {
-			setter.SetReasoningDebugInfo(s.buildReasoningDebugInfo(effectiveModel, effectiveReasoningEffort, usageTotals))
+			debugInfo := s.buildReasoningDebugInfo(effectiveModel, effectiveReasoningEffort, usageTotals)
+			debugInfo.MainModelUsage = debugInfo.UsageBreakdown()
+			debugInfo.AIToolsUsage = toolDebug.UsageBreakdown()
+			debugInfo.Add(toolDebug)
+			setter.SetReasoningDebugInfo(debugInfo)
 		}
 	}
 
@@ -433,7 +449,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 	progressSessionID string,
-) (*LLMBotMessage, string, OpenAIUsageTotals, int, []string, error) {
+) (*LLMBotMessage, string, OpenAIUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
 	usageTotals := OpenAIUsageTotals{}
 	iterations := 0
 	usedTools := []string{}
@@ -464,10 +480,10 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	reasoningSummaries := []string{}
 
 	if len(tools) == 0 {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, errors.New("tools must contain at least one tool definition")
+		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
 	}
 	if len(toolHandlers) == 0 {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, errors.New("toolHandlers must contain at least one handler")
+		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
 	}
 	if maxIterations <= 0 {
 		maxIterations = 8
@@ -475,7 +491,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 	normalizedMessages, err := normalizeZAIMessages(messages)
 	if err != nil {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, err
+		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
 	}
 	if jsonSchema != nil {
 		// Same grounding as the one-shot path. Without this, glm-5.1 often
@@ -484,7 +500,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	}
 	thinking, err := zaiThinkingValue(reasoningEffort)
 	if err != nil {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, err
+		return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
 	}
 	responseFormat := zaiResponseFormat(jsonSchema)
 	toolChoice := "auto"
@@ -512,14 +528,14 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 		var chatResp ZAIChatResponse
 		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
-			return nil, "", OpenAIUsageTotals{}, 0, nil, err
+			return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
 		usageTotals.Add(chatResp.Usage)
 
 		message, err := firstZAIChoice(&chatResp)
 		if err != nil {
-			return nil, "", OpenAIUsageTotals{}, 0, nil, err
+			return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
 		}
 		if strings.TrimSpace(message.ReasoningContent) != "" {
 			summary := strings.TrimSpace(message.ReasoningContent)
@@ -531,24 +547,24 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 		if len(message.ToolCalls) == 0 {
 			if strings.TrimSpace(message.Content) == "" {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, errors.New("zai chat returned empty assistant output")
+				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("zai chat returned empty assistant output")
 			}
 			return &LLMBotMessage{
 				Role:    "assistant",
 				Content: message.Content,
-			}, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations, usedTools, nil
+			}, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
 		}
 
 		assistantMessage, err := zaiAssistantMessage(message)
 		if err != nil {
-			return nil, "", OpenAIUsageTotals{}, 0, nil, err
+			return nil, "", OpenAIUsageTotals{}, 0, nil, nil, err
 		}
 		normalizedMessages = append(normalizedMessages, *assistantMessage)
 
 		toolCallLogs := []string{}
 		for _, toolCall := range message.ToolCalls {
 			if toolCall.Function.Name == "" {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, errors.New("zai tool call is missing function name")
+				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, errors.New("zai tool call is missing function name")
 			}
 			if !usedToolsSet[toolCall.Function.Name] {
 				usedTools = append(usedTools, toolCall.Function.Name)
@@ -557,7 +573,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 			handler, ok := toolHandlers[toolCall.Function.Name]
 			if !ok {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Function.Name)
+				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Function.Name)
 			}
 
 			rawArgs := toolCall.Function.Arguments.Raw
@@ -573,7 +589,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 			}
 			result, err := handler(reasoningCtx, rawArgs)
 			if err != nil {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Function.Name, err)
+				return nil, "", OpenAIUsageTotals{}, 0, nil, nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Function.Name, err)
 			}
 
 			normalizedMessages = append(normalizedMessages, LLMBotMessage{
@@ -588,7 +604,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 		}
 	}
 
-	return nil, "", OpenAIUsageTotals{}, 0, nil, &MaxReasoningIterationsError{MaxIterations: maxIterations}
+	return nil, "", OpenAIUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
 }
 
 func normalizeZAIMessages(messages []LLMBotMessage) ([]LLMBotMessage, error) {

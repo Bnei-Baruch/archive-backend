@@ -106,14 +106,39 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	}
 
 	ASSETS = integration.NewAssetsService(viper.GetString("assets_service.url"))
+	//	Progress tracks transient UI/status updates for the current run
+	progress := llm.NewReasoningProgressStore(llm.ReasoningSessionTTLFromConfig())
+	//	Workflow stores stage/provider/session metadata needed to resume or rerun correctly
+	workflow := llm.NewReasoningWorkflowSessionStore(llm.ReasoningSessionTTLFromConfig())
+	defaultProvider := llm.ProviderFromConfig()
+	verificationProvider := llm.ReasoningSearchVerificationProviderFromConfig()
+	aiToolsConfig, err := llm.AIToolsConfigFromConfig()
+	utils.Must(err)
+	services := map[string]llm.Service{}
+
+	services[defaultProvider], err = llm.NewServiceForProviderWithProgress(defaultProvider, progress)
+	utils.Must(err)
+	if viper.GetBool("llm.reasoning-search-verification-enabled") {
+		if _, ok := services[verificationProvider]; !ok {
+			services[verificationProvider], err = llm.NewServiceForProviderWithProgress(verificationProvider, nil)
+			utils.Must(err)
+		}
+	}
+	if _, ok := services[aiToolsConfig.Provider]; !ok {
+		services[aiToolsConfig.Provider], err = llm.NewServiceForProviderWithProgress(aiToolsConfig.Provider, nil)
+		utils.Must(err)
+	}
+
 	var postgreSQLToolCacheTTL *time.Duration
 	if viper.IsSet("llm.postgresql-tool-cache-ttl") {
 		ttl := viper.GetDuration("llm.postgresql-tool-cache-ttl")
 		postgreSQLToolCacheTTL = &ttl
 	}
 	tools, err := llmtools.NewAppScopedManager(llmtools.AppScopedManagerDeps{
-		DB:            DB,
-		AssetsService: ASSETS,
+		DB:             DB,
+		AssetsService:  ASSETS,
+		AIQueryService: services[aiToolsConfig.Provider],
+		AIQueryConfig:  aiToolsConfig,
 		NewElasticsearchSearchEngine: func() (llmtools.ElasticsearchSearchEngine, error) {
 			esc, err := ESC.GetClient()
 			if err != nil {
@@ -125,21 +150,6 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		PostgreSQLToolCacheTTL: postgreSQLToolCacheTTL,
 	})
 	utils.Must(err)
-
-	progress := llm.NewReasoningProgressStore(llm.ReasoningSessionTTLFromConfig())
-	workflow := llm.NewReasoningWorkflowSessionStore(llm.ReasoningSessionTTLFromConfig())
-	defaultProvider := llm.ProviderFromConfig()
-	verificationProvider := llm.ReasoningSearchVerificationProviderFromConfig()
-	services := map[string]llm.Service{}
-
-	services[defaultProvider], err = llm.NewServiceForProviderWithProgress(defaultProvider, progress)
-	utils.Must(err)
-	if viper.GetBool("llm.reasoning-search-verification-enabled") {
-		if _, ok := services[verificationProvider]; !ok {
-			services[verificationProvider], err = llm.NewServiceForProviderWithProgress(verificationProvider, nil)
-			utils.Must(err)
-		}
-	}
 
 	LLM_RUNTIME = &llm.Runtime{
 		Tools:    tools,

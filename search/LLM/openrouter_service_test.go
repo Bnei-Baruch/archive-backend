@@ -386,7 +386,7 @@ func TestOpenRouterGetStructuredOutputWithDebugReturnsUsage(t *testing.T) {
 		Answer string `json:"answer"`
 	}
 
-	debug, err := service.GetStructuredOutputWithDebug(
+	debug, err := service.GetStructuredOutputWithDebugInfo(
 		schema,
 		"moonshotai/kimi-k2.5",
 		&maxTokens,
@@ -396,6 +396,7 @@ func TestOpenRouterGetStructuredOutputWithDebugReturnsUsage(t *testing.T) {
 		},
 		nil,
 		&effort,
+		true,
 		&output,
 	)
 	if err != nil {

@@ -70,16 +70,15 @@ Instructions for coding agents working in this repository.
 - Pricing for cost estimation is configured per provider with `[[<provider>.pricing]]`.
 
 ## Implemented Tools
-- `source_lookup`
-  Path: `search/LLM/tools/source_lookup_tool.go`
-  Input: `source_id` (required), `language` (optional), plus optional `query`, `chunk_number`
-  Behavior: find public source doc/docx file UID, fetch text via `Doc2Text`, cache full text in memory, and use a 3-tier policy
-  Small sources return full text; medium sources return full text by default but support targeted chunk retrieval; very large sources use chunk mode. Query mode returns the top matching chunks, and `chunk_number` returns the requested chunk plus one neighboring chunk on each side. Chunk retrieval for the same source is limited per reasoning request.
+- `query_source_ai`
+  Path: `search/LLM/tools/ai_tools.go`
+  Input: `source_id` (required), `query` (required), optional `language`, optional `max_chunks`
+  Behavior: resolve a public source document file UID, fetch text via `Doc2Text`, cache it in memory, then use the configured cheaper AI reader model to return semantically relevant chunk ranges and excerpts.
 
-- `transcript_lookup`
-  Path: `search/LLM/tools/transcript_lookup_tool.go`
-  Input: `content_unit_id` (required), `language` (optional)
-  Behavior: find transcript doc/docx for the content unit, fetch text via `Doc2Text`, cache in memory, return text.
+- `query_transcript_ai`
+  Path: `search/LLM/tools/ai_tools.go`
+  Input: `content_unit_id` (required), `query` (required), optional `language`, optional `max_chunks`
+  Behavior: resolve a public transcript doc/docx file UID, fetch text via `Doc2Text`, cache it in memory, then use the configured cheaper AI reader model to return semantically relevant chunk ranges and excerpts.
 
 - PostgreSQL list tools
   Path: `search/LLM/tools/postgresql_tools.go`

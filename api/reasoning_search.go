@@ -318,13 +318,14 @@ func ReasoningSearchHandler(c *gin.Context) {
 					},
 				}
 				verificationResponse := llm.ReasoningSearchVerificationResponse{}
-				verificationDebug, err := verificationService.GetStructuredOutputWithDebug(
+				verificationDebug, err := verificationService.GetStructuredOutputWithDebugInfo(
 					llm.GenerateReasoningSearchVerificationResponseJSONSchema(),
 					verificationStage.Model,
 					&verificationStage.MaxTokens,
 					verificationMessages,
 					&verificationPromptCacheKey,
 					&verificationStage.ReasoningEffort,
+					true,
 					&verificationResponse,
 				)
 				if err != nil {

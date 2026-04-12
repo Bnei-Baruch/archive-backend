@@ -52,10 +52,10 @@ func (s *OpenRouterService) GetStructuredOutput(jsonSchema string, model string,
 	return nil
 }
 
-func (s *OpenRouterService) GetStructuredOutputWithDebug(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) (*ReasoningSearchDebugInfo, error) {
-	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.providerPreferences, true)
+func (s *OpenRouterService) GetStructuredOutputWithDebugInfo(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.providerPreferences, debug)
 	if usageTotals.TotalTokens > 0 {
-		log.Printf("OpenRouter GetStructuredOutputWithDebug total tokens: %d", usageTotals.TotalTokens)
+		log.Printf("OpenRouter GetStructuredOutputWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
 	}
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func (s *OpenRouterService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, promptCacheKey, reasoningEffort, deb, maxIterations, "")
+	msg, _, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, promptCacheKey, reasoningEffort, deb, maxIterations, "")
 	return msg, err
 }
 
@@ -95,7 +95,7 @@ func (s *OpenRouterService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, promptCacheKey, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, toolDebug, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, promptCacheKey, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -109,15 +109,23 @@ func (s *OpenRouterService) GetReasoningStructuredOutputWithTools(
 			setter.SetReasoningSummary(reasoningSummary)
 		}
 	}
+	totalTokens := usageTotals.TotalTokens
+	if toolDebug != nil {
+		totalTokens += toolDebug.TotalTokens
+	}
 	if setter, ok := output.(reasoningProcessStatsSetter); ok {
-		setter.SetReasoningProcessStats(usageTotals.TotalTokens, reasoningIterations)
+		setter.SetReasoningProcessStats(totalTokens, reasoningIterations)
 	}
 	if setter, ok := output.(reasoningUsedToolsSetter); ok {
 		setter.SetUsedTools(usedTools)
 	}
 	if deb {
 		if setter, ok := output.(reasoningDebugInfoSetter); ok {
-			setter.SetReasoningDebugInfo(s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals))
+			debugInfo := s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals)
+			debugInfo.MainModelUsage = debugInfo.UsageBreakdown()
+			debugInfo.AIToolsUsage = toolDebug.UsageBreakdown()
+			debugInfo.Add(toolDebug)
+			setter.SetReasoningDebugInfo(debugInfo)
 		}
 	}
 	return nil
@@ -176,7 +184,7 @@ func (s *OpenRouterService) GetReasoningStructuredOutputWithToolsForSession(
 		effectiveProgressSessionID = strings.TrimSpace(*progressSessionID)
 	}
 
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, err := s.getReasoningResponseWithTools(
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, toolDebug, err := s.getReasoningResponseWithTools(
 		"GetReasoningStructuredOutputWithToolsForSession",
 		&jsonSchema,
 		effectiveModel,
@@ -210,15 +218,23 @@ func (s *OpenRouterService) GetReasoningStructuredOutputWithToolsForSession(
 			setter.SetReasoningSummary(reasoningSummary)
 		}
 	}
+	totalTokens := usageTotals.TotalTokens
+	if toolDebug != nil {
+		totalTokens += toolDebug.TotalTokens
+	}
 	if setter, ok := output.(reasoningProcessStatsSetter); ok {
-		setter.SetReasoningProcessStats(usageTotals.TotalTokens, reasoningIterations)
+		setter.SetReasoningProcessStats(totalTokens, reasoningIterations)
 	}
 	if setter, ok := output.(reasoningUsedToolsSetter); ok {
 		setter.SetUsedTools(usedTools)
 	}
 	if deb {
 		if setter, ok := output.(reasoningDebugInfoSetter); ok {
-			setter.SetReasoningDebugInfo(s.buildReasoningDebugInfo(effectiveModel, effectiveReasoningEffort, usageTotals))
+			debugInfo := s.buildReasoningDebugInfo(effectiveModel, effectiveReasoningEffort, usageTotals)
+			debugInfo.MainModelUsage = debugInfo.UsageBreakdown()
+			debugInfo.AIToolsUsage = toolDebug.UsageBreakdown()
+			debugInfo.Add(toolDebug)
+			setter.SetReasoningDebugInfo(debugInfo)
 		}
 	}
 
@@ -278,12 +294,12 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 	progressSessionID string,
-) (*LLMBotMessage, string, OpenAIUsageTotals, int, []string, string, error) {
+) (*LLMBotMessage, string, OpenAIUsageTotals, int, []string, string, *ReasoningSearchDebugInfo, error) {
 	if reasoningEffort != nil {
 		switch *reasoningEffort {
 		case "minimal", "low", "medium", "high":
 		default:
-			return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("reasoning effort %q is not supported for OpenRouter models; supported values are minimal, low, medium, high", *reasoningEffort)
+			return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, fmt.Errorf("reasoning effort %q is not supported for OpenRouter models; supported values are minimal, low, medium, high", *reasoningEffort)
 		}
 	}
 	usageTotals := OpenAIUsageTotals{}
@@ -316,10 +332,10 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 	reasoningSummaries := []string{}
 
 	if len(tools) == 0 {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, "", errors.New("tools must contain at least one tool definition")
+		return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, errors.New("tools must contain at least one tool definition")
 	}
 	if len(toolHandlers) == 0 {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, "", errors.New("toolHandlers must contain at least one handler")
+		return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, errors.New("toolHandlers must contain at least one handler")
 	}
 	if maxIterations <= 0 {
 		maxIterations = 8
@@ -328,21 +344,21 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 
 	instructions, conversation, err := splitInstructionsAndConversation(messages)
 	if err != nil {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, "", err
+		return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, err
 	}
 	conversationInput, err := buildOpenRouterInput(conversation)
 	if err != nil {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, "", err
+		return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, err
 	}
 
 	normalizedTools, err := normalizeResponseTools(tools)
 	if err != nil {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, "", err
+		return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, err
 	}
 
 	text, err := buildResponsesText(jsonSchema)
 	if err != nil {
-		return nil, "", OpenAIUsageTotals{}, 0, nil, "", err
+		return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, err
 	}
 
 	for i := 0; i < maxIterations; i++ {
@@ -370,7 +386,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 
 		var responsesResp ResponsesResponse
 		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/responses", &responsesResp, deb); err != nil {
-			return nil, "", OpenAIUsageTotals{}, 0, nil, "", err
+			return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, err
 		}
 		iterations = i + 1
 		iterationSummary := strings.Join(extractReasoningSummaryText(responsesResp.Output), "\n\n")
@@ -381,7 +397,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 		usageTotals.Add(responsesResp.Usage)
 
 		if err := responsesCompletionError(&responsesResp); err != nil {
-			return nil, "", OpenAIUsageTotals{}, 0, nil, "", err
+			return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, err
 		}
 
 		if len(responsesResp.Output) == 0 {
@@ -391,7 +407,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 				responsesResp.Status,
 				describeResponsesOutputItems(responsesResp.Output),
 			)
-			return nil, "", OpenAIUsageTotals{}, 0, nil, "", errors.New("responses API returned no output")
+			return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, errors.New("responses API returned no output")
 		}
 
 		functionCalls := []ResponsesOutputItem{}
@@ -410,12 +426,12 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 					responsesResp.Status,
 					describeResponsesOutputItems(responsesResp.Output),
 				)
-				return nil, "", OpenAIUsageTotals{}, 0, nil, "", errors.New("responses API returned empty assistant output")
+				return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, errors.New("responses API returned empty assistant output")
 			}
 			return &LLMBotMessage{
 				Role:    "assistant",
 				Content: content,
-			}, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations, usedTools, responsesResp.ID, nil
+			}, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations, usedTools, responsesResp.ID, ToolDebugInfoFromContext(reasoningCtx), nil
 		}
 
 		nextConversationInput := append([]interface{}{}, conversationInput...)
@@ -427,7 +443,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 		}
 		for _, toolCall := range functionCalls {
 			if toolCall.CallID == "" {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("tool call for '%s' is missing call_id", toolCall.Name)
+				return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, fmt.Errorf("tool call for '%s' is missing call_id", toolCall.Name)
 			}
 			if !usedToolsSet[toolCall.Name] {
 				usedTools = append(usedTools, toolCall.Name)
@@ -436,7 +452,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 
 			handler, ok := toolHandlers[toolCall.Name]
 			if !ok {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("missing handler for tool '%s'", toolCall.Name)
+				return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Name)
 			}
 
 			rawArgs := json.RawMessage(toolCall.Arguments)
@@ -444,7 +460,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 				rawArgs = json.RawMessage("{}")
 			}
 			if !json.Valid(rawArgs) {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("invalid arguments for tool '%s': %s", toolCall.Name, toolCall.Arguments)
+				return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, fmt.Errorf("invalid arguments for tool '%s': %s", toolCall.Name, toolCall.Arguments)
 			}
 			if deb {
 				toolCallLogs = append(toolCallLogs, fmt.Sprintf("- %s args: %s", toolCall.Name, compactToolCallArguments(rawArgs)))
@@ -455,7 +471,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 			}
 			result, err := handler(reasoningCtx, rawArgs)
 			if err != nil {
-				return nil, "", OpenAIUsageTotals{}, 0, nil, "", fmt.Errorf("tool '%s' execution failed: %w", toolCall.Name, err)
+				return nil, "", OpenAIUsageTotals{}, 0, nil, "", nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Name, err)
 			}
 
 			nextConversationInput = append(nextConversationInput, map[string]string{
@@ -470,7 +486,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 		conversationInput = nextConversationInput
 	}
 
-	return nil, "", OpenAIUsageTotals{}, 0, nil, "", &MaxReasoningIterationsError{MaxIterations: maxIterations}
+	return nil, "", OpenAIUsageTotals{}, 0, nil, "", ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
 }
 
 func splitInstructionsAndConversation(messages []LLMBotMessage) (string, []LLMBotMessage, error) {

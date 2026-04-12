@@ -45,7 +45,7 @@ func NewChatReasoningSessionStore(ttl time.Duration) *ChatReasoningSessionStore 
 }
 
 func (s *ChatReasoningSessionStore) Create(history []LLMBotMessage, model string, reasoningEffort string) (string, error) {
-	sessionID, err := newOpenAIReasoningSessionID()
+	sessionID, err := newReasoningSessionID()
 	if err != nil {
 		return "", err
 	}
@@ -53,7 +53,7 @@ func (s *ChatReasoningSessionStore) Create(history []LLMBotMessage, model string
 }
 
 func (s *ChatReasoningSessionStore) CreateReserved(model string, reasoningEffort string) (string, error) {
-	sessionID, err := newOpenAIReasoningSessionID()
+	sessionID, err := newReasoningSessionID()
 	if err != nil {
 		return "", err
 	}

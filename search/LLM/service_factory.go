@@ -20,6 +20,8 @@ const (
 	defaultReasoningSearchMaxTokens     = 8000
 	defaultReasoningSearchMaxIterations = 20
 	defaultReasoningSearchRerunMaxIters = 2
+	defaultAIToolsEffort                = "low"
+	defaultAIToolsMaxTokens             = 1500
 )
 
 type ReasoningSearchConfig struct {
@@ -33,6 +35,13 @@ type ReasoningSearchConfig struct {
 }
 
 type ReasoningSearchVerificationConfig struct {
+	Provider  string
+	Model     string
+	Effort    string
+	MaxTokens int
+}
+
+type AIToolsConfig struct {
 	Provider  string
 	Model     string
 	Effort    string
@@ -459,6 +468,18 @@ func ReasoningSearchVerificationProviderFromConfig() string {
 	return provider
 }
 
+func AIToolsProviderFromConfig() string {
+	provider := strings.ToLower(strings.TrimSpace(viper.GetString("llm.ai-tools-provider")))
+	if provider == "" {
+		return ProviderFromConfig()
+	}
+	return provider
+}
+
+func AIToolsConfigFromConfig() (*AIToolsConfig, error) {
+	return aiToolsConfigFromProvider(AIToolsProviderFromConfig())
+}
+
 func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffort string) (*ReasoningSearchVerificationConfig, error) {
 	switch provider {
 	case ProviderOpenAI:
@@ -561,6 +582,112 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported verification provider: %s", provider)
+	}
+}
+
+func aiToolsConfigFromProvider(provider string) (*AIToolsConfig, error) {
+	switch provider {
+	case ProviderOpenAI:
+		model := strings.TrimSpace(viper.GetString("openai.ai-tools-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("openai.reasoning-search-model"))
+		}
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("openai.model"))
+		}
+		if model == "" {
+			return nil, fmt.Errorf("openai.ai-tools-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("openai.ai-tools-effort"))
+		if effort == "" {
+			effort = defaultAIToolsEffort
+		}
+		if strings.HasPrefix(model, "gpt-oss") {
+			switch effort {
+			case "low", "medium", "high":
+			default:
+				return nil, fmt.Errorf("reasoning effort %q is not supported for model %q; gpt-oss supports only low, medium, high", effort, model)
+			}
+		}
+		maxTokens := viper.GetInt("openai.ai-tools-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultAIToolsMaxTokens
+		}
+		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderOpenRouter:
+		model := strings.TrimSpace(viper.GetString("openrouter.ai-tools-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("openrouter.reasoning-search-model"))
+		}
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("openrouter.model"))
+		}
+		if model == "" {
+			return nil, fmt.Errorf("openrouter.ai-tools-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("openrouter.ai-tools-effort"))
+		if effort == "" {
+			effort = defaultAIToolsEffort
+		}
+		switch effort {
+		case "minimal", "low", "medium", "high":
+		default:
+			return nil, fmt.Errorf("reasoning effort %q is not supported for OpenRouter models; supported values are minimal, low, medium, high", effort)
+		}
+		maxTokens := viper.GetInt("openrouter.ai-tools-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultAIToolsMaxTokens
+		}
+		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderOllama:
+		model := strings.TrimSpace(viper.GetString("ollama.ai-tools-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("ollama.reasoning-search-model"))
+		}
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("ollama.model"))
+		}
+		if model == "" {
+			return nil, fmt.Errorf("ollama.ai-tools-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("ollama.ai-tools-effort"))
+		if effort == "" {
+			effort = defaultAIToolsEffort
+		}
+		switch effort {
+		case "minimal", "low", "medium", "high":
+		default:
+			return nil, fmt.Errorf("reasoning effort %q is not supported for Ollama models; supported values are minimal, low, medium, high", effort)
+		}
+		maxTokens := viper.GetInt("ollama.ai-tools-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultAIToolsMaxTokens
+		}
+		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderZAI:
+		model := strings.TrimSpace(viper.GetString("zai.ai-tools-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("zai.reasoning-search-model"))
+		}
+		if model == "" {
+			model = "glm-5.1"
+		}
+		effort := strings.TrimSpace(viper.GetString("zai.ai-tools-effort"))
+		if effort == "" {
+			effort = defaultAIToolsEffort
+		}
+		switch effort {
+		case "minimal", "low", "medium", "high", "xhigh":
+		default:
+			return nil, fmt.Errorf("reasoning effort %q is not supported for Z.AI models; supported values are minimal, low, medium, high, xhigh", effort)
+		}
+		maxTokens := viper.GetInt("zai.ai-tools-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultAIToolsMaxTokens
+		}
+		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	default:
+		return nil, fmt.Errorf("unsupported ai tools provider: %s", provider)
 	}
 }
 

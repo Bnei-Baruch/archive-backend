@@ -198,7 +198,7 @@ Arguments:
 - exact_phrase: optional boolean. When true, the full query is treated as one exact phrase and requires a non-empty query.
 Behavior:
 - Returns JSON with the normalized search query, selected sort, pagination, and Elasticsearch result payload.
-- Use this as the main discovery tool. If you need direct source or transcript text evidence after search, follow up with source_lookup or transcript_lookup.
+- Use this as the main discovery tool. If the returned highlights are not sufficient, and you need direct source or transcript evidence, follow up with query_source_ai or query_transcript_ai.
 Returned data:
 - query: the normalized search.Query that was actually executed. Inspect query.term, query.exact_terms, query.filters, and query.language_order to understand the final search request.
 - sort_by, from, size: the resolved sort and pagination actually used.

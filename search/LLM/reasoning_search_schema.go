@@ -26,27 +26,48 @@ type ReasoningSearchResult struct {
 }
 
 type ReasoningSearchDebugInfo struct {
-	Enabled                      bool    `json:"enabled"`
-	Model                        string  `json:"model"`
-	ReasoningEffort              string  `json:"reasoning_effort"`
-	VerificationModel            string  `json:"verification_model,omitempty"`
-	VerificationReasoningEffort  string  `json:"verification_reasoning_effort,omitempty"`
-	VerificationTotalTokens      int     `json:"verification_total_tokens,omitempty"`
-	VerificationEstimatedCostUSD float64 `json:"verification_estimated_cost_usd,omitempty"`
-	TotalTokens                  int     `json:"total_tokens"`
-	InputTokens                  int     `json:"input_tokens"`
-	CachedInputTokens            int     `json:"cached_input_tokens"`
-	UncachedInputTokens          int     `json:"uncached_input_tokens"`
-	OutputTokens                 int     `json:"output_tokens"`
-	ReasoningTokens              int     `json:"reasoning_tokens"`
-	PricingConfigured            bool    `json:"pricing_configured"`
-	InputPer1MTokensUSD          float64 `json:"input_per_1m_tokens_usd"`
-	CachedInputPer1MTokensUSD    float64 `json:"cached_input_per_1m_tokens_usd"`
-	OutputPer1MTokensUSD         float64 `json:"output_per_1m_tokens_usd"`
-	EstimatedInputCostUSD        float64 `json:"estimated_input_cost_usd"`
-	EstimatedCachedInputCostUSD  float64 `json:"estimated_cached_input_cost_usd"`
-	EstimatedOutputCostUSD       float64 `json:"estimated_output_cost_usd"`
-	EstimatedCostUSD             float64 `json:"estimated_cost_usd"`
+	Enabled                      bool                           `json:"enabled"`
+	Model                        string                         `json:"model"`
+	ReasoningEffort              string                         `json:"reasoning_effort"`
+	MainModelUsage               *ReasoningSearchUsageBreakdown `json:"main_model_usage,omitempty"`
+	AIToolsUsage                 *ReasoningSearchUsageBreakdown `json:"ai_tools_usage,omitempty"`
+	VerificationModel            string                         `json:"verification_model,omitempty"`
+	VerificationReasoningEffort  string                         `json:"verification_reasoning_effort,omitempty"`
+	VerificationTotalTokens      int                            `json:"verification_total_tokens,omitempty"`
+	VerificationEstimatedCostUSD float64                        `json:"verification_estimated_cost_usd,omitempty"`
+	TotalTokens                  int                            `json:"total_tokens"`
+	InputTokens                  int                            `json:"input_tokens"`
+	CachedInputTokens            int                            `json:"cached_input_tokens"`
+	UncachedInputTokens          int                            `json:"uncached_input_tokens"`
+	OutputTokens                 int                            `json:"output_tokens"`
+	ReasoningTokens              int                            `json:"reasoning_tokens"`
+	PricingConfigured            bool                           `json:"pricing_configured"`
+	InputPer1MTokensUSD          float64                        `json:"input_per_1m_tokens_usd"`
+	CachedInputPer1MTokensUSD    float64                        `json:"cached_input_per_1m_tokens_usd"`
+	OutputPer1MTokensUSD         float64                        `json:"output_per_1m_tokens_usd"`
+	EstimatedInputCostUSD        float64                        `json:"estimated_input_cost_usd"`
+	EstimatedCachedInputCostUSD  float64                        `json:"estimated_cached_input_cost_usd"`
+	EstimatedOutputCostUSD       float64                        `json:"estimated_output_cost_usd"`
+	EstimatedCostUSD             float64                        `json:"estimated_cost_usd"`
+}
+
+type ReasoningSearchUsageBreakdown struct {
+	Model                       string  `json:"model"`
+	ReasoningEffort             string  `json:"reasoning_effort"`
+	TotalTokens                 int     `json:"total_tokens"`
+	InputTokens                 int     `json:"input_tokens"`
+	CachedInputTokens           int     `json:"cached_input_tokens"`
+	UncachedInputTokens         int     `json:"uncached_input_tokens"`
+	OutputTokens                int     `json:"output_tokens"`
+	ReasoningTokens             int     `json:"reasoning_tokens"`
+	PricingConfigured           bool    `json:"pricing_configured"`
+	InputPer1MTokensUSD         float64 `json:"input_per_1m_tokens_usd"`
+	CachedInputPer1MTokensUSD   float64 `json:"cached_input_per_1m_tokens_usd"`
+	OutputPer1MTokensUSD        float64 `json:"output_per_1m_tokens_usd"`
+	EstimatedInputCostUSD       float64 `json:"estimated_input_cost_usd"`
+	EstimatedCachedInputCostUSD float64 `json:"estimated_cached_input_cost_usd"`
+	EstimatedOutputCostUSD      float64 `json:"estimated_output_cost_usd"`
+	EstimatedCostUSD            float64 `json:"estimated_cost_usd"`
 }
 
 type ReasoningSearchVerificationResponse struct {
@@ -159,6 +180,30 @@ func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {
 	d.EstimatedCostUSD += other.EstimatedCostUSD
 	if !other.PricingConfigured {
 		d.PricingConfigured = false
+	}
+}
+
+func (d *ReasoningSearchDebugInfo) UsageBreakdown() *ReasoningSearchUsageBreakdown {
+	if d == nil {
+		return nil
+	}
+	return &ReasoningSearchUsageBreakdown{
+		Model:                       d.Model,
+		ReasoningEffort:             d.ReasoningEffort,
+		TotalTokens:                 d.TotalTokens,
+		InputTokens:                 d.InputTokens,
+		CachedInputTokens:           d.CachedInputTokens,
+		UncachedInputTokens:         d.UncachedInputTokens,
+		OutputTokens:                d.OutputTokens,
+		ReasoningTokens:             d.ReasoningTokens,
+		PricingConfigured:           d.PricingConfigured,
+		InputPer1MTokensUSD:         d.InputPer1MTokensUSD,
+		CachedInputPer1MTokensUSD:   d.CachedInputPer1MTokensUSD,
+		OutputPer1MTokensUSD:        d.OutputPer1MTokensUSD,
+		EstimatedInputCostUSD:       d.EstimatedInputCostUSD,
+		EstimatedCachedInputCostUSD: d.EstimatedCachedInputCostUSD,
+		EstimatedOutputCostUSD:      d.EstimatedOutputCostUSD,
+		EstimatedCostUSD:            d.EstimatedCostUSD,
 	}
 }
 
