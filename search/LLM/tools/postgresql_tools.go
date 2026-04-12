@@ -90,12 +90,19 @@ INNER JOIN sources s ON s.id = aus.source_id
 LEFT JOIN sources parent ON parent.id = s.parent_id
 LEFT JOIN source_types st ON st.id = s.type_id
 WHERE aus.author_id = $2
-  AND EXISTS (
-    SELECT 1
-    FROM content_units cu
-    WHERE cu.uid = s.uid
-      AND cu.secure = $3
-      AND cu.published IS TRUE
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM content_units cu
+      WHERE cu.uid = s.uid
+        AND cu.secure = $3
+        AND cu.published IS TRUE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM sources child
+      WHERE child.parent_id = s.id
+    )
   )
 ORDER BY s.parent_id NULLS FIRST, s.position ASC, s.id ASC
 LIMIT $4`
@@ -785,6 +792,7 @@ func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.Raw
 	cacheKey := fmt.Sprintf("get_sources_by_author|author_id=%s|language=%s|limit=%d", authorID, language, limit)
 	if cached, ok := t.cache.get(cacheKey); ok {
 		llm.LogIfDeb(ctx, "get_sources_by_author: cache hit author_id=%q language=%q limit=%d", authorID, language, limit)
+		llm.LogIfDeb(ctx, "get_sources_by_author: output=%s", cached)
 		return cached, nil
 	}
 
@@ -831,6 +839,7 @@ func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.Raw
 	if err != nil {
 		return "", err
 	}
+	llm.LogIfDeb(ctx, "get_sources_by_author: output=%s", result)
 	if len(items) > 0 {
 		t.cache.set(cacheKey, result)
 	}
