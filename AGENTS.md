@@ -41,7 +41,7 @@ Instructions for coding agents working in this repository.
 
 ## Reasoning Search
 - API endpoints: `POST /search/reasoning/start`, `GET /search/reasoning/status`, `POST /search/reasoning`.
-- Request supports `q`, optional `deb`, optional `session_id`.
+- Request supports `q`, optional `deb`, optional `session_id`, optional `ui_language`.
 - The API `session_id` is a workflow session id owned by the backend, not a provider-native LLM session id.
 - Response includes `session_id`, `used_tools`, token stats, and debug/cost details when `deb=true`.
 - The backend persists a `reasoning` workflow stage and, when enabled, a `verification` workflow stage.
