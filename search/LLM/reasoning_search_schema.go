@@ -6,6 +6,9 @@ type ReasoningSearchResponse struct {
 	Summary             string                               `json:"summary"`
 	ReasoningSummary    string                               `json:"reasoning_summary"`
 	VerificationOutput  *ReasoningSearchVerificationResponse `json:"verification_output,omitempty"`
+	MaxFollowups        int                                  `json:"max_followups"`
+	FollowupsUsed       int                                  `json:"followups_used"`
+	FollowupsRemaining  int                                  `json:"followups_remaining"`
 	UsedTokens          int                                  `json:"used_tokens"`
 	ReasoningIterations int                                  `json:"reasoning_iterations"`
 	UsedTools           []string                             `json:"used_tools"`
@@ -161,6 +164,12 @@ func (r *ReasoningSearchResponse) SetUsedTools(usedTools []string) {
 
 func (r *ReasoningSearchResponse) SetSessionID(sessionID string) {
 	r.SessionID = sessionID
+}
+
+func (r *ReasoningSearchResponse) SetFollowupBudget(maxFollowups int, used int, remaining int) {
+	r.MaxFollowups = maxFollowups
+	r.FollowupsUsed = used
+	r.FollowupsRemaining = remaining
 }
 
 func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {

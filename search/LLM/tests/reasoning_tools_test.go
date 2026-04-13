@@ -105,7 +105,7 @@ func TestGenerateSystemMessageForReasoningSearchIncludesToolUsage(t *testing.T) 
 		t.Fatalf("unexpected error creating manager: %v", err)
 	}
 
-	message := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), 20)
+	message := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), 20, 2)
 	if !strings.Contains(message, "Available tools and usage instructions:") {
 		t.Fatalf("expected tool usage header in message: %s", message)
 	}
@@ -122,9 +122,14 @@ func TestGenerateSystemMessageForReasoningSearchIncludesToolUsage(t *testing.T) 
 		t.Fatalf("expected tool explanations to preserve manager order: %s", message)
 	}
 
-	lowBudgetMessage := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), 4)
+	lowBudgetMessage := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), 4, 2)
 	if !strings.Contains(lowBudgetMessage, "Current request tool rounds remaining: 4.") {
 		t.Fatalf("expected remaining iterations text when tool budget is low: %s", lowBudgetMessage)
+	}
+
+	finalFollowupMessage := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), 20, 0)
+	if !strings.Contains(finalFollowupMessage, "No further follow-up requests remain in this session after this response.") {
+		t.Fatalf("expected no-followup instruction when budget is exhausted: %s", finalFollowupMessage)
 	}
 }
 

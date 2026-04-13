@@ -20,6 +20,7 @@ const (
 	defaultReasoningSearchMaxTokens     = 8000
 	defaultReasoningSearchMaxIterations = 20
 	defaultReasoningSearchRerunMaxIters = 2
+	defaultReasoningSearchMaxFollowups  = 2
 	defaultAIToolsEffort                = "low"
 	defaultAIToolsMaxTokens             = 1500
 )
@@ -31,6 +32,7 @@ type ReasoningSearchConfig struct {
 	MaxTokens          int
 	MaxIterations      int
 	RerunMaxIterations int
+	MaxFollowups       int
 	Verification       *ReasoningSearchVerificationConfig
 }
 
@@ -218,6 +220,13 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 	provider := ProviderFromConfig()
 	verificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
 	verificationProvider := ReasoningSearchVerificationProviderFromConfig()
+	maxFollowups := defaultReasoningSearchMaxFollowups
+	if viper.IsSet("llm.reasoning-search-max-followups") {
+		maxFollowups = viper.GetInt("llm.reasoning-search-max-followups")
+		if maxFollowups < 0 {
+			return nil, fmt.Errorf("llm.reasoning-search-max-followups must be >= 0")
+		}
+	}
 
 	switch provider {
 	case ProviderOpenAI:
@@ -277,6 +286,7 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			MaxTokens:          maxTokens,
 			MaxIterations:      maxIterations,
 			RerunMaxIterations: rerunMaxIterations,
+			MaxFollowups:       maxFollowups,
 			Verification:       verification,
 		}, nil
 	case ProviderOpenRouter:
@@ -334,6 +344,7 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			MaxTokens:          maxTokens,
 			MaxIterations:      maxIterations,
 			RerunMaxIterations: rerunMaxIterations,
+			MaxFollowups:       maxFollowups,
 			Verification:       verification,
 		}, nil
 	case ProviderOllama:
@@ -391,6 +402,7 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			MaxTokens:          maxTokens,
 			MaxIterations:      maxIterations,
 			RerunMaxIterations: rerunMaxIterations,
+			MaxFollowups:       maxFollowups,
 			Verification:       verification,
 		}, nil
 	case ProviderZAI:
@@ -445,6 +457,7 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			MaxTokens:          maxTokens,
 			MaxIterations:      maxIterations,
 			RerunMaxIterations: rerunMaxIterations,
+			MaxFollowups:       maxFollowups,
 			Verification:       verification,
 		}, nil
 	default:

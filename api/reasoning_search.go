@@ -51,6 +51,7 @@ func ReasoningSearchStartHandler(c *gin.Context) {
 		MaxTokens:          reasoningConfig.MaxTokens,
 		MaxIterations:      reasoningConfig.MaxIterations,
 		RerunMaxIterations: reasoningConfig.RerunMaxIterations,
+		MaxFollowups:       reasoningConfig.MaxFollowups,
 		ProviderSessionID:  providerSessionID,
 	})
 	if err != nil {
@@ -141,6 +142,9 @@ func ReasoningSearchHandler(c *gin.Context) {
 	var verificationStage *llm.ReasoningWorkflowStageSession
 	var providerSessionID *string
 	var progressSessionID *string
+	followupsUsed := 0
+	followupsRemaining := 0
+	initialRequestCompleted := false
 
 	if r.SessionID != nil {
 		workflowSession, err := workflowStore.Get(*r.SessionID)
@@ -162,6 +166,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 			stageCopy := stage
 			verificationStage = &stageCopy
 		}
+		initialRequestCompleted = workflowSession.InitialRequestCompleted
 		responseSessionID = workflowSession.ID
 		providerID := strings.TrimSpace(stage.ProviderSessionID)
 		providerSessionID = &providerID
@@ -190,6 +195,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 			MaxTokens:          reasoningConfig.MaxTokens,
 			MaxIterations:      reasoningConfig.MaxIterations,
 			RerunMaxIterations: reasoningConfig.RerunMaxIterations,
+			MaxFollowups:       reasoningConfig.MaxFollowups,
 			ProviderSessionID:  reservedProviderSessionID,
 		}
 		responseSessionID, err = workflowStore.Create(llm.ReasoningWorkflowStageReasoning, reasoningStage)
@@ -217,13 +223,47 @@ func ReasoningSearchHandler(c *gin.Context) {
 		progressSessionID = &progressID
 	}
 
+	if r.SessionID != nil {
+		if initialRequestCompleted {
+			if workflowSession, err := workflowStore.Get(responseSessionID); err != nil {
+				if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+					NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+					return
+				}
+				NewInternalError(err).Abort(c)
+				return
+			} else {
+				if workflowSession.FollowupCount >= reasoningStage.MaxFollowups {
+					NewHttpError(http.StatusUnprocessableEntity, &llm.MaxReasoningFollowupsError{MaxFollowups: reasoningStage.MaxFollowups}, gin.ErrorTypePublic).Abort(c)
+					return
+				}
+				followupsUsed = workflowSession.FollowupCount + 1
+				followupsRemaining = reasoningStage.MaxFollowups - followupsUsed
+				if err := workflowStore.SetFollowupState(responseSessionID, true, followupsUsed); err != nil {
+					if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+						NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+						return
+					}
+					NewInternalError(err).Abort(c)
+					return
+				}
+			}
+		} else {
+			followupsUsed = 0
+			followupsRemaining = reasoningStage.MaxFollowups
+		}
+	} else {
+		followupsUsed = 0
+		followupsRemaining = reasoningStage.MaxFollowups
+	}
+
 	service := runtime.Services[reasoningStage.Provider]
 	if service == nil {
 		NewInternalError(errors.New("reasoning llm service is not initialized")).Abort(c)
 		return
 	}
 
-	systemMessage := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), reasoningStage.MaxIterations)
+	systemMessage := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), reasoningStage.MaxIterations, followupsRemaining)
 	messages := []llm.LLMBotMessage{
 		{
 			Role:    "system",
@@ -469,6 +509,17 @@ func ReasoningSearchHandler(c *gin.Context) {
 		}
 	}
 
+	if !initialRequestCompleted {
+		// We set the followup state when the initial request is completed,
+		// the initial request itself is not counted as a followup.
+		if err := workflowStore.SetFollowupState(responseSessionID, true, followupsUsed); err != nil {
+			progressStore.Fail(responseSessionID, response.ReasoningIterations)
+			NewInternalError(err).Abort(c)
+			return
+		}
+	}
+
+	response.SetFollowupBudget(reasoningStage.MaxFollowups, followupsUsed, followupsRemaining)
 	progressStore.Complete(responseSessionID, response.ReasoningIterations)
 
 	c.JSON(http.StatusOK, response)

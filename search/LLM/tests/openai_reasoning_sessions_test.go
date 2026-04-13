@@ -145,3 +145,66 @@ func TestReasoningProgressStoreLifecycle(t *testing.T) {
 		t.Fatalf("unexpected iteration: %d", status.Iteration)
 	}
 }
+
+func TestReasoningWorkflowSessionStoreFollowupLifecycle(t *testing.T) {
+	store := llm.NewReasoningWorkflowSessionStore(5 * time.Minute)
+	defer store.Close()
+
+	sessionID, err := store.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:        "openai",
+		Model:           "gpt-5.4",
+		ReasoningEffort: "high",
+		MaxFollowups:    2,
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+
+	session, err := store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if session.InitialRequestCompleted {
+		t.Fatalf("did not expect initial request to be completed")
+	}
+	if session.FollowupCount != 0 {
+		t.Fatalf("unexpected initial follow-up count: %d", session.FollowupCount)
+	}
+
+	if err := store.SetFollowupState(sessionID, true, 0); err != nil {
+		t.Fatalf("unexpected state update error after first request: %v", err)
+	}
+
+	session, err = store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected get error after first request update: %v", err)
+	}
+	if !session.InitialRequestCompleted {
+		t.Fatalf("expected initial request to be completed")
+	}
+	if session.FollowupCount != 0 {
+		t.Fatalf("unexpected follow-up count after first request: %d", session.FollowupCount)
+	}
+
+	if err := store.SetFollowupState(sessionID, true, 1); err != nil {
+		t.Fatalf("unexpected state update error for first follow-up: %v", err)
+	}
+	session, err = store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected get error after first follow-up: %v", err)
+	}
+	if session.FollowupCount != 1 {
+		t.Fatalf("unexpected follow-up count after first follow-up: %d", session.FollowupCount)
+	}
+
+	if err := store.SetFollowupState(sessionID, true, 2); err != nil {
+		t.Fatalf("unexpected state update error for second follow-up: %v", err)
+	}
+	session, err = store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected get error after second follow-up: %v", err)
+	}
+	if session.FollowupCount != 2 {
+		t.Fatalf("unexpected follow-up count after second follow-up: %d", session.FollowupCount)
+	}
+}

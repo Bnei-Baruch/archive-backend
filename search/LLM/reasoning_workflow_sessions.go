@@ -20,6 +20,7 @@ type ReasoningWorkflowStageSession struct {
 	MaxTokens          int
 	MaxIterations      int
 	RerunMaxIterations int
+	MaxFollowups       int
 	// ProviderSessionID may be empty for one-shot stages such as verification.
 	// Example: the reasoning stage stores OpenAI previous_response_id or a
 	// provider-side session/history id, while the verification stage is a single
@@ -28,11 +29,13 @@ type ReasoningWorkflowStageSession struct {
 }
 
 type ReasoningWorkflowSession struct {
-	ID        string
-	Stages    map[string]ReasoningWorkflowStageSession
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	ExpiresAt time.Time
+	ID                      string
+	Stages                  map[string]ReasoningWorkflowStageSession
+	InitialRequestCompleted bool
+	FollowupCount           int
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+	ExpiresAt               time.Time
 }
 
 type ReasoningWorkflowSessionStore struct {
@@ -124,6 +127,28 @@ func (s *ReasoningWorkflowSessionStore) SetStage(sessionID string, stageName str
 		session.Stages = map[string]ReasoningWorkflowStageSession{}
 	}
 	session.Stages[stageName] = stage
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func (s *ReasoningWorkflowSessionStore) SetFollowupState(sessionID string, initialRequestCompleted bool, followupCount int) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+
+	session.InitialRequestCompleted = initialRequestCompleted
+	session.FollowupCount = followupCount
 	session.UpdatedAt = now
 	session.ExpiresAt = now.Add(s.ttl)
 	return nil

@@ -135,6 +135,7 @@ func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	oldMaxTokens := viper.GetInt("openai.reasoning-search-max-output-tokens")
 	oldMaxIterations := viper.GetInt("openai.reasoning-search-max-iterations")
 	oldRerunMaxIterations := viper.GetInt("openai.reasoning-search-rerun-max-iterations")
+	oldMaxFollowups := viper.Get("llm.reasoning-search-max-followups")
 	oldVerificationModel := viper.GetString("openai.reasoning-search-verification-model")
 	oldVerificationEffort := viper.GetString("openai.reasoning-search-verification-effort")
 	oldVerificationMaxTokens := viper.GetInt("openai.reasoning-search-verification-max-output-tokens")
@@ -146,6 +147,7 @@ func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	defer viper.Set("openai.reasoning-search-max-output-tokens", oldMaxTokens)
 	defer viper.Set("openai.reasoning-search-max-iterations", oldMaxIterations)
 	defer viper.Set("openai.reasoning-search-rerun-max-iterations", oldRerunMaxIterations)
+	defer viper.Set("llm.reasoning-search-max-followups", oldMaxFollowups)
 	defer viper.Set("openai.reasoning-search-verification-model", oldVerificationModel)
 	defer viper.Set("openai.reasoning-search-verification-effort", oldVerificationEffort)
 	defer viper.Set("openai.reasoning-search-verification-max-output-tokens", oldVerificationMaxTokens)
@@ -156,6 +158,7 @@ func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	viper.Set("openai.reasoning-search-max-output-tokens", 1234)
 	viper.Set("openai.reasoning-search-max-iterations", 6)
 	viper.Set("openai.reasoning-search-rerun-max-iterations", 2)
+	viper.Set("llm.reasoning-search-max-followups", 3)
 	viper.Set("llm.reasoning-search-verification-enabled", true)
 	viper.Set("llm.reasoning-search-verification-provider", "openai")
 	viper.Set("openai.reasoning-search-verification-model", "verifier-model")
@@ -183,6 +186,9 @@ func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	}
 	if cfg.RerunMaxIterations != 2 {
 		t.Fatalf("unexpected rerun max iterations: %d", cfg.RerunMaxIterations)
+	}
+	if cfg.MaxFollowups != 3 {
+		t.Fatalf("unexpected max followups: %d", cfg.MaxFollowups)
 	}
 	if cfg.Verification == nil {
 		t.Fatalf("expected verification config")
