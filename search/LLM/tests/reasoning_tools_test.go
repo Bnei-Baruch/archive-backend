@@ -128,7 +128,7 @@ func TestGenerateSystemMessageForReasoningSearchIncludesToolUsage(t *testing.T) 
 	}
 
 	finalFollowupMessage := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), 20, 0)
-	if !strings.Contains(finalFollowupMessage, "No further follow-up requests remain in this session after this response.") {
+	if !strings.Contains(finalFollowupMessage, "no further follow-up requests remain in this session after this response") {
 		t.Fatalf("expected no-followup instruction when budget is exhausted: %s", finalFollowupMessage)
 	}
 }

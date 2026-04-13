@@ -50,11 +50,14 @@ type elasticsearchSearchToolArgs struct {
 }
 
 type elasticsearchSearchToolResult struct {
-	Query  search.Query        `json:"query"`
-	SortBy string              `json:"sort_by"`
-	From   int                 `json:"from"`
-	Size   int                 `json:"size"`
-	Result *search.QueryResult `json:"result,omitempty"`
+	Query          search.Query        `json:"query"`
+	SortBy         string              `json:"sort_by"`
+	From           int                 `json:"from"`
+	Size           int                 `json:"size"`
+	Result         *search.QueryResult `json:"result,omitempty"`
+	Error          string              `json:"error,omitempty"`
+	RetrySuggested bool                `json:"retry_suggested,omitempty"`
+	Guidance       string              `json:"guidance,omitempty"`
 }
 
 func NewElasticsearchSearchTool(engine ElasticsearchSearchEngine, timeoutForHighlight time.Duration) *ElasticsearchSearchTool {
@@ -198,6 +201,7 @@ Arguments:
 - exact_phrase: optional boolean. When true, the full query is treated as one exact phrase and requires a non-empty query.
 Behavior:
 - Returns JSON with the normalized search query, selected sort, pagination, and Elasticsearch result payload.
+- If Elasticsearch fails, the tool returns an error field and retry guidance.
 - Use this as the main discovery tool. If the returned highlights are not sufficient, and you need direct source or transcript evidence, follow up with query_source_ai or query_transcript_ai.
 Returned data:
 - query: the normalized search.Query that was actually executed. Inspect query.term, query.exact_terms, query.filters, and query.language_order to understand the final search request.
@@ -294,7 +298,16 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 		t.timeoutForHighlight,
 	)
 	if err != nil {
-		return "", fmt.Errorf("elasticsearch_search: DoSearch failed: %w", err)
+		llm.LogIfDeb(ctx, "elasticsearch_search: runtime search failure query=%q err=%v", queryText, err)
+		return marshalToolResult(elasticsearchSearchToolResult{
+			Query:          query,
+			SortBy:         sortBy,
+			From:           from,
+			Size:           size,
+			Error:          fmt.Sprintf("Elasticsearch search failed: %v", err),
+			RetrySuggested: true,
+			Guidance:       "Try another query variation or simpler filters. If the same runtime error repeats, stop retrying the same search and continue with other available tools.",
+		})
 	}
 	hitCount := int64(0)
 	if result != nil && result.SearchResult != nil && result.SearchResult.Hits != nil {

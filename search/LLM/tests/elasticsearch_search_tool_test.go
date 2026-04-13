@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -30,8 +31,11 @@ type fakeElasticsearchSearchEngine struct {
 }
 
 type elasticsearchSearchToolPayload struct {
-	SortBy string              `json:"sort_by"`
-	Result *search.QueryResult `json:"result,omitempty"`
+	SortBy         string              `json:"sort_by"`
+	Result         *search.QueryResult `json:"result,omitempty"`
+	Error          string              `json:"error,omitempty"`
+	RetrySuggested bool                `json:"retry_suggested,omitempty"`
+	Guidance       string              `json:"guidance,omitempty"`
 }
 
 func (e *fakeElasticsearchSearchEngine) DoSearch(
@@ -201,6 +205,38 @@ func TestElasticsearchSearchToolExecuteRejectsUnknownFilter(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unsupported filter") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestElasticsearchSearchToolExecuteReturnsRetryPayloadOnSearchRuntimeError(t *testing.T) {
+	engine := &fakeElasticsearchSearchEngine{
+		err: errors.New("es timeout"),
+	}
+	tool := llmtools.NewElasticsearchSearchTool(engine, 0)
+
+	result, err := tool.Execute(context.Background(), json.RawMessage(`{
+		"query":"ד' בחינות דאור ישר",
+		"language":"he"
+	}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	payload := elasticsearchSearchToolPayload{}
+	if err := json.Unmarshal([]byte(result), &payload); err != nil {
+		t.Fatalf("failed to unmarshal tool result: %v", err)
+	}
+	if payload.Error == "" {
+		t.Fatalf("expected error payload, got %#v", payload)
+	}
+	if !payload.RetrySuggested {
+		t.Fatalf("expected retry guidance, got %#v", payload)
+	}
+	if !strings.Contains(payload.Guidance, "Try another query variation") {
+		t.Fatalf("unexpected guidance: %q", payload.Guidance)
+	}
+	if payload.Result != nil {
+		t.Fatalf("expected nil result on runtime error, got %#v", payload.Result)
 	}
 }
 
