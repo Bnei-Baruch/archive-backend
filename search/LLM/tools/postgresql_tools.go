@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -298,6 +299,32 @@ WHERE ccu.collection_id = $2
 ORDER BY ccu.position ASC, COALESCE(NULLIF(cu.properties->>'film_date', '')::date, cu.created_at::date) DESC, cu.created_at DESC
 LIMIT $4`
 
+const collectionUIDsByContentUnitMDBIDQuery = `
+SELECT DISTINCT c.uid
+FROM collections c
+INNER JOIN collections_content_units ccu ON c.id = ccu.collection_id
+INNER JOIN content_units cu ON cu.id = ccu.content_unit_id
+WHERE c.secure = $1
+  AND c.published IS TRUE
+  AND cu.secure = $1
+  AND cu.published IS TRUE
+  AND cu.id = $2
+ORDER BY c.uid ASC
+LIMIT 5`
+
+const collectionUIDsByContentUnitUIDQuery = `
+SELECT DISTINCT c.uid
+FROM collections c
+INNER JOIN collections_content_units ccu ON c.id = ccu.collection_id
+INNER JOIN content_units cu ON cu.id = ccu.content_unit_id
+WHERE c.secure = $1
+  AND c.published IS TRUE
+  AND cu.secure = $1
+  AND cu.published IS TRUE
+  AND cu.uid = $2
+ORDER BY c.uid ASC
+LIMIT 5`
+
 type GetSourcesByAuthorTool struct {
 	db    *sql.DB
 	cache *postgreSQLToolCache
@@ -332,6 +359,13 @@ type postgreSQLToolCache struct {
 type postgreSQLToolCacheItem struct {
 	value     string
 	expiresAt time.Time
+}
+
+type postgreSQLToolRecoverableResult struct {
+	Error                  string   `json:"error,omitempty"`
+	RetrySuggested         bool     `json:"retry_suggested,omitempty"`
+	Guidance               string   `json:"guidance,omitempty"`
+	SuggestedCollectionIDs []string `json:"suggested_collection_ids,omitempty"`
 }
 
 type getSourcesByAuthorArgs struct {
@@ -975,7 +1009,22 @@ func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMess
 
 	if collectionID != "" && len(items) == 0 {
 		llm.LogIfDeb(ctx, "get_collections: collection not found collection_id=%q", collectionID)
-		return "", fmt.Errorf("get_collections: collection not found for collection_id '%s'", collectionID)
+		collectionUIDs, lookupErr := loadCollectionUIDsForContentUnit(t.db, collectionID)
+		if lookupErr != nil {
+			llm.LogIfDeb(ctx, "get_collections: failed to check content-unit fallback for collection_id=%q err=%v", collectionID, lookupErr)
+		}
+		errorText := fmt.Sprintf("Collection not found for collection_id '%s'", collectionID)
+		guidance := "Try another collection_id from get_collections or continue with another search query instead of repeating the same missing collection lookup."
+		if len(collectionUIDs) > 0 {
+			errorText = fmt.Sprintf("Collection not found for collection_id '%s'. This id looks like a content_unit_id instead.", collectionID)
+			guidance = fmt.Sprintf("get_collections expects a collection_id, not a content_unit_id. Consider using one of these parent collection ids instead: %s", strings.Join(collectionUIDs, ", "))
+		}
+		return marshalToolResult(postgreSQLToolRecoverableResult{
+			Error:                  errorText,
+			RetrySuggested:         true,
+			Guidance:               guidance,
+			SuggestedCollectionIDs: collectionUIDs,
+		})
 	}
 	llm.LogIfDeb(ctx, "get_collections: completed collection_id=%q returned_count=%d", collectionID, len(items))
 
@@ -1018,6 +1067,25 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 
 	collection, err := loadCollectionToolResult(t.db, collectionID, language)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			llm.LogIfDeb(ctx, "get_content_units_by_collection: collection not found collection_id=%q", collectionID)
+			collectionUIDs, lookupErr := loadCollectionUIDsForContentUnit(t.db, collectionID)
+			if lookupErr != nil {
+				llm.LogIfDeb(ctx, "get_content_units_by_collection: failed to check content-unit fallback for collection_id=%q err=%v", collectionID, lookupErr)
+			}
+			errorText := fmt.Sprintf("Collection not found for collection_id '%s'", collectionID)
+			guidance := "Try another collection_id from get_collections or continue with another search query instead of repeating the same missing collection lookup."
+			if len(collectionUIDs) > 0 {
+				errorText = fmt.Sprintf("Collection not found for collection_id '%s'. This id looks like a content_unit_id instead.", collectionID)
+				guidance = fmt.Sprintf("get_content_units_by_collection requires collection_id, not content_unit_id. Use one of these parent collection ids instead: %s", strings.Join(collectionUIDs, ", "))
+			}
+			return marshalToolResult(postgreSQLToolRecoverableResult{
+				Error:                  errorText,
+				RetrySuggested:         true,
+				Guidance:               guidance,
+				SuggestedCollectionIDs: collectionUIDs,
+			})
+		}
 		return "", err
 	}
 	llm.LogIfDeb(ctx, "get_content_units_by_collection: resolved collection mdb_id=%d uid=%q", collection.MDBID, collection.UID)
@@ -1174,12 +1242,44 @@ func loadCollectionToolResult(db *sql.DB, collectionID string, language string) 
 	item, err := scanCollectionToolResult(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("get_content_units_by_collection: collection not found for collection_id '%s'", collectionID)
+			return nil, fmt.Errorf("get_content_units_by_collection: collection not found for collection_id '%s': %w", collectionID, sql.ErrNoRows)
 		}
 		return nil, fmt.Errorf("get_content_units_by_collection: collection lookup failed: %w", err)
 	}
 
 	return &item, nil
+}
+
+func loadCollectionUIDsForContentUnit(db *sql.DB, contentUnitID string) ([]string, error) {
+	rowQuery := collectionUIDsByContentUnitUIDQuery
+	queryValue := interface{}(contentUnitID)
+	if numericID, ok := parsePostgreSQLToolNumericID(contentUnitID); ok {
+		rowQuery = collectionUIDsByContentUnitMDBIDQuery
+		queryValue = numericID
+	}
+
+	rows, err := db.Query(rowQuery, consts.SEC_PUBLIC, queryValue)
+	if err != nil {
+		return nil, fmt.Errorf("content unit collection lookup failed: %w", err)
+	}
+	defer rows.Close()
+
+	collectionUIDs := []string{}
+	for rows.Next() {
+		var collectionUID string
+		if err := rows.Scan(&collectionUID); err != nil {
+			return nil, fmt.Errorf("content unit collection scan failed: %w", err)
+		}
+		collectionUID = strings.TrimSpace(collectionUID)
+		if collectionUID == "" {
+			continue
+		}
+		collectionUIDs = append(collectionUIDs, collectionUID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("content unit collection rows failed: %w", err)
+	}
+	return collectionUIDs, nil
 }
 
 func scanCollectionToolResult(scanner interface {
