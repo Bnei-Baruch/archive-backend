@@ -33,6 +33,7 @@ type ReasoningWorkflowSession struct {
 	Stages                  map[string]ReasoningWorkflowStageSession
 	InitialRequestCompleted bool
 	FollowupCount           int
+	CachedInitialResponse   *ReasoningSearchCacheEntry
 	CreatedAt               time.Time
 	UpdatedAt               time.Time
 	ExpiresAt               time.Time
@@ -105,6 +106,7 @@ func (s *ReasoningWorkflowSessionStore) Get(sessionID string) (*ReasoningWorkflo
 	for key, value := range session.Stages {
 		copySession.Stages[key] = value
 	}
+	copySession.CachedInitialResponse = cloneReasoningSearchCacheEntry(session.CachedInitialResponse)
 	return &copySession, nil
 }
 
@@ -149,6 +151,27 @@ func (s *ReasoningWorkflowSessionStore) SetFollowupState(sessionID string, initi
 
 	session.InitialRequestCompleted = initialRequestCompleted
 	session.FollowupCount = followupCount
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func (s *ReasoningWorkflowSessionStore) SetCachedInitialResponse(sessionID string, entry *ReasoningSearchCacheEntry) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+
+	session.CachedInitialResponse = cloneReasoningSearchCacheEntry(entry)
 	session.UpdatedAt = now
 	session.ExpiresAt = now.Add(s.ttl)
 	return nil

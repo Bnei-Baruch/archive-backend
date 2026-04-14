@@ -2,6 +2,7 @@ package llm
 
 type ReasoningSearchResponse struct {
 	SessionID           string                               `json:"session_id"`
+	CacheHit            bool                                 `json:"cache_hit"`
 	Query               string                               `json:"query"`
 	Summary             string                               `json:"summary"`
 	ReasoningSummary    string                               `json:"reasoning_summary"`

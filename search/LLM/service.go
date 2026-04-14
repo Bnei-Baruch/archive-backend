@@ -18,8 +18,9 @@ type Service interface {
 }
 
 type Runtime struct {
-	Tools    *ReasoningToolManager
-	Progress *ReasoningProgressStore
-	Workflow *ReasoningWorkflowSessionStore
-	Services map[string]Service
+	Tools          *ReasoningToolManager
+	Progress       *ReasoningProgressStore
+	Workflow       *ReasoningWorkflowSessionStore
+	ReasoningCache *ReasoningSearchCacheStore
+	Services       map[string]Service
 }

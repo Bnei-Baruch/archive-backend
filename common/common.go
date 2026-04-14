@@ -110,6 +110,10 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	progress := llm.NewReasoningProgressStore(llm.ReasoningSessionTTLFromConfig())
 	//	Workflow stores stage/provider/session metadata needed to resume or rerun correctly
 	workflow := llm.NewReasoningWorkflowSessionStore(llm.ReasoningSessionTTLFromConfig())
+	var reasoningCache *llm.ReasoningSearchCacheStore
+	if llm.ReasoningSearchCacheEnabledFromConfig() {
+		reasoningCache = llm.NewReasoningSearchCacheStore(llm.ReasoningSearchCacheTTLFromConfig())
+	}
 	defaultProvider := llm.ProviderFromConfig()
 	verificationProvider := llm.ReasoningSearchVerificationProviderFromConfig()
 	aiToolsConfig, err := llm.AIToolsConfigFromConfig()
@@ -152,10 +156,11 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	utils.Must(err)
 
 	LLM_RUNTIME = &llm.Runtime{
-		Tools:    tools,
-		Progress: progress,
-		Workflow: workflow,
-		Services: services,
+		Tools:          tools,
+		Progress:       progress,
+		Workflow:       workflow,
+		ReasoningCache: reasoningCache,
+		Services:       services,
 	}
 
 	return clock
@@ -178,6 +183,9 @@ func Shutdown() {
 		}
 		if LLM_RUNTIME.Workflow != nil {
 			utils.Must(LLM_RUNTIME.Workflow.Close())
+		}
+		if LLM_RUNTIME.ReasoningCache != nil {
+			utils.Must(LLM_RUNTIME.ReasoningCache.Close())
 		}
 	}
 	utils.Must(DB.Close())

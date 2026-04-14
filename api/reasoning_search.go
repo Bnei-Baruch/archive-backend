@@ -145,6 +145,13 @@ func ReasoningSearchHandler(c *gin.Context) {
 	followupsUsed := 0
 	followupsRemaining := 0
 	initialRequestCompleted := false
+	var cachedInitialResponse *llm.ReasoningSearchCacheEntry
+	cacheKey := ""
+	cacheEligible := false
+
+	if r.SessionID == nil && runtime.ReasoningCache != nil && !r.Deb {
+		cacheKey, cacheEligible = llm.ReasoningSearchCacheKeyForQuery(r.Query)
+	}
 
 	if r.SessionID != nil {
 		workflowSession, err := workflowStore.Get(*r.SessionID)
@@ -167,6 +174,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 			verificationStage = &stageCopy
 		}
 		initialRequestCompleted = workflowSession.InitialRequestCompleted
+		cachedInitialResponse = workflowSession.CachedInitialResponse
 		responseSessionID = workflowSession.ID
 		providerID := strings.TrimSpace(stage.ProviderSessionID)
 		providerSessionID = &providerID
@@ -221,6 +229,37 @@ func ReasoningSearchHandler(c *gin.Context) {
 		providerSessionID = &providerID
 		progressID := responseSessionID
 		progressSessionID = &progressID
+
+		if cacheEligible {
+			if cachedEntry, ok := runtime.ReasoningCache.Get(cacheKey); ok {
+				cachedEntry.Query = r.Query
+				if err := workflowStore.SetCachedInitialResponse(responseSessionID, cachedEntry); err != nil {
+					NewInternalError(err).Abort(c)
+					return
+				}
+				if err := workflowStore.SetFollowupState(responseSessionID, true, 0); err != nil {
+					NewInternalError(err).Abort(c)
+					return
+				}
+
+				response.Query = r.Query
+				response.Summary = cachedEntry.Summary
+				response.CacheHit = true
+				response.SetUsedTools([]string{})
+				response.Results = append([]llm.ReasoningSearchResult(nil), cachedEntry.Results...)
+				response.SetSessionID(responseSessionID)
+				if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
+					progressStore.Fail(responseSessionID, response.ReasoningIterations)
+					NewInternalError(err).Abort(c)
+					return
+				}
+				response.SetFollowupBudget(reasoningStage.MaxFollowups, 0, reasoningStage.MaxFollowups)
+				progressStore.Complete(responseSessionID, 0)
+				log.Infof("Reasoning Search Cache Hit: [%s]", cacheKey)
+				c.JSON(http.StatusOK, response)
+				return
+			}
+		}
 	}
 
 	if r.SessionID != nil {
@@ -269,11 +308,24 @@ func ReasoningSearchHandler(c *gin.Context) {
 			Role:    "system",
 			Content: systemMessage,
 		},
-		{
-			Role:    "user",
-			Content: r.Query,
-		},
 	}
+	usedCachedInitialResponse := cachedInitialResponse != nil
+	if cachedInitialResponse != nil {
+		messages = append(messages,
+			llm.LLMBotMessage{
+				Role:    "user",
+				Content: cachedInitialResponse.Query,
+			},
+			llm.LLMBotMessage{
+				Role:    "assistant",
+				Content: llm.BuildReasoningSearchCacheSeedAssistantContent(cachedInitialResponse),
+			},
+		)
+	}
+	messages = append(messages, llm.LLMBotMessage{
+		Role:    "user",
+		Content: r.Query,
+	})
 
 	promptCacheKey := fmt.Sprintf(
 		"reasoning-search:m=%s:e=%s",
@@ -316,6 +368,13 @@ func ReasoningSearchHandler(c *gin.Context) {
 		progressStore.Fail(responseSessionID, response.ReasoningIterations)
 		NewInternalError(err).Abort(c)
 		return
+	}
+	if usedCachedInitialResponse {
+		if err := workflowStore.SetCachedInitialResponse(responseSessionID, nil); err != nil {
+			progressStore.Fail(responseSessionID, response.ReasoningIterations)
+			NewInternalError(err).Abort(c)
+			return
+		}
 	}
 	response.SetSessionID(responseSessionID)
 	if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
@@ -521,6 +580,9 @@ func ReasoningSearchHandler(c *gin.Context) {
 
 	response.SetFollowupBudget(reasoningStage.MaxFollowups, followupsUsed, followupsRemaining)
 	progressStore.Complete(responseSessionID, response.ReasoningIterations)
+	if cacheEligible && runtime.ReasoningCache != nil {
+		runtime.ReasoningCache.Set(cacheKey, llm.BuildReasoningSearchCacheEntryFromResponse(&response))
+	}
 
 	c.JSON(http.StatusOK, response)
 }

@@ -216,6 +216,18 @@ func ReasoningSessionTTLFromConfig() time.Duration {
 	}
 }
 
+func ReasoningSearchCacheEnabledFromConfig() bool {
+	return viper.GetBool("llm.reasoning-search-cache-enabled")
+}
+
+func ReasoningSearchCacheTTLFromConfig() time.Duration {
+	ttl := viper.GetDuration("llm.reasoning-search-cache-ttl")
+	if ttl <= 0 {
+		return defaultReasoningSearchCacheTTL
+	}
+	return ttl
+}
+
 func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 	provider := ProviderFromConfig()
 	verificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")

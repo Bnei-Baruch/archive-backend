@@ -166,5 +166,11 @@ func openAIReasoningSessionCleanupInterval(ttl time.Duration) time.Duration {
 	if ttl <= 10*time.Minute {
 		return time.Minute
 	}
-	return 5 * time.Minute
+	if ttl <= time.Hour {
+		return 5 * time.Minute
+	}
+	if ttl <= 24*time.Hour {
+		return time.Hour
+	}
+	return 24 * time.Hour
 }
