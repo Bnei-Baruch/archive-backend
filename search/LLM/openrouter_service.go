@@ -12,7 +12,7 @@ import (
 const defaultOpenRouterAPIBaseURL = "https://openrouter.ai/api/v1"
 
 type OpenRouterService struct {
-	*OpenAIService
+	*OpenAICompatibleAPIService
 	sessions               *ChatReasoningSessionStore
 	providerPreferences    *ResponsesProvider
 	requiredToolIterations int
@@ -24,16 +24,16 @@ func NewOpenRouterService(token string) *OpenRouterService {
 	return NewOpenRouterServiceWithOptions(token, nil, nil, "")
 }
 
-func NewOpenRouterServiceWithOptions(token string, pricing []OpenAIModelPricing, sessions *ChatReasoningSessionStore, apiBaseURL string) *OpenRouterService {
+func NewOpenRouterServiceWithOptions(token string, pricing []ModelPricing, sessions *ChatReasoningSessionStore, apiBaseURL string) *OpenRouterService {
 	apiBaseURL = strings.TrimSpace(apiBaseURL)
 	if apiBaseURL == "" {
 		apiBaseURL = defaultOpenRouterAPIBaseURL
 	}
 
 	return &OpenRouterService{
-		OpenAIService:          NewOpenAIServiceWithOptions(token, pricing, nil, apiBaseURL),
-		sessions:               sessions,
-		requiredToolIterations: 1,
+		OpenAICompatibleAPIService: newOpenAICompatibleAPIServiceWithOptions(token, pricing, nil, apiBaseURL),
+		sessions:                   sessions,
+		requiredToolIterations:     1,
 	}
 }
 

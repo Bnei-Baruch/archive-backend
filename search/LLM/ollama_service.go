@@ -15,7 +15,7 @@ const (
 )
 
 type OllamaService struct {
-	*OpenAIService
+	*BaseLLMService
 	sessions                     *ChatReasoningSessionStore
 	numCtx                       int
 	keepAlive                    string
@@ -80,16 +80,15 @@ func NewOllamaService(token string) *OllamaService {
 	return NewOllamaServiceWithOptions(token, nil, nil, "", defaultOllamaNumCtx, "", nil, false)
 }
 
-func NewOllamaServiceWithOptions(token string, pricing []OpenAIModelPricing, sessions *ChatReasoningSessionStore, apiBaseURL string, numCtx int, keepAlive string, temperature *float64, structuredOutputPromptSchema bool) *OllamaService {
+func NewOllamaServiceWithOptions(token string, pricing []ModelPricing, sessions *ChatReasoningSessionStore, apiBaseURL string, numCtx int, keepAlive string, temperature *float64, structuredOutputPromptSchema bool) *OllamaService {
 	if numCtx <= 0 {
 		numCtx = defaultOllamaNumCtx
 	}
 
-	base := NewOpenAIServiceWithOptions(token, pricing, nil, defaultOpenAIAPIBaseURL)
-	base.apiBaseURL = normalizeOllamaAPIBaseURL(apiBaseURL)
+	base := newBaseLLMService(token, pricing, normalizeOllamaAPIBaseURL(apiBaseURL))
 
 	return &OllamaService{
-		OpenAIService:                base,
+		BaseLLMService:               base,
 		sessions:                     sessions,
 		numCtx:                       numCtx,
 		keepAlive:                    strings.TrimSpace(keepAlive),

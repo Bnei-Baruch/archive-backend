@@ -126,6 +126,27 @@ func TestNewServiceFromConfigSupportsZAI(t *testing.T) {
 	}
 }
 
+func TestNewServiceFromConfigSupportsXAI(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldToken := viper.GetString("xai.token")
+	oldEndpoint := viper.GetString("xai.api-endpoint")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("xai.token", oldToken)
+	defer viper.Set("xai.api-endpoint", oldEndpoint)
+
+	viper.Set("llm.provider", "xai")
+	viper.Set("xai.token", "test-token")
+	viper.Set("xai.api-endpoint", "")
+
+	service, err := llm.NewServiceFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := service.(*llm.XAIService); !ok {
+		t.Fatalf("unexpected service type: %T", service)
+	}
+}
+
 func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldVerificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
@@ -381,6 +402,75 @@ func TestReasoningSearchConfigFromConfigUsesZAISection(t *testing.T) {
 	}
 	if cfg.RerunMaxIterations != 4 {
 		t.Fatalf("unexpected rerun max iterations: %d", cfg.RerunMaxIterations)
+	}
+}
+
+func TestReasoningSearchConfigFromConfigUsesXAISection(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldVerificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
+	oldModel := viper.GetString("xai.reasoning-search-model")
+	oldEffort := viper.GetString("xai.reasoning-search-effort")
+	oldMaxTokens := viper.GetInt("xai.reasoning-search-max-output-tokens")
+	oldMaxIterations := viper.GetInt("xai.reasoning-search-max-iterations")
+	oldRerunMaxIterations := viper.GetInt("xai.reasoning-search-rerun-max-iterations")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-verification-enabled", oldVerificationEnabled)
+	defer viper.Set("xai.reasoning-search-model", oldModel)
+	defer viper.Set("xai.reasoning-search-effort", oldEffort)
+	defer viper.Set("xai.reasoning-search-max-output-tokens", oldMaxTokens)
+	defer viper.Set("xai.reasoning-search-max-iterations", oldMaxIterations)
+	defer viper.Set("xai.reasoning-search-rerun-max-iterations", oldRerunMaxIterations)
+
+	viper.Set("llm.provider", "xai")
+	viper.Set("llm.reasoning-search-verification-enabled", false)
+	viper.Set("xai.reasoning-search-model", "grok-4-1-fast-reasoning")
+	viper.Set("xai.reasoning-search-effort", "")
+	viper.Set("xai.reasoning-search-max-output-tokens", 3456)
+	viper.Set("xai.reasoning-search-max-iterations", 9)
+	viper.Set("xai.reasoning-search-rerun-max-iterations", 3)
+
+	cfg, err := llm.ReasoningSearchConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Provider != "xai" {
+		t.Fatalf("unexpected provider: %s", cfg.Provider)
+	}
+	if cfg.Model != "grok-4-1-fast-reasoning" {
+		t.Fatalf("unexpected model: %s", cfg.Model)
+	}
+	if cfg.Effort != "" {
+		t.Fatalf("unexpected effort: %q", cfg.Effort)
+	}
+	if cfg.MaxTokens != 3456 {
+		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
+	}
+	if cfg.MaxIterations != 9 {
+		t.Fatalf("unexpected max iterations: %d", cfg.MaxIterations)
+	}
+	if cfg.RerunMaxIterations != 3 {
+		t.Fatalf("unexpected rerun max iterations: %d", cfg.RerunMaxIterations)
+	}
+}
+
+func TestReasoningSearchConfigFromConfigRejectsXAIEffort(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldModel := viper.GetString("xai.reasoning-search-model")
+	oldEffort := viper.GetString("xai.reasoning-search-effort")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("xai.reasoning-search-model", oldModel)
+	defer viper.Set("xai.reasoning-search-effort", oldEffort)
+
+	viper.Set("llm.provider", "xai")
+	viper.Set("xai.reasoning-search-model", "grok-4-1-fast-reasoning")
+	viper.Set("xai.reasoning-search-effort", "high")
+
+	_, err := llm.ReasoningSearchConfigFromConfig()
+	if err == nil {
+		t.Fatalf("expected error for xai reasoning effort")
+	}
+	if !strings.Contains(err.Error(), "xai.reasoning-search-effort is not supported") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

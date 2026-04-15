@@ -24,7 +24,7 @@ func TestOpenRouterReasoningWithToolsUsesResponsesAPI(t *testing.T) {
 		Sort:              "latency",
 		RequireParameters: boolPtr(true),
 	}
-	service.OpenAIService.client = &http.Client{
+	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			if req.URL.Path != "/v1/responses" {
 				t.Fatalf("unexpected path: %s", req.URL.Path)
@@ -199,7 +199,7 @@ func TestOpenRouterUsesConfiguredRequiredToolIterations(t *testing.T) {
 	requests := []map[string]interface{}{}
 	service := NewOpenRouterServiceWithOptions("test-token", nil, nil, "https://openrouter.test")
 	service.requiredToolIterations = 5
-	service.OpenAIService.client = &http.Client{
+	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			var payload map[string]interface{}
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
@@ -322,7 +322,7 @@ func TestOpenRouterGetStructuredOutputWithDebugReturnsUsage(t *testing.T) {
 		Sort:              "latency",
 		RequireParameters: boolPtr(true),
 	}
-	service.OpenAIService.client = &http.Client{
+	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			if req.URL.Path != "/v1/responses" {
 				t.Fatalf("unexpected path: %s", req.URL.Path)
@@ -424,7 +424,7 @@ func TestOpenRouterReasoningSessionReplaysHistory(t *testing.T) {
 		Sort:              "latency",
 		RequireParameters: boolPtr(true),
 	}
-	service.OpenAIService.client = &http.Client{
+	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			var payload map[string]interface{}
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {

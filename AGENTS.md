@@ -18,13 +18,17 @@ Instructions for coding agents working in this repository.
   - `es/` Elasticsearch indexing pipelines
   - `mdb/` SQLBoiler-generated MDB models
   - `events/` NATS-based event processing
-- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), OpenAI (`[openai]`).
+- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`).
 - Config: `config.toml` (see `config.sample.toml`).
 
 ## LLM Architecture
 - Use the provider-agnostic `llm.Service` interface in `search/LLM/service.go`.
 - Provider selection is driven by `[llm].provider`.
+- Shared service layers:
+  - `search/LLM/base_service.go`: provider-agnostic client/pricing/debug helpers
+  - `search/LLM/openai_compatible_service.go`: shared OpenAI-compatible `/v1/responses` and chat logic
 - OpenAI reasoning + tools flow uses `v1/responses` with iteration via `previous_response_id`.
+- xAI also uses `v1/responses` with iteration via `previous_response_id`, but resumed requests must omit `instructions`.
 - OpenRouter also uses `v1/responses`, but continues sessions by replaying full message history instead of `previous_response_id`.
 - Ollama uses `/api/chat` with message-history replay; it does not use `tool_choice`.
 - `common.Init()` builds one app-scoped `common.LLM_RUNTIME`; do not construct new LLM services per request.
@@ -48,6 +52,7 @@ Instructions for coding agents working in this repository.
 - Workflow stages own their provider/model/effort settings; handlers should execute a stage from stored workflow state, not by re-reading current config for existing sessions.
 - Verification is currently a one-shot structured call, so its stored stage metadata may have an empty provider-native session id.
 - OpenAI short-lived reasoning sessions are stored in memory only, with TTL from `openai.reasoning-session-ttl`.
+- xAI short-lived reasoning sessions are also stored in memory only, with TTL from `xai.reasoning-session-ttl`.
 - OpenRouter and Ollama sessions also live in memory, but store full replayable conversation history via `chat_reasoning_sessions.go`.
 - If client sends a missing or expired `session_id`, the API returns an error; it does not silently start a new session.
 - OpenAI session state stores continuation data (`last_response_id`, model, effort), not the full prompt or hidden reasoning.
@@ -61,13 +66,17 @@ Instructions for coding agents working in this repository.
   - `[openai]` for OpenAI
   - `[openrouter]` for OpenRouter
   - `[ollama]` for Ollama
+  - `[xai]` for xAI
+  - `[zai]` for Z.AI
 - Verification model settings are also provider-specific:
   - `<provider>.reasoning-search-verification-model`
   - `<provider>.reasoning-search-verification-effort`
   - `<provider>.reasoning-search-verification-max-output-tokens`
 - OpenRouter supports configurable provider routing and `openrouter.enforced-tool-use-iterations` (default `1`).
+- xAI Grok 4 fast reasoning models do not support `reasoning_effort`; keep xAI effort config empty.
 - Ollama supports `ollama.num-ctx`; `ollama.temperature` and `ollama.structured-output-prompt-schema` are optional.
 - Pricing for cost estimation is configured per provider with `[[<provider>.pricing]]`.
+- Shared pricing/cost helpers live in `search/LLM/llm_pricing.go`.
 
 ## Implemented Tools
 - `query_source_ai`

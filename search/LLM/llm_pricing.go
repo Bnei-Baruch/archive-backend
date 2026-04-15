@@ -2,7 +2,7 @@ package llm
 
 import "strings"
 
-type OpenAIModelPricing struct {
+type ModelPricing struct {
 	Model                     string  `mapstructure:"model"`
 	Effort                    string  `mapstructure:"effort"`
 	InputPer1MTokensUSD       float64 `mapstructure:"input_per_1m_tokens_usd"`
@@ -18,7 +18,7 @@ type LLMUsageTotals struct {
 	TotalTokens       int
 }
 
-type OpenAICostBreakdown struct {
+type LLMCostBreakdown struct {
 	PricingConfigured           bool
 	InputPer1MTokensUSD         float64
 	CachedInputPer1MTokensUSD   float64
@@ -54,10 +54,10 @@ func (u LLMUsageTotals) UncachedInputTokens() int {
 	return uncached
 }
 
-func (s *OpenAIService) estimateCost(model string, effort string, usage LLMUsageTotals) OpenAICostBreakdown {
+func (s *BaseLLMService) estimateCost(model string, effort string, usage LLMUsageTotals) LLMCostBreakdown {
 	pricing, ok := s.findPricing(model, effort)
 	if !ok {
-		return OpenAICostBreakdown{}
+		return LLMCostBreakdown{}
 	}
 
 	cachedInputRate := pricing.CachedInputPer1MTokensUSD
@@ -69,7 +69,7 @@ func (s *OpenAIService) estimateCost(model string, effort string, usage LLMUsage
 	cachedInputCost := float64(usage.CachedInputTokens) * cachedInputRate / 1000000
 	outputCost := float64(usage.OutputTokens) * pricing.OutputPer1MTokensUSD / 1000000
 
-	return OpenAICostBreakdown{
+	return LLMCostBreakdown{
 		PricingConfigured:           true,
 		InputPer1MTokensUSD:         pricing.InputPer1MTokensUSD,
 		CachedInputPer1MTokensUSD:   cachedInputRate,
@@ -81,7 +81,7 @@ func (s *OpenAIService) estimateCost(model string, effort string, usage LLMUsage
 	}
 }
 
-func (s *OpenAIService) findPricing(model string, effort string) (*OpenAIModelPricing, bool) {
+func (s *BaseLLMService) findPricing(model string, effort string) (*ModelPricing, bool) {
 	normalizedModel := normalizePricingKey(model)
 	normalizedEffort := normalizePricingKey(effort)
 

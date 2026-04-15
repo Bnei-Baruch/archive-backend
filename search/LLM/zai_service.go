@@ -12,7 +12,7 @@ import (
 const defaultZAIAPIBaseURL = "https://api.z.ai/api/paas/v4"
 
 type ZAIService struct {
-	*OpenAIService
+	*BaseLLMService
 	sessions    *ChatReasoningSessionStore
 	doSample    *bool
 	temperature *float64
@@ -103,17 +103,16 @@ func NewZAIService(token string) *ZAIService {
 	return NewZAIServiceWithOptions(token, nil, nil, "", nil, nil, nil, nil)
 }
 
-func NewZAIServiceWithOptions(token string, pricing []OpenAIModelPricing, sessions *ChatReasoningSessionStore, apiBaseURL string, doSample *bool, temperature *float64, topP *float64, stop []string) *ZAIService {
-	base := NewOpenAIServiceWithOptions(token, pricing, nil, defaultOpenAIAPIBaseURL)
-	base.apiBaseURL = normalizeZAIAPIBaseURL(apiBaseURL)
+func NewZAIServiceWithOptions(token string, pricing []ModelPricing, sessions *ChatReasoningSessionStore, apiBaseURL string, doSample *bool, temperature *float64, topP *float64, stop []string) *ZAIService {
+	base := newBaseLLMService(token, pricing, normalizeZAIAPIBaseURL(apiBaseURL))
 
 	return &ZAIService{
-		OpenAIService: base,
-		sessions:      sessions,
-		doSample:      doSample,
-		temperature:   temperature,
-		topP:          topP,
-		stop:          append([]string(nil), stop...),
+		BaseLLMService: base,
+		sessions:       sessions,
+		doSample:       doSample,
+		temperature:    temperature,
+		topP:           topP,
+		stop:           append([]string(nil), stop...),
 	}
 }
 

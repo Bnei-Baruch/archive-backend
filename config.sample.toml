@@ -56,14 +56,14 @@ url_template="https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2
 refresh-search-stats="5m"
 
 [llm]
-provider="openai" # "openai", "openrouter", "ollama", "zai"
+provider="openai" # "openai", "openrouter", "ollama", "xai", "zai"
 postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache
-ai-tools-provider="openai" # "openai", "openrouter", "ollama", "zai"; defaults to llm.provider when empty
+ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai"; defaults to llm.provider when empty
 reasoning-search-cache-enabled=false
 reasoning-search-cache-ttl="120h" # default is 120h (5 days)
 reasoning-search-max-followups=2
 reasoning-search-verification-enabled=false
-reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "zai"; defaults to llm.provider when empty
+reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai"; defaults to llm.provider when empty
 
 [openai]
 token="sk-..."
@@ -175,6 +175,26 @@ structured-output-prompt-schema=false # when true, also embed the JSON schema an
 # model="gemma4:31b"
 # input_per_1m_tokens_usd=0
 # output_per_1m_tokens_usd=0
+
+[xai]
+token="xai-..."
+api-endpoint="" # optional; defaults to https://api.x.ai/v1
+reasoning-search-model="grok-4-1-fast-reasoning"
+reasoning-search-max-output-tokens=8000
+reasoning-search-max-iterations=20
+reasoning-search-rerun-max-iterations=2 # post-verification reasoning rerun
+ai-tools-model="grok-4-1-fast-reasoning"
+ai-tools-max-output-tokens=1500
+# reasoning-search-verification-model="grok-4-1-fast-reasoning"
+# reasoning-search-verification-max-output-tokens=2000
+reasoning-session-ttl="30m"
+request-timeout="5m"
+# grok-4 / grok-4-fast reasoning models do not support reasoning_effort
+
+[[xai.pricing]]
+model="grok-4-1-fast-reasoning"
+input_per_1m_tokens_usd=0.20
+output_per_1m_tokens_usd=0.50
 
 [zai]
 token="zai-..."

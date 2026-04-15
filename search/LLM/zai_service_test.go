@@ -13,7 +13,7 @@ import (
 func TestZAIReasoningWithToolsUsesChatCompletionsAPI(t *testing.T) {
 	requests := []map[string]interface{}{}
 	service := NewZAIServiceWithOptions("test-token", nil, nil, "https://api.z.ai", nil, nil, nil, nil)
-	service.OpenAIService.client = &http.Client{
+	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			if req.URL.Path != "/api/paas/v4/chat/completions" {
 				t.Fatalf("unexpected path: %s", req.URL.Path)
@@ -185,7 +185,7 @@ func TestZAIReasoningWithToolsUsesChatCompletionsAPI(t *testing.T) {
 
 func TestZAIGetStructuredOutputWithDebugUsesJSONMode(t *testing.T) {
 	service := NewZAIServiceWithOptions("test-token", nil, nil, "https://api.z.ai/api/paas/v4/chat/completions", nil, nil, nil, nil)
-	service.OpenAIService.client = &http.Client{
+	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			if req.URL.Path != "/api/paas/v4/chat/completions" {
 				t.Fatalf("unexpected path: %s", req.URL.Path)
@@ -271,7 +271,7 @@ func TestZAIGetStructuredOutputWithDebugUsesJSONMode(t *testing.T) {
 
 func TestZAIReasoningStructuredOutputRejectsNullRequiredTopLevelFields(t *testing.T) {
 	service := NewZAIServiceWithOptions("test-token", nil, nil, "https://api.z.ai", nil, nil, nil, nil)
-	service.OpenAIService.client = &http.Client{
+	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			body := mustJSON(t, map[string]interface{}{
 				"choices": []map[string]interface{}{
@@ -332,7 +332,7 @@ func TestZAIChatRequestIncludesSamplingControls(t *testing.T) {
 	topP := 0.8
 	stop := []string{"</json>"}
 	service := NewZAIServiceWithOptions("test-token", nil, nil, "https://api.z.ai", &doSample, &temperature, &topP, stop)
-	service.OpenAIService.client = &http.Client{
+	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			var payload map[string]interface{}
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {

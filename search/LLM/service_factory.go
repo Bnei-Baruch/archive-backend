@@ -12,6 +12,7 @@ const (
 	ProviderOpenAI     = "openai"
 	ProviderOpenRouter = "openrouter"
 	ProviderOllama     = "ollama"
+	ProviderXAI        = "xai"
 	ProviderZAI        = "zai"
 )
 
@@ -66,7 +67,7 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		if token == "" && strings.TrimSpace(apiEndpoint) == "" {
 			return nil, fmt.Errorf("openai.token is empty")
 		}
-		pricing := []OpenAIModelPricing{}
+		pricing := []ModelPricing{}
 		if err := viper.UnmarshalKey("openai.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read openai.pricing: %w", err)
 		}
@@ -84,7 +85,7 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 			return nil, fmt.Errorf("openrouter.token is empty")
 		}
 		apiEndpoint := viper.GetString("openrouter.api-endpoint")
-		pricing := []OpenAIModelPricing{}
+		pricing := []ModelPricing{}
 		if err := viper.UnmarshalKey("openrouter.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read openrouter.pricing: %w", err)
 		}
@@ -105,7 +106,7 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 	case ProviderOllama:
 		token := viper.GetString("ollama.token")
 		apiEndpoint := viper.GetString("ollama.api-endpoint")
-		pricing := []OpenAIModelPricing{}
+		pricing := []ModelPricing{}
 		if err := viper.UnmarshalKey("ollama.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read ollama.pricing: %w", err)
 		}
@@ -131,13 +132,31 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("ollama.request-timeout")
 		return service, nil
+	case ProviderXAI:
+		token := viper.GetString("xai.token")
+		apiEndpoint := viper.GetString("xai.api-endpoint")
+		if token == "" && strings.TrimSpace(apiEndpoint) == "" {
+			return nil, fmt.Errorf("xai.token is empty")
+		}
+		pricing := []ModelPricing{}
+		if err := viper.UnmarshalKey("xai.pricing", &pricing); err != nil {
+			return nil, fmt.Errorf("failed to read xai.pricing: %w", err)
+		}
+		sessionTTL := viper.GetDuration("xai.reasoning-session-ttl")
+		if sessionTTL <= 0 {
+			sessionTTL = defaultOpenAIReasoningSessionTTL
+		}
+		service := NewXAIServiceWithOptions(token, pricing, NewOpenAIReasoningSessionStore(sessionTTL), apiEndpoint)
+		service.progress = progress
+		service.client.Timeout = requestTimeoutFromConfig("xai.request-timeout")
+		return service, nil
 	case ProviderZAI:
 		token := viper.GetString("zai.token")
 		if strings.TrimSpace(token) == "" {
 			return nil, fmt.Errorf("zai.token is empty")
 		}
 		apiEndpoint := viper.GetString("zai.api-endpoint")
-		pricing := []OpenAIModelPricing{}
+		pricing := []ModelPricing{}
 		if err := viper.UnmarshalKey("zai.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read zai.pricing: %w", err)
 		}
@@ -201,6 +220,12 @@ func ReasoningSessionTTLFromConfig() time.Duration {
 		return ttl
 	case ProviderOllama:
 		ttl := viper.GetDuration("ollama.reasoning-session-ttl")
+		if ttl <= 0 {
+			return defaultOpenAIReasoningSessionTTL
+		}
+		return ttl
+	case ProviderXAI:
+		ttl := viper.GetDuration("xai.reasoning-session-ttl")
 		if ttl <= 0 {
 			return defaultOpenAIReasoningSessionTTL
 		}
@@ -417,6 +442,50 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			MaxFollowups:       maxFollowups,
 			Verification:       verification,
 		}, nil
+	case ProviderXAI:
+		model := strings.TrimSpace(viper.GetString("xai.reasoning-search-model"))
+		if model == "" {
+			model = "grok-4-1-fast-reasoning"
+		}
+
+		effort := strings.TrimSpace(viper.GetString("xai.reasoning-search-effort"))
+		if effort != "" {
+			return nil, fmt.Errorf("xai.reasoning-search-effort is not supported for model %q", model)
+		}
+
+		maxTokens := viper.GetInt("xai.reasoning-search-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+
+		maxIterations := viper.GetInt("xai.reasoning-search-max-iterations")
+		if maxIterations <= 0 {
+			maxIterations = defaultReasoningSearchMaxIterations
+		}
+		rerunMaxIterations := viper.GetInt("xai.reasoning-search-rerun-max-iterations")
+		if rerunMaxIterations <= 0 {
+			rerunMaxIterations = defaultReasoningSearchRerunMaxIters
+		}
+
+		var verification *ReasoningSearchVerificationConfig
+		if verificationEnabled {
+			var err error
+			verification, err = reasoningSearchVerificationConfigFromProvider(verificationProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return &ReasoningSearchConfig{
+			Provider:           provider,
+			Model:              model,
+			Effort:             effort,
+			MaxTokens:          maxTokens,
+			MaxIterations:      maxIterations,
+			RerunMaxIterations: rerunMaxIterations,
+			MaxFollowups:       maxFollowups,
+			Verification:       verification,
+		}, nil
 	case ProviderZAI:
 		model := viper.GetString("zai.reasoning-search-model")
 		if model == "" {
@@ -581,6 +650,25 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			Effort:    effort,
 			MaxTokens: maxTokens,
 		}, nil
+	case ProviderXAI:
+		model := strings.TrimSpace(viper.GetString("xai.reasoning-search-verification-model"))
+		if model == "" {
+			return nil, fmt.Errorf("xai.reasoning-search-verification-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("xai.reasoning-search-verification-effort"))
+		if effort != "" {
+			return nil, fmt.Errorf("xai.reasoning-search-verification-effort is not supported for model %q", model)
+		}
+		maxTokens := viper.GetInt("xai.reasoning-search-verification-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+		return &ReasoningSearchVerificationConfig{
+			Provider:  provider,
+			Model:     model,
+			Effort:    effort,
+			MaxTokens: maxTokens,
+		}, nil
 	case ProviderZAI:
 		model := strings.TrimSpace(viper.GetString("zai.reasoning-search-verification-model"))
 		if model == "" {
@@ -685,6 +773,23 @@ func aiToolsConfigFromProvider(provider string) (*AIToolsConfig, error) {
 			return nil, fmt.Errorf("reasoning effort %q is not supported for Ollama models; supported values are minimal, low, medium, high", effort)
 		}
 		maxTokens := viper.GetInt("ollama.ai-tools-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultAIToolsMaxTokens
+		}
+		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderXAI:
+		model := strings.TrimSpace(viper.GetString("xai.ai-tools-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("xai.reasoning-search-model"))
+		}
+		if model == "" {
+			model = "grok-4-1-fast-reasoning"
+		}
+		effort := strings.TrimSpace(viper.GetString("xai.ai-tools-effort"))
+		if effort != "" {
+			return nil, fmt.Errorf("xai.ai-tools-effort is not supported for model %q", model)
+		}
+		maxTokens := viper.GetInt("xai.ai-tools-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultAIToolsMaxTokens
 		}

@@ -14,7 +14,7 @@ import (
 func TestOllamaReasoningWithToolsUsesChatAPI(t *testing.T) {
 	requests := []map[string]interface{}{}
 	service := NewOllamaServiceWithOptions("", nil, nil, "https://ollama.kab.sh/api/generate", 32768, "", nil, false)
-	service.OpenAIService.client = &http.Client{
+	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			if req.URL.Path != "/api/chat" {
 				t.Fatalf("unexpected path: %s", req.URL.Path)
@@ -178,7 +178,7 @@ func TestOllamaReasoningWithToolsSupportsStructuredOutputPromptSchemaAndTemperat
 	requests := []map[string]interface{}{}
 	temperature := 0.0
 	service := NewOllamaServiceWithOptions("", nil, nil, "https://ollama.kab.sh", 32768, "", &temperature, true)
-	service.OpenAIService.client = &http.Client{
+	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			var payload map[string]interface{}
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
@@ -279,7 +279,7 @@ func TestOllamaReasoningSessionReplaysHistory(t *testing.T) {
 	requests := []map[string]interface{}{}
 	service := NewOllamaServiceWithOptions("", nil, NewChatReasoningSessionStore(time.Minute), "https://ollama.kab.sh", 32768, "", nil, false)
 	defer service.sessions.Close()
-	service.OpenAIService.client = &http.Client{
+	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			var payload map[string]interface{}
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
