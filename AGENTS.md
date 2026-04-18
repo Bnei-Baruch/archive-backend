@@ -18,7 +18,7 @@ Instructions for coding agents working in this repository.
   - `es/` Elasticsearch indexing pipelines
   - `mdb/` SQLBoiler-generated MDB models
   - `events/` NATS-based event processing
-- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`).
+- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`); `[stub]` is local and makes no API calls.
 - Config: `config.toml` (see `config.sample.toml`).
 
 ## LLM Architecture
@@ -31,6 +31,7 @@ Instructions for coding agents working in this repository.
 - xAI also uses `v1/responses` with iteration via `previous_response_id`, but resumed requests must omit `instructions`.
 - OpenRouter also uses `v1/responses`, but continues sessions by replaying full message history instead of `previous_response_id`.
 - Ollama uses `/api/chat` with message-history replay; it does not use `tool_choice`.
+- Stub provider returns configured constant responses by `model` and query, and is intended for stage-isolation tests.
 - `common.Init()` builds one app-scoped `common.LLM_RUNTIME`; do not construct new LLM services per request.
 - `common.LLM_RUNTIME` stores the shared tool manager, progress/workflow stores, and provider services keyed by provider.
 - Tool implementations live under `search/LLM/tools/`.
@@ -74,6 +75,7 @@ Instructions for coding agents working in this repository.
   - `[ollama]` for Ollama
   - `[xai]` for xAI
   - `[zai]` for Z.AI
+  - `[stub]` for local constant responses with no API calls
 - Verification model settings are also provider-specific:
   - `<provider>.reasoning-search-verification-model`
   - `<provider>.reasoning-search-verification-effort`
@@ -85,6 +87,7 @@ Instructions for coding agents working in this repository.
 - OpenRouter supports configurable provider routing and `openrouter.enforced-tool-use-iterations` (default `1`).
 - xAI Grok 4 fast reasoning models do not support `reasoning_effort`; keep xAI reasoning and planning effort config empty.
 - Ollama supports `ollama.num-ctx`; `ollama.temperature` and `ollama.structured-output-prompt-schema` are optional.
+- Stub responses are configured with `[[stub.responses]]` entries keyed by `model` and `query`; use `query="*"` as a model-level fallback.
 - Pricing for cost estimation is configured per provider with `[[<provider>.pricing]]`.
 - Shared pricing/cost helpers live in `search/LLM/llm_pricing.go`.
 

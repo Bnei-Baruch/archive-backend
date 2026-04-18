@@ -56,16 +56,16 @@ url_template="https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2
 refresh-search-stats="5m"
 
 [llm]
-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai"
+provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "stub"
 postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache
-ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai"; defaults to llm.provider when empty
+ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "stub"; defaults to llm.provider when empty
 reasoning-search-cache-enabled=false
 reasoning-search-cache-ttl="120h" # default is 120h (5 days)
 reasoning-search-max-followups=2
 reasoning-search-planning-enabled=false
-reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai"; defaults to llm.provider when empty
+reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "stub"; defaults to llm.provider when empty
 reasoning-search-verification-enabled=false
-reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai"; defaults to llm.provider when empty
+reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "stub"; defaults to llm.provider when empty
 
 [openai]
 token="sk-..."
@@ -244,3 +244,36 @@ model="glm-5.1"
 input_per_1m_tokens_usd=1.00
 cached_input_per_1m_tokens_usd=0.20
 output_per_1m_tokens_usd=3.20
+
+[stub]
+# In tests, point any stage provider at "stub" and map model + query to a fixed JSON response.
+reasoning-search-model="stub-reasoning"
+reasoning-search-effort=""
+reasoning-search-max-output-tokens=8000
+reasoning-search-max-iterations=1
+reasoning-search-rerun-max-iterations=1
+ai-tools-model="stub-ai-tools"
+ai-tools-effort=""
+ai-tools-max-output-tokens=1500
+reasoning-search-planning-model="stub-planning"
+reasoning-search-planning-effort=""
+reasoning-search-planning-max-output-tokens=1500
+reasoning-search-verification-model="stub-verification"
+reasoning-search-verification-effort=""
+reasoning-search-verification-max-output-tokens=2000
+
+# Exact model + query match. Use query="*" as a fallback for a model; "*" will handle any query.
+# [[stub.responses]]
+# model="stub-planning"
+# query="אהבה"
+# response='{"instruction_text":"","first_iteration_tools":[]}'
+#
+# [[stub.responses]]
+# model="stub-reasoning"
+# query="אהבה"
+# response='{"query":"אהבה","summary":"stub summary","reasoning_summary":"","results":[]}'
+#
+# [[stub.responses]]
+# model="stub-verification"
+# query="אהבה"
+# response='{"needs_another_iteration":false,"recommendation":""}'

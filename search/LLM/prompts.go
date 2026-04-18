@@ -121,7 +121,7 @@ Do not explain Kabbalah concepts.
 Do not invent results.`
 
 const reasoningSearchToolUsageHeader = "Available tools and usage instructions:"
-const reasoningSearchPlanningHeader = "YOU MUST FOLLOW THIS INSTRUCTION ON SEARCH STRATEGY:"
+const reasoningSearchPlanningHeader = "YOU MUST FOLLOW THIS INSTRUCTION ON SEARCH STRATEGY FOR THE GIVEN QUERY:"
 
 func GenerateSystemMessageForReasoningSearch(tools []ReasoningTool, remainingIterations int, followupsRemaining int) string {
 	msg := fmt.Sprintf("Today is %s. \n%s", time.Now().Format("Monday, January 2, 2006"), GeneralReasoningSearchInstruction)

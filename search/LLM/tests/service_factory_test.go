@@ -147,6 +147,21 @@ func TestNewServiceFromConfigSupportsXAI(t *testing.T) {
 	}
 }
 
+func TestNewServiceFromConfigSupportsStub(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	defer viper.Set("llm.provider", oldProvider)
+
+	viper.Set("llm.provider", "stub")
+
+	service, err := llm.NewServiceFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := service.(*llm.StubLLMService); !ok {
+		t.Fatalf("unexpected service type: %T", service)
+	}
+}
+
 func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldVerificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
@@ -453,6 +468,87 @@ func TestReasoningSearchConfigFromConfigUsesXAISection(t *testing.T) {
 	}
 }
 
+func TestReasoningSearchConfigFromConfigUsesStubSection(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldPlanningEnabled := viper.GetBool("llm.reasoning-search-planning-enabled")
+	oldPlanningProvider := viper.GetString("llm.reasoning-search-planning-provider")
+	oldVerificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
+	oldVerificationProvider := viper.GetString("llm.reasoning-search-verification-provider")
+	oldModel := viper.GetString("stub.reasoning-search-model")
+	oldEffort := viper.GetString("stub.reasoning-search-effort")
+	oldMaxTokens := viper.GetInt("stub.reasoning-search-max-output-tokens")
+	oldMaxIterations := viper.GetInt("stub.reasoning-search-max-iterations")
+	oldRerunMaxIterations := viper.GetInt("stub.reasoning-search-rerun-max-iterations")
+	oldPlanningModel := viper.GetString("stub.reasoning-search-planning-model")
+	oldPlanningEffort := viper.GetString("stub.reasoning-search-planning-effort")
+	oldPlanningMaxTokens := viper.GetInt("stub.reasoning-search-planning-max-output-tokens")
+	oldVerificationModel := viper.GetString("stub.reasoning-search-verification-model")
+	oldVerificationEffort := viper.GetString("stub.reasoning-search-verification-effort")
+	oldVerificationMaxTokens := viper.GetInt("stub.reasoning-search-verification-max-output-tokens")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-planning-enabled", oldPlanningEnabled)
+	defer viper.Set("llm.reasoning-search-planning-provider", oldPlanningProvider)
+	defer viper.Set("llm.reasoning-search-verification-enabled", oldVerificationEnabled)
+	defer viper.Set("llm.reasoning-search-verification-provider", oldVerificationProvider)
+	defer viper.Set("stub.reasoning-search-model", oldModel)
+	defer viper.Set("stub.reasoning-search-effort", oldEffort)
+	defer viper.Set("stub.reasoning-search-max-output-tokens", oldMaxTokens)
+	defer viper.Set("stub.reasoning-search-max-iterations", oldMaxIterations)
+	defer viper.Set("stub.reasoning-search-rerun-max-iterations", oldRerunMaxIterations)
+	defer viper.Set("stub.reasoning-search-planning-model", oldPlanningModel)
+	defer viper.Set("stub.reasoning-search-planning-effort", oldPlanningEffort)
+	defer viper.Set("stub.reasoning-search-planning-max-output-tokens", oldPlanningMaxTokens)
+	defer viper.Set("stub.reasoning-search-verification-model", oldVerificationModel)
+	defer viper.Set("stub.reasoning-search-verification-effort", oldVerificationEffort)
+	defer viper.Set("stub.reasoning-search-verification-max-output-tokens", oldVerificationMaxTokens)
+
+	viper.Set("llm.provider", "stub")
+	viper.Set("llm.reasoning-search-planning-enabled", true)
+	viper.Set("llm.reasoning-search-planning-provider", "stub")
+	viper.Set("llm.reasoning-search-verification-enabled", true)
+	viper.Set("llm.reasoning-search-verification-provider", "stub")
+	viper.Set("stub.reasoning-search-model", "main-stub")
+	viper.Set("stub.reasoning-search-effort", "none")
+	viper.Set("stub.reasoning-search-max-output-tokens", 1000)
+	viper.Set("stub.reasoning-search-max-iterations", 1)
+	viper.Set("stub.reasoning-search-rerun-max-iterations", 1)
+	viper.Set("stub.reasoning-search-planning-model", "planner-stub")
+	viper.Set("stub.reasoning-search-planning-effort", "plan")
+	viper.Set("stub.reasoning-search-planning-max-output-tokens", 2000)
+	viper.Set("stub.reasoning-search-verification-model", "verify-stub")
+	viper.Set("stub.reasoning-search-verification-effort", "verify")
+	viper.Set("stub.reasoning-search-verification-max-output-tokens", 3000)
+
+	cfg, err := llm.ReasoningSearchConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Provider != "stub" {
+		t.Fatalf("unexpected provider: %s", cfg.Provider)
+	}
+	if cfg.Model != "main-stub" {
+		t.Fatalf("unexpected model: %s", cfg.Model)
+	}
+	if cfg.Effort != "none" {
+		t.Fatalf("unexpected effort: %s", cfg.Effort)
+	}
+	if cfg.MaxTokens != 1000 {
+		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
+	}
+	if cfg.MaxIterations != 1 {
+		t.Fatalf("unexpected max iterations: %d", cfg.MaxIterations)
+	}
+	if cfg.RerunMaxIterations != 1 {
+		t.Fatalf("unexpected rerun max iterations: %d", cfg.RerunMaxIterations)
+	}
+	if cfg.Planning == nil || cfg.Planning.Provider != "stub" || cfg.Planning.Model != "planner-stub" || cfg.Planning.Effort != "plan" || cfg.Planning.MaxTokens != 2000 {
+		t.Fatalf("unexpected planning config: %#v", cfg.Planning)
+	}
+	if cfg.Verification == nil || cfg.Verification.Provider != "stub" || cfg.Verification.Model != "verify-stub" || cfg.Verification.Effort != "verify" || cfg.Verification.MaxTokens != 3000 {
+		t.Fatalf("unexpected verification config: %#v", cfg.Verification)
+	}
+}
+
 func TestReasoningSearchConfigFromConfigIncludesPlanningStage(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldPlanningEnabled := viper.GetBool("llm.reasoning-search-planning-enabled")
@@ -668,6 +764,42 @@ func TestAIToolsConfigFromConfigUsesExplicitProvider(t *testing.T) {
 		t.Fatalf("unexpected effort: %s", cfg.Effort)
 	}
 	if cfg.MaxTokens != 1234 {
+		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
+	}
+}
+
+func TestAIToolsConfigFromConfigSupportsStub(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldAIToolsProvider := viper.GetString("llm.ai-tools-provider")
+	oldModel := viper.GetString("stub.ai-tools-model")
+	oldEffort := viper.GetString("stub.ai-tools-effort")
+	oldMaxTokens := viper.GetInt("stub.ai-tools-max-output-tokens")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.ai-tools-provider", oldAIToolsProvider)
+	defer viper.Set("stub.ai-tools-model", oldModel)
+	defer viper.Set("stub.ai-tools-effort", oldEffort)
+	defer viper.Set("stub.ai-tools-max-output-tokens", oldMaxTokens)
+
+	viper.Set("llm.provider", "openai")
+	viper.Set("llm.ai-tools-provider", "stub")
+	viper.Set("stub.ai-tools-model", "reader-stub")
+	viper.Set("stub.ai-tools-effort", "reader")
+	viper.Set("stub.ai-tools-max-output-tokens", 3333)
+
+	cfg, err := llm.AIToolsConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Provider != "stub" {
+		t.Fatalf("unexpected provider: %s", cfg.Provider)
+	}
+	if cfg.Model != "reader-stub" {
+		t.Fatalf("unexpected model: %s", cfg.Model)
+	}
+	if cfg.Effort != "reader" {
+		t.Fatalf("unexpected effort: %s", cfg.Effort)
+	}
+	if cfg.MaxTokens != 3333 {
 		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
 	}
 }

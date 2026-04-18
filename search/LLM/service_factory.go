@@ -14,6 +14,7 @@ const (
 	ProviderOllama     = "ollama"
 	ProviderXAI        = "xai"
 	ProviderZAI        = "zai"
+	ProviderStub       = "stub"
 )
 
 const (
@@ -209,6 +210,8 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("zai.request-timeout")
 		return service, nil
+	case ProviderStub:
+		return NewStubLLMServiceFromConfig(progress)
 	default:
 		return nil, fmt.Errorf("unsupported llm provider: %s", provider)
 	}
@@ -246,6 +249,8 @@ func ReasoningSessionTTLFromConfig() time.Duration {
 			return defaultOpenAIReasoningSessionTTL
 		}
 		return ttl
+	case ProviderStub:
+		return defaultOpenAIReasoningSessionTTL
 	default:
 		return defaultOpenAIReasoningSessionTTL
 	}
@@ -598,6 +603,56 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			Planning:           planning,
 			Verification:       verification,
 		}, nil
+	case ProviderStub:
+		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-model"))
+		if model == "" {
+			model = "stub-reasoning"
+		}
+
+		effort := strings.TrimSpace(viper.GetString("stub.reasoning-search-effort"))
+
+		maxTokens := viper.GetInt("stub.reasoning-search-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+
+		maxIterations := viper.GetInt("stub.reasoning-search-max-iterations")
+		if maxIterations <= 0 {
+			maxIterations = 1
+		}
+		rerunMaxIterations := viper.GetInt("stub.reasoning-search-rerun-max-iterations")
+		if rerunMaxIterations <= 0 {
+			rerunMaxIterations = defaultReasoningSearchRerunMaxIters
+		}
+
+		var planning *ReasoningSearchPlanningConfig
+		if planningEnabled {
+			var err error
+			planning, err = reasoningSearchPlanningConfigFromProvider(planningProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+		var verification *ReasoningSearchVerificationConfig
+		if verificationEnabled {
+			var err error
+			verification, err = reasoningSearchVerificationConfigFromProvider(verificationProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return &ReasoningSearchConfig{
+			Provider:           provider,
+			Model:              model,
+			Effort:             effort,
+			MaxTokens:          maxTokens,
+			MaxIterations:      maxIterations,
+			RerunMaxIterations: rerunMaxIterations,
+			MaxFollowups:       maxFollowups,
+			Planning:           planning,
+			Verification:       verification,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported llm provider: %s", provider)
 	}
@@ -722,6 +777,20 @@ func reasoningSearchPlanningConfigFromProvider(provider string, fallbackEffort s
 			effort = defaultReasoningSearchPlanningEffort
 		}
 		maxTokens := viper.GetInt("zai.reasoning-search-planning-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchPlanningMaxTokens
+		}
+		return &ReasoningSearchPlanningConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderStub:
+		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-planning-model"))
+		if model == "" {
+			model = "stub-planning"
+		}
+		effort := strings.TrimSpace(viper.GetString("stub.reasoning-search-planning-effort"))
+		if effort == "" {
+			effort = strings.TrimSpace(fallbackEffort)
+		}
+		maxTokens := viper.GetInt("stub.reasoning-search-planning-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultReasoningSearchPlanningMaxTokens
 		}
@@ -862,6 +931,25 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			Effort:    effort,
 			MaxTokens: maxTokens,
 		}, nil
+	case ProviderStub:
+		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-verification-model"))
+		if model == "" {
+			model = "stub-verification"
+		}
+		effort := strings.TrimSpace(viper.GetString("stub.reasoning-search-verification-effort"))
+		if effort == "" {
+			effort = defaultEffort
+		}
+		maxTokens := viper.GetInt("stub.reasoning-search-verification-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+		return &ReasoningSearchVerificationConfig{
+			Provider:  provider,
+			Model:     model,
+			Effort:    effort,
+			MaxTokens: maxTokens,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported verification provider: %s", provider)
 	}
@@ -981,6 +1069,20 @@ func aiToolsConfigFromProvider(provider string) (*AIToolsConfig, error) {
 			return nil, fmt.Errorf("reasoning effort %q is not supported for Z.AI models; supported values are minimal, low, medium, high, xhigh", effort)
 		}
 		maxTokens := viper.GetInt("zai.ai-tools-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultAIToolsMaxTokens
+		}
+		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderStub:
+		model := strings.TrimSpace(viper.GetString("stub.ai-tools-model"))
+		if model == "" {
+			model = "stub-ai-tools"
+		}
+		effort := strings.TrimSpace(viper.GetString("stub.ai-tools-effort"))
+		if effort == "" {
+			effort = defaultAIToolsEffort
+		}
+		maxTokens := viper.GetInt("stub.ai-tools-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultAIToolsMaxTokens
 		}
