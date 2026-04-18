@@ -133,6 +133,47 @@ func TestGenerateSystemMessageForReasoningSearchIncludesToolUsage(t *testing.T) 
 	}
 }
 
+func TestBuildFirstIterationReasoningSearchSystemMessageUsesPlannedToolDocs(t *testing.T) {
+	systemMessage := strings.Join([]string{
+		"Base instructions.",
+		"Available tools and usage instructions:",
+		"Tool: elasticsearch_search\nUse normal search.",
+		"Tool: get_collections\nUse collections.",
+		"YOU MUST FOLLOW THIS INSTRUCTION ON SEARCH STRATEGY:\nSearch inside the planned collection first.",
+	}, "\n\n")
+	planned := []llm.ToolCall{
+		{
+			Type: "function",
+			Function: map[string]interface{}{
+				"name":        "planned__elasticsearch_search__1",
+				"description": `Search archive content. Predefined fixed arguments: {"query":"חיים חדשים","language":"he"}`,
+				"parameters": map[string]interface{}{
+					"type":                 "object",
+					"properties":           map[string]interface{}{},
+					"additionalProperties": false,
+				},
+			},
+		},
+	}
+
+	message := llm.BuildFirstIterationReasoningSearchSystemMessage(systemMessage, planned)
+	if !strings.Contains(message, "Tool: planned__elasticsearch_search__1") {
+		t.Fatalf("expected planned tool name in first-iteration message: %s", message)
+	}
+	if !strings.Contains(message, "Predefined fixed arguments") {
+		t.Fatalf("expected fixed arguments in planned tool docs: %s", message)
+	}
+	if strings.Contains(message, "Tool: elasticsearch_search\nUse normal search.") {
+		t.Fatalf("did not expect base tool usage docs in first-iteration message: %s", message)
+	}
+	if strings.Contains(message, "Tool: get_collections") {
+		t.Fatalf("did not expect hidden tool usage docs in first-iteration message: %s", message)
+	}
+	if !strings.Contains(message, "YOU MUST FOLLOW THIS INSTRUCTION ON SEARCH STRATEGY") {
+		t.Fatalf("expected planning guidance to be preserved: %s", message)
+	}
+}
+
 func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *testing.T) {
 	schema := llm.GenerateReasoningSearchResponseJSONSchema()
 
@@ -168,6 +209,33 @@ func TestGenerateReasoningSearchVerificationResponseJSONSchemaIncludesRequiredFi
 		if !strings.Contains(schema, snippet) {
 			t.Fatalf("expected schema to contain %s", snippet)
 		}
+	}
+}
+
+func TestGenerateReasoningSearchPlanningResponseJSONSchemaUsesStrictToolParams(t *testing.T) {
+	manager, err := llm.NewReasoningToolManager(
+		llmtools.NewElasticsearchSearchTool(nil, 0),
+		llmtools.NewGetCollectionsTool(nil, 0),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error creating manager: %v", err)
+	}
+
+	schema := llm.GenerateReasoningSearchPlanningResponseJSONSchema(manager.Tools())
+	requiredSnippets := []string{
+		`"first_iteration_tools"`,
+		`"tool_name"`,
+		`"params_json"`,
+		`"elasticsearch_search"`,
+		`"get_collections"`,
+	}
+	for _, snippet := range requiredSnippets {
+		if !strings.Contains(schema, snippet) {
+			t.Fatalf("expected planning schema to contain %s", snippet)
+		}
+	}
+	if strings.Contains(schema, `"additionalProperties":true`) {
+		t.Fatalf("planning schema should not contain open additionalProperties: %s", schema)
 	}
 }
 
@@ -309,6 +377,10 @@ func (s *fakeLLMService) GetChatResponse(string, *int, []llm.LLMBotMessage, *str
 	return nil, nil
 }
 
+func (s *fakeLLMService) GetChatResponseWithDebugInfo(string, *int, []llm.LLMBotMessage, *string, *float64, *string, *string, bool) (*llm.LLMBotMessage, *llm.ReasoningSearchDebugInfo, error) {
+	return nil, nil, nil
+}
+
 func (s *fakeLLMService) GetReasoningResponseWithTools(string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int) (*llm.LLMBotMessage, error) {
 	return nil, nil
 }
@@ -317,7 +389,7 @@ func (s *fakeLLMService) GetReasoningStructuredOutputWithTools(string, string, *
 	return nil
 }
 
-func (s *fakeLLMService) GetReasoningStructuredOutputWithToolsForSession(*string, *string, string, string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int, interface{}) (string, error) {
+func (s *fakeLLMService) GetReasoningStructuredOutputWithToolsForSession(*string, *string, string, string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int, interface{}) (string, error) {
 	return "", nil
 }
 

@@ -13,6 +13,7 @@ const (
 	ReasoningProgressStateFailed    = "failed"
 
 	ReasoningProgressPhasePending     = "pending"
+	ReasoningProgressPhasePlanning    = "planning"
 	ReasoningProgressPhaseThinking    = "thinking"
 	ReasoningProgressPhaseRunningTool = "running_tool"
 	ReasoningProgressPhaseVerifying   = "verifying"
@@ -80,6 +81,17 @@ func (s *ReasoningProgressStore) Thinking(sessionID string, iteration int) {
 		status.Iteration = iteration
 		status.ToolName = ""
 		status.Message = "Thinking..."
+		status.Done = false
+	})
+}
+
+func (s *ReasoningProgressStore) Planning(sessionID string) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.State = ReasoningProgressStateRunning
+		status.Phase = ReasoningProgressPhasePlanning
+		status.Iteration = 0
+		status.ToolName = ""
+		status.Message = "Analyzing query and preparing search strategy..."
 		status.Done = false
 	})
 }
@@ -207,6 +219,7 @@ func (s *ReasoningProgressStore) update(sessionID string, mutate func(*Reasoning
 }
 
 func reasoningProgressToolMessage(toolName string) string {
+	toolName = CanonicalReasoningToolName(toolName)
 	switch toolName {
 	case "elasticsearch_search":
 		return "Searching archive..."

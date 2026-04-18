@@ -128,7 +128,7 @@ func TestXAIReasoningWithToolsOmitsInstructionsOnFollowup(t *testing.T) {
 	var firstOutput struct {
 		Answer string `json:"answer"`
 	}
-	sessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(nil, nil, schema, "grok-4-1-fast-reasoning", &maxTokens, messages, tools, toolHandlers, nil, nil, false, 4, &firstOutput)
+	sessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(nil, nil, schema, "grok-4-1-fast-reasoning", &maxTokens, messages, tools, toolHandlers, nil, nil, nil, nil, false, 4, &firstOutput)
 	if err != nil {
 		t.Fatalf("first request returned error: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestXAIReasoningWithToolsOmitsInstructionsOnFollowup(t *testing.T) {
 	var secondOutput struct {
 		Answer string `json:"answer"`
 	}
-	if _, err := service.GetReasoningStructuredOutputWithToolsForSession(&sessionID, nil, schema, "grok-4-1-fast-reasoning", &maxTokens, messages, tools, toolHandlers, nil, nil, false, 4, &secondOutput); err != nil {
+	if _, err := service.GetReasoningStructuredOutputWithToolsForSession(&sessionID, nil, schema, "grok-4-1-fast-reasoning", &maxTokens, messages, tools, toolHandlers, nil, nil, nil, nil, false, 4, &secondOutput); err != nil {
 		t.Fatalf("follow-up request returned error: %v", err)
 	}
 	if secondOutput.Answer != "second" {

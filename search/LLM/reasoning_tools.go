@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 type ReasoningToolDefinition struct {
@@ -102,4 +103,21 @@ func (m *ReasoningToolManager) Tools() []ReasoningTool {
 
 func (m *ReasoningToolManager) Len() int {
 	return len(m.order)
+}
+
+const plannedReasoningToolNamePrefix = "planned__"
+
+func MakePlannedReasoningToolName(base string, index int) string {
+	return fmt.Sprintf("%s%s__%d", plannedReasoningToolNamePrefix, base, index)
+}
+
+func CanonicalReasoningToolName(name string) string {
+	if !strings.HasPrefix(name, plannedReasoningToolNamePrefix) {
+		return name
+	}
+	rest := strings.TrimPrefix(name, plannedReasoningToolNamePrefix)
+	if idx := strings.Index(rest, "__"); idx > 0 {
+		return rest[:idx]
+	}
+	return name
 }

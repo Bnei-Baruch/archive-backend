@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -65,6 +66,17 @@ func ReasoningSearchStartHandler(c *gin.Context) {
 			Model:           reasoningConfig.Verification.Model,
 			ReasoningEffort: reasoningConfig.Verification.Effort,
 			MaxTokens:       reasoningConfig.Verification.MaxTokens,
+		}); err != nil {
+			NewInternalError(err).Abort(c)
+			return
+		}
+	}
+	if reasoningConfig.Planning != nil {
+		if err := runtime.Workflow.SetStage(sessionID, llm.ReasoningWorkflowStagePlanning, llm.ReasoningWorkflowStageSession{
+			Provider:        reasoningConfig.Planning.Provider,
+			Model:           reasoningConfig.Planning.Model,
+			ReasoningEffort: reasoningConfig.Planning.Effort,
+			MaxTokens:       reasoningConfig.Planning.MaxTokens,
 		}); err != nil {
 			NewInternalError(err).Abort(c)
 			return
@@ -139,6 +151,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 	response := llm.ReasoningSearchResponse{}
 	responseSessionID := ""
 	var reasoningStage llm.ReasoningWorkflowStageSession
+	var planningStage *llm.ReasoningWorkflowStageSession
 	var verificationStage *llm.ReasoningWorkflowStageSession
 	var providerSessionID *string
 	var progressSessionID *string
@@ -169,6 +182,10 @@ func ReasoningSearchHandler(c *gin.Context) {
 			return
 		}
 		reasoningStage = stage
+		if stage, ok := workflowSession.Stages[llm.ReasoningWorkflowStagePlanning]; ok {
+			stageCopy := stage
+			planningStage = &stageCopy
+		}
 		if stage, ok := workflowSession.Stages[llm.ReasoningWorkflowStageVerification]; ok {
 			stageCopy := stage
 			verificationStage = &stageCopy
@@ -223,6 +240,19 @@ func ReasoningSearchHandler(c *gin.Context) {
 				return
 			}
 			verificationStage = &stage
+		}
+		if reasoningConfig.Planning != nil {
+			stage := llm.ReasoningWorkflowStageSession{
+				Provider:        reasoningConfig.Planning.Provider,
+				Model:           reasoningConfig.Planning.Model,
+				ReasoningEffort: reasoningConfig.Planning.Effort,
+				MaxTokens:       reasoningConfig.Planning.MaxTokens,
+			}
+			if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStagePlanning, stage); err != nil {
+				NewInternalError(err).Abort(c)
+				return
+			}
+			planningStage = &stage
 		}
 		progressStore.Reserve(responseSessionID)
 		providerID := reservedProviderSessionID
@@ -303,6 +333,68 @@ func ReasoningSearchHandler(c *gin.Context) {
 	}
 
 	systemMessage := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), reasoningStage.MaxIterations, followupsRemaining)
+	var planningDebug *llm.ReasoningSearchDebugInfo
+	var firstIterationTools []llm.ToolCall
+	var firstIterationToolHandlers map[string]llm.ToolHandler
+	if planningStage != nil && !initialRequestCompleted {
+		planningService := runtime.Services[planningStage.Provider]
+		if planningService == nil {
+			log.Warnf("Reasoning Search planning skipped: service for provider %q is not initialized", planningStage.Provider)
+		} else {
+			progressStore.Planning(responseSessionID)
+			planningPromptCacheKey := fmt.Sprintf(
+				"reasoning-search-planning:m=%s:e=%s",
+				planningStage.Model,
+				planningStage.ReasoningEffort,
+			)
+			planningMessages := []llm.LLMBotMessage{
+				{
+					Role:    "system",
+					Content: llm.GenerateSystemMessageForReasoningSearchPlanning(manager.Tools()),
+				},
+				{
+					Role:    "user",
+					Content: r.Query,
+				},
+			}
+			planningResponse := llm.ReasoningSearchPlanningResponse{}
+			debugInfo, err := planningService.GetStructuredOutputWithDebugInfo(
+				llm.GenerateReasoningSearchPlanningResponseJSONSchema(manager.Tools()),
+				planningStage.Model,
+				&planningStage.MaxTokens,
+				planningMessages,
+				&planningPromptCacheKey,
+				&planningStage.ReasoningEffort,
+				r.Deb,
+				&planningResponse,
+			)
+			if err != nil {
+				log.Warnf("Reasoning Search planning failed: %v", err)
+			} else {
+				planningDebug = debugInfo
+				if r.Deb {
+					planningOutput := planningResponse
+					if planningResponse.FirstIterationTools != nil {
+						planningOutput.FirstIterationTools = append([]llm.ReasoningSearchPlanningToolSpec(nil), planningResponse.FirstIterationTools...)
+					}
+					response.PlanningOutput = &planningOutput
+					if debugInfo != nil {
+						response.PlanningReasoningSummary = strings.TrimSpace(debugInfo.ReasoningSummary)
+					}
+				}
+				planningText := strings.TrimSpace(planningResponse.InstructionText)
+				if planningText != "" {
+					systemMessage = llm.AppendReasoningSearchPlanning(systemMessage, planningText)
+				}
+				firstIterationTools, firstIterationToolHandlers, err = buildFirstIterationPlannedTools(manager, &planningResponse)
+				if err != nil {
+					log.Warnf("Reasoning Search planning tool restriction skipped: %v", err)
+					firstIterationTools = nil
+					firstIterationToolHandlers = nil
+				}
+			}
+		}
+	}
 	messages := []llm.LLMBotMessage{
 		{
 			Role:    "system",
@@ -344,6 +436,8 @@ func ReasoningSearchHandler(c *gin.Context) {
 		messages,
 		manager.ToolCalls(),
 		manager.ToolHandlers(),
+		firstIterationTools,
+		firstIterationToolHandlers,
 		&promptCacheKey,
 		&reasoningStage.ReasoningEffort,
 		r.Deb,
@@ -381,6 +475,13 @@ func ReasoningSearchHandler(c *gin.Context) {
 		progressStore.Fail(responseSessionID, response.ReasoningIterations)
 		NewInternalError(err).Abort(c)
 		return
+	}
+	if planningDebug != nil {
+		response.UsedTokens += planningDebug.TotalTokens
+		if response.Debug != nil {
+			response.Debug.PlanningModelUsage = planningDebug.UsageBreakdown()
+			response.Debug.Add(planningDebug)
+		}
 	}
 	if verificationStage != nil {
 		verificationService := runtime.Services[verificationStage.Provider]
@@ -452,6 +553,15 @@ func ReasoningSearchHandler(c *gin.Context) {
 					initialUsedTokens := response.UsedTokens
 					initialReasoningIterations := response.ReasoningIterations
 					initialUsedTools := append([]string(nil), response.UsedTools...)
+					var initialPlanningOutput *llm.ReasoningSearchPlanningResponse
+					if response.PlanningOutput != nil {
+						planningCopy := *response.PlanningOutput
+						if response.PlanningOutput.FirstIterationTools != nil {
+							planningCopy.FirstIterationTools = append([]llm.ReasoningSearchPlanningToolSpec(nil), response.PlanningOutput.FirstIterationTools...)
+						}
+						initialPlanningOutput = &planningCopy
+					}
+					initialPlanningReasoningSummary := response.PlanningReasoningSummary
 					initialDebug := response.Debug
 
 					if verificationResponse.NeedsAnotherIteration {
@@ -490,6 +600,8 @@ func ReasoningSearchHandler(c *gin.Context) {
 								rerunMessages,
 								manager.ToolCalls(),
 								manager.ToolHandlers(),
+								nil,
+								nil,
 								&promptCacheKey,
 								&reasoningStage.ReasoningEffort,
 								r.Deb,
@@ -530,8 +642,14 @@ func ReasoningSearchHandler(c *gin.Context) {
 											}
 										}
 										rerunResponse.SetUsedTools(mergedTools)
+										rerunResponse.PlanningOutput = initialPlanningOutput
+										rerunResponse.PlanningReasoningSummary = initialPlanningReasoningSummary
 										if rerunResponse.Debug != nil {
 											if initialDebug != nil {
+												if initialDebug.PlanningModelUsage != nil {
+													planningUsageCopy := *initialDebug.PlanningModelUsage
+													rerunResponse.Debug.PlanningModelUsage = &planningUsageCopy
+												}
 												rerunResponse.Debug.Add(initialDebug)
 											}
 											if verificationDebug != nil {
@@ -585,4 +703,120 @@ func ReasoningSearchHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func buildFirstIterationPlannedTools(manager *llm.ReasoningToolManager, plan *llm.ReasoningSearchPlanningResponse) ([]llm.ToolCall, map[string]llm.ToolHandler, error) {
+	if manager == nil || plan == nil || len(plan.FirstIterationTools) == 0 {
+		return nil, nil, nil
+	}
+
+	definitionsByName := map[string]llm.ReasoningToolDefinition{}
+	for _, definition := range manager.Definitions() {
+		definitionsByName[definition.Name] = definition
+	}
+	baseHandlers := manager.ToolHandlers()
+
+	plannedTools := []llm.ToolCall{}
+	plannedHandlers := map[string]llm.ToolHandler{}
+	nextIndex := 1
+
+	for _, planned := range plan.FirstIterationTools {
+		baseName := strings.TrimSpace(planned.ToolName)
+		if baseName == "" {
+			continue
+		}
+		definition, ok := definitionsByName[baseName]
+		if !ok {
+			return nil, nil, fmt.Errorf("unknown planned tool %q", baseName)
+		}
+		handler, ok := baseHandlers[baseName]
+		if !ok {
+			return nil, nil, fmt.Errorf("missing handler for planned tool %q", baseName)
+		}
+
+		baseParams, err := normalizePlannedToolParams(planned.ParamsJSON)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid params for planned tool %q: %w", baseName, err)
+		}
+		paramVariants := []json.RawMessage{baseParams}
+		if baseName == "elasticsearch_search" {
+			for _, altQuery := range planned.AlternativeQueries {
+				altQuery = strings.TrimSpace(altQuery)
+				if altQuery == "" {
+					continue
+				}
+				altParams, err := withPlannedElasticsearchQuery(baseParams, altQuery)
+				if err != nil {
+					return nil, nil, fmt.Errorf("invalid alternative query for planned tool %q: %w", baseName, err)
+				}
+				paramVariants = append(paramVariants, altParams)
+			}
+		}
+
+		for _, params := range paramVariants {
+			plannedName := llm.MakePlannedReasoningToolName(baseName, nextIndex)
+			nextIndex++
+			paramsCopy := append(json.RawMessage(nil), params...)
+			plannedTools = append(plannedTools, llm.ToolCall{
+				Type: "function",
+				Function: map[string]interface{}{
+					"name":        plannedName,
+					"description": buildPlannedToolDescription(definition.Description, paramsCopy),
+					"parameters": map[string]interface{}{
+						"type":                 "object",
+						"properties":           map[string]interface{}{},
+						"additionalProperties": false,
+					},
+				},
+			})
+			plannedHandlers[plannedName] = func(baseHandler llm.ToolHandler, fixedArgs json.RawMessage) llm.ToolHandler {
+				return func(ctx context.Context, _ json.RawMessage) (string, error) {
+					return baseHandler(ctx, fixedArgs)
+				}
+			}(handler, paramsCopy)
+		}
+	}
+
+	if len(plannedTools) == 0 {
+		return nil, nil, nil
+	}
+	return plannedTools, plannedHandlers, nil
+}
+
+func normalizePlannedToolParams(raw string) (json.RawMessage, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return json.RawMessage("{}"), nil
+	}
+	if !json.Valid([]byte(raw)) {
+		return nil, fmt.Errorf("params must be valid JSON")
+	}
+	if raw == "null" {
+		return json.RawMessage("{}"), nil
+	}
+	if !strings.HasPrefix(raw, "{") {
+		return nil, fmt.Errorf("params must be a JSON object")
+	}
+	return append(json.RawMessage(nil), raw...), nil
+}
+
+func withPlannedElasticsearchQuery(raw json.RawMessage, query string) (json.RawMessage, error) {
+	params := map[string]interface{}{}
+	if err := json.Unmarshal(raw, &params); err != nil {
+		return nil, err
+	}
+	params["query"] = query
+	updated, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
+func buildPlannedToolDescription(baseDescription string, params json.RawMessage) string {
+	baseDescription = strings.TrimSpace(baseDescription)
+	if baseDescription == "" {
+		baseDescription = "Run the planned first-step tool with fixed arguments."
+	}
+	return fmt.Sprintf("%s Predefined fixed arguments: %s", baseDescription, strings.TrimSpace(string(params)))
 }

@@ -115,6 +115,7 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		reasoningCache = llm.NewReasoningSearchCacheStore(llm.ReasoningSearchCacheTTLFromConfig())
 	}
 	defaultProvider := llm.ProviderFromConfig()
+	planningProvider := llm.ReasoningSearchPlanningProviderFromConfig()
 	verificationProvider := llm.ReasoningSearchVerificationProviderFromConfig()
 	aiToolsConfig, err := llm.AIToolsConfigFromConfig()
 	utils.Must(err)
@@ -125,6 +126,12 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	if viper.GetBool("llm.reasoning-search-verification-enabled") {
 		if _, ok := services[verificationProvider]; !ok {
 			services[verificationProvider], err = llm.NewServiceForProviderWithProgress(verificationProvider, nil)
+			utils.Must(err)
+		}
+	}
+	if viper.GetBool("llm.reasoning-search-planning-enabled") {
+		if _, ok := services[planningProvider]; !ok {
+			services[planningProvider], err = llm.NewServiceForProviderWithProgress(planningProvider, nil)
 			utils.Must(err)
 		}
 	}

@@ -8,6 +8,7 @@ import (
 )
 
 const ReasoningWorkflowStageReasoning = "reasoning"
+const ReasoningWorkflowStagePlanning = "planning"
 const ReasoningWorkflowStageVerification = "verification"
 
 // ReasoningWorkflowSessionStore keeps client-facing workflow sessions in local

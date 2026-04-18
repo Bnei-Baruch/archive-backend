@@ -453,6 +453,84 @@ func TestReasoningSearchConfigFromConfigUsesXAISection(t *testing.T) {
 	}
 }
 
+func TestReasoningSearchConfigFromConfigIncludesPlanningStage(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldPlanningEnabled := viper.GetBool("llm.reasoning-search-planning-enabled")
+	oldPlanningProvider := viper.GetString("llm.reasoning-search-planning-provider")
+	oldModel := viper.GetString("openai.reasoning-search-model")
+	oldEffort := viper.GetString("openai.reasoning-search-effort")
+	oldPlanningModel := viper.GetString("openai.reasoning-search-planning-model")
+	oldPlanningEffort := viper.GetString("openai.reasoning-search-planning-effort")
+	oldPlanningMaxTokens := viper.GetInt("openai.reasoning-search-planning-max-output-tokens")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-planning-enabled", oldPlanningEnabled)
+	defer viper.Set("llm.reasoning-search-planning-provider", oldPlanningProvider)
+	defer viper.Set("openai.reasoning-search-model", oldModel)
+	defer viper.Set("openai.reasoning-search-effort", oldEffort)
+	defer viper.Set("openai.reasoning-search-planning-model", oldPlanningModel)
+	defer viper.Set("openai.reasoning-search-planning-effort", oldPlanningEffort)
+	defer viper.Set("openai.reasoning-search-planning-max-output-tokens", oldPlanningMaxTokens)
+
+	viper.Set("llm.provider", "openai")
+	viper.Set("llm.reasoning-search-planning-enabled", true)
+	viper.Set("llm.reasoning-search-planning-provider", "openai")
+	viper.Set("openai.reasoning-search-model", "gpt-5.4")
+	viper.Set("openai.reasoning-search-effort", "high")
+	viper.Set("openai.reasoning-search-planning-model", "gpt-5.4-mini")
+	viper.Set("openai.reasoning-search-planning-effort", "medium")
+	viper.Set("openai.reasoning-search-planning-max-output-tokens", 1111)
+
+	cfg, err := llm.ReasoningSearchConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Planning == nil {
+		t.Fatalf("expected planning config")
+	}
+	if cfg.Planning.Provider != "openai" {
+		t.Fatalf("unexpected planning provider: %s", cfg.Planning.Provider)
+	}
+	if cfg.Planning.Model != "gpt-5.4-mini" {
+		t.Fatalf("unexpected planning model: %s", cfg.Planning.Model)
+	}
+	if cfg.Planning.Effort != "medium" {
+		t.Fatalf("unexpected planning effort: %s", cfg.Planning.Effort)
+	}
+	if cfg.Planning.MaxTokens != 1111 {
+		t.Fatalf("unexpected planning max tokens: %d", cfg.Planning.MaxTokens)
+	}
+}
+
+func TestReasoningSearchConfigFromConfigRejectsXAIPlanningEffort(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldPlanningEnabled := viper.GetBool("llm.reasoning-search-planning-enabled")
+	oldPlanningProvider := viper.GetString("llm.reasoning-search-planning-provider")
+	oldModel := viper.GetString("xai.reasoning-search-model")
+	oldPlanningModel := viper.GetString("xai.reasoning-search-planning-model")
+	oldPlanningEffort := viper.GetString("xai.reasoning-search-planning-effort")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-planning-enabled", oldPlanningEnabled)
+	defer viper.Set("llm.reasoning-search-planning-provider", oldPlanningProvider)
+	defer viper.Set("xai.reasoning-search-model", oldModel)
+	defer viper.Set("xai.reasoning-search-planning-model", oldPlanningModel)
+	defer viper.Set("xai.reasoning-search-planning-effort", oldPlanningEffort)
+
+	viper.Set("llm.provider", "xai")
+	viper.Set("llm.reasoning-search-planning-enabled", true)
+	viper.Set("llm.reasoning-search-planning-provider", "xai")
+	viper.Set("xai.reasoning-search-model", "grok-4-1-fast-reasoning")
+	viper.Set("xai.reasoning-search-planning-model", "grok-4-1-fast-reasoning")
+	viper.Set("xai.reasoning-search-planning-effort", "high")
+
+	_, err := llm.ReasoningSearchConfigFromConfig()
+	if err == nil {
+		t.Fatalf("expected error for xai planning effort")
+	}
+	if !strings.Contains(err.Error(), "xai.reasoning-search-planning-effort is not supported") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestReasoningSearchConfigFromConfigRejectsXAIEffort(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldModel := viper.GetString("xai.reasoning-search-model")

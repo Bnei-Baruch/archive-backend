@@ -140,6 +140,17 @@ func (s *OllamaService) GetChatResponse(model string, maxTokens *int, messages [
 	return msg, nil
 }
 
+func (s *OllamaService) GetChatResponseWithDebugInfo(model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, jsonSchema, reasoningEffort, false, debug)
+	if usageTotals.TotalTokens > 0 {
+		log.Printf("Ollama GetChatResponseWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return msg, s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals), nil
+}
+
 func (s *OllamaService) GetReasoningResponseWithTools(
 	model string,
 	maxTokens *int,
@@ -151,7 +162,7 @@ func (s *OllamaService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations, "")
+	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	return msg, err
 }
 
@@ -168,7 +179,7 @@ func (s *OllamaService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -213,6 +224,8 @@ func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 	messages []LLMBotMessage,
 	tools []ToolCall,
 	toolHandlers map[string]ToolHandler,
+	firstIterationTools []ToolCall,
+	firstIterationToolHandlers map[string]ToolHandler,
 	_ *string,
 	reasoningEffort *string,
 	deb bool,
@@ -265,6 +278,8 @@ func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 		effectiveMessages,
 		tools,
 		toolHandlers,
+		firstIterationTools,
+		firstIterationToolHandlers,
 		effectiveReasoningEffort,
 		deb,
 		maxIterations,
@@ -411,6 +426,8 @@ func (s *OllamaService) getReasoningResponseWithTools(
 	messages []LLMBotMessage,
 	tools []ToolCall,
 	toolHandlers map[string]ToolHandler,
+	firstIterationTools []ToolCall,
+	firstIterationToolHandlers map[string]ToolHandler,
 	reasoningEffort *string,
 	deb bool,
 	maxIterations int,
@@ -451,6 +468,9 @@ func (s *OllamaService) getReasoningResponseWithTools(
 	if len(toolHandlers) == 0 {
 		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
 	}
+	if len(firstIterationTools) > 0 && len(firstIterationToolHandlers) == 0 {
+		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
+	}
 	if maxIterations <= 0 {
 		maxIterations = 8
 	}
@@ -458,6 +478,14 @@ func (s *OllamaService) getReasoningResponseWithTools(
 	ollamaMessages, err := buildInitialOllamaMessages(messages, jsonSchema, s.structuredOutputPromptSchema)
 	if err != nil {
 		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+	}
+	firstIterationOllamaMessages := ollamaMessages
+	if len(firstIterationTools) > 0 {
+		firstIterationMessages := WithFirstIterationReasoningSearchSystemMessage(messages, firstIterationTools)
+		firstIterationOllamaMessages, err = buildInitialOllamaMessages(firstIterationMessages, jsonSchema, s.structuredOutputPromptSchema)
+		if err != nil {
+			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		}
 	}
 	format, err := buildOllamaFormat(jsonSchema)
 	if err != nil {
@@ -473,7 +501,17 @@ func (s *OllamaService) getReasoningResponseWithTools(
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
 		}
-		req := s.newChatRequest(model, maxTokens, ollamaMessages, tools, format, think)
+		currentTools := tools
+		currentToolHandlers := toolHandlers
+		if i == 0 && len(firstIterationTools) > 0 {
+			currentTools = firstIterationTools
+			currentToolHandlers = firstIterationToolHandlers
+		}
+		currentMessages := ollamaMessages
+		if i == 0 && len(firstIterationTools) > 0 {
+			currentMessages = firstIterationOllamaMessages
+		}
+		req := s.newChatRequest(model, maxTokens, currentMessages, currentTools, format, think)
 
 		var resp OllamaChatResponse
 		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/api/chat", &resp, deb); err != nil {
@@ -503,12 +541,13 @@ func (s *OllamaService) getReasoningResponseWithTools(
 			if toolCall.Function.Name == "" {
 				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("ollama tool call is missing function name")
 			}
-			if !usedToolsSet[toolCall.Function.Name] {
-				usedTools = append(usedTools, toolCall.Function.Name)
-				usedToolsSet[toolCall.Function.Name] = true
+			canonicalToolName := CanonicalReasoningToolName(toolCall.Function.Name)
+			if !usedToolsSet[canonicalToolName] {
+				usedTools = append(usedTools, canonicalToolName)
+				usedToolsSet[canonicalToolName] = true
 			}
 
-			handler, ok := toolHandlers[toolCall.Function.Name]
+			handler, ok := currentToolHandlers[toolCall.Function.Name]
 			if !ok {
 				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Function.Name)
 			}
@@ -525,7 +564,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 			}
 
 			if s.progress != nil && progressSessionID != "" {
-				s.progress.RunningTool(progressSessionID, i+1, toolCall.Function.Name)
+				s.progress.RunningTool(progressSessionID, i+1, canonicalToolName)
 			}
 			result, err := handler(reasoningCtx, rawArgs)
 			if err != nil {

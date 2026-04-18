@@ -1,20 +1,24 @@
 package llm
 
+import "encoding/json"
+
 type ReasoningSearchResponse struct {
-	SessionID           string                               `json:"session_id"`
-	CacheHit            bool                                 `json:"cache_hit"`
-	Query               string                               `json:"query"`
-	Summary             string                               `json:"summary"`
-	ReasoningSummary    string                               `json:"reasoning_summary"`
-	VerificationOutput  *ReasoningSearchVerificationResponse `json:"verification_output,omitempty"`
-	MaxFollowups        int                                  `json:"max_followups"`
-	FollowupsUsed       int                                  `json:"followups_used"`
-	FollowupsRemaining  int                                  `json:"followups_remaining"`
-	UsedTokens          int                                  `json:"used_tokens"`
-	ReasoningIterations int                                  `json:"reasoning_iterations"`
-	UsedTools           []string                             `json:"used_tools"`
-	Results             []ReasoningSearchResult              `json:"results"`
-	Debug               *ReasoningSearchDebugInfo            `json:"debug,omitempty"`
+	SessionID                string                               `json:"session_id"`
+	CacheHit                 bool                                 `json:"cache_hit"`
+	Query                    string                               `json:"query"`
+	Summary                  string                               `json:"summary"`
+	ReasoningSummary         string                               `json:"reasoning_summary"`
+	PlanningOutput           *ReasoningSearchPlanningResponse     `json:"planning_output,omitempty"`
+	PlanningReasoningSummary string                               `json:"planning_reasoning_summary,omitempty"`
+	VerificationOutput       *ReasoningSearchVerificationResponse `json:"verification_output,omitempty"`
+	MaxFollowups             int                                  `json:"max_followups"`
+	FollowupsUsed            int                                  `json:"followups_used"`
+	FollowupsRemaining       int                                  `json:"followups_remaining"`
+	UsedTokens               int                                  `json:"used_tokens"`
+	ReasoningIterations      int                                  `json:"reasoning_iterations"`
+	UsedTools                []string                             `json:"used_tools"`
+	Results                  []ReasoningSearchResult              `json:"results"`
+	Debug                    *ReasoningSearchDebugInfo            `json:"debug,omitempty"`
 }
 
 type ReasoningSearchResult struct {
@@ -33,6 +37,8 @@ type ReasoningSearchDebugInfo struct {
 	Enabled                      bool                           `json:"enabled"`
 	Model                        string                         `json:"model"`
 	ReasoningEffort              string                         `json:"reasoning_effort"`
+	ReasoningSummary             string                         `json:"reasoning_summary,omitempty"`
+	PlanningModelUsage           *ReasoningSearchUsageBreakdown `json:"planning_model_usage,omitempty"`
 	MainModelUsage               *ReasoningSearchUsageBreakdown `json:"main_model_usage,omitempty"`
 	AIToolsUsage                 *ReasoningSearchUsageBreakdown `json:"ai_tools_usage,omitempty"`
 	VerificationModel            string                         `json:"verification_model,omitempty"`
@@ -77,6 +83,17 @@ type ReasoningSearchUsageBreakdown struct {
 type ReasoningSearchVerificationResponse struct {
 	NeedsAnotherIteration bool   `json:"needs_another_iteration"`
 	Recommendation        string `json:"recommendation"`
+}
+
+type ReasoningSearchPlanningResponse struct {
+	InstructionText     string                            `json:"instruction_text"`
+	FirstIterationTools []ReasoningSearchPlanningToolSpec `json:"first_iteration_tools"`
+}
+
+type ReasoningSearchPlanningToolSpec struct {
+	ToolName           string   `json:"tool_name"`
+	ParamsJSON         string   `json:"params_json"`
+	AlternativeQueries []string `json:"alternative_queries"`
 }
 
 func GenerateReasoningSearchResponseJSONSchema() string {
@@ -233,4 +250,65 @@ func GenerateReasoningSearchVerificationResponseJSONSchema() string {
   },
   "required": ["needs_another_iteration", "recommendation"]
 }`
+}
+
+func GenerateReasoningSearchPlanningResponseJSONSchema(tools []ReasoningTool) string {
+	toolNames := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if tool == nil {
+			continue
+		}
+		name := tool.Definition().Name
+		if name == "" {
+			continue
+		}
+		toolNames = append(toolNames, name)
+	}
+
+	schema := map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]interface{}{
+			"instruction_text": map[string]interface{}{
+				"type":        "string",
+				"description": "Short request-specific instruction text to inject into the reasoning system prompt.",
+			},
+			"first_iteration_tools": map[string]interface{}{
+				"type":        "array",
+				"description": "Planned first-iteration tool options. These will be the only tool options available on the first reasoning iteration.",
+				"maxItems":    4,
+				"items": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]interface{}{
+						"tool_name": map[string]interface{}{
+							"type":        "string",
+							"enum":        toolNames,
+							"description": "One of the available tool names.",
+						},
+						"params_json": map[string]interface{}{
+							"type":        "string",
+							"description": "A JSON object string with predefined arguments for the selected tool. Example: {\"query\":\"חיים חדשים\",\"language\":\"he\"}.",
+						},
+						"alternative_queries": map[string]interface{}{
+							"type":        "array",
+							"description": "Only for elasticsearch_search. Alternative query strings that should be converted into additional first-iteration tool options using the same non-query params. Use an empty array for other tools.",
+							"items": map[string]interface{}{
+								"type": "string",
+							},
+							"maxItems": 4,
+						},
+					},
+					"required": []string{"tool_name", "params_json", "alternative_queries"},
+				},
+			},
+		},
+		"required": []string{"instruction_text", "first_iteration_tools"},
+	}
+
+	payload, err := json.Marshal(schema)
+	if err != nil {
+		return `{"type":"object","additionalProperties":false,"properties":{"instruction_text":{"type":"string"},"first_iteration_tools":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"tool_name":{"type":"string"},"params_json":{"type":"string"},"alternative_queries":{"type":"array","items":{"type":"string"}}},"required":["tool_name","params_json","alternative_queries"]}}},"required":["instruction_text","first_iteration_tools"]}`
+	}
+	return string(payload)
 }

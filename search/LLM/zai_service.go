@@ -163,6 +163,17 @@ func (s *ZAIService) GetChatResponse(model string, maxTokens *int, messages []LL
 	return msg, nil
 }
 
+func (s *ZAIService) GetChatResponseWithDebugInfo(model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, jsonSchema, reasoningEffort, debug)
+	if usageTotals.TotalTokens > 0 {
+		log.Printf("ZAI GetChatResponseWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return msg, s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals), nil
+}
+
 func (s *ZAIService) GetReasoningResponseWithTools(
 	model string,
 	maxTokens *int,
@@ -174,7 +185,7 @@ func (s *ZAIService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations, "")
+	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	return msg, err
 }
 
@@ -191,7 +202,7 @@ func (s *ZAIService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -239,6 +250,8 @@ func (s *ZAIService) GetReasoningStructuredOutputWithToolsForSession(
 	messages []LLMBotMessage,
 	tools []ToolCall,
 	toolHandlers map[string]ToolHandler,
+	firstIterationTools []ToolCall,
+	firstIterationToolHandlers map[string]ToolHandler,
 	_ *string,
 	reasoningEffort *string,
 	deb bool,
@@ -291,6 +304,8 @@ func (s *ZAIService) GetReasoningStructuredOutputWithToolsForSession(
 		effectiveMessages,
 		tools,
 		toolHandlers,
+		firstIterationTools,
+		firstIterationToolHandlers,
 		effectiveReasoningEffort,
 		deb,
 		maxIterations,
@@ -444,6 +459,8 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	messages []LLMBotMessage,
 	tools []ToolCall,
 	toolHandlers map[string]ToolHandler,
+	firstIterationTools []ToolCall,
+	firstIterationToolHandlers map[string]ToolHandler,
 	reasoningEffort *string,
 	deb bool,
 	maxIterations int,
@@ -484,6 +501,9 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	if len(toolHandlers) == 0 {
 		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
 	}
+	if len(firstIterationTools) > 0 && len(firstIterationToolHandlers) == 0 {
+		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
+	}
 	if maxIterations <= 0 {
 		maxIterations = 8
 	}
@@ -492,10 +512,21 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	if err != nil {
 		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 	}
+	firstIterationNormalizedMessages := normalizedMessages
+	if len(firstIterationTools) > 0 {
+		firstIterationMessages := WithFirstIterationReasoningSearchSystemMessage(messages, firstIterationTools)
+		firstIterationNormalizedMessages, err = normalizeZAIMessages(firstIterationMessages)
+		if err != nil {
+			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		}
+	}
 	if jsonSchema != nil {
 		// Same grounding as the one-shot path. Without this, glm-5.1 often
 		// returns arbitrary JSON objects instead of the required schema.
 		normalizedMessages[0].Content = appendStructuredOutputInstruction(normalizedMessages[0].Content, jsonSchema)
+		if len(firstIterationTools) > 0 {
+			firstIterationNormalizedMessages[0].Content = appendStructuredOutputInstruction(firstIterationNormalizedMessages[0].Content, jsonSchema)
+		}
 	}
 	thinking, err := zaiThinkingValue(reasoningEffort)
 	if err != nil {
@@ -509,10 +540,20 @@ func (s *ZAIService) getReasoningResponseWithTools(
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
 		}
+		currentTools := tools
+		currentToolHandlers := toolHandlers
+		if i == 0 && len(firstIterationTools) > 0 {
+			currentTools = firstIterationTools
+			currentToolHandlers = firstIterationToolHandlers
+		}
+		currentMessages := normalizedMessages
+		if i == 0 && len(firstIterationTools) > 0 {
+			currentMessages = firstIterationNormalizedMessages
+		}
 
 		req := ZAIChatRequest{
 			Model:          model,
-			Messages:       normalizedMessages,
+			Messages:       currentMessages,
 			MaxTokens:      maxTokens,
 			DoSample:       s.doSample,
 			Temperature:    s.temperature,
@@ -520,7 +561,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 			Stop:           s.stop,
 			ResponseFormat: responseFormat,
 			Thinking:       thinking,
-			Tools:          tools,
+			Tools:          currentTools,
 			ToolChoice:     &toolChoice,
 			Stream:         false,
 		}
@@ -565,12 +606,13 @@ func (s *ZAIService) getReasoningResponseWithTools(
 			if toolCall.Function.Name == "" {
 				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("zai tool call is missing function name")
 			}
-			if !usedToolsSet[toolCall.Function.Name] {
-				usedTools = append(usedTools, toolCall.Function.Name)
-				usedToolsSet[toolCall.Function.Name] = true
+			canonicalToolName := CanonicalReasoningToolName(toolCall.Function.Name)
+			if !usedToolsSet[canonicalToolName] {
+				usedTools = append(usedTools, canonicalToolName)
+				usedToolsSet[canonicalToolName] = true
 			}
 
-			handler, ok := toolHandlers[toolCall.Function.Name]
+			handler, ok := currentToolHandlers[toolCall.Function.Name]
 			if !ok {
 				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Function.Name)
 			}
@@ -584,7 +626,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 			}
 
 			if s.progress != nil && progressSessionID != "" {
-				s.progress.RunningTool(progressSessionID, i+1, toolCall.Function.Name)
+				s.progress.RunningTool(progressSessionID, i+1, canonicalToolName)
 			}
 			result, err := handler(reasoningCtx, rawArgs)
 			if err != nil {

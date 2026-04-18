@@ -47,18 +47,24 @@ Instructions for coding agents working in this repository.
 - API endpoints: `POST /search/reasoning/start`, `GET /search/reasoning/status`, `POST /search/reasoning`.
 - Request supports `q`, optional `deb`, optional `session_id`, optional `ui_language`.
 - The API `session_id` is a workflow session id owned by the backend, not a provider-native LLM session id.
-- Response includes `session_id`, `used_tools`, token stats, and debug/cost details when `deb=true`.
-- The backend persists a `reasoning` workflow stage and, when enabled, a `verification` workflow stage.
+- Response includes `session_id`, `cache_hit`, `used_tools`, token stats, and debug/cost details when `deb=true`.
+- The backend persists a `reasoning` workflow stage and, when enabled, `planning` and `verification` workflow stages.
 - Workflow stages own their provider/model/effort settings; handlers should execute a stage from stored workflow state, not by re-reading current config for existing sessions.
+- Planning is a one-shot structured-output call that runs only on the initial request, not on follow-ups. It returns request-specific guidance plus optional first-iteration tool restrictions.
 - Verification is currently a one-shot structured call, so its stored stage metadata may have an empty provider-native session id.
 - OpenAI short-lived reasoning sessions are stored in memory only, with TTL from `openai.reasoning-session-ttl`.
 - xAI short-lived reasoning sessions are also stored in memory only, with TTL from `xai.reasoning-session-ttl`.
 - OpenRouter and Ollama sessions also live in memory, but store full replayable conversation history via `chat_reasoning_sessions.go`.
 - If client sends a missing or expired `session_id`, the API returns an error; it does not silently start a new session.
 - OpenAI session state stores continuation data (`last_response_id`, model, effort), not the full prompt or hidden reasoning.
+- Planning failures are soft: the handler logs a warning and continues with reasoning without planner guidance.
+- In debug mode, planning token/cost usage is merged into the response totals and exposed via `debug.planning_model_usage`.
 
 ## LLM Config
 - Provider selection uses `[llm].provider`; default is `openai`.
+- Planning enable/provider selection lives under `[llm]`:
+  - `llm.reasoning-search-planning-enabled`
+  - `llm.reasoning-search-planning-provider`
 - Verification enable/provider selection lives under `[llm]`:
   - `llm.reasoning-search-verification-enabled`
   - `llm.reasoning-search-verification-provider`
@@ -72,8 +78,12 @@ Instructions for coding agents working in this repository.
   - `<provider>.reasoning-search-verification-model`
   - `<provider>.reasoning-search-verification-effort`
   - `<provider>.reasoning-search-verification-max-output-tokens`
+- Planning model settings are also provider-specific:
+  - `<provider>.reasoning-search-planning-model`
+  - `<provider>.reasoning-search-planning-effort`
+  - `<provider>.reasoning-search-planning-max-output-tokens`
 - OpenRouter supports configurable provider routing and `openrouter.enforced-tool-use-iterations` (default `1`).
-- xAI Grok 4 fast reasoning models do not support `reasoning_effort`; keep xAI effort config empty.
+- xAI Grok 4 fast reasoning models do not support `reasoning_effort`; keep xAI reasoning and planning effort config empty.
 - Ollama supports `ollama.num-ctx`; `ollama.temperature` and `ollama.structured-output-prompt-schema` are optional.
 - Pricing for cost estimation is configured per provider with `[[<provider>.pricing]]`.
 - Shared pricing/cost helpers live in `search/LLM/llm_pricing.go`.

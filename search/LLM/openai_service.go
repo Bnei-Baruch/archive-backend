@@ -1,5 +1,7 @@
 package llm
 
+import "log"
+
 type OpenAIService struct {
 	*OpenAICompatibleAPIService
 }
@@ -18,4 +20,26 @@ func NewOpenAIServiceWithOptions(token string, pricing []ModelPricing, sessions 
 	return &OpenAIService{
 		OpenAICompatibleAPIService: newOpenAICompatibleAPIServiceWithOptions(token, pricing, sessions, apiBaseURL),
 	}
+}
+
+func (s *OpenAIService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, promptCacheKey, frequencyPenalty, jsonSchema, reasoningEffort, true, false)
+	if usageTotals.TotalTokens > 0 {
+		log.Printf("OpenAI GetChatResponse total tokens: %d", usageTotals.TotalTokens)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return msg, nil
+}
+
+func (s *OpenAIService) GetChatResponseWithDebugInfo(model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, promptCacheKey, frequencyPenalty, jsonSchema, reasoningEffort, true, debug)
+	if usageTotals.TotalTokens > 0 {
+		log.Printf("OpenAI GetChatResponseWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return msg, s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals), nil
 }
