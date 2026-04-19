@@ -13,9 +13,13 @@ const defaultOpenRouterAPIBaseURL = "https://openrouter.ai/api/v1"
 
 type OpenRouterService struct {
 	*OpenAICompatibleAPIService
-	sessions               *ChatReasoningSessionStore
-	providerPreferences    *ResponsesProvider
-	requiredToolIterations int
+	sessions                                 *ChatReasoningSessionStore
+	providerPreferences                      *ResponsesProvider
+	reasoningSearchProviderPreferences       *ResponsesProvider
+	reasoningSearchPlanningProviderPrefs     *ResponsesProvider
+	reasoningSearchVerificationProviderPrefs *ResponsesProvider
+	aiToolsProviderPreferences               *ResponsesProvider
+	requiredToolIterations                   int
 }
 
 var _ Service = (*OpenRouterService)(nil)
@@ -37,8 +41,37 @@ func NewOpenRouterServiceWithOptions(token string, pricing []ModelPricing, sessi
 	}
 }
 
+func (s *OpenRouterService) reasoningSearchProviderPrefs() *ResponsesProvider {
+	if s.reasoningSearchProviderPreferences != nil {
+		return s.reasoningSearchProviderPreferences
+	}
+	return s.providerPreferences
+}
+
+func (s *OpenRouterService) structuredOutputProviderPreferences(promptCacheKey *string) *ResponsesProvider {
+	key := ""
+	if promptCacheKey != nil {
+		key = strings.TrimSpace(*promptCacheKey)
+	}
+	switch {
+	case strings.HasPrefix(key, "reasoning-search-planning:"):
+		if s.reasoningSearchPlanningProviderPrefs != nil {
+			return s.reasoningSearchPlanningProviderPrefs
+		}
+	case strings.HasPrefix(key, "reasoning-search-verification:"):
+		if s.reasoningSearchVerificationProviderPrefs != nil {
+			return s.reasoningSearchVerificationProviderPrefs
+		}
+	default:
+		if s.aiToolsProviderPreferences != nil {
+			return s.aiToolsProviderPreferences
+		}
+	}
+	return s.providerPreferences
+}
+
 func (s *OpenRouterService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) error {
-	msg, _, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.providerPreferences, false)
+	msg, _, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.structuredOutputProviderPreferences(promptCacheKey), false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("OpenRouter GetStructuredOutput total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -53,7 +86,7 @@ func (s *OpenRouterService) GetStructuredOutput(jsonSchema string, model string,
 }
 
 func (s *OpenRouterService) GetStructuredOutputWithDebugInfo(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
-	msg, reasoningSummary, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.providerPreferences, debug)
+	msg, reasoningSummary, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.structuredOutputProviderPreferences(promptCacheKey), debug)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("OpenRouter GetStructuredOutputWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -410,7 +443,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 			Text:            text,
 			Tools:           currentTools,
 			ToolChoice:      toolChoice,
-			Provider:        s.providerPreferences,
+			Provider:        s.reasoningSearchProviderPrefs(),
 		}
 		if reasoningEffort != nil {
 			req.Reasoning = &ResponsesReasoning{Effort: *reasoningEffort}

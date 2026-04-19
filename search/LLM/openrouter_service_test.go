@@ -416,6 +416,28 @@ func TestOpenRouterGetStructuredOutputWithDebugReturnsUsage(t *testing.T) {
 	}
 }
 
+func TestOpenRouterStructuredOutputProviderPreferencesSelectsStage(t *testing.T) {
+	service := NewOpenRouterServiceWithOptions("test-token", nil, nil, "https://openrouter.test")
+	service.providerPreferences = &ResponsesProvider{Sort: "latency"}
+	service.reasoningSearchPlanningProviderPrefs = &ResponsesProvider{Sort: "price"}
+	service.reasoningSearchVerificationProviderPrefs = &ResponsesProvider{Sort: "throughput"}
+	service.aiToolsProviderPreferences = &ResponsesProvider{Sort: "price", Only: []string{"novita"}}
+
+	planningKey := "reasoning-search-planning:m=planner:e=low"
+	if prefs := service.structuredOutputProviderPreferences(&planningKey); prefs == nil || prefs.Sort != "price" || len(prefs.Only) != 0 {
+		t.Fatalf("unexpected planning prefs: %#v", prefs)
+	}
+
+	verificationKey := "reasoning-search-verification:m=verifier:e=low"
+	if prefs := service.structuredOutputProviderPreferences(&verificationKey); prefs == nil || prefs.Sort != "throughput" {
+		t.Fatalf("unexpected verification prefs: %#v", prefs)
+	}
+
+	if prefs := service.structuredOutputProviderPreferences(nil); prefs == nil || prefs.Sort != "price" || len(prefs.Only) != 1 || prefs.Only[0] != "novita" {
+		t.Fatalf("unexpected ai-tools prefs: %#v", prefs)
+	}
+}
+
 func TestOpenRouterReasoningSessionReplaysHistory(t *testing.T) {
 	requests := []map[string]interface{}{}
 	service := NewOpenRouterServiceWithOptions("test-token", nil, NewChatReasoningSessionStore(time.Minute), "https://openrouter.test")

@@ -85,6 +85,7 @@ Instructions for coding agents working in this repository.
   - `<provider>.reasoning-search-planning-effort`
   - `<provider>.reasoning-search-planning-max-output-tokens`
 - OpenRouter supports configurable provider routing and `openrouter.enforced-tool-use-iterations` (default `1`).
+- OpenRouter provider routing keys can be overridden per stage with `reasoning-search-*`, `reasoning-search-planning-*`, `reasoning-search-verification-*`, and `ai-tools-*` provider-routing keys under `[openrouter]`.
 - xAI Grok 4 fast reasoning models do not support `reasoning_effort`; keep xAI reasoning and planning effort config empty.
 - Ollama supports `ollama.num-ctx`; `ollama.temperature` and `ollama.structured-output-prompt-schema` are optional.
 - Stub responses are configured with `[[stub.responses]]` entries keyed by `model` and `query`; use `query="*"` as a model-level fallback.

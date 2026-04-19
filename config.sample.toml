@@ -131,6 +131,23 @@ provider-require-parameters=false # set true only when you want strict provider 
 # provider-only=["openai"]
 # provider-ignore=["novita"]
 # provider-preferred-max-latency=60
+# Stage-specific provider routing overrides inherit the global keys above when unset.
+# reasoning-search-provider-sort="latency"
+# reasoning-search-provider-require-parameters=false
+# reasoning-search-provider-only=["openai"]
+# reasoning-search-provider-ignore=["novita"]
+# reasoning-search-planning-provider-sort="price"
+# reasoning-search-planning-provider-require-parameters=false
+# reasoning-search-planning-provider-only=["deepinfra"]
+# reasoning-search-planning-provider-ignore=[]
+# reasoning-search-verification-provider-sort="latency"
+# reasoning-search-verification-provider-require-parameters=false
+# reasoning-search-verification-provider-only=["fireworks"]
+# reasoning-search-verification-provider-ignore=[]
+# ai-tools-provider-sort="price"
+# ai-tools-provider-require-parameters=false
+# ai-tools-provider-only=["novita"]
+# ai-tools-provider-ignore=[]
 
 [[openrouter.pricing]]
 model="openai/gpt-oss-20b"

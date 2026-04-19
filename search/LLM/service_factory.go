@@ -112,6 +112,22 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 			return nil, err
 		}
 		service.providerPreferences = providerPreferences
+		service.reasoningSearchProviderPreferences, err = openRouterProviderPreferencesForScopeFromConfig("openrouter.reasoning-search", providerPreferences)
+		if err != nil {
+			return nil, err
+		}
+		service.reasoningSearchPlanningProviderPrefs, err = openRouterProviderPreferencesForScopeFromConfig("openrouter.reasoning-search-planning", providerPreferences)
+		if err != nil {
+			return nil, err
+		}
+		service.reasoningSearchVerificationProviderPrefs, err = openRouterProviderPreferencesForScopeFromConfig("openrouter.reasoning-search-verification", providerPreferences)
+		if err != nil {
+			return nil, err
+		}
+		service.aiToolsProviderPreferences, err = openRouterProviderPreferencesForScopeFromConfig("openrouter.ai-tools", providerPreferences)
+		if err != nil {
+			return nil, err
+		}
 		service.requiredToolIterations = openRouterRequiredToolIterationsFromConfig()
 		return service, nil
 	case ProviderOllama:
@@ -1101,52 +1117,99 @@ func requestTimeoutFromConfig(key string) time.Duration {
 }
 
 func openRouterProviderPreferencesFromConfig() (*ResponsesProvider, error) {
-	provider := &ResponsesProvider{}
+	return openRouterProviderPreferencesForScopeFromConfig("openrouter", nil)
+}
 
-	sort := strings.TrimSpace(viper.GetString("openrouter.provider-sort"))
+func openRouterProviderPreferencesForScopeFromConfig(scope string, fallback *ResponsesProvider) (*ResponsesProvider, error) {
+	provider := cloneResponsesProvider(fallback)
+	if provider == nil {
+		provider = &ResponsesProvider{}
+	}
+
+	sortKey := openRouterProviderPreferenceConfigKey(scope, "sort")
+	sort := strings.TrimSpace(viper.GetString(sortKey))
 	if sort == "" {
-		sort = "latency"
+		sort = strings.TrimSpace(provider.Sort)
+		if sort == "" {
+			sort = "latency"
+		}
 	}
 	switch sort {
 	case "latency", "price", "throughput":
 		provider.Sort = sort
 	default:
-		return nil, fmt.Errorf("openrouter.provider-sort %q is invalid; supported values are latency, price, throughput", sort)
+		return nil, fmt.Errorf("%s %q is invalid; supported values are latency, price, throughput", sortKey, sort)
 	}
 
 	requireParameters := false
-	if viper.IsSet("openrouter.provider-require-parameters") {
-		requireParameters = viper.GetBool("openrouter.provider-require-parameters")
+	if provider.RequireParameters != nil {
+		requireParameters = *provider.RequireParameters
+	}
+	if viper.IsSet(openRouterProviderPreferenceConfigKey(scope, "require-parameters")) {
+		requireParameters = viper.GetBool(openRouterProviderPreferenceConfigKey(scope, "require-parameters"))
 	}
 	provider.RequireParameters = &requireParameters
 
-	if viper.IsSet("openrouter.provider-allow-fallbacks") {
-		allowFallbacks := viper.GetBool("openrouter.provider-allow-fallbacks")
+	allowFallbacksKey := openRouterProviderPreferenceConfigKey(scope, "allow-fallbacks")
+	if viper.IsSet(allowFallbacksKey) {
+		allowFallbacks := viper.GetBool(allowFallbacksKey)
 		provider.AllowFallbacks = &allowFallbacks
 	}
 
-	if viper.IsSet("openrouter.provider-only") {
-		only := filterEmptyStrings(viper.GetStringSlice("openrouter.provider-only"))
-		if len(only) > 0 {
-			provider.Only = only
-		}
+	onlyKey := openRouterProviderPreferenceConfigKey(scope, "only")
+	if viper.IsSet(onlyKey) {
+		provider.Only = filterEmptyStrings(viper.GetStringSlice(onlyKey))
 	}
 
-	if viper.IsSet("openrouter.provider-ignore") {
-		ignore := filterEmptyStrings(viper.GetStringSlice("openrouter.provider-ignore"))
-		if len(ignore) > 0 {
-			provider.Ignore = ignore
-		}
+	ignoreKey := openRouterProviderPreferenceConfigKey(scope, "ignore")
+	if viper.IsSet(ignoreKey) {
+		provider.Ignore = filterEmptyStrings(viper.GetStringSlice(ignoreKey))
 	}
 
-	if viper.IsSet("openrouter.provider-preferred-max-latency") {
-		latency := viper.GetInt("openrouter.provider-preferred-max-latency")
+	latencyKey := openRouterProviderPreferenceConfigKey(scope, "preferred-max-latency")
+	if viper.IsSet(latencyKey) {
+		latency := viper.GetInt(latencyKey)
 		if latency > 0 {
 			provider.PreferredMaxLatency = &latency
+		} else {
+			provider.PreferredMaxLatency = nil
 		}
 	}
 
 	return provider, nil
+}
+
+func openRouterProviderPreferenceConfigKey(scope string, name string) string {
+	if scope == "openrouter" {
+		return "openrouter.provider-" + name
+	}
+	return scope + "-provider-" + name
+}
+
+func cloneResponsesProvider(provider *ResponsesProvider) *ResponsesProvider {
+	if provider == nil {
+		return nil
+	}
+	clone := *provider
+	if provider.RequireParameters != nil {
+		value := *provider.RequireParameters
+		clone.RequireParameters = &value
+	}
+	if provider.AllowFallbacks != nil {
+		value := *provider.AllowFallbacks
+		clone.AllowFallbacks = &value
+	}
+	if provider.PreferredMaxLatency != nil {
+		value := *provider.PreferredMaxLatency
+		clone.PreferredMaxLatency = &value
+	}
+	if provider.Only != nil {
+		clone.Only = append([]string(nil), provider.Only...)
+	}
+	if provider.Ignore != nil {
+		clone.Ignore = append([]string(nil), provider.Ignore...)
+	}
+	return &clone
 }
 
 func openRouterRequiredToolIterationsFromConfig() int {

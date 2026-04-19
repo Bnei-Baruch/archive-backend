@@ -34,6 +34,47 @@ func TestOpenRouterProviderPreferencesDefaultRequireParametersFalse(t *testing.T
 	}
 }
 
+func TestOpenRouterProviderPreferencesStageOverridesInheritGlobal(t *testing.T) {
+	restoreViperKeys(t,
+		"openrouter.provider-sort",
+		"openrouter.provider-require-parameters",
+		"openrouter.provider-only",
+		"openrouter.provider-ignore",
+		"openrouter.reasoning-search-planning-provider-sort",
+		"openrouter.reasoning-search-planning-provider-only",
+		"openrouter.reasoning-search-planning-provider-ignore",
+	)
+
+	viper.Set("openrouter.provider-sort", "latency")
+	viper.Set("openrouter.provider-require-parameters", true)
+	viper.Set("openrouter.provider-only", []string{"openai"})
+	viper.Set("openrouter.provider-ignore", []string{"novita"})
+	viper.Set("openrouter.reasoning-search-planning-provider-sort", "price")
+	viper.Set("openrouter.reasoning-search-planning-provider-only", []string{"deepinfra"})
+	viper.Set("openrouter.reasoning-search-planning-provider-ignore", []string{})
+
+	global, err := openRouterProviderPreferencesFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected global error: %v", err)
+	}
+	planning, err := openRouterProviderPreferencesForScopeFromConfig("openrouter.reasoning-search-planning", global)
+	if err != nil {
+		t.Fatalf("unexpected planning error: %v", err)
+	}
+	if planning.Sort != "price" {
+		t.Fatalf("unexpected planning sort: %q", planning.Sort)
+	}
+	if planning.RequireParameters == nil || !*planning.RequireParameters {
+		t.Fatalf("expected planning require_parameters to inherit true")
+	}
+	if len(planning.Only) != 1 || planning.Only[0] != "deepinfra" {
+		t.Fatalf("unexpected planning only: %#v", planning.Only)
+	}
+	if len(planning.Ignore) != 0 {
+		t.Fatalf("expected planning ignore to be cleared, got %#v", planning.Ignore)
+	}
+}
+
 func TestOpenRouterRequiredToolIterationsDefaultsToOne(t *testing.T) {
 	oldValue := viper.Get("openrouter.enforced-tool-use-iterations")
 	if oldValue == nil {
@@ -62,4 +103,17 @@ func TestOpenRouterRequiredToolIterationsUsesConfiguredValue(t *testing.T) {
 	if iterations := openRouterRequiredToolIterationsFromConfig(); iterations != 4 {
 		t.Fatalf("expected enforced-tool-use-iterations to be 4, got %d", iterations)
 	}
+}
+
+func restoreViperKeys(t *testing.T, keys ...string) {
+	t.Helper()
+	values := map[string]interface{}{}
+	for _, key := range keys {
+		values[key] = viper.Get(key)
+	}
+	t.Cleanup(func() {
+		for _, key := range keys {
+			viper.Set(key, values[key])
+		}
+	})
 }
