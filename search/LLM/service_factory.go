@@ -20,8 +20,8 @@ const (
 const (
 	defaultReasoningSearchEffort            = "high" // "low", "medium", "high", "xhigh" (not for oss models)
 	defaultReasoningSearchMaxTokens         = 8000
-	defaultReasoningSearchMaxIterations     = 20
-	defaultReasoningSearchRerunMaxIters     = 2
+	defaultReasoningSearchMaxIterations     = 20 // max iterations for a reasoning search before the verification stage
+	defaultReasoningSearchRerunMaxIters     = 8  // max reasoning iterations when the search is rerun after a failed verification stage
 	defaultReasoningSearchMaxFollowups      = 2
 	defaultReasoningSearchPlanningEffort    = "medium"
 	defaultReasoningSearchPlanningMaxTokens = 1500
