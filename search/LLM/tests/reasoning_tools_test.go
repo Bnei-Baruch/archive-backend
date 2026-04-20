@@ -139,7 +139,7 @@ func TestBuildFirstIterationReasoningSearchSystemMessageUsesPlannedToolDocs(t *t
 		"Available tools and usage instructions:",
 		"Tool: elasticsearch_search\nUse normal search.",
 		"Tool: get_collections\nUse collections.",
-		"YOU MUST FOLLOW THIS INSTRUCTION ON SEARCH STRATEGY:\nSearch inside the planned collection first.",
+		"YOU MUST FOLLOW THIS INSTRUCTION ON SEARCH STRATEGY FOR THE GIVEN QUERY:\nSearch inside the planned collection first.",
 	}, "\n\n")
 	planned := []llm.ToolCall{
 		{
