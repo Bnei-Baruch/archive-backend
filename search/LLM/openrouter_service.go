@@ -10,6 +10,7 @@ import (
 )
 
 const defaultOpenRouterAPIBaseURL = "https://openrouter.ai/api/v1"
+const openRouterResultsReadyToolName = "results_ready"
 
 type OpenRouterService struct {
 	*OpenAICompatibleAPIService
@@ -68,6 +69,58 @@ func (s *OpenRouterService) structuredOutputProviderPreferences(promptCacheKey *
 		}
 	}
 	return s.providerPreferences
+}
+
+func openRouterWithResultsReadyTool(tools []ToolCall, handlers map[string]ToolHandler) ([]ToolCall, map[string]ToolHandler) {
+	retTools := append([]ToolCall(nil), tools...)
+	if !openRouterHasTool(retTools, openRouterResultsReadyToolName) {
+		retTools = append(retTools, openRouterResultsReadyToolCall())
+	}
+
+	retHandlers := make(map[string]ToolHandler, len(handlers)+1)
+	for name, handler := range handlers {
+		retHandlers[name] = handler
+	}
+	retHandlers[openRouterResultsReadyToolName] = openRouterResultsReadyHandler
+	return retTools, retHandlers
+}
+
+func openRouterHasTool(tools []ToolCall, name string) bool {
+	for _, tool := range tools {
+		function, ok := tool.Function.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if toolCallStringField(function, "name") == name {
+			return true
+		}
+	}
+	return false
+}
+
+func openRouterResultsReadyToolCall() ToolCall {
+	return ToolCall{
+		Type: "function",
+		Function: map[string]interface{}{
+			"name":        openRouterResultsReadyToolName,
+			"description": "Call this internal tool only when you already have enough information and are ready to return the final structured response. It performs no search.",
+			"parameters": map[string]interface{}{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]interface{}{
+					"reason": map[string]interface{}{
+						"type":        "string",
+						"description": "Short reason why no more search tools are needed.",
+					},
+				},
+				"required": []string{"reason"},
+			},
+		},
+	}
+}
+
+func openRouterResultsReadyHandler(ctx context.Context, arguments json.RawMessage) (string, error) {
+	return `{"ok":true,"message":"No more tool calls are needed. Return the final structured response now."}`, nil
 }
 
 func (s *OpenRouterService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) error {
@@ -382,6 +435,12 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 		maxIterations = 8
 	}
 	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(context.Background(), deb))
+	if s.requiredToolIterations > 0 {
+		tools, toolHandlers = openRouterWithResultsReadyTool(tools, toolHandlers)
+		if len(firstIterationTools) > 0 {
+			firstIterationTools, firstIterationToolHandlers = openRouterWithResultsReadyTool(firstIterationTools, firstIterationToolHandlers)
+		}
+	}
 
 	instructions, conversation, err := splitInstructionsAndConversation(messages)
 	if err != nil {
@@ -416,6 +475,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 		return nil, "", LLMUsageTotals{}, 0, nil, "", nil, err
 	}
 
+	resultsReadyCalled := false
 	for i := 0; i < maxIterations; i++ {
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
@@ -427,7 +487,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 			currentToolHandlers = firstIterationToolHandlers
 		}
 		toolChoice := "auto"
-		if i < s.requiredToolIterations {
+		if i < s.requiredToolIterations && !resultsReadyCalled {
 			toolChoice = "required"
 		}
 		instructionsForRequest := &instructions
@@ -511,12 +571,13 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 				return nil, "", LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("tool call for '%s' is missing call_id", toolCall.Name)
 			}
 			canonicalToolName := CanonicalReasoningToolName(toolCall.Name)
+			isResultsReadyTool := toolCall.Name == openRouterResultsReadyToolName
 			if !usedToolsSet[canonicalToolName] {
 				usedTools = append(usedTools, canonicalToolName)
 				usedToolsSet[canonicalToolName] = true
 			}
 
-			handler, ok := currentToolHandlers[toolCall.Name]
+			handler, ok := ResolveReasoningToolHandler(toolCall.Name, currentToolHandlers, firstIterationToolHandlers)
 			if !ok {
 				return nil, "", LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Name)
 			}
@@ -532,7 +593,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 				toolCallLogs = append(toolCallLogs, fmt.Sprintf("- %s args: %s", toolCall.Name, compactToolCallArguments(rawArgs)))
 			}
 
-			if s.progress != nil && progressSessionID != "" {
+			if s.progress != nil && progressSessionID != "" && !isResultsReadyTool {
 				s.progress.RunningTool(progressSessionID, i+1, canonicalToolName)
 			}
 			result, err := handler(reasoningCtx, rawArgs)
@@ -545,6 +606,9 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 				"call_id": toolCall.CallID,
 				"output":  result,
 			})
+			if isResultsReadyTool {
+				resultsReadyCalled = true
+			}
 		}
 		if deb && len(toolCallLogs) > 0 {
 			reasoningSummaries = append(reasoningSummaries, "Tool calls:\n"+strings.Join(toolCallLogs, "\n"))

@@ -316,6 +316,134 @@ func TestOpenRouterUsesConfiguredRequiredToolIterations(t *testing.T) {
 	}
 }
 
+func TestOpenRouterResultsReadyToolStopsForcedToolUse(t *testing.T) {
+	requests := []map[string]interface{}{}
+	service := NewOpenRouterServiceWithOptions("test-token", nil, nil, "https://openrouter.test")
+	service.requiredToolIterations = 5
+	service.client = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			var payload map[string]interface{}
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			requests = append(requests, payload)
+
+			switch len(requests) {
+			case 1:
+				if payload["tool_choice"] != "required" {
+					t.Fatalf("expected first request to require a tool, got %#v", payload["tool_choice"])
+				}
+				tools, ok := payload["tools"].([]interface{})
+				if !ok {
+					t.Fatalf("expected tools array, got %T", payload["tools"])
+				}
+				if !openRouterPayloadHasTool(tools, openRouterResultsReadyToolName) {
+					t.Fatalf("expected %s tool in first request tools: %#v", openRouterResultsReadyToolName, tools)
+				}
+				body := mustJSON(t, map[string]interface{}{
+					"id":     "resp_ready",
+					"status": "completed",
+					"output": []map[string]interface{}{
+						{
+							"type":      "function_call",
+							"id":        "fc_ready",
+							"call_id":   "call_ready",
+							"name":      openRouterResultsReadyToolName,
+							"arguments": `{"reason":"enough information"}`,
+						},
+					},
+					"usage": map[string]interface{}{
+						"input_tokens":  10,
+						"output_tokens": 5,
+						"total_tokens":  15,
+					},
+				})
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body))}, nil
+			case 2:
+				if payload["tool_choice"] != "auto" {
+					t.Fatalf("expected second request to stop requiring tools, got %#v", payload["tool_choice"])
+				}
+				body := mustJSON(t, map[string]interface{}{
+					"id":     "resp_final",
+					"status": "completed",
+					"output": []map[string]interface{}{
+						{
+							"type": "message",
+							"role": "assistant",
+							"content": []map[string]interface{}{
+								{
+									"type": "output_text",
+									"text": `{"query":"x","summary":"done","reasoning_summary":"","results":[]}`,
+								},
+							},
+						},
+					},
+					"usage": map[string]interface{}{
+						"input_tokens":  12,
+						"output_tokens": 7,
+						"total_tokens":  19,
+					},
+				})
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body))}, nil
+			default:
+				t.Fatalf("unexpected extra request")
+			}
+			return nil, nil
+		}),
+	}
+
+	schema := GenerateReasoningSearchResponseJSONSchema()
+	effort := "high"
+	maxTokens := 256
+	output := ReasoningSearchResponse{}
+
+	err := service.GetReasoningStructuredOutputWithTools(
+		schema,
+		"openai/gpt-oss-120b",
+		&maxTokens,
+		[]LLMBotMessage{
+			{Role: "system", Content: "You are a search assistant."},
+			{Role: "user", Content: "מצא לי זוהר"},
+		},
+		[]ToolCall{{
+			Type: "function",
+			Function: map[string]interface{}{
+				"name": "lookup",
+				"parameters": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]interface{}{
+						"term": map[string]interface{}{"type": "string"},
+					},
+					"required": []string{"term"},
+				},
+			},
+		}},
+		map[string]ToolHandler{
+			"lookup": func(ctx context.Context, arguments json.RawMessage) (string, error) {
+				return `{"hits":[1]}`, nil
+			},
+		},
+		nil,
+		&effort,
+		false,
+		4,
+		&output,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output.Summary != "done" {
+		t.Fatalf("unexpected summary: %s", output.Summary)
+	}
+	if len(output.UsedTools) != 1 || output.UsedTools[0] != openRouterResultsReadyToolName {
+		t.Fatalf("expected results_ready in used_tools, got %#v", output.UsedTools)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(requests))
+	}
+}
+
 func TestOpenRouterGetStructuredOutputWithDebugReturnsUsage(t *testing.T) {
 	service := NewOpenRouterServiceWithOptions("test-token", nil, nil, "https://openrouter.test")
 	service.providerPreferences = &ResponsesProvider{
@@ -598,6 +726,19 @@ func mustJSON(t *testing.T, payload interface{}) []byte {
 		t.Fatalf("marshal json: %v", err)
 	}
 	return data
+}
+
+func openRouterPayloadHasTool(tools []interface{}, name string) bool {
+	for _, rawTool := range tools {
+		tool, ok := rawTool.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if tool["name"] == name {
+			return true
+		}
+	}
+	return false
 }
 
 func boolPtr(value bool) *bool {
