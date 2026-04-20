@@ -147,6 +147,27 @@ func TestNewServiceFromConfigSupportsXAI(t *testing.T) {
 	}
 }
 
+func TestNewServiceFromConfigSupportsArcee(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldToken := viper.GetString("arcee.token")
+	oldEndpoint := viper.GetString("arcee.api-endpoint")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("arcee.token", oldToken)
+	defer viper.Set("arcee.api-endpoint", oldEndpoint)
+
+	viper.Set("llm.provider", "arcee")
+	viper.Set("arcee.token", "test-token")
+	viper.Set("arcee.api-endpoint", "")
+
+	service, err := llm.NewServiceFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := service.(*llm.ArceeService); !ok {
+		t.Fatalf("unexpected service type: %T", service)
+	}
+}
+
 func TestNewServiceFromConfigSupportsStub(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	defer viper.Set("llm.provider", oldProvider)
@@ -468,6 +489,51 @@ func TestReasoningSearchConfigFromConfigUsesXAISection(t *testing.T) {
 	}
 }
 
+func TestReasoningSearchConfigFromConfigUsesArceeSection(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldModel := viper.GetString("arcee.reasoning-search-model")
+	oldEffort := viper.GetString("arcee.reasoning-search-effort")
+	oldMaxTokens := viper.GetInt("arcee.reasoning-search-max-output-tokens")
+	oldMaxIterations := viper.GetInt("arcee.reasoning-search-max-iterations")
+	oldRerunMaxIterations := viper.GetInt("arcee.reasoning-search-rerun-max-iterations")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("arcee.reasoning-search-model", oldModel)
+	defer viper.Set("arcee.reasoning-search-effort", oldEffort)
+	defer viper.Set("arcee.reasoning-search-max-output-tokens", oldMaxTokens)
+	defer viper.Set("arcee.reasoning-search-max-iterations", oldMaxIterations)
+	defer viper.Set("arcee.reasoning-search-rerun-max-iterations", oldRerunMaxIterations)
+
+	viper.Set("llm.provider", "arcee")
+	viper.Set("arcee.reasoning-search-model", "trinity-mini")
+	viper.Set("arcee.reasoning-search-effort", "medium")
+	viper.Set("arcee.reasoning-search-max-output-tokens", 2345)
+	viper.Set("arcee.reasoning-search-max-iterations", 7)
+	viper.Set("arcee.reasoning-search-rerun-max-iterations", 3)
+
+	cfg, err := llm.ReasoningSearchConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Provider != "arcee" {
+		t.Fatalf("unexpected provider: %s", cfg.Provider)
+	}
+	if cfg.Model != "trinity-mini" {
+		t.Fatalf("unexpected model: %s", cfg.Model)
+	}
+	if cfg.Effort != "medium" {
+		t.Fatalf("unexpected effort: %s", cfg.Effort)
+	}
+	if cfg.MaxTokens != 2345 {
+		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
+	}
+	if cfg.MaxIterations != 7 {
+		t.Fatalf("unexpected max iterations: %d", cfg.MaxIterations)
+	}
+	if cfg.RerunMaxIterations != 3 {
+		t.Fatalf("unexpected rerun max iterations: %d", cfg.RerunMaxIterations)
+	}
+}
+
 func TestReasoningSearchConfigFromConfigUsesStubSection(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldPlanningEnabled := viper.GetBool("llm.reasoning-search-planning-enabled")
@@ -728,6 +794,27 @@ func TestReasoningSearchConfigFromConfigRejectsInvalidZAIEffort(t *testing.T) {
 		t.Fatalf("expected error for invalid Z.AI effort")
 	}
 	if !strings.Contains(err.Error(), "supported values are minimal, low, medium, high, xhigh") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestReasoningSearchConfigFromConfigRejectsInvalidArceeEffort(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldModel := viper.GetString("arcee.reasoning-search-model")
+	oldEffort := viper.GetString("arcee.reasoning-search-effort")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("arcee.reasoning-search-model", oldModel)
+	defer viper.Set("arcee.reasoning-search-effort", oldEffort)
+
+	viper.Set("llm.provider", "arcee")
+	viper.Set("arcee.reasoning-search-model", "trinity-mini")
+	viper.Set("arcee.reasoning-search-effort", "xhigh")
+
+	_, err := llm.ReasoningSearchConfigFromConfig()
+	if err == nil {
+		t.Fatalf("expected error for invalid Arcee effort")
+	}
+	if !strings.Contains(err.Error(), "supported values are minimal, low, medium, high") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

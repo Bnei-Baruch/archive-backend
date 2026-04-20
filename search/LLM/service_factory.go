@@ -14,6 +14,7 @@ const (
 	ProviderOllama     = "ollama"
 	ProviderXAI        = "xai"
 	ProviderZAI        = "zai"
+	ProviderArcee      = "arcee"
 	ProviderStub       = "stub"
 )
 
@@ -128,7 +129,7 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		if err != nil {
 			return nil, err
 		}
-		service.requiredToolIterations = openRouterRequiredToolIterationsFromConfig()
+		service.requiredToolIterations = viper.GetInt("openrouter.enforced-tool-use-iterations")
 		return service, nil
 	case ProviderOllama:
 		token := viper.GetString("ollama.token")
@@ -226,6 +227,24 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("zai.request-timeout")
 		return service, nil
+	case ProviderArcee:
+		token := viper.GetString("arcee.token")
+		if strings.TrimSpace(token) == "" {
+			return nil, fmt.Errorf("arcee.token is empty")
+		}
+		apiEndpoint := viper.GetString("arcee.api-endpoint")
+		pricing := []ModelPricing{}
+		if err := viper.UnmarshalKey("arcee.pricing", &pricing); err != nil {
+			return nil, fmt.Errorf("failed to read arcee.pricing: %w", err)
+		}
+		sessionTTL := viper.GetDuration("arcee.reasoning-session-ttl")
+		if sessionTTL <= 0 {
+			sessionTTL = defaultOpenAIReasoningSessionTTL
+		}
+		service := NewArceeServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint)
+		service.progress = progress
+		service.client.Timeout = requestTimeoutFromConfig("arcee.request-timeout")
+		return service, nil
 	case ProviderStub:
 		return NewStubLLMServiceFromConfig(progress)
 	default:
@@ -261,6 +280,12 @@ func ReasoningSessionTTLFromConfig() time.Duration {
 		return ttl
 	case ProviderZAI:
 		ttl := viper.GetDuration("zai.reasoning-session-ttl")
+		if ttl <= 0 {
+			return defaultOpenAIReasoningSessionTTL
+		}
+		return ttl
+	case ProviderArcee:
+		ttl := viper.GetDuration("arcee.reasoning-session-ttl")
 		if ttl <= 0 {
 			return defaultOpenAIReasoningSessionTTL
 		}
@@ -619,6 +644,69 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			Planning:           planning,
 			Verification:       verification,
 		}, nil
+	case ProviderArcee:
+		model := viper.GetString("arcee.reasoning-search-model")
+		if model == "" {
+			model = viper.GetString("arcee.reasoning-model")
+		}
+		if model == "" {
+			model = "trinity-mini"
+		}
+
+		effort := viper.GetString("arcee.reasoning-search-effort")
+		if effort == "" {
+			effort = viper.GetString("arcee.reasoning-effort")
+		}
+		if effort != "" {
+			switch effort {
+			case "minimal", "low", "medium", "high":
+			default:
+				return nil, fmt.Errorf("reasoning effort %q is not supported for Arcee models; supported values are minimal, low, medium, high", effort)
+			}
+		}
+
+		maxTokens := viper.GetInt("arcee.reasoning-search-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+
+		maxIterations := viper.GetInt("arcee.reasoning-search-max-iterations")
+		if maxIterations <= 0 {
+			maxIterations = defaultReasoningSearchMaxIterations
+		}
+		rerunMaxIterations := viper.GetInt("arcee.reasoning-search-rerun-max-iterations")
+		if rerunMaxIterations <= 0 {
+			rerunMaxIterations = defaultReasoningSearchRerunMaxIters
+		}
+
+		var planning *ReasoningSearchPlanningConfig
+		if planningEnabled {
+			var err error
+			planning, err = reasoningSearchPlanningConfigFromProvider(planningProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+		var verification *ReasoningSearchVerificationConfig
+		if verificationEnabled {
+			var err error
+			verification, err = reasoningSearchVerificationConfigFromProvider(verificationProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return &ReasoningSearchConfig{
+			Provider:           provider,
+			Model:              model,
+			Effort:             effort,
+			MaxTokens:          maxTokens,
+			MaxIterations:      maxIterations,
+			RerunMaxIterations: rerunMaxIterations,
+			MaxFollowups:       maxFollowups,
+			Planning:           planning,
+			Verification:       verification,
+		}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-model"))
 		if model == "" {
@@ -797,6 +885,30 @@ func reasoningSearchPlanningConfigFromProvider(provider string, fallbackEffort s
 			maxTokens = defaultReasoningSearchPlanningMaxTokens
 		}
 		return &ReasoningSearchPlanningConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderArcee:
+		model := strings.TrimSpace(viper.GetString("arcee.reasoning-search-planning-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("arcee.reasoning-search-model"))
+		}
+		if model == "" {
+			model = "trinity-mini"
+		}
+		effort := strings.TrimSpace(viper.GetString("arcee.reasoning-search-planning-effort"))
+		if effort == "" {
+			effort = strings.TrimSpace(fallbackEffort)
+		}
+		if effort != "" {
+			switch effort {
+			case "minimal", "low", "medium", "high":
+			default:
+				return nil, fmt.Errorf("reasoning effort %q is not supported for Arcee models; supported values are minimal, low, medium, high", effort)
+			}
+		}
+		maxTokens := viper.GetInt("arcee.reasoning-search-planning-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchPlanningMaxTokens
+		}
+		return &ReasoningSearchPlanningConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-planning-model"))
 		if model == "" {
@@ -938,6 +1050,32 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			return nil, fmt.Errorf("reasoning effort %q is not supported for Z.AI models; supported values are minimal, low, medium, high, xhigh", effort)
 		}
 		maxTokens := viper.GetInt("zai.reasoning-search-verification-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+		return &ReasoningSearchVerificationConfig{
+			Provider:  provider,
+			Model:     model,
+			Effort:    effort,
+			MaxTokens: maxTokens,
+		}, nil
+	case ProviderArcee:
+		model := strings.TrimSpace(viper.GetString("arcee.reasoning-search-verification-model"))
+		if model == "" {
+			return nil, fmt.Errorf("arcee.reasoning-search-verification-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("arcee.reasoning-search-verification-effort"))
+		if effort == "" {
+			effort = defaultEffort
+		}
+		if effort != "" {
+			switch effort {
+			case "minimal", "low", "medium", "high":
+			default:
+				return nil, fmt.Errorf("reasoning effort %q is not supported for Arcee models; supported values are minimal, low, medium, high", effort)
+			}
+		}
+		maxTokens := viper.GetInt("arcee.reasoning-search-verification-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultReasoningSearchMaxTokens
 		}
@@ -1089,6 +1227,27 @@ func aiToolsConfigFromProvider(provider string) (*AIToolsConfig, error) {
 			maxTokens = defaultAIToolsMaxTokens
 		}
 		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderArcee:
+		model := strings.TrimSpace(viper.GetString("arcee.ai-tools-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("arcee.reasoning-search-model"))
+		}
+		if model == "" {
+			model = "trinity-mini"
+		}
+		effort := strings.TrimSpace(viper.GetString("arcee.ai-tools-effort"))
+		if effort != "" {
+			switch effort {
+			case "minimal", "low", "medium", "high":
+			default:
+				return nil, fmt.Errorf("reasoning effort %q is not supported for Arcee models; supported values are minimal, low, medium, high", effort)
+			}
+		}
+		maxTokens := viper.GetInt("arcee.ai-tools-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultAIToolsMaxTokens
+		}
+		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.ai-tools-model"))
 		if model == "" {
@@ -1210,14 +1369,6 @@ func cloneResponsesProvider(provider *ResponsesProvider) *ResponsesProvider {
 		clone.Ignore = append([]string(nil), provider.Ignore...)
 	}
 	return &clone
-}
-
-func openRouterRequiredToolIterationsFromConfig() int {
-	requiredToolIterations := viper.GetInt("openrouter.enforced-tool-use-iterations")
-	if requiredToolIterations <= 0 {
-		return 1
-	}
-	return requiredToolIterations
 }
 
 func filterEmptyStrings(values []string) []string {

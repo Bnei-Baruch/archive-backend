@@ -56,16 +56,16 @@ url_template="https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2
 refresh-search-stats="5m"
 
 [llm]
-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "stub"
+provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "stub"
 postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache
-ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "stub"; defaults to llm.provider when empty
+ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "stub"; defaults to llm.provider when empty
 reasoning-search-cache-enabled=false
 reasoning-search-cache-ttl="120h" # default is 120h (5 days)
 reasoning-search-max-followups=2
 reasoning-search-planning-enabled=false
-reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "stub"; defaults to llm.provider when empty
+reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "stub"; defaults to llm.provider when empty
 reasoning-search-verification-enabled=false
-reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "stub"; defaults to llm.provider when empty
+reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "stub"; defaults to llm.provider when empty
 
 [openai]
 token="sk-..."
@@ -108,7 +108,7 @@ output_per_1m_tokens_usd=1.25
 [openrouter]
 token="sk-or-..."
 api-endpoint="" # optional; defaults to https://openrouter.ai/api/v1
-reasoning-search-model="openai/gpt-oss-120b" # "openai/gpt-oss-20b", "openai/gpt-oss-120b", "google/gemma-4-31b-it", "google/gemma-4-26b-a4b-it", "qwen/qwen3.5-35b-a3b"
+reasoning-search-model="openai/gpt-oss-120b" # "openai/gpt-oss-20b", "openai/gpt-oss-120b", "google/gemma-4-31b-it", "google/gemma-4-26b-a4b-it", "qwen/qwen3.5-35b-a3b", "arcee-ai/trinity-large-thinking"
 reasoning-search-effort="high" # "minimal", "low", "medium", "high"
 reasoning-search-max-output-tokens=3000
 reasoning-search-max-iterations=8
@@ -124,7 +124,7 @@ ai-tools-max-output-tokens=1500
 # reasoning-search-verification-max-output-tokens=1500
 reasoning-session-ttl="30m"
 request-timeout="2m"
-enforced-tool-use-iterations=1
+enforced-tool-use-iterations=0 # 0 disables forced tool use; set >0 to require tools for the first N reasoning iterations
 provider-sort="latency" # "latency", "price", "throughput"
 provider-require-parameters=false # set true only when you want strict provider capability matching
 # provider-allow-fallbacks=true
@@ -173,6 +173,11 @@ output_per_1m_tokens_usd=0.40
 model="qwen/qwen3.5-35b-a3b"
 input_per_1m_tokens_usd=0.1625
 output_per_1m_tokens_usd=1.30
+
+[[openrouter.pricing]]
+model="arcee-ai/trinity-large-thinking"
+input_per_1m_tokens_usd=0.22
+output_per_1m_tokens_usd=0.85
 
 [[openrouter.pricing]]
 model="minimax/minimax-m2.7"
@@ -230,6 +235,41 @@ request-timeout="5m"
 model="grok-4-1-fast-reasoning"
 input_per_1m_tokens_usd=0.20
 output_per_1m_tokens_usd=0.50
+
+[arcee]
+token="arcee-..."
+api-endpoint="" # optional; defaults to https://api.arcee.ai/api/v1 and also accepts a full /chat/completions URL
+reasoning-search-model="trinity-mini" # "trinity-mini", "trinity-large-preview", "trinity-large-thinking"
+reasoning-search-effort="" # optional; "minimal", "low", "medium", "high"; ignored for trinity-large-thinking
+reasoning-search-max-output-tokens=8000
+reasoning-search-max-iterations=20
+reasoning-search-rerun-max-iterations=8 # post-verification reasoning rerun
+ai-tools-model="trinity-mini"
+ai-tools-effort="" # optional; "minimal", "low", "medium", "high"; ignored for trinity-large-thinking
+ai-tools-max-output-tokens=1500
+# reasoning-search-planning-model="trinity-mini"
+# reasoning-search-planning-effort="" # optional; "minimal", "low", "medium", "high"; ignored for trinity-large-thinking
+# reasoning-search-planning-max-output-tokens=1500
+# reasoning-search-verification-model="trinity-mini"
+# reasoning-search-verification-effort="" # optional; "minimal", "low", "medium", "high"; ignored for trinity-large-thinking
+# reasoning-search-verification-max-output-tokens=2000
+reasoning-session-ttl="30m"
+request-timeout="2m"
+
+[[arcee.pricing]]
+model="trinity-mini"
+input_per_1m_tokens_usd=0.045
+output_per_1m_tokens_usd=0.15
+
+[[arcee.pricing]]
+model="trinity-large-preview"
+input_per_1m_tokens_usd=0.25
+output_per_1m_tokens_usd=1.00
+
+[[arcee.pricing]]
+model="trinity-large-thinking"
+input_per_1m_tokens_usd=0.25
+output_per_1m_tokens_usd=0.90
 
 [zai]
 token="zai-..."
