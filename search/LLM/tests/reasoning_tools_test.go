@@ -174,6 +174,35 @@ func TestBuildFirstIterationReasoningSearchSystemMessageUsesPlannedToolDocs(t *t
 	}
 }
 
+func TestResolveReasoningToolHandlerAllowsExactPlannedFallback(t *testing.T) {
+	currentHandlers := map[string]llm.ToolHandler{
+		"elasticsearch_search": func(ctx context.Context, arguments json.RawMessage) (string, error) {
+			return "base", nil
+		},
+	}
+	plannedHandlers := map[string]llm.ToolHandler{
+		"planned__elasticsearch_search__4": func(ctx context.Context, arguments json.RawMessage) (string, error) {
+			return "planned", nil
+		},
+	}
+
+	handler, ok := llm.ResolveReasoningToolHandler("planned__elasticsearch_search__4", currentHandlers, plannedHandlers)
+	if !ok {
+		t.Fatalf("expected planned handler fallback")
+	}
+	result, err := handler(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected handler error: %v", err)
+	}
+	if result != "planned" {
+		t.Fatalf("unexpected handler result: %s", result)
+	}
+
+	if _, ok := llm.ResolveReasoningToolHandler("planned__elasticsearch_search__9", currentHandlers, plannedHandlers); ok {
+		t.Fatalf("did not expect fallback for an unknown planned tool")
+	}
+}
+
 func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *testing.T) {
 	schema := llm.GenerateReasoningSearchResponseJSONSchema()
 

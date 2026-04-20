@@ -121,3 +121,14 @@ func CanonicalReasoningToolName(name string) string {
 	}
 	return name
 }
+
+func ResolveReasoningToolHandler(name string, currentHandlers map[string]ToolHandler, plannedHandlers map[string]ToolHandler) (ToolHandler, bool) {
+	if handler, ok := currentHandlers[name]; ok {
+		return handler, true
+	}
+	if !strings.HasPrefix(name, plannedReasoningToolNamePrefix) {
+		return nil, false
+	}
+	handler, ok := plannedHandlers[name] // In case the model is not on his first iteration but still asks for the tool definded by the 'planning' stage, resolve it from the planned handlers.
+	return handler, ok
+}

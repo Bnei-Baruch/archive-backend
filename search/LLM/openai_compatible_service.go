@@ -91,6 +91,7 @@ type EmbeddingResponse struct {
 type LLMBotMessage struct {
 	Role       string            `json:"role"`
 	Content    string            `json:"content"`
+	Reasoning  string            `json:"reasoning,omitempty"`
 	Refusal    *string           `json:"refusal,omitempty"`
 	ToolCalls  []MessageToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string            `json:"tool_call_id,omitempty"`
@@ -731,7 +732,7 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 				usedToolsSet[canonicalToolName] = true
 			}
 
-			handler, ok := currentToolHandlers[toolCall.Name]
+			handler, ok := ResolveReasoningToolHandler(toolCall.Name, currentToolHandlers, firstIterationToolHandlers)
 			if !ok {
 				return nil, "", LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Name)
 			}

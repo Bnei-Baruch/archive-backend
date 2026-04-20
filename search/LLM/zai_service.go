@@ -612,7 +612,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 				usedToolsSet[canonicalToolName] = true
 			}
 
-			handler, ok := currentToolHandlers[toolCall.Function.Name]
+			handler, ok := ResolveReasoningToolHandler(toolCall.Function.Name, currentToolHandlers, firstIterationToolHandlers)
 			if !ok {
 				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Function.Name)
 			}
