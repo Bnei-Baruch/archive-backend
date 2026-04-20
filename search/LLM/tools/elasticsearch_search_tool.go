@@ -163,7 +163,7 @@ KxApZ4pI – Baruch Shalom HaLevi Ashlag (Rabash). Use this filter when looking 
 
 4. start_date and end_date – Filter by date range. The date format is yyyy-MM-dd. If only start_date is provided, it filters from that date to the future. If only end_date is provided, it filters from the past until that date.
 
-5. tag - Filter by topic. Currently we support topics related to Holidays and Observances.
+5. tag - Filter by topic. Currently we support topics related to Holidays and Observances - these are applied only for content units and likutim but not for sources:
 - "topic id": "ksh1gGBM", "name": "אלול"
 - "topic id": "k3OHIbDd", "name": "הושענא רבה"
 - "topic id": "rxNl0zXg", "name": "חנוכה"
