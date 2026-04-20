@@ -593,6 +593,32 @@ func (s *ArceeService) getReasoningResponseWithTools(
 					if err != nil {
 						return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 					}
+					if err := validateJSONRequiredTopLevelFields(msg.Content, *jsonSchema); err != nil {
+						normalizedMessages = append(normalizedMessages,
+							LLMBotMessage{
+								Role:      "assistant",
+								Content:   msg.Content,
+								Reasoning: msg.Reasoning,
+							},
+							LLMBotMessage{
+								Role:    "user",
+								Content: fmt.Sprintf("The previous response is invalid: %v. Return only a complete JSON object that matches the required schema, using the archive results already found. Do not return an empty object.", err),
+							},
+						)
+						msg, retryUsage, err := s.getChatResponseWithUsage(model, maxTokens, normalizedMessages, jsonSchema, reasoningEffort, deb)
+						usageTotals.InputTokens += retryUsage.InputTokens
+						usageTotals.CachedInputTokens += retryUsage.CachedInputTokens
+						usageTotals.OutputTokens += retryUsage.OutputTokens
+						usageTotals.ReasoningTokens += retryUsage.ReasoningTokens
+						usageTotals.TotalTokens += retryUsage.TotalTokens
+						if err != nil {
+							return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+						}
+						if err := validateJSONRequiredTopLevelFields(msg.Content, *jsonSchema); err != nil {
+							return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+						}
+						return msg, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations + 2, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
+					}
 					return msg, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations + 1, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
 				}
 			}

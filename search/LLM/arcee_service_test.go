@@ -150,8 +150,9 @@ func TestArceeReasoningWithToolsUsesChatCompletionsAPI(t *testing.T) {
 						{
 							"index": 0,
 							"message": map[string]interface{}{
-								"role":    "assistant",
-								"content": `{"answer":"done"}`,
+								"role":              "assistant",
+								"content":           nil,
+								"reasoning_content": `{}`,
 							},
 						},
 					},
@@ -159,6 +160,37 @@ func TestArceeReasoningWithToolsUsesChatCompletionsAPI(t *testing.T) {
 						"prompt_tokens":     14,
 						"completion_tokens": 4,
 						"total_tokens":      18,
+					},
+				})
+			case 4:
+				if payload["tools"] != nil {
+					t.Fatalf("did not expect tools in Arcee retry structured call")
+				}
+				if payload["tool_choice"] != nil {
+					t.Fatalf("did not expect tool_choice in Arcee retry structured call")
+				}
+				responseFormat, ok := payload["response_format"].(map[string]interface{})
+				if !ok || responseFormat["type"] != "json_object" {
+					t.Fatalf("expected response_format.type=json_object in retry, got %#v", payload["response_format"])
+				}
+				lastMessage, ok := messages[len(messages)-1].(map[string]interface{})
+				if !ok || !strings.Contains(fmt.Sprint(lastMessage["content"]), "Do not return an empty object") {
+					t.Fatalf("expected correction message before retry: %#v", messages[len(messages)-1])
+				}
+				body = mustJSON(t, map[string]interface{}{
+					"choices": []map[string]interface{}{
+						{
+							"index": 0,
+							"message": map[string]interface{}{
+								"role":    "assistant",
+								"content": `{"answer":"done"}`,
+							},
+						},
+					},
+					"usage": map[string]interface{}{
+						"prompt_tokens":     16,
+						"completion_tokens": 4,
+						"total_tokens":      20,
 					},
 				})
 			default:
@@ -220,8 +252,8 @@ func TestArceeReasoningWithToolsUsesChatCompletionsAPI(t *testing.T) {
 	if output.Answer != "done" {
 		t.Fatalf("unexpected answer: %s", output.Answer)
 	}
-	if len(requests) != 3 {
-		t.Fatalf("expected 3 requests, got %d", len(requests))
+	if len(requests) != 4 {
+		t.Fatalf("expected 4 requests, got %d", len(requests))
 	}
 }
 
