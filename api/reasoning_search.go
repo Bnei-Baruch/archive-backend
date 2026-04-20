@@ -586,7 +586,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 								},
 								{
 									Role:    "user",
-									Content: "Verification feedback:\n" + recommendation,
+									Content: "INTERNAL VERIFICATION FEEDBACK:\n" + recommendation,
 								},
 							}
 							nextProviderSessionID := resolvedProviderSessionID
