@@ -15,6 +15,7 @@ import (
 type fakeReasoningTool struct {
 	definition       llm.ReasoningToolDefinition
 	usageExplanation string
+	response         string
 }
 
 func (t *fakeReasoningTool) Definition() llm.ReasoningToolDefinition {
@@ -27,6 +28,9 @@ func (t *fakeReasoningTool) UsageExplanation() string {
 
 func (t *fakeReasoningTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	_ = ctx
+	if t.response != "" {
+		return t.response, nil
+	}
 	return "ok", nil
 }
 
@@ -87,6 +91,33 @@ func TestReasoningToolManagerGeneratesToolCallsAndHandlers(t *testing.T) {
 	}
 	if result != "ok" {
 		t.Fatalf("unexpected handler result: %s", result)
+	}
+}
+
+func TestReasoningToolManagerHidesElasticsearchInternalHitIDs(t *testing.T) {
+	manager, err := llm.NewReasoningToolManager(
+		&fakeReasoningTool{
+			definition: llm.ReasoningToolDefinition{Name: "elasticsearch_search"},
+			response:   `{"result":{"search_result":{"hits":{"hits":[{"_index":"units","_type":"_doc","_id":"bad-hit-id","_score":12.3,"_source":{"mdb_uid":"good-mdb-uid","title":"Good"}}]}}}}`,
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error creating manager: %v", err)
+	}
+
+	handler := manager.ToolHandlers()["elasticsearch_search"]
+	result, err := handler(context.Background(), json.RawMessage(`{"query":"test"}`))
+	if err != nil {
+		t.Fatalf("unexpected handler error: %v", err)
+	}
+	if strings.Contains(result, "_id") || strings.Contains(result, "_index") || strings.Contains(result, "_type") || strings.Contains(result, "bad-hit-id") {
+		t.Fatalf("expected ES internal hit ids to be hidden, got %s", result)
+	}
+	if !strings.Contains(result, "good-mdb-uid") {
+		t.Fatalf("expected mdb_uid to remain, got %s", result)
+	}
+	if !strings.Contains(result, "_score") {
+		t.Fatalf("expected _score to remain, got %s", result)
 	}
 }
 
@@ -200,6 +231,29 @@ func TestResolveReasoningToolHandlerAllowsExactPlannedFallback(t *testing.T) {
 
 	if _, ok := llm.ResolveReasoningToolHandler("planned__elasticsearch_search__9", currentHandlers, plannedHandlers); ok {
 		t.Fatalf("did not expect fallback for an unknown planned tool")
+	}
+}
+
+func TestResolveReasoningToolHandlerSanitizesPlannedElasticsearchResult(t *testing.T) {
+	plannedHandlers := map[string]llm.ToolHandler{
+		"planned__elasticsearch_search__1": func(ctx context.Context, arguments json.RawMessage) (string, error) {
+			return `{"hits":[{"_id":"bad-hit-id","_source":{"mdb_uid":"good-mdb-uid"}}]}`, nil
+		},
+	}
+
+	handler, ok := llm.ResolveReasoningToolHandler("planned__elasticsearch_search__1", nil, plannedHandlers)
+	if !ok {
+		t.Fatalf("expected planned handler fallback")
+	}
+	result, err := handler(context.Background(), json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("unexpected handler error: %v", err)
+	}
+	if strings.Contains(result, "_id") || strings.Contains(result, "bad-hit-id") {
+		t.Fatalf("expected planned ES result to be sanitized, got %s", result)
+	}
+	if !strings.Contains(result, "good-mdb-uid") {
+		t.Fatalf("expected mdb_uid to remain, got %s", result)
 	}
 }
 

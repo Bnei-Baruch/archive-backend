@@ -666,7 +666,6 @@ func (s *ArceeService) getReasoningResponseWithTools(
 			if err != nil {
 				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Function.Name, err)
 			}
-			result = sanitizeArceeToolResult(model, canonicalToolName, result)
 
 			normalizedMessages = append(normalizedMessages, LLMBotMessage{
 				Role:       "tool",
@@ -747,45 +746,10 @@ func arceeSkipsReasoningEffort(model string) bool {
 	return normalized == "trinity-large-thinking"
 }
 
-func arceeIsTrinityModel(model string) bool {
-	return strings.HasPrefix(normalizeArceeModelName(model), "trinity-")
-}
-
 func normalizeArceeModelName(model string) string {
 	normalized := strings.TrimSpace(strings.ToLower(model))
 	normalized = strings.TrimPrefix(normalized, "arcee-ai/")
 	return normalized
-}
-
-func sanitizeArceeToolResult(model string, canonicalToolName string, result string) string {
-	if !arceeIsTrinityModel(model) || canonicalToolName != "elasticsearch_search" {
-		return result
-	}
-
-	var payload interface{}
-	if err := json.Unmarshal([]byte(result), &payload); err != nil {
-		return result
-	}
-	removeJSONKey(payload, "_id")
-	sanitized, err := json.Marshal(payload)
-	if err != nil {
-		return result
-	}
-	return string(sanitized)
-}
-
-func removeJSONKey(value interface{}, key string) {
-	switch typed := value.(type) {
-	case map[string]interface{}:
-		delete(typed, key)
-		for _, child := range typed {
-			removeJSONKey(child, key)
-		}
-	case []interface{}:
-		for _, child := range typed {
-			removeJSONKey(child, key)
-		}
-	}
 }
 
 func (m *ArceeMessage) reasoningText() string {

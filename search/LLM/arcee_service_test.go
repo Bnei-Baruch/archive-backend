@@ -108,7 +108,7 @@ func TestArceeReasoningWithToolsUsesChatCompletionsAPI(t *testing.T) {
 				}
 				toolContent := fmt.Sprint(toolMessage["content"])
 				if strings.Contains(toolContent, "_id") || strings.Contains(toolContent, "bad-hit-id") {
-					t.Fatalf("expected ES hit _id to be hidden from Trinity models, got %s", toolContent)
+					t.Fatalf("expected ES hit _id to be hidden from tool content, got %s", toolContent)
 				}
 				if !strings.Contains(toolContent, "good-mdb-uid") {
 					t.Fatalf("expected canonical mdb_uid to remain in tool content, got %s", toolContent)

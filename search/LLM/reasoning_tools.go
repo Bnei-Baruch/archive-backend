@@ -88,7 +88,7 @@ func (m *ReasoningToolManager) ToolHandlers() map[string]ToolHandler {
 	handlers := map[string]ToolHandler{}
 	for _, name := range m.order {
 		tool := m.toolsByName[name]
-		handlers[name] = tool.Execute
+		handlers[name] = wrapReasoningToolHandler(name, tool.Execute)
 	}
 	return handlers
 }
@@ -124,11 +124,57 @@ func CanonicalReasoningToolName(name string) string {
 
 func ResolveReasoningToolHandler(name string, currentHandlers map[string]ToolHandler, plannedHandlers map[string]ToolHandler) (ToolHandler, bool) {
 	if handler, ok := currentHandlers[name]; ok {
-		return handler, true
+		return wrapReasoningToolHandler(name, handler), true
 	}
 	if !strings.HasPrefix(name, plannedReasoningToolNamePrefix) {
 		return nil, false
 	}
 	handler, ok := plannedHandlers[name] // In case the model is not on his first iteration but still asks for the tool definded by the 'planning' stage, resolve it from the planned handlers.
-	return handler, ok
+	if !ok {
+		return nil, false
+	}
+	return wrapReasoningToolHandler(name, handler), true
+}
+
+func wrapReasoningToolHandler(name string, handler ToolHandler) ToolHandler {
+	return func(ctx context.Context, arguments json.RawMessage) (string, error) {
+		result, err := handler(ctx, arguments)
+		if err != nil {
+			return result, err
+		}
+		return sanitizeReasoningToolResult(name, result), nil
+	}
+}
+
+func sanitizeReasoningToolResult(name string, result string) string {
+	if CanonicalReasoningToolName(name) != "elasticsearch_search" {
+		return result
+	}
+
+	var payload interface{}
+	if err := json.Unmarshal([]byte(result), &payload); err != nil {
+		return result
+	}
+	removeElasticsearchInternalKeys(payload)
+	sanitized, err := json.Marshal(payload)
+	if err != nil {
+		return result
+	}
+	return string(sanitized)
+}
+
+func removeElasticsearchInternalKeys(value interface{}) {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		delete(typed, "_id")
+		delete(typed, "_index")
+		delete(typed, "_type")
+		for _, child := range typed {
+			removeElasticsearchInternalKeys(child)
+		}
+	case []interface{}:
+		for _, child := range typed {
+			removeElasticsearchInternalKeys(child)
+		}
+	}
 }
