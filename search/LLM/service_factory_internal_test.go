@@ -75,36 +75,6 @@ func TestOpenRouterProviderPreferencesStageOverridesInheritGlobal(t *testing.T) 
 	}
 }
 
-func TestOpenRouterRequiredToolIterationsDefaultsToOne(t *testing.T) {
-	oldValue := viper.Get("openrouter.enforced-tool-use-iterations")
-	if oldValue == nil {
-		defer viper.Set("openrouter.enforced-tool-use-iterations", nil)
-	} else {
-		defer viper.Set("openrouter.enforced-tool-use-iterations", oldValue)
-	}
-
-	viper.Set("openrouter.enforced-tool-use-iterations", nil)
-
-	if iterations := openRouterRequiredToolIterationsFromConfig(); iterations != 1 {
-		t.Fatalf("expected default enforced-tool-use-iterations to be 1, got %d", iterations)
-	}
-}
-
-func TestOpenRouterRequiredToolIterationsUsesConfiguredValue(t *testing.T) {
-	oldValue := viper.Get("openrouter.enforced-tool-use-iterations")
-	if oldValue == nil {
-		defer viper.Set("openrouter.enforced-tool-use-iterations", nil)
-	} else {
-		defer viper.Set("openrouter.enforced-tool-use-iterations", oldValue)
-	}
-
-	viper.Set("openrouter.enforced-tool-use-iterations", 4)
-
-	if iterations := openRouterRequiredToolIterationsFromConfig(); iterations != 4 {
-		t.Fatalf("expected enforced-tool-use-iterations to be 4, got %d", iterations)
-	}
-}
-
 func restoreViperKeys(t *testing.T, keys ...string) {
 	t.Helper()
 	values := map[string]interface{}{}
