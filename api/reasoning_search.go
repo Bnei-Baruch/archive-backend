@@ -510,7 +510,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 				verificationMessages := []llm.LLMBotMessage{
 					{
 						Role:    "system",
-						Content: llm.ReasoningSearchVerificationInstruction,
+						Content: fmt.Sprintf(llm.ReasoningSearchVerificationInstructionMask, llm.GeneralReasoningSearchInstruction),
 					},
 					{
 						Role:    "user",

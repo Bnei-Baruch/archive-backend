@@ -35,24 +35,13 @@ The main Kabbalist authors whose writings are studied in Bnei Baruch are:
 - Other Kabbalah lessons, lectures, TV programs, music, clips
 - Books, articles, and excerpts.`
 
-const ReasoningSearchVerificationInstruction = `You are verifying the quality of the search results of a search agent for the ‘Kabbalah Media’ website (also known as the archive).
+const ReasoningSearchVerificationInstructionMask = `You are verifying the quality of the search results of a search agent for the ‘Kabbalah Media’ website (also known as the archive).
 Below are the instructions given to the search agent:
 
 ### start of instructions ###
-If user query is a general term or a broad topic, look for the best results that introduce the topic to a wide audience, usually the best match for this is a video program. An article that covers the topic in an accessible way is also a good match. But also sources from books can be included since the user can be looking for a more in-depth and comprehensive content.
-For canonical terms (like מחשבת הבריאה, המאור המחזיר למוטב, שורש וענף, מסך ואור חוזר, עשר הספירות etc.), verify the answer using direct source material (result_type sources) before finalizing. In the final results, you may still rank accessible lessons or introductory content first when they better fit a broad audience, but include at least one authoritative source (preferably baal ha-sulam) result when relevant.
-Optimal number of results to return is 6 with a clarification question regarding the user's intent.
 
-The main Kabbalist authors whose writings are studied in Bnei Baruch are:
-- Rabbi Shimon Bar Yochai (Rashbi), lived in the 2nd and 3rd centuries CE, The author of The Book of Zohar.
-- Yehuda Leib HaLevi Ashlag (1885-1954) is known as Baal HaSulam (Owner of the Ladder) (בעל הסולם) for his Sulam (ladder) commentary on The Book of Zohar.
-- Baruch Shalom HaLevi Ashlag (The Rabash, רב״ש), (1907-1991), son and successor of Yehuda Leib HaLevi Ashlag (Baal HaSulam)
+%s
 
-‘Kabbalah Media’ is the official archive of the Bnei Baruch Kabbalah Education & Research Institute. It is updated regularly and provides viewable and downloadable materials including:
-
-- Daily Kabbalah Lessons (video/audio)
-- Other Kabbalah lessons, lectures, TV programs, music, clips
-- Books, articles, and excerpts.
 ### end of instructions ###
 
 Your task is to examine the given query and the search results provided by the search agent, and write a SHORT recommendation in english for improving the search results if needed.
@@ -61,26 +50,15 @@ The recommendation should also instruct about the good aspects of the search res
 In case there are a critical issue, mark the needs_another_iteration field as true, otherwise mark it as false.
 `
 
-const ReasoningSearchPlanningInstruction = `You are preparing a search strategy for another search model that will search the ‘Kabbalah Media’ archive.
+const ReasoningSearchPlanningInstructionMask = `You are preparing a search strategy for another search model that will search the ‘Kabbalah Media’ archive.
 Your job is to analyze the user's query and write a short operational plan for the search model along with a clarification of the user's intent on this search.
 
 Below are the instructions given to the search model:
 
 ### start of instructions ###
-If user query is a general term or a broad topic, look for the best results that introduce the topic to a wide audience, usually the best match for this is a video program. An article that covers the topic in an accessible way is also a good match. But also sources from books can be included since the user can be looking for a more in-depth and comprehensive content.
-For canonical terms (like מחשבת הבריאה, המאור המחזיר למוטב, שורש וענף, מסך ואור חוזר, עשר הספירות etc.), verify the answer using direct source material (result_type sources) before finalizing. In the final results, you may still rank accessible lessons or introductory content first when they better fit a broad audience, but include at least one authoritative source (preferably baal ha-sulam) result when relevant.
-Optimal number of results to return is 6 with a clarification question regarding the user's intent.
 
-The main Kabbalist authors whose writings are studied in Bnei Baruch are:
-- Rabbi Shimon Bar Yochai (Rashbi), lived in the 2nd and 3rd centuries CE, The author of The Book of Zohar.
-- Yehuda Leib HaLevi Ashlag (1885-1954) is known as Baal HaSulam (Owner of the Ladder) (בעל הסולם) for his Sulam (ladder) commentary on The Book of Zohar.
-- Baruch Shalom HaLevi Ashlag (The Rabash, רב״ש), (1907-1991), son and successor of Yehuda Leib HaLevi Ashlag (Baal HaSulam)
+%s
 
-‘Kabbalah Media’ is the official archive of the Bnei Baruch Kabbalah Education & Research Institute. It is updated regularly and provides viewable and downloadable materials including:
-
-- Daily Kabbalah Lessons (video/audio)
-- Other Kabbalah lessons, lectures, TV programs, music, clips
-- Books, articles, and excerpts.
 ### end of instructions ###
 
 First of all you should identify the user intent. User query can be ambiguous, and contains idiomatic phrases or domain-specific terminology. Also it can contain a name of a program, book, or author, specific date range or week day references. Also the can include the request for specific type of content (e.g. only from a conference).
@@ -169,11 +147,12 @@ func AppendReasoningSearchPlanning(systemMessage string, planningText string) st
 }
 
 func GenerateSystemMessageForReasoningSearchPlanning(tools []ReasoningTool) string {
+	message := fmt.Sprintf(ReasoningSearchPlanningInstructionMask, GeneralReasoningSearchInstruction)
 	toolUsage := buildReasoningSearchToolUsage(tools)
 	if toolUsage == "" {
-		return ReasoningSearchPlanningInstruction
+		return message
 	}
-	return fmt.Sprintf("%s\n\n%s\n\n%s", ReasoningSearchPlanningInstruction, reasoningSearchToolUsageHeader, toolUsage)
+	return fmt.Sprintf("%s\n\n%s\n\n%s", message, reasoningSearchToolUsageHeader, toolUsage)
 }
 
 func buildReasoningSearchToolUsage(tools []ReasoningTool) string {
