@@ -268,8 +268,16 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 	query.Filters = mergeElasticsearchSearchFilters(query.Filters, filters)
 	query.Deb = false // Set false to avoid putting debug data into LLM context and reaching token usage limits.
 
-	language := normalizeElasticsearchSearchLanguage(args.Language)
-	setElasticsearchSearchLanguageOrder(&query, language)
+	rawLanguage := strings.ToLower(strings.TrimSpace(args.Language))
+	language := consts.DEFAULT_UI_LANGUAGE
+	languageExplicit := false
+	if rawLanguage != "" {
+		if _, ok := consts.SEARCH_LANG_ORDER[rawLanguage]; ok {
+			language = rawLanguage
+			languageExplicit = true
+		}
+	}
+	setElasticsearchSearchLanguageOrder(&query, language, languageExplicit)
 
 	sortBy, err := normalizeElasticsearchSearchSortBy(args.SortBy, query.Term != "" || len(query.ExactTerms) > 0)
 	if err != nil {
@@ -442,24 +450,16 @@ func mergeElasticsearchSearchFilters(base map[string][]string, extra map[string]
 	return base
 }
 
-func normalizeElasticsearchSearchLanguage(language string) string {
-	language = strings.ToLower(strings.TrimSpace(language))
-	if language == "" {
-		return consts.DEFAULT_UI_LANGUAGE
+func setElasticsearchSearchLanguageOrder(query *search.Query, language string, languageExplicit bool) {
+	if languageExplicit {
+		query.LanguageOrder = appendUniqueStrings([]string{}, consts.SEARCH_LANG_ORDER[language]...)
+	} else {
+		detectTerms := append([]string{}, query.ExactTerms...)
+		if query.Term != "" {
+			detectTerms = append(detectTerms, query.Term)
+		}
+		query.LanguageOrder = utils.DetectLanguage(strings.Join(detectTerms, " "), language, "", nil)
 	}
-	if _, ok := consts.SEARCH_LANG_ORDER[language]; !ok {
-		return consts.DEFAULT_UI_LANGUAGE
-	}
-	return language
-}
-
-func setElasticsearchSearchLanguageOrder(query *search.Query, language string) {
-	detectTerms := append([]string{}, query.ExactTerms...)
-	if query.Term != "" {
-		detectTerms = append(detectTerms, query.Term)
-	}
-
-	query.LanguageOrder = utils.DetectLanguage(strings.Join(detectTerms, " "), language, "", nil)
 
 	if mediaLanguages, ok := query.Filters[consts.FILTER_MEDIA_LANGUAGE]; ok {
 		query.LanguageOrder = appendUniqueStrings(query.LanguageOrder, mediaLanguages...)
