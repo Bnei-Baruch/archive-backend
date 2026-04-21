@@ -306,8 +306,12 @@ func TestZAIReasoningStructuredOutputRejectsNullRequiredTopLevelFields(t *testin
 		Results          []interface{} `json:"results"`
 	}
 
-	err := service.GetStructuredOutput(
-		GenerateReasoningSearchResponseJSONSchema(),
+	schema, err := GenerateReasoningSearchResponseJSONSchemaForLanguage("English")
+	if err != nil {
+		t.Fatalf("unexpected schema error: %v", err)
+	}
+	err = service.GetStructuredOutput(
+		schema,
 		"glm-5.1",
 		&maxTokens,
 		[]LLMBotMessage{

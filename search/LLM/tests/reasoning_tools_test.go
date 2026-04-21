@@ -258,7 +258,10 @@ func TestResolveReasoningToolHandlerSanitizesPlannedElasticsearchResult(t *testi
 }
 
 func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *testing.T) {
-	schema := llm.GenerateReasoningSearchResponseJSONSchema()
+	schema, err := llm.GenerateReasoningSearchResponseJSONSchemaForLanguage("English")
+	if err != nil {
+		t.Fatalf("unexpected schema error: %v", err)
+	}
 
 	requiredSnippets := []string{
 		`"query"`,

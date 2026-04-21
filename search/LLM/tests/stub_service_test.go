@@ -54,10 +54,14 @@ func TestStubServiceReturnsReasoningSessionOutput(t *testing.T) {
 	})
 
 	var output llm.ReasoningSearchResponse
+	schema, err := llm.GenerateReasoningSearchResponseJSONSchemaForLanguage("English")
+	if err != nil {
+		t.Fatalf("unexpected schema error: %v", err)
+	}
 	sessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
 		nil,
 		nil,
-		llm.GenerateReasoningSearchResponseJSONSchema(),
+		schema,
 		"stub-reasoning",
 		nil,
 		[]llm.LLMBotMessage{{Role: "user", Content: "משה"}},
@@ -157,8 +161,12 @@ func TestStubServiceSupportsWildcardFallback(t *testing.T) {
 	})
 
 	var output llm.ReasoningSearchResponse
-	err := service.GetStructuredOutput(
-		llm.GenerateReasoningSearchResponseJSONSchema(),
+	schema, err := llm.GenerateReasoningSearchResponseJSONSchemaForLanguage("English")
+	if err != nil {
+		t.Fatalf("unexpected schema error: %v", err)
+	}
+	err = service.GetStructuredOutput(
+		schema,
 		"stub-reasoning",
 		nil,
 		[]llm.LLMBotMessage{{Role: "user", Content: "missing query"}},

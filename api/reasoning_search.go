@@ -10,9 +10,12 @@ import (
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
+	"golang.org/x/text/language/display"
 	"gopkg.in/gin-gonic/gin.v1"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
+	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
 type ReasoningSearchRequest struct {
@@ -332,6 +335,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 		return
 	}
 
+	outputLanguageName := reasoningSearchOutputLanguageName(r.UILanguage, r.Query)
 	systemMessage := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), reasoningStage.MaxIterations, followupsRemaining)
 	var planningDebug *llm.ReasoningSearchDebugInfo
 	var firstIterationTools []llm.ToolCall
@@ -395,6 +399,12 @@ func ReasoningSearchHandler(c *gin.Context) {
 			}
 		}
 	}
+	systemMessage = llm.AppendReasoningSearchOutputLanguage(systemMessage, outputLanguageName)
+	responseSchema, err := llm.GenerateReasoningSearchResponseJSONSchemaForLanguage(outputLanguageName)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
 	messages := []llm.LLMBotMessage{
 		{
 			Role:    "system",
@@ -430,7 +440,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 	resolvedProviderSessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
 		providerSessionID,
 		progressSessionID,
-		llm.GenerateReasoningSearchResponseJSONSchema(),
+		responseSchema,
 		reasoningStage.Model,
 		&reasoningStage.MaxTokens,
 		messages,
@@ -594,7 +604,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 							resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(
 								&nextProviderSessionID,
 								progressSessionID,
-								llm.GenerateReasoningSearchResponseJSONSchema(),
+								responseSchema,
 								reasoningStage.Model,
 								&reasoningStage.MaxTokens,
 								rerunMessages,
@@ -819,4 +829,19 @@ func buildPlannedToolDescription(baseDescription string, params json.RawMessage)
 		baseDescription = "Run the planned first-step tool with fixed arguments."
 	}
 	return fmt.Sprintf("%s Predefined fixed arguments: %s", baseDescription, strings.TrimSpace(string(params)))
+}
+
+func reasoningSearchOutputLanguageName(uiLanguage string, query string) string {
+	languageCode := strings.TrimSpace(uiLanguage)
+	if languageCode == "" {
+		order := utils.DetectLanguage(query, consts.DEFAULT_UI_LANGUAGE, "", nil)
+		if len(order) > 0 {
+			languageCode = order[0]
+		}
+	}
+
+	if tag, ok := utils.MDB_TO_GO[languageCode]; ok {
+		return display.English.Tags().Name(tag)
+	}
+	return display.English.Tags().Name(utils.MDB_TO_GO[consts.DEFAULT_UI_LANGUAGE])
 }

@@ -1,6 +1,10 @@
 package llm
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
 type ReasoningSearchResponse struct {
 	SessionID                string                               `json:"session_id"`
@@ -96,67 +100,75 @@ type ReasoningSearchPlanningToolSpec struct {
 	AlternativeQueries []string `json:"alternative_queries"`
 }
 
-func GenerateReasoningSearchResponseJSONSchema() string {
-	return `{
-  "type": "object",
-  "additionalProperties": false,
-  "properties": {
-    "query": {
-      "type": "string",
-      "description": "The original user query."
-    },
-    "summary": {
-      "type": "string",
-      "description": "A short explanation of the best results found for the user. Include clarification requests, or follow-up guidance here when needed. Refer to the user's requests and not to internal verification feedback messages if there are any, because they are hidden from the user."
-    },
-    "reasoning_summary": {
-      "type": "string",
-      "description": "A short summary of the reasoning process when debug mode is enabled, otherwise an empty string."
-    },
-    "results": {
-      "type": "array",
-      "description": "Best matching results from the archive. Prefer direct content results when possible.",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "mdb_uid": {
-            "type": "string",
-            "description": "The result MDB UID."
-          },
-          "result_type": {
-            "type": "string",
-            "enum": ["units", "sources", "collections", "posts", "tweets", "tags"],
-            "description": "Elasticsearch result type."
-          },
-          "reason": {
-            "type": "string",
-            "description": "Short description of the result and explanation of why this result was selected for the user."
-          },
-          "highlights": {
-            "type": "array",
-            "description": "Relevant highlight fragments from search results. Return an empty array if unavailable.",
-            "items": {
-              "type": "string"
-            }
-          },
-          "is_grouping_result": {
-            "type": "boolean",
-            "description": "True for grouping or narrowing results such as collections or tags."
-          }
-        },
-        "required": [
-          "mdb_uid",
-          "result_type",
-          "reason",
-          "highlights",
-          "is_grouping_result"
-        ]
-      }
-    }
-  },
-  "required": ["query", "summary", "reasoning_summary", "results"]
-}`
+func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (string, error) {
+	languageName = strings.TrimSpace(languageName)
+	summaryDescription := "A short explanation of the best results found for the user. Include clarification requests, or follow-up guidance here when needed. Refer to the user's requests and not to internal verification feedback messages if there are any, because they are hidden from the user."
+	reasonDescription := "Short description of the result and explanation of why this result was selected for the user."
+	if languageName != "" {
+		summaryDescription += " Write this field in " + languageName + "."
+		reasonDescription += " Write this field in " + languageName + "."
+	}
+
+	schema := map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]interface{}{
+			"query": map[string]interface{}{
+				"type":        "string",
+				"description": "The original user query.",
+			},
+			"summary": map[string]interface{}{
+				"type":        "string",
+				"description": summaryDescription,
+			},
+			"reasoning_summary": map[string]interface{}{
+				"type":        "string",
+				"description": "A short summary of the reasoning process when debug mode is enabled, otherwise an empty string.",
+			},
+			"results": map[string]interface{}{
+				"type":        "array",
+				"description": "Best matching results from the archive. Prefer direct content results when possible.",
+				"items": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]interface{}{
+						"mdb_uid": map[string]interface{}{
+							"type":        "string",
+							"description": "The result MDB UID.",
+						},
+						"result_type": map[string]interface{}{
+							"type":        "string",
+							"enum":        []string{"units", "sources", "collections", "posts", "tweets", "tags"},
+							"description": "Elasticsearch result type.",
+						},
+						"reason": map[string]interface{}{
+							"type":        "string",
+							"description": reasonDescription,
+						},
+						"highlights": map[string]interface{}{
+							"type":        "array",
+							"description": "Relevant highlight fragments from search results. Return an empty array if unavailable.",
+							"items": map[string]interface{}{
+								"type": "string",
+							},
+						},
+						"is_grouping_result": map[string]interface{}{
+							"type":        "boolean",
+							"description": "True for grouping or narrowing results such as collections or tags.",
+						},
+					},
+					"required": []string{"mdb_uid", "result_type", "reason", "highlights", "is_grouping_result"},
+				},
+			},
+		},
+		"required": []string{"query", "summary", "reasoning_summary", "results"},
+	}
+
+	payload, err := json.Marshal(schema)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal reasoning search response schema: %w", err)
+	}
+	return string(payload), nil
 }
 
 func (r *ReasoningSearchResponse) SetReasoningSummary(summary string) {

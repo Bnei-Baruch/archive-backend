@@ -392,12 +392,15 @@ func TestOpenRouterResultsReadyToolStopsForcedToolUse(t *testing.T) {
 		}),
 	}
 
-	schema := GenerateReasoningSearchResponseJSONSchema()
+	schema, err := GenerateReasoningSearchResponseJSONSchemaForLanguage("English")
+	if err != nil {
+		t.Fatalf("unexpected schema error: %v", err)
+	}
 	effort := "high"
 	maxTokens := 256
 	output := ReasoningSearchResponse{}
 
-	err := service.GetReasoningStructuredOutputWithTools(
+	err = service.GetReasoningStructuredOutputWithTools(
 		schema,
 		"openai/gpt-oss-120b",
 		&maxTokens,
