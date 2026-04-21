@@ -26,16 +26,17 @@ var ErrReasoningProgressNotFoundOrExpired = errors.New("reasoning progress not f
 // ReasoningProgressStore keeps transient per-session progress in local process memory.
 // It is suitable only for a single backend instance or sticky routing to one machine.
 type ReasoningProgressStatus struct {
-	SessionID string    `json:"session_id"`
-	State     string    `json:"state"`
-	Phase     string    `json:"phase"`
-	Iteration int       `json:"iteration"`
-	ToolName  string    `json:"tool_name,omitempty"`
-	Message   string    `json:"message"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Done      bool      `json:"done"`
-	Seq       int64     `json:"seq"`
-	ExpiresAt time.Time `json:"-"`
+	SessionID       string    `json:"session_id"`
+	State           string    `json:"state"`
+	Phase           string    `json:"phase"`
+	Iteration       int       `json:"iteration"`
+	ToolName        string    `json:"tool_name,omitempty"`
+	Message         string    `json:"message"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	Done            bool      `json:"done"`
+	Seq             int64     `json:"seq"`
+	ExpiresAt       time.Time `json:"-"`
+	IterationOffset int       `json:"-"`
 }
 
 type ReasoningProgressStore struct {
@@ -78,18 +79,18 @@ func (s *ReasoningProgressStore) Thinking(sessionID string, iteration int) {
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
 		status.State = ReasoningProgressStateRunning
 		status.Phase = ReasoningProgressPhaseThinking
-		status.Iteration = iteration
+		status.Iteration = status.IterationOffset + iteration
 		status.ToolName = ""
 		status.Message = "Thinking..."
 		status.Done = false
 	})
 }
 
-func (s *ReasoningProgressStore) Planning(sessionID string) {
+func (s *ReasoningProgressStore) Planning(sessionID string, iteration int) {
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
 		status.State = ReasoningProgressStateRunning
 		status.Phase = ReasoningProgressPhasePlanning
-		status.Iteration = 0
+		status.Iteration = iteration
 		status.ToolName = ""
 		status.Message = "Analyzing query and preparing search strategy..."
 		status.Done = false
@@ -100,7 +101,7 @@ func (s *ReasoningProgressStore) RunningTool(sessionID string, iteration int, to
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
 		status.State = ReasoningProgressStateRunning
 		status.Phase = ReasoningProgressPhaseRunningTool
-		status.Iteration = iteration
+		status.Iteration = status.IterationOffset + iteration
 		status.ToolName = toolName
 		status.Message = reasoningProgressToolMessage(toolName)
 		status.Done = false
@@ -122,6 +123,9 @@ func (s *ReasoningProgressStore) Complete(sessionID string, iteration int) {
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
 		status.State = ReasoningProgressStateCompleted
 		status.Phase = ReasoningProgressPhaseDone
+		if iteration < status.Iteration {
+			iteration = status.Iteration
+		}
 		status.Iteration = iteration
 		status.ToolName = ""
 		status.Message = "Done."
@@ -133,10 +137,19 @@ func (s *ReasoningProgressStore) Fail(sessionID string, iteration int) {
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
 		status.State = ReasoningProgressStateFailed
 		status.Phase = ReasoningProgressPhaseError
-		status.Iteration = iteration
+		status.Iteration = status.IterationOffset + iteration
 		status.ToolName = ""
 		status.Message = "Failed."
 		status.Done = true
+	})
+}
+
+func (s *ReasoningProgressStore) SetIterationOffset(sessionID string, offset int) {
+	if offset < 0 {
+		offset = 0
+	}
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.IterationOffset = offset
 	})
 }
 

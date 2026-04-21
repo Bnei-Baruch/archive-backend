@@ -146,6 +146,83 @@ func TestReasoningProgressStoreLifecycle(t *testing.T) {
 	}
 }
 
+func TestReasoningProgressStoreIterationOffset(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	store.Thinking("session-1", 2)
+	store.SetIterationOffset("session-1", 2)
+	store.Thinking("session-1", 1)
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if status.Iteration != 3 {
+		t.Fatalf("unexpected offset thinking iteration: %d", status.Iteration)
+	}
+
+	store.RunningTool("session-1", 2, "elasticsearch_search")
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected second get error: %v", err)
+	}
+	if status.Iteration != 4 {
+		t.Fatalf("unexpected offset tool iteration: %d", status.Iteration)
+	}
+
+	store.SetIterationOffset("session-1", 0)
+	store.Complete("session-1", 4)
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected final get error: %v", err)
+	}
+	if status.Iteration != 4 {
+		t.Fatalf("unexpected complete iteration: %d", status.Iteration)
+	}
+}
+
+func TestReasoningProgressStoreStageIterationsDoNotRepeat(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	store.Planning("session-1", 1)
+	store.SetIterationOffset("session-1", 1)
+	store.Thinking("session-1", 1)
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if status.Iteration != 2 {
+		t.Fatalf("unexpected first reasoning iteration: %d", status.Iteration)
+	}
+
+	store.Verifying("session-1", 3)
+	store.SetIterationOffset("session-1", 3)
+	store.Thinking("session-1", 1)
+
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected second get error: %v", err)
+	}
+	if status.Iteration != 4 {
+		t.Fatalf("unexpected rerun reasoning iteration: %d", status.Iteration)
+	}
+
+	store.SetIterationOffset("session-1", 0)
+	store.Complete("session-1", 3)
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected final get error: %v", err)
+	}
+	if status.Iteration != 4 {
+		t.Fatalf("complete should not move iteration backward: %d", status.Iteration)
+	}
+}
+
 func TestReasoningWorkflowSessionStoreFollowupLifecycle(t *testing.T) {
 	store := llm.NewReasoningWorkflowSessionStore(5 * time.Minute)
 	defer store.Close()

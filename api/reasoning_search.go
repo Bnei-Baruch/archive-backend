@@ -340,12 +340,14 @@ func ReasoningSearchHandler(c *gin.Context) {
 	var planningDebug *llm.ReasoningSearchDebugInfo
 	var firstIterationTools []llm.ToolCall
 	var firstIterationToolHandlers map[string]llm.ToolHandler
+	progressIterationOffset := 0
 	if planningStage != nil && !initialRequestCompleted {
 		planningService := runtime.Services[planningStage.Provider]
 		if planningService == nil {
 			log.Warnf("Reasoning Search planning skipped: service for provider %q is not initialized", planningStage.Provider)
 		} else {
-			progressStore.Planning(responseSessionID)
+			progressIterationOffset++
+			progressStore.Planning(responseSessionID, progressIterationOffset)
 			planningPromptCacheKey := fmt.Sprintf(
 				"reasoning-search-planning:m=%s:e=%s",
 				planningStage.Model,
@@ -399,6 +401,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 			}
 		}
 	}
+	progressStore.SetIterationOffset(responseSessionID, progressIterationOffset)
 	systemMessage = llm.AppendReasoningSearchOutputLanguage(systemMessage, outputLanguageName)
 	responseSchema, err := llm.GenerateReasoningSearchResponseJSONSchemaForLanguage(outputLanguageName)
 	if err != nil {
@@ -493,12 +496,14 @@ func ReasoningSearchHandler(c *gin.Context) {
 			response.Debug.Add(planningDebug)
 		}
 	}
+	progressCompleteIteration := progressIterationOffset + response.ReasoningIterations
 	if verificationStage != nil {
 		verificationService := runtime.Services[verificationStage.Provider]
 		if verificationService == nil {
 			log.Warnf("Reasoning Search verification skipped: service for provider %q is not initialized", verificationStage.Provider)
 		} else {
-			progressStore.Verifying(responseSessionID, response.ReasoningIterations)
+			progressCompleteIteration++
+			progressStore.Verifying(responseSessionID, progressCompleteIteration)
 
 			verificationPromptCacheKey := fmt.Sprintf(
 				"reasoning-search-verification:m=%s:e=%s",
@@ -601,6 +606,8 @@ func ReasoningSearchHandler(c *gin.Context) {
 							}
 							nextProviderSessionID := resolvedProviderSessionID
 							rerunResponse := llm.ReasoningSearchResponse{}
+							rerunProgressOffset := progressCompleteIteration
+							progressStore.SetIterationOffset(responseSessionID, rerunProgressOffset)
 							resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(
 								&nextProviderSessionID,
 								progressSessionID,
@@ -618,6 +625,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 								reasoningStage.RerunMaxIterations,
 								&rerunResponse,
 							)
+							progressStore.SetIterationOffset(responseSessionID, 0)
 							if err != nil {
 								log.Warnf("Reasoning Search rerun after verification failed: %v", err)
 								response = originalResponse
@@ -632,6 +640,8 @@ func ReasoningSearchHandler(c *gin.Context) {
 										log.Warnf("Reasoning Search failed to enrich rerun results: %v", err)
 										response = originalResponse
 									} else {
+										rerunReasoningIterations := rerunResponse.ReasoningIterations
+										progressCompleteIteration = rerunProgressOffset + rerunReasoningIterations
 										rerunResponse.UsedTokens += initialUsedTokens
 										rerunResponse.ReasoningIterations += initialReasoningIterations
 										if verificationDebug != nil {
@@ -707,7 +717,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 	}
 
 	response.SetFollowupBudget(reasoningStage.MaxFollowups, followupsUsed, followupsRemaining)
-	progressStore.Complete(responseSessionID, response.ReasoningIterations)
+	progressStore.Complete(responseSessionID, progressCompleteIteration)
 	if cacheEligible && runtime.ReasoningCache != nil {
 		runtime.ReasoningCache.Set(cacheKey, llm.BuildReasoningSearchCacheEntryFromResponse(&response))
 	}
