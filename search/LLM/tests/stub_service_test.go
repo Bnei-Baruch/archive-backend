@@ -49,7 +49,7 @@ func TestStubServiceReturnsReasoningSessionOutput(t *testing.T) {
 		{
 			Model:    "stub-reasoning",
 			Query:    "משה",
-			Response: `{"query":"משה","summary":"stub summary","reasoning_summary":"","results":[{"mdb_uid":"u1","result_type":"units","reason":"stub result","highlights":[],"is_grouping_result":false}]}`,
+			Response: `{"query":"משה","summary":"stub summary","reasoning_summary":"","results":[{"mdb_uid":"u1","reason":"stub result","highlights":[],"is_grouping_result":false}]}`,
 		},
 	})
 

@@ -136,11 +136,6 @@ func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (
 							"type":        "string",
 							"description": "The result MDB UID.",
 						},
-						"result_type": map[string]interface{}{
-							"type":        "string",
-							"enum":        []string{"units", "sources", "collections", "posts", "tweets", "tags"},
-							"description": "Elasticsearch result type.",
-						},
 						"reason": map[string]interface{}{
 							"type":        "string",
 							"description": reasonDescription,
@@ -157,7 +152,7 @@ func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (
 							"description": "True for grouping or narrowing results such as collections or tags.",
 						},
 					},
-					"required": []string{"mdb_uid", "result_type", "reason", "highlights", "is_grouping_result"},
+					"required": []string{"mdb_uid", "reason", "highlights", "is_grouping_result"},
 				},
 			},
 		},

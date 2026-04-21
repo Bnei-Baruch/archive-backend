@@ -35,8 +35,15 @@ func enrichReasoningSearchResults(db *sql.DB, uiLanguage string, results []llm.R
 		uiLanguage = consts.DEFAULT_UI_LANGUAGE
 	}
 	baseRequest := BaseRequest{UILanguage: uiLanguage}
+	if err := inferReasoningSearchResultTypes(db, results); err != nil {
+		return err
+	}
+
 	resultsByType := make(map[string][]*llm.ReasoningSearchResult)
 	for i := range results {
+		if results[i].ResultType == "" {
+			continue
+		}
 		resultsByType[results[i].ResultType] = append(resultsByType[results[i].ResultType], &results[i])
 	}
 
@@ -70,6 +77,132 @@ func enrichReasoningSearchResults(db *sql.DB, uiLanguage string, results []llm.R
 		}
 	}
 
+	return nil
+}
+
+func inferReasoningSearchResultTypes(db *sql.DB, results []llm.ReasoningSearchResult) error {
+	unknownUIDs := make([]string, 0, len(results))
+	seenUnknown := map[string]bool{}
+	for i := range results {
+		results[i].MDBUID = strings.TrimSpace(results[i].MDBUID)
+		results[i].ResultType = ""
+		if results[i].MDBUID == "" {
+			continue
+		}
+		if _, _, ok := parseReasoningSearchBlogPostUID(results[i].MDBUID); ok {
+			results[i].ResultType = consts.ES_RESULT_TYPE_BLOG_POSTS
+			continue
+		}
+		if !seenUnknown[results[i].MDBUID] {
+			seenUnknown[results[i].MDBUID] = true
+			unknownUIDs = append(unknownUIDs, results[i].MDBUID)
+		}
+	}
+	if len(unknownUIDs) == 0 {
+		return nil
+	}
+
+	typesByUID, err := loadReasoningSearchResultTypes(db, unknownUIDs)
+	if err != nil {
+		return fmt.Errorf("failed inferring reasoning search result types: %w", err)
+	}
+	for i := range results {
+		if results[i].ResultType != "" {
+			continue
+		}
+		if resultType, ok := typesByUID[results[i].MDBUID]; ok {
+			results[i].ResultType = resultType
+		}
+	}
+	return nil
+}
+
+func loadReasoningSearchResultTypes(db *sql.DB, uids []string) (map[string]string, error) {
+	result := map[string]string{}
+	if len(uids) == 0 {
+		return result, nil
+	}
+
+	if err := setReasoningSearchResultTypesFromSources(db, uids, result); err != nil {
+		return nil, err
+	}
+	if err := setReasoningSearchResultTypesFromContentUnits(db, uids, result); err != nil {
+		return nil, err
+	}
+	if err := setReasoningSearchResultTypesFromCollections(db, uids, result); err != nil {
+		return nil, err
+	}
+	if err := setReasoningSearchResultTypesFromTags(db, uids, result); err != nil {
+		return nil, err
+	}
+	if err := setReasoningSearchResultTypesFromTweets(db, uids, result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func setReasoningSearchResultTypesFromContentUnits(db *sql.DB, uids []string, result map[string]string) error {
+	items, err := mdbmodels.ContentUnits(qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...)).All(db)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if _, exists := result[item.UID]; !exists {
+			result[item.UID] = consts.ES_RESULT_TYPE_UNITS
+		}
+	}
+	return nil
+}
+
+func setReasoningSearchResultTypesFromCollections(db *sql.DB, uids []string, result map[string]string) error {
+	items, err := mdbmodels.Collections(qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...)).All(db)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if _, exists := result[item.UID]; !exists {
+			result[item.UID] = consts.ES_RESULT_TYPE_COLLECTIONS
+		}
+	}
+	return nil
+}
+
+func setReasoningSearchResultTypesFromSources(db *sql.DB, uids []string, result map[string]string) error {
+	items, err := mdbmodels.Sources(qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...)).All(db)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if _, exists := result[item.UID]; !exists {
+			result[item.UID] = consts.ES_RESULT_TYPE_SOURCES
+		}
+	}
+	return nil
+}
+
+func setReasoningSearchResultTypesFromTags(db *sql.DB, uids []string, result map[string]string) error {
+	items, err := mdbmodels.Tags(qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...)).All(db)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if _, exists := result[item.UID]; !exists {
+			result[item.UID] = consts.ES_RESULT_TYPE_TAGS
+		}
+	}
+	return nil
+}
+
+func setReasoningSearchResultTypesFromTweets(db *sql.DB, uids []string, result map[string]string) error {
+	items, err := mdbmodels.TwitterTweets(qm.WhereIn("twitter_id in ?", utils.ConvertArgsString(uids)...)).All(db)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if _, exists := result[item.TwitterID]; !exists {
+			result[item.TwitterID] = consts.ES_RESULT_TYPE_TWEETS
+		}
+	}
 	return nil
 }
 
