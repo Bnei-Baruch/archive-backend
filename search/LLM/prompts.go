@@ -47,7 +47,7 @@ Below are the instructions given to the search agent:
 
 Your task is to examine the given query and the search results provided by the search agent, and write a SHORT recommendation in english for improving the search results if needed.
 If the results demonstrate that some phrases were not interpreted correctly by the search agent (e.g., due to ambiguity of domain-specific terminology based on the query context), suggest a more accurate interpretation of these phrases.
-Your recommendation must be related only to a CRITICAL issue that significantly impacts the relevance of the search results and not a minor or nice-to-have improvement.
+Your recommendation must be related only to the aspects that significantly impacts the relevance of the search results and not a minor or nice-to-have improvement.
 The recommendation should also instruct about the good aspects of the search results that MUST be preserved.
 In case there are a critical issue, mark the needs_another_iteration field as true, otherwise mark it as false.
 `
