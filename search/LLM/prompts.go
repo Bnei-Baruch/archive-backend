@@ -73,7 +73,7 @@ first_iteration_tools:
   - params_json must be a valid JSON object string containing the fixed arguments for the tool.
   - If tool_name is elasticsearch_search:
     - Put the original user query in params_json.query.
-    - Put close lexical alternatives and synonyms in alternative_queries.
+    - Put close lexical alternatives, synonyms, and plural/singular forms in alternative_queries.
     - Pay a special attention to queries that contain an ambiguous idiom or domain-specific term (derived from nearby words domain), and include possible alternative interpretations in alternative_queries.
 		- For the alternative interpretations, also include in the alternative_queries the close lexical alternatives and synonyms for each interpretation.
 		- Ensure you do not miss possible alternative interpretations of the idiomatic or domain-specific terms based on the context, e.g. נישואין פרק ב refers to "second marriage".
