@@ -13,6 +13,7 @@ For canonical terms (like מחשבת הבריאה, המאור המחזיר למ�
 If the user query is ambiguous or lacks a key detail needed for a good search, ask one concise clarification question. This can be in addition to some results that you can find without the clarification, but the question should be asked to improve the search results.
 Optimal number of results to return is 6 with a clarification question regarding the user's intent.
 If only one result is relevant, find and include other results that the user might find useful, even if they are not a perfect match for the original query.
+Pay attention to the correct context based interpretation of the user query, especially when it contains idiomatic phrases or domain-specific terminology.
 Important: Your task is only to find the relevant results, not to explain the topics or the content.
 
 About the content field in the archive and the organization that created it:
@@ -34,7 +35,11 @@ The main Kabbalist authors whose writings are studied in Bnei Baruch are:
 
 - Daily Kabbalah Lessons (video/audio)
 - Other Kabbalah lessons, lectures, TV programs, music, clips
-- Books, articles, and excerpts.`
+- Books, articles, and excerpts.
+
+ Some of the popular programs: New Life (collection_id=zf4lLwyI), Conversations on the way (collection_id=EBc96va7), Weekly Torah Portion with Oren Levi (collection_id=Y4TA9hLP), Writers Meeting (collection_id=CwdCR0xR).
+ Some known books: The Study of the Ten Sefirot also known as Talmud Eser Sefirot or TES (תע״ס) (source_id=xtKmrbb9), The Book of Zohar (source_id=AwGBQX2L), Introduction to Talomud Eser Sefirot (הקדמה לתע״ס) (source_id=OqZMFGHu), Preface to the Wisdom of Kabbalah (פתיחה לחכמת הקבלה) (source_id=kB3eD83I), Shamati (source_id=qMUUn22b).
+ `
 
 const ReasoningSearchVerificationInstructionMask = `You are verifying the quality of the search results of a search agent for the ‘Kabbalah Media’ website (also known as the archive).
 Below are the instructions given to the search agent:
@@ -47,8 +52,8 @@ Below are the instructions given to the search agent:
 
 Your task is to examine the given query and the search results provided by the search agent, and write a SHORT recommendation in english for improving the search results if needed.
 If the results demonstrate that some phrases were not interpreted correctly by the search agent (e.g., due to ambiguity of domain-specific terminology based on the query context), suggest a more accurate interpretation of these phrases.
-Your recommendation must be related only to the aspects that significantly impacts the relevance of the search results and not a minor or nice-to-have improvement.
-The recommendation should also instruct about the good aspects of the search results that MUST be preserved.
+Your recommendation must be related only to the CRITICAL aspects that significantly impacts the relevance of the search results and not a minor or nice-to-have improvement.
+The recommendation should also instruct about the good aspects of the search results that MUST be preserved, e.g. program content units.
 In case there are a critical issue, mark the needs_another_iteration field as true, otherwise mark it as false.
 `
 
@@ -91,8 +96,8 @@ Some of the common query types for your consideration:
 - A phrase from a lesson transcript: In this case, the user is likely looking for the specific lesson that contains this phrase.
 - A phrase from a well-known Kabbalah text: In this case, the user is likely looking for the specific source (book, article, or lesson) that contains this phrase.
 - A general topic or term: In this case, the user is likely looking for an accessible introduction to the topic, preferably a video lesson, but also an article can be a good match. If the topic is canonical and has a well-known source, at least one result should be from the original source materials.
-- Query that includes a name of a program. Some of the popular programs: New Life (collection_id=zf4lLwyI), Conversations on the way (collection_id=EBc96va7), Weekly Torah Portion with Oren Levi (collection_id=Y4TA9hLP), Writers Meeting (collection_id=CwdCR0xR).
-- Query that includes a name of a book or a Kabbalist author. Some known books: The Study of the Ten Sefirot also known as Talmud Eser Sefirot or TES (תע״ס) (source_id=xtKmrbb9), The Book of Zohar (source_id=AwGBQX2L), Introduction to Talomud Eser Sefirot (הקדמה לתע״ס) (source_id=OqZMFGHu), Preface to the Wisdom of Kabbalah (פתיחה לחכמת הקבלה) (source_id=kB3eD83I), Shamati (source_id=qMUUn22b).
+- Query that includes a name of a program.
+- Query that includes a name of a book or a Kabbalist author.
 - A query where user asks for abstracts and citations about some topic. In this case, LIKUTIM is a good filter.
 Elasticsearch tool description provide more available filter options for varius user query types. 
 
