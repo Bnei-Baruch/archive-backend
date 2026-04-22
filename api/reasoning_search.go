@@ -490,6 +490,9 @@ func ReasoningSearchHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
+	for i := range response.Results {
+		response.Results[i].Origin = llm.ReasoningSearchResultOriginOriginal
+	}
 	if planningDebug != nil {
 		response.UsedTokens += planningDebug.TotalTokens
 		if response.Debug != nil {
@@ -512,13 +515,15 @@ func ReasoningSearchHandler(c *gin.Context) {
 				verificationStage.ReasoningEffort,
 			)
 			verificationInput, err := json.Marshal(struct {
-				Query   string                      `json:"query"`
-				Summary string                      `json:"summary"`
-				Results []llm.ReasoningSearchResult `json:"results"`
+				Query            string                      `json:"query"`
+				Summary          string                      `json:"summary"`
+				ReasoningSummary string                      `json:"reasoning_summary,omitempty"`
+				Results          []llm.ReasoningSearchResult `json:"results"`
 			}{
-				Query:   r.Query,
-				Summary: response.Summary,
-				Results: response.Results,
+				Query:            r.Query,
+				Summary:          response.Summary,
+				ReasoningSummary: response.ReasoningSummary,
+				Results:          response.Results,
 			})
 			if err != nil {
 				log.Warnf("Reasoning Search verification failed to build input: %v", err)
@@ -641,6 +646,34 @@ func ReasoningSearchHandler(c *gin.Context) {
 										log.Warnf("Reasoning Search failed to enrich rerun results: %v", err)
 										response = originalResponse
 									} else {
+										for i := range rerunResponse.Results {
+											rerunResponse.Results[i].Origin = llm.ReasoningSearchResultOriginRerun
+										}
+										if len(originalResponse.Results) != 0 {
+											mergedResults := make([]llm.ReasoningSearchResult, 0, len(rerunResponse.Results)+len(originalResponse.Results))
+											seenResultUIDs := map[string]bool{}
+											for _, result := range rerunResponse.Results {
+												uid := strings.TrimSpace(result.MDBUID)
+												if uid != "" {
+													if seenResultUIDs[uid] {
+														continue
+													}
+													seenResultUIDs[uid] = true
+												}
+												mergedResults = append(mergedResults, result)
+											}
+											for _, result := range originalResponse.Results {
+												uid := strings.TrimSpace(result.MDBUID)
+												if uid != "" {
+													if seenResultUIDs[uid] {
+														continue
+													}
+													seenResultUIDs[uid] = true
+												}
+												mergedResults = append(mergedResults, result)
+											}
+											rerunResponse.Results = mergedResults
+										}
 										rerunReasoningIterations := rerunResponse.ReasoningIterations
 										progressCompleteIteration = rerunProgressOffset + rerunReasoningIterations
 										rerunResponse.UsedTokens += initialUsedTokens

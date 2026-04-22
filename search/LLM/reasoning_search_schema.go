@@ -27,6 +27,7 @@ type ReasoningSearchResponse struct {
 
 type ReasoningSearchResult struct {
 	MDBUID           string   `json:"mdb_uid"`
+	Origin           string   `json:"origin,omitempty"`
 	ResultType       string   `json:"result_type"`
 	Title            string   `json:"title"`
 	Description      string   `json:"description"`
@@ -36,6 +37,11 @@ type ReasoningSearchResult struct {
 	Highlights       []string `json:"highlights"`
 	IsGroupingResult bool     `json:"is_grouping_result"`
 }
+
+const (
+	ReasoningSearchResultOriginOriginal = "original"
+	ReasoningSearchResultOriginRerun    = "rerun"
+)
 
 type ReasoningSearchDebugInfo struct {
 	Enabled                      bool                           `json:"enabled"`
