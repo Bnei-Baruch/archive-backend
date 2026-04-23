@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -30,7 +31,7 @@ const (
 	aiQueryToolBatchMaxChars = 20000
 
 	// Prevent scanning arbitrarily large documents in one request.
-	aiQueryToolMaxBatches = 20
+	aiQueryToolMaxBatches = 5
 
 	// Build larger semantic windows on top of raw lookup chunks so the reader model
 	// sees more surrounding context before choosing a match.
@@ -197,6 +198,116 @@ LIMIT 1`
 	sourceLookupMaxChunkSize         = 4200
 	sourceLookupSmallSourceThreshold = 40000
 )
+
+var aiQueryStopWords = map[string]bool{
+	// Common instruction words that should not decide which document batches
+	// are sent to the reader model.
+	"או":       true,
+	"את":       true,
+	"מצא":      true,
+	"קטע":      true,
+	"קטעים":    true,
+	"מצאו":     true,
+	"למצוא":    true,
+	"שמצא":     true,
+	"שמוצא":    true,
+	"שמגדיר":   true,
+	"שמגדירים": true,
+	"שמסביר":   true,
+	"מסביר":    true,
+	"מסבירים":  true,
+	"מגדיר":    true,
+	"מגדירים":  true,
+
+	"a":          true,
+	"an":         true,
+	"and":        true,
+	"or":         true,
+	"the":        true,
+	"of":         true,
+	"in":         true,
+	"on":         true,
+	"to":         true,
+	"for":        true,
+	"that":       true,
+	"which":      true,
+	"find":       true,
+	"show":       true,
+	"chunk":      true,
+	"chunks":     true,
+	"passage":    true,
+	"passages":   true,
+	"excerpt":    true,
+	"excerpts":   true,
+	"quote":      true,
+	"quotes":     true,
+	"define":     true,
+	"defines":    true,
+	"defining":   true,
+	"explain":    true,
+	"explains":   true,
+	"explaining": true,
+
+	"и":           true,
+	"или":         true,
+	"найди":       true,
+	"найти":       true,
+	"покажи":      true,
+	"который":     true,
+	"которая":     true,
+	"которое":     true,
+	"которые":     true,
+	"фрагмент":    true,
+	"фрагменты":   true,
+	"отрывок":     true,
+	"отрывки":     true,
+	"цитата":      true,
+	"цитаты":      true,
+	"определи":    true,
+	"определить":  true,
+	"определяет":  true,
+	"определяют":  true,
+	"объясни":     true,
+	"объяснить":   true,
+	"объясняет":   true,
+	"объясняют":   true,
+	"объясняющие": true,
+
+	"el":           true,
+	"la":           true,
+	"los":          true,
+	"las":          true,
+	"un":           true,
+	"una":          true,
+	"unos":         true,
+	"unas":         true,
+	"de":           true,
+	"del":          true,
+	"en":           true,
+	"para":         true,
+	"por":          true,
+	"que":          true,
+	"buscar":       true,
+	"busca":        true,
+	"encuentra":    true,
+	"muestra":      true,
+	"fragmento":    true,
+	"fragmentos":   true,
+	"pasaje":       true,
+	"pasajes":      true,
+	"extracto":     true,
+	"extractos":    true,
+	"cita":         true,
+	"citas":        true,
+	"definir":      true,
+	"definen":      true,
+	"definiendo":   true,
+	"explica":      true,
+	"explican":     true,
+	"explicar":     true,
+	"explicando":   true,
+	"explicativos": true,
+}
 
 const aiQueryChunkSelectorPrompt = `You select the most relevant chunks from a single document for a search query.
 Choose chunks by meaning, not only by exact word overlap.
@@ -522,9 +633,11 @@ func executeAIQuery(ctx context.Context, service llm.Service, config *llm.AITool
 		return result, nil
 	}
 	batches := buildAIQueryBatches(chunks, aiQueryToolBatchMaxChars)
-	if len(batches) > aiQueryToolMaxBatches {
-		llm.LogIfDeb(ctx, "%s_ai: truncating batch count from %d to %d", documentType, len(batches), aiQueryToolMaxBatches)
-		batches = batches[:aiQueryToolMaxBatches]
+	maxBatches := normalizeAIQueryToolMaxBatches(config)
+	if len(batches) > maxBatches {
+		selectedBatches := selectAIQueryBatches(query, batches, maxBatches)
+		llm.LogIfDeb(ctx, "%s_ai: selected %d candidate batches out of %d", documentType, len(selectedBatches), len(batches))
+		batches = selectedBatches
 	}
 
 	selected := map[int]aiQuerySelectedChunk{}
@@ -1035,6 +1148,93 @@ func buildAIQueryBatches(chunks []aiQueryChunk, maxChars int) [][]aiQueryChunk {
 	return batches
 }
 
+func selectAIQueryBatches(query string, batches [][]aiQueryChunk, limit int) [][]aiQueryChunk {
+	if limit <= 0 || len(batches) <= limit {
+		return batches
+	}
+
+	keywords := aiQueryKeywords(query)
+	if len(keywords) == 0 {
+		return batches[:limit]
+	}
+
+	// Score every batch cheaply before invoking the AI reader, so the limited
+	// reader budget is spent near lexical matches instead of the document start.
+	type scoredBatch struct {
+		index int
+		score int
+		batch []aiQueryChunk
+	}
+	scored := make([]scoredBatch, 0, limit)
+	for i, batch := range batches {
+		score := scoreAIQueryBatch(batch, keywords)
+		if score == 0 {
+			continue
+		}
+		scored = append(scored, scoredBatch{index: i, score: score, batch: batch})
+	}
+	if len(scored) == 0 {
+		return batches[:limit]
+	}
+
+	// Keep source order after selecting top-scoring batches. This preserves
+	// document context for the reader and stable output ordering for callers.
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score == scored[j].score {
+			return scored[i].index < scored[j].index
+		}
+		return scored[i].score > scored[j].score
+	})
+	selected := scored
+	if len(selected) > limit {
+		selected = selected[:limit]
+	}
+	sort.Slice(selected, func(i, j int) bool {
+		return selected[i].index < selected[j].index
+	})
+
+	result := make([][]aiQueryChunk, len(selected))
+	for i, item := range selected {
+		result[i] = item.batch
+	}
+	return result
+}
+
+func aiQueryKeywords(query string) []string {
+	seen := map[string]bool{}
+	keywords := []string{}
+	for _, part := range strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}) {
+		part = strings.TrimSpace(part)
+		if utf8.RuneCountInString(part) < 2 || seen[part] || aiQueryStopWords[part] {
+			continue
+		}
+		seen[part] = true
+		keywords = append(keywords, part)
+	}
+	return keywords
+}
+
+func scoreAIQueryBatch(batch []aiQueryChunk, keywords []string) int {
+	if len(batch) == 0 || len(keywords) == 0 {
+		return 0
+	}
+	var builder strings.Builder
+	for _, chunk := range batch {
+		if builder.Len() > 0 {
+			builder.WriteByte('\n')
+		}
+		builder.WriteString(strings.ToLower(chunk.Content))
+	}
+	content := builder.String()
+	score := 0
+	for _, keyword := range keywords {
+		score += strings.Count(content, keyword)
+	}
+	return score
+}
+
 func renderAIQueryBatch(batch []aiQueryChunk) string {
 	parts := make([]string, 0, len(batch))
 	for _, chunk := range batch {
@@ -1070,6 +1270,13 @@ func normalizeAIQueryToolMaxChunks(value int) int {
 		return maxAIQueryToolMaxChunks
 	}
 	return value
+}
+
+func normalizeAIQueryToolMaxBatches(config *llm.AIToolsConfig) int {
+	if config != nil && config.MaxBatches > 0 {
+		return config.MaxBatches
+	}
+	return aiQueryToolMaxBatches
 }
 
 func truncateAIQueryContent(content string, maxRunes int) string {

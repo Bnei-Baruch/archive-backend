@@ -825,14 +825,17 @@ func TestAIToolsConfigFromConfigUsesExplicitProvider(t *testing.T) {
 	oldModel := viper.GetString("openrouter.ai-tools-model")
 	oldEffort := viper.GetString("openrouter.ai-tools-effort")
 	oldMaxTokens := viper.GetInt("openrouter.ai-tools-max-output-tokens")
+	oldMaxBatches := viper.Get("llm.ai-query-tool-max-batches")
 	defer viper.Set("llm.provider", oldProvider)
 	defer viper.Set("llm.ai-tools-provider", oldAIToolsProvider)
 	defer viper.Set("openrouter.ai-tools-model", oldModel)
 	defer viper.Set("openrouter.ai-tools-effort", oldEffort)
 	defer viper.Set("openrouter.ai-tools-max-output-tokens", oldMaxTokens)
+	defer viper.Set("llm.ai-query-tool-max-batches", oldMaxBatches)
 
 	viper.Set("llm.provider", "openai")
 	viper.Set("llm.ai-tools-provider", "openrouter")
+	viper.Set("llm.ai-query-tool-max-batches", 7)
 	viper.Set("openrouter.ai-tools-model", "openai/gpt-oss-20b")
 	viper.Set("openrouter.ai-tools-effort", "minimal")
 	viper.Set("openrouter.ai-tools-max-output-tokens", 1234)
@@ -852,6 +855,9 @@ func TestAIToolsConfigFromConfigUsesExplicitProvider(t *testing.T) {
 	}
 	if cfg.MaxTokens != 1234 {
 		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
+	}
+	if cfg.MaxBatches != 7 {
+		t.Fatalf("unexpected max batches: %d", cfg.MaxBatches)
 	}
 }
 

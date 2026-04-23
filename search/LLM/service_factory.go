@@ -28,6 +28,7 @@ const (
 	defaultReasoningSearchPlanningMaxTokens = 1500
 	defaultAIToolsEffort                    = "low"
 	defaultAIToolsMaxTokens                 = 1500
+	defaultAIToolsMaxBatches                = 5
 )
 
 type ReasoningSearchConfig struct {
@@ -57,10 +58,11 @@ type ReasoningSearchVerificationConfig struct {
 }
 
 type AIToolsConfig struct {
-	Provider  string
-	Model     string
-	Effort    string
-	MaxTokens int
+	Provider   string
+	Model      string
+	Effort     string
+	MaxTokens  int
+	MaxBatches int
 }
 
 func NewServiceFromConfig() (Service, error) {
@@ -937,7 +939,20 @@ func AIToolsProviderFromConfig() string {
 }
 
 func AIToolsConfigFromConfig() (*AIToolsConfig, error) {
-	return aiToolsConfigFromProvider(AIToolsProviderFromConfig())
+	cfg, err := aiToolsConfigFromProvider(AIToolsProviderFromConfig())
+	if err != nil {
+		return nil, err
+	}
+	cfg.MaxBatches = AIToolsMaxBatchesFromConfig()
+	return cfg, nil
+}
+
+func AIToolsMaxBatchesFromConfig() int {
+	maxBatches := viper.GetInt("llm.ai-query-tool-max-batches")
+	if maxBatches <= 0 {
+		return defaultAIToolsMaxBatches
+	}
+	return maxBatches
 }
 
 func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffort string) (*ReasoningSearchVerificationConfig, error) {
