@@ -67,6 +67,7 @@ reasoning-search-planning-enabled=false
 reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "stub"; defaults to llm.provider when empty
 reasoning-search-verification-enabled=false
 reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "stub"; defaults to llm.provider when empty
+reasoning-search-verification-max-input-tokens=20000 # skip verification when accumulated reasoning/planning tokens are >= this value
 
 [openai]
 token="sk-..."

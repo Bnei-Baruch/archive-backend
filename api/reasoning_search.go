@@ -66,10 +66,11 @@ func ReasoningSearchStartHandler(c *gin.Context) {
 	if reasoningConfig.Verification != nil {
 		// Verification is a one-shot structured call today, so only stage metadata is stored.
 		if err := runtime.Workflow.SetStage(sessionID, llm.ReasoningWorkflowStageVerification, llm.ReasoningWorkflowStageSession{
-			Provider:        reasoningConfig.Verification.Provider,
-			Model:           reasoningConfig.Verification.Model,
-			ReasoningEffort: reasoningConfig.Verification.Effort,
-			MaxTokens:       reasoningConfig.Verification.MaxTokens,
+			Provider:                      reasoningConfig.Verification.Provider,
+			Model:                         reasoningConfig.Verification.Model,
+			ReasoningEffort:               reasoningConfig.Verification.Effort,
+			MaxTokens:                     reasoningConfig.Verification.MaxTokens,
+			MaxInputTokensForVerification: reasoningConfig.Verification.MaxInputTokens,
 		}); err != nil {
 			NewInternalError(err).Abort(c)
 			return
@@ -235,10 +236,11 @@ func ReasoningSearchHandler(c *gin.Context) {
 		}
 		if reasoningConfig.Verification != nil {
 			stage := llm.ReasoningWorkflowStageSession{
-				Provider:        reasoningConfig.Verification.Provider,
-				Model:           reasoningConfig.Verification.Model,
-				ReasoningEffort: reasoningConfig.Verification.Effort,
-				MaxTokens:       reasoningConfig.Verification.MaxTokens,
+				Provider:                      reasoningConfig.Verification.Provider,
+				Model:                         reasoningConfig.Verification.Model,
+				ReasoningEffort:               reasoningConfig.Verification.Effort,
+				MaxTokens:                     reasoningConfig.Verification.MaxTokens,
+				MaxInputTokensForVerification: reasoningConfig.Verification.MaxInputTokens,
 			}
 			if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStageVerification, stage); err != nil {
 				NewInternalError(err).Abort(c)
@@ -504,8 +506,9 @@ func ReasoningSearchHandler(c *gin.Context) {
 	}
 	progressCompleteIteration := progressIterationOffset + response.ReasoningIterations
 	if verificationStage != nil {
-		verificationService := runtime.Services[verificationStage.Provider]
-		if verificationService == nil {
+		if verificationStage.MaxInputTokensForVerification > 0 && response.UsedTokens >= verificationStage.MaxInputTokensForVerification {
+			log.Infof("Reasoning Search verification skipped: total tokens %d reached threshold %d", response.UsedTokens, verificationStage.MaxInputTokensForVerification)
+		} else if verificationService := runtime.Services[verificationStage.Provider]; verificationService == nil {
 			log.Warnf("Reasoning Search verification skipped: service for provider %q is not initialized", verificationStage.Provider)
 		} else {
 			progressCompleteIteration++

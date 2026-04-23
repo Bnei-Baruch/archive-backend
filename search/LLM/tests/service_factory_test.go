@@ -196,6 +196,7 @@ func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	oldVerificationModel := viper.GetString("openai.reasoning-search-verification-model")
 	oldVerificationEffort := viper.GetString("openai.reasoning-search-verification-effort")
 	oldVerificationMaxTokens := viper.GetInt("openai.reasoning-search-verification-max-output-tokens")
+	oldVerificationMaxInputTokens := viper.Get("llm.reasoning-search-verification-max-input-tokens")
 	defer viper.Set("llm.provider", oldProvider)
 	defer viper.Set("llm.reasoning-search-verification-enabled", oldVerificationEnabled)
 	defer viper.Set("llm.reasoning-search-verification-provider", oldVerificationProvider)
@@ -208,6 +209,7 @@ func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	defer viper.Set("openai.reasoning-search-verification-model", oldVerificationModel)
 	defer viper.Set("openai.reasoning-search-verification-effort", oldVerificationEffort)
 	defer viper.Set("openai.reasoning-search-verification-max-output-tokens", oldVerificationMaxTokens)
+	defer viper.Set("llm.reasoning-search-verification-max-input-tokens", oldVerificationMaxInputTokens)
 
 	viper.Set("llm.provider", "openai")
 	viper.Set("openai.reasoning-search-model", "test-model")
@@ -221,6 +223,7 @@ func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	viper.Set("openai.reasoning-search-verification-model", "verifier-model")
 	viper.Set("openai.reasoning-search-verification-effort", "medium")
 	viper.Set("openai.reasoning-search-verification-max-output-tokens", 4321)
+	viper.Set("llm.reasoning-search-verification-max-input-tokens", 5555)
 
 	cfg, err := llm.ReasoningSearchConfigFromConfig()
 	if err != nil {
@@ -261,6 +264,9 @@ func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	}
 	if cfg.Verification.MaxTokens != 4321 {
 		t.Fatalf("unexpected verification max tokens: %d", cfg.Verification.MaxTokens)
+	}
+	if cfg.Verification.MaxInputTokens != 5555 {
+		t.Fatalf("unexpected verification max input tokens: %d", cfg.Verification.MaxInputTokens)
 	}
 }
 

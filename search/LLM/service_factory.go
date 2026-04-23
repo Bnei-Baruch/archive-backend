@@ -19,16 +19,17 @@ const (
 )
 
 const (
-	defaultReasoningSearchEffort            = "high" // "low", "medium", "high", "xhigh" (not for oss models)
-	defaultReasoningSearchMaxTokens         = 8000
-	defaultReasoningSearchMaxIterations     = 20 // max iterations for a reasoning search before the verification stage
-	defaultReasoningSearchRerunMaxIters     = 8  // max reasoning iterations when the search is rerun after a failed verification stage
-	defaultReasoningSearchMaxFollowups      = 2
-	defaultReasoningSearchPlanningEffort    = "medium"
-	defaultReasoningSearchPlanningMaxTokens = 1500
-	defaultAIToolsEffort                    = "low"
-	defaultAIToolsMaxTokens                 = 1500
-	defaultAIToolsMaxBatches                = 5
+	defaultReasoningSearchEffort                     = "high" // "low", "medium", "high", "xhigh" (not for oss models)
+	defaultReasoningSearchMaxTokens                  = 8000
+	defaultReasoningSearchMaxIterations              = 20 // max iterations for a reasoning search before the verification stage
+	defaultReasoningSearchRerunMaxIters              = 8  // max reasoning iterations when the search is rerun after a failed verification stage
+	defaultReasoningSearchMaxFollowups               = 2
+	defaultReasoningSearchPlanningEffort             = "medium"
+	defaultReasoningSearchPlanningMaxTokens          = 1500
+	defaultReasoningSearchVerificationMaxInputTokens = 20000
+	defaultAIToolsEffort                             = "low"
+	defaultAIToolsMaxTokens                          = 1500
+	defaultAIToolsMaxBatches                         = 5
 )
 
 type ReasoningSearchConfig struct {
@@ -51,10 +52,11 @@ type ReasoningSearchPlanningConfig struct {
 }
 
 type ReasoningSearchVerificationConfig struct {
-	Provider  string
-	Model     string
-	Effort    string
-	MaxTokens int
+	Provider       string
+	Model          string
+	Effort         string
+	MaxTokens      int
+	MaxInputTokens int
 }
 
 type AIToolsConfig struct {
@@ -788,6 +790,14 @@ func ReasoningSearchVerificationProviderFromConfig() string {
 	return provider
 }
 
+func ReasoningSearchVerificationMaxInputTokensFromConfig() int {
+	maxTokens := viper.GetInt("llm.reasoning-search-verification-max-input-tokens")
+	if maxTokens <= 0 {
+		return defaultReasoningSearchVerificationMaxInputTokens
+	}
+	return maxTokens
+}
+
 func reasoningSearchPlanningConfigFromProvider(provider string, fallbackEffort string) (*ReasoningSearchPlanningConfig, error) {
 	switch provider {
 	case ProviderOpenAI:
@@ -956,6 +966,7 @@ func AIToolsMaxBatchesFromConfig() int {
 }
 
 func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffort string) (*ReasoningSearchVerificationConfig, error) {
+	maxInputTokens := ReasoningSearchVerificationMaxInputTokensFromConfig()
 	switch provider {
 	case ProviderOpenAI:
 		model := strings.TrimSpace(viper.GetString("openai.reasoning-search-verification-model"))
@@ -978,10 +989,11 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			maxTokens = defaultReasoningSearchMaxTokens
 		}
 		return &ReasoningSearchVerificationConfig{
-			Provider:  provider,
-			Model:     model,
-			Effort:    effort,
-			MaxTokens: maxTokens,
+			Provider:       provider,
+			Model:          model,
+			Effort:         effort,
+			MaxTokens:      maxTokens,
+			MaxInputTokens: maxInputTokens,
 		}, nil
 	case ProviderOpenRouter:
 		model := strings.TrimSpace(viper.GetString("openrouter.reasoning-search-verification-model"))
@@ -1002,10 +1014,11 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			maxTokens = defaultReasoningSearchMaxTokens
 		}
 		return &ReasoningSearchVerificationConfig{
-			Provider:  provider,
-			Model:     model,
-			Effort:    effort,
-			MaxTokens: maxTokens,
+			Provider:       provider,
+			Model:          model,
+			Effort:         effort,
+			MaxTokens:      maxTokens,
+			MaxInputTokens: maxInputTokens,
 		}, nil
 	case ProviderOllama:
 		model := strings.TrimSpace(viper.GetString("ollama.reasoning-search-verification-model"))
@@ -1026,10 +1039,11 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			maxTokens = defaultReasoningSearchMaxTokens
 		}
 		return &ReasoningSearchVerificationConfig{
-			Provider:  provider,
-			Model:     model,
-			Effort:    effort,
-			MaxTokens: maxTokens,
+			Provider:       provider,
+			Model:          model,
+			Effort:         effort,
+			MaxTokens:      maxTokens,
+			MaxInputTokens: maxInputTokens,
 		}, nil
 	case ProviderXAI:
 		model := strings.TrimSpace(viper.GetString("xai.reasoning-search-verification-model"))
@@ -1045,10 +1059,11 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			maxTokens = defaultReasoningSearchMaxTokens
 		}
 		return &ReasoningSearchVerificationConfig{
-			Provider:  provider,
-			Model:     model,
-			Effort:    effort,
-			MaxTokens: maxTokens,
+			Provider:       provider,
+			Model:          model,
+			Effort:         effort,
+			MaxTokens:      maxTokens,
+			MaxInputTokens: maxInputTokens,
 		}, nil
 	case ProviderZAI:
 		model := strings.TrimSpace(viper.GetString("zai.reasoning-search-verification-model"))
@@ -1069,10 +1084,11 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			maxTokens = defaultReasoningSearchMaxTokens
 		}
 		return &ReasoningSearchVerificationConfig{
-			Provider:  provider,
-			Model:     model,
-			Effort:    effort,
-			MaxTokens: maxTokens,
+			Provider:       provider,
+			Model:          model,
+			Effort:         effort,
+			MaxTokens:      maxTokens,
+			MaxInputTokens: maxInputTokens,
 		}, nil
 	case ProviderArcee:
 		model := strings.TrimSpace(viper.GetString("arcee.reasoning-search-verification-model"))
@@ -1095,10 +1111,11 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			maxTokens = defaultReasoningSearchMaxTokens
 		}
 		return &ReasoningSearchVerificationConfig{
-			Provider:  provider,
-			Model:     model,
-			Effort:    effort,
-			MaxTokens: maxTokens,
+			Provider:       provider,
+			Model:          model,
+			Effort:         effort,
+			MaxTokens:      maxTokens,
+			MaxInputTokens: maxInputTokens,
 		}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-verification-model"))
@@ -1114,10 +1131,11 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			maxTokens = defaultReasoningSearchMaxTokens
 		}
 		return &ReasoningSearchVerificationConfig{
-			Provider:  provider,
-			Model:     model,
-			Effort:    effort,
-			MaxTokens: maxTokens,
+			Provider:       provider,
+			Model:          model,
+			Effort:         effort,
+			MaxTokens:      maxTokens,
+			MaxInputTokens: maxInputTokens,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported verification provider: %s", provider)

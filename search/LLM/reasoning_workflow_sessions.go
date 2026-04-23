@@ -15,13 +15,14 @@ const ReasoningWorkflowStageVerification = "verification"
 // process memory. It works only on a single machine; multi-instance deployments
 // need sticky routing or a shared backing store.
 type ReasoningWorkflowStageSession struct {
-	Provider           string
-	Model              string
-	ReasoningEffort    string
-	MaxTokens          int
-	MaxIterations      int
-	RerunMaxIterations int
-	MaxFollowups       int
+	Provider                      string
+	Model                         string
+	ReasoningEffort               string
+	MaxTokens                     int
+	MaxInputTokensForVerification int
+	MaxIterations                 int
+	RerunMaxIterations            int
+	MaxFollowups                  int
 	// ProviderSessionID may be empty for one-shot stages such as verification.
 	// Example: the reasoning stage stores OpenAI previous_response_id or a
 	// provider-side session/history id, while the verification stage is a single
