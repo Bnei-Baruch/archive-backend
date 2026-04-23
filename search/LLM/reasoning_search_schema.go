@@ -32,6 +32,7 @@ type ReasoningSearchResult struct {
 	Title            string   `json:"title"`
 	Description      string   `json:"description"`
 	ContentType      string   `json:"content_type"`
+	ProgramName      string   `json:"program_name,omitempty"`
 	Date             string   `json:"date"`
 	Reason           string   `json:"reason"`
 	Highlights       []string `json:"highlights"`

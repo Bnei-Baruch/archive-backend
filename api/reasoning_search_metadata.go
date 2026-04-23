@@ -19,6 +19,7 @@ import (
 type reasoningSearchResultMetadata struct {
 	Title       string
 	ContentType string
+	ProgramName string
 	Date        string
 }
 
@@ -72,6 +73,7 @@ func enrichReasoningSearchResults(db *sql.DB, uiLanguage string, results []llm.R
 			if meta, ok := metadata[result.MDBUID]; ok {
 				result.Title = meta.Title
 				result.ContentType = meta.ContentType
+				result.ProgramName = meta.ProgramName
 				result.Date = meta.Date
 			}
 		}
@@ -212,7 +214,11 @@ func loadReasoningSearchContentUnitMetadata(db *sql.DB, r BaseRequest, uids []st
 		return metadata, nil
 	}
 
-	items, err := mdbmodels.ContentUnits(qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...)).All(db)
+	items, err := mdbmodels.ContentUnits(
+		qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...),
+		qm.Load("CollectionsContentUnits"),
+		qm.Load("CollectionsContentUnits.Collection"),
+	).All(db)
 	if err != nil {
 		return nil, err
 	}
@@ -226,6 +232,28 @@ func loadReasoningSearchContentUnitMetadata(db *sql.DB, r BaseRequest, uids []st
 		return nil, err
 	}
 
+	programCollectionIDs := []int64{}
+	for _, item := range items {
+		for _, ccu := range item.R.CollectionsContentUnits {
+			if ccu.R == nil || ccu.R.Collection == nil {
+				continue
+			}
+			collection := ccu.R.Collection
+			contentType, ok := mdb.CONTENT_TYPE_REGISTRY.ByID[collection.TypeID]
+			if !ok || contentType.Name != consts.CT_VIDEO_PROGRAM {
+				continue
+			}
+			if collection.Secure != consts.SEC_PUBLIC || !collection.Published {
+				continue
+			}
+			programCollectionIDs = append(programCollectionIDs, collection.ID)
+		}
+	}
+	programI18nsMap, err := loadCI18ns(db, r, reasoningSearchUniqueInt64s(programCollectionIDs))
+	if err != nil {
+		return nil, err
+	}
+
 	for _, item := range items {
 		contentUnit, err := mdbToCU(item)
 		if err != nil {
@@ -234,9 +262,35 @@ func loadReasoningSearchContentUnitMetadata(db *sql.DB, r BaseRequest, uids []st
 		if i18ns, ok := i18nsMap[item.ID]; ok {
 			setCUI18n(contentUnit, r, i18ns)
 		}
+		programName := ""
+		for _, ccu := range item.R.CollectionsContentUnits {
+			if ccu.R == nil || ccu.R.Collection == nil {
+				continue
+			}
+			collection := ccu.R.Collection
+			contentType, ok := mdb.CONTENT_TYPE_REGISTRY.ByID[collection.TypeID]
+			if !ok || contentType.Name != consts.CT_VIDEO_PROGRAM {
+				continue
+			}
+			if collection.Secure != consts.SEC_PUBLIC || !collection.Published {
+				continue
+			}
+			program, err := mdbToC(collection)
+			if err != nil {
+				return nil, err
+			}
+			if i18ns, ok := programI18nsMap[collection.ID]; ok {
+				setCI18n(program, r, i18ns)
+			}
+			programName = strings.TrimSpace(program.Name)
+			if programName != "" {
+				break
+			}
+		}
 		metadata[item.UID] = reasoningSearchResultMetadata{
 			Title:       contentUnit.Name,
 			ContentType: contentUnit.ContentType,
+			ProgramName: programName,
 			Date:        reasoningSearchUtilsDateString(contentUnit.FilmDate),
 		}
 	}

@@ -387,6 +387,7 @@ func cloneReasoningSearchCacheEntry(entry *ReasoningSearchCacheEntry) *Reasoning
 			Title:            result.Title,
 			Description:      result.Description,
 			ContentType:      result.ContentType,
+			ProgramName:      result.ProgramName,
 			Date:             result.Date,
 			Reason:           result.Reason,
 			Highlights:       append([]string(nil), result.Highlights...),
