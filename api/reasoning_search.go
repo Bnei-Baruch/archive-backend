@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode"
 
 	log "github.com/Sirupsen/logrus"
 	"golang.org/x/text/language/display"
@@ -127,6 +128,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 		NewBadRequestError(errors.New("q is required")).Abort(c)
 		return
 	}
+	r.Query = rewriteReasoningSearchQuery(r.Query)
 	r.UILanguage = strings.ToLower(strings.TrimSpace(r.UILanguage))
 	if r.SessionID != nil {
 		trimmedSessionID := strings.TrimSpace(*r.SessionID)
@@ -888,4 +890,39 @@ func reasoningSearchOutputLanguageName(uiLanguage string, query string) string {
 		return display.English.Tags().Name(tag)
 	}
 	return display.English.Tags().Name(utils.MDB_TO_GO[consts.DEFAULT_UI_LANGUAGE])
+}
+
+func rewriteReasoningSearchQuery(query string) string {
+	runes := []rune(query)
+	if len(runes) == 0 {
+		return query
+	}
+
+	var builder strings.Builder
+	for i, r := range runes {
+		builder.WriteRune(r)
+		if !isReasoningSearchRewriteLetter(r) {
+			continue
+		}
+		if i > 0 && isReasoningSearchQueryWordRune(runes[i-1]) {
+			continue
+		}
+		if i+1 < len(runes) && (isReasoningSearchQueryWordRune(runes[i+1]) || isReasoningSearchGeresh(runes[i+1])) {
+			continue
+		}
+		builder.WriteByte('\'')
+	}
+	return builder.String()
+}
+
+func isReasoningSearchRewriteLetter(r rune) bool {
+	return r >= 'א' && r <= 'י'
+}
+
+func isReasoningSearchQueryWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+func isReasoningSearchGeresh(r rune) bool {
+	return r == '\'' || r == '׳'
 }
