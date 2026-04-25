@@ -12,7 +12,7 @@ import (
 
 const (
 	defaultReasoningSearchCacheTTL          = 5 * 24 * time.Hour
-	maxReasoningSearchCacheQueryWords       = 4
+	maxReasoningSearchCacheQueryWords       = 8
 	maxReasoningSearchCacheWordLengthRunes  = 16
 	maxReasoningSearchCacheQueryLengthRunes = 48
 )
