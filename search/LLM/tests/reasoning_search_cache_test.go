@@ -162,3 +162,58 @@ func TestBuildReasoningSearchCacheSeedAssistantContent(t *testing.T) {
 		t.Fatalf("expected cached seed to include result identifiers: %q", content)
 	}
 }
+
+func TestReasoningWorkflowSessionStoreResponseSnapshotLifecycle(t *testing.T) {
+	store := llm.NewReasoningWorkflowSessionStore(5 * time.Minute)
+	defer store.Close()
+
+	sessionID, err := store.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:        "openrouter",
+		Model:           "model",
+		ReasoningEffort: "low",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+
+	response := &llm.ReasoningSearchResponse{
+		SessionID: "session",
+		Query:     "query",
+		Summary:   "summary",
+		Results: []llm.ReasoningSearchResult{
+			{MDBUID: "abc", ResultType: "units", Title: "Title", Reason: "why"},
+		},
+	}
+	if err := store.SetResponseSnapshot(sessionID, response); err != nil {
+		t.Fatalf("unexpected response snapshot set error: %v", err)
+	}
+
+	session, err := store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if !strings.Contains(string(session.ResponseSnapshotJSON), "\"summary\":\"summary\"") {
+		t.Fatalf("unexpected response snapshot: %s", string(session.ResponseSnapshotJSON))
+	}
+
+	session.ResponseSnapshotJSON[0] = '{'
+
+	session, err = store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected second get error: %v", err)
+	}
+	if !strings.Contains(string(session.ResponseSnapshotJSON), "\"summary\":\"summary\"") {
+		t.Fatalf("expected response snapshot copy to be isolated, got %s", string(session.ResponseSnapshotJSON))
+	}
+
+	if err := store.SetResponseSnapshot(sessionID, nil); err != nil {
+		t.Fatalf("unexpected response snapshot clear error: %v", err)
+	}
+	session, err = store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected third get error: %v", err)
+	}
+	if len(session.ResponseSnapshotJSON) != 0 {
+		t.Fatalf("expected response snapshot to be cleared")
+	}
+}

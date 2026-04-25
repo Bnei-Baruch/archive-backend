@@ -21,75 +21,60 @@ import (
 
 type ReasoningSearchRequest struct {
 	SessionID  *string `json:"session_id" form:"session_id"`
-	Query      string  `json:"q" form:"q" binding:"required"`
+	Query      string  `json:"q" form:"q"`
 	Deb        bool    `json:"deb" form:"deb" binding:"omitempty"`
 	UILanguage string  `json:"ui_language" form:"ui_language" binding:"omitempty,len=2"`
 }
 
+var (
+	errReasoningSearchAlreadyRunning  = errors.New("reasoning search is already running for this session")
+	errReasoningSearchResultsNotReady = errors.New("reasoning search results are not ready yet")
+	errReasoningSearchFailed          = errors.New("reasoning search failed")
+)
+
+// Async flow entrypoint: start work in background and return a workflow
+// session_id immediately. The client then polls status and later fetches the
+// stored response snapshot for that session.
 func ReasoningSearchStartHandler(c *gin.Context) {
+	r := ReasoningSearchRequest{}
+	if c.Bind(&r) != nil {
+		return
+	}
+	if err := normalizeReasoningSearchRequest(&r); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+
 	runtime, _ := c.MustGet("LLM_RUNTIME").(*llm.Runtime)
 	if runtime == nil || runtime.Tools == nil || runtime.Progress == nil || runtime.Workflow == nil {
 		NewInternalError(errors.New("reasoning workflow is not initialized")).Abort(c)
 		return
 	}
-	reasoningConfig, err := llm.ReasoningSearchConfigFromConfig()
-	if err != nil {
-		NewInternalError(err).Abort(c)
-		return
-	}
-	service := runtime.Services[reasoningConfig.Provider]
-	if service == nil {
-		NewInternalError(errors.New("reasoning llm service is not initialized")).Abort(c)
-		return
-	}
+	db := c.MustGet("MDB_DB").(*sql.DB)
 
-	providerSessionID, err := service.ReserveReasoningSession(reasoningConfig.Model, &reasoningConfig.Effort)
+	sessionID, err := prepareReasoningSearchSession(runtime, &r)
 	if err != nil {
-		NewInternalError(err).Abort(c)
-		return
-	}
-
-	sessionID, err := runtime.Workflow.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
-		Provider:           reasoningConfig.Provider,
-		Model:              reasoningConfig.Model,
-		ReasoningEffort:    reasoningConfig.Effort,
-		MaxTokens:          reasoningConfig.MaxTokens,
-		MaxIterations:      reasoningConfig.MaxIterations,
-		RerunMaxIterations: reasoningConfig.RerunMaxIterations,
-		MaxFollowups:       reasoningConfig.MaxFollowups,
-		ProviderSessionID:  providerSessionID,
-	})
-	if err != nil {
-		NewInternalError(err).Abort(c)
-		return
-	}
-	if reasoningConfig.Verification != nil {
-		// Verification is a one-shot structured call today, so only stage metadata is stored.
-		if err := runtime.Workflow.SetStage(sessionID, llm.ReasoningWorkflowStageVerification, llm.ReasoningWorkflowStageSession{
-			Provider:                      reasoningConfig.Verification.Provider,
-			Model:                         reasoningConfig.Verification.Model,
-			ReasoningEffort:               reasoningConfig.Verification.Effort,
-			MaxTokens:                     reasoningConfig.Verification.MaxTokens,
-			MaxInputTokensForVerification: reasoningConfig.Verification.MaxInputTokens,
-		}); err != nil {
-			NewInternalError(err).Abort(c)
+		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
 			return
 		}
-	}
-	if reasoningConfig.Planning != nil {
-		if err := runtime.Workflow.SetStage(sessionID, llm.ReasoningWorkflowStagePlanning, llm.ReasoningWorkflowStageSession{
-			Provider:        reasoningConfig.Planning.Provider,
-			Model:           reasoningConfig.Planning.Model,
-			ReasoningEffort: reasoningConfig.Planning.Effort,
-			MaxTokens:       reasoningConfig.Planning.MaxTokens,
-		}); err != nil {
-			NewInternalError(err).Abort(c)
+		var maxFollowupsErr *llm.MaxReasoningFollowupsError
+		if errors.As(err, &maxFollowupsErr) {
+			NewHttpError(http.StatusUnprocessableEntity, err, gin.ErrorTypePublic).Abort(c)
 			return
 		}
+		if errors.Is(err, errReasoningSearchAlreadyRunning) {
+			NewHttpError(http.StatusConflict, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
 	}
-	runtime.Progress.Reserve(sessionID)
 
-	c.JSON(http.StatusOK, gin.H{"session_id": sessionID})
+	requestCopy := r
+	go executeReasoningSearchInBackground(runtime, db, requestCopy, sessionID)
+
+	c.JSON(http.StatusAccepted, gin.H{"session_id": sessionID})
 }
 
 func ReasoningSearchStatusHandler(c *gin.Context) {
@@ -118,167 +103,355 @@ func ReasoningSearchStatusHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
+// Synchronous flow entrypoint: run the full reasoning search now and return the
+// final response directly. This is mainly useful for simple clients and manual
+// testing, while the async flow uses /search/reasoning/start + status + result.
 func ReasoningSearchHandler(c *gin.Context) {
 	r := ReasoningSearchRequest{}
 	if c.Bind(&r) != nil {
 		return
 	}
+	if err := normalizeReasoningSearchRequest(&r); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
 
+	runtime, _ := c.MustGet("LLM_RUNTIME").(*llm.Runtime)
+	if runtime == nil || runtime.Progress == nil || runtime.Workflow == nil {
+		NewInternalError(errors.New("reasoning workflow is not initialized")).Abort(c)
+		return
+	}
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	sessionID, err := prepareReasoningSearchSession(runtime, &r)
+	if err != nil {
+		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		var maxFollowupsErr *llm.MaxReasoningFollowupsError
+		if errors.As(err, &maxFollowupsErr) {
+			NewHttpError(http.StatusUnprocessableEntity, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		if errors.Is(err, errReasoningSearchAlreadyRunning) {
+			NewHttpError(http.StatusConflict, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if err := executeReasoningSearchForSession(runtime, db, r, sessionID); err != nil {
+		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		var maxIterationsErr *llm.MaxReasoningIterationsError
+		if errors.As(err, &maxIterationsErr) {
+			NewHttpError(http.StatusUnprocessableEntity, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	workflowSession, err := runtime.Workflow.Get(sessionID)
+	if err != nil {
+		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if len(workflowSession.ResponseSnapshotJSON) != 0 {
+		c.Data(http.StatusOK, "application/json; charset=utf-8", workflowSession.ResponseSnapshotJSON)
+		return
+	}
+
+	status, err := runtime.Progress.Get(sessionID)
+	if err != nil {
+		if errors.Is(err, llm.ErrReasoningProgressNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
+	}
+	switch status.State {
+	case llm.ReasoningProgressStateFailed:
+		NewHttpError(http.StatusUnprocessableEntity, errReasoningSearchFailed, gin.ErrorTypePublic).Abort(c)
+		return
+	case llm.ReasoningProgressStateCompleted:
+		NewInternalError(errors.New("reasoning search completed without stored response snapshot")).Abort(c)
+		return
+	default:
+		NewHttpError(http.StatusConflict, errReasoningSearchResultsNotReady, gin.ErrorTypePublic).Abort(c)
+		return
+	}
+}
+
+// Async flow result endpoint: fetch the stored response snapshot for a
+// background reasoning run by workflow session_id.
+func ReasoningSearchResultHandler(c *gin.Context) {
+	sessionID := strings.TrimSpace(c.Query("session_id"))
+	if sessionID == "" {
+		NewBadRequestError(errors.New("session_id is required")).Abort(c)
+		return
+	}
+
+	runtime, _ := c.MustGet("LLM_RUNTIME").(*llm.Runtime)
+	if runtime == nil || runtime.Progress == nil || runtime.Workflow == nil {
+		NewInternalError(errors.New("reasoning workflow is not initialized")).Abort(c)
+		return
+	}
+
+	workflowSession, err := runtime.Workflow.Get(sessionID)
+	if err != nil {
+		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
+	}
+	if len(workflowSession.ResponseSnapshotJSON) != 0 {
+		c.Data(http.StatusOK, "application/json; charset=utf-8", workflowSession.ResponseSnapshotJSON)
+		return
+	}
+
+	status, err := runtime.Progress.Get(sessionID)
+	if err != nil {
+		if errors.Is(err, llm.ErrReasoningProgressNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
+	}
+	switch status.State {
+	case llm.ReasoningProgressStateFailed:
+		NewHttpError(http.StatusUnprocessableEntity, errReasoningSearchFailed, gin.ErrorTypePublic).Abort(c)
+		return
+	case llm.ReasoningProgressStateCompleted:
+		NewInternalError(errors.New("reasoning search completed without stored response snapshot")).Abort(c)
+		return
+	default:
+		NewHttpError(http.StatusConflict, errReasoningSearchResultsNotReady, gin.ErrorTypePublic).Abort(c)
+		return
+	}
+}
+
+func normalizeReasoningSearchRequest(r *ReasoningSearchRequest) error {
 	r.Query = strings.TrimSpace(r.Query)
 	if r.Query == "" {
-		NewBadRequestError(errors.New("q is required")).Abort(c)
-		return
+		return errors.New("q is required")
 	}
 	r.Query = rewriteReasoningSearchQuery(r.Query)
 	r.UILanguage = strings.ToLower(strings.TrimSpace(r.UILanguage))
 	if r.SessionID != nil {
 		trimmedSessionID := strings.TrimSpace(*r.SessionID)
 		if trimmedSessionID == "" {
-			NewBadRequestError(errors.New("session_id cannot be empty")).Abort(c)
-			return
+			return errors.New("session_id cannot be empty")
 		}
 		r.SessionID = &trimmedSessionID
 	}
+	return nil
+}
 
-	runtime, _ := c.MustGet("LLM_RUNTIME").(*llm.Runtime)
-	if runtime == nil || runtime.Tools == nil || runtime.Progress == nil || runtime.Workflow == nil {
-		NewInternalError(errors.New("reasoning workflow is not initialized")).Abort(c)
-		return
+// Both flows share the same preparation rules so follow-up limits, progress
+// reset, and previous response snapshot cleanup stay consistent.
+func prepareReasoningSearchSession(runtime *llm.Runtime, r *ReasoningSearchRequest) (string, error) {
+	if runtime == nil || runtime.Progress == nil || runtime.Workflow == nil {
+		return "", errors.New("reasoning workflow is not initialized")
 	}
+
+	workflowStore := runtime.Workflow
+	progressStore := runtime.Progress
+
+	if r.SessionID != nil {
+		sessionID := *r.SessionID
+		workflowSession, err := workflowStore.Get(sessionID)
+		if err != nil {
+			return "", err
+		}
+		reasoningStage, ok := workflowSession.Stages[llm.ReasoningWorkflowStageReasoning]
+		if !ok || strings.TrimSpace(reasoningStage.ProviderSessionID) == "" {
+			return "", llm.ErrReasoningSessionNotFoundOrExpired
+		}
+		if status, err := progressStore.Get(sessionID); err == nil {
+			if !status.Done {
+				return "", errReasoningSearchAlreadyRunning
+			}
+		} else if !errors.Is(err, llm.ErrReasoningProgressNotFoundOrExpired) {
+			return "", err
+		}
+		if workflowSession.InitialRequestCompleted {
+			if workflowSession.FollowupCount >= reasoningStage.MaxFollowups {
+				return "", &llm.MaxReasoningFollowupsError{MaxFollowups: reasoningStage.MaxFollowups}
+			}
+			if err := workflowStore.SetFollowupState(sessionID, true, workflowSession.FollowupCount+1); err != nil {
+				return "", err
+			}
+		}
+		if err := workflowStore.SetResponseSnapshot(sessionID, nil); err != nil {
+			return "", err
+		}
+		progressStore.Reserve(sessionID)
+		progressStore.SetIterationOffset(sessionID, 0)
+		return sessionID, nil
+	}
+
+	reasoningConfig, err := llm.ReasoningSearchConfigFromConfig()
+	if err != nil {
+		return "", err
+	}
+	service := runtime.Services[reasoningConfig.Provider]
+	if service == nil {
+		return "", errors.New("reasoning llm service is not initialized")
+	}
+
+	providerSessionID, err := service.ReserveReasoningSession(reasoningConfig.Model, &reasoningConfig.Effort)
+	if err != nil {
+		return "", err
+	}
+
+	sessionID, err := workflowStore.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:           reasoningConfig.Provider,
+		Model:              reasoningConfig.Model,
+		ReasoningEffort:    reasoningConfig.Effort,
+		MaxTokens:          reasoningConfig.MaxTokens,
+		MaxIterations:      reasoningConfig.MaxIterations,
+		RerunMaxIterations: reasoningConfig.RerunMaxIterations,
+		MaxFollowups:       reasoningConfig.MaxFollowups,
+		ProviderSessionID:  providerSessionID,
+	})
+	if err != nil {
+		return "", err
+	}
+	if reasoningConfig.Verification != nil {
+		if err := workflowStore.SetStage(sessionID, llm.ReasoningWorkflowStageVerification, llm.ReasoningWorkflowStageSession{
+			Provider:                      reasoningConfig.Verification.Provider,
+			Model:                         reasoningConfig.Verification.Model,
+			ReasoningEffort:               reasoningConfig.Verification.Effort,
+			MaxTokens:                     reasoningConfig.Verification.MaxTokens,
+			MaxInputTokensForVerification: reasoningConfig.Verification.MaxInputTokens,
+		}); err != nil {
+			return "", err
+		}
+	}
+	if reasoningConfig.Planning != nil {
+		if err := workflowStore.SetStage(sessionID, llm.ReasoningWorkflowStagePlanning, llm.ReasoningWorkflowStageSession{
+			Provider:        reasoningConfig.Planning.Provider,
+			Model:           reasoningConfig.Planning.Model,
+			ReasoningEffort: reasoningConfig.Planning.Effort,
+			MaxTokens:       reasoningConfig.Planning.MaxTokens,
+		}); err != nil {
+			return "", err
+		}
+	}
+	if err := workflowStore.SetResponseSnapshot(sessionID, nil); err != nil {
+		return "", err
+	}
+	progressStore.Reserve(sessionID)
+	progressStore.SetIterationOffset(sessionID, 0)
+	return sessionID, nil
+}
+
+func executeReasoningSearchInBackground(runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Errorf("Reasoning Search background panic session=%s: %v", responseSessionID, recovered)
+			if runtime != nil && runtime.Workflow != nil {
+				if err := runtime.Workflow.SetResponseSnapshot(responseSessionID, nil); err != nil && !errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+					log.Warnf("Reasoning Search failed clearing response snapshot after panic: %v", err)
+				}
+			}
+			if runtime != nil && runtime.Progress != nil {
+				runtime.Progress.Fail(responseSessionID, 0)
+			}
+		}
+	}()
+	if err := executeReasoningSearchForSession(runtime, db, r, responseSessionID); err != nil {
+		log.Warnf("Reasoning Search background execution failed session=%s: %v", responseSessionID, err)
+	}
+}
+
+// Runs the full reasoning workflow and stores the final per-session response
+// snapshot. The shared query cache may seed an initial result, but the final
+// API payload is always stored per workflow session.
+func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) (err error) {
+	if runtime == nil || runtime.Tools == nil || runtime.Progress == nil || runtime.Workflow == nil {
+		return errors.New("reasoning workflow is not initialized")
+	}
+	if db == nil {
+		return errors.New("MDB_DB is not initialized")
+	}
+
 	manager := runtime.Tools
 	if manager == nil {
-		NewInternalError(errors.New("LLM_TOOLS is not initialized")).Abort(c)
-		return
+		return errors.New("LLM_TOOLS is not initialized")
 	}
 
-	db := c.MustGet("MDB_DB").(*sql.DB)
 	workflowStore := runtime.Workflow
 	progressStore := runtime.Progress
 	response := llm.ReasoningSearchResponse{}
-	responseSessionID := ""
-	var reasoningStage llm.ReasoningWorkflowStageSession
+	reasoningIterations := 0
+	defer func() {
+		if err == nil {
+			return
+		}
+		if workflowStore != nil {
+			if clearErr := workflowStore.SetResponseSnapshot(responseSessionID, nil); clearErr != nil && !errors.Is(clearErr, llm.ErrReasoningSessionNotFoundOrExpired) {
+				log.Warnf("Reasoning Search failed clearing response snapshot: %v", clearErr)
+			}
+		}
+		if progressStore != nil {
+			progressStore.Fail(responseSessionID, reasoningIterations)
+		}
+	}()
+
+	workflowSession, err := workflowStore.Get(responseSessionID)
+	if err != nil {
+		return err
+	}
+	reasoningStage, ok := workflowSession.Stages[llm.ReasoningWorkflowStageReasoning]
+	if !ok || strings.TrimSpace(reasoningStage.ProviderSessionID) == "" {
+		return llm.ErrReasoningSessionNotFoundOrExpired
+	}
 	var planningStage *llm.ReasoningWorkflowStageSession
+	if stage, ok := workflowSession.Stages[llm.ReasoningWorkflowStagePlanning]; ok {
+		stageCopy := stage
+		planningStage = &stageCopy
+	}
 	var verificationStage *llm.ReasoningWorkflowStageSession
-	var providerSessionID *string
-	var progressSessionID *string
-	followupsUsed := 0
-	followupsRemaining := 0
-	initialRequestCompleted := false
-	var cachedInitialResponse *llm.ReasoningSearchCacheEntry
+	if stage, ok := workflowSession.Stages[llm.ReasoningWorkflowStageVerification]; ok {
+		stageCopy := stage
+		verificationStage = &stageCopy
+	}
+	initialRequestCompleted := workflowSession.InitialRequestCompleted
+	cachedInitialResponse := workflowSession.CachedInitialResponse
+	providerID := strings.TrimSpace(reasoningStage.ProviderSessionID)
+	providerSessionID := &providerID
+	progressSessionID := responseSessionID
+	followupsUsed := workflowSession.FollowupCount
+	followupsRemaining := reasoningStage.MaxFollowups - followupsUsed
+	if followupsRemaining < 0 {
+		followupsRemaining = 0
+	}
+
 	cacheKey := ""
 	cacheEligible := false
-
 	if runtime.ReasoningCache != nil && !r.Deb {
 		cacheKey, cacheEligible = llm.ReasoningSearchCacheKeyForQuery(r.Query)
 	}
-
-	if r.SessionID != nil {
-		workflowSession, err := workflowStore.Get(*r.SessionID)
-		if err != nil {
-			if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
-				NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
-				return
-			}
-			NewInternalError(err).Abort(c)
-			return
-		}
-		stage, ok := workflowSession.Stages[llm.ReasoningWorkflowStageReasoning]
-		if !ok || strings.TrimSpace(stage.ProviderSessionID) == "" {
-			NewHttpError(http.StatusNotFound, llm.ErrReasoningSessionNotFoundOrExpired, gin.ErrorTypePublic).Abort(c)
-			return
-		}
-		reasoningStage = stage
-		if stage, ok := workflowSession.Stages[llm.ReasoningWorkflowStagePlanning]; ok {
-			stageCopy := stage
-			planningStage = &stageCopy
-		}
-		if stage, ok := workflowSession.Stages[llm.ReasoningWorkflowStageVerification]; ok {
-			stageCopy := stage
-			verificationStage = &stageCopy
-		}
-		initialRequestCompleted = workflowSession.InitialRequestCompleted
-		cachedInitialResponse = workflowSession.CachedInitialResponse
-		responseSessionID = workflowSession.ID
-		providerID := strings.TrimSpace(stage.ProviderSessionID)
-		providerSessionID = &providerID
-		progressID := workflowSession.ID
-		progressSessionID = &progressID
-	} else {
-		reasoningConfig, err := llm.ReasoningSearchConfigFromConfig()
-		if err != nil {
-			NewInternalError(err).Abort(c)
-			return
-		}
-		service := runtime.Services[reasoningConfig.Provider]
-		if service == nil {
-			NewInternalError(errors.New("reasoning llm service is not initialized")).Abort(c)
-			return
-		}
-		reservedProviderSessionID, err := service.ReserveReasoningSession(reasoningConfig.Model, &reasoningConfig.Effort)
-		if err != nil {
-			NewInternalError(err).Abort(c)
-			return
-		}
-		reasoningStage = llm.ReasoningWorkflowStageSession{
-			Provider:           reasoningConfig.Provider,
-			Model:              reasoningConfig.Model,
-			ReasoningEffort:    reasoningConfig.Effort,
-			MaxTokens:          reasoningConfig.MaxTokens,
-			MaxIterations:      reasoningConfig.MaxIterations,
-			RerunMaxIterations: reasoningConfig.RerunMaxIterations,
-			MaxFollowups:       reasoningConfig.MaxFollowups,
-			ProviderSessionID:  reservedProviderSessionID,
-		}
-		responseSessionID, err = workflowStore.Create(llm.ReasoningWorkflowStageReasoning, reasoningStage)
-		if err != nil {
-			NewInternalError(err).Abort(c)
-			return
-		}
-		if reasoningConfig.Verification != nil {
-			stage := llm.ReasoningWorkflowStageSession{
-				Provider:                      reasoningConfig.Verification.Provider,
-				Model:                         reasoningConfig.Verification.Model,
-				ReasoningEffort:               reasoningConfig.Verification.Effort,
-				MaxTokens:                     reasoningConfig.Verification.MaxTokens,
-				MaxInputTokensForVerification: reasoningConfig.Verification.MaxInputTokens,
-			}
-			if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStageVerification, stage); err != nil {
-				NewInternalError(err).Abort(c)
-				return
-			}
-			verificationStage = &stage
-		}
-		if reasoningConfig.Planning != nil {
-			stage := llm.ReasoningWorkflowStageSession{
-				Provider:        reasoningConfig.Planning.Provider,
-				Model:           reasoningConfig.Planning.Model,
-				ReasoningEffort: reasoningConfig.Planning.Effort,
-				MaxTokens:       reasoningConfig.Planning.MaxTokens,
-			}
-			if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStagePlanning, stage); err != nil {
-				NewInternalError(err).Abort(c)
-				return
-			}
-			planningStage = &stage
-		}
-		progressStore.Reserve(responseSessionID)
-		providerID := reservedProviderSessionID
-		providerSessionID = &providerID
-		progressID := responseSessionID
-		progressSessionID = &progressID
-
-	}
-
 	if cacheEligible && !initialRequestCompleted {
 		if cachedEntry, ok := runtime.ReasoningCache.Get(cacheKey); ok {
 			cachedEntry.Query = r.Query
 			if err := workflowStore.SetCachedInitialResponse(responseSessionID, cachedEntry); err != nil {
-				NewInternalError(err).Abort(c)
-				return
+				return err
 			}
 			if err := workflowStore.SetFollowupState(responseSessionID, true, 0); err != nil {
-				NewInternalError(err).Abort(c)
-				return
+				return err
 			}
 
 			response.Query = r.Query
@@ -288,56 +461,21 @@ func ReasoningSearchHandler(c *gin.Context) {
 			response.Results = append([]llm.ReasoningSearchResult(nil), cachedEntry.Results...)
 			response.SetSessionID(responseSessionID)
 			if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
-				progressStore.Fail(responseSessionID, response.ReasoningIterations)
-				NewInternalError(err).Abort(c)
-				return
+				return err
 			}
 			response.SetFollowupBudget(reasoningStage.MaxFollowups, 0, reasoningStage.MaxFollowups)
+			if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
+				return err
+			}
 			progressStore.Complete(responseSessionID, 0)
 			log.Infof("Reasoning Search Cache Hit: [%s]", cacheKey)
-			c.JSON(http.StatusOK, response)
-			return
+			return nil
 		}
-	}
-
-	if r.SessionID != nil {
-		if initialRequestCompleted {
-			if workflowSession, err := workflowStore.Get(responseSessionID); err != nil {
-				if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
-					NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
-					return
-				}
-				NewInternalError(err).Abort(c)
-				return
-			} else {
-				if workflowSession.FollowupCount >= reasoningStage.MaxFollowups {
-					NewHttpError(http.StatusUnprocessableEntity, &llm.MaxReasoningFollowupsError{MaxFollowups: reasoningStage.MaxFollowups}, gin.ErrorTypePublic).Abort(c)
-					return
-				}
-				followupsUsed = workflowSession.FollowupCount + 1
-				followupsRemaining = reasoningStage.MaxFollowups - followupsUsed
-				if err := workflowStore.SetFollowupState(responseSessionID, true, followupsUsed); err != nil {
-					if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
-						NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
-						return
-					}
-					NewInternalError(err).Abort(c)
-					return
-				}
-			}
-		} else {
-			followupsUsed = 0
-			followupsRemaining = reasoningStage.MaxFollowups
-		}
-	} else {
-		followupsUsed = 0
-		followupsRemaining = reasoningStage.MaxFollowups
 	}
 
 	service := runtime.Services[reasoningStage.Provider]
 	if service == nil {
-		NewInternalError(errors.New("reasoning llm service is not initialized")).Abort(c)
-		return
+		return errors.New("reasoning llm service is not initialized")
 	}
 
 	outputLanguageName := reasoningSearchOutputLanguageName(r.UILanguage, r.Query)
@@ -410,8 +548,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 	systemMessage = llm.AppendReasoningSearchOutputLanguage(systemMessage, outputLanguageName)
 	responseSchema, err := llm.GenerateReasoningSearchResponseJSONSchemaForLanguage(outputLanguageName)
 	if err != nil {
-		NewInternalError(err).Abort(c)
-		return
+		return err
 	}
 	messages := []llm.LLMBotMessage{
 		{
@@ -447,7 +584,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 
 	resolvedProviderSessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
 		providerSessionID,
-		progressSessionID,
+		&progressSessionID,
 		responseSchema,
 		reasoningStage.Model,
 		&reasoningStage.MaxTokens,
@@ -463,36 +600,21 @@ func ReasoningSearchHandler(c *gin.Context) {
 		&response,
 	)
 	if err != nil {
-		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
-			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
-			return
-		}
-		var maxIterationsErr *llm.MaxReasoningIterationsError
-		if errors.As(err, &maxIterationsErr) {
-			NewHttpError(http.StatusUnprocessableEntity, err, gin.ErrorTypePublic).Abort(c)
-			return
-		}
-		NewInternalError(err).Abort(c)
-		return
+		return err
 	}
+	reasoningIterations = response.ReasoningIterations
 	reasoningStage.ProviderSessionID = resolvedProviderSessionID
 	if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStageReasoning, reasoningStage); err != nil {
-		progressStore.Fail(responseSessionID, response.ReasoningIterations)
-		NewInternalError(err).Abort(c)
-		return
+		return err
 	}
 	if usedCachedInitialResponse {
 		if err := workflowStore.SetCachedInitialResponse(responseSessionID, nil); err != nil {
-			progressStore.Fail(responseSessionID, response.ReasoningIterations)
-			NewInternalError(err).Abort(c)
-			return
+			return err
 		}
 	}
 	response.SetSessionID(responseSessionID)
 	if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
-		progressStore.Fail(responseSessionID, response.ReasoningIterations)
-		NewInternalError(err).Abort(c)
-		return
+		return err
 	}
 	for i := range response.Results {
 		response.Results[i].Origin = llm.ReasoningSearchResultOriginOriginal
@@ -557,9 +679,6 @@ func ReasoningSearchHandler(c *gin.Context) {
 				if err != nil {
 					log.Warnf("Reasoning Search verification failed: %v", err)
 				} else {
-					// Keep a clean fallback in case verification asks for a rerun and
-					// that repair pass fails. In that case we want to return the
-					// original first-pass results, not a partially annotated response.
 					originalResponse := response
 					if response.UsedTools != nil {
 						originalResponse.UsedTools = append([]string(nil), response.UsedTools...)
@@ -621,7 +740,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 							progressStore.SetIterationOffset(responseSessionID, rerunProgressOffset)
 							resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(
 								&nextProviderSessionID,
-								progressSessionID,
+								&progressSessionID,
 								responseSchema,
 								reasoningStage.Model,
 								&reasoningStage.MaxTokens,
@@ -746,22 +865,22 @@ func ReasoningSearchHandler(c *gin.Context) {
 	}
 
 	if !initialRequestCompleted {
-		// We set the followup state when the initial request is completed,
-		// the initial request itself is not counted as a followup.
 		if err := workflowStore.SetFollowupState(responseSessionID, true, followupsUsed); err != nil {
-			progressStore.Fail(responseSessionID, response.ReasoningIterations)
-			NewInternalError(err).Abort(c)
-			return
+			return err
 		}
 	}
 
 	response.SetFollowupBudget(reasoningStage.MaxFollowups, followupsUsed, followupsRemaining)
+	reasoningIterations = response.ReasoningIterations
+	if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
+		return err
+	}
 	progressStore.Complete(responseSessionID, progressCompleteIteration)
 	if cacheEligible && !initialRequestCompleted && runtime.ReasoningCache != nil {
 		runtime.ReasoningCache.Set(cacheKey, llm.BuildReasoningSearchCacheEntryFromResponse(&response))
 	}
 
-	c.JSON(http.StatusOK, response)
+	return nil
 }
 
 func buildFirstIterationPlannedTools(manager *llm.ReasoningToolManager, plan *llm.ReasoningSearchPlanningResponse) ([]llm.ToolCall, map[string]llm.ToolHandler, error) {

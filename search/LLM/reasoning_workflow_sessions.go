@@ -36,9 +36,13 @@ type ReasoningWorkflowSession struct {
 	InitialRequestCompleted bool
 	FollowupCount           int
 	CachedInitialResponse   *ReasoningSearchCacheEntry
-	CreatedAt               time.Time
-	UpdatedAt               time.Time
-	ExpiresAt               time.Time
+	// ResponseSnapshotJSON stores the exact final API response for this workflow
+	// session so the fetch endpoint can return it after the background run ends.
+	// This is session-scoped state, not the shared query-based ReasoningCache.
+	ResponseSnapshotJSON []byte
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	ExpiresAt            time.Time
 }
 
 type ReasoningWorkflowSessionStore struct {
@@ -109,6 +113,7 @@ func (s *ReasoningWorkflowSessionStore) Get(sessionID string) (*ReasoningWorkflo
 		copySession.Stages[key] = value
 	}
 	copySession.CachedInitialResponse = cloneReasoningSearchCacheEntry(session.CachedInitialResponse)
+	copySession.ResponseSnapshotJSON = append([]byte(nil), session.ResponseSnapshotJSON...)
 	return &copySession, nil
 }
 
@@ -174,6 +179,36 @@ func (s *ReasoningWorkflowSessionStore) SetCachedInitialResponse(sessionID strin
 	}
 
 	session.CachedInitialResponse = cloneReasoningSearchCacheEntry(entry)
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func (s *ReasoningWorkflowSessionStore) SetResponseSnapshot(sessionID string, response *ReasoningSearchResponse) error {
+	var responseJSON []byte
+	if response != nil {
+		raw, err := marshalJSON(response)
+		if err != nil {
+			return err
+		}
+		responseJSON = []byte(raw)
+	}
+
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+
+	session.ResponseSnapshotJSON = append([]byte(nil), responseJSON...)
 	session.UpdatedAt = now
 	session.ExpiresAt = now.Add(s.ttl)
 	return nil
