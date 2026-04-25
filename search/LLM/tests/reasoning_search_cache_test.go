@@ -44,8 +44,8 @@ func TestReasoningSearchCacheKeyForQueryRejectsTemporalQueries(t *testing.T) {
 	}
 }
 
-func TestReasoningSearchCacheKeyForQueryRejectsLongQueries(t *testing.T) {
-	if key, ok := llm.ReasoningSearchCacheKeyForQuery("one two three four five"); ok {
+func TestReasoningSearchCacheKeyForQueryRejectsQueriesWithTooManyWords(t *testing.T) {
+	if key, ok := llm.ReasoningSearchCacheKeyForQuery("one two three four five six seven eight nine ten"); ok {
 		t.Fatalf("expected query to bypass cache, got key %q", key)
 	}
 }
