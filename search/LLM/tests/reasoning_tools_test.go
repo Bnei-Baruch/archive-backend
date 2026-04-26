@@ -453,39 +453,39 @@ var _ integration.AssetsService = (*fakeAssetsService)(nil)
 
 type fakeLLMService struct{}
 
-func (s *fakeLLMService) GetStructuredOutput(string, string, *int, []llm.LLMBotMessage, *string, *string, interface{}) error {
+func (s *fakeLLMService) GetStructuredOutput(context.Context, string, string, *int, []llm.LLMBotMessage, *string, *string, interface{}) error {
 	return nil
 }
 
-func (s *fakeLLMService) GetStructuredOutputWithDebugInfo(string, string, *int, []llm.LLMBotMessage, *string, *string, bool, interface{}) (*llm.ReasoningSearchDebugInfo, error) {
+func (s *fakeLLMService) GetStructuredOutputWithDebugInfo(context.Context, string, string, *int, []llm.LLMBotMessage, *string, *string, bool, interface{}) (*llm.ReasoningSearchDebugInfo, error) {
 	return nil, nil
 }
 
-func (s *fakeLLMService) GetChatResponse(string, *int, []llm.LLMBotMessage, *string, *float64, *string, *string) (*llm.LLMBotMessage, error) {
+func (s *fakeLLMService) GetChatResponse(context.Context, string, *int, []llm.LLMBotMessage, *string, *float64, *string, *string) (*llm.LLMBotMessage, error) {
 	return nil, nil
 }
 
-func (s *fakeLLMService) GetChatResponseWithDebugInfo(string, *int, []llm.LLMBotMessage, *string, *float64, *string, *string, bool) (*llm.LLMBotMessage, *llm.ReasoningSearchDebugInfo, error) {
+func (s *fakeLLMService) GetChatResponseWithDebugInfo(context.Context, string, *int, []llm.LLMBotMessage, *string, *float64, *string, *string, bool) (*llm.LLMBotMessage, *llm.ReasoningSearchDebugInfo, error) {
 	return nil, nil, nil
 }
 
-func (s *fakeLLMService) GetReasoningResponseWithTools(string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int) (*llm.LLMBotMessage, error) {
+func (s *fakeLLMService) GetReasoningResponseWithTools(context.Context, string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int) (*llm.LLMBotMessage, error) {
 	return nil, nil
 }
 
-func (s *fakeLLMService) GetReasoningStructuredOutputWithTools(string, string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int, interface{}) error {
+func (s *fakeLLMService) GetReasoningStructuredOutputWithTools(context.Context, string, string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int, interface{}) error {
 	return nil
 }
 
-func (s *fakeLLMService) GetReasoningStructuredOutputWithToolsForSession(*string, *string, string, string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int, interface{}) (string, error) {
+func (s *fakeLLMService) GetReasoningStructuredOutputWithToolsForSession(context.Context, *string, *string, string, string, *int, []llm.LLMBotMessage, []llm.ToolCall, map[string]llm.ToolHandler, []llm.ToolCall, map[string]llm.ToolHandler, *string, *string, bool, int, interface{}) (string, error) {
 	return "", nil
 }
 
-func (s *fakeLLMService) ReserveReasoningSession(string, *string) (string, error) {
+func (s *fakeLLMService) ReserveReasoningSession(context.Context, string, *string) (string, error) {
 	return "", nil
 }
 
-func (s *fakeLLMService) GetEmbeddings(string) ([]float64, error) {
+func (s *fakeLLMService) GetEmbeddings(context.Context, string) ([]float64, error) {
 	return nil, nil
 }
 

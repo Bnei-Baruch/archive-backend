@@ -20,16 +20,22 @@ import (
 )
 
 type ReasoningSearchRequest struct {
-	SessionID  *string `json:"session_id" form:"session_id"`
-	Query      string  `json:"q" form:"q"`
-	Deb        bool    `json:"deb" form:"deb" binding:"omitempty"`
-	UILanguage string  `json:"ui_language" form:"ui_language" binding:"omitempty,len=2"`
+	SessionID       *string `json:"session_id" form:"session_id"`
+	CancelSessionID *string `json:"cancel_session_id" form:"cancel_session_id"`
+	Query           string  `json:"q" form:"q"`
+	Deb             bool    `json:"deb" form:"deb" binding:"omitempty"`
+	UILanguage      string  `json:"ui_language" form:"ui_language" binding:"omitempty,len=2"`
+}
+
+type ReasoningSearchCancelRequest struct {
+	SessionID string `json:"session_id" form:"session_id"`
 }
 
 var (
 	errReasoningSearchAlreadyRunning  = errors.New("reasoning search is already running for this session")
 	errReasoningSearchResultsNotReady = errors.New("reasoning search results are not ready yet")
 	errReasoningSearchFailed          = errors.New("reasoning search failed")
+	errReasoningSearchCanceled        = errors.New("reasoning search was canceled")
 )
 
 // Async flow entrypoint: start work in background and return a workflow
@@ -46,13 +52,17 @@ func ReasoningSearchStartHandler(c *gin.Context) {
 	}
 
 	runtime, _ := c.MustGet("LLM_RUNTIME").(*llm.Runtime)
-	if runtime == nil || runtime.Tools == nil || runtime.Progress == nil || runtime.Workflow == nil {
+	if runtime == nil || runtime.Tools == nil || runtime.Progress == nil || runtime.Workflow == nil || runtime.Cancellations == nil {
 		NewInternalError(errors.New("reasoning workflow is not initialized")).Abort(c)
 		return
 	}
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
-	sessionID, err := prepareReasoningSearchSession(runtime, &r)
+	if r.CancelSessionID != nil {
+		cancelReasoningSearchSession(runtime, *r.CancelSessionID)
+	}
+
+	sessionID, err := prepareReasoningSearchSession(c.Request.Context(), runtime, &r)
 	if err != nil {
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
@@ -72,9 +82,40 @@ func ReasoningSearchStartHandler(c *gin.Context) {
 	}
 
 	requestCopy := r
-	go executeReasoningSearchInBackground(runtime, db, requestCopy, sessionID)
+	// Async work is intentionally detached from the request context; that context
+	// is canceled when this handler returns after sending 202 Accepted.
+	bgCtx, cancel := context.WithCancel(context.Background())
+	runtime.Cancellations.Set(sessionID, cancel)
+	go executeReasoningSearchInBackground(bgCtx, runtime, db, requestCopy, sessionID)
 
 	c.JSON(http.StatusAccepted, gin.H{"session_id": sessionID})
+}
+
+func ReasoningSearchCancelHandler(c *gin.Context) {
+	sessionID := strings.TrimSpace(c.Query("session_id"))
+	if sessionID == "" {
+		r := ReasoningSearchCancelRequest{}
+		if c.Bind(&r) != nil {
+			return
+		}
+		sessionID = strings.TrimSpace(r.SessionID)
+	}
+	if sessionID == "" {
+		NewBadRequestError(errors.New("session_id is required")).Abort(c)
+		return
+	}
+
+	runtime, _ := c.MustGet("LLM_RUNTIME").(*llm.Runtime)
+	if runtime == nil || runtime.Progress == nil || runtime.Cancellations == nil {
+		NewInternalError(errors.New("reasoning workflow is not initialized")).Abort(c)
+		return
+	}
+
+	canceled := cancelReasoningSearchSession(runtime, sessionID)
+	c.JSON(http.StatusOK, gin.H{
+		"session_id": sessionID,
+		"canceled":   canceled,
+	})
 }
 
 func ReasoningSearchStatusHandler(c *gin.Context) {
@@ -122,7 +163,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 		return
 	}
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	sessionID, err := prepareReasoningSearchSession(runtime, &r)
+	sessionID, err := prepareReasoningSearchSession(c.Request.Context(), runtime, &r)
 	if err != nil {
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
@@ -140,9 +181,13 @@ func ReasoningSearchHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	if err := executeReasoningSearchForSession(runtime, db, r, sessionID); err != nil {
+	if err := executeReasoningSearchForSession(c.Request.Context(), runtime, db, r, sessionID); err != nil {
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		if isReasoningSearchCancellation(err) {
+			NewHttpError(499, err, gin.ErrorTypePublic).Abort(c)
 			return
 		}
 		var maxIterationsErr *llm.MaxReasoningIterationsError
@@ -178,6 +223,9 @@ func ReasoningSearchHandler(c *gin.Context) {
 		return
 	}
 	switch status.State {
+	case llm.ReasoningProgressStateCanceled:
+		NewHttpError(http.StatusUnprocessableEntity, errReasoningSearchCanceled, gin.ErrorTypePublic).Abort(c)
+		return
 	case llm.ReasoningProgressStateFailed:
 		NewHttpError(http.StatusUnprocessableEntity, errReasoningSearchFailed, gin.ErrorTypePublic).Abort(c)
 		return
@@ -229,6 +277,9 @@ func ReasoningSearchResultHandler(c *gin.Context) {
 		return
 	}
 	switch status.State {
+	case llm.ReasoningProgressStateCanceled:
+		NewHttpError(http.StatusUnprocessableEntity, errReasoningSearchCanceled, gin.ErrorTypePublic).Abort(c)
+		return
 	case llm.ReasoningProgressStateFailed:
 		NewHttpError(http.StatusUnprocessableEntity, errReasoningSearchFailed, gin.ErrorTypePublic).Abort(c)
 		return
@@ -255,12 +306,26 @@ func normalizeReasoningSearchRequest(r *ReasoningSearchRequest) error {
 		}
 		r.SessionID = &trimmedSessionID
 	}
+	if r.CancelSessionID != nil {
+		trimmedSessionID := strings.TrimSpace(*r.CancelSessionID)
+		if trimmedSessionID == "" {
+			r.CancelSessionID = nil
+		} else {
+			r.CancelSessionID = &trimmedSessionID
+		}
+	}
 	return nil
 }
 
 // Both flows share the same preparation rules so follow-up limits, progress
 // reset, and previous response snapshot cleanup stay consistent.
-func prepareReasoningSearchSession(runtime *llm.Runtime, r *ReasoningSearchRequest) (string, error) {
+func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r *ReasoningSearchRequest) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if runtime == nil || runtime.Progress == nil || runtime.Workflow == nil {
 		return "", errors.New("reasoning workflow is not initialized")
 	}
@@ -310,7 +375,7 @@ func prepareReasoningSearchSession(runtime *llm.Runtime, r *ReasoningSearchReque
 		return "", errors.New("reasoning llm service is not initialized")
 	}
 
-	providerSessionID, err := service.ReserveReasoningSession(reasoningConfig.Model, &reasoningConfig.Effort)
+	providerSessionID, err := service.ReserveReasoningSession(ctx, reasoningConfig.Model, &reasoningConfig.Effort)
 	if err != nil {
 		return "", err
 	}
@@ -357,8 +422,11 @@ func prepareReasoningSearchSession(runtime *llm.Runtime, r *ReasoningSearchReque
 	return sessionID, nil
 }
 
-func executeReasoningSearchInBackground(runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) {
+func executeReasoningSearchInBackground(ctx context.Context, runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) {
 	defer func() {
+		if runtime != nil && runtime.Cancellations != nil {
+			runtime.Cancellations.Delete(responseSessionID)
+		}
 		if recovered := recover(); recovered != nil {
 			log.Errorf("Reasoning Search background panic session=%s: %v", responseSessionID, recovered)
 			if runtime != nil && runtime.Workflow != nil {
@@ -371,7 +439,11 @@ func executeReasoningSearchInBackground(runtime *llm.Runtime, db *sql.DB, r Reas
 			}
 		}
 	}()
-	if err := executeReasoningSearchForSession(runtime, db, r, responseSessionID); err != nil {
+	if err := executeReasoningSearchForSession(ctx, runtime, db, r, responseSessionID); err != nil {
+		if isReasoningSearchCancellation(err) {
+			log.Infof("Reasoning Search background canceled session=%s", responseSessionID)
+			return
+		}
 		log.Warnf("Reasoning Search background execution failed session=%s: %v", responseSessionID, err)
 	}
 }
@@ -379,7 +451,13 @@ func executeReasoningSearchInBackground(runtime *llm.Runtime, db *sql.DB, r Reas
 // Runs the full reasoning workflow and stores the final per-session response
 // snapshot. The shared query cache may seed an initial result, but the final
 // API payload is always stored per workflow session.
-func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) (err error) {
+func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) (err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if runtime == nil || runtime.Tools == nil || runtime.Progress == nil || runtime.Workflow == nil {
 		return errors.New("reasoning workflow is not initialized")
 	}
@@ -406,6 +484,10 @@ func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r Reason
 			}
 		}
 		if progressStore != nil {
+			if isReasoningSearchCancellation(err) {
+				progressStore.Cancel(responseSessionID, reasoningIterations)
+				return
+			}
 			progressStore.Fail(responseSessionID, reasoningIterations)
 		}
 	}()
@@ -485,6 +567,9 @@ func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r Reason
 	var firstIterationToolHandlers map[string]llm.ToolHandler
 	progressIterationOffset := 0
 	if planningStage != nil && !initialRequestCompleted {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		planningService := runtime.Services[planningStage.Provider]
 		if planningService == nil {
 			log.Warnf("Reasoning Search planning skipped: service for provider %q is not initialized", planningStage.Provider)
@@ -507,7 +592,7 @@ func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r Reason
 				},
 			}
 			planningResponse := llm.ReasoningSearchPlanningResponse{}
-			debugInfo, err := planningService.GetStructuredOutputWithDebugInfo(
+			debugInfo, err := planningService.GetStructuredOutputWithDebugInfo(ctx,
 				llm.GenerateReasoningSearchPlanningResponseJSONSchema(manager.Tools()),
 				planningStage.Model,
 				&planningStage.MaxTokens,
@@ -518,6 +603,9 @@ func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r Reason
 				&planningResponse,
 			)
 			if err != nil {
+				if isReasoningSearchCancellation(err) {
+					return err
+				}
 				log.Warnf("Reasoning Search planning failed: %v", err)
 			} else {
 				planningDebug = debugInfo
@@ -581,8 +669,11 @@ func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r Reason
 	)
 
 	log.Infof("Reasoning Search Query: [%s]", r.Query)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
-	resolvedProviderSessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
+	resolvedProviderSessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(ctx,
 		providerSessionID,
 		&progressSessionID,
 		responseSchema,
@@ -628,6 +719,9 @@ func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r Reason
 	}
 	progressCompleteIteration := progressIterationOffset + response.ReasoningIterations
 	if verificationStage != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if verificationStage.MaxInputTokensForVerification > 0 && response.UsedTokens >= verificationStage.MaxInputTokensForVerification {
 			log.Infof("Reasoning Search verification skipped: total tokens %d reached threshold %d", response.UsedTokens, verificationStage.MaxInputTokensForVerification)
 		} else if verificationService := runtime.Services[verificationStage.Provider]; verificationService == nil {
@@ -666,7 +760,7 @@ func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r Reason
 					},
 				}
 				verificationResponse := llm.ReasoningSearchVerificationResponse{}
-				verificationDebug, err := verificationService.GetStructuredOutputWithDebugInfo(
+				verificationDebug, err := verificationService.GetStructuredOutputWithDebugInfo(ctx,
 					llm.GenerateReasoningSearchVerificationResponseJSONSchema(),
 					verificationStage.Model,
 					&verificationStage.MaxTokens,
@@ -677,6 +771,9 @@ func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r Reason
 					&verificationResponse,
 				)
 				if err != nil {
+					if isReasoningSearchCancellation(err) {
+						return err
+					}
 					log.Warnf("Reasoning Search verification failed: %v", err)
 				} else {
 					originalResponse := response
@@ -738,7 +835,7 @@ func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r Reason
 							rerunResponse := llm.ReasoningSearchResponse{}
 							rerunProgressOffset := progressCompleteIteration
 							progressStore.SetIterationOffset(responseSessionID, rerunProgressOffset)
-							resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(
+							resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(ctx,
 								&nextProviderSessionID,
 								&progressSessionID,
 								responseSchema,
@@ -757,6 +854,9 @@ func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r Reason
 							)
 							progressStore.SetIterationOffset(responseSessionID, 0)
 							if err != nil {
+								if isReasoningSearchCancellation(err) {
+									return err
+								}
 								log.Warnf("Reasoning Search rerun after verification failed: %v", err)
 								response = originalResponse
 							} else {
@@ -881,6 +981,30 @@ func executeReasoningSearchForSession(runtime *llm.Runtime, db *sql.DB, r Reason
 	}
 
 	return nil
+}
+
+func isReasoningSearchCancellation(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+func cancelReasoningSearchSession(runtime *llm.Runtime, sessionID string) bool {
+	sessionID = strings.TrimSpace(sessionID)
+	if runtime == nil || runtime.Cancellations == nil || sessionID == "" {
+		return false
+	}
+	canceled := runtime.Cancellations.Cancel(sessionID)
+	if !canceled {
+		return false
+	}
+	if runtime.Workflow != nil {
+		if err := runtime.Workflow.SetResponseSnapshot(sessionID, nil); err != nil && !errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			log.Warnf("Reasoning Search failed clearing response snapshot after cancel: %v", err)
+		}
+	}
+	if runtime.Progress != nil {
+		runtime.Progress.Cancel(sessionID, 0)
+	}
+	return true
 }
 
 func buildFirstIterationPlannedTools(manager *llm.ReasoningToolManager, plan *llm.ReasoningSearchPlanningResponse) ([]llm.ToolCall, map[string]llm.ToolHandler, error) {

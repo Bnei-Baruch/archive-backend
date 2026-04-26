@@ -116,8 +116,8 @@ func NewZAIServiceWithOptions(token string, pricing []ModelPricing, sessions *Ch
 	}
 }
 
-func (s *ZAIService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, output interface{}) error {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, false)
+func (s *ZAIService) GetStructuredOutput(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, output interface{}) error {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, &jsonSchema, reasoningEffort, false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("ZAI GetStructuredOutput total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -134,8 +134,8 @@ func (s *ZAIService) GetStructuredOutput(jsonSchema string, model string, maxTok
 	return nil
 }
 
-func (s *ZAIService) GetStructuredOutputWithDebugInfo(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, debug)
+func (s *ZAIService) GetStructuredOutputWithDebugInfo(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, &jsonSchema, reasoningEffort, debug)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("ZAI GetStructuredOutputWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -152,8 +152,8 @@ func (s *ZAIService) GetStructuredOutputWithDebugInfo(jsonSchema string, model s
 	return s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals), nil
 }
 
-func (s *ZAIService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, jsonSchema, reasoningEffort, false)
+func (s *ZAIService) GetChatResponse(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, jsonSchema, reasoningEffort, false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("ZAI GetChatResponse total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -163,8 +163,8 @@ func (s *ZAIService) GetChatResponse(model string, maxTokens *int, messages []LL
 	return msg, nil
 }
 
-func (s *ZAIService) GetChatResponseWithDebugInfo(model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, jsonSchema, reasoningEffort, debug)
+func (s *ZAIService) GetChatResponseWithDebugInfo(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, jsonSchema, reasoningEffort, debug)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("ZAI GetChatResponseWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -175,6 +175,7 @@ func (s *ZAIService) GetChatResponseWithDebugInfo(model string, maxTokens *int, 
 }
 
 func (s *ZAIService) GetReasoningResponseWithTools(
+	ctx context.Context,
 	model string,
 	maxTokens *int,
 	messages []LLMBotMessage,
@@ -185,11 +186,12 @@ func (s *ZAIService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
+	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools(ctx, "GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	return msg, err
 }
 
 func (s *ZAIService) GetReasoningStructuredOutputWithTools(
+	ctx context.Context,
 	jsonSchema string,
 	model string,
 	maxTokens *int,
@@ -202,7 +204,7 @@ func (s *ZAIService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -242,6 +244,7 @@ func (s *ZAIService) GetReasoningStructuredOutputWithTools(
 }
 
 func (s *ZAIService) GetReasoningStructuredOutputWithToolsForSession(
+	ctx context.Context,
 	sessionID *string,
 	progressSessionID *string,
 	jsonSchema string,
@@ -297,6 +300,7 @@ func (s *ZAIService) GetReasoningStructuredOutputWithToolsForSession(
 	}
 
 	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
+		ctx,
 		"GetReasoningStructuredOutputWithToolsForSession",
 		&jsonSchema,
 		effectiveModel,
@@ -383,7 +387,10 @@ func (s *ZAIService) GetReasoningStructuredOutputWithToolsForSession(
 	return effectiveSessionID, nil
 }
 
-func (s *ZAIService) ReserveReasoningSession(model string, reasoningEffort *string) (string, error) {
+func (s *ZAIService) ReserveReasoningSession(ctx context.Context, model string, reasoningEffort *string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if s.sessions == nil {
 		return "", errors.New("reasoning sessions are not enabled")
 	}
@@ -395,7 +402,7 @@ func (s *ZAIService) ReserveReasoningSession(model string, reasoningEffort *stri
 	return s.sessions.CreateReserved(model, storedReasoningEffort)
 }
 
-func (s *ZAIService) GetEmbeddings(content string) ([]float64, error) {
+func (s *ZAIService) GetEmbeddings(ctx context.Context, content string) ([]float64, error) {
 	return nil, errors.New("zai embeddings are not implemented")
 }
 
@@ -406,7 +413,7 @@ func (s *ZAIService) Close() error {
 	return s.sessions.Close()
 }
 
-func (s *ZAIService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, jsonSchema *string, reasoningEffort *string, logRawBody bool) (*LLMBotMessage, LLMUsageTotals, error) {
+func (s *ZAIService) getChatResponseWithUsage(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, jsonSchema *string, reasoningEffort *string, logRawBody bool) (*LLMBotMessage, LLMUsageTotals, error) {
 	usageTotals := LLMUsageTotals{}
 	normalizedMessages, err := normalizeZAIMessages(messages)
 	if err != nil {
@@ -436,7 +443,7 @@ func (s *ZAIService) getChatResponseWithUsage(model string, maxTokens *int, mess
 	}
 
 	var chatResp ZAIChatResponse
-	if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, logRawBody); err != nil {
+	if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, logRawBody); err != nil {
 		return nil, usageTotals, err
 	}
 	usageTotals.Add(chatResp.Usage)
@@ -452,6 +459,7 @@ func (s *ZAIService) getChatResponseWithUsage(model string, maxTokens *int, mess
 }
 
 func (s *ZAIService) getReasoningResponseWithTools(
+	ctx context.Context,
 	methodName string,
 	jsonSchema *string,
 	model string,
@@ -466,6 +474,9 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	maxIterations int,
 	progressSessionID string,
 ) (*LLMBotMessage, string, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	usageTotals := LLMUsageTotals{}
 	iterations := 0
 	usedTools := []string{}
@@ -534,9 +545,12 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	}
 	responseFormat := zaiResponseFormat(jsonSchema)
 	toolChoice := "auto"
-	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(context.Background(), deb))
+	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
 
 	for i := 0; i < maxIterations; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+		}
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
 		}
@@ -567,7 +581,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 		}
 
 		var chatResp ZAIChatResponse
-		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
+		if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
 			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
@@ -603,6 +617,9 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 		toolCallLogs := []string{}
 		for _, toolCall := range message.ToolCalls {
+			if err := ctx.Err(); err != nil {
+				return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+			}
 			if toolCall.Function.Name == "" {
 				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("zai tool call is missing function name")
 			}

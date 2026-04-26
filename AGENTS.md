@@ -46,13 +46,16 @@ Instructions for coding agents working in this repository.
 - `common.Init()` builds the shared tool manager inside `common.LLM_RUNTIME`.
 
 ## Reasoning Search
-- API endpoints: `POST /search/reasoning`, `POST /search/reasoning/start`, `GET /search/reasoning/status`, `GET /search/reasoning/result`.
-- Request supports `q`, optional `deb`, optional `session_id`, optional `ui_language`.
+- API endpoints: `POST /search/reasoning`, `POST /search/reasoning/start`, `POST /search/reasoning/cancel`, `GET /search/reasoning/status`, `GET /search/reasoning/result`.
+- Request supports `q`, optional `deb`, optional `session_id`, optional `cancel_session_id`, optional `ui_language`.
 - The API `session_id` is a workflow session id owned by the backend, not a provider-native LLM session id.
 - `POST /search/reasoning` runs the full reasoning search synchronously and returns the final response directly.
 - `POST /search/reasoning/start` starts the reasoning run in background and returns the workflow `session_id`.
+- `POST /search/reasoning/start` may receive `cancel_session_id` to cancel a previous background run before starting the new one.
+- `POST /search/reasoning/cancel` cancels a running background search by workflow `session_id`.
 - `GET /search/reasoning/status` reports background progress for that workflow session.
 - `GET /search/reasoning/result` fetches the stored per-session response snapshot after the background run completes.
+- Background progress terminal states include `completed`, `failed`, and `canceled`.
 - Response includes `session_id`, `cache_hit`, `used_tools`, token stats, and debug/cost details when `deb=true`.
 - The backend persists a `reasoning` workflow stage and, when enabled, `planning` and `verification` workflow stages.
 - The backend uses two different storage mechanisms for reasoning search:

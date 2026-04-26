@@ -131,6 +131,7 @@ func TestOllamaReasoningWithToolsUsesChatAPI(t *testing.T) {
 	}
 
 	err := service.GetReasoningStructuredOutputWithTools(
+		context.Background(),
 		schema,
 		"gemma4:31b",
 		&maxTokens,
@@ -235,6 +236,7 @@ func TestOllamaReasoningWithToolsSupportsStructuredOutputPromptSchemaAndTemperat
 		Answer string `json:"answer"`
 	}
 	err := service.GetReasoningStructuredOutputWithTools(
+		context.Background(),
 		schema,
 		"gemma4:31b",
 		&maxTokens,
@@ -330,6 +332,7 @@ func TestOllamaReasoningSessionReplaysHistory(t *testing.T) {
 		Answer string `json:"answer"`
 	}
 	sessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
+		context.Background(),
 		nil,
 		nil,
 		schema,
@@ -357,6 +360,7 @@ func TestOllamaReasoningSessionReplaysHistory(t *testing.T) {
 		Answer string `json:"answer"`
 	}
 	_, err = service.GetReasoningStructuredOutputWithToolsForSession(
+		context.Background(),
 		&sessionID,
 		nil,
 		schema,

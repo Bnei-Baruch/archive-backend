@@ -110,6 +110,7 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	progress := llm.NewReasoningProgressStore(llm.ReasoningSessionTTLFromConfig())
 	//	Workflow stores stage/provider/session metadata needed to resume or rerun correctly
 	workflow := llm.NewReasoningWorkflowSessionStore(llm.ReasoningSessionTTLFromConfig())
+	cancellations := llm.NewReasoningCancellationStore()
 	var reasoningCache *llm.ReasoningSearchCacheStore
 	if llm.ReasoningSearchCacheEnabledFromConfig() {
 		reasoningCache = llm.NewReasoningSearchCacheStore(llm.ReasoningSearchCacheTTLFromConfig())
@@ -166,6 +167,7 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		Tools:          tools,
 		Progress:       progress,
 		Workflow:       workflow,
+		Cancellations:  cancellations,
 		ReasoningCache: reasoningCache,
 		Services:       services,
 	}

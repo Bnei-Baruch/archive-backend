@@ -97,8 +97,8 @@ func NewOllamaServiceWithOptions(token string, pricing []ModelPricing, sessions 
 	}
 }
 
-func (s *OllamaService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, output interface{}) error {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, false, false)
+func (s *OllamaService) GetStructuredOutput(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, output interface{}) error {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, &jsonSchema, reasoningEffort, false, false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("Ollama GetStructuredOutput total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -113,8 +113,8 @@ func (s *OllamaService) GetStructuredOutput(jsonSchema string, model string, max
 	return nil
 }
 
-func (s *OllamaService) GetStructuredOutputWithDebugInfo(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, false, debug)
+func (s *OllamaService) GetStructuredOutputWithDebugInfo(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, &jsonSchema, reasoningEffort, false, debug)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("Ollama GetStructuredOutputWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -129,8 +129,8 @@ func (s *OllamaService) GetStructuredOutputWithDebugInfo(jsonSchema string, mode
 	return s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals), nil
 }
 
-func (s *OllamaService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, jsonSchema, reasoningEffort, false, false)
+func (s *OllamaService) GetChatResponse(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, jsonSchema, reasoningEffort, false, false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("Ollama GetChatResponse total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -140,8 +140,8 @@ func (s *OllamaService) GetChatResponse(model string, maxTokens *int, messages [
 	return msg, nil
 }
 
-func (s *OllamaService) GetChatResponseWithDebugInfo(model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, jsonSchema, reasoningEffort, false, debug)
+func (s *OllamaService) GetChatResponseWithDebugInfo(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, jsonSchema, reasoningEffort, false, debug)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("Ollama GetChatResponseWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -152,6 +152,7 @@ func (s *OllamaService) GetChatResponseWithDebugInfo(model string, maxTokens *in
 }
 
 func (s *OllamaService) GetReasoningResponseWithTools(
+	ctx context.Context,
 	model string,
 	maxTokens *int,
 	messages []LLMBotMessage,
@@ -162,11 +163,12 @@ func (s *OllamaService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
+	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools(ctx, "GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	return msg, err
 }
 
 func (s *OllamaService) GetReasoningStructuredOutputWithTools(
+	ctx context.Context,
 	jsonSchema string,
 	model string,
 	maxTokens *int,
@@ -179,7 +181,7 @@ func (s *OllamaService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -216,6 +218,7 @@ func (s *OllamaService) GetReasoningStructuredOutputWithTools(
 }
 
 func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
+	ctx context.Context,
 	sessionID *string,
 	progressSessionID *string,
 	jsonSchema string,
@@ -271,6 +274,7 @@ func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 	}
 
 	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
+		ctx,
 		"GetReasoningStructuredOutputWithToolsForSession",
 		&jsonSchema,
 		effectiveModel,
@@ -351,7 +355,10 @@ func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 	return effectiveSessionID, nil
 }
 
-func (s *OllamaService) ReserveReasoningSession(model string, reasoningEffort *string) (string, error) {
+func (s *OllamaService) ReserveReasoningSession(ctx context.Context, model string, reasoningEffort *string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if s.sessions == nil {
 		return "", errors.New("reasoning sessions are not enabled")
 	}
@@ -367,7 +374,7 @@ func (s *OllamaService) ReserveReasoningSession(model string, reasoningEffort *s
 	return sessionID, nil
 }
 
-func (s *OllamaService) GetEmbeddings(content string) ([]float64, error) {
+func (s *OllamaService) GetEmbeddings(ctx context.Context, content string) ([]float64, error) {
 	return nil, errors.New("ollama embeddings are not implemented")
 }
 
@@ -379,6 +386,7 @@ func (s *OllamaService) Close() error {
 }
 
 func (s *OllamaService) getChatResponseWithUsage(
+	ctx context.Context,
 	model string,
 	maxTokens *int,
 	messages []LLMBotMessage,
@@ -403,7 +411,7 @@ func (s *OllamaService) getChatResponseWithUsage(
 
 	req := s.newChatRequest(model, maxTokens, ollamaMessages, nil, format, think)
 	var resp OllamaChatResponse
-	if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/api/chat", &resp, logRawBody); err != nil {
+	if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/api/chat", &resp, logRawBody); err != nil {
 		return nil, usageTotals, err
 	}
 	usageTotals = resp.usageTotals()
@@ -419,6 +427,7 @@ func (s *OllamaService) getChatResponseWithUsage(
 }
 
 func (s *OllamaService) getReasoningResponseWithTools(
+	ctx context.Context,
 	methodName string,
 	jsonSchema *string,
 	model string,
@@ -433,6 +442,9 @@ func (s *OllamaService) getReasoningResponseWithTools(
 	maxIterations int,
 	progressSessionID string,
 ) (*LLMBotMessage, string, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	usageTotals := LLMUsageTotals{}
 	iterations := 0
 	usedTools := []string{}
@@ -495,9 +507,12 @@ func (s *OllamaService) getReasoningResponseWithTools(
 	if err != nil {
 		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 	}
-	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(context.Background(), deb))
+	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
 
 	for i := 0; i < maxIterations; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+		}
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
 		}
@@ -514,7 +529,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 		req := s.newChatRequest(model, maxTokens, currentMessages, currentTools, format, think)
 
 		var resp OllamaChatResponse
-		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/api/chat", &resp, deb); err != nil {
+		if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/api/chat", &resp, deb); err != nil {
 			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
@@ -538,6 +553,9 @@ func (s *OllamaService) getReasoningResponseWithTools(
 		ollamaMessages = append(ollamaMessages, resp.Message)
 		toolCallLogs := []string{}
 		for _, toolCall := range resp.Message.ToolCalls {
+			if err := ctx.Err(); err != nil {
+				return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+			}
 			if toolCall.Function.Name == "" {
 				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("ollama tool call is missing function name")
 			}

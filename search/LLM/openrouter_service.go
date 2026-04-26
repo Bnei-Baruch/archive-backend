@@ -123,8 +123,8 @@ func openRouterResultsReadyHandler(ctx context.Context, arguments json.RawMessag
 	return `{"ok":true,"message":"No more tool calls are needed. Return the final structured response now."}`, nil
 }
 
-func (s *OpenRouterService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) error {
-	msg, _, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.structuredOutputProviderPreferences(promptCacheKey), false)
+func (s *OpenRouterService) GetStructuredOutput(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) error {
+	msg, _, usageTotals, err := s.getStructuredOutputWithUsage(ctx, model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.structuredOutputProviderPreferences(promptCacheKey), false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("OpenRouter GetStructuredOutput total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -138,8 +138,8 @@ func (s *OpenRouterService) GetStructuredOutput(jsonSchema string, model string,
 	return nil
 }
 
-func (s *OpenRouterService) GetStructuredOutputWithDebugInfo(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
-	msg, reasoningSummary, usageTotals, err := s.getStructuredOutputWithUsage(model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.structuredOutputProviderPreferences(promptCacheKey), debug)
+func (s *OpenRouterService) GetStructuredOutputWithDebugInfo(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
+	msg, reasoningSummary, usageTotals, err := s.getStructuredOutputWithUsage(ctx, model, maxTokens, messages, promptCacheKey, jsonSchema, reasoningEffort, s.structuredOutputProviderPreferences(promptCacheKey), debug)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("OpenRouter GetStructuredOutputWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -156,6 +156,7 @@ func (s *OpenRouterService) GetStructuredOutputWithDebugInfo(jsonSchema string, 
 }
 
 func (s *OpenRouterService) GetReasoningResponseWithTools(
+	ctx context.Context,
 	model string,
 	maxTokens *int,
 	messages []LLMBotMessage,
@@ -166,11 +167,12 @@ func (s *OpenRouterService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	msg, _, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, nil, nil, promptCacheKey, reasoningEffort, deb, maxIterations, "")
+	msg, _, _, _, _, _, _, err := s.getReasoningResponseWithTools(ctx, "GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, nil, nil, promptCacheKey, reasoningEffort, deb, maxIterations, "")
 	return msg, err
 }
 
 func (s *OpenRouterService) GetReasoningStructuredOutputWithTools(
+	ctx context.Context,
 	jsonSchema string,
 	model string,
 	maxTokens *int,
@@ -183,7 +185,7 @@ func (s *OpenRouterService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, toolDebug, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, promptCacheKey, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, promptCacheKey, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -220,6 +222,7 @@ func (s *OpenRouterService) GetReasoningStructuredOutputWithTools(
 }
 
 func (s *OpenRouterService) GetReasoningStructuredOutputWithToolsForSession(
+	ctx context.Context,
 	sessionID *string,
 	progressSessionID *string,
 	jsonSchema string,
@@ -275,6 +278,7 @@ func (s *OpenRouterService) GetReasoningStructuredOutputWithToolsForSession(
 	}
 
 	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, toolDebug, err := s.getReasoningResponseWithTools(
+		ctx,
 		"GetReasoningStructuredOutputWithToolsForSession",
 		&jsonSchema,
 		effectiveModel,
@@ -357,7 +361,10 @@ func (s *OpenRouterService) GetReasoningStructuredOutputWithToolsForSession(
 	return effectiveSessionID, nil
 }
 
-func (s *OpenRouterService) ReserveReasoningSession(model string, reasoningEffort *string) (string, error) {
+func (s *OpenRouterService) ReserveReasoningSession(ctx context.Context, model string, reasoningEffort *string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if s.sessions == nil {
 		return "", errors.New("reasoning sessions are not enabled")
 	}
@@ -374,6 +381,7 @@ func (s *OpenRouterService) ReserveReasoningSession(model string, reasoningEffor
 }
 
 func (s *OpenRouterService) getReasoningResponseWithTools(
+	ctx context.Context,
 	methodName string,
 	jsonSchema *string,
 	model string,
@@ -389,6 +397,9 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 	maxIterations int,
 	progressSessionID string,
 ) (*LLMBotMessage, string, LLMUsageTotals, int, []string, string, *ReasoningSearchDebugInfo, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if reasoningEffort != nil {
 		switch *reasoningEffort {
 		case "minimal", "low", "medium", "high":
@@ -434,7 +445,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 	if maxIterations <= 0 {
 		maxIterations = 8
 	}
-	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(context.Background(), deb))
+	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
 	if s.requiredToolIterations > 0 {
 		tools, toolHandlers = openRouterWithResultsReadyTool(tools, toolHandlers)
 		if len(firstIterationTools) > 0 {
@@ -477,6 +488,9 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 
 	resultsReadyCalled := false
 	for i := 0; i < maxIterations; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, "", usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
+		}
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
 		}
@@ -510,7 +524,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 		}
 
 		var responsesResp ResponsesResponse
-		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/responses", &responsesResp, deb); err != nil {
+		if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/responses", &responsesResp, deb); err != nil {
 			return nil, "", LLMUsageTotals{}, 0, nil, "", nil, err
 		}
 		iterations = i + 1
@@ -567,6 +581,9 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 			}
 		}
 		for _, toolCall := range functionCalls {
+			if err := ctx.Err(); err != nil {
+				return nil, "", usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
+			}
 			if toolCall.CallID == "" {
 				return nil, "", LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("tool call for '%s' is missing call_id", toolCall.Name)
 			}

@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -32,7 +33,7 @@ func TestOpenAIGetChatResponseUsesMaxCompletionTokens(t *testing.T) {
 	service := NewOpenAIServiceWithOptions("test-token", nil, nil, server.URL)
 	service.client = server.Client()
 	maxTokens := 123
-	msg, err := service.GetChatResponse("gpt-5.4", &maxTokens, []LLMBotMessage{
+	msg, err := service.GetChatResponse(context.Background(), "gpt-5.4", &maxTokens, []LLMBotMessage{
 		{Role: "system", Content: "You are a planner."},
 		{Role: "user", Content: "אהבה"},
 	}, nil, nil, nil, nil)

@@ -11,6 +11,7 @@ const (
 	ReasoningProgressStateRunning   = "running"
 	ReasoningProgressStateCompleted = "completed"
 	ReasoningProgressStateFailed    = "failed"
+	ReasoningProgressStateCanceled  = "canceled"
 
 	ReasoningProgressPhasePending     = "pending"
 	ReasoningProgressPhasePlanning    = "planning"
@@ -19,6 +20,7 @@ const (
 	ReasoningProgressPhaseVerifying   = "verifying"
 	ReasoningProgressPhaseDone        = "done"
 	ReasoningProgressPhaseError       = "error"
+	ReasoningProgressPhaseCanceled    = "canceled"
 )
 
 var ErrReasoningProgressNotFoundOrExpired = errors.New("reasoning progress not found or expired")
@@ -140,6 +142,21 @@ func (s *ReasoningProgressStore) Fail(sessionID string, iteration int) {
 		status.Iteration = status.IterationOffset + iteration
 		status.ToolName = ""
 		status.Message = "Failed."
+		status.Done = true
+	})
+}
+
+func (s *ReasoningProgressStore) Cancel(sessionID string, iteration int) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.State = ReasoningProgressStateCanceled
+		status.Phase = ReasoningProgressPhaseCanceled
+		iteration = status.IterationOffset + iteration
+		if iteration < status.Iteration {
+			iteration = status.Iteration
+		}
+		status.Iteration = iteration
+		status.ToolName = ""
+		status.Message = "Canceled."
 		status.Done = true
 	})
 }

@@ -152,6 +152,7 @@ func TestOpenRouterReasoningWithToolsUsesResponsesAPI(t *testing.T) {
 	}
 
 	err := service.GetReasoningStructuredOutputWithTools(
+		context.Background(),
 		schema,
 		"openai/gpt-oss-120b",
 		&maxTokens,
@@ -273,6 +274,7 @@ func TestOpenRouterUsesConfiguredRequiredToolIterations(t *testing.T) {
 	}
 
 	err := service.GetReasoningStructuredOutputWithTools(
+		context.Background(),
 		schema,
 		"openai/gpt-oss-120b",
 		&maxTokens,
@@ -401,6 +403,7 @@ func TestOpenRouterResultsReadyToolStopsForcedToolUse(t *testing.T) {
 	output := ReasoningSearchResponse{}
 
 	err = service.GetReasoningStructuredOutputWithTools(
+		context.Background(),
 		schema,
 		"openai/gpt-oss-120b",
 		&maxTokens,
@@ -518,6 +521,7 @@ func TestOpenRouterGetStructuredOutputWithDebugReturnsUsage(t *testing.T) {
 	}
 
 	debug, err := service.GetStructuredOutputWithDebugInfo(
+		context.Background(),
 		schema,
 		"moonshotai/kimi-k2.5",
 		&maxTokens,
@@ -639,6 +643,7 @@ func TestOpenRouterReasoningSessionReplaysHistory(t *testing.T) {
 		Answer string `json:"answer"`
 	}
 	sessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
+		context.Background(),
 		nil,
 		nil,
 		schema,
@@ -669,6 +674,7 @@ func TestOpenRouterReasoningSessionReplaysHistory(t *testing.T) {
 		Answer string `json:"answer"`
 	}
 	_, err = service.GetReasoningStructuredOutputWithToolsForSession(
+		context.Background(),
 		&sessionID,
 		nil,
 		schema,

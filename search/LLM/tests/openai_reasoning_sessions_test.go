@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -143,6 +144,57 @@ func TestReasoningProgressStoreLifecycle(t *testing.T) {
 	}
 	if status.Iteration != 2 {
 		t.Fatalf("unexpected iteration: %d", status.Iteration)
+	}
+}
+
+func TestReasoningProgressStoreCancel(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	store.Thinking("session-1", 2)
+	store.Cancel("session-1", 2)
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if status.State != llm.ReasoningProgressStateCanceled {
+		t.Fatalf("unexpected state: %s", status.State)
+	}
+	if status.Phase != llm.ReasoningProgressPhaseCanceled {
+		t.Fatalf("unexpected phase: %s", status.Phase)
+	}
+	if !status.Done {
+		t.Fatalf("expected done status")
+	}
+
+	store.Reserve("session-2")
+	store.SetIterationOffset("session-2", 3)
+	store.Thinking("session-2", 1)
+	store.Cancel("session-2", 0)
+	status, err = store.Get("session-2")
+	if err != nil {
+		t.Fatalf("unexpected second get error: %v", err)
+	}
+	if status.Iteration != 4 {
+		t.Fatalf("cancel should not move iteration forward or backward, got %d", status.Iteration)
+	}
+}
+
+func TestReasoningCancellationStoreCancel(t *testing.T) {
+	store := llm.NewReasoningCancellationStore()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	store.Set("session-1", cancel)
+	if !store.Cancel("session-1") {
+		t.Fatalf("expected cancel to return true")
+	}
+	if err := ctx.Err(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
+	}
+	if store.Cancel("session-1") {
+		t.Fatalf("expected second cancel to return false")
 	}
 }
 

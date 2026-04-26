@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -51,7 +52,10 @@ func NewStubLLMService(entries []StubLLMResponseConfig) *StubLLMService {
 	}
 }
 
-func (s *StubLLMService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, user *string, reasoningEffort *string, output interface{}) error {
+func (s *StubLLMService) GetStructuredOutput(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, user *string, reasoningEffort *string, output interface{}) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	content, err := s.responseFor(model, messages)
 	if err != nil {
 		return err
@@ -59,7 +63,10 @@ func (s *StubLLMService) GetStructuredOutput(jsonSchema string, model string, ma
 	return unmarshalStubResponse(jsonSchema, content, output)
 }
 
-func (s *StubLLMService) GetStructuredOutputWithDebugInfo(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, user *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
+func (s *StubLLMService) GetStructuredOutputWithDebugInfo(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, user *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	content, err := s.responseFor(model, messages)
 	if err != nil {
 		return nil, err
@@ -70,7 +77,10 @@ func (s *StubLLMService) GetStructuredOutputWithDebugInfo(jsonSchema string, mod
 	return s.stubDebugInfo(model, reasoningEffort), nil
 }
 
-func (s *StubLLMService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
+func (s *StubLLMService) GetChatResponse(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	content, err := s.responseFor(model, messages)
 	if err != nil {
 		return nil, err
@@ -78,19 +88,22 @@ func (s *StubLLMService) GetChatResponse(model string, maxTokens *int, messages 
 	return &LLMBotMessage{Role: "assistant", Content: content}, nil
 }
 
-func (s *StubLLMService) GetChatResponseWithDebugInfo(model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
-	msg, err := s.GetChatResponse(model, maxTokens, messages, user, frequencyPenalty, jsonSchema, reasoningEffort)
+func (s *StubLLMService) GetChatResponseWithDebugInfo(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
+	msg, err := s.GetChatResponse(ctx, model, maxTokens, messages, user, frequencyPenalty, jsonSchema, reasoningEffort)
 	if err != nil {
 		return nil, nil, err
 	}
 	return msg, s.stubDebugInfo(model, reasoningEffort), nil
 }
 
-func (s *StubLLMService) GetReasoningResponseWithTools(model string, maxTokens *int, messages []LLMBotMessage, tools []ToolCall, toolHandlers map[string]ToolHandler, user *string, reasoningEffort *string, deb bool, maxIterations int) (*LLMBotMessage, error) {
-	return s.GetChatResponse(model, maxTokens, messages, user, nil, nil, reasoningEffort)
+func (s *StubLLMService) GetReasoningResponseWithTools(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, tools []ToolCall, toolHandlers map[string]ToolHandler, user *string, reasoningEffort *string, deb bool, maxIterations int) (*LLMBotMessage, error) {
+	return s.GetChatResponse(ctx, model, maxTokens, messages, user, nil, nil, reasoningEffort)
 }
 
-func (s *StubLLMService) GetReasoningStructuredOutputWithToolsForSession(sessionID *string, progressSessionID *string, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, tools []ToolCall, toolHandlers map[string]ToolHandler, firstIterationTools []ToolCall, firstIterationToolHandlers map[string]ToolHandler, user *string, reasoningEffort *string, deb bool, maxIterations int, output interface{}) (string, error) {
+func (s *StubLLMService) GetReasoningStructuredOutputWithToolsForSession(ctx context.Context, sessionID *string, progressSessionID *string, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, tools []ToolCall, toolHandlers map[string]ToolHandler, firstIterationTools []ToolCall, firstIterationToolHandlers map[string]ToolHandler, user *string, reasoningEffort *string, deb bool, maxIterations int, output interface{}) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	content, err := s.responseFor(model, messages)
 	if err != nil {
 		return "", err
@@ -117,11 +130,14 @@ func (s *StubLLMService) GetReasoningStructuredOutputWithToolsForSession(session
 	return newReasoningSessionID()
 }
 
-func (s *StubLLMService) ReserveReasoningSession(model string, reasoningEffort *string) (string, error) {
+func (s *StubLLMService) ReserveReasoningSession(ctx context.Context, model string, reasoningEffort *string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	return newReasoningSessionID()
 }
 
-func (s *StubLLMService) GetEmbeddings(content string) ([]float64, error) {
+func (s *StubLLMService) GetEmbeddings(ctx context.Context, content string) ([]float64, error) {
 	return nil, fmt.Errorf("stub provider does not support embeddings")
 }
 

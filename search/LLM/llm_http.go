@@ -2,6 +2,7 @@ package llm
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,14 +16,17 @@ const defaultLLMHTTPRequestTimeout = 2 * time.Minute
 const rawResponseLogColor = "\x1b[36m"
 const rawResponseLogReset = "\x1b[0m"
 
-// callLLMAPI is shared by all providers that send plain JSON requests.
-func callLLMAPI(client *http.Client, token string, data interface{}, endpoint string, result interface{}, logRawBody bool) error {
+// callLLMAPI is shared by providers that send plain JSON requests.
+func callLLMAPI(ctx context.Context, client *http.Client, token string, data interface{}, endpoint string, result interface{}, logRawBody bool) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(jsonBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewBuffer(jsonBytes))
 	if err != nil {
 		return err
 	}

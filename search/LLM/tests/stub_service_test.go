@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -18,6 +19,7 @@ func TestStubServiceReturnsStructuredOutputByModelAndQuery(t *testing.T) {
 
 	var output llm.ReasoningSearchPlanningResponse
 	debug, err := service.GetStructuredOutputWithDebugInfo(
+		context.Background(),
 		llm.GenerateReasoningSearchPlanningResponseJSONSchema(nil),
 		"stub-planning",
 		nil,
@@ -59,6 +61,7 @@ func TestStubServiceReturnsReasoningSessionOutput(t *testing.T) {
 		t.Fatalf("unexpected schema error: %v", err)
 	}
 	sessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(
+		context.Background(),
 		nil,
 		nil,
 		schema,
@@ -106,6 +109,7 @@ func TestStubServiceExtractsQueryFromJSONUserPayload(t *testing.T) {
 
 	var output llm.ReasoningSearchVerificationResponse
 	err := service.GetStructuredOutput(
+		context.Background(),
 		llm.GenerateReasoningSearchVerificationResponseJSONSchema(),
 		"stub-verification",
 		nil,
@@ -135,6 +139,7 @@ func TestStubServiceExtractsQueryFromAIReaderPrompt(t *testing.T) {
 		Matches []int `json:"matches"`
 	}
 	err := service.GetStructuredOutput(
+		context.Background(),
 		`{"type":"object"}`,
 		"stub-ai-tools",
 		nil,
@@ -166,6 +171,7 @@ func TestStubServiceSupportsWildcardFallback(t *testing.T) {
 		t.Fatalf("unexpected schema error: %v", err)
 	}
 	err = service.GetStructuredOutput(
+		context.Background(),
 		schema,
 		"stub-reasoning",
 		nil,

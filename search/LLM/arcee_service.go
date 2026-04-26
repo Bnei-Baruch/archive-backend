@@ -104,8 +104,8 @@ func NewArceeServiceWithOptions(token string, pricing []ModelPricing, sessions *
 	}
 }
 
-func (s *ArceeService) GetStructuredOutput(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, output interface{}) error {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, false)
+func (s *ArceeService) GetStructuredOutput(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, output interface{}) error {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, &jsonSchema, reasoningEffort, false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("Arcee GetStructuredOutput total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -122,8 +122,8 @@ func (s *ArceeService) GetStructuredOutput(jsonSchema string, model string, maxT
 	return nil
 }
 
-func (s *ArceeService) GetStructuredOutputWithDebugInfo(jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, &jsonSchema, reasoningEffort, debug)
+func (s *ArceeService) GetStructuredOutputWithDebugInfo(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, &jsonSchema, reasoningEffort, debug)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("Arcee GetStructuredOutputWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -140,8 +140,8 @@ func (s *ArceeService) GetStructuredOutputWithDebugInfo(jsonSchema string, model
 	return s.buildReasoningDebugInfo(model, reasoningEffort, usageTotals), nil
 }
 
-func (s *ArceeService) GetChatResponse(model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, jsonSchema, reasoningEffort, false)
+func (s *ArceeService) GetChatResponse(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, jsonSchema, reasoningEffort, false)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("Arcee GetChatResponse total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -151,8 +151,8 @@ func (s *ArceeService) GetChatResponse(model string, maxTokens *int, messages []
 	return msg, nil
 }
 
-func (s *ArceeService) GetChatResponseWithDebugInfo(model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
-	msg, usageTotals, err := s.getChatResponseWithUsage(model, maxTokens, messages, jsonSchema, reasoningEffort, debug)
+func (s *ArceeService) GetChatResponseWithDebugInfo(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, _ *string, _ *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
+	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, jsonSchema, reasoningEffort, debug)
 	if usageTotals.TotalTokens > 0 {
 		log.Printf("Arcee GetChatResponseWithDebugInfo total tokens: %d", usageTotals.TotalTokens)
 	}
@@ -163,6 +163,7 @@ func (s *ArceeService) GetChatResponseWithDebugInfo(model string, maxTokens *int
 }
 
 func (s *ArceeService) GetReasoningResponseWithTools(
+	ctx context.Context,
 	model string,
 	maxTokens *int,
 	messages []LLMBotMessage,
@@ -173,11 +174,12 @@ func (s *ArceeService) GetReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 ) (*LLMBotMessage, error) {
-	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools("GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
+	msg, _, _, _, _, _, err := s.getReasoningResponseWithTools(ctx, "GetReasoningResponseWithTools", nil, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	return msg, err
 }
 
 func (s *ArceeService) GetReasoningStructuredOutputWithTools(
+	ctx context.Context,
 	jsonSchema string,
 	model string,
 	maxTokens *int,
@@ -190,7 +192,7 @@ func (s *ArceeService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools("GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -230,6 +232,7 @@ func (s *ArceeService) GetReasoningStructuredOutputWithTools(
 }
 
 func (s *ArceeService) GetReasoningStructuredOutputWithToolsForSession(
+	ctx context.Context,
 	sessionID *string,
 	progressSessionID *string,
 	jsonSchema string,
@@ -285,6 +288,7 @@ func (s *ArceeService) GetReasoningStructuredOutputWithToolsForSession(
 	}
 
 	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
+		ctx,
 		"GetReasoningStructuredOutputWithToolsForSession",
 		&jsonSchema,
 		effectiveModel,
@@ -371,7 +375,10 @@ func (s *ArceeService) GetReasoningStructuredOutputWithToolsForSession(
 	return effectiveSessionID, nil
 }
 
-func (s *ArceeService) ReserveReasoningSession(model string, reasoningEffort *string) (string, error) {
+func (s *ArceeService) ReserveReasoningSession(ctx context.Context, model string, reasoningEffort *string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if s.sessions == nil {
 		return "", errors.New("reasoning sessions are not enabled")
 	}
@@ -383,7 +390,7 @@ func (s *ArceeService) ReserveReasoningSession(model string, reasoningEffort *st
 	return s.sessions.CreateReserved(model, storedReasoningEffort)
 }
 
-func (s *ArceeService) GetEmbeddings(content string) ([]float64, error) {
+func (s *ArceeService) GetEmbeddings(ctx context.Context, content string) ([]float64, error) {
 	return nil, errors.New("arcee embeddings are not implemented")
 }
 
@@ -394,7 +401,7 @@ func (s *ArceeService) Close() error {
 	return s.sessions.Close()
 }
 
-func (s *ArceeService) getChatResponseWithUsage(model string, maxTokens *int, messages []LLMBotMessage, jsonSchema *string, reasoningEffort *string, logRawBody bool) (*LLMBotMessage, LLMUsageTotals, error) {
+func (s *ArceeService) getChatResponseWithUsage(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, jsonSchema *string, reasoningEffort *string, logRawBody bool) (*LLMBotMessage, LLMUsageTotals, error) {
 	usageTotals := LLMUsageTotals{}
 	normalizedMessages, err := normalizeArceeMessages(messages)
 	if err != nil {
@@ -422,7 +429,7 @@ func (s *ArceeService) getChatResponseWithUsage(model string, maxTokens *int, me
 	}
 
 	var chatResp ArceeChatResponse
-	if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, logRawBody); err != nil {
+	if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, logRawBody); err != nil {
 		return nil, usageTotals, err
 	}
 	usageTotals.Add(chatResp.Usage)
@@ -438,6 +445,7 @@ func (s *ArceeService) getChatResponseWithUsage(model string, maxTokens *int, me
 }
 
 func (s *ArceeService) getReasoningResponseWithTools(
+	ctx context.Context,
 	methodName string,
 	jsonSchema *string,
 	model string,
@@ -452,6 +460,9 @@ func (s *ArceeService) getReasoningResponseWithTools(
 	maxIterations int,
 	progressSessionID string,
 ) (*LLMBotMessage, string, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	usageTotals := LLMUsageTotals{}
 	iterations := 0
 	usedTools := []string{}
@@ -514,9 +525,12 @@ func (s *ArceeService) getReasoningResponseWithTools(
 		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 	}
 	toolChoice := "auto"
-	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(context.Background(), deb))
+	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
 
 	for i := 0; i < maxIterations; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+		}
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
 		}
@@ -543,7 +557,7 @@ func (s *ArceeService) getReasoningResponseWithTools(
 		}
 
 		var chatResp ArceeChatResponse
-		if err := callLLMAPI(s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
+		if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
 			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
@@ -584,7 +598,7 @@ func (s *ArceeService) getReasoningResponseWithTools(
 						Content:   content,
 						Reasoning: message.reasoningText(),
 					})
-					msg, finalizeUsage, err := s.getChatResponseWithUsage(model, maxTokens, normalizedMessages, jsonSchema, reasoningEffort, deb)
+					msg, finalizeUsage, err := s.getChatResponseWithUsage(ctx, model, maxTokens, normalizedMessages, jsonSchema, reasoningEffort, deb)
 					usageTotals.InputTokens += finalizeUsage.InputTokens
 					usageTotals.CachedInputTokens += finalizeUsage.CachedInputTokens
 					usageTotals.OutputTokens += finalizeUsage.OutputTokens
@@ -605,7 +619,7 @@ func (s *ArceeService) getReasoningResponseWithTools(
 								Content: fmt.Sprintf("The previous response is invalid: %v. Return only a complete JSON object that matches the required schema, using the archive results already found. Do not return an empty object.", err),
 							},
 						)
-						msg, retryUsage, err := s.getChatResponseWithUsage(model, maxTokens, normalizedMessages, jsonSchema, reasoningEffort, deb)
+						msg, retryUsage, err := s.getChatResponseWithUsage(ctx, model, maxTokens, normalizedMessages, jsonSchema, reasoningEffort, deb)
 						usageTotals.InputTokens += retryUsage.InputTokens
 						usageTotals.CachedInputTokens += retryUsage.CachedInputTokens
 						usageTotals.OutputTokens += retryUsage.OutputTokens
@@ -637,6 +651,9 @@ func (s *ArceeService) getReasoningResponseWithTools(
 
 		toolCallLogs := []string{}
 		for _, toolCall := range message.ToolCalls {
+			if err := ctx.Err(); err != nil {
+				return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+			}
 			if toolCall.Function.Name == "" {
 				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("arcee tool call is missing function name")
 			}

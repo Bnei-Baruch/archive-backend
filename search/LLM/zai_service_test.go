@@ -140,6 +140,7 @@ func TestZAIReasoningWithToolsUsesChatCompletionsAPI(t *testing.T) {
 	}
 
 	err := service.GetReasoningStructuredOutputWithTools(
+		context.Background(),
 		schema,
 		"glm-5.1",
 		&maxTokens,
@@ -246,6 +247,7 @@ func TestZAIGetStructuredOutputWithDebugUsesJSONMode(t *testing.T) {
 	maxTokens := 128
 	output := ReasoningSearchVerificationResponse{}
 	debug, err := service.GetStructuredOutputWithDebugInfo(
+		context.Background(),
 		GenerateReasoningSearchVerificationResponseJSONSchema(),
 		"glm-5.1",
 		&maxTokens,
@@ -311,6 +313,7 @@ func TestZAIReasoningStructuredOutputRejectsNullRequiredTopLevelFields(t *testin
 		t.Fatalf("unexpected schema error: %v", err)
 	}
 	err = service.GetStructuredOutput(
+		context.Background(),
 		schema,
 		"glm-5.1",
 		&maxTokens,
@@ -384,6 +387,7 @@ func TestZAIChatRequestIncludesSamplingControls(t *testing.T) {
 	effort := "low"
 	output := ReasoningSearchVerificationResponse{}
 	if _, err := service.GetStructuredOutputWithDebugInfo(
+		context.Background(),
 		GenerateReasoningSearchVerificationResponseJSONSchema(),
 		"glm-5.1",
 		&maxTokens,

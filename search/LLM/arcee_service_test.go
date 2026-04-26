@@ -214,6 +214,7 @@ func TestArceeReasoningWithToolsUsesChatCompletionsAPI(t *testing.T) {
 	}
 
 	err := service.GetReasoningStructuredOutputWithTools(
+		context.Background(),
 		schema,
 		"trinity-mini",
 		&maxTokens,
@@ -322,6 +323,7 @@ func TestArceeGetStructuredOutputWithDebugUsesJSONMode(t *testing.T) {
 	maxTokens := 128
 	output := ReasoningSearchVerificationResponse{}
 	debug, err := service.GetStructuredOutputWithDebugInfo(
+		context.Background(),
 		GenerateReasoningSearchVerificationResponseJSONSchema(),
 		"trinity-large-thinking",
 		&maxTokens,

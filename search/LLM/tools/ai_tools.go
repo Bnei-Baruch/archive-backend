@@ -617,6 +617,9 @@ func (t *QueryTranscriptAITool) Execute(ctx context.Context, arguments json.RawM
 }
 
 func executeAIQuery(ctx context.Context, service llm.Service, config *llm.AIToolsConfig, documentType string, documentID string, query string, entry *aiQueryDocumentCacheEntry, maxChunks int) (*aiQueryToolResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	result := &aiQueryToolResult{
 		DocumentID:    documentID,
 		DocumentType:  documentType,
@@ -642,6 +645,9 @@ func executeAIQuery(ctx context.Context, service llm.Service, config *llm.AITool
 
 	selected := map[int]aiQuerySelectedChunk{}
 	for i, batch := range batches {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		selectedChunks, debug, err := selectAIQueryBatch(ctx, service, config, query, batch, maxChunks)
 		if err != nil {
 			return nil, err
@@ -721,7 +727,7 @@ func selectAIQueryBatch(ctx context.Context, service llm.Service, config *llm.AI
 	if debugMode {
 		run := func() ([]aiQuerySelectedChunk, *llm.ReasoningSearchDebugInfo, error) {
 			response := &aiQueryChunkSelectionWithReasons{}
-			debug, err := service.GetStructuredOutputWithDebugInfo(schema, config.Model, &config.MaxTokens, messages, nil, &config.Effort, true, response)
+			debug, err := service.GetStructuredOutputWithDebugInfo(ctx, schema, config.Model, &config.MaxTokens, messages, nil, &config.Effort, true, response)
 			return aiQuerySelectedChunksFromReasons(response), debug, err
 		}
 		selected, debug, err := run()
@@ -734,7 +740,7 @@ func selectAIQueryBatch(ctx context.Context, service llm.Service, config *llm.AI
 	}
 	run := func() ([]aiQuerySelectedChunk, *llm.ReasoningSearchDebugInfo, error) {
 		response := &aiQueryChunkSelection{}
-		debug, err := service.GetStructuredOutputWithDebugInfo(schema, config.Model, &config.MaxTokens, messages, nil, &config.Effort, false, response)
+		debug, err := service.GetStructuredOutputWithDebugInfo(ctx, schema, config.Model, &config.MaxTokens, messages, nil, &config.Effort, false, response)
 		return aiQuerySelectedChunksFromPlain(response), debug, err
 	}
 	selected, debug, err := run()
