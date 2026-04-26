@@ -90,6 +90,12 @@ reasoning-session-ttl="30m"
 request-timeout="2m"
 
 [[openai.pricing]]
+model="gpt-5.5"
+input_per_1m_tokens_usd=5.00
+cached_input_per_1m_tokens_usd=0.50
+output_per_1m_tokens_usd=30.00
+
+[[openai.pricing]]
 model="gpt-5.4"
 input_per_1m_tokens_usd=2.50
 cached_input_per_1m_tokens_usd=0.25
