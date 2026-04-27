@@ -168,6 +168,27 @@ func TestNewServiceFromConfigSupportsArcee(t *testing.T) {
 	}
 }
 
+func TestNewServiceFromConfigSupportsDeepSeek(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldToken := viper.GetString("deepseek.token")
+	oldEndpoint := viper.GetString("deepseek.api-endpoint")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("deepseek.token", oldToken)
+	defer viper.Set("deepseek.api-endpoint", oldEndpoint)
+
+	viper.Set("llm.provider", "deepseek")
+	viper.Set("deepseek.token", "test-token")
+	viper.Set("deepseek.api-endpoint", "")
+
+	service, err := llm.NewServiceFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := service.(*llm.DeepSeekService); !ok {
+		t.Fatalf("unexpected service type: %T", service)
+	}
+}
+
 func TestNewServiceFromConfigSupportsStub(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	defer viper.Set("llm.provider", oldProvider)
@@ -540,6 +561,57 @@ func TestReasoningSearchConfigFromConfigUsesArceeSection(t *testing.T) {
 	}
 }
 
+func TestReasoningSearchConfigFromConfigUsesDeepSeekSection(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldPlanningEnabled := viper.GetBool("llm.reasoning-search-planning-enabled")
+	oldVerificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
+	oldModel := viper.GetString("deepseek.reasoning-search-model")
+	oldEffort := viper.GetString("deepseek.reasoning-search-effort")
+	oldMaxTokens := viper.GetInt("deepseek.reasoning-search-max-output-tokens")
+	oldMaxIterations := viper.GetInt("deepseek.reasoning-search-max-iterations")
+	oldRerunMaxIterations := viper.GetInt("deepseek.reasoning-search-rerun-max-iterations")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-planning-enabled", oldPlanningEnabled)
+	defer viper.Set("llm.reasoning-search-verification-enabled", oldVerificationEnabled)
+	defer viper.Set("deepseek.reasoning-search-model", oldModel)
+	defer viper.Set("deepseek.reasoning-search-effort", oldEffort)
+	defer viper.Set("deepseek.reasoning-search-max-output-tokens", oldMaxTokens)
+	defer viper.Set("deepseek.reasoning-search-max-iterations", oldMaxIterations)
+	defer viper.Set("deepseek.reasoning-search-rerun-max-iterations", oldRerunMaxIterations)
+
+	viper.Set("llm.provider", "deepseek")
+	viper.Set("llm.reasoning-search-planning-enabled", false)
+	viper.Set("llm.reasoning-search-verification-enabled", false)
+	viper.Set("deepseek.reasoning-search-model", "deepseek-v4-pro")
+	viper.Set("deepseek.reasoning-search-effort", "xhigh")
+	viper.Set("deepseek.reasoning-search-max-output-tokens", 4567)
+	viper.Set("deepseek.reasoning-search-max-iterations", 11)
+	viper.Set("deepseek.reasoning-search-rerun-max-iterations", 4)
+
+	cfg, err := llm.ReasoningSearchConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Provider != "deepseek" {
+		t.Fatalf("unexpected provider: %s", cfg.Provider)
+	}
+	if cfg.Model != "deepseek-v4-pro" {
+		t.Fatalf("unexpected model: %s", cfg.Model)
+	}
+	if cfg.Effort != "xhigh" {
+		t.Fatalf("unexpected effort: %s", cfg.Effort)
+	}
+	if cfg.MaxTokens != 4567 {
+		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
+	}
+	if cfg.MaxIterations != 11 {
+		t.Fatalf("unexpected max iterations: %d", cfg.MaxIterations)
+	}
+	if cfg.RerunMaxIterations != 4 {
+		t.Fatalf("unexpected rerun max iterations: %d", cfg.RerunMaxIterations)
+	}
+}
+
 func TestReasoningSearchConfigFromConfigUsesStubSection(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldPlanningEnabled := viper.GetBool("llm.reasoning-search-planning-enabled")
@@ -821,6 +893,27 @@ func TestReasoningSearchConfigFromConfigRejectsInvalidArceeEffort(t *testing.T) 
 		t.Fatalf("expected error for invalid Arcee effort")
 	}
 	if !strings.Contains(err.Error(), "supported values are minimal, low, medium, high") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestReasoningSearchConfigFromConfigRejectsInvalidDeepSeekEffort(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldModel := viper.GetString("deepseek.reasoning-search-model")
+	oldEffort := viper.GetString("deepseek.reasoning-search-effort")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("deepseek.reasoning-search-model", oldModel)
+	defer viper.Set("deepseek.reasoning-search-effort", oldEffort)
+
+	viper.Set("llm.provider", "deepseek")
+	viper.Set("deepseek.reasoning-search-model", "deepseek-v4-flash")
+	viper.Set("deepseek.reasoning-search-effort", "tiny")
+
+	_, err := llm.ReasoningSearchConfigFromConfig()
+	if err == nil {
+		t.Fatalf("expected error for invalid DeepSeek effort")
+	}
+	if !strings.Contains(err.Error(), "supported values are minimal, low, medium, high, xhigh, max") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -15,6 +15,7 @@ const (
 	ProviderXAI        = "xai"
 	ProviderZAI        = "zai"
 	ProviderArcee      = "arcee"
+	ProviderDeepSeek   = "deepseek"
 	ProviderStub       = "stub"
 )
 
@@ -249,6 +250,24 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("arcee.request-timeout")
 		return service, nil
+	case ProviderDeepSeek:
+		token := viper.GetString("deepseek.token")
+		if strings.TrimSpace(token) == "" {
+			return nil, fmt.Errorf("deepseek.token is empty")
+		}
+		apiEndpoint := viper.GetString("deepseek.api-endpoint")
+		pricing := []ModelPricing{}
+		if err := viper.UnmarshalKey("deepseek.pricing", &pricing); err != nil {
+			return nil, fmt.Errorf("failed to read deepseek.pricing: %w", err)
+		}
+		sessionTTL := viper.GetDuration("deepseek.reasoning-session-ttl")
+		if sessionTTL <= 0 {
+			sessionTTL = defaultOpenAIReasoningSessionTTL
+		}
+		service := NewDeepSeekServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint)
+		service.progress = progress
+		service.client.Timeout = requestTimeoutFromConfig("deepseek.request-timeout")
+		return service, nil
 	case ProviderStub:
 		return NewStubLLMServiceFromConfig(progress)
 	default:
@@ -290,6 +309,12 @@ func ReasoningSessionTTLFromConfig() time.Duration {
 		return ttl
 	case ProviderArcee:
 		ttl := viper.GetDuration("arcee.reasoning-session-ttl")
+		if ttl <= 0 {
+			return defaultOpenAIReasoningSessionTTL
+		}
+		return ttl
+	case ProviderDeepSeek:
+		ttl := viper.GetDuration("deepseek.reasoning-session-ttl")
 		if ttl <= 0 {
 			return defaultOpenAIReasoningSessionTTL
 		}
@@ -711,6 +736,71 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			Planning:           planning,
 			Verification:       verification,
 		}, nil
+	case ProviderDeepSeek:
+		model := viper.GetString("deepseek.reasoning-search-model")
+		if model == "" {
+			model = viper.GetString("deepseek.reasoning-model")
+		}
+		if model == "" {
+			model = viper.GetString("deepseek.model")
+		}
+		if model == "" {
+			model = "deepseek-v4-flash"
+		}
+
+		effort := viper.GetString("deepseek.reasoning-search-effort")
+		if effort == "" {
+			effort = viper.GetString("deepseek.reasoning-effort")
+		}
+		if effort == "" {
+			effort = defaultReasoningSearchEffort
+		}
+		if _, _, err := deepseekThinkingAndEffort(&effort); err != nil {
+			return nil, err
+		}
+
+		maxTokens := viper.GetInt("deepseek.reasoning-search-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+
+		maxIterations := viper.GetInt("deepseek.reasoning-search-max-iterations")
+		if maxIterations <= 0 {
+			maxIterations = defaultReasoningSearchMaxIterations
+		}
+		rerunMaxIterations := viper.GetInt("deepseek.reasoning-search-rerun-max-iterations")
+		if rerunMaxIterations <= 0 {
+			rerunMaxIterations = defaultReasoningSearchRerunMaxIters
+		}
+
+		var planning *ReasoningSearchPlanningConfig
+		if planningEnabled {
+			var err error
+			planning, err = reasoningSearchPlanningConfigFromProvider(planningProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+		var verification *ReasoningSearchVerificationConfig
+		if verificationEnabled {
+			var err error
+			verification, err = reasoningSearchVerificationConfigFromProvider(verificationProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return &ReasoningSearchConfig{
+			Provider:           provider,
+			Model:              model,
+			Effort:             effort,
+			MaxTokens:          maxTokens,
+			MaxIterations:      maxIterations,
+			RerunMaxIterations: rerunMaxIterations,
+			MaxFollowups:       maxFollowups,
+			Planning:           planning,
+			Verification:       verification,
+		}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-model"))
 		if model == "" {
@@ -921,6 +1011,29 @@ func reasoningSearchPlanningConfigFromProvider(provider string, fallbackEffort s
 			maxTokens = defaultReasoningSearchPlanningMaxTokens
 		}
 		return &ReasoningSearchPlanningConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderDeepSeek:
+		model := strings.TrimSpace(viper.GetString("deepseek.reasoning-search-planning-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("deepseek.reasoning-search-model"))
+		}
+		if model == "" {
+			model = "deepseek-v4-flash"
+		}
+		effort := strings.TrimSpace(viper.GetString("deepseek.reasoning-search-planning-effort"))
+		if effort == "" {
+			effort = strings.TrimSpace(fallbackEffort)
+		}
+		if effort == "" {
+			effort = defaultReasoningSearchPlanningEffort
+		}
+		if _, _, err := deepseekThinkingAndEffort(&effort); err != nil {
+			return nil, err
+		}
+		maxTokens := viper.GetInt("deepseek.reasoning-search-planning-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchPlanningMaxTokens
+		}
+		return &ReasoningSearchPlanningConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-planning-model"))
 		if model == "" {
@@ -1117,6 +1230,29 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			MaxTokens:      maxTokens,
 			MaxInputTokens: maxInputTokens,
 		}, nil
+	case ProviderDeepSeek:
+		model := strings.TrimSpace(viper.GetString("deepseek.reasoning-search-verification-model"))
+		if model == "" {
+			return nil, fmt.Errorf("deepseek.reasoning-search-verification-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("deepseek.reasoning-search-verification-effort"))
+		if effort == "" {
+			effort = defaultEffort
+		}
+		if _, _, err := deepseekThinkingAndEffort(&effort); err != nil {
+			return nil, err
+		}
+		maxTokens := viper.GetInt("deepseek.reasoning-search-verification-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+		return &ReasoningSearchVerificationConfig{
+			Provider:       provider,
+			Model:          model,
+			Effort:         effort,
+			MaxTokens:      maxTokens,
+			MaxInputTokens: maxInputTokens,
+		}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-verification-model"))
 		if model == "" {
@@ -1277,6 +1413,26 @@ func aiToolsConfigFromProvider(provider string) (*AIToolsConfig, error) {
 			}
 		}
 		maxTokens := viper.GetInt("arcee.ai-tools-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultAIToolsMaxTokens
+		}
+		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderDeepSeek:
+		model := strings.TrimSpace(viper.GetString("deepseek.ai-tools-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("deepseek.reasoning-search-model"))
+		}
+		if model == "" {
+			model = "deepseek-v4-flash"
+		}
+		effort := strings.TrimSpace(viper.GetString("deepseek.ai-tools-effort"))
+		if effort == "" {
+			effort = defaultAIToolsEffort
+		}
+		if _, _, err := deepseekThinkingAndEffort(&effort); err != nil {
+			return nil, err
+		}
+		maxTokens := viper.GetInt("deepseek.ai-tools-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultAIToolsMaxTokens
 		}

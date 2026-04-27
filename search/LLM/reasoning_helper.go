@@ -118,6 +118,7 @@ func (u *OpenAIUsage) UnmarshalJSON(data []byte) error {
 		OutputTokensDetails     *OpenAIOutputTokensDetails `json:"output_tokens_details,omitempty"`
 		TotalTokens             int                        `json:"total_tokens,omitempty"`
 		PromptTokens            int                        `json:"prompt_tokens,omitempty"`
+		PromptCacheHitTokens    int                        `json:"prompt_cache_hit_tokens,omitempty"`
 		PromptTokensDetails     *OpenAIInputTokensDetails  `json:"prompt_tokens_details,omitempty"`
 		CompletionTokens        int                        `json:"completion_tokens,omitempty"`
 		CompletionTokensDetails *OpenAIOutputTokensDetails `json:"completion_tokens_details,omitempty"`
@@ -135,6 +136,9 @@ func (u *OpenAIUsage) UnmarshalJSON(data []byte) error {
 	u.InputTokensDetails = raw.InputTokensDetails
 	if u.InputTokensDetails == nil {
 		u.InputTokensDetails = raw.PromptTokensDetails
+	}
+	if u.InputTokensDetails == nil && raw.PromptCacheHitTokens > 0 {
+		u.InputTokensDetails = &OpenAIInputTokensDetails{CachedTokens: raw.PromptCacheHitTokens}
 	}
 
 	u.OutputTokens = raw.OutputTokens

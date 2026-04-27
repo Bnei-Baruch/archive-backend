@@ -18,7 +18,7 @@ Instructions for coding agents working in this repository.
   - `es/` Elasticsearch indexing pipelines
   - `mdb/` SQLBoiler-generated MDB models
   - `events/` NATS-based event processing
-- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`, `[arcee]`); `[stub]` is local and makes no API calls.
+- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`, `[arcee]`, `[deepseek]`); `[stub]` is local and makes no API calls.
 - Config: `config.toml` (see `config.sample.toml`).
 
 ## LLM Architecture
@@ -32,6 +32,7 @@ Instructions for coding agents working in this repository.
 - OpenRouter also uses `v1/responses`, but continues sessions by replaying full message history instead of `previous_response_id`.
 - Ollama uses `/api/chat` with message-history replay; it does not use `tool_choice`.
 - Arcee uses OpenAI-compatible `/chat/completions` with message-history replay.
+- DeepSeek uses the official `/chat/completions` API with message-history replay and preserves `reasoning_content` on tool-call turns.
 - Stub provider returns configured constant responses by `model` and query, and is intended for stage-isolation tests.
 - `common.Init()` builds one app-scoped `common.LLM_RUNTIME`; do not construct new LLM services per request.
 - `common.LLM_RUNTIME` stores the shared tool manager, progress/workflow stores, and provider services keyed by provider.
@@ -66,7 +67,7 @@ Instructions for coding agents working in this repository.
 - Verification is currently a one-shot structured call, so its stored stage metadata may have an empty provider-native session id.
 - OpenAI short-lived reasoning sessions are stored in memory only, with TTL from `openai.reasoning-session-ttl`.
 - xAI short-lived reasoning sessions are also stored in memory only, with TTL from `xai.reasoning-session-ttl`.
-- OpenRouter, Ollama, and Arcee sessions also live in memory, but store full replayable conversation history via `chat_reasoning_sessions.go`.
+- OpenRouter, Ollama, Arcee, and DeepSeek sessions also live in memory, but store full replayable conversation history via `chat_reasoning_sessions.go`.
 - If client sends a missing or expired `session_id`, the API returns an error; it does not silently start a new session.
 - OpenAI session state stores continuation data (`last_response_id`, model, effort), not the full prompt or hidden reasoning.
 - Planning failures are soft: the handler logs a warning and continues with reasoning without planner guidance.
@@ -87,6 +88,7 @@ Instructions for coding agents working in this repository.
   - `[xai]` for xAI
   - `[zai]` for Z.AI
   - `[arcee]` for Arcee AI
+  - `[deepseek]` for DeepSeek official API
   - `[stub]` for local constant responses with no API calls
 - Verification model settings are also provider-specific:
   - `<provider>.reasoning-search-verification-model`
@@ -100,6 +102,7 @@ Instructions for coding agents working in this repository.
 - OpenRouter provider routing keys can be overridden per stage with `reasoning-search-*`, `reasoning-search-planning-*`, `reasoning-search-verification-*`, and `ai-tools-*` provider-routing keys under `[openrouter]`.
 - xAI Grok 4 fast reasoning models do not support `reasoning_effort`; keep xAI reasoning and planning effort config empty.
 - Arcee accepts optional `reasoning_effort` values `minimal`, `low`, `medium`, and `high`; leave it empty unless a model/stage needs it. Do not send it to `trinity-large-thinking`.
+- DeepSeek supports thinking by default; `minimal` disables thinking, `low`/`medium`/`high` map to `high`, and `xhigh`/`max` map to `max`.
 - Ollama supports `ollama.num-ctx`; `ollama.temperature` and `ollama.structured-output-prompt-schema` are optional.
 - Stub responses are configured with `[[stub.responses]]` entries keyed by `model` and `query`; use `query="*"` as a model-level fallback.
 - Pricing for cost estimation is configured per provider with `[[<provider>.pricing]]`.

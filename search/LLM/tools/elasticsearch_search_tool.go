@@ -191,6 +191,8 @@ KxApZ4pI – Baruch Shalom HaLevi Ashlag (Rabash). Use this filter when looking 
 
 6. collection - Filter by collection ids. Use the get_collections tool to obtain collection ids. Collections are groups of related content units. Each daily lesson is a collection, a TV series (program) is also a collection, and there are also collections for conventions and special events.
 
+7. mdb_uid - Exact lookup by archive result UID. Use this only when you already have a concrete mdb_uid from previous tool results and need to retrieve/check that exact result.
+
 Arguments:
 - query: optional search text. Required when exact_phrase is true.
 - filters: optional structured filters as described above.
@@ -538,6 +540,7 @@ func isAllowedElasticsearchSearchFilter(filter string) bool {
 		consts.FILTER_AUTHOR,
 		consts.FILTER_CONTENT_TYPE,
 		consts.FILTER_COLLECTIONS_CONTENT_TYPE,
+		consts.FILTER_MDB_UID,
 		consts.FILTER_MEDIA_LANGUAGE,
 		consts.FILTER_ORIGINAL_LANGUAGE,
 		consts.FILTER_PERSON,

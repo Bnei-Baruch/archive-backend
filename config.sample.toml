@@ -56,17 +56,17 @@ url_template="https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2
 refresh-search-stats="5m"
 
 [llm]
-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "stub"
+provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "stub"
 postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache
-ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "stub"; defaults to llm.provider when empty
+ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "stub"; defaults to llm.provider when empty
 ai-query-tool-max-batches=5 # max document batches query_source_ai/query_transcript_ai may send to the reader model per call
 reasoning-search-cache-enabled=false
 reasoning-search-cache-ttl="120h" # default is 120h (5 days)
 reasoning-search-max-followups=2
 reasoning-search-planning-enabled=false
-reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "stub"; defaults to llm.provider when empty
+reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "stub"; defaults to llm.provider when empty
 reasoning-search-verification-enabled=false
-reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "stub"; defaults to llm.provider when empty
+reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "stub"; defaults to llm.provider when empty
 reasoning-search-verification-max-input-tokens=20000 # skip verification when accumulated reasoning/planning tokens are >= this value
 
 [openai]
@@ -191,6 +191,38 @@ output_per_1m_tokens_usd=0.85
 model="minimax/minimax-m2.7"
 input_per_1m_tokens_usd=0.30
 output_per_1m_tokens_usd=1.20
+
+[deepseek]
+token="sk-..."
+api-endpoint="" # optional; defaults to https://api.deepseek.com and also accepts a full /chat/completions URL
+reasoning-search-model="deepseek-v4-flash" # "deepseek-v4-flash", "deepseek-v4-pro"
+reasoning-search-effort="high" # "minimal" disables thinking; "low"/"medium"/"high" map to high; "xhigh"/"max" map to max
+reasoning-search-max-output-tokens=8000
+reasoning-search-max-iterations=20
+reasoning-search-rerun-max-iterations=8 # post-verification reasoning rerun
+ai-tools-model="deepseek-v4-flash"
+ai-tools-effort="low"
+ai-tools-max-output-tokens=1500
+# reasoning-search-planning-model="deepseek-v4-flash"
+# reasoning-search-planning-effort="medium"
+# reasoning-search-planning-max-output-tokens=1500
+# reasoning-search-verification-model="deepseek-v4-flash"
+# reasoning-search-verification-effort="medium"
+# reasoning-search-verification-max-output-tokens=2000
+reasoning-session-ttl="30m"
+request-timeout="5m"
+
+[[deepseek.pricing]]
+model="deepseek-v4-flash"
+input_per_1m_tokens_usd=0.14
+cached_input_per_1m_tokens_usd=0.0028
+output_per_1m_tokens_usd=0.28
+
+[[deepseek.pricing]]
+model="deepseek-v4-pro"
+input_per_1m_tokens_usd=0.435
+cached_input_per_1m_tokens_usd=0.003625
+output_per_1m_tokens_usd=0.87
 
 [ollama]
 token="" # optional bearer token for Ollama-compatible servers

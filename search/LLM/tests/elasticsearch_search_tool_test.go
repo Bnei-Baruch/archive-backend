@@ -194,6 +194,29 @@ func TestElasticsearchSearchToolExecuteFilterOnlySearch(t *testing.T) {
 	}
 }
 
+func TestElasticsearchSearchToolExecuteAllowsMDBUIDFilter(t *testing.T) {
+	engine := &fakeElasticsearchSearchEngine{
+		result: &search.QueryResult{Language: consts.LANG_HEBREW},
+	}
+	tool := llmtools.NewElasticsearchSearchTool(engine, 0)
+
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{
+		"filters":{"mdb_uid":["4AN1qAqj"]},
+		"language":"he",
+		"size":1
+	}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !reflect.DeepEqual(engine.query.Filters[consts.FILTER_MDB_UID], []string{"4AN1qAqj"}) {
+		t.Fatalf("unexpected mdb_uid filter: %#v", engine.query.Filters[consts.FILTER_MDB_UID])
+	}
+	if engine.size != 1 {
+		t.Fatalf("unexpected size: %d", engine.size)
+	}
+}
+
 func TestElasticsearchSearchToolExecuteRejectsUnknownFilter(t *testing.T) {
 	tool := llmtools.NewElasticsearchSearchTool(&fakeElasticsearchSearchEngine{}, 0)
 

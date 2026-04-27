@@ -463,6 +463,7 @@ const (
 	FILTER_AUTHOR                   = "author"
 	FILTER_CONTENT_TYPE             = "content_type"
 	FILTER_COLLECTIONS_CONTENT_TYPE = "collections_content_type"
+	FILTER_MDB_UID                  = "mdb_uid"
 	FILTER_MEDIA_LANGUAGE           = "media_language"
 	FILTER_ORIGINAL_LANGUAGE        = "original_language"
 	FILTER_PERSON                   = "person"
@@ -484,6 +485,7 @@ var ALL_FILTERS = []string{
 	FILTER_SOURCE,
 	FILTER_AUTHOR,
 	FILTER_CONTENT_TYPE,
+	FILTER_MDB_UID,
 	FILTER_MEDIA_LANGUAGE,
 	FILTER_ORIGINAL_LANGUAGE,
 	FILTER_PERSON,
