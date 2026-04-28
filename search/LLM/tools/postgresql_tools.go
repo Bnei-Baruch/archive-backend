@@ -415,9 +415,10 @@ type getCollectionsArgs struct {
 }
 
 type getContentUnitsByCollectionArgs struct {
-	CollectionID string `json:"collection_id,omitempty"`
-	Language     string `json:"language,omitempty"`
-	Limit        int    `json:"limit,omitempty"`
+	CollectionID  string `json:"collection_id,omitempty"`
+	ContentUnitID string `json:"content_unit_id,omitempty"`
+	Language      string `json:"language,omitempty"`
+	Limit         int    `json:"limit,omitempty"`
 }
 
 type authorToolResult struct {
@@ -1053,6 +1054,24 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 
 	collectionID := strings.TrimSpace(args.CollectionID)
 	if collectionID == "" {
+		contentUnitID := strings.TrimSpace(args.ContentUnitID)
+		if contentUnitID != "" {
+			collectionUIDs, lookupErr := loadCollectionUIDsForContentUnit(t.db, contentUnitID)
+			if lookupErr != nil {
+				llm.LogIfDeb(ctx, "get_content_units_by_collection: failed to check content-unit fallback for content_unit_id=%q err=%v", contentUnitID, lookupErr)
+			}
+			errorText := fmt.Sprintf("collection_id is required. The supplied content_unit_id '%s' cannot be used directly.", contentUnitID)
+			guidance := "get_content_units_by_collection requires collection_id. Use get_collections or continue with another search query instead of repeating this content_unit_id lookup."
+			if len(collectionUIDs) > 0 {
+				guidance = fmt.Sprintf("get_content_units_by_collection requires collection_id, not content_unit_id. Use one of these parent collection ids instead: %s", strings.Join(collectionUIDs, ", "))
+			}
+			return marshalToolResult(postgreSQLToolRecoverableResult{
+				Error:                  errorText,
+				RetrySuggested:         len(collectionUIDs) > 0,
+				Guidance:               guidance,
+				SuggestedCollectionIDs: collectionUIDs,
+			})
+		}
 		return "", fmt.Errorf("get_content_units_by_collection: collection_id is required")
 	}
 
