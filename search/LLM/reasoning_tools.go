@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -140,6 +141,25 @@ func wrapReasoningToolHandler(name string, handler ToolHandler) ToolHandler {
 	return func(ctx context.Context, arguments json.RawMessage) (string, error) {
 		result, err := handler(ctx, arguments)
 		if err != nil {
+			var recoverable *RecoverableToolError
+			if errors.As(err, &recoverable) {
+				payload := map[string]interface{}{
+					"error":           "wrong_tool_usage",
+					"retry_suggested": true,
+					"message":         recoverable.Message,
+				}
+				if recoverable.Tool != "" {
+					payload["tool"] = recoverable.Tool
+				}
+				if recoverable.Guidance != "" {
+					payload["guidance"] = recoverable.Guidance
+				}
+				recoverableResult, marshalErr := json.Marshal(payload)
+				if marshalErr != nil {
+					return result, err
+				}
+				return string(recoverableResult), nil
+			}
 			return result, err
 		}
 		return sanitizeReasoningToolResult(name, result), nil

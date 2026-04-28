@@ -43,6 +43,7 @@ Instructions for coding agents working in this repository.
 - Generic tool abstractions live in `search/LLM/reasoning_tools.go`.
 - Register tools with `ReasoningToolManager`.
 - Pass `manager.ToolCalls()` and `manager.ToolHandlers()` into `GetReasoningResponseWithTools`.
+- Tool argument/usage mistakes should return `llm.RecoverableToolError`; `ReasoningToolManager` converts it to a JSON tool result so the model can retry instead of failing the whole reasoning run. Keep infrastructure/runtime failures as normal errors.
 - App-scoped manager builder lives in `search/LLM/tools/manager.go`.
 - `common.Init()` builds the shared tool manager inside `common.LLM_RUNTIME`.
 

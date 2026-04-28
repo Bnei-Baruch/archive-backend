@@ -639,7 +639,7 @@ Behavior:
 func (t *GetAvailableBooksTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	trimmed := strings.TrimSpace(string(arguments))
 	if trimmed != "" && trimmed != "null" && trimmed != "{}" {
-		return "", fmt.Errorf("get_available_books: this tool does not accept arguments")
+		return "", llm.NewRecoverableToolError("get_available_books", "this tool does not accept arguments", "Call get_available_books with an empty JSON object.")
 	}
 	if t.db == nil {
 		return "", fmt.Errorf("get_available_books: db is nil")
@@ -818,7 +818,7 @@ func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.Raw
 
 	authorID := strings.TrimSpace(args.AuthorID)
 	if authorID == "" {
-		return "", fmt.Errorf("get_sources_by_author: author_id is required")
+		return "", llm.NewRecoverableToolError("get_sources_by_author", "author_id is required", "Call get_sources_by_author with a valid author_id such as bs, rb, ml, mr, rh, ar, rl, ag, or vk.")
 	}
 
 	language := normalizePostgreSQLToolLanguage(args.Language)
@@ -893,7 +893,7 @@ func (t *GetSourcesBySourceTool) Execute(ctx context.Context, arguments json.Raw
 
 	sourceID := strings.TrimSpace(args.SourceID)
 	if sourceID == "" {
-		return "", fmt.Errorf("get_sources_by_source: source_id is required")
+		return "", llm.NewRecoverableToolError("get_sources_by_source", "source_id is required", "Call get_sources_by_source with a source_id returned by get_available_books, get_sources_by_author, or get_sources_by_source.")
 	}
 
 	language := normalizePostgreSQLToolLanguage(args.Language)
@@ -1072,7 +1072,7 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 				SuggestedCollectionIDs: collectionUIDs,
 			})
 		}
-		return "", fmt.Errorf("get_content_units_by_collection: collection_id is required")
+		return "", llm.NewRecoverableToolError("get_content_units_by_collection", "collection_id is required", "Call get_content_units_by_collection with a collection_id returned by get_collections or from an Elasticsearch collection result.")
 	}
 
 	language := normalizePostgreSQLToolLanguage(args.Language)

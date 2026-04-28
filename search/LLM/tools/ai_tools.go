@@ -542,11 +542,11 @@ func (t *QuerySourceAITool) Execute(ctx context.Context, arguments json.RawMessa
 	}
 	sourceID := strings.TrimSpace(args.SourceID)
 	if sourceID == "" {
-		return "", fmt.Errorf("query_source_ai: source_id is required")
+		return "", llm.NewRecoverableToolError("query_source_ai", "source_id is required", "Call query_source_ai with a source_id from a source result or PostgreSQL source lookup tool.")
 	}
 	query := strings.TrimSpace(args.Query)
 	if query == "" {
-		return "", fmt.Errorf("query_source_ai: query is required")
+		return "", llm.NewRecoverableToolError("query_source_ai", "query is required", "Provide a short natural-language query describing what to find in the source.")
 	}
 	language := strings.ToLower(strings.TrimSpace(args.Language))
 	maxChunks := normalizeAIQueryToolMaxChunks(args.MaxChunks)
@@ -587,11 +587,11 @@ func (t *QueryTranscriptAITool) Execute(ctx context.Context, arguments json.RawM
 	}
 	contentUnitID := strings.TrimSpace(args.ContentUnitID)
 	if contentUnitID == "" {
-		return "", fmt.Errorf("query_transcript_ai: content_unit_id is required")
+		return "", llm.NewRecoverableToolError("query_transcript_ai", "content_unit_id is required", "Call query_transcript_ai with a content_unit_id from a concrete content unit result.")
 	}
 	query := strings.TrimSpace(args.Query)
 	if query == "" {
-		return "", fmt.Errorf("query_transcript_ai: query is required")
+		return "", llm.NewRecoverableToolError("query_transcript_ai", "query is required", "Provide a short natural-language query describing what to find in the transcript.")
 	}
 	language := strings.ToLower(strings.TrimSpace(args.Language))
 	maxChunks := normalizeAIQueryToolMaxChunks(args.MaxChunks)

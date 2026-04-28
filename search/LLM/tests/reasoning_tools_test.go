@@ -16,6 +16,7 @@ type fakeReasoningTool struct {
 	definition       llm.ReasoningToolDefinition
 	usageExplanation string
 	response         string
+	err              error
 }
 
 func (t *fakeReasoningTool) Definition() llm.ReasoningToolDefinition {
@@ -28,6 +29,9 @@ func (t *fakeReasoningTool) UsageExplanation() string {
 
 func (t *fakeReasoningTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	_ = ctx
+	if t.err != nil {
+		return "", t.err
+	}
 	if t.response != "" {
 		return t.response, nil
 	}
@@ -91,6 +95,28 @@ func TestReasoningToolManagerGeneratesToolCallsAndHandlers(t *testing.T) {
 	}
 	if result != "ok" {
 		t.Fatalf("unexpected handler result: %s", result)
+	}
+}
+
+func TestReasoningToolManagerReturnsRecoverableToolErrorAsResult(t *testing.T) {
+	manager, err := llm.NewReasoningToolManager(&fakeReasoningTool{
+		definition: llm.ReasoningToolDefinition{Name: "fake_lookup"},
+		err:        llm.NewRecoverableToolError("fake_lookup", "missing required argument", "Retry with the required argument."),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error creating manager: %v", err)
+	}
+
+	handler := manager.ToolHandlers()["fake_lookup"]
+	result, err := handler(context.Background(), json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("expected recoverable tool error as tool result, got %v", err)
+	}
+	if !strings.Contains(result, `"error":"wrong_tool_usage"`) {
+		t.Fatalf("expected wrong_tool_usage result, got %s", result)
+	}
+	if !strings.Contains(result, `"retry_suggested":true`) {
+		t.Fatalf("expected retry_suggested result, got %s", result)
 	}
 }
 

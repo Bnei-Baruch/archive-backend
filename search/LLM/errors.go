@@ -2,6 +2,20 @@ package llm
 
 import "fmt"
 
+type RecoverableToolError struct {
+	Tool     string `json:"tool,omitempty"`
+	Message  string `json:"message"`
+	Guidance string `json:"guidance,omitempty"`
+}
+
+func (e *RecoverableToolError) Error() string {
+	return e.Message
+}
+
+func NewRecoverableToolError(tool string, message string, guidance string) error {
+	return &RecoverableToolError{Tool: tool, Message: message, Guidance: guidance}
+}
+
 type MaxReasoningIterationsError struct {
 	MaxIterations int
 }

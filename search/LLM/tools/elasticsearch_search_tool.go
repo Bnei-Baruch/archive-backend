@@ -257,15 +257,15 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 
 	queryText := strings.TrimSpace(args.Query)
 	if queryText == "" && len(filters) == 0 {
-		return "", fmt.Errorf("elasticsearch_search: either query or filters must be provided")
+		return "", llm.NewRecoverableToolError("elasticsearch_search", "either query or filters must be provided", "Call elasticsearch_search with a non-empty query, filters, or both.")
 	}
 	if args.ExactPhrase && queryText == "" {
-		return "", fmt.Errorf("elasticsearch_search: exact_phrase requires a non-empty query")
+		return "", llm.NewRecoverableToolError("elasticsearch_search", "exact_phrase requires a non-empty query", "Either provide a non-empty query or set exact_phrase to false.")
 	}
 
 	query := buildElasticsearchSearchQuery(queryText, args.ExactPhrase)
 	if args.ExactPhrase && len(query.ExactTerms) == 1 && query.ExactTerms[0] == "" {
-		return "", fmt.Errorf("elasticsearch_search: exact_phrase requires a non-empty query")
+		return "", llm.NewRecoverableToolError("elasticsearch_search", "exact_phrase requires a non-empty query", "Either provide a non-empty query or set exact_phrase to false.")
 	}
 	query.Filters = mergeElasticsearchSearchFilters(query.Filters, filters)
 	query.Deb = false // Set false to avoid putting debug data into LLM context and reaching token usage limits.
@@ -391,15 +391,15 @@ func normalizeElasticsearchSearchFilters(raw json.RawMessage) (map[string][]stri
 	for rawKey, rawValue := range values {
 		key := normalizeElasticsearchSearchFilterName(rawKey)
 		if !isAllowedElasticsearchSearchFilter(key) {
-			return nil, fmt.Errorf("elasticsearch_search: unsupported filter '%s'", rawKey)
+			return nil, llm.NewRecoverableToolError("elasticsearch_search", fmt.Sprintf("unsupported filter '%s'", rawKey), "Use only supported filters: content_type, source, person, start_date, end_date, tag, collection, or mdb_uid.")
 		}
 
 		stringValues, err := normalizeElasticsearchSearchFilterValues(rawValue)
 		if err != nil {
-			return nil, fmt.Errorf("elasticsearch_search: invalid values for filter '%s': %w", rawKey, err)
+			return nil, llm.NewRecoverableToolError("elasticsearch_search", fmt.Sprintf("invalid values for filter '%s': %v", rawKey, err), "Filter values must be strings or arrays of strings.")
 		}
 		if len(stringValues) == 0 {
-			return nil, fmt.Errorf("elasticsearch_search: filter '%s' requires at least one non-empty value", rawKey)
+			return nil, llm.NewRecoverableToolError("elasticsearch_search", fmt.Sprintf("filter '%s' requires at least one non-empty value", rawKey), "Remove the empty filter or provide at least one non-empty value.")
 		}
 
 		if key == consts.FILTER_AUTHOR {
