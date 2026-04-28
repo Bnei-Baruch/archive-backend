@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -1502,7 +1503,14 @@ func aiQueryToolErrorOutput(toolName string, err error) string {
 }
 
 func aiQueryShouldRetrySelection(err error) bool {
-	return err != nil && strings.Contains(err.Error(), llm.ResponsesAPIEmptyAssistantOutputError)
+	if err == nil {
+		return false
+	}
+	if strings.Contains(err.Error(), llm.ResponsesAPIEmptyAssistantOutputError) {
+		return true
+	}
+	var syntaxErr *json.SyntaxError
+	return errors.As(err, &syntaxErr)
 }
 
 func minAIQueryInt(a int, b int) int {

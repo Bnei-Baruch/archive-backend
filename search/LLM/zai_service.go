@@ -616,6 +616,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 		normalizedMessages = append(normalizedMessages, *assistantMessage)
 
 		toolCallLogs := []string{}
+		toolExecutions := make([]ReasoningToolExecution, 0, len(message.ToolCalls))
 		for _, toolCall := range message.ToolCalls {
 			if err := ctx.Err(); err != nil {
 				return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
@@ -629,11 +630,6 @@ func (s *ZAIService) getReasoningResponseWithTools(
 				usedToolsSet[canonicalToolName] = true
 			}
 
-			handler, ok := ResolveReasoningToolHandler(toolCall.Function.Name, currentToolHandlers, firstIterationToolHandlers)
-			if !ok {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Function.Name)
-			}
-
 			rawArgs := toolCall.Function.Arguments.Raw
 			if len(rawArgs) == 0 {
 				rawArgs = json.RawMessage("{}")
@@ -645,15 +641,18 @@ func (s *ZAIService) getReasoningResponseWithTools(
 			if s.progress != nil && progressSessionID != "" {
 				s.progress.RunningTool(progressSessionID, i+1, canonicalToolName)
 			}
-			result, err := handler(reasoningCtx, rawArgs)
-			if err != nil {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Function.Name, err)
-			}
+			toolExecutions = append(toolExecutions, ReasoningToolExecution{Name: toolCall.Function.Name, Arguments: rawArgs})
+		}
 
+		toolResults, err := ExecuteReasoningToolExecutions(reasoningCtx, toolExecutions, currentToolHandlers, firstIterationToolHandlers)
+		if err != nil {
+			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		}
+		for idx, toolCall := range message.ToolCalls {
 			normalizedMessages = append(normalizedMessages, LLMBotMessage{
 				Role:       "tool",
 				ToolCallID: toolCall.ID,
-				Content:    result,
+				Content:    toolResults[idx].Output,
 			})
 		}
 

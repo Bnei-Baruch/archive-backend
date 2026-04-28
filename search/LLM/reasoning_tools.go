@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 type ReasoningToolDefinition struct {
@@ -18,6 +19,15 @@ type ReasoningTool interface {
 	Definition() ReasoningToolDefinition
 	UsageExplanation() string
 	Execute(ctx context.Context, arguments json.RawMessage) (string, error)
+}
+
+type ReasoningToolExecution struct {
+	Name      string
+	Arguments json.RawMessage
+}
+
+type ReasoningToolExecutionResult struct {
+	Output string
 }
 
 type ReasoningToolManager struct {
@@ -164,6 +174,101 @@ func wrapReasoningToolHandler(name string, handler ToolHandler) ToolHandler {
 		}
 		return sanitizeReasoningToolResult(name, result), nil
 	}
+}
+
+const parallelElasticsearchToolConcurrency = 4
+
+// Execute ES search calls in parallel when the model emits them as one batch.
+// Other tools stay serial, preserving their existing execution behavior.
+func ExecuteReasoningToolExecutions(ctx context.Context, calls []ReasoningToolExecution, currentHandlers map[string]ToolHandler, plannedHandlers map[string]ToolHandler) ([]ReasoningToolExecutionResult, error) {
+	results := make([]ReasoningToolExecutionResult, len(calls))
+	for i := 0; i < len(calls); {
+		if CanonicalReasoningToolName(calls[i].Name) != "elasticsearch_search" {
+			output, err := executeReasoningToolExecution(ctx, calls[i], currentHandlers, plannedHandlers)
+			if err != nil {
+				return nil, err
+			}
+			results[i] = ReasoningToolExecutionResult{Output: output}
+			i++
+			continue
+		}
+
+		end := i + 1
+		for end < len(calls) && CanonicalReasoningToolName(calls[end].Name) == "elasticsearch_search" {
+			end++
+		}
+		if err := executeParallelElasticsearchToolExecutions(ctx, calls[i:end], results[i:end], currentHandlers, plannedHandlers); err != nil {
+			return nil, err
+		}
+		i = end
+	}
+	return results, nil
+}
+
+func executeParallelElasticsearchToolExecutions(ctx context.Context, calls []ReasoningToolExecution, results []ReasoningToolExecutionResult, currentHandlers map[string]ToolHandler, plannedHandlers map[string]ToolHandler) error {
+	if len(calls) <= 1 {
+		output, err := executeReasoningToolExecution(ctx, calls[0], currentHandlers, plannedHandlers)
+		if err != nil {
+			return err
+		}
+		results[0] = ReasoningToolExecutionResult{Output: output}
+		return nil
+	}
+
+	sem := make(chan struct{}, parallelElasticsearchToolConcurrency)
+	var wg sync.WaitGroup
+	var once sync.Once
+	var firstErr error
+	setErr := func(err error) {
+		if err != nil {
+			once.Do(func() { firstErr = err })
+		}
+	}
+
+	for i := range calls {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				setErr(ctx.Err())
+				return
+			}
+			output, err := executeReasoningToolExecution(ctx, calls[i], currentHandlers, plannedHandlers)
+			if err != nil {
+				setErr(err)
+				return
+			}
+			results[i] = ReasoningToolExecutionResult{Output: output}
+		}()
+	}
+	wg.Wait()
+	return firstErr
+}
+
+func executeReasoningToolExecution(ctx context.Context, call ReasoningToolExecution, currentHandlers map[string]ToolHandler, plannedHandlers map[string]ToolHandler) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	handler, ok := ResolveReasoningToolHandler(call.Name, currentHandlers, plannedHandlers)
+	if !ok {
+		return "", fmt.Errorf("missing handler for tool '%s'", call.Name)
+	}
+	args := call.Arguments
+	if len(args) == 0 {
+		args = json.RawMessage("{}")
+	}
+	result, err := handler(ctx, args)
+	if err != nil {
+		return "", fmt.Errorf("tool '%s' execution failed: %w", call.Name, err)
+	}
+	return result, nil
 }
 
 func sanitizeReasoningToolResult(name string, result string) string {

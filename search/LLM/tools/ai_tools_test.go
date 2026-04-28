@@ -1,6 +1,9 @@
 package tools
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestSelectAIQueryBatchesPrefersKeywordMatches(t *testing.T) {
 	batches := [][]aiQueryChunk{
@@ -107,5 +110,18 @@ func TestAIQueryKeywordsFiltersInstructionStopWordsSpanish(t *testing.T) {
 		if keywords[i] != expected[i] {
 			t.Fatalf("expected %v, got %v", expected, keywords)
 		}
+	}
+}
+
+func TestAIQueryShouldRetrySelectionForJSONSyntaxError(t *testing.T) {
+	var payload struct {
+		Matches []int `json:"matches"`
+	}
+	err := json.Unmarshal([]byte(`{"matches":[1]}×`), &payload)
+	if err == nil {
+		t.Fatalf("expected JSON syntax error")
+	}
+	if !aiQueryShouldRetrySelection(err) {
+		t.Fatalf("expected syntax error to be retryable")
 	}
 }

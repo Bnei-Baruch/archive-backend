@@ -10,6 +10,7 @@ type ReasoningSearchResponse struct {
 	SessionID                string                               `json:"session_id"`
 	CacheHit                 bool                                 `json:"cache_hit"`
 	Query                    string                               `json:"query"`
+	QueryMismatchRetry       bool                                 `json:"query_mismatch_retry,omitempty"`
 	Summary                  string                               `json:"summary"`
 	ReasoningSummary         string                               `json:"reasoning_summary"`
 	PlanningOutput           *ReasoningSearchPlanningResponse     `json:"planning_output,omitempty"`

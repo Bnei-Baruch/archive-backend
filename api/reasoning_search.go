@@ -455,10 +455,31 @@ func validateReasoningSearchResponseQuery(expected string, response *llm.Reasoni
 	if response != nil {
 		actual = strings.TrimSpace(response.Query)
 	}
-	if expected == actual {
+	if normalizeReasoningSearchQueryForComparison(expected) == normalizeReasoningSearchQueryForComparison(actual) {
 		return nil
 	}
 	return fmt.Errorf("%w: returned query %q but expected %q", errReasoningSearchQueryMismatch, actual, expected)
+}
+
+func normalizeReasoningSearchQueryForComparison(query string) string {
+	query = strings.TrimSpace(query)
+	var builder strings.Builder
+	lastWasSpace := false
+	for _, r := range query {
+		if isReasoningSearchQuoteMark(r) {
+			continue
+		}
+		if unicode.IsSpace(r) {
+			if builder.Len() > 0 && !lastWasSpace {
+				builder.WriteByte(' ')
+				lastWasSpace = true
+			}
+			continue
+		}
+		builder.WriteRune(r)
+		lastWasSpace = false
+	}
+	return strings.TrimSpace(builder.String())
 }
 
 func mergeReasoningSearchUsageBreakdown(dst **llm.ReasoningSearchUsageBreakdown, src *llm.ReasoningSearchUsageBreakdown) {
@@ -796,6 +817,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		}
 		if previousReasoningAttempt != nil {
 			mergeReasoningSearchAttemptStats(&response, previousReasoningAttempt)
+			response.QueryMismatchRetry = true
 		}
 		break
 	}
@@ -983,6 +1005,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 								}
 								if previousRerunAttempt != nil {
 									mergeReasoningSearchAttemptStats(&rerunResponse, previousRerunAttempt)
+									rerunResponse.QueryMismatchRetry = true
 								}
 								break
 							}
@@ -1005,6 +1028,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 										log.Warnf("Reasoning Search failed to enrich rerun results: %v", err)
 										response = originalResponse
 									} else {
+										rerunResponse.QueryMismatchRetry = rerunResponse.QueryMismatchRetry || originalResponse.QueryMismatchRetry
 										for i := range rerunResponse.Results {
 											rerunResponse.Results[i].Origin = llm.ReasoningSearchResultOriginRerun
 										}
@@ -1306,4 +1330,8 @@ func isReasoningSearchQueryWordRune(r rune) bool {
 
 func isReasoningSearchGeresh(r rune) bool {
 	return r == '\'' || r == '׳'
+}
+
+func isReasoningSearchQuoteMark(r rune) bool {
+	return r == '\'' || r == '"' || r == '׳' || r == '״'
 }

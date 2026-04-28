@@ -552,6 +552,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 
 		ollamaMessages = append(ollamaMessages, resp.Message)
 		toolCallLogs := []string{}
+		toolExecutions := make([]ReasoningToolExecution, 0, len(resp.Message.ToolCalls))
 		for _, toolCall := range resp.Message.ToolCalls {
 			if err := ctx.Err(); err != nil {
 				return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
@@ -563,11 +564,6 @@ func (s *OllamaService) getReasoningResponseWithTools(
 			if !usedToolsSet[canonicalToolName] {
 				usedTools = append(usedTools, canonicalToolName)
 				usedToolsSet[canonicalToolName] = true
-			}
-
-			handler, ok := ResolveReasoningToolHandler(toolCall.Function.Name, currentToolHandlers, firstIterationToolHandlers)
-			if !ok {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Function.Name)
 			}
 
 			rawArgs, err := json.Marshal(toolCall.Function.Arguments)
@@ -584,15 +580,18 @@ func (s *OllamaService) getReasoningResponseWithTools(
 			if s.progress != nil && progressSessionID != "" {
 				s.progress.RunningTool(progressSessionID, i+1, canonicalToolName)
 			}
-			result, err := handler(reasoningCtx, rawArgs)
-			if err != nil {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Function.Name, err)
-			}
+			toolExecutions = append(toolExecutions, ReasoningToolExecution{Name: toolCall.Function.Name, Arguments: rawArgs})
+		}
 
+		toolResults, err := ExecuteReasoningToolExecutions(reasoningCtx, toolExecutions, currentToolHandlers, firstIterationToolHandlers)
+		if err != nil {
+			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		}
+		for idx, toolCall := range resp.Message.ToolCalls {
 			ollamaMessages = append(ollamaMessages, OllamaMessage{
 				Role:     "tool",
 				ToolName: toolCall.Function.Name,
-				Content:  result,
+				Content:  toolResults[idx].Output,
 			})
 		}
 

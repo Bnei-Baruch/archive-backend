@@ -580,6 +580,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 				nextConversationInput = append(nextConversationInput, item)
 			}
 		}
+		toolExecutions := make([]ReasoningToolExecution, 0, len(functionCalls))
 		for _, toolCall := range functionCalls {
 			if err := ctx.Err(); err != nil {
 				return nil, "", usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
@@ -592,11 +593,6 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 			if !usedToolsSet[canonicalToolName] {
 				usedTools = append(usedTools, canonicalToolName)
 				usedToolsSet[canonicalToolName] = true
-			}
-
-			handler, ok := ResolveReasoningToolHandler(toolCall.Name, currentToolHandlers, firstIterationToolHandlers)
-			if !ok {
-				return nil, "", LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("missing handler for tool '%s'", toolCall.Name)
 			}
 
 			rawArgs := json.RawMessage(toolCall.Arguments)
@@ -613,17 +609,20 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 			if s.progress != nil && progressSessionID != "" && !isResultsReadyTool {
 				s.progress.RunningTool(progressSessionID, i+1, canonicalToolName)
 			}
-			result, err := handler(reasoningCtx, rawArgs)
-			if err != nil {
-				return nil, "", LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("tool '%s' execution failed: %w", toolCall.Name, err)
-			}
+			toolExecutions = append(toolExecutions, ReasoningToolExecution{Name: toolCall.Name, Arguments: rawArgs})
+		}
 
+		toolResults, err := ExecuteReasoningToolExecutions(reasoningCtx, toolExecutions, currentToolHandlers, firstIterationToolHandlers)
+		if err != nil {
+			return nil, "", LLMUsageTotals{}, 0, nil, "", nil, err
+		}
+		for idx, toolCall := range functionCalls {
 			nextConversationInput = append(nextConversationInput, map[string]string{
 				"type":    "function_call_output",
 				"call_id": toolCall.CallID,
-				"output":  result,
+				"output":  toolResults[idx].Output,
 			})
-			if isResultsReadyTool {
+			if toolCall.Name == openRouterResultsReadyToolName {
 				resultsReadyCalled = true
 			}
 		}
