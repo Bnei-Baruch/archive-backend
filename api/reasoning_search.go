@@ -36,6 +36,7 @@ var (
 	errReasoningSearchResultsNotReady = errors.New("reasoning search results are not ready yet")
 	errReasoningSearchFailed          = errors.New("reasoning search failed")
 	errReasoningSearchCanceled        = errors.New("reasoning search was canceled")
+	errReasoningSearchQueryMismatch   = errors.New("reasoning search query mismatch")
 )
 
 // Async flow entrypoint: start work in background and return a workflow
@@ -448,10 +449,92 @@ func executeReasoningSearchInBackground(ctx context.Context, runtime *llm.Runtim
 	}
 }
 
+func validateReasoningSearchResponseQuery(expected string, response *llm.ReasoningSearchResponse) error {
+	expected = strings.TrimSpace(expected)
+	actual := ""
+	if response != nil {
+		actual = strings.TrimSpace(response.Query)
+	}
+	if expected == actual {
+		return nil
+	}
+	return fmt.Errorf("%w: returned query %q but expected %q", errReasoningSearchQueryMismatch, actual, expected)
+}
+
+func mergeReasoningSearchUsageBreakdown(dst **llm.ReasoningSearchUsageBreakdown, src *llm.ReasoningSearchUsageBreakdown) {
+	if src == nil {
+		return
+	}
+	if *dst == nil {
+		copy := *src
+		*dst = &copy
+		return
+	}
+	(*dst).TotalTokens += src.TotalTokens
+	(*dst).InputTokens += src.InputTokens
+	(*dst).CachedInputTokens += src.CachedInputTokens
+	(*dst).UncachedInputTokens += src.UncachedInputTokens
+	(*dst).OutputTokens += src.OutputTokens
+	(*dst).ReasoningTokens += src.ReasoningTokens
+	(*dst).EstimatedInputCostUSD += src.EstimatedInputCostUSD
+	(*dst).EstimatedCachedInputCostUSD += src.EstimatedCachedInputCostUSD
+	(*dst).EstimatedOutputCostUSD += src.EstimatedOutputCostUSD
+	(*dst).EstimatedCostUSD += src.EstimatedCostUSD
+	if !src.PricingConfigured {
+		(*dst).PricingConfigured = false
+	}
+}
+
+func mergeReasoningSearchAttemptStats(dst *llm.ReasoningSearchResponse, src *llm.ReasoningSearchResponse) {
+	if dst == nil || src == nil {
+		return
+	}
+	dst.UsedTokens += src.UsedTokens
+	dst.ReasoningIterations += src.ReasoningIterations
+	if len(src.UsedTools) != 0 {
+		mergedTools := make([]string, 0, len(dst.UsedTools)+len(src.UsedTools))
+		seen := map[string]bool{}
+		for _, tool := range dst.UsedTools {
+			if !seen[tool] {
+				seen[tool] = true
+				mergedTools = append(mergedTools, tool)
+			}
+		}
+		for _, tool := range src.UsedTools {
+			if !seen[tool] {
+				seen[tool] = true
+				mergedTools = append(mergedTools, tool)
+			}
+		}
+		dst.SetUsedTools(mergedTools)
+	}
+	if src.Debug == nil {
+		return
+	}
+	if dst.Debug == nil {
+		debugCopy := *src.Debug
+		if src.Debug.MainModelUsage != nil {
+			mainCopy := *src.Debug.MainModelUsage
+			debugCopy.MainModelUsage = &mainCopy
+		}
+		if src.Debug.AIToolsUsage != nil {
+			aiCopy := *src.Debug.AIToolsUsage
+			debugCopy.AIToolsUsage = &aiCopy
+		}
+		dst.Debug = &debugCopy
+		return
+	}
+	mergeReasoningSearchUsageBreakdown(&dst.Debug.MainModelUsage, src.Debug.MainModelUsage)
+	mergeReasoningSearchUsageBreakdown(&dst.Debug.AIToolsUsage, src.Debug.AIToolsUsage)
+	dst.Debug.Add(src.Debug)
+}
+
 // Runs the full reasoning workflow and stores the final per-session response
 // snapshot. The shared query cache may seed an initial result, but the final
 // API payload is always stored per workflow session.
 func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) (err error) {
+	const maxQueryMismatchValidationAttempts = 2
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -473,6 +556,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	workflowStore := runtime.Workflow
 	progressStore := runtime.Progress
 	response := llm.ReasoningSearchResponse{}
+	resolvedProviderSessionID := ""
 	reasoningIterations := 0
 	defer func() {
 		if err == nil {
@@ -673,25 +757,47 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		return err
 	}
 
-	resolvedProviderSessionID, err := service.GetReasoningStructuredOutputWithToolsForSession(ctx,
-		providerSessionID,
-		&progressSessionID,
-		responseSchema,
-		reasoningStage.Model,
-		&reasoningStage.MaxTokens,
-		messages,
-		manager.ToolCalls(),
-		manager.ToolHandlers(),
-		firstIterationTools,
-		firstIterationToolHandlers,
-		&promptCacheKey,
-		&reasoningStage.ReasoningEffort,
-		r.Deb,
-		reasoningStage.MaxIterations,
-		&response,
-	)
-	if err != nil {
-		return err
+	expectedQuery := strings.TrimSpace(r.Query)
+	currentProviderSessionID := providerSessionID
+	var previousReasoningAttempt *llm.ReasoningSearchResponse
+	for attempt := 1; attempt <= maxQueryMismatchValidationAttempts; attempt++ {
+		resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(ctx,
+			currentProviderSessionID,
+			&progressSessionID,
+			responseSchema,
+			reasoningStage.Model,
+			&reasoningStage.MaxTokens,
+			messages,
+			manager.ToolCalls(),
+			manager.ToolHandlers(),
+			firstIterationTools,
+			firstIterationToolHandlers,
+			&promptCacheKey,
+			&reasoningStage.ReasoningEffort,
+			r.Deb,
+			reasoningStage.MaxIterations,
+			&response,
+		)
+		if err != nil {
+			return err
+		}
+		if err := validateReasoningSearchResponseQuery(expectedQuery, &response); err != nil {
+			if !errors.Is(err, errReasoningSearchQueryMismatch) {
+				return err
+			}
+			if attempt == maxQueryMismatchValidationAttempts {
+				return fmt.Errorf("reasoning search query mismatch after retry: %w", err)
+			}
+			log.Warnf("Reasoning Search query mismatch after reasoning stage: expected %q, got %q. Retrying with a fresh provider session.", expectedQuery, strings.TrimSpace(response.Query))
+			previousAttempt := response
+			previousReasoningAttempt = &previousAttempt
+			currentProviderSessionID = nil
+			continue
+		}
+		if previousReasoningAttempt != nil {
+			mergeReasoningSearchAttemptStats(&response, previousReasoningAttempt)
+		}
+		break
 	}
 	reasoningIterations = response.ReasoningIterations
 	reasoningStage.ProviderSessionID = resolvedProviderSessionID
@@ -832,26 +938,54 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 								},
 							}
 							nextProviderSessionID := resolvedProviderSessionID
-							rerunResponse := llm.ReasoningSearchResponse{}
 							rerunProgressOffset := progressCompleteIteration
 							progressStore.SetIterationOffset(responseSessionID, rerunProgressOffset)
-							resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(ctx,
-								&nextProviderSessionID,
-								&progressSessionID,
-								responseSchema,
-								reasoningStage.Model,
-								&reasoningStage.MaxTokens,
-								rerunMessages,
-								manager.ToolCalls(),
-								manager.ToolHandlers(),
-								nil,
-								nil,
-								&promptCacheKey,
-								&reasoningStage.ReasoningEffort,
-								r.Deb,
-								reasoningStage.RerunMaxIterations,
-								&rerunResponse,
-							)
+							rerunStage := reasoningStage
+							rerunStage.MaxIterations = reasoningStage.RerunMaxIterations
+							rerunResponse := llm.ReasoningSearchResponse{}
+							rerunResolvedProviderSessionID := ""
+							currentRerunProviderSessionID := &nextProviderSessionID
+							var previousRerunAttempt *llm.ReasoningSearchResponse
+							for attempt := 1; attempt <= maxQueryMismatchValidationAttempts; attempt++ {
+								rerunResolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(ctx,
+									currentRerunProviderSessionID,
+									&progressSessionID,
+									responseSchema,
+									rerunStage.Model,
+									&rerunStage.MaxTokens,
+									rerunMessages,
+									manager.ToolCalls(),
+									manager.ToolHandlers(),
+									nil,
+									nil,
+									&promptCacheKey,
+									&rerunStage.ReasoningEffort,
+									r.Deb,
+									rerunStage.MaxIterations,
+									&rerunResponse,
+								)
+								if err != nil {
+									break
+								}
+								if err := validateReasoningSearchResponseQuery(expectedQuery, &rerunResponse); err != nil {
+									if !errors.Is(err, errReasoningSearchQueryMismatch) {
+										break
+									}
+									if attempt == maxQueryMismatchValidationAttempts {
+										err = fmt.Errorf("reasoning search query mismatch after retry: %w", err)
+										break
+									}
+									log.Warnf("Reasoning Search query mismatch after rerun stage: expected %q, got %q. Retrying with a fresh provider session.", expectedQuery, strings.TrimSpace(rerunResponse.Query))
+									previousAttempt := rerunResponse
+									previousRerunAttempt = &previousAttempt
+									currentRerunProviderSessionID = nil
+									continue
+								}
+								if previousRerunAttempt != nil {
+									mergeReasoningSearchAttemptStats(&rerunResponse, previousRerunAttempt)
+								}
+								break
+							}
 							progressStore.SetIterationOffset(responseSessionID, 0)
 							if err != nil {
 								if isReasoningSearchCancellation(err) {
@@ -860,6 +994,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 								log.Warnf("Reasoning Search rerun after verification failed: %v", err)
 								response = originalResponse
 							} else {
+								resolvedProviderSessionID = rerunResolvedProviderSessionID
 								reasoningStage.ProviderSessionID = resolvedProviderSessionID
 								if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStageReasoning, reasoningStage); err != nil {
 									log.Warnf("Reasoning Search failed to persist rerun session state: %v", err)
