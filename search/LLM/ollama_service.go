@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 )
 
 const (
@@ -181,7 +182,7 @@ func (s *OllamaService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSteps, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -190,9 +191,9 @@ func (s *OllamaService) GetReasoningStructuredOutputWithTools(
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
 		return err
 	}
-	if deb && reasoningSummary != "" {
-		if setter, ok := output.(reasoningSummarySetter); ok {
-			setter.SetReasoningSummary(reasoningSummary)
+	if deb && len(reasoningSteps) > 0 {
+		if setter, ok := output.(reasoningStepsSetter); ok {
+			setter.SetReasoningSteps(reasoningSteps)
 		}
 	}
 	totalTokens := usageTotals.TotalTokens
@@ -273,7 +274,7 @@ func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 		effectiveProgressSessionID = strings.TrimSpace(*progressSessionID)
 	}
 
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
+	msg, reasoningSteps, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
 		ctx,
 		"GetReasoningStructuredOutputWithToolsForSession",
 		&jsonSchema,
@@ -303,9 +304,9 @@ func (s *OllamaService) GetReasoningStructuredOutputWithToolsForSession(
 		}
 		return "", err
 	}
-	if deb && reasoningSummary != "" {
-		if setter, ok := output.(reasoningSummarySetter); ok {
-			setter.SetReasoningSummary(reasoningSummary)
+	if deb && len(reasoningSteps) > 0 {
+		if setter, ok := output.(reasoningStepsSetter); ok {
+			setter.SetReasoningSteps(reasoningSteps)
 		}
 	}
 	totalTokens := usageTotals.TotalTokens
@@ -441,7 +442,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 	progressSessionID string,
-) (*LLMBotMessage, string, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
+) (*LLMBotMessage, []ReasoningSearchReasoningStep, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -472,16 +473,16 @@ func (s *OllamaService) getReasoningResponseWithTools(
 			)
 		}
 	}()
-	reasoningSummaries := []string{}
+	reasoningSteps := []ReasoningSearchReasoningStep{}
 
 	if len(tools) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
 	}
 	if len(toolHandlers) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
 	}
 	if len(firstIterationTools) > 0 && len(firstIterationToolHandlers) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
 	}
 	if maxIterations <= 0 {
 		maxIterations = 8
@@ -489,29 +490,30 @@ func (s *OllamaService) getReasoningResponseWithTools(
 
 	ollamaMessages, err := buildInitialOllamaMessages(messages, jsonSchema, s.structuredOutputPromptSchema)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	firstIterationOllamaMessages := ollamaMessages
 	if len(firstIterationTools) > 0 {
 		firstIterationMessages := WithFirstIterationReasoningSearchSystemMessage(messages, firstIterationTools)
 		firstIterationOllamaMessages, err = buildInitialOllamaMessages(firstIterationMessages, jsonSchema, s.structuredOutputPromptSchema)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 	}
 	format, err := buildOllamaFormat(jsonSchema)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	think, err := ollamaThinkValue(reasoningEffort, deb)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
 
 	for i := 0; i < maxIterations; i++ {
+		stepStarted := time.Now()
 		if err := ctx.Err(); err != nil {
-			return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+			return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 		}
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
@@ -530,35 +532,35 @@ func (s *OllamaService) getReasoningResponseWithTools(
 
 		var resp OllamaChatResponse
 		if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/api/chat", &resp, deb); err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
+		stepUsage := reasoningUsageTotals(resp.usage())
 		usageTotals.Add(resp.usage())
 
-		if strings.TrimSpace(resp.Message.Thinking) != "" {
-			reasoningSummaries = append(reasoningSummaries, strings.TrimSpace(resp.Message.Thinking))
-		}
+		stepThoughts := strings.TrimSpace(resp.Message.Thinking)
 		s.logThinkingIfDeb(deb, i+1, resp.Message.Thinking)
 
 		if len(resp.Message.ToolCalls) == 0 {
 			if strings.TrimSpace(resp.Message.Content) == "" {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("ollama chat returned empty assistant output")
+				return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("ollama chat returned empty assistant output")
 			}
+			reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, nil, stepUsage, stepStarted)
 			return &LLMBotMessage{
 				Role:    "assistant",
 				Content: resp.Message.Content,
-			}, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
+			}, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
 		}
 
 		ollamaMessages = append(ollamaMessages, resp.Message)
-		toolCallLogs := []string{}
+		stepToolCalls := []ReasoningSearchReasoningToolCall{}
 		toolExecutions := make([]ReasoningToolExecution, 0, len(resp.Message.ToolCalls))
 		for _, toolCall := range resp.Message.ToolCalls {
 			if err := ctx.Err(); err != nil {
-				return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+				return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 			}
 			if toolCall.Function.Name == "" {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("ollama tool call is missing function name")
+				return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("ollama tool call is missing function name")
 			}
 			canonicalToolName := CanonicalReasoningToolName(toolCall.Function.Name)
 			if !usedToolsSet[canonicalToolName] {
@@ -568,13 +570,13 @@ func (s *OllamaService) getReasoningResponseWithTools(
 
 			rawArgs, err := json.Marshal(toolCall.Function.Arguments)
 			if err != nil {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("failed to encode arguments for tool '%s': %w", toolCall.Function.Name, err)
+				return nil, nil, LLMUsageTotals{}, 0, nil, nil, fmt.Errorf("failed to encode arguments for tool '%s': %w", toolCall.Function.Name, err)
 			}
 			if len(rawArgs) == 0 {
 				rawArgs = json.RawMessage("{}")
 			}
 			if deb {
-				toolCallLogs = append(toolCallLogs, fmt.Sprintf("- %s args: %s", toolCall.Function.Name, compactToolCallArguments(rawArgs)))
+				stepToolCalls = append(stepToolCalls, reasoningToolCallDebug(toolCall.Function.Name, rawArgs))
 			}
 
 			if s.progress != nil && progressSessionID != "" {
@@ -585,7 +587,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 
 		toolResults, err := ExecuteReasoningToolExecutions(reasoningCtx, toolExecutions, currentToolHandlers, firstIterationToolHandlers)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		for idx, toolCall := range resp.Message.ToolCalls {
 			ollamaMessages = append(ollamaMessages, OllamaMessage{
@@ -595,12 +597,10 @@ func (s *OllamaService) getReasoningResponseWithTools(
 			})
 		}
 
-		if deb && len(toolCallLogs) > 0 {
-			reasoningSummaries = append(reasoningSummaries, "Tool calls:\n"+strings.Join(toolCallLogs, "\n"))
-		}
+		reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, stepToolCalls, stepUsage, stepStarted)
 	}
 
-	return nil, "", LLMUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
+	return nil, reasoningSteps, LLMUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
 }
 
 func (s *OllamaService) newChatRequest(model string, maxTokens *int, messages []OllamaMessage, tools []ToolCall, format interface{}, think interface{}) OllamaChatRequest {

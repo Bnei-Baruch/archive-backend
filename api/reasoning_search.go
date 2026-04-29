@@ -864,10 +864,10 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 				verificationStage.ReasoningEffort,
 			)
 			verificationInput, err := json.Marshal(struct {
-				Query            string                      `json:"query"`
-				Summary          string                      `json:"summary"`
-				ReasoningSummary string                      `json:"reasoning_summary,omitempty"`
-				Results          []llm.ReasoningSearchResult `json:"results"`
+				Query            string                             `json:"query"`
+				Summary          string                             `json:"summary"`
+				ReasoningSummary []llm.ReasoningSearchReasoningStep `json:"reasoning_summary,omitempty"`
+				Results          []llm.ReasoningSearchResult        `json:"results"`
 			}{
 				Query:            r.Query,
 				Summary:          response.Summary,

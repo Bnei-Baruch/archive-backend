@@ -375,7 +375,7 @@ func TestOpenRouterResultsReadyToolStopsForcedToolUse(t *testing.T) {
 							"content": []map[string]interface{}{
 								{
 									"type": "output_text",
-									"text": `{"query":"x","summary":"done","reasoning_summary":"","results":[]}`,
+									"text": `{"query":"x","summary":"done","reasoning_summary":[],"results":[]}`,
 								},
 							},
 						},

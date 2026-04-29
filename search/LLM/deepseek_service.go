@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 )
 
 const defaultDeepSeekAPIBaseURL = "https://api.deepseek.com"
@@ -197,7 +198,7 @@ func (s *DeepSeekService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSteps, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -208,9 +209,9 @@ func (s *DeepSeekService) GetReasoningStructuredOutputWithTools(
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
 		return err
 	}
-	if deb && reasoningSummary != "" {
-		if setter, ok := output.(reasoningSummarySetter); ok {
-			setter.SetReasoningSummary(reasoningSummary)
+	if deb && len(reasoningSteps) > 0 {
+		if setter, ok := output.(reasoningStepsSetter); ok {
+			setter.SetReasoningSteps(reasoningSteps)
 		}
 	}
 	totalTokens := usageTotals.TotalTokens
@@ -291,7 +292,7 @@ func (s *DeepSeekService) GetReasoningStructuredOutputWithToolsForSession(
 		effectiveProgressSessionID = strings.TrimSpace(*progressSessionID)
 	}
 
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
+	msg, reasoningSteps, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
 		ctx,
 		"GetReasoningStructuredOutputWithToolsForSession",
 		&jsonSchema,
@@ -326,9 +327,9 @@ func (s *DeepSeekService) GetReasoningStructuredOutputWithToolsForSession(
 		}
 		return "", err
 	}
-	if deb && reasoningSummary != "" {
-		if setter, ok := output.(reasoningSummarySetter); ok {
-			setter.SetReasoningSummary(reasoningSummary)
+	if deb && len(reasoningSteps) > 0 {
+		if setter, ok := output.(reasoningStepsSetter); ok {
+			setter.SetReasoningSteps(reasoningSteps)
 		}
 	}
 	totalTokens := usageTotals.TotalTokens
@@ -462,7 +463,7 @@ func (s *DeepSeekService) getReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 	progressSessionID string,
-) (*LLMBotMessage, string, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
+) (*LLMBotMessage, []ReasoningSearchReasoningStep, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -493,16 +494,16 @@ func (s *DeepSeekService) getReasoningResponseWithTools(
 			)
 		}
 	}()
-	reasoningSummaries := []string{}
+	reasoningSteps := []ReasoningSearchReasoningStep{}
 
 	if len(tools) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
 	}
 	if len(toolHandlers) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
 	}
 	if len(firstIterationTools) > 0 && len(firstIterationToolHandlers) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
 	}
 	if maxIterations <= 0 {
 		maxIterations = 8
@@ -510,19 +511,19 @@ func (s *DeepSeekService) getReasoningResponseWithTools(
 
 	normalizedMessages, err := normalizeDeepSeekMessages(messages)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	firstIterationNormalizedMessages := normalizedMessages
 	if len(firstIterationTools) > 0 {
 		firstIterationMessages := WithFirstIterationReasoningSearchSystemMessage(messages, firstIterationTools)
 		firstIterationNormalizedMessages, err = normalizeDeepSeekMessages(firstIterationMessages)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 	}
 	responseFormat, err := deepseekResponseFormat(jsonSchema)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	if jsonSchema != nil {
 		normalizedMessages[0].Content = appendStructuredOutputInstruction(normalizedMessages[0].Content, jsonSchema)
@@ -532,14 +533,15 @@ func (s *DeepSeekService) getReasoningResponseWithTools(
 	}
 	thinking, effort, err := deepseekThinkingAndEffort(reasoningEffort)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	toolChoice := "auto"
 	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
 
 	for i := 0; i < maxIterations; i++ {
+		stepStarted := time.Now()
 		if err := ctx.Err(); err != nil {
-			return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+			return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 		}
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
@@ -569,63 +571,63 @@ func (s *DeepSeekService) getReasoningResponseWithTools(
 
 		var chatResp DeepSeekChatResponse
 		if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
+		stepUsage := reasoningUsageTotals(chatResp.Usage)
 		usageTotals.Add(chatResp.Usage)
 
 		message, err := firstDeepSeekChoice(&chatResp)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
+		stepThoughts := strings.TrimSpace(message.ReasoningContent)
 		if strings.TrimSpace(message.ReasoningContent) != "" {
-			summary := strings.TrimSpace(message.ReasoningContent)
-			reasoningSummaries = append(reasoningSummaries, summary)
 			if deb {
-				log.Printf("LLM reasoning summary iteration %d:\n%s", i+1, summary)
+				log.Printf("LLM reasoning summary iteration %d:\n%s", i+1, stepThoughts)
 			}
 		}
 
 		if len(message.ToolCalls) == 0 {
 			if strings.TrimSpace(message.Content) == "" {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("deepseek chat returned empty assistant output")
+				return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("deepseek chat returned empty assistant output")
 			}
 			if len(usedTools) == 0 {
 				normalizedMessages = append(normalizedMessages, DeepSeekRequestMessage{Role: "assistant", Content: message.Content, ReasoningContent: message.ReasoningContent}, DeepSeekRequestMessage{Role: "user", Content: "Use the available archive search tools before giving final results. Do not invent or use example result IDs."})
+				reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, nil, stepUsage, stepStarted)
 				continue
 			}
 			if jsonSchema != nil {
 				if err := validateJSONRequiredTopLevelFields(message.Content, *jsonSchema); err != nil {
 					normalizedMessages = append(normalizedMessages, DeepSeekRequestMessage{Role: "assistant", Content: message.Content, ReasoningContent: message.ReasoningContent})
 					msg, finalizeUsage, err := s.getChatResponseWithUsage(ctx, model, maxTokens, deepseekMessagesToLLM(normalizedMessages), jsonSchema, reasoningEffort, deb)
-					usageTotals.InputTokens += finalizeUsage.InputTokens
-					usageTotals.CachedInputTokens += finalizeUsage.CachedInputTokens
-					usageTotals.OutputTokens += finalizeUsage.OutputTokens
-					usageTotals.ReasoningTokens += finalizeUsage.ReasoningTokens
-					usageTotals.TotalTokens += finalizeUsage.TotalTokens
+					usageTotals.AddTotals(finalizeUsage)
+					stepUsage.AddTotals(finalizeUsage)
 					if err != nil {
-						return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+						return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 					}
 					if err := validateJSONRequiredTopLevelFields(msg.Content, *jsonSchema); err != nil {
-						return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+						return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 					}
-					return msg, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations + 1, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
+					reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, nil, stepUsage, stepStarted)
+					return msg, reasoningSteps, usageTotals, iterations + 1, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
 				}
 			}
-			return &LLMBotMessage{Role: "assistant", Content: message.Content, Reasoning: message.ReasoningContent}, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
+			reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, nil, stepUsage, stepStarted)
+			return &LLMBotMessage{Role: "assistant", Content: message.Content, Reasoning: message.ReasoningContent}, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
 		}
 
 		assistantMessage := deepseekAssistantRequestMessage(message)
 		normalizedMessages = append(normalizedMessages, assistantMessage)
 
-		toolCallLogs := []string{}
+		stepToolCalls := []ReasoningSearchReasoningToolCall{}
 		toolExecutions := make([]ReasoningToolExecution, 0, len(message.ToolCalls))
 		for _, toolCall := range message.ToolCalls {
 			if err := ctx.Err(); err != nil {
-				return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+				return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 			}
 			if toolCall.Function.Name == "" {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("deepseek tool call is missing function name")
+				return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("deepseek tool call is missing function name")
 			}
 			canonicalToolName := CanonicalReasoningToolName(toolCall.Function.Name)
 			if !usedToolsSet[canonicalToolName] {
@@ -638,7 +640,7 @@ func (s *DeepSeekService) getReasoningResponseWithTools(
 				rawArgs = json.RawMessage("{}")
 			}
 			if deb {
-				toolCallLogs = append(toolCallLogs, fmt.Sprintf("- %s args: %s", toolCall.Function.Name, compactToolCallArguments(rawArgs)))
+				stepToolCalls = append(stepToolCalls, reasoningToolCallDebug(toolCall.Function.Name, rawArgs))
 			}
 
 			if s.progress != nil && progressSessionID != "" {
@@ -649,18 +651,16 @@ func (s *DeepSeekService) getReasoningResponseWithTools(
 
 		toolResults, err := ExecuteReasoningToolExecutions(reasoningCtx, toolExecutions, currentToolHandlers, firstIterationToolHandlers)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		for idx, toolCall := range message.ToolCalls {
 			normalizedMessages = append(normalizedMessages, DeepSeekRequestMessage{Role: "tool", ToolCallID: toolCall.ID, Content: toolResults[idx].Output})
 		}
 
-		if deb && len(toolCallLogs) > 0 {
-			reasoningSummaries = append(reasoningSummaries, "Tool calls:\n"+strings.Join(toolCallLogs, "\n"))
-		}
+		reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, stepToolCalls, stepUsage, stepStarted)
 	}
 
-	return nil, "", LLMUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
+	return nil, reasoningSteps, LLMUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
 }
 
 func normalizeDeepSeekMessages(messages []LLMBotMessage) ([]DeepSeekRequestMessage, error) {

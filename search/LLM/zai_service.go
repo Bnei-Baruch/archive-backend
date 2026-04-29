@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 )
 
 const defaultZAIAPIBaseURL = "https://api.z.ai/api/paas/v4"
@@ -204,7 +205,7 @@ func (s *ZAIService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSteps, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -216,9 +217,9 @@ func (s *ZAIService) GetReasoningStructuredOutputWithTools(
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
 		return err
 	}
-	if deb && reasoningSummary != "" {
-		if setter, ok := output.(reasoningSummarySetter); ok {
-			setter.SetReasoningSummary(reasoningSummary)
+	if deb && len(reasoningSteps) > 0 {
+		if setter, ok := output.(reasoningStepsSetter); ok {
+			setter.SetReasoningSteps(reasoningSteps)
 		}
 	}
 	totalTokens := usageTotals.TotalTokens
@@ -299,7 +300,7 @@ func (s *ZAIService) GetReasoningStructuredOutputWithToolsForSession(
 		effectiveProgressSessionID = strings.TrimSpace(*progressSessionID)
 	}
 
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
+	msg, reasoningSteps, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
 		ctx,
 		"GetReasoningStructuredOutputWithToolsForSession",
 		&jsonSchema,
@@ -335,9 +336,9 @@ func (s *ZAIService) GetReasoningStructuredOutputWithToolsForSession(
 		}
 		return "", err
 	}
-	if deb && reasoningSummary != "" {
-		if setter, ok := output.(reasoningSummarySetter); ok {
-			setter.SetReasoningSummary(reasoningSummary)
+	if deb && len(reasoningSteps) > 0 {
+		if setter, ok := output.(reasoningStepsSetter); ok {
+			setter.SetReasoningSteps(reasoningSteps)
 		}
 	}
 	totalTokens := usageTotals.TotalTokens
@@ -473,7 +474,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 	progressSessionID string,
-) (*LLMBotMessage, string, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
+) (*LLMBotMessage, []ReasoningSearchReasoningStep, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -504,16 +505,16 @@ func (s *ZAIService) getReasoningResponseWithTools(
 			)
 		}
 	}()
-	reasoningSummaries := []string{}
+	reasoningSteps := []ReasoningSearchReasoningStep{}
 
 	if len(tools) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
 	}
 	if len(toolHandlers) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
 	}
 	if len(firstIterationTools) > 0 && len(firstIterationToolHandlers) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
 	}
 	if maxIterations <= 0 {
 		maxIterations = 8
@@ -521,14 +522,14 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 	normalizedMessages, err := normalizeZAIMessages(messages)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	firstIterationNormalizedMessages := normalizedMessages
 	if len(firstIterationTools) > 0 {
 		firstIterationMessages := WithFirstIterationReasoningSearchSystemMessage(messages, firstIterationTools)
 		firstIterationNormalizedMessages, err = normalizeZAIMessages(firstIterationMessages)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 	}
 	if jsonSchema != nil {
@@ -541,15 +542,16 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	}
 	thinking, err := zaiThinkingValue(reasoningEffort)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	responseFormat := zaiResponseFormat(jsonSchema)
 	toolChoice := "auto"
 	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
 
 	for i := 0; i < maxIterations; i++ {
+		stepStarted := time.Now()
 		if err := ctx.Err(); err != nil {
-			return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+			return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 		}
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
@@ -582,47 +584,48 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 		var chatResp ZAIChatResponse
 		if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
+		stepUsage := reasoningUsageTotals(chatResp.Usage)
 		usageTotals.Add(chatResp.Usage)
 
 		message, err := firstZAIChoice(&chatResp)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
+		stepThoughts := strings.TrimSpace(message.ReasoningContent)
 		if strings.TrimSpace(message.ReasoningContent) != "" {
-			summary := strings.TrimSpace(message.ReasoningContent)
-			reasoningSummaries = append(reasoningSummaries, summary)
 			if deb {
-				log.Printf("LLM reasoning summary iteration %d:\n%s", i+1, summary)
+				log.Printf("LLM reasoning summary iteration %d:\n%s", i+1, stepThoughts)
 			}
 		}
 
 		if len(message.ToolCalls) == 0 {
 			if strings.TrimSpace(message.Content) == "" {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("zai chat returned empty assistant output")
+				return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("zai chat returned empty assistant output")
 			}
+			reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, nil, stepUsage, stepStarted)
 			return &LLMBotMessage{
 				Role:    "assistant",
 				Content: message.Content,
-			}, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
+			}, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
 		}
 
 		assistantMessage, err := zaiAssistantMessage(message)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		normalizedMessages = append(normalizedMessages, *assistantMessage)
 
-		toolCallLogs := []string{}
+		stepToolCalls := []ReasoningSearchReasoningToolCall{}
 		toolExecutions := make([]ReasoningToolExecution, 0, len(message.ToolCalls))
 		for _, toolCall := range message.ToolCalls {
 			if err := ctx.Err(); err != nil {
-				return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+				return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 			}
 			if toolCall.Function.Name == "" {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("zai tool call is missing function name")
+				return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("zai tool call is missing function name")
 			}
 			canonicalToolName := CanonicalReasoningToolName(toolCall.Function.Name)
 			if !usedToolsSet[canonicalToolName] {
@@ -635,7 +638,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 				rawArgs = json.RawMessage("{}")
 			}
 			if deb {
-				toolCallLogs = append(toolCallLogs, fmt.Sprintf("- %s args: %s", toolCall.Function.Name, compactToolCallArguments(rawArgs)))
+				stepToolCalls = append(stepToolCalls, reasoningToolCallDebug(toolCall.Function.Name, rawArgs))
 			}
 
 			if s.progress != nil && progressSessionID != "" {
@@ -646,7 +649,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 		toolResults, err := ExecuteReasoningToolExecutions(reasoningCtx, toolExecutions, currentToolHandlers, firstIterationToolHandlers)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		for idx, toolCall := range message.ToolCalls {
 			normalizedMessages = append(normalizedMessages, LLMBotMessage{
@@ -656,12 +659,10 @@ func (s *ZAIService) getReasoningResponseWithTools(
 			})
 		}
 
-		if deb && len(toolCallLogs) > 0 {
-			reasoningSummaries = append(reasoningSummaries, "Tool calls:\n"+strings.Join(toolCallLogs, "\n"))
-		}
+		reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, stepToolCalls, stepUsage, stepStarted)
 	}
 
-	return nil, "", LLMUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
+	return nil, reasoningSteps, LLMUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
 }
 
 func normalizeZAIMessages(messages []LLMBotMessage) ([]LLMBotMessage, error) {

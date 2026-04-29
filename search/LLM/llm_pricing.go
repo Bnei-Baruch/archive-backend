@@ -46,6 +46,14 @@ func (u *LLMUsageTotals) Add(usage *OpenAIUsage) {
 	}
 }
 
+func (u *LLMUsageTotals) AddTotals(other LLMUsageTotals) {
+	u.InputTokens += other.InputTokens
+	u.CachedInputTokens += other.CachedInputTokens
+	u.OutputTokens += other.OutputTokens
+	u.ReasoningTokens += other.ReasoningTokens
+	u.TotalTokens += other.TotalTokens
+}
+
 func (u LLMUsageTotals) UncachedInputTokens() int {
 	uncached := u.InputTokens - u.CachedInputTokens
 	if uncached < 0 {

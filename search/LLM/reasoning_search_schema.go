@@ -12,7 +12,7 @@ type ReasoningSearchResponse struct {
 	Query                    string                               `json:"query"`
 	QueryMismatchRetry       bool                                 `json:"query_mismatch_retry,omitempty"`
 	Summary                  string                               `json:"summary"`
-	ReasoningSummary         string                               `json:"reasoning_summary"`
+	ReasoningSummary         []ReasoningSearchReasoningStep       `json:"reasoning_summary"`
 	PlanningOutput           *ReasoningSearchPlanningResponse     `json:"planning_output,omitempty"`
 	PlanningReasoningSummary string                               `json:"planning_reasoning_summary,omitempty"`
 	VerificationOutput       *ReasoningSearchVerificationResponse `json:"verification_output,omitempty"`
@@ -24,6 +24,28 @@ type ReasoningSearchResponse struct {
 	UsedTools                []string                             `json:"used_tools"`
 	Results                  []ReasoningSearchResult              `json:"results"`
 	Debug                    *ReasoningSearchDebugInfo            `json:"debug,omitempty"`
+}
+
+type ReasoningSearchReasoningStep struct {
+	Number    int                                `json:"number"`
+	Thoughts  string                             `json:"thoughts"`
+	ToolCalls []ReasoningSearchReasoningToolCall `json:"tool_calls"`
+	Usage     ReasoningSearchReasoningStepUsage  `json:"usage"`
+	LatencyMS int64                              `json:"latency_ms"`
+}
+
+type ReasoningSearchReasoningStepUsage struct {
+	TotalTokens         int `json:"total_tokens"`
+	InputTokens         int `json:"input_tokens"`
+	CachedInputTokens   int `json:"cached_input_tokens"`
+	UncachedInputTokens int `json:"uncached_input_tokens"`
+	OutputTokens        int `json:"output_tokens"`
+	ReasoningTokens     int `json:"reasoning_tokens"`
+}
+
+type ReasoningSearchReasoningToolCall struct {
+	Name   string `json:"name"`
+	Params string `json:"params"`
 }
 
 type ReasoningSearchResult struct {
@@ -130,8 +152,65 @@ func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (
 				"description": summaryDescription,
 			},
 			"reasoning_summary": map[string]interface{}{
-				"type":        "string",
-				"description": "A short summary of the reasoning process when debug mode is enabled, otherwise an empty string.",
+				"type":        "array",
+				"description": "Return an empty array. The backend fills this field with per-step debug data when debug mode is enabled.",
+				"items": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]interface{}{
+						"number": map[string]interface{}{
+							"type": "integer",
+						},
+						"thoughts": map[string]interface{}{
+							"type": "string",
+						},
+						"tool_calls": map[string]interface{}{
+							"type": "array",
+							"items": map[string]interface{}{
+								"type":                 "object",
+								"additionalProperties": false,
+								"properties": map[string]interface{}{
+									"name": map[string]interface{}{
+										"type": "string",
+									},
+									"params": map[string]interface{}{
+										"type": "string",
+									},
+								},
+								"required": []string{"name", "params"},
+							},
+						},
+						"usage": map[string]interface{}{
+							"type":                 "object",
+							"additionalProperties": false,
+							"properties": map[string]interface{}{
+								"total_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+								"input_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+								"cached_input_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+								"uncached_input_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+								"output_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+								"reasoning_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+							},
+							"required": []string{"total_tokens", "input_tokens", "cached_input_tokens", "uncached_input_tokens", "output_tokens", "reasoning_tokens"},
+						},
+						"latency_ms": map[string]interface{}{
+							"type": "integer",
+						},
+					},
+					"required": []string{"number", "thoughts", "tool_calls", "usage", "latency_ms"},
+				},
 			},
 			"results": map[string]interface{}{
 				"type":        "array",
@@ -174,8 +253,12 @@ func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (
 	return string(payload), nil
 }
 
-func (r *ReasoningSearchResponse) SetReasoningSummary(summary string) {
-	r.ReasoningSummary = summary
+func (r *ReasoningSearchResponse) SetReasoningSteps(steps []ReasoningSearchReasoningStep) {
+	if steps == nil {
+		r.ReasoningSummary = []ReasoningSearchReasoningStep{}
+		return
+	}
+	r.ReasoningSummary = steps
 }
 
 func (r *ReasoningSearchResponse) SetReasoningProcessStats(usedTokens int, reasoningIterations int) {

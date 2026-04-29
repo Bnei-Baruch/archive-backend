@@ -281,7 +281,7 @@ func TestZAIReasoningStructuredOutputRejectsNullRequiredTopLevelFields(t *testin
 						"index": 0,
 						"message": map[string]interface{}{
 							"role":    "assistant",
-							"content": `{"query":null,"summary":null,"reasoning_summary":"x","results":null}`,
+							"content": `{"query":null,"summary":null,"reasoning_summary":[],"results":null}`,
 						},
 					},
 				},
@@ -304,7 +304,7 @@ func TestZAIReasoningStructuredOutputRejectsNullRequiredTopLevelFields(t *testin
 	var output struct {
 		Query            string        `json:"query"`
 		Summary          string        `json:"summary"`
-		ReasoningSummary string        `json:"reasoning_summary"`
+		ReasoningSummary []interface{} `json:"reasoning_summary"`
 		Results          []interface{} `json:"results"`
 	}
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 )
 
 const embeddingModel = "text-embedding-3-large"
@@ -348,7 +349,7 @@ func (s *OpenAICompatibleAPIService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, _, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, promptCacheKey, reasoningEffort, deb, maxIterations, nil, "")
+	msg, reasoningSteps, usageTotals, reasoningIterations, usedTools, _, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, promptCacheKey, reasoningEffort, deb, maxIterations, nil, "")
 	if err != nil {
 		return err
 	}
@@ -357,9 +358,9 @@ func (s *OpenAICompatibleAPIService) GetReasoningStructuredOutputWithTools(
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
 		return err
 	}
-	if deb && reasoningSummary != "" {
-		if setter, ok := output.(reasoningSummarySetter); ok {
-			setter.SetReasoningSummary(reasoningSummary)
+	if deb && len(reasoningSteps) > 0 {
+		if setter, ok := output.(reasoningStepsSetter); ok {
+			setter.SetReasoningSteps(reasoningSteps)
 		}
 	}
 	totalTokens := usageTotals.TotalTokens
@@ -432,7 +433,7 @@ func (s *OpenAICompatibleAPIService) GetReasoningStructuredOutputWithToolsForSes
 		effectiveProgressSessionID = strings.TrimSpace(*progressSessionID)
 	}
 
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, finalResponseID, toolDebug, err := s.getReasoningResponseWithTools(
+	msg, reasoningSteps, usageTotals, reasoningIterations, usedTools, finalResponseID, toolDebug, err := s.getReasoningResponseWithTools(
 		ctx,
 		"GetReasoningStructuredOutputWithToolsForSession",
 		&jsonSchema,
@@ -465,9 +466,9 @@ func (s *OpenAICompatibleAPIService) GetReasoningStructuredOutputWithToolsForSes
 		return "", err
 	}
 
-	if deb && reasoningSummary != "" {
-		if setter, ok := output.(reasoningSummarySetter); ok {
-			setter.SetReasoningSummary(reasoningSummary)
+	if deb && len(reasoningSteps) > 0 {
+		if setter, ok := output.(reasoningStepsSetter); ok {
+			setter.SetReasoningSteps(reasoningSteps)
 		}
 	}
 	totalTokens := usageTotals.TotalTokens
@@ -546,7 +547,7 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 	maxIterations int,
 	initialPreviousResponseID *string,
 	progressSessionID string,
-) (*LLMBotMessage, string, LLMUsageTotals, int, []string, string, *ReasoningSearchDebugInfo, error) {
+) (*LLMBotMessage, []ReasoningSearchReasoningStep, LLMUsageTotals, int, []string, string, *ReasoningSearchDebugInfo, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -556,7 +557,7 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 			switch *reasoningEffort {
 			case "low", "medium", "high":
 			default:
-				return nil, "", LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("reasoning effort %q is not supported for model %q; gpt-oss supports only low, medium, high", *reasoningEffort, model)
+				return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("reasoning effort %q is not supported for model %q; gpt-oss supports only low, medium, high", *reasoningEffort, model)
 			}
 		}
 	}
@@ -587,13 +588,13 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 			)
 		}
 	}()
-	reasoningSummaries := []string{}
+	reasoningSteps := []ReasoningSearchReasoningStep{}
 
 	if len(tools) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, "", nil, errors.New("tools must contain at least one tool definition")
+		return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, errors.New("tools must contain at least one tool definition")
 	}
 	if len(toolHandlers) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, "", nil, errors.New("toolHandlers must contain at least one handler")
+		return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, errors.New("toolHandlers must contain at least one handler")
 	}
 	if maxIterations <= 0 {
 		maxIterations = 8
@@ -611,7 +612,7 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 		}
 		if m.Role == "tool" {
 			if m.ToolCallID == "" {
-				return nil, "", LLMUsageTotals{}, 0, nil, "", nil, errors.New("tool message is missing tool_call_id")
+				return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, errors.New("tool message is missing tool_call_id")
 			}
 			initialInput = append(initialInput, map[string]string{
 				"type":    "function_call_output",
@@ -626,7 +627,7 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 		})
 	}
 	if sysMsgCount != 1 {
-		return nil, "", LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("must include exactly one system message, found %d", sysMsgCount)
+		return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("must include exactly one system message, found %d", sysMsgCount)
 	}
 	firstIterationInstructions := instructions
 	if len(firstIterationTools) > 0 {
@@ -635,30 +636,31 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 
 	normalizedTools, err := normalizeResponseTools(tools)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, "", nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, err
 	}
 	firstIterationNormalizedTools := normalizedTools
 	if len(firstIterationTools) > 0 {
 		firstIterationNormalizedTools, err = normalizeResponseTools(firstIterationTools)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, "", nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, err
 		}
 		if len(firstIterationToolHandlers) == 0 {
-			return nil, "", LLMUsageTotals{}, 0, nil, "", nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
+			return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
 		}
 	}
 
 	text, err := buildResponsesText(jsonSchema)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, "", nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, err
 	}
 
 	previousResponseID := initialPreviousResponseID
 	nextInput := initialInput
 
 	for i := 0; i < maxIterations; i++ {
+		stepStarted := time.Now()
 		if err := ctx.Err(); err != nil {
-			return nil, "", usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
+			return nil, reasoningSteps, usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
 		}
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
@@ -698,22 +700,20 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 
 		var responsesResp ResponsesResponse
 		if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/responses", &responsesResp, deb); err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, "", nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, err
 		}
 		iterations = i + 1
 		iterationSummary := strings.Join(extractReasoningSummaryText(responsesResp.Output), "\n\n")
-		if strings.TrimSpace(iterationSummary) != "" {
-			reasoningSummaries = append(reasoningSummaries, iterationSummary)
-		}
+		stepUsage := reasoningUsageTotals(responsesResp.Usage)
 		printReasoningOutputIfDeb(deb, i+1, responsesResp.Output)
 		usageTotals.Add(responsesResp.Usage)
 
 		if err := responsesCompletionError(&responsesResp); err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, "", nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, err
 		}
 
 		if len(responsesResp.Output) == 0 {
-			return nil, "", LLMUsageTotals{}, 0, nil, "", nil, errors.New("responses API returned no output")
+			return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, errors.New("responses API returned no output")
 		}
 
 		functionCalls := []ResponsesOutputItem{}
@@ -726,23 +726,24 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 		if len(functionCalls) == 0 {
 			content := extractAssistantOutputText(responsesResp.Output)
 			if content == "" {
-				return nil, "", LLMUsageTotals{}, 0, nil, "", nil, errors.New(ResponsesAPIEmptyAssistantOutputError)
+				return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, errors.New(ResponsesAPIEmptyAssistantOutputError)
 			}
+			reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, iterationSummary, nil, stepUsage, stepStarted)
 			return &LLMBotMessage{
 				Role:    "assistant",
 				Content: content,
-			}, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations, usedTools, responsesResp.ID, ToolDebugInfoFromContext(reasoningCtx), nil
+			}, reasoningSteps, usageTotals, iterations, usedTools, responsesResp.ID, ToolDebugInfoFromContext(reasoningCtx), nil
 		}
 
 		nextInput = []interface{}{}
-		toolCallLogs := []string{}
+		stepToolCalls := []ReasoningSearchReasoningToolCall{}
 		toolExecutions := make([]ReasoningToolExecution, 0, len(functionCalls))
 		for _, toolCall := range functionCalls {
 			if err := ctx.Err(); err != nil {
-				return nil, "", usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
+				return nil, reasoningSteps, usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
 			}
 			if toolCall.CallID == "" {
-				return nil, "", LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("tool call for '%s' is missing call_id", toolCall.Name)
+				return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("tool call for '%s' is missing call_id", toolCall.Name)
 			}
 			canonicalToolName := CanonicalReasoningToolName(toolCall.Name)
 			if !usedToolsSet[canonicalToolName] {
@@ -755,10 +756,10 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 				rawArgs = json.RawMessage("{}")
 			}
 			if !json.Valid(rawArgs) {
-				return nil, "", LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("invalid arguments for tool '%s': %s", toolCall.Name, toolCall.Arguments)
+				return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, fmt.Errorf("invalid arguments for tool '%s': %s", toolCall.Name, toolCall.Arguments)
 			}
 			if deb {
-				toolCallLogs = append(toolCallLogs, fmt.Sprintf("- %s args: %s", toolCall.Name, compactToolCallArguments(rawArgs)))
+				stepToolCalls = append(stepToolCalls, reasoningToolCallDebug(toolCall.Name, rawArgs))
 			}
 
 			if s.progress != nil && progressSessionID != "" {
@@ -769,7 +770,7 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 
 		toolResults, err := ExecuteReasoningToolExecutions(reasoningCtx, toolExecutions, currentToolHandlers, firstIterationToolHandlers)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, "", nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, "", nil, err
 		}
 		for idx, toolCall := range functionCalls {
 			nextInput = append(nextInput, map[string]string{
@@ -778,13 +779,11 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 				"output":  toolResults[idx].Output,
 			})
 		}
-		if deb && len(toolCallLogs) > 0 {
-			reasoningSummaries = append(reasoningSummaries, "Tool calls:\n"+strings.Join(toolCallLogs, "\n"))
-		}
+		reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, iterationSummary, stepToolCalls, stepUsage, stepStarted)
 		previousResponseID = &responsesResp.ID
 	}
 
-	return nil, "", LLMUsageTotals{}, 0, nil, "", ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
+	return nil, reasoningSteps, LLMUsageTotals{}, 0, nil, "", ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
 }
 
 func normalizeOpenAICompatibleReasoningEffort(reasoningEffort *string) *string {

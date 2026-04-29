@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"strings"
+	"time"
 )
 
 const defaultArceeAPIBaseURL = "https://api.arcee.ai/api/v1"
@@ -192,7 +193,7 @@ func (s *ArceeService) GetReasoningStructuredOutputWithTools(
 	maxIterations int,
 	output interface{},
 ) error {
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
+	msg, reasoningSteps, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(ctx, "GetReasoningStructuredOutputWithTools", &jsonSchema, model, maxTokens, messages, tools, toolHandlers, nil, nil, reasoningEffort, deb, maxIterations, "")
 	if err != nil {
 		return err
 	}
@@ -204,9 +205,9 @@ func (s *ArceeService) GetReasoningStructuredOutputWithTools(
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
 		return err
 	}
-	if deb && reasoningSummary != "" {
-		if setter, ok := output.(reasoningSummarySetter); ok {
-			setter.SetReasoningSummary(reasoningSummary)
+	if deb && len(reasoningSteps) > 0 {
+		if setter, ok := output.(reasoningStepsSetter); ok {
+			setter.SetReasoningSteps(reasoningSteps)
 		}
 	}
 	totalTokens := usageTotals.TotalTokens
@@ -287,7 +288,7 @@ func (s *ArceeService) GetReasoningStructuredOutputWithToolsForSession(
 		effectiveProgressSessionID = strings.TrimSpace(*progressSessionID)
 	}
 
-	msg, reasoningSummary, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
+	msg, reasoningSteps, usageTotals, reasoningIterations, usedTools, toolDebug, err := s.getReasoningResponseWithTools(
 		ctx,
 		"GetReasoningStructuredOutputWithToolsForSession",
 		&jsonSchema,
@@ -323,9 +324,9 @@ func (s *ArceeService) GetReasoningStructuredOutputWithToolsForSession(
 		}
 		return "", err
 	}
-	if deb && reasoningSummary != "" {
-		if setter, ok := output.(reasoningSummarySetter); ok {
-			setter.SetReasoningSummary(reasoningSummary)
+	if deb && len(reasoningSteps) > 0 {
+		if setter, ok := output.(reasoningStepsSetter); ok {
+			setter.SetReasoningSteps(reasoningSteps)
 		}
 	}
 	totalTokens := usageTotals.TotalTokens
@@ -459,7 +460,7 @@ func (s *ArceeService) getReasoningResponseWithTools(
 	deb bool,
 	maxIterations int,
 	progressSessionID string,
-) (*LLMBotMessage, string, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
+) (*LLMBotMessage, []ReasoningSearchReasoningStep, LLMUsageTotals, int, []string, *ReasoningSearchDebugInfo, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -490,16 +491,16 @@ func (s *ArceeService) getReasoningResponseWithTools(
 			)
 		}
 	}()
-	reasoningSummaries := []string{}
+	reasoningSteps := []ReasoningSearchReasoningStep{}
 
 	if len(tools) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("tools must contain at least one tool definition")
 	}
 	if len(toolHandlers) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("toolHandlers must contain at least one handler")
 	}
 	if len(firstIterationTools) > 0 && len(firstIterationToolHandlers) == 0 {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("firstIterationToolHandlers must contain at least one handler when firstIterationTools are provided")
 	}
 	if maxIterations <= 0 {
 		maxIterations = 8
@@ -507,29 +508,30 @@ func (s *ArceeService) getReasoningResponseWithTools(
 
 	normalizedMessages, err := normalizeArceeMessages(messages)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	firstIterationNormalizedMessages := normalizedMessages
 	if len(firstIterationTools) > 0 {
 		firstIterationMessages := WithFirstIterationReasoningSearchSystemMessage(messages, firstIterationTools)
 		firstIterationNormalizedMessages, err = normalizeArceeMessages(firstIterationMessages)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 	}
 	if _, err := arceeResponseFormat(jsonSchema); err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	reasoningEffort, err = arceeReasoningEffortValue(model, reasoningEffort)
 	if err != nil {
-		return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	toolChoice := "auto"
 	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
 
 	for i := 0; i < maxIterations; i++ {
+		stepStarted := time.Now()
 		if err := ctx.Err(); err != nil {
-			return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+			return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 		}
 		if s.progress != nil && progressSessionID != "" {
 			s.progress.Thinking(progressSessionID, i+1)
@@ -558,27 +560,27 @@ func (s *ArceeService) getReasoningResponseWithTools(
 
 		var chatResp ArceeChatResponse
 		if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
+		stepUsage := reasoningUsageTotals(chatResp.Usage)
 		usageTotals.Add(chatResp.Usage)
 
 		message, err := firstArceeChoice(&chatResp)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
+		stepThoughts := strings.TrimSpace(message.reasoningText())
 		if strings.TrimSpace(message.reasoningText()) != "" {
-			summary := strings.TrimSpace(message.reasoningText())
-			reasoningSummaries = append(reasoningSummaries, summary)
 			if deb {
-				log.Printf("LLM reasoning summary iteration %d:\n%s", i+1, summary)
+				log.Printf("LLM reasoning summary iteration %d:\n%s", i+1, stepThoughts)
 			}
 		}
 
 		if len(message.ToolCalls) == 0 {
 			content := message.contentText()
 			if strings.TrimSpace(content) == "" {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("arcee chat returned empty assistant output")
+				return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("arcee chat returned empty assistant output")
 			}
 			if len(usedTools) == 0 {
 				normalizedMessages = append(normalizedMessages, LLMBotMessage{
@@ -589,6 +591,7 @@ func (s *ArceeService) getReasoningResponseWithTools(
 					Role:    "user",
 					Content: "Use the available archive search tools before giving final results. Do not invent or use example result IDs.",
 				})
+				reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, nil, stepUsage, stepStarted)
 				continue
 			}
 			if jsonSchema != nil {
@@ -599,13 +602,10 @@ func (s *ArceeService) getReasoningResponseWithTools(
 						Reasoning: message.reasoningText(),
 					})
 					msg, finalizeUsage, err := s.getChatResponseWithUsage(ctx, model, maxTokens, normalizedMessages, jsonSchema, reasoningEffort, deb)
-					usageTotals.InputTokens += finalizeUsage.InputTokens
-					usageTotals.CachedInputTokens += finalizeUsage.CachedInputTokens
-					usageTotals.OutputTokens += finalizeUsage.OutputTokens
-					usageTotals.ReasoningTokens += finalizeUsage.ReasoningTokens
-					usageTotals.TotalTokens += finalizeUsage.TotalTokens
+					usageTotals.AddTotals(finalizeUsage)
+					stepUsage.AddTotals(finalizeUsage)
 					if err != nil {
-						return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+						return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 					}
 					if err := validateJSONRequiredTopLevelFields(msg.Content, *jsonSchema); err != nil {
 						normalizedMessages = append(normalizedMessages,
@@ -620,43 +620,43 @@ func (s *ArceeService) getReasoningResponseWithTools(
 							},
 						)
 						msg, retryUsage, err := s.getChatResponseWithUsage(ctx, model, maxTokens, normalizedMessages, jsonSchema, reasoningEffort, deb)
-						usageTotals.InputTokens += retryUsage.InputTokens
-						usageTotals.CachedInputTokens += retryUsage.CachedInputTokens
-						usageTotals.OutputTokens += retryUsage.OutputTokens
-						usageTotals.ReasoningTokens += retryUsage.ReasoningTokens
-						usageTotals.TotalTokens += retryUsage.TotalTokens
+						usageTotals.AddTotals(retryUsage)
+						stepUsage.AddTotals(retryUsage)
 						if err != nil {
-							return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+							return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 						}
 						if err := validateJSONRequiredTopLevelFields(msg.Content, *jsonSchema); err != nil {
-							return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+							return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 						}
-						return msg, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations + 2, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
+						reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, nil, stepUsage, stepStarted)
+						return msg, reasoningSteps, usageTotals, iterations + 2, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
 					}
-					return msg, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations + 1, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
+					reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, nil, stepUsage, stepStarted)
+					return msg, reasoningSteps, usageTotals, iterations + 1, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
 				}
 			}
+			reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, nil, stepUsage, stepStarted)
 			return &LLMBotMessage{
 				Role:      "assistant",
 				Content:   content,
 				Reasoning: message.reasoningText(),
-			}, strings.Join(reasoningSummaries, "\n\n"), usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
+			}, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
 		}
 
 		assistantMessage, err := arceeAssistantMessage(message)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		normalizedMessages = append(normalizedMessages, *assistantMessage)
 
-		toolCallLogs := []string{}
+		stepToolCalls := []ReasoningSearchReasoningToolCall{}
 		toolExecutions := make([]ReasoningToolExecution, 0, len(message.ToolCalls))
 		for _, toolCall := range message.ToolCalls {
 			if err := ctx.Err(); err != nil {
-				return nil, "", usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
+				return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 			}
 			if toolCall.Function.Name == "" {
-				return nil, "", LLMUsageTotals{}, 0, nil, nil, errors.New("arcee tool call is missing function name")
+				return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("arcee tool call is missing function name")
 			}
 			canonicalToolName := CanonicalReasoningToolName(toolCall.Function.Name)
 			if !usedToolsSet[canonicalToolName] {
@@ -669,7 +669,7 @@ func (s *ArceeService) getReasoningResponseWithTools(
 				rawArgs = json.RawMessage("{}")
 			}
 			if deb {
-				toolCallLogs = append(toolCallLogs, fmt.Sprintf("- %s args: %s", toolCall.Function.Name, compactToolCallArguments(rawArgs)))
+				stepToolCalls = append(stepToolCalls, reasoningToolCallDebug(toolCall.Function.Name, rawArgs))
 			}
 
 			if s.progress != nil && progressSessionID != "" {
@@ -680,7 +680,7 @@ func (s *ArceeService) getReasoningResponseWithTools(
 
 		toolResults, err := ExecuteReasoningToolExecutions(reasoningCtx, toolExecutions, currentToolHandlers, firstIterationToolHandlers)
 		if err != nil {
-			return nil, "", LLMUsageTotals{}, 0, nil, nil, err
+			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		for idx, toolCall := range message.ToolCalls {
 			normalizedMessages = append(normalizedMessages, LLMBotMessage{
@@ -690,12 +690,10 @@ func (s *ArceeService) getReasoningResponseWithTools(
 			})
 		}
 
-		if deb && len(toolCallLogs) > 0 {
-			reasoningSummaries = append(reasoningSummaries, "Tool calls:\n"+strings.Join(toolCallLogs, "\n"))
-		}
+		reasoningSteps = appendReasoningStepIfDebug(reasoningSteps, deb, i+1, stepThoughts, stepToolCalls, stepUsage, stepStarted)
 	}
 
-	return nil, "", LLMUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
+	return nil, reasoningSteps, LLMUsageTotals{}, 0, nil, ToolDebugInfoFromContext(reasoningCtx), &MaxReasoningIterationsError{MaxIterations: maxIterations}
 }
 
 func normalizeArceeMessages(messages []LLMBotMessage) ([]LLMBotMessage, error) {

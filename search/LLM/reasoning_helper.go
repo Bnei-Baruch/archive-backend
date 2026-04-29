@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 )
 
 const ResponsesAPIEmptyAssistantOutputError = "responses API returned empty assistant output"
@@ -166,8 +167,8 @@ type OpenAIOutputTokensDetails struct {
 	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
 }
 
-type reasoningSummarySetter interface {
-	SetReasoningSummary(string)
+type reasoningStepsSetter interface {
+	SetReasoningSteps([]ReasoningSearchReasoningStep)
 }
 
 type reasoningProcessStatsSetter interface {
@@ -180,6 +181,42 @@ type reasoningDebugInfoSetter interface {
 
 type reasoningUsedToolsSetter interface {
 	SetUsedTools([]string)
+}
+
+func appendReasoningStepIfDebug(steps []ReasoningSearchReasoningStep, deb bool, number int, thoughts string, toolCalls []ReasoningSearchReasoningToolCall, usage LLMUsageTotals, started time.Time) []ReasoningSearchReasoningStep {
+	if !deb {
+		return steps
+	}
+	if toolCalls == nil {
+		toolCalls = []ReasoningSearchReasoningToolCall{}
+	}
+	return append(steps, ReasoningSearchReasoningStep{
+		Number:    number,
+		Thoughts:  strings.TrimSpace(thoughts),
+		ToolCalls: toolCalls,
+		Usage: ReasoningSearchReasoningStepUsage{
+			TotalTokens:         usage.TotalTokens,
+			InputTokens:         usage.InputTokens,
+			CachedInputTokens:   usage.CachedInputTokens,
+			UncachedInputTokens: usage.UncachedInputTokens(),
+			OutputTokens:        usage.OutputTokens,
+			ReasoningTokens:     usage.ReasoningTokens,
+		},
+		LatencyMS: time.Since(started).Milliseconds(),
+	})
+}
+
+func reasoningUsageTotals(usage *OpenAIUsage) LLMUsageTotals {
+	totals := LLMUsageTotals{}
+	totals.Add(usage)
+	return totals
+}
+
+func reasoningToolCallDebug(name string, args json.RawMessage) ReasoningSearchReasoningToolCall {
+	return ReasoningSearchReasoningToolCall{
+		Name:   name,
+		Params: compactToolCallArguments(args),
+	}
 }
 
 func buildResponsesText(jsonSchema *string) (*ResponsesText, error) {
