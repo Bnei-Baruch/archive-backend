@@ -119,6 +119,58 @@ func ReasoningSearchCancelHandler(c *gin.Context) {
 	})
 }
 
+func ReasoningSearchCacheHandler(c *gin.Context) {
+	r := ReasoningSearchRequest{}
+	if c.Bind(&r) != nil {
+		return
+	}
+	if err := normalizeReasoningSearchRequest(&r); err != nil {
+		NewBadRequestError(err).Abort(c)
+		return
+	}
+	r.SessionID = nil
+	r.CancelSessionID = nil
+
+	runtime, _ := c.MustGet("LLM_RUNTIME").(*llm.Runtime)
+	if runtime == nil || runtime.ReasoningCache == nil || runtime.Progress == nil || runtime.Workflow == nil {
+		NewInternalError(errors.New("reasoning workflow is not initialized")).Abort(c)
+		return
+	}
+
+	cacheKey, cacheEligible := llm.ReasoningSearchCacheKeyForQuery(r.Query)
+	if !cacheEligible {
+		c.JSON(http.StatusOK, gin.H{"cache_hit": false})
+		return
+	}
+	cachedEntry, ok := runtime.ReasoningCache.Get(cacheKey)
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{"cache_hit": false})
+		return
+	}
+
+	sessionID, err := prepareReasoningSearchSession(c.Request.Context(), runtime, &r)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	db := c.MustGet("MDB_DB").(*sql.DB)
+	workflowSession, err := runtime.Workflow.Get(sessionID)
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+	reasoningStage := workflowSession.Stages[llm.ReasoningWorkflowStageReasoning]
+	if err := storeReasoningSearchCachedResponse(runtime, db, r, sessionID, cachedEntry, reasoningStage.MaxFollowups); err != nil {
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"cache_hit":  true,
+		"session_id": sessionID,
+	})
+}
+
 func ReasoningSearchStatusHandler(c *gin.Context) {
 	sessionID := strings.TrimSpace(c.Query("session_id"))
 	if sessionID == "" {
@@ -423,6 +475,41 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 	return sessionID, nil
 }
 
+func storeReasoningSearchCachedResponse(runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, sessionID string, cachedEntry *llm.ReasoningSearchCacheEntry, maxFollowups int) error {
+	if runtime == nil || runtime.Workflow == nil || runtime.Progress == nil {
+		return errors.New("reasoning workflow is not initialized")
+	}
+	if cachedEntry == nil {
+		return errors.New("reasoning search cache entry is nil")
+	}
+
+	cachedEntry.Query = r.Query
+	if err := runtime.Workflow.SetCachedInitialResponse(sessionID, cachedEntry); err != nil {
+		return err
+	}
+	if err := runtime.Workflow.SetFollowupState(sessionID, true, 0); err != nil {
+		return err
+	}
+
+	response := llm.ReasoningSearchResponse{
+		Query:    r.Query,
+		Summary:  cachedEntry.Summary,
+		CacheHit: true,
+		Results:  append([]llm.ReasoningSearchResult(nil), cachedEntry.Results...),
+	}
+	response.SetUsedTools([]string{})
+	response.SetSessionID(sessionID)
+	if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
+		return err
+	}
+	response.SetFollowupBudget(maxFollowups, 0, maxFollowups)
+	if err := runtime.Workflow.SetResponseSnapshot(sessionID, &response); err != nil {
+		return err
+	}
+	runtime.Progress.Complete(sessionID, 0)
+	return nil
+}
+
 func executeReasoningSearchInBackground(ctx context.Context, runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) {
 	defer func() {
 		if runtime != nil && runtime.Cancellations != nil {
@@ -633,28 +720,9 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	}
 	if cacheEligible && !initialRequestCompleted {
 		if cachedEntry, ok := runtime.ReasoningCache.Get(cacheKey); ok {
-			cachedEntry.Query = r.Query
-			if err := workflowStore.SetCachedInitialResponse(responseSessionID, cachedEntry); err != nil {
+			if err := storeReasoningSearchCachedResponse(runtime, db, r, responseSessionID, cachedEntry, reasoningStage.MaxFollowups); err != nil {
 				return err
 			}
-			if err := workflowStore.SetFollowupState(responseSessionID, true, 0); err != nil {
-				return err
-			}
-
-			response.Query = r.Query
-			response.Summary = cachedEntry.Summary
-			response.CacheHit = true
-			response.SetUsedTools([]string{})
-			response.Results = append([]llm.ReasoningSearchResult(nil), cachedEntry.Results...)
-			response.SetSessionID(responseSessionID)
-			if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
-				return err
-			}
-			response.SetFollowupBudget(reasoningStage.MaxFollowups, 0, reasoningStage.MaxFollowups)
-			if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
-				return err
-			}
-			progressStore.Complete(responseSessionID, 0)
 			log.Infof("Reasoning Search Cache Hit: [%s]", cacheKey)
 			return nil
 		}

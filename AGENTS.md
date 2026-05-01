@@ -49,11 +49,12 @@ Instructions for coding agents working in this repository.
 - `common.Init()` builds the shared tool manager inside `common.LLM_RUNTIME`.
 
 ## Reasoning Search
-- API endpoints: `POST /search/reasoning`, `POST /search/reasoning/start`, `POST /search/reasoning/cancel`, `GET /search/reasoning/status`, `GET /search/reasoning/result`.
+- API endpoints: `POST /search/reasoning`, `POST /search/reasoning/start`, `POST /search/reasoning/cache`, `POST /search/reasoning/cancel`, `GET /search/reasoning/status`, `GET /search/reasoning/result`.
 - Request supports `q`, optional `deb`, optional `session_id`, optional `cancel_session_id`, optional `ui_language`.
 - The API `session_id` is a workflow session id owned by the backend, not a provider-native LLM session id.
 - `POST /search/reasoning` runs the full reasoning search synchronously and returns the final response directly.
 - `POST /search/reasoning/start` starts the reasoning run in background and returns the workflow `session_id`.
+- `POST /search/reasoning/cache` checks the shared query cache; on hit it creates a fresh workflow session, stores a response snapshot, and returns the new `session_id`.
 - `POST /search/reasoning/start` may receive `cancel_session_id` to cancel a previous background run before starting the new one.
 - `POST /search/reasoning/cancel` cancels a running background search by workflow `session_id`.
 - `GET /search/reasoning/status` reports background progress for that workflow session.

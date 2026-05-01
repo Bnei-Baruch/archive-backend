@@ -34,6 +34,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/search", SearchHandler)
 	router.POST("/search/reasoning/start", ReasoningSearchStartHandler)
 	router.POST("/search/reasoning/cancel", ReasoningSearchCancelHandler)
+	router.POST("/search/reasoning/cache", ReasoningSearchCacheHandler)
 	router.POST("/search/reasoning", ReasoningSearchHandler)
 	router.GET("/search/reasoning/status", ReasoningSearchStatusHandler)
 	router.GET("/search/reasoning/result", ReasoningSearchResultHandler)
