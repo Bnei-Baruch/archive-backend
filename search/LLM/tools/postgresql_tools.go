@@ -325,6 +325,74 @@ WHERE c.secure = $1
 ORDER BY c.uid ASC
 LIMIT 5`
 
+const contentUnitSelectQuery = `
+SELECT
+	cu.id,
+	cu.uid,
+	COALESCE(ct.name, '') AS content_type,
+	COALESCE(
+		(SELECT name FROM content_unit_i18n WHERE content_unit_id = cu.id AND language = $1),
+		(SELECT name FROM content_unit_i18n WHERE content_unit_id = cu.id AND language = 'en'),
+		(SELECT name FROM content_unit_i18n WHERE content_unit_id = cu.id AND language = 'he'),
+		''
+	) AS name,
+	COALESCE(
+		(SELECT description FROM content_unit_i18n WHERE content_unit_id = cu.id AND language = $1),
+		(SELECT description FROM content_unit_i18n WHERE content_unit_id = cu.id AND language = 'en'),
+		(SELECT description FROM content_unit_i18n WHERE content_unit_id = cu.id AND language = 'he'),
+		''
+	) AS description,
+	COALESCE(cu.properties->>'film_date', '') AS film_date,
+	COALESCE(cu.properties->>'original_language', '') AS original_language,
+	COALESCE(NULLIF(cu.properties->>'duration', ''), '0')::double precision AS duration
+FROM content_units cu
+LEFT JOIN content_types ct ON ct.id = cu.type_id
+`
+
+const contentUnitByMDBIDQuery = contentUnitSelectQuery + `
+WHERE cu.secure = $2
+  AND cu.published IS TRUE
+  AND cu.id = $3
+LIMIT 1`
+
+const contentUnitByUIDQuery = contentUnitSelectQuery + `
+WHERE cu.secure = $2
+  AND cu.published IS TRUE
+  AND cu.uid = $3
+LIMIT 1`
+
+const collectionsByContentUnitQuery = collectionsSelectQuery + `
+INNER JOIN collections_content_units ccu ON ccu.collection_id = c.id
+WHERE c.secure = $2
+  AND c.published IS TRUE
+  AND ccu.content_unit_id = $3
+ORDER BY ccu.position ASC
+LIMIT 10`
+
+const sourcesByContentUnitQuery = sourceSelectQuery + `
+INNER JOIN content_units_sources cus ON cus.source_id = s.id
+WHERE cus.content_unit_id = $2
+ORDER BY s.parent_id NULLS FIRST, s.position ASC, s.id ASC
+LIMIT 20`
+
+const tagsByContentUnitQuery = `
+SELECT
+	t.id,
+	t.uid,
+	COALESCE(parent.uid, '') AS parent_uid,
+	COALESCE(
+		(SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = $1),
+		(SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'en'),
+		(SELECT label FROM tag_i18n WHERE tag_id = t.id AND language = 'he'),
+		''
+	) AS label
+FROM tags t
+LEFT JOIN tags parent ON parent.id = t.parent_id
+INNER JOIN content_units_tags cut ON cut.tag_id = t.id
+WHERE cut.content_unit_id = $2
+ORDER BY t.id ASC
+LIMIT 20`
+
 type GetSourcesByAuthorTool struct {
 	db    *sql.DB
 	cache *postgreSQLToolCache
@@ -341,6 +409,11 @@ type GetSourcesBySourceTool struct {
 }
 
 type GetCollectionsTool struct {
+	db    *sql.DB
+	cache *postgreSQLToolCache
+}
+
+type GetContentUnitTool struct {
 	db    *sql.DB
 	cache *postgreSQLToolCache
 }
@@ -419,6 +492,11 @@ type getContentUnitsByCollectionArgs struct {
 	ContentUnitID string `json:"content_unit_id,omitempty"`
 	Language      string `json:"language,omitempty"`
 	Limit         int    `json:"limit,omitempty"`
+}
+
+type getContentUnitArgs struct {
+	ContentUnitID string `json:"content_unit_id,omitempty"`
+	Language      string `json:"language,omitempty"`
 }
 
 type authorToolResult struct {
@@ -503,6 +581,20 @@ type contentUnitsByCollectionToolResult struct {
 	Items         []contentUnitToolResult `json:"items"`
 }
 
+type tagToolResult struct {
+	MDBID     int64  `json:"mdb_id"`
+	UID       string `json:"uid"`
+	ParentUID string `json:"parent_uid,omitempty"`
+	Label     string `json:"label,omitempty"`
+}
+
+type contentUnitLookupToolResult struct {
+	ContentUnit contentUnitToolResult  `json:"content_unit"`
+	Collections []collectionToolResult `json:"collections,omitempty"`
+	Sources     []sourceNodeToolResult `json:"sources,omitempty"`
+	Tags        []tagToolResult        `json:"tags,omitempty"`
+}
+
 func NewGetSourcesByAuthorTool(db *sql.DB, cacheTTL time.Duration) *GetSourcesByAuthorTool {
 	return &GetSourcesByAuthorTool{db: db, cache: newPostgreSQLToolCache(cacheTTL)}
 }
@@ -517,6 +609,10 @@ func NewGetSourcesBySourceTool(db *sql.DB, cacheTTL time.Duration) *GetSourcesBy
 
 func NewGetCollectionsTool(db *sql.DB, cacheTTL time.Duration) *GetCollectionsTool {
 	return &GetCollectionsTool{db: db, cache: newPostgreSQLToolCache(cacheTTL)}
+}
+
+func NewGetContentUnitTool(db *sql.DB, cacheTTL time.Duration) *GetContentUnitTool {
+	return &GetContentUnitTool{db: db, cache: newPostgreSQLToolCache(cacheTTL)}
 }
 
 func NewGetContentUnitsByCollectionTool(db *sql.DB, cacheTTL time.Duration) *GetContentUnitsByCollectionTool {
@@ -769,13 +865,17 @@ Behavior:
 func (t *GetContentUnitsByCollectionTool) Definition() llm.ReasoningToolDefinition {
 	return llm.ReasoningToolDefinition{
 		Name:        "get_content_units_by_collection",
-		Description: "Return public content units that belong to a collection from PostgreSQL by collection_id.",
+		Description: "Return public content units that belong to a collection from PostgreSQL by collection_id, or suggest parent collections for a content_unit_id.",
 		Parameters: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"collection_id": map[string]interface{}{
 					"type":        "string",
 					"description": "Collection identifier (UID or numeric MDB id).",
+				},
+				"content_unit_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional content unit identifier used only to discover suggested parent collection ids when collection_id is unknown.",
 				},
 				"language": map[string]interface{}{
 					"type":        "string",
@@ -786,10 +886,44 @@ func (t *GetContentUnitsByCollectionTool) Definition() llm.ReasoningToolDefiniti
 					"description": "Maximum number of content units to return.",
 				},
 			},
-			"required":             []string{"collection_id"},
 			"additionalProperties": false,
 		},
 	}
+}
+
+func (t *GetContentUnitTool) Definition() llm.ReasoningToolDefinition {
+	return llm.ReasoningToolDefinition{
+		Name:        "get_content_unit",
+		Description: "Return one public content unit from PostgreSQL by content_unit_id.",
+		Parameters: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"content_unit_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Content unit identifier (UID or numeric MDB id).",
+				},
+				"language": map[string]interface{}{
+					"type":        "string",
+					"description": "Preferred UI language for names and descriptions.",
+				},
+			},
+			"required":             []string{"content_unit_id"},
+			"additionalProperties": false,
+		},
+	}
+}
+
+func (t *GetContentUnitTool) UsageExplanation() string {
+	return `Tool: get_content_unit
+This tool allows you to retrieve structured metadata about one public content unit from PostgreSQL.
+Use this tool when you already have a concrete content unit id from search results and need to inspect that item.
+Arguments:
+- content_unit_id: required. Content unit UID or numeric MDB id.
+- language: optional language for localized names and descriptions.
+Behavior:
+- Returns JSON with the resolved public content unit, its parent collections, linked sources, and tags.
+- Do not pass source ids to this tool. For source ids, use get_sources_by_source or query_source_ai.
+- This tool does not search transcripts. If you need transcript excerpts, use query_transcript_ai with the same content_unit_id.`
 }
 
 func (t *GetContentUnitsByCollectionTool) UsageExplanation() string {
@@ -797,11 +931,13 @@ func (t *GetContentUnitsByCollectionTool) UsageExplanation() string {
 This tool allows you to retrieve structured metadata about public content units that belong to a specific collection from PostgreSQL.
 Use this tool after you know the collection and need to browse or list its member content units.
 Arguments:
-- collection_id: required. Collection UID or numeric MDB id.
+- collection_id: collection UID or numeric MDB id. Use this when you want the members of a known collection.
+- content_unit_id: optional content unit UID or numeric MDB id. Use this only when you do not know the parent collection id; the tool can return suggested parent collection ids.
 - language: optional language for localized names and descriptions.
 - limit: optional maximum number of rows.
 Behavior:
 - Returns JSON with the resolved public collection and its public published content units.
+- If only content_unit_id is provided, returns guidance and suggested parent collection ids instead of collection members.
 - This tool returns collection members in collection order, not by text-query relevance.
 - If you need the best matching concrete item inside a known collection for a user query, prefer elasticsearch_search with collection filter instead.`
 }
@@ -1042,6 +1178,60 @@ func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMess
 	return result, nil
 }
 
+func (t *GetContentUnitTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
+	if t.db == nil {
+		return "", fmt.Errorf("get_content_unit: db is nil")
+	}
+
+	args := getContentUnitArgs{}
+	if err := json.Unmarshal(arguments, &args); err != nil {
+		return "", fmt.Errorf("get_content_unit: failed to parse arguments: %w", err)
+	}
+
+	contentUnitID := strings.TrimSpace(args.ContentUnitID)
+	if contentUnitID == "" {
+		return "", llm.NewRecoverableToolError("get_content_unit", "content_unit_id is required", "Call get_content_unit with a concrete content_unit_id from an Elasticsearch unit result.")
+	}
+
+	language := normalizePostgreSQLToolLanguage(args.Language)
+	llm.LogIfDeb(ctx, "get_content_unit: start content_unit_id=%q language=%q", contentUnitID, language)
+	cacheKey := fmt.Sprintf("get_content_unit|content_unit_id=%s|language=%s", contentUnitID, language)
+	if cached, ok := t.cache.get(cacheKey); ok {
+		llm.LogIfDeb(ctx, "get_content_unit: cache hit content_unit_id=%q language=%q", contentUnitID, language)
+		return cached, nil
+	}
+
+	contentUnit, err := loadContentUnitToolResult(t.db, contentUnitID, language)
+	if err != nil {
+		return "", err
+	}
+	collections, err := loadContentUnitCollections(t.db, contentUnit.MDBID, language)
+	if err != nil {
+		return "", err
+	}
+	sources, err := loadContentUnitSources(t.db, contentUnit.MDBID, language)
+	if err != nil {
+		return "", err
+	}
+	tags, err := loadContentUnitTags(t.db, contentUnit.MDBID, language)
+	if err != nil {
+		return "", err
+	}
+
+	result, err := marshalToolResult(contentUnitLookupToolResult{
+		ContentUnit: *contentUnit,
+		Collections: collections,
+		Sources:     sources,
+		Tags:        tags,
+	})
+	if err != nil {
+		return "", err
+	}
+	llm.LogIfDeb(ctx, "get_content_unit: completed content_unit_id=%q collections=%d sources=%d tags=%d", contentUnitID, len(collections), len(sources), len(tags))
+	t.cache.set(cacheKey, result)
+	return result, nil
+}
+
 func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments json.RawMessage) (string, error) {
 	if t.db == nil {
 		return "", fmt.Errorf("get_content_units_by_collection: db is nil")
@@ -1269,6 +1459,89 @@ func loadCollectionToolResult(db *sql.DB, collectionID string, language string) 
 	return &item, nil
 }
 
+func loadContentUnitToolResult(db *sql.DB, contentUnitID string, language string) (*contentUnitToolResult, error) {
+	rowQuery := contentUnitByUIDQuery
+	queryValue := interface{}(contentUnitID)
+	if numericID, ok := parsePostgreSQLToolNumericID(contentUnitID); ok {
+		rowQuery = contentUnitByMDBIDQuery
+		queryValue = numericID
+	}
+
+	row := db.QueryRow(rowQuery, language, consts.SEC_PUBLIC, queryValue)
+	item, err := scanContentUnitToolResult(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, llm.NewRecoverableToolError("get_content_unit", fmt.Sprintf("content unit not found for content_unit_id '%s'", contentUnitID), "This may be a source id, not a content unit id. Use get_sources_by_source for source navigation, or query_source_ai if you need source text excerpts.")
+		}
+		return nil, fmt.Errorf("get_content_unit: content unit lookup failed: %w", err)
+	}
+
+	return &item, nil
+}
+
+func loadContentUnitCollections(db *sql.DB, contentUnitMDBID int64, language string) ([]collectionToolResult, error) {
+	rows, err := db.Query(collectionsByContentUnitQuery, language, consts.SEC_PUBLIC, contentUnitMDBID)
+	if err != nil {
+		return nil, fmt.Errorf("get_content_unit: collections query failed: %w", err)
+	}
+	defer rows.Close()
+
+	items := []collectionToolResult{}
+	for rows.Next() {
+		item, err := scanCollectionToolResult(rows)
+		if err != nil {
+			return nil, fmt.Errorf("get_content_unit: collections scan failed: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("get_content_unit: collections rows failed: %w", err)
+	}
+	return items, nil
+}
+
+func loadContentUnitSources(db *sql.DB, contentUnitMDBID int64, language string) ([]sourceNodeToolResult, error) {
+	rows, err := db.Query(sourcesByContentUnitQuery, language, contentUnitMDBID)
+	if err != nil {
+		return nil, fmt.Errorf("get_content_unit: sources query failed: %w", err)
+	}
+	defer rows.Close()
+
+	items := []sourceNodeToolResult{}
+	for rows.Next() {
+		item, err := scanSourceNodeToolResult(rows)
+		if err != nil {
+			return nil, fmt.Errorf("get_content_unit: sources scan failed: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("get_content_unit: sources rows failed: %w", err)
+	}
+	return items, nil
+}
+
+func loadContentUnitTags(db *sql.DB, contentUnitMDBID int64, language string) ([]tagToolResult, error) {
+	rows, err := db.Query(tagsByContentUnitQuery, language, contentUnitMDBID)
+	if err != nil {
+		return nil, fmt.Errorf("get_content_unit: tags query failed: %w", err)
+	}
+	defer rows.Close()
+
+	items := []tagToolResult{}
+	for rows.Next() {
+		item := tagToolResult{}
+		if err := rows.Scan(&item.MDBID, &item.UID, &item.ParentUID, &item.Label); err != nil {
+			return nil, fmt.Errorf("get_content_unit: tags scan failed: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("get_content_unit: tags rows failed: %w", err)
+	}
+	return items, nil
+}
+
 func loadCollectionUIDsForContentUnit(db *sql.DB, contentUnitID string) ([]string, error) {
 	rowQuery := collectionUIDsByContentUnitUIDQuery
 	queryValue := interface{}(contentUnitID)
@@ -1317,6 +1590,23 @@ func scanCollectionToolResult(scanner interface {
 		&item.SourceID,
 		&item.Number,
 		&item.ContentUnitsCount,
+	)
+	return item, err
+}
+
+func scanContentUnitToolResult(scanner interface {
+	Scan(dest ...interface{}) error
+}) (contentUnitToolResult, error) {
+	item := contentUnitToolResult{}
+	err := scanner.Scan(
+		&item.MDBID,
+		&item.UID,
+		&item.ContentType,
+		&item.Name,
+		&item.Description,
+		&item.FilmDate,
+		&item.OriginalLanguage,
+		&item.Duration,
 	)
 	return item, err
 }

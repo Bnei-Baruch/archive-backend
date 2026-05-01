@@ -10,10 +10,10 @@ import (
 )
 
 type AppScopedManagerDeps struct {
-	DB                           *sql.DB
-	AssetsService                integration.AssetsService
+	DB            *sql.DB
+	AssetsService integration.AssetsService
 	// AIQueryService is the shared provider client instance used by the AI query tools.
-	AIQueryService               llm.Service
+	AIQueryService llm.Service
 	// AIQueryConfig is the per-call reader-model config passed to that service
 	// (model, effort, max tokens) for query_source_ai/query_transcript_ai.
 	AIQueryConfig                *llm.AIToolsConfig
@@ -54,6 +54,7 @@ func NewAppScopedManager(deps AppScopedManagerDeps) (*llm.ReasoningToolManager, 
 		NewGetSourcesByAuthorTool(deps.DB, postgreSQLToolCacheTTL),
 		NewGetSourcesBySourceTool(deps.DB, postgreSQLToolCacheTTL),
 		NewGetCollectionsTool(deps.DB, postgreSQLToolCacheTTL),
+		NewGetContentUnitTool(deps.DB, postgreSQLToolCacheTTL),
 		NewGetContentUnitsByCollectionTool(deps.DB, postgreSQLToolCacheTTL),
 		NewElasticsearchSearchToolWithFactory(deps.NewElasticsearchSearchEngine, deps.TimeoutForHighlight),
 	)

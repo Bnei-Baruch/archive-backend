@@ -127,6 +127,7 @@ Instructions for coding agents working in this repository.
   `get_sources_by_author`: return sources by `author_id` (author code or MDB id)
   `get_sources_by_source`: return direct child sources by `source_id` (source UID or MDB id)
   `get_collections`: return public collections, optionally filtered by `collection_id`, `content_type`, or text query
+  `get_content_unit`: return one public content unit by `content_unit_id`
   `get_content_units_by_collection`: return public content units for a `collection_id`
 
 - `elasticsearch_search`

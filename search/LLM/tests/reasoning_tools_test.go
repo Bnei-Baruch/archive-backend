@@ -396,6 +396,11 @@ func TestPostgreSQLToolDefinitions(t *testing.T) {
 		t.Fatalf("did not expect get_collections to define query")
 	}
 
+	contentUnit := llmtools.NewGetContentUnitTool(nil, 0).Definition()
+	if contentUnit.Name != "get_content_unit" {
+		t.Fatalf("unexpected get_content_unit tool name: %s", contentUnit.Name)
+	}
+
 	contentUnitsByCollection := llmtools.NewGetContentUnitsByCollectionTool(nil, 0).Definition()
 	if contentUnitsByCollection.Name != "get_content_units_by_collection" {
 		t.Fatalf("unexpected get_content_units_by_collection tool name: %s", contentUnitsByCollection.Name)
@@ -546,6 +551,7 @@ func TestNewAppScopedManager(t *testing.T) {
 		"get_sources_by_author",
 		"get_sources_by_source",
 		"get_collections",
+		"get_content_unit",
 		"get_content_units_by_collection",
 		"elasticsearch_search",
 	}
