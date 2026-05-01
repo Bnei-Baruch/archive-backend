@@ -490,6 +490,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 	resultsReadyCalled := false
 	for i := 0; i < maxIterations; i++ {
 		stepStarted := time.Now()
+		isFinalIteration := i == maxIterations-1
 		if err := ctx.Err(); err != nil {
 			return nil, reasoningSteps, usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
 		}
@@ -509,6 +510,13 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 		instructionsForRequest := &instructions
 		if i == 0 && len(firstIterationTools) > 0 {
 			instructionsForRequest = &firstIterationInstructions
+		}
+		if isFinalIteration {
+			currentTools = nil
+			currentToolHandlers = nil
+			toolChoice = "auto"
+			finalInstructions := appendFinalReasoningIterationInstruction(*instructionsForRequest)
+			instructionsForRequest = &finalInstructions
 		}
 		req := ResponsesRequest{
 			Model:           model,

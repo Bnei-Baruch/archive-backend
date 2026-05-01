@@ -659,6 +659,7 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 
 	for i := 0; i < maxIterations; i++ {
 		stepStarted := time.Now()
+		isFinalIteration := i == maxIterations-1
 		if err := ctx.Err(); err != nil {
 			return nil, reasoningSteps, usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
 		}
@@ -678,9 +679,24 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 			currentTools = firstIterationNormalizedTools
 			currentToolHandlers = firstIterationToolHandlers
 		}
+		requestInput := nextInput
+		if isFinalIteration {
+			currentTools = nil
+			currentToolHandlers = nil
+			if instructionsForRequest != nil {
+				finalInstructions := appendFinalReasoningIterationInstruction(*instructionsForRequest)
+				instructionsForRequest = &finalInstructions
+			} else {
+				requestInput = append([]interface{}{}, nextInput...)
+				requestInput = append(requestInput, map[string]string{
+					"role":    "user",
+					"content": finalReasoningIterationInstruction,
+				})
+			}
+		}
 		req := ResponsesRequest{
 			Model:              model,
-			Input:              nextInput,
+			Input:              requestInput,
 			Instructions:       instructionsForRequest,
 			PreviousResponseID: previousResponseID,
 			MaxOutputTokens:    maxTokens,

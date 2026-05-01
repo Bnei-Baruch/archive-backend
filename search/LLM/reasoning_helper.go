@@ -10,6 +10,7 @@ import (
 )
 
 const ResponsesAPIEmptyAssistantOutputError = "responses API returned empty assistant output"
+const finalReasoningIterationInstruction = "This is the final allowed reasoning iteration. Do not call tools. Return the best structured response using only the evidence already gathered. If evidence is partial, return the best results you have and briefly note uncertainty in the summary."
 
 type ResponsesRequest struct {
 	Model              string                   `json:"model"`
@@ -217,6 +218,14 @@ func reasoningToolCallDebug(name string, args json.RawMessage) ReasoningSearchRe
 		Name:   name,
 		Params: compactToolCallArguments(args),
 	}
+}
+
+func appendFinalReasoningIterationInstruction(content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return finalReasoningIterationInstruction
+	}
+	return content + "\n\n" + finalReasoningIterationInstruction
 }
 
 func buildResponsesText(jsonSchema *string) (*ResponsesText, error) {

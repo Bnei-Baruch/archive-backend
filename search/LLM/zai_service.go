@@ -550,6 +550,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 
 	for i := 0; i < maxIterations; i++ {
 		stepStarted := time.Now()
+		isFinalIteration := i == maxIterations-1
 		if err := ctx.Err(); err != nil {
 			return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 		}
@@ -566,6 +567,14 @@ func (s *ZAIService) getReasoningResponseWithTools(
 		if i == 0 && len(firstIterationTools) > 0 {
 			currentMessages = firstIterationNormalizedMessages
 		}
+		currentToolChoice := &toolChoice
+		if isFinalIteration {
+			currentTools = nil
+			currentToolHandlers = nil
+			currentToolChoice = nil
+			currentMessages = append([]LLMBotMessage{}, currentMessages...)
+			currentMessages = append(currentMessages, LLMBotMessage{Role: "user", Content: finalReasoningIterationInstruction})
+		}
 
 		req := ZAIChatRequest{
 			Model:          model,
@@ -578,7 +587,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 			ResponseFormat: responseFormat,
 			Thinking:       thinking,
 			Tools:          currentTools,
-			ToolChoice:     &toolChoice,
+			ToolChoice:     currentToolChoice,
 			Stream:         false,
 		}
 

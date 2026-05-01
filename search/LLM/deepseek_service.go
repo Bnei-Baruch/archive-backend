@@ -540,6 +540,7 @@ func (s *DeepSeekService) getReasoningResponseWithTools(
 
 	for i := 0; i < maxIterations; i++ {
 		stepStarted := time.Now()
+		isFinalIteration := i == maxIterations-1
 		if err := ctx.Err(); err != nil {
 			return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 		}
@@ -556,16 +557,31 @@ func (s *DeepSeekService) getReasoningResponseWithTools(
 		if i == 0 && len(firstIterationTools) > 0 {
 			currentMessages = firstIterationNormalizedMessages
 		}
+		currentToolChoice := &toolChoice
+		currentThinking := thinking
+		currentEffort := effort
+		currentReasoningEffort := reasoningEffort
+		if isFinalIteration {
+			currentTools = nil
+			currentToolHandlers = nil
+			currentToolChoice = nil
+			currentThinking = &DeepSeekThinking{Type: "disabled"}
+			currentEffort = nil
+			minimalEffort := "minimal"
+			currentReasoningEffort = &minimalEffort
+			currentMessages = append([]DeepSeekRequestMessage{}, currentMessages...)
+			currentMessages = append(currentMessages, DeepSeekRequestMessage{Role: "user", Content: finalReasoningIterationInstruction})
+		}
 
 		req := DeepSeekChatRequest{
 			Model:           model,
 			Messages:        currentMessages,
 			MaxTokens:       maxTokens,
 			ResponseFormat:  responseFormat,
-			Thinking:        thinking,
-			ReasoningEffort: effort,
+			Thinking:        currentThinking,
+			ReasoningEffort: currentEffort,
 			Tools:           currentTools,
-			ToolChoice:      &toolChoice,
+			ToolChoice:      currentToolChoice,
 			Stream:          false,
 		}
 
@@ -600,7 +616,7 @@ func (s *DeepSeekService) getReasoningResponseWithTools(
 			if jsonSchema != nil {
 				if err := validateJSONRequiredTopLevelFields(message.Content, *jsonSchema); err != nil {
 					normalizedMessages = append(normalizedMessages, DeepSeekRequestMessage{Role: "assistant", Content: message.Content, ReasoningContent: message.ReasoningContent})
-					msg, finalizeUsage, err := s.getChatResponseWithUsage(ctx, model, maxTokens, deepseekMessagesToLLM(normalizedMessages), jsonSchema, reasoningEffort, deb)
+					msg, finalizeUsage, err := s.getChatResponseWithUsage(ctx, model, maxTokens, deepseekMessagesToLLM(normalizedMessages), jsonSchema, currentReasoningEffort, deb)
 					usageTotals.AddTotals(finalizeUsage)
 					stepUsage.AddTotals(finalizeUsage)
 					if err != nil {

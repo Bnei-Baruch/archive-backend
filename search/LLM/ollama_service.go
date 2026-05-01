@@ -512,6 +512,7 @@ func (s *OllamaService) getReasoningResponseWithTools(
 
 	for i := 0; i < maxIterations; i++ {
 		stepStarted := time.Now()
+		isFinalIteration := i == maxIterations-1
 		if err := ctx.Err(); err != nil {
 			return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 		}
@@ -527,6 +528,12 @@ func (s *OllamaService) getReasoningResponseWithTools(
 		currentMessages := ollamaMessages
 		if i == 0 && len(firstIterationTools) > 0 {
 			currentMessages = firstIterationOllamaMessages
+		}
+		if isFinalIteration {
+			currentTools = nil
+			currentToolHandlers = nil
+			currentMessages = append([]OllamaMessage{}, currentMessages...)
+			currentMessages = append(currentMessages, OllamaMessage{Role: "user", Content: finalReasoningIterationInstruction})
 		}
 		req := s.newChatRequest(model, maxTokens, currentMessages, currentTools, format, think)
 
