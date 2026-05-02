@@ -176,46 +176,26 @@ func wrapReasoningToolHandler(name string, handler ToolHandler) ToolHandler {
 	}
 }
 
-const parallelElasticsearchToolConcurrency = 4
+const parallelReasoningToolConcurrency = 4
 
-// Execute ES search calls in parallel when the model emits them as one batch.
-// Other tools stay serial, preserving their existing execution behavior.
+// Execute tool calls in parallel when the model emits them as one batch.
+// Results are written back by input index so provider messages keep the
+// same order as the original tool calls.
 func ExecuteReasoningToolExecutions(ctx context.Context, calls []ReasoningToolExecution, currentHandlers map[string]ToolHandler, plannedHandlers map[string]ToolHandler) ([]ReasoningToolExecutionResult, error) {
 	results := make([]ReasoningToolExecutionResult, len(calls))
-	for i := 0; i < len(calls); {
-		if CanonicalReasoningToolName(calls[i].Name) != "elasticsearch_search" {
-			output, err := executeReasoningToolExecution(ctx, calls[i], currentHandlers, plannedHandlers)
-			if err != nil {
-				return nil, err
-			}
-			results[i] = ReasoningToolExecutionResult{Output: output}
-			i++
-			continue
-		}
-
-		end := i + 1
-		for end < len(calls) && CanonicalReasoningToolName(calls[end].Name) == "elasticsearch_search" {
-			end++
-		}
-		if err := executeParallelElasticsearchToolExecutions(ctx, calls[i:end], results[i:end], currentHandlers, plannedHandlers); err != nil {
-			return nil, err
-		}
-		i = end
+	if len(calls) == 0 {
+		return results, nil
 	}
-	return results, nil
-}
-
-func executeParallelElasticsearchToolExecutions(ctx context.Context, calls []ReasoningToolExecution, results []ReasoningToolExecutionResult, currentHandlers map[string]ToolHandler, plannedHandlers map[string]ToolHandler) error {
 	if len(calls) <= 1 {
 		output, err := executeReasoningToolExecution(ctx, calls[0], currentHandlers, plannedHandlers)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		results[0] = ReasoningToolExecutionResult{Output: output}
-		return nil
+		return results, nil
 	}
 
-	sem := make(chan struct{}, parallelElasticsearchToolConcurrency)
+	sem := make(chan struct{}, parallelReasoningToolConcurrency)
 	var wg sync.WaitGroup
 	var once sync.Once
 	var firstErr error
@@ -227,7 +207,7 @@ func executeParallelElasticsearchToolExecutions(ctx context.Context, calls []Rea
 
 	for i := range calls {
 		if err := ctx.Err(); err != nil {
-			return err
+			return nil, err
 		}
 		i := i
 		wg.Add(1)
@@ -249,7 +229,10 @@ func executeParallelElasticsearchToolExecutions(ctx context.Context, calls []Rea
 		}()
 	}
 	wg.Wait()
-	return firstErr
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return results, nil
 }
 
 func executeReasoningToolExecution(ctx context.Context, call ReasoningToolExecution, currentHandlers map[string]ToolHandler, plannedHandlers map[string]ToolHandler) (string, error) {

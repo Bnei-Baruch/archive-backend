@@ -2,13 +2,13 @@ package llm
 
 import (
 	"context"
+	"sync"
 )
 
 type reasoningToolStateContextKey struct{}
 
 type reasoningToolState struct {
-	// Tool execution is sequential today, so this state intentionally stays lock-free.
-	// If tool execution becomes parallel in the future, add synchronization here.
+	mu            sync.Mutex
 	toolDebugInfo *ReasoningSearchDebugInfo
 }
 
@@ -24,6 +24,8 @@ func AddToolDebugInfo(ctx context.Context, info *ReasoningSearchDebugInfo) {
 	if !ok || state == nil {
 		return
 	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
 	if state.toolDebugInfo == nil {
 		copy := *info
 		state.toolDebugInfo = &copy
@@ -37,7 +39,12 @@ func ToolDebugInfoFromContext(ctx context.Context) *ReasoningSearchDebugInfo {
 		return nil
 	}
 	state, ok := ctx.Value(reasoningToolStateContextKey{}).(*reasoningToolState)
-	if !ok || state == nil || state.toolDebugInfo == nil {
+	if !ok || state == nil {
+		return nil
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.toolDebugInfo == nil {
 		return nil
 	}
 	copy := *state.toolDebugInfo

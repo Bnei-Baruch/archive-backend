@@ -45,7 +45,7 @@ Instructions for coding agents working in this repository.
 - Register tools with `ReasoningToolManager`.
 - Pass `manager.ToolCalls()` and `manager.ToolHandlers()` into `GetReasoningResponseWithTools`.
 - Tool argument/usage mistakes should return `llm.RecoverableToolError`; `ReasoningToolManager` converts it to a JSON tool result so the model can retry instead of failing the whole reasoning run. Keep infrastructure/runtime failures as normal errors.
-- `ReasoningToolManager` parallelizes consecutive `elasticsearch_search` tool calls from the same model response, while preserving output order.
+- `ReasoningToolManager` executes tool calls from the same model response in bounded parallelism, while preserving output order.
 - App-scoped manager builder lives in `search/LLM/tools/manager.go`.
 - `common.Init()` builds the shared tool manager inside `common.LLM_RUNTIME`.
 
