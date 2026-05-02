@@ -219,12 +219,19 @@ var aiQueryStopWords = map[string]bool{
 	"מסבירים":  true,
 	"מגדיר":    true,
 	"מגדירים":  true,
+	"מה":       true,
+	"הוא":      true,
+	"היא":      true,
+	"זה":       true,
+	"זו":       true,
 
 	"a":          true,
 	"an":         true,
 	"and":        true,
+	"is":         true,
 	"or":         true,
 	"the":        true,
+	"what":       true,
 	"of":         true,
 	"in":         true,
 	"on":         true,
@@ -273,6 +280,10 @@ var aiQueryStopWords = map[string]bool{
 	"объясняет":   true,
 	"объясняют":   true,
 	"объясняющие": true,
+	"что":         true,
+	"это":         true,
+	"есть":        true,
+	"является":    true,
 
 	"el":           true,
 	"la":           true,
@@ -308,6 +319,11 @@ var aiQueryStopWords = map[string]bool{
 	"explicar":     true,
 	"explicando":   true,
 	"explicativos": true,
+	"qué":          true,
+	"es":           true,
+	"son":          true,
+	"está":         true,
+	"esta":         true,
 }
 
 const aiQueryChunkSelectorPrompt = `You select the most relevant chunks from a single document for a search query.
