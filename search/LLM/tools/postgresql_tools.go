@@ -894,7 +894,7 @@ func (t *GetContentUnitsByCollectionTool) Definition() llm.ReasoningToolDefiniti
 func (t *GetContentUnitTool) Definition() llm.ReasoningToolDefinition {
 	return llm.ReasoningToolDefinition{
 		Name:        "get_content_unit",
-		Description: "Return one public content unit from PostgreSQL by content_unit_id. Do not use for blog posts or source/library ids.",
+		Description: "Return one public content unit from PostgreSQL by content_unit_id. Do not use for collections, blog posts or source/library ids.",
 		Parameters: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -917,7 +917,7 @@ func (t *GetContentUnitTool) UsageExplanation() string {
 	return `Tool: get_content_unit
 This tool allows you to retrieve structured metadata about one public content unit from PostgreSQL.
 Use this tool when you already have a concrete content unit id from search results and need to inspect that item.
-Do not use this tool for blog posts or source/library items. Blog posts are result_type posts, and sources are result_type sources.
+Do not use this tool for collections, blog posts or source/library items. Collections are result_type collections, blog posts are result_type posts, and sources are result_type sources.
 Arguments:
 - content_unit_id: required. Content unit UID or numeric MDB id.
 - language: optional language for localized names and descriptions.
