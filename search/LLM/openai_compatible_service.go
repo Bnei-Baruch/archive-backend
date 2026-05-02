@@ -530,6 +530,13 @@ func (s *OpenAICompatibleAPIService) ReserveReasoningSession(ctx context.Context
 	return sessionID, nil
 }
 
+func (s *OpenAICompatibleAPIService) RefreshReasoningSession(sessionID string) error {
+	if s.sessions == nil {
+		return errors.New("reasoning sessions are not enabled")
+	}
+	return s.sessions.Refresh(strings.TrimSpace(sessionID))
+}
+
 func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 	ctx context.Context,
 	methodName string,

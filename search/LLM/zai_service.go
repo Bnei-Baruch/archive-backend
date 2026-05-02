@@ -403,6 +403,13 @@ func (s *ZAIService) ReserveReasoningSession(ctx context.Context, model string, 
 	return s.sessions.CreateReserved(model, storedReasoningEffort)
 }
 
+func (s *ZAIService) RefreshReasoningSession(sessionID string) error {
+	if s.sessions == nil {
+		return errors.New("reasoning sessions are not enabled")
+	}
+	return s.sessions.Refresh(strings.TrimSpace(sessionID))
+}
+
 func (s *ZAIService) GetEmbeddings(ctx context.Context, content string) ([]float64, error) {
 	return nil, errors.New("zai embeddings are not implemented")
 }

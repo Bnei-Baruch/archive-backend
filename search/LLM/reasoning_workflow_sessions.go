@@ -117,6 +117,26 @@ func (s *ReasoningWorkflowSessionStore) Get(sessionID string) (*ReasoningWorkflo
 	return &copySession, nil
 }
 
+func (s *ReasoningWorkflowSessionStore) Refresh(sessionID string) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
 func (s *ReasoningWorkflowSessionStore) SetStage(sessionID string, stageName string, stage ReasoningWorkflowStageSession) error {
 	now := time.Now()
 

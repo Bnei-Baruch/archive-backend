@@ -5,11 +5,15 @@ import (
 	"time"
 )
 
-// ChatReasoningSessionStore keeps full replayable conversation history for chat-style
-// reasoning providers such as OpenRouter and Ollama. It is not used by OpenAI,
-// which continues reasoning sessions via previous_response_id instead of history replay.
-// The store lives only in local process memory, so it works on a single machine;
-// multi-instance deployments need sticky routing or shared storage.
+// This file stores provider-specific continuation state for providers that do
+// not expose a server-side continuation id. It is not the public reasoning
+// workflow session used by API clients. The public session stores only workflow
+// metadata and points to this store with its reasoning stage continuation id.
+//
+// These providers continue a follow-up by replaying prior message history, so
+// the state here is the minimal provider-side context needed to build the next
+// API request. The store lives only in local process memory, so multi-instance
+// deployments need sticky routing or shared storage.
 type ChatReasoningSession struct {
 	ID              string
 	Model           string
@@ -98,6 +102,26 @@ func (s *ChatReasoningSessionStore) Get(sessionID string) (*ChatReasoningSession
 	sessionCopy := *session
 	sessionCopy.History = append([]LLMBotMessage(nil), session.History...)
 	return &sessionCopy, nil
+}
+
+func (s *ChatReasoningSessionStore) Refresh(sessionID string) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
 }
 
 func (s *ChatReasoningSessionStore) Update(sessionID string, history []LLMBotMessage) error {

@@ -393,6 +393,13 @@ func (s *DeepSeekService) ReserveReasoningSession(ctx context.Context, model str
 	return s.sessions.CreateReserved(model, storedReasoningEffort)
 }
 
+func (s *DeepSeekService) RefreshReasoningSession(sessionID string) error {
+	if s.sessions == nil {
+		return errors.New("reasoning sessions are not enabled")
+	}
+	return s.sessions.Refresh(strings.TrimSpace(sessionID))
+}
+
 func (s *DeepSeekService) GetEmbeddings(ctx context.Context, content string) ([]float64, error) {
 	return nil, errors.New("deepseek embeddings are not implemented")
 }

@@ -16,6 +16,7 @@ const (
 	ProviderZAI        = "zai"
 	ProviderArcee      = "arcee"
 	ProviderDeepSeek   = "deepseek"
+	ProviderClaude     = "claude"
 	ProviderStub       = "stub"
 )
 
@@ -88,10 +89,7 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		if err := viper.UnmarshalKey("openai.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read openai.pricing: %w", err)
 		}
-		sessionTTL := viper.GetDuration("openai.reasoning-session-ttl")
-		if sessionTTL <= 0 {
-			sessionTTL = defaultOpenAIReasoningSessionTTL
-		}
+		sessionTTL := ReasoningSessionTTLFromConfig()
 		service := NewOpenAIServiceWithOptions(token, pricing, NewOpenAIReasoningSessionStore(sessionTTL), apiEndpoint)
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("openai.request-timeout")
@@ -106,10 +104,7 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		if err := viper.UnmarshalKey("openrouter.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read openrouter.pricing: %w", err)
 		}
-		sessionTTL := viper.GetDuration("openrouter.reasoning-session-ttl")
-		if sessionTTL <= 0 {
-			sessionTTL = defaultOpenAIReasoningSessionTTL
-		}
+		sessionTTL := ReasoningSessionTTLFromConfig()
 		service := NewOpenRouterServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint)
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("openrouter.request-timeout")
@@ -143,10 +138,7 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		if err := viper.UnmarshalKey("ollama.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read ollama.pricing: %w", err)
 		}
-		sessionTTL := viper.GetDuration("ollama.reasoning-session-ttl")
-		if sessionTTL <= 0 {
-			sessionTTL = defaultOpenAIReasoningSessionTTL
-		}
+		sessionTTL := ReasoningSessionTTLFromConfig()
 		numCtx := viper.GetInt("ollama.num-ctx")
 		if numCtx <= 0 {
 			numCtx = defaultOllamaNumCtx
@@ -175,10 +167,7 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		if err := viper.UnmarshalKey("xai.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read xai.pricing: %w", err)
 		}
-		sessionTTL := viper.GetDuration("xai.reasoning-session-ttl")
-		if sessionTTL <= 0 {
-			sessionTTL = defaultOpenAIReasoningSessionTTL
-		}
+		sessionTTL := ReasoningSessionTTLFromConfig()
 		service := NewXAIServiceWithOptions(token, pricing, NewOpenAIReasoningSessionStore(sessionTTL), apiEndpoint)
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("xai.request-timeout")
@@ -193,10 +182,7 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		if err := viper.UnmarshalKey("zai.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read zai.pricing: %w", err)
 		}
-		sessionTTL := viper.GetDuration("zai.reasoning-session-ttl")
-		if sessionTTL <= 0 {
-			sessionTTL = defaultOpenAIReasoningSessionTTL
-		}
+		sessionTTL := ReasoningSessionTTLFromConfig()
 		var doSample *bool
 		if viper.IsSet("zai.do-sample") {
 			value := viper.GetBool("zai.do-sample")
@@ -242,10 +228,7 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		if err := viper.UnmarshalKey("arcee.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read arcee.pricing: %w", err)
 		}
-		sessionTTL := viper.GetDuration("arcee.reasoning-session-ttl")
-		if sessionTTL <= 0 {
-			sessionTTL = defaultOpenAIReasoningSessionTTL
-		}
+		sessionTTL := ReasoningSessionTTLFromConfig()
 		service := NewArceeServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint)
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("arcee.request-timeout")
@@ -260,13 +243,25 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		if err := viper.UnmarshalKey("deepseek.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read deepseek.pricing: %w", err)
 		}
-		sessionTTL := viper.GetDuration("deepseek.reasoning-session-ttl")
-		if sessionTTL <= 0 {
-			sessionTTL = defaultOpenAIReasoningSessionTTL
-		}
+		sessionTTL := ReasoningSessionTTLFromConfig()
 		service := NewDeepSeekServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint)
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("deepseek.request-timeout")
+		return service, nil
+	case ProviderClaude:
+		token := viper.GetString("claude.token")
+		if strings.TrimSpace(token) == "" {
+			return nil, fmt.Errorf("claude.token is empty")
+		}
+		apiEndpoint := viper.GetString("claude.api-endpoint")
+		pricing := []ModelPricing{}
+		if err := viper.UnmarshalKey("claude.pricing", &pricing); err != nil {
+			return nil, fmt.Errorf("failed to read claude.pricing: %w", err)
+		}
+		sessionTTL := ReasoningSessionTTLFromConfig()
+		service := NewClaudeServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint)
+		service.progress = progress
+		service.client.Timeout = requestTimeoutFromConfig("claude.request-timeout")
 		return service, nil
 	case ProviderStub:
 		return NewStubLLMServiceFromConfig(progress)
@@ -276,54 +271,11 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 }
 
 func ReasoningSessionTTLFromConfig() time.Duration {
-	switch ProviderFromConfig() {
-	case ProviderOpenAI:
-		ttl := viper.GetDuration("openai.reasoning-session-ttl")
-		if ttl <= 0 {
-			return defaultOpenAIReasoningSessionTTL
-		}
-		return ttl
-	case ProviderOpenRouter:
-		ttl := viper.GetDuration("openrouter.reasoning-session-ttl")
-		if ttl <= 0 {
-			return defaultOpenAIReasoningSessionTTL
-		}
-		return ttl
-	case ProviderOllama:
-		ttl := viper.GetDuration("ollama.reasoning-session-ttl")
-		if ttl <= 0 {
-			return defaultOpenAIReasoningSessionTTL
-		}
-		return ttl
-	case ProviderXAI:
-		ttl := viper.GetDuration("xai.reasoning-session-ttl")
-		if ttl <= 0 {
-			return defaultOpenAIReasoningSessionTTL
-		}
-		return ttl
-	case ProviderZAI:
-		ttl := viper.GetDuration("zai.reasoning-session-ttl")
-		if ttl <= 0 {
-			return defaultOpenAIReasoningSessionTTL
-		}
-		return ttl
-	case ProviderArcee:
-		ttl := viper.GetDuration("arcee.reasoning-session-ttl")
-		if ttl <= 0 {
-			return defaultOpenAIReasoningSessionTTL
-		}
-		return ttl
-	case ProviderDeepSeek:
-		ttl := viper.GetDuration("deepseek.reasoning-session-ttl")
-		if ttl <= 0 {
-			return defaultOpenAIReasoningSessionTTL
-		}
-		return ttl
-	case ProviderStub:
-		return defaultOpenAIReasoningSessionTTL
-	default:
+	ttl := viper.GetDuration("llm.reasoning-session-ttl")
+	if ttl <= 0 {
 		return defaultOpenAIReasoningSessionTTL
 	}
+	return ttl
 }
 
 func ReasoningSearchCacheEnabledFromConfig() bool {
@@ -801,6 +753,58 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			Planning:           planning,
 			Verification:       verification,
 		}, nil
+	case ProviderClaude:
+		model := strings.TrimSpace(viper.GetString("claude.reasoning-search-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("claude.model"))
+		}
+		if model == "" {
+			model = "claude-sonnet-4-6"
+		}
+
+		effort := strings.TrimSpace(viper.GetString("claude.reasoning-search-effort"))
+		maxTokens := viper.GetInt("claude.reasoning-search-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+
+		maxIterations := viper.GetInt("claude.reasoning-search-max-iterations")
+		if maxIterations <= 0 {
+			maxIterations = defaultReasoningSearchMaxIterations
+		}
+		rerunMaxIterations := viper.GetInt("claude.reasoning-search-rerun-max-iterations")
+		if rerunMaxIterations <= 0 {
+			rerunMaxIterations = defaultReasoningSearchRerunMaxIters
+		}
+
+		var planning *ReasoningSearchPlanningConfig
+		if planningEnabled {
+			var err error
+			planning, err = reasoningSearchPlanningConfigFromProvider(planningProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+		var verification *ReasoningSearchVerificationConfig
+		if verificationEnabled {
+			var err error
+			verification, err = reasoningSearchVerificationConfigFromProvider(verificationProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return &ReasoningSearchConfig{
+			Provider:           provider,
+			Model:              model,
+			Effort:             effort,
+			MaxTokens:          maxTokens,
+			MaxIterations:      maxIterations,
+			RerunMaxIterations: rerunMaxIterations,
+			MaxFollowups:       maxFollowups,
+			Planning:           planning,
+			Verification:       verification,
+		}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-model"))
 		if model == "" {
@@ -1034,6 +1038,23 @@ func reasoningSearchPlanningConfigFromProvider(provider string, fallbackEffort s
 			maxTokens = defaultReasoningSearchPlanningMaxTokens
 		}
 		return &ReasoningSearchPlanningConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderClaude:
+		model := strings.TrimSpace(viper.GetString("claude.reasoning-search-planning-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("claude.reasoning-search-model"))
+		}
+		if model == "" {
+			model = "claude-sonnet-4-6"
+		}
+		effort := strings.TrimSpace(viper.GetString("claude.reasoning-search-planning-effort"))
+		if effort == "" {
+			effort = strings.TrimSpace(fallbackEffort)
+		}
+		maxTokens := viper.GetInt("claude.reasoning-search-planning-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchPlanningMaxTokens
+		}
+		return &ReasoningSearchPlanningConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-planning-model"))
 		if model == "" {
@@ -1253,6 +1274,26 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			MaxTokens:      maxTokens,
 			MaxInputTokens: maxInputTokens,
 		}, nil
+	case ProviderClaude:
+		model := strings.TrimSpace(viper.GetString("claude.reasoning-search-verification-model"))
+		if model == "" {
+			return nil, fmt.Errorf("claude.reasoning-search-verification-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("claude.reasoning-search-verification-effort"))
+		if effort == "" {
+			effort = defaultEffort
+		}
+		maxTokens := viper.GetInt("claude.reasoning-search-verification-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+		return &ReasoningSearchVerificationConfig{
+			Provider:       provider,
+			Model:          model,
+			Effort:         effort,
+			MaxTokens:      maxTokens,
+			MaxInputTokens: maxInputTokens,
+		}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-verification-model"))
 		if model == "" {
@@ -1433,6 +1474,20 @@ func aiToolsConfigFromProvider(provider string) (*AIToolsConfig, error) {
 			return nil, err
 		}
 		maxTokens := viper.GetInt("deepseek.ai-tools-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultAIToolsMaxTokens
+		}
+		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderClaude:
+		model := strings.TrimSpace(viper.GetString("claude.ai-tools-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("claude.reasoning-search-model"))
+		}
+		if model == "" {
+			model = "claude-sonnet-4-6"
+		}
+		effort := strings.TrimSpace(viper.GetString("claude.ai-tools-effort"))
+		maxTokens := viper.GetInt("claude.ai-tools-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultAIToolsMaxTokens
 		}

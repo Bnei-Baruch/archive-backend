@@ -18,7 +18,7 @@ Instructions for coding agents working in this repository.
   - `es/` Elasticsearch indexing pipelines
   - `mdb/` SQLBoiler-generated MDB models
   - `events/` NATS-based event processing
-- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`, `[arcee]`, `[deepseek]`); `[stub]` is local and makes no API calls.
+- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`, `[arcee]`, `[deepseek]`, `[claude]`); `[stub]` is local and makes no API calls.
 - Config: `config.toml` (see `config.sample.toml`).
 
 ## LLM Architecture
@@ -33,6 +33,7 @@ Instructions for coding agents working in this repository.
 - Ollama uses `/api/chat` with message-history replay; it does not use `tool_choice`.
 - Arcee uses OpenAI-compatible `/chat/completions` with message-history replay.
 - DeepSeek uses the official `/chat/completions` API with message-history replay and preserves `reasoning_content` on tool-call turns.
+- Claude uses Anthropic Messages API `/v1/messages` with message-history replay.
 - Stub provider returns configured constant responses by `model` and query, and is intended for stage-isolation tests.
 - `common.Init()` builds one app-scoped `common.LLM_RUNTIME`; do not construct new LLM services per request.
 - `common.LLM_RUNTIME` stores the shared tool manager, progress/workflow stores, and provider services keyed by provider.
@@ -68,9 +69,9 @@ Instructions for coding agents working in this repository.
 - Workflow stages own their provider/model/effort settings; handlers should execute a stage from stored workflow state, not by re-reading current config for existing sessions.
 - Planning is a one-shot structured-output call that runs only on the initial request, not on follow-ups. It returns request-specific guidance plus optional first-iteration tool restrictions.
 - Verification is currently a one-shot structured call, so its stored stage metadata may have an empty provider-native session id.
-- OpenAI short-lived reasoning sessions are stored in memory only, with TTL from `openai.reasoning-session-ttl`.
-- xAI short-lived reasoning sessions are also stored in memory only, with TTL from `xai.reasoning-session-ttl`.
-- OpenRouter, Ollama, Arcee, and DeepSeek sessions also live in memory, but store full replayable conversation history via `chat_reasoning_sessions.go`.
+- Reasoning workflow/progress/provider sessions are stored in memory only, with TTL from `llm.reasoning-session-ttl`.
+- Session-related endpoints such as status, result, and follow-up renew session expiry when the session still exists.
+- OpenRouter, Ollama, Arcee, DeepSeek, Z.AI, and Claude sessions store full replayable conversation history via `chat_reasoning_sessions.go`.
 - If client sends a missing or expired `session_id`, the API returns an error; it does not silently start a new session.
 - OpenAI session state stores continuation data (`last_response_id`, model, effort), not the full prompt or hidden reasoning.
 - Planning failures are soft: the handler logs a warning and continues with reasoning without planner guidance.
@@ -92,6 +93,7 @@ Instructions for coding agents working in this repository.
   - `[zai]` for Z.AI
   - `[arcee]` for Arcee AI
   - `[deepseek]` for DeepSeek official API
+  - `[claude]` for Anthropic Claude
   - `[stub]` for local constant responses with no API calls
 - Verification model settings are also provider-specific:
   - `<provider>.reasoning-search-verification-model`

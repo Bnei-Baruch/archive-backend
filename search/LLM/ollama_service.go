@@ -375,6 +375,13 @@ func (s *OllamaService) ReserveReasoningSession(ctx context.Context, model strin
 	return sessionID, nil
 }
 
+func (s *OllamaService) RefreshReasoningSession(sessionID string) error {
+	if s.sessions == nil {
+		return errors.New("reasoning sessions are not enabled")
+	}
+	return s.sessions.Refresh(strings.TrimSpace(sessionID))
+}
+
 func (s *OllamaService) GetEmbeddings(ctx context.Context, content string) ([]float64, error) {
 	return nil, errors.New("ollama embeddings are not implemented")
 }

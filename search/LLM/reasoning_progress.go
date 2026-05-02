@@ -190,6 +190,26 @@ func (s *ReasoningProgressStore) Get(sessionID string) (*ReasoningProgressStatus
 	return &statusCopy, nil
 }
 
+func (s *ReasoningProgressStore) Refresh(sessionID string) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	status, ok := s.statuses[sessionID]
+	if !ok {
+		return ErrReasoningProgressNotFoundOrExpired
+	}
+	if now.After(status.ExpiresAt) {
+		delete(s.statuses, sessionID)
+		return ErrReasoningProgressNotFoundOrExpired
+	}
+
+	status.UpdatedAt = now
+	status.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
 func (s *ReasoningProgressStore) Close() error {
 	close(s.stop)
 	<-s.done

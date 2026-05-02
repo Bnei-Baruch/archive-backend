@@ -137,6 +137,13 @@ func (s *StubLLMService) ReserveReasoningSession(ctx context.Context, model stri
 	return newReasoningSessionID()
 }
 
+func (s *StubLLMService) RefreshReasoningSession(sessionID string) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	return nil
+}
+
 func (s *StubLLMService) GetEmbeddings(ctx context.Context, content string) ([]float64, error) {
 	return nil, fmt.Errorf("stub provider does not support embeddings")
 }

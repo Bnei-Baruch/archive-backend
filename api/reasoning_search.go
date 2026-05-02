@@ -179,8 +179,17 @@ func ReasoningSearchStatusHandler(c *gin.Context) {
 	}
 
 	runtime, _ := c.MustGet("LLM_RUNTIME").(*llm.Runtime)
-	if runtime == nil || runtime.Progress == nil {
+	if runtime == nil || runtime.Progress == nil || runtime.Workflow == nil {
 		NewInternalError(errors.New("LLM_REASONING_PROGRESS is not initialized")).Abort(c)
+		return
+	}
+
+	if err := refreshReasoningSearchSession(runtime, sessionID); err != nil {
+		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
 		return
 	}
 
@@ -306,6 +315,15 @@ func ReasoningSearchResultHandler(c *gin.Context) {
 		return
 	}
 
+	if err := refreshReasoningSearchSession(runtime, sessionID); err != nil {
+		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
+	}
+
 	workflowSession, err := runtime.Workflow.Get(sessionID)
 	if err != nil {
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
@@ -396,6 +414,7 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 		if !ok || strings.TrimSpace(reasoningStage.ProviderSessionID) == "" {
 			return "", llm.ErrReasoningSessionNotFoundOrExpired
 		}
+		refreshProviderReasoningSession(runtime, reasoningStage)
 		if status, err := progressStore.Get(sessionID); err == nil {
 			if !status.Done {
 				return "", errReasoningSearchAlreadyRunning
@@ -1232,6 +1251,45 @@ func cancelReasoningSearchSession(runtime *llm.Runtime, sessionID string) bool {
 		runtime.Progress.Cancel(sessionID, 0)
 	}
 	return true
+}
+
+func refreshReasoningSearchSession(runtime *llm.Runtime, sessionID string) error {
+	if runtime == nil || runtime.Workflow == nil {
+		return errors.New("reasoning workflow is not initialized")
+	}
+	workflowSession, err := runtime.Workflow.Get(sessionID)
+	if err != nil {
+		return err
+	}
+	if reasoningStage, ok := workflowSession.Stages[llm.ReasoningWorkflowStageReasoning]; ok {
+		refreshProviderReasoningSession(runtime, reasoningStage)
+	}
+	if err := runtime.Workflow.Refresh(sessionID); err != nil {
+		return err
+	}
+	if runtime.Progress != nil {
+		if err := runtime.Progress.Refresh(sessionID); err != nil && !errors.Is(err, llm.ErrReasoningProgressNotFoundOrExpired) {
+			return err
+		}
+	}
+	return nil
+}
+
+func refreshProviderReasoningSession(runtime *llm.Runtime, stage llm.ReasoningWorkflowStageSession) {
+	if runtime == nil || runtime.Services == nil {
+		return
+	}
+	providerSessionID := strings.TrimSpace(stage.ProviderSessionID)
+	if providerSessionID == "" {
+		return
+	}
+	service, ok := runtime.Services[stage.Provider].(llm.ReasoningSessionRefresher)
+	if !ok || service == nil {
+		return
+	}
+	if err := service.RefreshReasoningSession(providerSessionID); err != nil {
+		log.Warnf("Reasoning Search failed refreshing provider session: provider=%q err=%v", stage.Provider, err)
+	}
 }
 
 func buildFirstIterationPlannedTools(manager *llm.ReasoningToolManager, plan *llm.ReasoningSearchPlanningResponse) ([]llm.ToolCall, map[string]llm.ToolHandler, error) {

@@ -22,6 +22,12 @@ type Service interface {
 	GetEmbeddings(ctx context.Context, content string) ([]float64, error)
 }
 
+type ReasoningSessionRefresher interface {
+	// RefreshReasoningSession extends the provider-side continuation state TTL.
+	// The public API workflow session is refreshed separately by the workflow store.
+	RefreshReasoningSession(sessionID string) error
+}
+
 type Runtime struct {
 	Tools          *ReasoningToolManager
 	Progress       *ReasoningProgressStore

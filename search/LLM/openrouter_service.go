@@ -381,6 +381,13 @@ func (s *OpenRouterService) ReserveReasoningSession(ctx context.Context, model s
 	return sessionID, nil
 }
 
+func (s *OpenRouterService) RefreshReasoningSession(sessionID string) error {
+	if s.sessions == nil {
+		return errors.New("reasoning sessions are not enabled")
+	}
+	return s.sessions.Refresh(strings.TrimSpace(sessionID))
+}
+
 func (s *OpenRouterService) getReasoningResponseWithTools(
 	ctx context.Context,
 	methodName string,

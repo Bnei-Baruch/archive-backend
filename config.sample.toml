@@ -56,17 +56,18 @@ url_template="https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2
 refresh-search-stats="5m"
 
 [llm]
-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "stub"
+provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "stub"
 postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache
-ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "stub"; defaults to llm.provider when empty
+ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "stub"; defaults to llm.provider when empty
 ai-query-tool-max-batches=5 # max document batches query_source_ai/query_transcript_ai may send to the reader model per call
 reasoning-search-cache-enabled=false
 reasoning-search-cache-ttl="120h" # default is 120h (5 days)
+reasoning-session-ttl="30m" # workflow/provider session TTL; renewed on status/result/follow-up requests
 reasoning-search-max-followups=2
 reasoning-search-planning-enabled=false
-reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "stub"; defaults to llm.provider when empty
+reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "stub"; defaults to llm.provider when empty
 reasoning-search-verification-enabled=false
-reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "stub"; defaults to llm.provider when empty
+reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "stub"; defaults to llm.provider when empty
 reasoning-search-verification-max-input-tokens=20000 # skip verification when accumulated reasoning/planning tokens are >= this value
 
 [openai]
@@ -86,7 +87,6 @@ ai-tools-max-output-tokens=1500
 # reasoning-search-verification-model="gpt-5.4-mini"
 # reasoning-search-verification-effort="medium"
 # reasoning-search-verification-max-output-tokens=2000
-reasoning-session-ttl="30m"
 request-timeout="2m"
 
 [[openai.pricing]]
@@ -130,7 +130,6 @@ ai-tools-max-output-tokens=1500
 # reasoning-search-verification-model="openai/gpt-oss-20b"
 # reasoning-search-verification-effort="medium"
 # reasoning-search-verification-max-output-tokens=1500
-reasoning-session-ttl="30m"
 request-timeout="2m"
 enforced-tool-use-iterations=0 # 0 disables forced tool use; set >0 to require tools for the first N reasoning iterations
 provider-sort="latency" # "latency", "price", "throughput"
@@ -209,7 +208,6 @@ ai-tools-max-output-tokens=1500
 # reasoning-search-verification-model="deepseek-v4-flash"
 # reasoning-search-verification-effort="medium"
 # reasoning-search-verification-max-output-tokens=2000
-reasoning-session-ttl="30m"
 request-timeout="5m"
 
 [[deepseek.pricing]]
@@ -223,6 +221,61 @@ model="deepseek-v4-pro"
 input_per_1m_tokens_usd=0.435
 cached_input_per_1m_tokens_usd=0.003625
 output_per_1m_tokens_usd=0.87
+
+[claude]
+token="sk-ant-..."
+api-endpoint="" # optional; defaults to https://api.anthropic.com/v1 and also accepts a full /v1/messages URL
+reasoning-search-model="claude-sonnet-4-6" # "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-opus-4-1-20250805", "claude-opus-4-20250514"
+reasoning-search-effort="" # currently stored for debug/cost labels only; Anthropic extended thinking is not enabled here
+reasoning-search-max-output-tokens=8000
+reasoning-search-max-iterations=20
+reasoning-search-rerun-max-iterations=8 # post-verification reasoning rerun
+ai-tools-model="claude-sonnet-4-6"
+ai-tools-effort=""
+ai-tools-max-output-tokens=1500
+# reasoning-search-planning-model="claude-sonnet-4-6"
+# reasoning-search-planning-effort=""
+# reasoning-search-planning-max-output-tokens=1500
+# reasoning-search-verification-model="claude-sonnet-4-6"
+# reasoning-search-verification-effort=""
+# reasoning-search-verification-max-output-tokens=2000
+request-timeout="5m"
+
+[[claude.pricing]]
+model="claude-opus-4-7"
+input_per_1m_tokens_usd=5.00
+cached_input_per_1m_tokens_usd=0.50
+output_per_1m_tokens_usd=25.00
+
+[[claude.pricing]]
+model="claude-opus-4-6"
+input_per_1m_tokens_usd=5.00
+cached_input_per_1m_tokens_usd=0.50
+output_per_1m_tokens_usd=25.00
+
+[[claude.pricing]]
+model="claude-opus-4-20250514"
+input_per_1m_tokens_usd=15.00
+cached_input_per_1m_tokens_usd=1.50
+output_per_1m_tokens_usd=75.00
+
+[[claude.pricing]]
+model="claude-opus-4-1-20250805"
+input_per_1m_tokens_usd=15.00
+cached_input_per_1m_tokens_usd=1.50
+output_per_1m_tokens_usd=75.00
+
+[[claude.pricing]]
+model="claude-sonnet-4-6"
+input_per_1m_tokens_usd=3.00
+cached_input_per_1m_tokens_usd=0.30
+output_per_1m_tokens_usd=15.00
+
+[[claude.pricing]]
+model="claude-haiku-4-5"
+input_per_1m_tokens_usd=1.00
+cached_input_per_1m_tokens_usd=0.10
+output_per_1m_tokens_usd=5.00
 
 [ollama]
 token="" # optional bearer token for Ollama-compatible servers
@@ -241,7 +294,6 @@ ai-tools-max-output-tokens=1500
 # reasoning-search-verification-model="gemma4:31b"
 # reasoning-search-verification-effort="medium"
 # reasoning-search-verification-max-output-tokens=2000
-reasoning-session-ttl="30m"
 request-timeout="5m"
 num-ctx=32768
 structured-output-prompt-schema=false # when true, also embed the JSON schema and explicit JSON-only instruction into the prompt
@@ -267,7 +319,6 @@ ai-tools-max-output-tokens=1500
 # reasoning-search-planning-max-output-tokens=1500
 # reasoning-search-verification-model="grok-4-1-fast-reasoning"
 # reasoning-search-verification-max-output-tokens=2000
-reasoning-session-ttl="30m"
 request-timeout="5m"
 # grok-4 / grok-4-fast reasoning models do not support reasoning_effort
 
@@ -293,7 +344,6 @@ ai-tools-max-output-tokens=1500
 # reasoning-search-verification-model="trinity-mini"
 # reasoning-search-verification-effort="" # optional; "minimal", "low", "medium", "high"; ignored for trinity-large-thinking
 # reasoning-search-verification-max-output-tokens=2000
-reasoning-session-ttl="30m"
 request-timeout="2m"
 
 [[arcee.pricing]]
@@ -332,7 +382,6 @@ ai-tools-max-output-tokens=1500
 # reasoning-search-verification-model="glm-5.1"
 # reasoning-search-verification-effort="low"
 # reasoning-search-verification-max-output-tokens=2000
-reasoning-session-ttl="30m"
 request-timeout="2m"
 
 [[zai.pricing]]
