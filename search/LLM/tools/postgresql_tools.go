@@ -1472,7 +1472,7 @@ func loadContentUnitToolResult(db *sql.DB, contentUnitID string, language string
 	item, err := scanContentUnitToolResult(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, llm.NewRecoverableToolError("get_content_unit", fmt.Sprintf("content unit not found for content_unit_id '%s'", contentUnitID), "This may be a source id, not a content unit id. Use get_sources_by_source for source navigation, or query_source_ai if you need source text excerpts.")
+			return nil, llm.NewRecoverableToolError("get_content_unit", fmt.Sprintf("content unit not found for content_unit_id '%s'", contentUnitID), "This may be a collection or source id, not a content unit id. Use get_collections or get_content_units_by_collection for collection ids, and get_sources_by_source or query_source_ai for source ids.")
 		}
 		return nil, fmt.Errorf("get_content_unit: content unit lookup failed: %w", err)
 	}

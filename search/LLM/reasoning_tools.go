@@ -241,7 +241,18 @@ func executeReasoningToolExecution(ctx context.Context, call ReasoningToolExecut
 	}
 	handler, ok := ResolveReasoningToolHandler(call.Name, currentHandlers, plannedHandlers)
 	if !ok {
-		return "", fmt.Errorf("missing handler for tool '%s'", call.Name)
+		payload := map[string]interface{}{
+			"error":           "wrong_tool_usage",
+			"retry_suggested": true,
+			"tool":            call.Name,
+			"message":         fmt.Sprintf("tool '%s' is not available in this step", call.Name),
+			"guidance":        "Use only the tools that were provided in the current tool list. For source navigation use get_sources_by_source, for collections use get_collections or get_content_units_by_collection, and for concrete content units use get_content_unit.",
+		}
+		recoverableResult, err := json.Marshal(payload)
+		if err != nil {
+			return "", err
+		}
+		return string(recoverableResult), nil
 	}
 	args := call.Arguments
 	if len(args) == 0 {

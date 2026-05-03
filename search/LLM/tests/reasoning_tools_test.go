@@ -283,6 +283,32 @@ func TestResolveReasoningToolHandlerSanitizesPlannedElasticsearchResult(t *testi
 	}
 }
 
+func TestExecuteReasoningToolExecutionsReturnsRecoverableOutputForMissingTool(t *testing.T) {
+	results, err := llm.ExecuteReasoningToolExecutions(
+		context.Background(),
+		[]llm.ReasoningToolExecution{{Name: "get_source", Arguments: json.RawMessage(`{}`)}},
+		map[string]llm.ToolHandler{},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("expected missing tool to be recoverable, got error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected one result, got %d", len(results))
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal([]byte(results[0].Output), &payload); err != nil {
+		t.Fatalf("expected JSON recoverable payload: %v", err)
+	}
+	if payload["error"] != "wrong_tool_usage" {
+		t.Fatalf("unexpected payload: %v", payload)
+	}
+	if payload["tool"] != "get_source" {
+		t.Fatalf("expected missing tool name in payload, got %v", payload["tool"])
+	}
+}
+
 func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *testing.T) {
 	schema, err := llm.GenerateReasoningSearchResponseJSONSchemaForLanguage("English")
 	if err != nil {
