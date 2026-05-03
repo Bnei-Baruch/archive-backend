@@ -68,31 +68,47 @@ const (
 )
 
 type ReasoningSearchDebugInfo struct {
-	Enabled                      bool                           `json:"enabled"`
-	Model                        string                         `json:"model"`
-	ReasoningEffort              string                         `json:"reasoning_effort"`
-	ReasoningSummary             string                         `json:"reasoning_summary,omitempty"`
-	PlanningModelUsage           *ReasoningSearchUsageBreakdown `json:"planning_model_usage,omitempty"`
-	MainModelUsage               *ReasoningSearchUsageBreakdown `json:"main_model_usage,omitempty"`
-	AIToolsUsage                 *ReasoningSearchUsageBreakdown `json:"ai_tools_usage,omitempty"`
-	VerificationModel            string                         `json:"verification_model,omitempty"`
-	VerificationReasoningEffort  string                         `json:"verification_reasoning_effort,omitempty"`
-	VerificationTotalTokens      int                            `json:"verification_total_tokens,omitempty"`
-	VerificationEstimatedCostUSD float64                        `json:"verification_estimated_cost_usd,omitempty"`
-	TotalTokens                  int                            `json:"total_tokens"`
-	InputTokens                  int                            `json:"input_tokens"`
-	CachedInputTokens            int                            `json:"cached_input_tokens"`
-	UncachedInputTokens          int                            `json:"uncached_input_tokens"`
-	OutputTokens                 int                            `json:"output_tokens"`
-	ReasoningTokens              int                            `json:"reasoning_tokens"`
-	PricingConfigured            bool                           `json:"pricing_configured"`
-	InputPer1MTokensUSD          float64                        `json:"input_per_1m_tokens_usd"`
-	CachedInputPer1MTokensUSD    float64                        `json:"cached_input_per_1m_tokens_usd"`
-	OutputPer1MTokensUSD         float64                        `json:"output_per_1m_tokens_usd"`
-	EstimatedInputCostUSD        float64                        `json:"estimated_input_cost_usd"`
-	EstimatedCachedInputCostUSD  float64                        `json:"estimated_cached_input_cost_usd"`
-	EstimatedOutputCostUSD       float64                        `json:"estimated_output_cost_usd"`
-	EstimatedCostUSD             float64                        `json:"estimated_cost_usd"`
+	Enabled                      bool                             `json:"enabled"`
+	Model                        string                           `json:"model"`
+	ReasoningEffort              string                           `json:"reasoning_effort"`
+	ReasoningSummary             string                           `json:"reasoning_summary,omitempty"`
+	PlanningModelUsage           *ReasoningSearchUsageBreakdown   `json:"planning_model_usage,omitempty"`
+	MainModelUsage               *ReasoningSearchUsageBreakdown   `json:"main_model_usage,omitempty"`
+	AIToolsUsage                 *ReasoningSearchUsageBreakdown   `json:"ai_tools_usage,omitempty"`
+	AIToolsCalls                 []ReasoningSearchAIToolCallDebug `json:"ai_tools_calls,omitempty"`
+	VerificationModel            string                           `json:"verification_model,omitempty"`
+	VerificationReasoningEffort  string                           `json:"verification_reasoning_effort,omitempty"`
+	VerificationTotalTokens      int                              `json:"verification_total_tokens,omitempty"`
+	VerificationEstimatedCostUSD float64                          `json:"verification_estimated_cost_usd,omitempty"`
+	TotalTokens                  int                              `json:"total_tokens"`
+	InputTokens                  int                              `json:"input_tokens"`
+	CachedInputTokens            int                              `json:"cached_input_tokens"`
+	UncachedInputTokens          int                              `json:"uncached_input_tokens"`
+	OutputTokens                 int                              `json:"output_tokens"`
+	ReasoningTokens              int                              `json:"reasoning_tokens"`
+	PricingConfigured            bool                             `json:"pricing_configured"`
+	InputPer1MTokensUSD          float64                          `json:"input_per_1m_tokens_usd"`
+	CachedInputPer1MTokensUSD    float64                          `json:"cached_input_per_1m_tokens_usd"`
+	OutputPer1MTokensUSD         float64                          `json:"output_per_1m_tokens_usd"`
+	EstimatedInputCostUSD        float64                          `json:"estimated_input_cost_usd"`
+	EstimatedCachedInputCostUSD  float64                          `json:"estimated_cached_input_cost_usd"`
+	EstimatedOutputCostUSD       float64                          `json:"estimated_output_cost_usd"`
+	EstimatedCostUSD             float64                          `json:"estimated_cost_usd"`
+}
+
+type ReasoningSearchAIToolCallDebug struct {
+	ToolName           string  `json:"tool_name"`
+	DocumentType       string  `json:"document_type"`
+	DocumentID         string  `json:"document_id"`
+	Query              string  `json:"query"`
+	DocumentBatchCount int     `json:"document_batch_count"`
+	SelectedBatchCount int     `json:"selected_batch_count"`
+	LoadLatencyMS      int64   `json:"load_latency_ms"`
+	BatchLatenciesMS   []int64 `json:"batch_latencies_ms"`
+	MaxBatchLatencyMS  int64   `json:"max_batch_latency_ms"`
+	ReaderLatencyMS    int64   `json:"reader_latency_ms"`
+	ReturnedCount      int     `json:"returned_count"`
+	Error              string  `json:"error,omitempty"`
 }
 
 type ReasoningSearchUsageBreakdown struct {
@@ -303,9 +319,28 @@ func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {
 	d.EstimatedCachedInputCostUSD += other.EstimatedCachedInputCostUSD
 	d.EstimatedOutputCostUSD += other.EstimatedOutputCostUSD
 	d.EstimatedCostUSD += other.EstimatedCostUSD
-	if !other.PricingConfigured {
+	if len(other.AIToolsCalls) != 0 {
+		d.AIToolsCalls = append(d.AIToolsCalls, other.AIToolsCalls...)
+	}
+	if other.hasUsageOrCost() && !other.PricingConfigured {
 		d.PricingConfigured = false
 	}
+}
+
+func (d *ReasoningSearchDebugInfo) hasUsageOrCost() bool {
+	if d == nil {
+		return false
+	}
+	return d.TotalTokens != 0 ||
+		d.InputTokens != 0 ||
+		d.CachedInputTokens != 0 ||
+		d.UncachedInputTokens != 0 ||
+		d.OutputTokens != 0 ||
+		d.ReasoningTokens != 0 ||
+		d.EstimatedInputCostUSD != 0 ||
+		d.EstimatedCachedInputCostUSD != 0 ||
+		d.EstimatedOutputCostUSD != 0 ||
+		d.EstimatedCostUSD != 0
 }
 
 func (d *ReasoningSearchDebugInfo) UsageBreakdown() *ReasoningSearchUsageBreakdown {

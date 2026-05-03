@@ -648,6 +648,9 @@ func mergeReasoningSearchAttemptStats(dst *llm.ReasoningSearchResponse, src *llm
 			aiCopy := *src.Debug.AIToolsUsage
 			debugCopy.AIToolsUsage = &aiCopy
 		}
+		if len(src.Debug.AIToolsCalls) != 0 {
+			debugCopy.AIToolsCalls = append([]llm.ReasoningSearchAIToolCallDebug(nil), src.Debug.AIToolsCalls...)
+		}
 		dst.Debug = &debugCopy
 		return
 	}

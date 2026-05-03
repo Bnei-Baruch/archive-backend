@@ -924,12 +924,14 @@ func TestAIToolsConfigFromConfigUsesExplicitProvider(t *testing.T) {
 	oldModel := viper.GetString("openrouter.ai-tools-model")
 	oldEffort := viper.GetString("openrouter.ai-tools-effort")
 	oldMaxTokens := viper.GetInt("openrouter.ai-tools-max-output-tokens")
+	oldBatchConcurrency := viper.Get("openrouter.ai-tools-batch-concurrency")
 	oldMaxBatches := viper.Get("llm.ai-query-tool-max-batches")
 	defer viper.Set("llm.provider", oldProvider)
 	defer viper.Set("llm.ai-tools-provider", oldAIToolsProvider)
 	defer viper.Set("openrouter.ai-tools-model", oldModel)
 	defer viper.Set("openrouter.ai-tools-effort", oldEffort)
 	defer viper.Set("openrouter.ai-tools-max-output-tokens", oldMaxTokens)
+	defer viper.Set("openrouter.ai-tools-batch-concurrency", oldBatchConcurrency)
 	defer viper.Set("llm.ai-query-tool-max-batches", oldMaxBatches)
 
 	viper.Set("llm.provider", "openai")
@@ -938,6 +940,7 @@ func TestAIToolsConfigFromConfigUsesExplicitProvider(t *testing.T) {
 	viper.Set("openrouter.ai-tools-model", "openai/gpt-oss-20b")
 	viper.Set("openrouter.ai-tools-effort", "minimal")
 	viper.Set("openrouter.ai-tools-max-output-tokens", 1234)
+	viper.Set("openrouter.ai-tools-batch-concurrency", 5)
 
 	cfg, err := llm.AIToolsConfigFromConfig()
 	if err != nil {
@@ -958,6 +961,9 @@ func TestAIToolsConfigFromConfigUsesExplicitProvider(t *testing.T) {
 	if cfg.MaxBatches != 7 {
 		t.Fatalf("unexpected max batches: %d", cfg.MaxBatches)
 	}
+	if cfg.BatchConcurrency != 5 {
+		t.Fatalf("unexpected batch concurrency: %d", cfg.BatchConcurrency)
+	}
 }
 
 func TestAIToolsConfigFromConfigSupportsStub(t *testing.T) {
@@ -966,17 +972,20 @@ func TestAIToolsConfigFromConfigSupportsStub(t *testing.T) {
 	oldModel := viper.GetString("stub.ai-tools-model")
 	oldEffort := viper.GetString("stub.ai-tools-effort")
 	oldMaxTokens := viper.GetInt("stub.ai-tools-max-output-tokens")
+	oldBatchConcurrency := viper.Get("stub.ai-tools-batch-concurrency")
 	defer viper.Set("llm.provider", oldProvider)
 	defer viper.Set("llm.ai-tools-provider", oldAIToolsProvider)
 	defer viper.Set("stub.ai-tools-model", oldModel)
 	defer viper.Set("stub.ai-tools-effort", oldEffort)
 	defer viper.Set("stub.ai-tools-max-output-tokens", oldMaxTokens)
+	defer viper.Set("stub.ai-tools-batch-concurrency", oldBatchConcurrency)
 
 	viper.Set("llm.provider", "openai")
 	viper.Set("llm.ai-tools-provider", "stub")
 	viper.Set("stub.ai-tools-model", "reader-stub")
 	viper.Set("stub.ai-tools-effort", "reader")
 	viper.Set("stub.ai-tools-max-output-tokens", 3333)
+	viper.Set("stub.ai-tools-batch-concurrency", 4)
 
 	cfg, err := llm.AIToolsConfigFromConfig()
 	if err != nil {
@@ -993,6 +1002,9 @@ func TestAIToolsConfigFromConfigSupportsStub(t *testing.T) {
 	}
 	if cfg.MaxTokens != 3333 {
 		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
+	}
+	if cfg.BatchConcurrency != 4 {
+		t.Fatalf("unexpected batch concurrency: %d", cfg.BatchConcurrency)
 	}
 }
 

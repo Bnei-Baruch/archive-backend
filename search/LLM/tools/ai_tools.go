@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -33,6 +34,8 @@ const (
 
 	// Prevent scanning arbitrarily large documents in one request.
 	aiQueryToolMaxBatches = 5
+	// Keep reader-model fan-out modest because tool calls themselves may already run in parallel.
+	defaultAIQueryToolBatchConcurrency = 2
 
 	// Build larger semantic windows on top of raw lookup chunks so the reader model
 	// sees more surrounding context before choosing a match.
@@ -417,6 +420,13 @@ type aiQuerySelectedChunk struct {
 	SupportingSnippet string
 }
 
+type aiQueryBatchResult struct {
+	Batch          []aiQueryChunk
+	SelectedChunks []aiQuerySelectedChunk
+	Debug          *llm.ReasoningSearchDebugInfo
+	LatencyMS      int64
+}
+
 type aiQueryChunk struct {
 	Number           int
 	StartChunkNumber int
@@ -567,13 +577,23 @@ func (t *QuerySourceAITool) Execute(ctx context.Context, arguments json.RawMessa
 	}
 	language := strings.ToLower(strings.TrimSpace(args.Language))
 	maxChunks := normalizeAIQueryToolMaxChunks(args.MaxChunks)
+	loadStart := time.Now()
 	entry, err := loadSourceDocumentEntry(t.lookup, sourceID, language)
+	loadLatencyMS := time.Since(loadStart).Milliseconds()
 	if err != nil {
+		addAIQueryToolCallDebug(ctx, llm.ReasoningSearchAIToolCallDebug{
+			ToolName:      "query_source_ai",
+			DocumentType:  "source",
+			DocumentID:    sourceID,
+			Query:         query,
+			LoadLatencyMS: loadLatencyMS,
+			Error:         err.Error(),
+		})
 		llm.LogIfDeb(ctx, "query_source_ai: source load failed source_id=%q language=%q err=%v", sourceID, language, err)
 		return aiQueryToolErrorOutput("query_source_ai", err), nil
 	}
 	llm.LogIfDeb(ctx, "query_source_ai: start source_id=%q file_id=%q language=%q query=%q max_chunks=%d", sourceID, entry.FileUID, language, query, maxChunks)
-	result, err := executeAIQuery(ctx, t.service, t.config, "source", sourceID, query, entry, maxChunks)
+	result, err := executeAIQuery(ctx, t.service, t.config, "source", sourceID, query, entry, maxChunks, loadLatencyMS)
 	if err != nil {
 		llm.LogIfDeb(ctx, "query_source_ai: semantic selection failed source_id=%q file_id=%q language=%q err=%v", sourceID, entry.FileUID, language, err)
 		return aiQueryToolErrorOutput("query_source_ai", err), nil
@@ -614,12 +634,22 @@ func (t *QueryTranscriptAITool) Execute(ctx context.Context, arguments json.RawM
 	maxChunks := normalizeAIQueryToolMaxChunks(args.MaxChunks)
 	llm.LogIfDeb(ctx, "query_transcript_ai: start content_unit_id=%q language=%q query=%q max_chunks=%d", contentUnitID, language, query, maxChunks)
 
+	loadStart := time.Now()
 	entry, err := loadTranscriptDocumentEntry(t.lookup, contentUnitID, language)
+	loadLatencyMS := time.Since(loadStart).Milliseconds()
 	if err != nil {
+		addAIQueryToolCallDebug(ctx, llm.ReasoningSearchAIToolCallDebug{
+			ToolName:      "query_transcript_ai",
+			DocumentType:  "transcript",
+			DocumentID:    contentUnitID,
+			Query:         query,
+			LoadLatencyMS: loadLatencyMS,
+			Error:         err.Error(),
+		})
 		llm.LogIfDeb(ctx, "query_transcript_ai: transcript load failed content_unit_id=%q language=%q err=%v", contentUnitID, language, err)
 		return aiQueryToolErrorOutput("query_transcript_ai", err), nil
 	}
-	result, err := executeAIQuery(ctx, t.service, t.config, "transcript", contentUnitID, query, entry, maxChunks)
+	result, err := executeAIQuery(ctx, t.service, t.config, "transcript", contentUnitID, query, entry, maxChunks, loadLatencyMS)
 	if err != nil {
 		llm.LogIfDeb(ctx, "query_transcript_ai: semantic selection failed content_unit_id=%q language=%q err=%v", contentUnitID, language, err)
 		return aiQueryToolErrorOutput("query_transcript_ai", err), nil
@@ -633,17 +663,31 @@ func (t *QueryTranscriptAITool) Execute(ctx context.Context, arguments json.RawM
 	return output, nil
 }
 
-func executeAIQuery(ctx context.Context, service llm.Service, config *llm.AIToolsConfig, documentType string, documentID string, query string, entry *aiQueryDocumentCacheEntry, maxChunks int) (*aiQueryToolResult, error) {
+func executeAIQuery(ctx context.Context, service llm.Service, config *llm.AIToolsConfig, documentType string, documentID string, query string, entry *aiQueryDocumentCacheEntry, maxChunks int, loadLatencyMS int64) (result *aiQueryToolResult, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	result := &aiQueryToolResult{
+	result = &aiQueryToolResult{
 		DocumentID:    documentID,
 		DocumentType:  documentType,
 		Query:         query,
 		ReturnedCount: 0,
 		Matches:       []aiQueryToolMatch{},
 	}
+	callDebug := llm.ReasoningSearchAIToolCallDebug{
+		ToolName:      "query_" + documentType + "_ai",
+		DocumentType:  documentType,
+		DocumentID:    documentID,
+		Query:         query,
+		LoadLatencyMS: loadLatencyMS,
+	}
+	defer func() {
+		callDebug.ReturnedCount = result.ReturnedCount
+		if err != nil {
+			callDebug.Error = err.Error()
+		}
+		addAIQueryToolCallDebug(ctx, callDebug)
+	}()
 	if entry == nil || strings.TrimSpace(entry.Content) == "" {
 		return result, nil
 	}
@@ -653,6 +697,7 @@ func executeAIQuery(ctx context.Context, service llm.Service, config *llm.AITool
 		return result, nil
 	}
 	batches := buildAIQueryBatches(chunks, aiQueryToolBatchMaxChars)
+	documentBatchCount := len(batches)
 	maxBatches := normalizeAIQueryToolMaxBatches(config)
 	if len(batches) > maxBatches {
 		selectedBatches := selectAIQueryBatches(query, batches, maxBatches)
@@ -660,24 +705,33 @@ func executeAIQuery(ctx context.Context, service llm.Service, config *llm.AITool
 		batches = selectedBatches
 	}
 
+	callDebug.DocumentBatchCount = documentBatchCount
+	callDebug.SelectedBatchCount = len(batches)
+
+	readerStart := time.Now()
+	batchResults, err := selectAIQueryBatchesWithReader(ctx, service, config, query, batches, maxChunks)
+	if err != nil {
+		return result, err
+	}
+	readerLatencyMS := time.Since(readerStart).Milliseconds()
+
+	batchLatenciesMS := make([]int64, 0, len(batchResults))
+	var maxBatchLatencyMS int64
 	selected := map[int]aiQuerySelectedChunk{}
-	for i, batch := range batches {
-		if err := ctx.Err(); err != nil {
-			return nil, err
+	for i, batchResult := range batchResults {
+		batchLatenciesMS = append(batchLatenciesMS, batchResult.LatencyMS)
+		if batchResult.LatencyMS > maxBatchLatencyMS {
+			maxBatchLatencyMS = batchResult.LatencyMS
 		}
-		selectedChunks, debug, err := selectAIQueryBatch(ctx, service, config, query, batch, maxChunks)
-		if err != nil {
-			return nil, err
+		if batchResult.Debug != nil {
+			llm.LogIfDeb(ctx, "%s_ai: batch=%d total_tokens=%d estimated_cost_usd=%.6f", documentType, i+1, batchResult.Debug.TotalTokens, batchResult.Debug.EstimatedCostUSD)
 		}
-		if debug != nil {
-			llm.LogIfDeb(ctx, "%s_ai: batch=%d total_tokens=%d estimated_cost_usd=%.6f", documentType, i+1, debug.TotalTokens, debug.EstimatedCostUSD)
-		}
-		for _, selectedChunk := range selectedChunks {
+		for _, selectedChunk := range batchResult.SelectedChunks {
 			chunkNumber := selectedChunk.ChunkNumber
 			if chunkNumber <= 0 {
 				continue
 			}
-			chunk := findAIQueryChunk(batch, chunkNumber)
+			chunk := findAIQueryChunk(batchResult.Batch, chunkNumber)
 			if chunk == nil {
 				continue
 			}
@@ -717,7 +771,72 @@ func executeAIQuery(ctx context.Context, service llm.Service, config *llm.AITool
 	}
 	result.Matches = finalMatches
 	result.ReturnedCount = len(finalMatches)
+	callDebug.BatchLatenciesMS = batchLatenciesMS
+	callDebug.MaxBatchLatencyMS = maxBatchLatencyMS
+	callDebug.ReaderLatencyMS = readerLatencyMS
 	return result, nil
+}
+
+func addAIQueryToolCallDebug(ctx context.Context, call llm.ReasoningSearchAIToolCallDebug) {
+	llm.AddToolDebugInfo(ctx, &llm.ReasoningSearchDebugInfo{
+		AIToolsCalls: []llm.ReasoningSearchAIToolCallDebug{call},
+	})
+}
+
+func selectAIQueryBatchesWithReader(ctx context.Context, service llm.Service, config *llm.AIToolsConfig, query string, batches [][]aiQueryChunk, maxChunks int) ([]aiQueryBatchResult, error) {
+	results := make([]aiQueryBatchResult, len(batches))
+	if len(batches) == 0 {
+		return results, nil
+	}
+	if len(batches) == 1 {
+		start := time.Now()
+		selectedChunks, debug, err := selectAIQueryBatch(ctx, service, config, query, batches[0], maxChunks)
+		if err != nil {
+			return nil, err
+		}
+		results[0] = aiQueryBatchResult{Batch: batches[0], SelectedChunks: selectedChunks, Debug: debug, LatencyMS: time.Since(start).Milliseconds()}
+		return results, nil
+	}
+
+	sem := make(chan struct{}, normalizeAIQueryToolBatchConcurrency(config))
+	var wg sync.WaitGroup
+	var once sync.Once
+	var firstErr error
+	setErr := func(err error) {
+		if err != nil {
+			once.Do(func() { firstErr = err })
+		}
+	}
+
+	for i, batch := range batches {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		i, batch := i, batch
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				setErr(ctx.Err())
+				return
+			}
+			start := time.Now()
+			selectedChunks, debug, err := selectAIQueryBatch(ctx, service, config, query, batch, maxChunks)
+			if err != nil {
+				setErr(err)
+				return
+			}
+			results[i] = aiQueryBatchResult{Batch: batch, SelectedChunks: selectedChunks, Debug: debug, LatencyMS: time.Since(start).Milliseconds()}
+		}()
+	}
+	wg.Wait()
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return results, nil
 }
 
 func selectAIQueryBatch(ctx context.Context, service llm.Service, config *llm.AIToolsConfig, query string, batch []aiQueryChunk, maxChunks int) ([]aiQuerySelectedChunk, *llm.ReasoningSearchDebugInfo, error) {
@@ -1300,6 +1419,13 @@ func normalizeAIQueryToolMaxBatches(config *llm.AIToolsConfig) int {
 		return config.MaxBatches
 	}
 	return aiQueryToolMaxBatches
+}
+
+func normalizeAIQueryToolBatchConcurrency(config *llm.AIToolsConfig) int {
+	if config != nil && config.BatchConcurrency > 0 {
+		return config.BatchConcurrency
+	}
+	return defaultAIQueryToolBatchConcurrency
 }
 
 func truncateAIQueryContent(content string, maxRunes int) string {

@@ -32,6 +32,7 @@ const (
 	defaultAIToolsEffort                             = "low"
 	defaultAIToolsMaxTokens                          = 1500
 	defaultAIToolsMaxBatches                         = 5
+	defaultAIToolsBatchConcurrency                   = 2
 )
 
 type ReasoningSearchConfig struct {
@@ -62,11 +63,12 @@ type ReasoningSearchVerificationConfig struct {
 }
 
 type AIToolsConfig struct {
-	Provider   string
-	Model      string
-	Effort     string
-	MaxTokens  int
-	MaxBatches int
+	Provider         string
+	Model            string
+	Effort           string
+	MaxTokens        int
+	MaxBatches       int
+	BatchConcurrency int
 }
 
 func NewServiceFromConfig() (Service, error) {
@@ -1088,6 +1090,7 @@ func AIToolsConfigFromConfig() (*AIToolsConfig, error) {
 		return nil, err
 	}
 	cfg.MaxBatches = AIToolsMaxBatchesFromConfig()
+	cfg.BatchConcurrency = AIToolsBatchConcurrencyFromConfig(cfg.Provider)
 	return cfg, nil
 }
 
@@ -1097,6 +1100,14 @@ func AIToolsMaxBatchesFromConfig() int {
 		return defaultAIToolsMaxBatches
 	}
 	return maxBatches
+}
+
+func AIToolsBatchConcurrencyFromConfig(provider string) int {
+	concurrency := viper.GetInt(provider + ".ai-tools-batch-concurrency")
+	if concurrency <= 0 {
+		return defaultAIToolsBatchConcurrency
+	}
+	return concurrency
 }
 
 func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffort string) (*ReasoningSearchVerificationConfig, error) {
