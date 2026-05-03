@@ -869,6 +869,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	}
 
 	expectedQuery := strings.TrimSpace(r.Query)
+	validateResponseQuery := !initialRequestCompleted
 	currentProviderSessionID := providerSessionID
 	var previousReasoningAttempt *llm.ReasoningSearchResponse
 	for attempt := 1; attempt <= maxQueryMismatchValidationAttempts; attempt++ {
@@ -892,18 +893,21 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		if err != nil {
 			return err
 		}
-		if err := validateReasoningSearchResponseQuery(expectedQuery, &response); err != nil {
-			if !errors.Is(err, errReasoningSearchQueryMismatch) {
-				return err
+		if validateResponseQuery {
+			err := validateReasoningSearchResponseQuery(expectedQuery, &response)
+			if err != nil {
+				if !errors.Is(err, errReasoningSearchQueryMismatch) {
+					return err
+				}
+				if attempt == maxQueryMismatchValidationAttempts {
+					return fmt.Errorf("reasoning search query mismatch after retry: %w", err)
+				}
+				log.Warnf("Reasoning Search query mismatch after reasoning stage: expected %q, got %q. Retrying with a fresh provider session.", expectedQuery, strings.TrimSpace(response.Query))
+				previousAttempt := response
+				previousReasoningAttempt = &previousAttempt
+				currentProviderSessionID = nil
+				continue
 			}
-			if attempt == maxQueryMismatchValidationAttempts {
-				return fmt.Errorf("reasoning search query mismatch after retry: %w", err)
-			}
-			log.Warnf("Reasoning Search query mismatch after reasoning stage: expected %q, got %q. Retrying with a fresh provider session.", expectedQuery, strings.TrimSpace(response.Query))
-			previousAttempt := response
-			previousReasoningAttempt = &previousAttempt
-			currentProviderSessionID = nil
-			continue
 		}
 		if previousReasoningAttempt != nil {
 			mergeReasoningSearchAttemptStats(&response, previousReasoningAttempt)
@@ -1079,19 +1083,21 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 								if err != nil {
 									break
 								}
-								if err := validateReasoningSearchResponseQuery(expectedQuery, &rerunResponse); err != nil {
-									if !errors.Is(err, errReasoningSearchQueryMismatch) {
-										break
+								if validateResponseQuery {
+									if err := validateReasoningSearchResponseQuery(expectedQuery, &rerunResponse); err != nil {
+										if !errors.Is(err, errReasoningSearchQueryMismatch) {
+											break
+										}
+										if attempt == maxQueryMismatchValidationAttempts {
+											err = fmt.Errorf("reasoning search query mismatch after retry: %w", err)
+											break
+										}
+										log.Warnf("Reasoning Search query mismatch after rerun stage: expected %q, got %q. Retrying with a fresh provider session.", expectedQuery, strings.TrimSpace(rerunResponse.Query))
+										previousAttempt := rerunResponse
+										previousRerunAttempt = &previousAttempt
+										currentRerunProviderSessionID = nil
+										continue
 									}
-									if attempt == maxQueryMismatchValidationAttempts {
-										err = fmt.Errorf("reasoning search query mismatch after retry: %w", err)
-										break
-									}
-									log.Warnf("Reasoning Search query mismatch after rerun stage: expected %q, got %q. Retrying with a fresh provider session.", expectedQuery, strings.TrimSpace(rerunResponse.Query))
-									previousAttempt := rerunResponse
-									previousRerunAttempt = &previousAttempt
-									currentRerunProviderSessionID = nil
-									continue
 								}
 								if previousRerunAttempt != nil {
 									mergeReasoningSearchAttemptStats(&rerunResponse, previousRerunAttempt)
