@@ -10,10 +10,15 @@ type reasoningToolStateContextKey struct{}
 type reasoningToolState struct {
 	mu            sync.Mutex
 	toolDebugInfo *ReasoningSearchDebugInfo
+	progress      *ReasoningProgressStore
+	progressID    string
 }
 
-func ContextWithReasoningToolState(ctx context.Context) context.Context {
-	return context.WithValue(ctx, reasoningToolStateContextKey{}, &reasoningToolState{})
+func ContextWithReasoningToolState(ctx context.Context, progress *ReasoningProgressStore, progressID string) context.Context {
+	return context.WithValue(ctx, reasoningToolStateContextKey{}, &reasoningToolState{
+		progress:   progress,
+		progressID: progressID,
+	})
 }
 
 func AddToolDebugInfo(ctx context.Context, info *ReasoningSearchDebugInfo) {
@@ -49,4 +54,15 @@ func ToolDebugInfoFromContext(ctx context.Context) *ReasoningSearchDebugInfo {
 	}
 	copy := *state.toolDebugInfo
 	return &copy
+}
+
+func ReportReasoningProgressResults(ctx context.Context, hasPotentiallyGoodResults bool) {
+	if ctx == nil {
+		return
+	}
+	state, ok := ctx.Value(reasoningToolStateContextKey{}).(*reasoningToolState)
+	if !ok || state == nil || state.progress == nil || state.progressID == "" {
+		return
+	}
+	state.progress.ReportResultAvailability(state.progressID, hasPotentiallyGoodResults)
 }

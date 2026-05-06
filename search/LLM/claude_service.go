@@ -333,7 +333,7 @@ func (s *ClaudeService) getReasoningResponseWithTools(ctx context.Context, metho
 			firstSystem = appendStructuredOutputInstruction(firstSystem, jsonSchema)
 		}
 	}
-	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
+	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb), s.progress, progressSessionID)
 
 	for i := 0; i < maxIterations; i++ {
 		stepStarted := time.Now()
@@ -342,7 +342,7 @@ func (s *ClaudeService) getReasoningResponseWithTools(ctx context.Context, metho
 			return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 		}
 		if s.progress != nil && progressSessionID != "" {
-			s.progress.Thinking(progressSessionID, i+1)
+			s.progress.Thinking(progressSessionID, i+1, isFinalIteration)
 		}
 		currentSystem, currentMessages := system, anthropicMessages
 		currentTools, currentHandlers := tools, toolHandlers

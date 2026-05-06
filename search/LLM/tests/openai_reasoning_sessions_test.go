@@ -124,7 +124,7 @@ func TestReasoningProgressStoreLifecycle(t *testing.T) {
 	defer store.Close()
 
 	store.Reserve("session-1")
-	store.Thinking("session-1", 1)
+	store.Thinking("session-1", 1, false)
 	store.RunningTool("session-1", 1, "elasticsearch_search")
 	store.Verifying("session-1", 2)
 	store.Complete("session-1", 2)
@@ -147,12 +147,169 @@ func TestReasoningProgressStoreLifecycle(t *testing.T) {
 	}
 }
 
+func TestReasoningProgressStoreResultFlags(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	store.ReportResultAvailability("session-1", false)
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if !status.HasAnyResults {
+		t.Fatalf("expected has_any_results")
+	}
+	if status.HasPotentiallyGoodResults {
+		t.Fatalf("did not expect has_potentially_good_results")
+	}
+
+	store.ReportResultAvailability("session-1", true)
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected second get error: %v", err)
+	}
+	if !status.HasPotentiallyGoodResults {
+		t.Fatalf("expected has_potentially_good_results")
+	}
+
+	store.Reserve("session-1")
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected final get error: %v", err)
+	}
+	if status.HasAnyResults || status.HasPotentiallyGoodResults {
+		t.Fatalf("reserve should reset result flags")
+	}
+}
+
+func TestReasoningProgressStoreQueryAnalyzedFlag(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	store.Thinking("session-1", 1, false)
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if status.QueryAnalyzed {
+		t.Fatalf("did not expect query_analyzed before first tool")
+	}
+
+	store.RunningTool("session-1", 1, "elasticsearch_search")
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected second get error: %v", err)
+	}
+	if !status.QueryAnalyzed {
+		t.Fatalf("expected query_analyzed after first tool")
+	}
+
+	store.Reserve("session-1")
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected final get error: %v", err)
+	}
+	if status.QueryAnalyzed {
+		t.Fatalf("reserve should reset query_analyzed")
+	}
+}
+
+func TestReasoningProgressStoreMayTakeLongerFlag(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	store.RunningTool("session-1", 1, "elasticsearch_search")
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if status.MayTakeLonger {
+		t.Fatalf("did not expect may_take_longer before AI tool")
+	}
+
+	store.RunningTool("session-1", 2, "query_source_ai")
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected second get error: %v", err)
+	}
+	if !status.MayTakeLonger {
+		t.Fatalf("expected may_take_longer after AI tool")
+	}
+
+	store.Thinking("session-1", 3, false)
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected third get error: %v", err)
+	}
+	if !status.MayTakeLonger {
+		t.Fatalf("expected may_take_longer to stay true")
+	}
+
+	store.Reserve("session-1")
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected final get error: %v", err)
+	}
+	if status.MayTakeLonger {
+		t.Fatalf("reserve should reset may_take_longer")
+	}
+}
+
+func TestReasoningProgressStoreNearFinishFlag(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	store.Thinking("session-1", 1, false)
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if status.NearFinish {
+		t.Fatalf("did not expect near_finish before final iteration")
+	}
+
+	store.Thinking("session-1", 2, true)
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected second get error: %v", err)
+	}
+	if !status.NearFinish {
+		t.Fatalf("expected near_finish on final iteration")
+	}
+
+	store.RunningTool("session-1", 2, "elasticsearch_search")
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected third get error: %v", err)
+	}
+	if !status.NearFinish {
+		t.Fatalf("expected near_finish to stay true during final iteration tools")
+	}
+
+	store.Reserve("session-1")
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected final get error: %v", err)
+	}
+	if status.NearFinish {
+		t.Fatalf("reserve should reset near_finish")
+	}
+}
+
 func TestReasoningProgressStoreCancel(t *testing.T) {
 	store := llm.NewReasoningProgressStore(5 * time.Minute)
 	defer store.Close()
 
 	store.Reserve("session-1")
-	store.Thinking("session-1", 2)
+	store.Thinking("session-1", 2, false)
 	store.Cancel("session-1", 2)
 
 	status, err := store.Get("session-1")
@@ -171,7 +328,7 @@ func TestReasoningProgressStoreCancel(t *testing.T) {
 
 	store.Reserve("session-2")
 	store.SetIterationOffset("session-2", 3)
-	store.Thinking("session-2", 1)
+	store.Thinking("session-2", 1, false)
 	store.Cancel("session-2", 0)
 	status, err = store.Get("session-2")
 	if err != nil {
@@ -203,9 +360,9 @@ func TestReasoningProgressStoreIterationOffset(t *testing.T) {
 	defer store.Close()
 
 	store.Reserve("session-1")
-	store.Thinking("session-1", 2)
+	store.Thinking("session-1", 2, false)
 	store.SetIterationOffset("session-1", 2)
-	store.Thinking("session-1", 1)
+	store.Thinking("session-1", 1, false)
 
 	status, err := store.Get("session-1")
 	if err != nil {
@@ -242,7 +399,7 @@ func TestReasoningProgressStoreStageIterationsDoNotRepeat(t *testing.T) {
 	store.Reserve("session-1")
 	store.Planning("session-1", 1)
 	store.SetIterationOffset("session-1", 1)
-	store.Thinking("session-1", 1)
+	store.Thinking("session-1", 1, false)
 
 	status, err := store.Get("session-1")
 	if err != nil {
@@ -254,7 +411,7 @@ func TestReasoningProgressStoreStageIterationsDoNotRepeat(t *testing.T) {
 
 	store.Verifying("session-1", 3)
 	store.SetIterationOffset("session-1", 3)
-	store.Thinking("session-1", 1)
+	store.Thinking("session-1", 1, false)
 
 	status, err = store.Get("session-1")
 	if err != nil {

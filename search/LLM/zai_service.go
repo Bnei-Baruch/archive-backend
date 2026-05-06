@@ -553,7 +553,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	}
 	responseFormat := zaiResponseFormat(jsonSchema)
 	toolChoice := "auto"
-	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
+	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb), s.progress, progressSessionID)
 
 	for i := 0; i < maxIterations; i++ {
 		stepStarted := time.Now()
@@ -562,7 +562,7 @@ func (s *ZAIService) getReasoningResponseWithTools(
 			return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 		}
 		if s.progress != nil && progressSessionID != "" {
-			s.progress.Thinking(progressSessionID, i+1)
+			s.progress.Thinking(progressSessionID, i+1, isFinalIteration)
 		}
 		currentTools := tools
 		currentToolHandlers := toolHandlers

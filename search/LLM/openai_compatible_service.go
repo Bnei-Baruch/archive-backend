@@ -606,7 +606,7 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 	if maxIterations <= 0 {
 		maxIterations = 8
 	}
-	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
+	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb), s.progress, progressSessionID)
 
 	sysMsgCount := 0
 	var instructions string
@@ -671,7 +671,7 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 			return nil, reasoningSteps, usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
 		}
 		if s.progress != nil && progressSessionID != "" {
-			s.progress.Thinking(progressSessionID, i+1)
+			s.progress.Thinking(progressSessionID, i+1, isFinalIteration)
 		}
 		instructionsForRequest := &instructions
 		if i == 0 && len(firstIterationTools) > 0 {

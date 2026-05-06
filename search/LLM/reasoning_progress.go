@@ -28,17 +28,22 @@ var ErrReasoningProgressNotFoundOrExpired = errors.New("reasoning progress not f
 // ReasoningProgressStore keeps transient per-session progress in local process memory.
 // It is suitable only for a single backend instance or sticky routing to one machine.
 type ReasoningProgressStatus struct {
-	SessionID       string    `json:"session_id"`
-	State           string    `json:"state"`
-	Phase           string    `json:"phase"`
-	Iteration       int       `json:"iteration"`
-	ToolName        string    `json:"tool_name,omitempty"`
-	Message         string    `json:"message"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	Done            bool      `json:"done"`
-	Seq             int64     `json:"seq"`
-	ExpiresAt       time.Time `json:"-"`
-	IterationOffset int       `json:"-"`
+	SessionID                 string    `json:"session_id"`
+	State                     string    `json:"state"`
+	Phase                     string    `json:"phase"`
+	Iteration                 int       `json:"iteration"`
+	ToolName                  string    `json:"tool_name,omitempty"`
+	Message                   string    `json:"message"`
+	QueryAnalyzed             bool      `json:"query_analyzed"`
+	HasAnyResults             bool      `json:"has_any_results"`
+	HasPotentiallyGoodResults bool      `json:"has_potentially_good_results"`
+	MayTakeLonger             bool      `json:"may_take_longer"`
+	NearFinish                bool      `json:"near_finish"`
+	UpdatedAt                 time.Time `json:"updated_at"`
+	Done                      bool      `json:"done"`
+	Seq                       int64     `json:"seq"`
+	ExpiresAt                 time.Time `json:"-"`
+	IterationOffset           int       `json:"-"`
 }
 
 type ReasoningProgressStore struct {
@@ -73,17 +78,23 @@ func (s *ReasoningProgressStore) Reserve(sessionID string) {
 		status.Iteration = 0
 		status.ToolName = ""
 		status.Message = "Waiting to start..."
+		status.QueryAnalyzed = false
+		status.HasAnyResults = false
+		status.HasPotentiallyGoodResults = false
+		status.MayTakeLonger = false
+		status.NearFinish = false
 		status.Done = false
 	})
 }
 
-func (s *ReasoningProgressStore) Thinking(sessionID string, iteration int) {
+func (s *ReasoningProgressStore) Thinking(sessionID string, iteration int, nearFinish bool) {
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
 		status.State = ReasoningProgressStateRunning
 		status.Phase = ReasoningProgressPhaseThinking
 		status.Iteration = status.IterationOffset + iteration
 		status.ToolName = ""
 		status.Message = "Thinking..."
+		status.NearFinish = nearFinish
 		status.Done = false
 	})
 }
@@ -106,6 +117,10 @@ func (s *ReasoningProgressStore) RunningTool(sessionID string, iteration int, to
 		status.Iteration = status.IterationOffset + iteration
 		status.ToolName = toolName
 		status.Message = reasoningProgressToolMessage(toolName)
+		status.QueryAnalyzed = true
+		if reasoningProgressToolMayTakeLonger(toolName) {
+			status.MayTakeLonger = true
+		}
 		status.Done = false
 	})
 }
@@ -167,6 +182,15 @@ func (s *ReasoningProgressStore) SetIterationOffset(sessionID string, offset int
 	}
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
 		status.IterationOffset = offset
+	})
+}
+
+func (s *ReasoningProgressStore) ReportResultAvailability(sessionID string, hasPotentiallyGoodResults bool) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.HasAnyResults = true
+		if hasPotentiallyGoodResults {
+			status.HasPotentiallyGoodResults = true
+		}
 	})
 }
 
@@ -289,5 +313,14 @@ func reasoningProgressToolMessage(toolName string) string {
 		return "Looking up collection items..."
 	default:
 		return "Using tool..."
+	}
+}
+
+func reasoningProgressToolMayTakeLonger(toolName string) bool {
+	switch CanonicalReasoningToolName(toolName) {
+	case "query_source_ai", "query_transcript_ai":
+		return true
+	default:
+		return false
 	}
 }

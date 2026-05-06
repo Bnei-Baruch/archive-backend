@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/search"
 	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 	"github.com/Bnei-Baruch/archive-backend/utils"
@@ -327,6 +328,9 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 	if result != nil {
 		resultLanguage = result.Language
 	}
+	if elasticsearchSearchHasAnyResults(result) {
+		llm.ReportReasoningProgressResults(ctx, elasticsearchSearchHasPotentiallyGoodResults(result))
+	}
 	llm.LogIfDeb(ctx, "elasticsearch_search: completed language=%q hits=%d", resultLanguage, hitCount)
 
 	return marshalToolResult(elasticsearchSearchToolResult{
@@ -336,6 +340,64 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 		Size:   size,
 		Result: result,
 	})
+}
+
+func elasticsearchSearchHasAnyResults(result *search.QueryResult) bool {
+	if result == nil || result.SearchResult == nil || result.SearchResult.Hits == nil {
+		return false
+	}
+	return len(result.SearchResult.Hits.Hits) > 0
+}
+
+func elasticsearchSearchHasPotentiallyGoodResults(result *search.QueryResult) bool {
+	if !elasticsearchSearchHasAnyResults(result) {
+		return false
+	}
+
+	// Current heuristic for potentially good results:
+	// 1. The returned page has at least 10 visible hits.
+	// 2. It includes at least one source, one lesson part, and one video program chapter.
+	// This is intentionally conservative because the flag is used only as an early-stop hint.
+	if len(result.SearchResult.Hits.Hits) < 10 {
+		return false
+	}
+
+	hasProgramChapter := false
+	hasSource := false
+	hasLessonPart := false
+	for _, hit := range result.SearchResult.Hits.Hits {
+		if hit.Type != "result" || hit.Source == nil {
+			continue
+		}
+		var src es.Result
+		if err := json.Unmarshal(*hit.Source, &src); err != nil {
+			continue
+		}
+		if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
+			contentTypes, err := es.KeyValuesToValues("content_type", src.FilterValues)
+			if err != nil || len(contentTypes) == 0 {
+				continue
+			}
+			for _, contentType := range contentTypes {
+				if contentType == consts.CT_VIDEO_PROGRAM_CHAPTER {
+					hasProgramChapter = true
+				} else if contentType == consts.CT_LESSON_PART {
+					hasLessonPart = true
+				}
+				if hasProgramChapter && hasLessonPart {
+					break
+				}
+			}
+		}
+		if src.ResultType == consts.ES_RESULT_TYPE_SOURCES {
+			hasSource = true
+		}
+		if hasProgramChapter && hasSource && hasLessonPart {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (t *ElasticsearchSearchTool) getEngine() (ElasticsearchSearchEngine, error) {

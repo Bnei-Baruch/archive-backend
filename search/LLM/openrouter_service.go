@@ -453,7 +453,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 	if maxIterations <= 0 {
 		maxIterations = 8
 	}
-	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb))
+	reasoningCtx := ContextWithReasoningToolState(ContextWithDeb(ctx, deb), s.progress, progressSessionID)
 	if s.requiredToolIterations > 0 {
 		tools, toolHandlers = openRouterWithResultsReadyTool(tools, toolHandlers)
 		if len(firstIterationTools) > 0 {
@@ -502,7 +502,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 			return nil, reasoningSteps, usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
 		}
 		if s.progress != nil && progressSessionID != "" {
-			s.progress.Thinking(progressSessionID, i+1)
+			s.progress.Thinking(progressSessionID, i+1, isFinalIteration)
 		}
 		currentTools := normalizedTools
 		currentToolHandlers := toolHandlers
