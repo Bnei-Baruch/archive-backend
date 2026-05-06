@@ -356,15 +356,10 @@ func elasticsearchSearchHasPotentiallyGoodResults(result *search.QueryResult) bo
 
 	// Current heuristic for potentially good results:
 	// 1. The returned page has at least 10 visible hits.
-	// 2. It includes at least one source, one lesson part, and one video program chapter.
-	// This is intentionally conservative because the flag is used only as an early-stop hint.
-	if len(result.SearchResult.Hits.Hits) < 10 {
-		return false
-	}
-
-	hasProgramChapter := false
+	// 2. It includes at least one source, AND: one lesson part or one video program chapter.
+	hasProgram := false
 	hasSource := false
-	hasLessonPart := false
+	hasLesson := false
 	for _, hit := range result.SearchResult.Hits.Hits {
 		if hit.Type != "result" || hit.Source == nil {
 			continue
@@ -373,31 +368,51 @@ func elasticsearchSearchHasPotentiallyGoodResults(result *search.QueryResult) bo
 		if err := json.Unmarshal(*hit.Source, &src); err != nil {
 			continue
 		}
-		if src.ResultType == consts.ES_RESULT_TYPE_UNITS {
-			contentTypes, err := es.KeyValuesToValues("content_type", src.FilterValues)
-			if err != nil || len(contentTypes) == 0 {
-				continue
-			}
-			for _, contentType := range contentTypes {
-				if contentType == consts.CT_VIDEO_PROGRAM_CHAPTER {
-					hasProgramChapter = true
-				} else if contentType == consts.CT_LESSON_PART {
-					hasLessonPart = true
-				}
-				if hasProgramChapter && hasLessonPart {
-					break
-				}
-			}
-		}
 		if src.ResultType == consts.ES_RESULT_TYPE_SOURCES {
 			hasSource = true
 		}
-		if hasProgramChapter && hasSource && hasLessonPart {
+		for _, contentType := range elasticsearchSearchHitContentTypes(src) {
+			if elasticsearchSearchIsProgramContentType(contentType) {
+				hasProgram = true
+			}
+			if elasticsearchSearchIsLessonContentType(contentType) {
+				hasLesson = true
+			}
+			if hasProgram && hasLesson {
+				break
+			}
+		}
+		if hasSource && (hasProgram || hasLesson) {
 			return true
 		}
 	}
 
 	return false
+}
+
+func elasticsearchSearchHitContentTypes(src es.Result) []string {
+	contentTypes, err := es.KeyValuesToValues("content_type", src.FilterValues)
+	if err != nil {
+		return nil
+	}
+	collectionContentTypes, err := es.KeyValuesToValues(consts.FILTER_COLLECTIONS_CONTENT_TYPE, src.FilterValues)
+	if err == nil {
+		contentTypes = append(contentTypes, collectionContentTypes...)
+	}
+	return contentTypes
+}
+
+func elasticsearchSearchIsProgramContentType(contentType string) bool {
+	return contentType == consts.CT_VIDEO_PROGRAM || contentType == consts.CT_VIDEO_PROGRAM_CHAPTER
+}
+
+func elasticsearchSearchIsLessonContentType(contentType string) bool {
+	switch contentType {
+	case consts.CT_DAILY_LESSON, consts.CT_FULL_LESSON, consts.CT_LESSON_PART:
+		return true
+	default:
+		return false
+	}
 }
 
 func (t *ElasticsearchSearchTool) getEngine() (ElasticsearchSearchEngine, error) {

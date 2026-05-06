@@ -667,11 +667,12 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 	for i := 0; i < maxIterations; i++ {
 		stepStarted := time.Now()
 		isFinalIteration := i == maxIterations-1
+		isNearFinish := i >= maxIterations-2
 		if err := ctx.Err(); err != nil {
 			return nil, reasoningSteps, usageTotals, iterations, usedTools, "", ToolDebugInfoFromContext(reasoningCtx), err
 		}
 		if s.progress != nil && progressSessionID != "" {
-			s.progress.Thinking(progressSessionID, i+1, isFinalIteration)
+			s.progress.Thinking(progressSessionID, i+1, isNearFinish)
 		}
 		instructionsForRequest := &instructions
 		if i == 0 && len(firstIterationTools) > 0 {

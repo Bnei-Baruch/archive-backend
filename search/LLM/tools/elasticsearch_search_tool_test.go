@@ -22,53 +22,47 @@ func TestSetElasticsearchSearchLanguageOrderUsesExplicitLanguage(t *testing.T) {
 	}
 }
 
-func TestElasticsearchSearchHasPotentiallyGoodResultsRequiresTenVisibleHits(t *testing.T) {
+func TestElasticsearchSearchHasPotentiallyGoodResultsWithSourceAndProgram(t *testing.T) {
 	result := elasticsearchSearchQueryResultWithHits(
 		elasticsearchSearchTestUnitHit(consts.CT_VIDEO_PROGRAM_CHAPTER),
 		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_SOURCES},
-		elasticsearchSearchTestUnitHit(consts.CT_LESSON_PART),
-	)
-
-	if elasticsearchSearchHasPotentiallyGoodResults(result) {
-		t.Fatalf("expected fewer than 10 visible hits to be insufficient")
-	}
-}
-
-func TestElasticsearchSearchHasPotentiallyGoodResultsWithRequiredTypes(t *testing.T) {
-	result := elasticsearchSearchQueryResultWithHits(
-		elasticsearchSearchTestUnitHit(consts.CT_VIDEO_PROGRAM_CHAPTER),
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_SOURCES},
-		elasticsearchSearchTestUnitHit(consts.CT_LESSON_PART),
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
 	)
 
 	if !elasticsearchSearchHasPotentiallyGoodResults(result) {
-		t.Fatalf("expected required result types to be potentially good")
+		t.Fatalf("expected source and program to be potentially good")
 	}
 }
 
-func TestElasticsearchSearchHasPotentiallyGoodResultsRequiresLessonPart(t *testing.T) {
+func TestElasticsearchSearchHasPotentiallyGoodResultsWithSourceAndLesson(t *testing.T) {
+	result := elasticsearchSearchQueryResultWithHits(
+		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_SOURCES},
+		elasticsearchSearchTestUnitHit(consts.CT_LESSON_PART),
+	)
+
+	if !elasticsearchSearchHasPotentiallyGoodResults(result) {
+		t.Fatalf("expected source and lesson to be potentially good")
+	}
+}
+
+func TestElasticsearchSearchHasPotentiallyGoodResultsRequiresSource(t *testing.T) {
 	result := elasticsearchSearchQueryResultWithHits(
 		elasticsearchSearchTestUnitHit(consts.CT_VIDEO_PROGRAM_CHAPTER),
+		elasticsearchSearchTestUnitHit(consts.CT_LESSON_PART),
+	)
+
+	if elasticsearchSearchHasPotentiallyGoodResults(result) {
+		t.Fatalf("expected missing source to be insufficient")
+	}
+}
+
+func TestElasticsearchSearchHasPotentiallyGoodResultsRequiresProgramOrLesson(t *testing.T) {
+	result := elasticsearchSearchQueryResultWithHits(
 		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_SOURCES},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
 		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
 	)
 
 	if elasticsearchSearchHasPotentiallyGoodResults(result) {
-		t.Fatalf("expected missing lesson part to be insufficient")
+		t.Fatalf("expected missing program or lesson to be insufficient")
 	}
 }
 

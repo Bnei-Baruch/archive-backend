@@ -273,7 +273,7 @@ func TestReasoningProgressStoreNearFinishFlag(t *testing.T) {
 		t.Fatalf("unexpected get error: %v", err)
 	}
 	if status.NearFinish {
-		t.Fatalf("did not expect near_finish before final iteration")
+		t.Fatalf("did not expect near_finish before penultimate iteration")
 	}
 
 	store.Thinking("session-1", 2, true)
@@ -282,7 +282,7 @@ func TestReasoningProgressStoreNearFinishFlag(t *testing.T) {
 		t.Fatalf("unexpected second get error: %v", err)
 	}
 	if !status.NearFinish {
-		t.Fatalf("expected near_finish on final iteration")
+		t.Fatalf("expected near_finish on penultimate iteration")
 	}
 
 	store.RunningTool("session-1", 2, "elasticsearch_search")
