@@ -194,6 +194,18 @@ func (s *ReasoningProgressStore) ReportResultAvailability(sessionID string, hasP
 	})
 }
 
+func (s *ReasoningProgressStore) IsNearFinish(sessionID string, currentIteration int, maxIterations int) bool {
+	mayTakeLonger := false
+
+	s.mu.RLock()
+	if status, ok := s.statuses[sessionID]; ok {
+		mayTakeLonger = status.MayTakeLonger
+	}
+	s.mu.RUnlock()
+
+	return reasoningProgressIsNearFinish(currentIteration, maxIterations, mayTakeLonger)
+}
+
 func (s *ReasoningProgressStore) Get(sessionID string) (*ReasoningProgressStatus, error) {
 	now := time.Now()
 
@@ -323,4 +335,24 @@ func reasoningProgressToolMayTakeLonger(toolName string) bool {
 	default:
 		return false
 	}
+}
+
+func reasoningProgressIsNearFinish(currentIteration int, maxIterations int, mayTakeLonger bool) bool {
+	if currentIteration <= 0 || maxIterations <= 0 {
+		return false
+	}
+
+	thresholdPercent := 50
+	if mayTakeLonger {
+		thresholdPercent = 65
+	}
+
+	// Use ceil(maxIterations * percent / 100), so the flag turns on only after
+	// the visible iteration actually reaches the configured percentage.
+	thresholdIteration := (maxIterations*thresholdPercent + 99) / 100
+	if thresholdIteration < 1 {
+		thresholdIteration = 1
+	}
+
+	return currentIteration >= thresholdIteration
 }

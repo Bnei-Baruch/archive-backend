@@ -8,10 +8,18 @@ import (
 type reasoningToolStateContextKey struct{}
 
 type reasoningToolState struct {
-	mu            sync.Mutex
-	toolDebugInfo *ReasoningSearchDebugInfo
-	progress      *ReasoningProgressStore
-	progressID    string
+	mu                  sync.Mutex
+	toolDebugInfo       *ReasoningSearchDebugInfo
+	progress            *ReasoningProgressStore
+	progressID          string
+	resultKeys          map[string]bool
+	resultCategories    map[string]bool
+	concreteResultCount int
+}
+
+type ReasoningProgressResultSignal struct {
+	Key      string
+	Category string
 }
 
 func ContextWithReasoningToolState(ctx context.Context, progress *ReasoningProgressStore, progressID string) context.Context {
@@ -56,13 +64,32 @@ func ToolDebugInfoFromContext(ctx context.Context) *ReasoningSearchDebugInfo {
 	return &copy
 }
 
-func ReportReasoningProgressResults(ctx context.Context, hasPotentiallyGoodResults bool) {
-	if ctx == nil {
+func ReportReasoningProgressSearchResults(ctx context.Context, results []ReasoningProgressResultSignal) {
+	if ctx == nil || len(results) == 0 {
 		return
 	}
 	state, ok := ctx.Value(reasoningToolStateContextKey{}).(*reasoningToolState)
 	if !ok || state == nil || state.progress == nil || state.progressID == "" {
 		return
 	}
+
+	state.mu.Lock()
+	if state.resultKeys == nil {
+		state.resultKeys = map[string]bool{}
+	}
+	if state.resultCategories == nil {
+		state.resultCategories = map[string]bool{}
+	}
+	for _, result := range results {
+		if result.Key == "" || result.Category == "" || state.resultKeys[result.Key] {
+			continue
+		}
+		state.resultKeys[result.Key] = true
+		state.resultCategories[result.Category] = true
+		state.concreteResultCount++
+	}
+	hasPotentiallyGoodResults := state.concreteResultCount >= 4 && len(state.resultCategories) >= 2
+	state.mu.Unlock()
+
 	state.progress.ReportResultAvailability(state.progressID, hasPotentiallyGoodResults)
 }

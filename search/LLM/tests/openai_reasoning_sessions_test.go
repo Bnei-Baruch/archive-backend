@@ -184,6 +184,44 @@ func TestReasoningProgressStoreResultFlags(t *testing.T) {
 	}
 }
 
+func TestReasoningProgressSearchResultsAccumulateAcrossReports(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	ctx := llm.ContextWithReasoningToolState(context.Background(), store, "session-1")
+
+	llm.ReportReasoningProgressSearchResults(ctx, []llm.ReasoningProgressResultSignal{
+		{Key: "source-1", Category: "source"},
+		{Key: "source-2", Category: "source"},
+	})
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if !status.HasAnyResults {
+		t.Fatalf("expected has_any_results")
+	}
+	if status.HasPotentiallyGoodResults {
+		t.Fatalf("did not expect has_potentially_good_results after one category")
+	}
+
+	llm.ReportReasoningProgressSearchResults(ctx, []llm.ReasoningProgressResultSignal{
+		{Key: "source-2", Category: "source"},
+		{Key: "lesson-1", Category: "lesson"},
+		{Key: "lesson-2", Category: "lesson"},
+	})
+
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected second get error: %v", err)
+	}
+	if !status.HasPotentiallyGoodResults {
+		t.Fatalf("expected accumulated unique results across searches to be potentially good")
+	}
+}
+
 func TestReasoningProgressStoreQueryAnalyzedFlag(t *testing.T) {
 	store := llm.NewReasoningProgressStore(5 * time.Minute)
 	defer store.Close()
@@ -273,7 +311,7 @@ func TestReasoningProgressStoreNearFinishFlag(t *testing.T) {
 		t.Fatalf("unexpected get error: %v", err)
 	}
 	if status.NearFinish {
-		t.Fatalf("did not expect near_finish before penultimate iteration")
+		t.Fatalf("did not expect near_finish before the halfway iteration")
 	}
 
 	store.Thinking("session-1", 2, true)
@@ -282,7 +320,7 @@ func TestReasoningProgressStoreNearFinishFlag(t *testing.T) {
 		t.Fatalf("unexpected second get error: %v", err)
 	}
 	if !status.NearFinish {
-		t.Fatalf("expected near_finish on penultimate iteration")
+		t.Fatalf("expected near_finish on the halfway iteration")
 	}
 
 	store.RunningTool("session-1", 2, "elasticsearch_search")
@@ -301,6 +339,27 @@ func TestReasoningProgressStoreNearFinishFlag(t *testing.T) {
 	}
 	if status.NearFinish {
 		t.Fatalf("reserve should reset near_finish")
+	}
+}
+
+func TestReasoningProgressStoreNearFinishThreshold(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	if store.IsNearFinish("session-1", 3, 8) {
+		t.Fatalf("did not expect near_finish before 50%% of max iterations")
+	}
+	if !store.IsNearFinish("session-1", 4, 8) {
+		t.Fatalf("expected near_finish at 50%% of max iterations")
+	}
+
+	store.RunningTool("session-1", 4, "query_source_ai")
+	if store.IsNearFinish("session-1", 5, 8) {
+		t.Fatalf("did not expect near_finish before 65%% of max iterations when may_take_longer is true")
+	}
+	if !store.IsNearFinish("session-1", 6, 8) {
+		t.Fatalf("expected near_finish at 65%% of max iterations when may_take_longer is true")
 	}
 }
 

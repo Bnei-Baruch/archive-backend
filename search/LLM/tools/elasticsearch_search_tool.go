@@ -329,7 +329,7 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 		resultLanguage = result.Language
 	}
 	if elasticsearchSearchHasAnyResults(result) {
-		llm.ReportReasoningProgressResults(ctx, elasticsearchSearchHasPotentiallyGoodResults(result))
+		llm.ReportReasoningProgressSearchResults(ctx, elasticsearchSearchPotentiallyGoodResultSignals(result))
 	}
 	llm.LogIfDeb(ctx, "elasticsearch_search: completed language=%q hits=%d", resultLanguage, hitCount)
 
@@ -350,17 +350,28 @@ func elasticsearchSearchHasAnyResults(result *search.QueryResult) bool {
 }
 
 func elasticsearchSearchHasPotentiallyGoodResults(result *search.QueryResult) bool {
+	signals := elasticsearchSearchPotentiallyGoodResultSignals(result)
+	categories := map[string]bool{}
+	for _, signal := range signals {
+		categories[signal.Category] = true
+	}
+	return len(signals) >= 4 && len(categories) >= 2
+}
+
+func elasticsearchSearchPotentiallyGoodResultSignals(result *search.QueryResult) []llm.ReasoningProgressResultSignal {
 	if !elasticsearchSearchHasAnyResults(result) {
-		return false
+		return nil
 	}
 
-	// Current heuristic for potentially good results:
-	// 1. The returned page has at least 10 visible hits.
-	// 2. It includes at least one source, AND: one lesson part or one video program chapter.
-	hasProgram := false
-	hasSource := false
-	hasLesson := false
-	for _, hit := range result.SearchResult.Hits.Hits {
+	// Potentially-good progress requires at least 4 unique direct results across
+	// at least 2 useful categories: source, lesson, program, or text. Grouping
+	// results such as tags and collections do not count. The reasoning context
+	// aggregates these categories across all ES searches in the run.
+	signals := []llm.ReasoningProgressResultSignal{}
+	for i, hit := range result.SearchResult.Hits.Hits {
+		if i >= 6 {
+			break
+		}
 		if hit.Type != "result" || hit.Source == nil {
 			continue
 		}
@@ -368,26 +379,43 @@ func elasticsearchSearchHasPotentiallyGoodResults(result *search.QueryResult) bo
 		if err := json.Unmarshal(*hit.Source, &src); err != nil {
 			continue
 		}
-		if src.ResultType == consts.ES_RESULT_TYPE_SOURCES {
-			hasSource = true
+		category := elasticsearchSearchUsefulResultCategory(src)
+		if category == "" {
+			continue
 		}
-		for _, contentType := range elasticsearchSearchHitContentTypes(src) {
-			if elasticsearchSearchIsProgramContentType(contentType) {
-				hasProgram = true
-			}
-			if elasticsearchSearchIsLessonContentType(contentType) {
-				hasLesson = true
-			}
-			if hasProgram && hasLesson {
-				break
-			}
+		key := src.MDB_UID
+		if key == "" {
+			key = fmt.Sprintf("hit:%d:%s", i, category)
 		}
-		if hasSource && (hasProgram || hasLesson) {
-			return true
-		}
+		signals = append(signals, llm.ReasoningProgressResultSignal{
+			Key:      key,
+			Category: category,
+		})
 	}
 
-	return false
+	return signals
+}
+
+func elasticsearchSearchUsefulResultCategory(src es.Result) string {
+	switch src.ResultType {
+	case consts.ES_RESULT_TYPE_SOURCES:
+		return "source"
+	case consts.ES_RESULT_TYPE_BLOG_POSTS:
+		return "text"
+	case consts.ES_RESULT_TYPE_UNITS:
+		for _, contentType := range elasticsearchSearchHitContentTypes(src) {
+			if elasticsearchSearchIsProgramContentType(contentType) {
+				return "program"
+			}
+			if elasticsearchSearchIsLessonContentType(contentType) {
+				return "lesson"
+			}
+			if elasticsearchSearchIsTextContentType(contentType) {
+				return "text"
+			}
+		}
+	}
+	return ""
 }
 
 func elasticsearchSearchHitContentTypes(src es.Result) []string {
@@ -408,7 +436,16 @@ func elasticsearchSearchIsProgramContentType(contentType string) bool {
 
 func elasticsearchSearchIsLessonContentType(contentType string) bool {
 	switch contentType {
-	case consts.CT_DAILY_LESSON, consts.CT_FULL_LESSON, consts.CT_LESSON_PART:
+	case consts.CT_DAILY_LESSON, consts.CT_FULL_LESSON, consts.CT_LECTURE, consts.CT_LESSON_PART, consts.CT_WOMEN_LESSON:
+		return true
+	default:
+		return false
+	}
+}
+
+func elasticsearchSearchIsTextContentType(contentType string) bool {
+	switch contentType {
+	case consts.CT_ARTICLE, consts.CT_BLOG_POST, consts.CT_LIKUTIM:
 		return true
 	default:
 		return false

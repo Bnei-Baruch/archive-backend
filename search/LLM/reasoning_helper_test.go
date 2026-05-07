@@ -38,3 +38,27 @@ func TestDescribeResponsesOutputItemsIncludesDiagnosticFields(t *testing.T) {
 		}
 	}
 }
+
+func TestUnmarshalLLMJSONContentAcceptsDuplicateTopLevelJSON(t *testing.T) {
+	var payload struct {
+		Query string `json:"query"`
+	}
+
+	content := `{"query":"first"}{"query":"second"}`
+	if err := unmarshalLLMJSONContent(content, &payload); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if payload.Query != "first" {
+		t.Fatalf("expected first object to be used, got %q", payload.Query)
+	}
+}
+
+func TestUnmarshalLLMJSONContentRejectsInvalidTrailingText(t *testing.T) {
+	var payload struct {
+		Query string `json:"query"`
+	}
+
+	if err := unmarshalLLMJSONContent(`{"query":"first"} trailing`, &payload); err == nil {
+		t.Fatalf("expected invalid trailing text to fail")
+	}
+}

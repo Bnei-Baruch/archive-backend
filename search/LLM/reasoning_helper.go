@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"strings"
 	"time"
@@ -276,7 +277,7 @@ func validateJSONRequiredTopLevelFields(content string, jsonSchema string) error
 	}
 
 	var payload map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(content), &payload); err != nil {
+	if err := unmarshalLLMJSONContent(content, &payload); err != nil {
 		return err
 	}
 	for _, field := range schema.Required {
@@ -289,6 +290,30 @@ func validateJSONRequiredTopLevelFields(content string, jsonSchema string) error
 		}
 	}
 	return nil
+}
+
+func unmarshalLLMJSONContent(content string, output interface{}) error {
+	if err := json.Unmarshal([]byte(content), output); err == nil {
+		return nil
+	} else {
+		originalErr := err
+
+		// Some models occasionally return two complete structured JSON objects
+		// concatenated. Use the first object only when the trailing value is also
+		// valid JSON, but keep rejecting arbitrary trailing garbage.
+		decoder := json.NewDecoder(strings.NewReader(content))
+		if err := decoder.Decode(output); err != nil {
+			return originalErr
+		}
+
+		var extra json.RawMessage
+		err := decoder.Decode(&extra)
+		if err == nil || err == io.EOF {
+			return nil
+		}
+
+		return originalErr
+	}
 }
 
 func normalizeResponseTools(tools []ToolCall) ([]map[string]interface{}, error) {

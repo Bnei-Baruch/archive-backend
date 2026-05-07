@@ -128,7 +128,7 @@ func (s *ZAIService) GetStructuredOutput(ctx context.Context, jsonSchema string,
 	if err := validateJSONRequiredTopLevelFields(msg.Content, jsonSchema); err != nil {
 		return err
 	}
-	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
+	if err := unmarshalLLMJSONContent(msg.Content, output); err != nil {
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
 		return err
 	}
@@ -146,7 +146,7 @@ func (s *ZAIService) GetStructuredOutputWithDebugInfo(ctx context.Context, jsonS
 	if err := validateJSONRequiredTopLevelFields(msg.Content, jsonSchema); err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
+	if err := unmarshalLLMJSONContent(msg.Content, output); err != nil {
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (s *ZAIService) GetReasoningStructuredOutputWithTools(
 		return err
 	}
 
-	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
+	if err := unmarshalLLMJSONContent(msg.Content, output); err != nil {
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
 		return err
 	}
@@ -329,7 +329,7 @@ func (s *ZAIService) GetReasoningStructuredOutputWithToolsForSession(
 		return "", err
 	}
 
-	if err := json.Unmarshal([]byte(msg.Content), output); err != nil {
+	if err := unmarshalLLMJSONContent(msg.Content, output); err != nil {
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
 		if s.progress != nil && effectiveProgressSessionID != "" {
 			s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
@@ -558,12 +558,14 @@ func (s *ZAIService) getReasoningResponseWithTools(
 	for i := 0; i < maxIterations; i++ {
 		stepStarted := time.Now()
 		isFinalIteration := i == maxIterations-1
-		isNearFinish := i >= maxIterations-2
+		currentIteration := i + 1
+		isNearFinish := false
 		if err := ctx.Err(); err != nil {
 			return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), err
 		}
 		if s.progress != nil && progressSessionID != "" {
-			s.progress.Thinking(progressSessionID, i+1, isNearFinish)
+			isNearFinish = s.progress.IsNearFinish(progressSessionID, currentIteration, maxIterations)
+			s.progress.Thinking(progressSessionID, currentIteration, isNearFinish)
 		}
 		currentTools := tools
 		currentToolHandlers := toolHandlers

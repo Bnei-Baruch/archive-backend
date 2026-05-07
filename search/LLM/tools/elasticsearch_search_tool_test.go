@@ -22,47 +22,71 @@ func TestSetElasticsearchSearchLanguageOrderUsesExplicitLanguage(t *testing.T) {
 	}
 }
 
-func TestElasticsearchSearchHasPotentiallyGoodResultsWithSourceAndProgram(t *testing.T) {
+func TestElasticsearchSearchHasPotentiallyGoodResultsWithFourDirectHitsAndTwoCategories(t *testing.T) {
 	result := elasticsearchSearchQueryResultWithHits(
+		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_SOURCES},
 		elasticsearchSearchTestUnitHit(consts.CT_VIDEO_PROGRAM_CHAPTER),
-		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_SOURCES},
+		elasticsearchSearchTestUnitHit(consts.CT_VIDEO_PROGRAM_CHAPTER),
+		elasticsearchSearchTestUnitHit(consts.CT_ARTICLE),
 	)
 
 	if !elasticsearchSearchHasPotentiallyGoodResults(result) {
-		t.Fatalf("expected source and program to be potentially good")
+		t.Fatalf("expected four direct hits across two categories to be potentially good")
 	}
 }
 
-func TestElasticsearchSearchHasPotentiallyGoodResultsWithSourceAndLesson(t *testing.T) {
+func TestElasticsearchSearchHasPotentiallyGoodResultsRequiresFourDirectHits(t *testing.T) {
 	result := elasticsearchSearchQueryResultWithHits(
 		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_SOURCES},
-		elasticsearchSearchTestUnitHit(consts.CT_LESSON_PART),
-	)
-
-	if !elasticsearchSearchHasPotentiallyGoodResults(result) {
-		t.Fatalf("expected source and lesson to be potentially good")
-	}
-}
-
-func TestElasticsearchSearchHasPotentiallyGoodResultsRequiresSource(t *testing.T) {
-	result := elasticsearchSearchQueryResultWithHits(
 		elasticsearchSearchTestUnitHit(consts.CT_VIDEO_PROGRAM_CHAPTER),
 		elasticsearchSearchTestUnitHit(consts.CT_LESSON_PART),
 	)
 
 	if elasticsearchSearchHasPotentiallyGoodResults(result) {
-		t.Fatalf("expected missing source to be insufficient")
+		t.Fatalf("expected fewer than four direct hits to be insufficient")
 	}
 }
 
-func TestElasticsearchSearchHasPotentiallyGoodResultsRequiresProgramOrLesson(t *testing.T) {
+func TestElasticsearchSearchHasPotentiallyGoodResultsRequiresTwoCategories(t *testing.T) {
+	result := elasticsearchSearchQueryResultWithHits(
+		elasticsearchSearchTestUnitHit(consts.CT_LESSON_PART),
+		elasticsearchSearchTestUnitHit(consts.CT_LESSON_PART),
+		elasticsearchSearchTestUnitHit(consts.CT_LESSON_PART),
+		elasticsearchSearchTestUnitHit(consts.CT_LESSON_PART),
+	)
+
+	if elasticsearchSearchHasPotentiallyGoodResults(result) {
+		t.Fatalf("expected one useful category to be insufficient")
+	}
+}
+
+func TestElasticsearchSearchHasPotentiallyGoodResultsIgnoresGroupingHits(t *testing.T) {
 	result := elasticsearchSearchQueryResultWithHits(
 		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_SOURCES},
+		elasticsearchSearchTestUnitHit(consts.CT_VIDEO_PROGRAM_CHAPTER),
+		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
 		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
 	)
 
 	if elasticsearchSearchHasPotentiallyGoodResults(result) {
-		t.Fatalf("expected missing program or lesson to be insufficient")
+		t.Fatalf("expected grouping hits not to count as direct results")
+	}
+}
+
+func TestElasticsearchSearchHasPotentiallyGoodResultsOnlyChecksTopSix(t *testing.T) {
+	result := elasticsearchSearchQueryResultWithHits(
+		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_SOURCES},
+		elasticsearchSearchTestUnitHit(consts.CT_VIDEO_PROGRAM_CHAPTER),
+		elasticsearchSearchTestUnitHit(consts.CT_VIDEO_PROGRAM_CHAPTER),
+		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
+		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
+		elasticsearchSearchTestHit{ResultType: consts.ES_RESULT_TYPE_COLLECTIONS},
+		elasticsearchSearchTestUnitHit(consts.CT_ARTICLE),
+		elasticsearchSearchTestUnitHit(consts.CT_ARTICLE),
+	)
+
+	if elasticsearchSearchHasPotentiallyGoodResults(result) {
+		t.Fatalf("expected direct hits after top six not to count")
 	}
 }
 
