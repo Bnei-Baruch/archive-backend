@@ -50,7 +50,7 @@ Instructions for coding agents working in this repository.
 - `common.Init()` builds the shared tool manager inside `common.LLM_RUNTIME`.
 
 ## Reasoning Search
-- API endpoints: `POST /search/reasoning`, `POST /search/reasoning/start`, `POST /search/reasoning/cache`, `POST /search/reasoning/cancel`, `GET /search/reasoning/status`, `GET /search/reasoning/result`.
+- API endpoints: `POST /search/reasoning`, `POST /search/reasoning/start`, `POST /search/reasoning/cache`, `POST /search/reasoning/cancel`, `POST /search/reasoning/finish-now`, `GET /search/reasoning/status`, `GET /search/reasoning/result`.
 - Request supports `q`, optional `deb`, optional `session_id`, optional `cancel_session_id`, optional `ui_language`.
 - The API `session_id` is a workflow session id owned by the backend, not a provider-native LLM session id.
 - `POST /search/reasoning` runs the full reasoning search synchronously and returns the final response directly.
@@ -58,14 +58,21 @@ Instructions for coding agents working in this repository.
 - `POST /search/reasoning/cache` checks the shared query cache; on hit it creates a fresh workflow session, stores a response snapshot, and returns the new `session_id`.
 - `POST /search/reasoning/start` may receive `cancel_session_id` to cancel a previous background run before starting the new one.
 - `POST /search/reasoning/cancel` cancels a running background search by workflow `session_id`.
+- `POST /search/reasoning/finish-now` finalizes the latest prepared draft response for a workflow `session_id`; it does not generate results inline. If no draft is ready, it returns a conflict error.
 - `GET /search/reasoning/status` reports background progress for that workflow session.
 - `GET /search/reasoning/result` fetches the stored per-session response snapshot after the background run completes.
 - Background progress terminal states include `completed`, `failed`, and `canceled`.
+- Status also exposes progress hints such as result availability, potentially good results, long-running risk, near-finish, query-analyzed, and draft availability. `has_draft_results=true` means the client may offer `finish-now`.
 - Response includes `session_id`, `cache_hit`, `used_tools`, token stats, and debug/cost details when `deb=true`.
 - The backend persists a `reasoning` workflow stage and, when enabled, `planning` and `verification` workflow stages.
 - The backend uses two different storage mechanisms for reasoning search:
   - `ReasoningCache`: shared query-based cache for reusable initial results.
   - response snapshot: exact per-session final API response stored on the workflow session for later fetch by `session_id`.
+- During background reasoning, Elasticsearch tool results are accumulated as partial workflow results. A configured draft model periodically converts those partial ES results into a stored draft response. Draft generation is throttled and requires enough partial results; it uses only ES result data.
+- `finish-now` copies the stored draft response into the normal response snapshot, marks progress completed, and returns only readiness metadata. The client then fetches the actual draft response through `GET /search/reasoning/result`.
+- Draft model token/cost usage is included in draft and final response totals when available and, when `deb=true`, under `debug.draft_model_usage`. Individual draft generations are listed separately under `debug.draft_model_runs`.
+- Follow-up after draft results must not continue the old hidden provider context. The backend starts a fresh provider reasoning session for the same workflow session and seeds the visible draft response as prior assistant context before the user's follow-up query.
+- Old background reasoning runs may finish after a draft was returned or after a draft follow-up started. They must not overwrite or clear the newer workflow state.
 - Workflow stages own their provider/model/effort settings; handlers should execute a stage from stored workflow state, not by re-reading current config for existing sessions.
 - Planning is a one-shot structured-output call that runs only on the initial request, not on follow-ups. It returns request-specific guidance plus optional first-iteration tool restrictions.
 - Verification is currently a one-shot structured call, so its stored stage metadata may have an empty provider-native session id.
@@ -85,6 +92,9 @@ Instructions for coding agents working in this repository.
 - Verification enable/provider selection lives under `[llm]`:
   - `llm.reasoning-search-verification-enabled`
   - `llm.reasoning-search-verification-provider`
+- Draft response provider selection lives under `[llm]`:
+  - `llm.reasoning-search-draft-provider`
+  - Defaults to `llm.ai-tools-provider` when empty.
 - Reasoning search config is provider-specific:
   - `[openai]` for OpenAI
   - `[openrouter]` for OpenRouter
@@ -103,6 +113,11 @@ Instructions for coding agents working in this repository.
   - `<provider>.reasoning-search-planning-model`
   - `<provider>.reasoning-search-planning-effort`
   - `<provider>.reasoning-search-planning-max-output-tokens`
+- Draft model settings are also provider-specific:
+  - `<provider>.reasoning-search-draft-model`
+  - `<provider>.reasoning-search-draft-effort`
+  - `<provider>.reasoning-search-draft-max-output-tokens`
+  - When unset, draft settings fall back to the selected AI-tools provider settings.
 - OpenRouter supports configurable provider routing and `openrouter.enforced-tool-use-iterations`; `0` disables forced tool use.
 - OpenRouter provider routing keys can be overridden per stage with `reasoning-search-*`, `reasoning-search-planning-*`, `reasoning-search-verification-*`, and `ai-tools-*` provider-routing keys under `[openrouter]`.
 - xAI Grok 4 fast reasoning models do not support `reasoning_effort`; keep xAI reasoning and planning effort config empty.

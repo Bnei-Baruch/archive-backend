@@ -330,6 +330,7 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 	}
 	if elasticsearchSearchHasAnyResults(result) {
 		llm.ReportReasoningProgressSearchResults(ctx, elasticsearchSearchPotentiallyGoodResultSignals(result))
+		llm.ReportReasoningPartialResults(ctx, elasticsearchSearchPartialResults(result))
 	}
 	llm.LogIfDeb(ctx, "elasticsearch_search: completed language=%q hits=%d", resultLanguage, hitCount)
 
@@ -356,6 +357,97 @@ func elasticsearchSearchHasPotentiallyGoodResults(result *search.QueryResult) bo
 		categories[signal.Category] = true
 	}
 	return len(signals) >= 4 && len(categories) >= 2
+}
+
+func elasticsearchSearchPartialResults(result *search.QueryResult) []llm.ReasoningSearchResult {
+	if !elasticsearchSearchHasAnyResults(result) {
+		return nil
+	}
+
+	results := []llm.ReasoningSearchResult{}
+	for i, hit := range result.SearchResult.Hits.Hits {
+		if i >= 12 {
+			break
+		}
+		if hit.Type != "result" || hit.Source == nil {
+			continue
+		}
+		var src es.Result
+		if err := json.Unmarshal(*hit.Source, &src); err != nil {
+			continue
+		}
+		if strings.TrimSpace(src.MDB_UID) == "" {
+			continue
+		}
+		contentType := elasticsearchSearchPrimaryContentType(src)
+		date := ""
+		if src.EffectiveDate != nil {
+			date = src.EffectiveDate.Time.Format("2006-01-02")
+		}
+		title := strings.TrimSpace(src.FullTitle)
+		if title == "" {
+			title = strings.TrimSpace(src.Title)
+		}
+		results = append(results, llm.ReasoningSearchResult{
+			MDBUID:           strings.TrimSpace(src.MDB_UID),
+			Origin:           llm.ReasoningSearchResultOriginOriginal,
+			ResultType:       strings.TrimSpace(src.ResultType),
+			Title:            title,
+			Description:      strings.TrimSpace(src.Description),
+			ContentType:      contentType,
+			Date:             date,
+			Highlights:       elasticsearchSearchHighlights(hit.Highlight),
+			IsGroupingResult: src.ResultType == consts.ES_RESULT_TYPE_COLLECTIONS || src.ResultType == consts.ES_RESULT_TYPE_TAGS,
+		})
+	}
+	return results
+}
+
+func elasticsearchSearchPrimaryContentType(src es.Result) string {
+	contentTypes := elasticsearchSearchHitContentTypes(src)
+	if len(contentTypes) > 0 {
+		return strings.TrimSpace(contentTypes[0])
+	}
+	switch src.ResultType {
+	case consts.ES_RESULT_TYPE_SOURCES:
+		return consts.CT_SOURCE
+	case consts.ES_RESULT_TYPE_BLOG_POSTS:
+		return consts.CT_BLOG_POST
+	default:
+		return ""
+	}
+}
+
+func elasticsearchSearchHighlights(highlights map[string][]string) []string {
+	if len(highlights) == 0 {
+		return []string{}
+	}
+
+	result := []string{}
+	seen := map[string]bool{}
+	add := func(values []string) {
+		for _, value := range values {
+			value = strings.TrimSpace(value)
+			if value == "" || seen[value] {
+				continue
+			}
+			seen[value] = true
+			result = append(result, value)
+		}
+	}
+
+	for _, field := range []string{"title", "full_title", "description", "description.language", "content", "content.language"} {
+		add(highlights[field])
+	}
+	for field, values := range highlights {
+		switch field {
+		case "title", "full_title", "description", "description.language", "content", "content.language":
+			continue
+		default:
+			add(values)
+		}
+	}
+	return result
 }
 
 func elasticsearchSearchPotentiallyGoodResultSignals(result *search.QueryResult) []llm.ReasoningProgressResultSignal {

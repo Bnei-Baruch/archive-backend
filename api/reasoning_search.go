@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 	"unicode"
 
 	log "github.com/Sirupsen/logrus"
@@ -38,6 +39,14 @@ var (
 	errReasoningSearchCanceled        = errors.New("reasoning search was canceled")
 	errReasoningSearchQueryMismatch   = errors.New("reasoning search query mismatch")
 )
+
+const reasoningSearchDraftMinInterval = 15 * time.Second
+const reasoningSearchDraftMinResults = 8
+
+const reasoningSearchDraftInstruction = `Draft mode: prepare a partial archive search response from Elasticsearch results that were already collected while the main reasoning search is still running.
+Use only the supplied Elasticsearch results. Do not invent results, IDs, titles, highlights, dates, or content types.
+Keep mdb_uid values exactly as provided.
+The summary must say that the user asked for fast results and the answer is based on results gathered so far.`
 
 // Async flow entrypoint: start work in background and return a workflow
 // session_id immediately. The client then polls status and later fetches the
@@ -116,6 +125,57 @@ func ReasoningSearchCancelHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"session_id": sessionID,
 		"canceled":   canceled,
+	})
+}
+
+func ReasoningSearchFinishNowHandler(c *gin.Context) {
+	sessionID := strings.TrimSpace(c.Query("session_id"))
+	if sessionID == "" {
+		r := ReasoningSearchCancelRequest{}
+		if c.Bind(&r) != nil {
+			return
+		}
+		sessionID = strings.TrimSpace(r.SessionID)
+	}
+	if sessionID == "" {
+		NewBadRequestError(errors.New("session_id is required")).Abort(c)
+		return
+	}
+
+	runtime, _ := c.MustGet("LLM_RUNTIME").(*llm.Runtime)
+	if runtime == nil || runtime.Progress == nil || runtime.Workflow == nil {
+		NewInternalError(errors.New("reasoning workflow is not initialized")).Abort(c)
+		return
+	}
+	if err := refreshReasoningSearchSession(runtime, sessionID); err != nil {
+		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
+	}
+
+	response, err := runtime.Workflow.FinalizeWithDraft(sessionID)
+	if err != nil {
+		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		if errors.Is(err, llm.ErrReasoningDraftNotReady) {
+			NewHttpError(http.StatusConflict, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
+	}
+	log.Infof("Reasoning Search finish-now returned stored draft session=%s results=%d", sessionID, len(response.Results))
+	runtime.Progress.Complete(sessionID, 0)
+
+	c.JSON(http.StatusOK, gin.H{
+		"session_id":   sessionID,
+		"draft_used":   true,
+		"result_ready": true,
 	})
 }
 
@@ -243,7 +303,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	if err := executeReasoningSearchForSession(c.Request.Context(), runtime, db, r, sessionID); err != nil {
+	if err := executeReasoningSearchForSession(c.Request.Context(), runtime, db, r, sessionID, false); err != nil {
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
 			return
@@ -414,7 +474,9 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 		if !ok || strings.TrimSpace(reasoningStage.ProviderSessionID) == "" {
 			return "", llm.ErrReasoningSessionNotFoundOrExpired
 		}
-		refreshProviderReasoningSession(runtime, reasoningStage)
+		if !workflowSession.FinalizedFromDraft {
+			refreshProviderReasoningSession(runtime, reasoningStage)
+		}
 		if status, err := progressStore.Get(sessionID); err == nil {
 			if !status.Done {
 				return "", errReasoningSearchAlreadyRunning
@@ -422,15 +484,37 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 		} else if !errors.Is(err, llm.ErrReasoningProgressNotFoundOrExpired) {
 			return "", err
 		}
-		if workflowSession.InitialRequestCompleted {
+		isFollowup := workflowSession.InitialRequestCompleted || workflowSession.FinalizedFromDraft
+		if isFollowup {
 			if workflowSession.FollowupCount >= reasoningStage.MaxFollowups {
 				return "", &llm.MaxReasoningFollowupsError{MaxFollowups: reasoningStage.MaxFollowups}
 			}
-			if err := workflowStore.SetFollowupState(sessionID, true, workflowSession.FollowupCount+1); err != nil {
+			nextFollowupCount := workflowSession.FollowupCount + 1
+			if workflowSession.FinalizedFromDraft {
+				service := runtime.Services[reasoningStage.Provider]
+				if service == nil {
+					return "", errors.New("reasoning llm service is not initialized")
+				}
+				providerSessionID, err := service.ReserveReasoningSession(ctx, reasoningStage.Model, &reasoningStage.ReasoningEffort)
+				if err != nil {
+					return "", err
+				}
+				reasoningStage.ProviderSessionID = providerSessionID
+				if err := workflowStore.StartDraftFollowup(sessionID, r.Query, nextFollowupCount, reasoningStage); err != nil {
+					return "", err
+				}
+				progressStore.Reserve(sessionID)
+				progressStore.SetIterationOffset(sessionID, 0)
+				return sessionID, nil
+			}
+			if err := workflowStore.SetFollowupState(sessionID, true, nextFollowupCount); err != nil {
 				return "", err
 			}
 		}
 		if err := workflowStore.SetResponseSnapshot(sessionID, nil); err != nil {
+			return "", err
+		}
+		if err := workflowStore.SetQuery(sessionID, r.Query); err != nil {
 			return "", err
 		}
 		progressStore.Reserve(sessionID)
@@ -463,6 +547,9 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 		ProviderSessionID:  providerSessionID,
 	})
 	if err != nil {
+		return "", err
+	}
+	if err := workflowStore.SetQuery(sessionID, r.Query); err != nil {
 		return "", err
 	}
 	if reasoningConfig.Verification != nil {
@@ -529,6 +616,204 @@ func storeReasoningSearchCachedResponse(runtime *llm.Runtime, db *sql.DB, r Reas
 	return nil
 }
 
+func maybeStartReasoningSearchDraft(runtime *llm.Runtime, db *sql.DB, uiLanguage string, sessionID string, deb bool) {
+	if runtime == nil || runtime.Workflow == nil || runtime.Progress == nil || runtime.DraftConfig == nil || runtime.Services == nil {
+		return
+	}
+	service := runtime.Services[runtime.DraftConfig.Provider]
+	if service == nil {
+		return
+	}
+
+	results, revision, query, ok, err := runtime.Workflow.TryStartDraft(sessionID, reasoningSearchDraftMinInterval, reasoningSearchDraftMinResults)
+	if err != nil {
+		if !errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			log.Warnf("Reasoning Search draft start failed session=%s: %v", sessionID, err)
+		}
+		return
+	}
+	if !ok {
+		return
+	}
+
+	go func() {
+		if err := buildAndStoreReasoningSearchDraft(context.Background(), runtime, db, service, runtime.DraftConfig, uiLanguage, sessionID, query, revision, results, deb); err != nil {
+			runtime.Workflow.FailDraft(sessionID)
+			if !errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+				log.Warnf("Reasoning Search draft failed session=%s revision=%d: %v", sessionID, revision, err)
+			}
+		}
+	}()
+}
+
+func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime, db *sql.DB, service llm.Service, config *llm.ReasoningSearchDraftConfig, uiLanguage string, sessionID string, query string, revision int, candidates []llm.ReasoningSearchResult, deb bool) error {
+	if len(candidates) == 0 {
+		runtime.Workflow.FailDraft(sessionID)
+		return nil
+	}
+	if len(candidates) > 30 {
+		candidates = candidates[:30]
+	}
+
+	workflowSession, err := runtime.Workflow.Get(sessionID)
+	if err != nil {
+		return err
+	}
+	reasoningStage := workflowSession.Stages[llm.ReasoningWorkflowStageReasoning]
+	followupsUsed := workflowSession.FollowupCount
+	followupsRemaining := reasoningStage.MaxFollowups - followupsUsed
+	if followupsRemaining < 0 {
+		followupsRemaining = 0
+	}
+	outputLanguageName := reasoningSearchOutputLanguageName(uiLanguage, query)
+	schema, err := llm.GenerateReasoningSearchResponseJSONSchemaForLanguage(outputLanguageName)
+	if err != nil {
+		return err
+	}
+	systemMessage := llm.GenerateSystemMessageForReasoningSearch(runtime.Tools.Tools(), reasoningStage.MaxIterations, followupsRemaining)
+	systemMessage = llm.AppendReasoningSearchOutputLanguage(systemMessage, outputLanguageName)
+	systemMessage = systemMessage + "\n\n" + reasoningSearchDraftInstruction
+
+	input, err := json.Marshal(struct {
+		Query   string                      `json:"query"`
+		Results []llm.ReasoningSearchResult `json:"results"`
+	}{
+		Query:   query,
+		Results: candidates,
+	})
+	if err != nil {
+		return err
+	}
+
+	messages := []llm.LLMBotMessage{
+		{
+			Role:    "system",
+			Content: systemMessage,
+		},
+		{
+			Role:    "user",
+			Content: string(input),
+		},
+	}
+
+	response := llm.ReasoningSearchResponse{}
+	promptCacheKey := fmt.Sprintf("reasoning-search-draft:m=%s:e=%s", config.Model, config.Effort)
+	debug, err := service.GetStructuredOutputWithDebugInfo(ctx, schema, config.Model, &config.MaxTokens, messages, &promptCacheKey, &config.Effort, deb, &response)
+	if err != nil {
+		return err
+	}
+
+	response.Query = query
+	response.SetSessionID(sessionID)
+	response.SetUsedTools([]string{"elasticsearch_search"})
+	response.SetReasoningSteps([]llm.ReasoningSearchReasoningStep{})
+	if debug != nil {
+		response.UsedTokens = debug.TotalTokens
+		if usage := debug.UsageBreakdown(); usage != nil {
+			debug.DraftModelUsage = usage
+			debug.DraftModelRuns = []llm.ReasoningSearchUsageBreakdown{*usage}
+		}
+		if deb {
+			response.Debug = debug
+		}
+	}
+	mergeReasoningSearchDraftMetadata(&response, candidates)
+	if len(response.Results) == 0 {
+		runtime.Workflow.FailDraft(sessionID)
+		return nil
+	}
+	if err := enrichReasoningSearchResults(db, uiLanguage, response.Results); err != nil {
+		return err
+	}
+	response.SetFollowupBudget(reasoningStage.MaxFollowups, followupsUsed, followupsRemaining)
+
+	if err := runtime.Workflow.FinishDraft(sessionID, revision, &response); err != nil {
+		return err
+	}
+	runtime.Progress.ReportDraftAvailability(sessionID)
+	log.Infof("Reasoning Search draft ready session=%s revision=%d results=%d", sessionID, revision, len(response.Results))
+	return nil
+}
+
+func mergeReasoningSearchDraftMetadata(response *llm.ReasoningSearchResponse, candidates []llm.ReasoningSearchResult) {
+	if response == nil || len(response.Results) == 0 {
+		return
+	}
+
+	byUID := map[string]llm.ReasoningSearchResult{}
+	for _, candidate := range candidates {
+		uid := strings.TrimSpace(candidate.MDBUID)
+		if uid == "" {
+			continue
+		}
+		byUID[uid] = candidate
+	}
+
+	merged := make([]llm.ReasoningSearchResult, 0, len(response.Results))
+	seen := map[string]bool{}
+	for _, selected := range response.Results {
+		uid := strings.TrimSpace(selected.MDBUID)
+		if uid == "" || seen[uid] {
+			continue
+		}
+		candidate, ok := byUID[uid]
+		if !ok {
+			continue
+		}
+		candidate.Reason = strings.TrimSpace(selected.Reason)
+		if len(selected.Highlights) > 0 {
+			candidate.Highlights = append([]string(nil), selected.Highlights...)
+		}
+		candidate.IsGroupingResult = candidate.IsGroupingResult || selected.IsGroupingResult
+		candidate.Origin = llm.ReasoningSearchResultOriginOriginal
+		merged = append(merged, candidate)
+		seen[uid] = true
+	}
+	response.Results = merged
+}
+
+func buildReasoningSearchDraftFollowupSeedAssistantContent(response *llm.ReasoningSearchResponse) string {
+	if response == nil {
+		return ""
+	}
+	type seedResult struct {
+		MDBUID           string   `json:"mdb_uid"`
+		ResultType       string   `json:"result_type"`
+		Title            string   `json:"title"`
+		ContentType      string   `json:"content_type"`
+		Reason           string   `json:"reason"`
+		Highlights       []string `json:"highlights"`
+		IsGroupingResult bool     `json:"is_grouping_result"`
+	}
+	type seedPayload struct {
+		Query   string       `json:"query"`
+		Summary string       `json:"summary"`
+		Results []seedResult `json:"results"`
+	}
+
+	payload := seedPayload{
+		Query:   response.Query,
+		Summary: response.Summary,
+		Results: make([]seedResult, 0, len(response.Results)),
+	}
+	for _, result := range response.Results {
+		payload.Results = append(payload.Results, seedResult{
+			MDBUID:           result.MDBUID,
+			ResultType:       result.ResultType,
+			Title:            result.Title,
+			ContentType:      result.ContentType,
+			Reason:           result.Reason,
+			Highlights:       append([]string(nil), result.Highlights...),
+			IsGroupingResult: result.IsGroupingResult,
+		})
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return response.Summary
+	}
+	return "Previous visible response was an early draft based on partial Elasticsearch results. Use it as conversation context for the user's follow-up, but verify and improve it with tools when needed:\n" + string(raw)
+}
+
 func executeReasoningSearchInBackground(ctx context.Context, runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) {
 	defer func() {
 		if runtime != nil && runtime.Cancellations != nil {
@@ -537,6 +822,10 @@ func executeReasoningSearchInBackground(ctx context.Context, runtime *llm.Runtim
 		if recovered := recover(); recovered != nil {
 			log.Errorf("Reasoning Search background panic session=%s: %v", responseSessionID, recovered)
 			if runtime != nil && runtime.Workflow != nil {
+				if finalized, err := runtime.Workflow.IsFinalizedFromDraft(responseSessionID); err == nil && finalized {
+					log.Infof("Reasoning Search panic ignored because draft was already returned session=%s", responseSessionID)
+					return
+				}
 				if err := runtime.Workflow.SetResponseSnapshot(responseSessionID, nil); err != nil && !errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 					log.Warnf("Reasoning Search failed clearing response snapshot after panic: %v", err)
 				}
@@ -546,10 +835,16 @@ func executeReasoningSearchInBackground(ctx context.Context, runtime *llm.Runtim
 			}
 		}
 	}()
-	if err := executeReasoningSearchForSession(ctx, runtime, db, r, responseSessionID); err != nil {
+	if err := executeReasoningSearchForSession(ctx, runtime, db, r, responseSessionID, true); err != nil {
 		if isReasoningSearchCancellation(err) {
 			log.Infof("Reasoning Search background canceled session=%s", responseSessionID)
 			return
+		}
+		if runtime != nil && runtime.Workflow != nil {
+			if finalized, finalErr := runtime.Workflow.IsFinalizedFromDraft(responseSessionID); finalErr == nil && finalized {
+				log.Infof("Reasoning Search background error ignored because draft was already returned session=%s err=%v", responseSessionID, err)
+				return
+			}
 		}
 		log.Warnf("Reasoning Search background execution failed session=%s: %v", responseSessionID, err)
 	}
@@ -648,6 +943,13 @@ func mergeReasoningSearchAttemptStats(dst *llm.ReasoningSearchResponse, src *llm
 			aiCopy := *src.Debug.AIToolsUsage
 			debugCopy.AIToolsUsage = &aiCopy
 		}
+		if src.Debug.DraftModelUsage != nil {
+			draftCopy := *src.Debug.DraftModelUsage
+			debugCopy.DraftModelUsage = &draftCopy
+		}
+		if len(src.Debug.DraftModelRuns) != 0 {
+			debugCopy.DraftModelRuns = append([]llm.ReasoningSearchUsageBreakdown(nil), src.Debug.DraftModelRuns...)
+		}
 		if len(src.Debug.AIToolsCalls) != 0 {
 			debugCopy.AIToolsCalls = append([]llm.ReasoningSearchAIToolCallDebug(nil), src.Debug.AIToolsCalls...)
 		}
@@ -656,13 +958,43 @@ func mergeReasoningSearchAttemptStats(dst *llm.ReasoningSearchResponse, src *llm
 	}
 	mergeReasoningSearchUsageBreakdown(&dst.Debug.MainModelUsage, src.Debug.MainModelUsage)
 	mergeReasoningSearchUsageBreakdown(&dst.Debug.AIToolsUsage, src.Debug.AIToolsUsage)
+	mergeReasoningSearchUsageBreakdown(&dst.Debug.DraftModelUsage, src.Debug.DraftModelUsage)
 	dst.Debug.Add(src.Debug)
+}
+
+func mergeReasoningSearchDraftUsage(response *llm.ReasoningSearchResponse, runs []llm.ReasoningSearchUsageBreakdown, usage *llm.ReasoningSearchUsageBreakdown, deb bool) {
+	if response == nil || usage == nil {
+		return
+	}
+	response.UsedTokens += usage.TotalTokens
+	if !deb && response.Debug == nil {
+		return
+	}
+	if response.Debug == nil {
+		response.Debug = &llm.ReasoningSearchDebugInfo{Enabled: true}
+	}
+	response.Debug.Add(&llm.ReasoningSearchDebugInfo{
+		Enabled:                     true,
+		PricingConfigured:           usage.PricingConfigured,
+		TotalTokens:                 usage.TotalTokens,
+		InputTokens:                 usage.InputTokens,
+		CachedInputTokens:           usage.CachedInputTokens,
+		UncachedInputTokens:         usage.UncachedInputTokens,
+		OutputTokens:                usage.OutputTokens,
+		ReasoningTokens:             usage.ReasoningTokens,
+		EstimatedInputCostUSD:       usage.EstimatedInputCostUSD,
+		EstimatedCachedInputCostUSD: usage.EstimatedCachedInputCostUSD,
+		EstimatedOutputCostUSD:      usage.EstimatedOutputCostUSD,
+		EstimatedCostUSD:            usage.EstimatedCostUSD,
+		DraftModelUsage:             usage,
+		DraftModelRuns:              append([]llm.ReasoningSearchUsageBreakdown(nil), runs...),
+	})
 }
 
 // Runs the full reasoning workflow and stores the final per-session response
 // snapshot. The shared query cache may seed an initial result, but the final
 // API payload is always stored per workflow session.
-func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) (err error) {
+func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string, enableDraft bool) (err error) {
 	const maxQueryMismatchValidationAttempts = 2
 
 	if ctx == nil {
@@ -688,9 +1020,22 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	response := llm.ReasoningSearchResponse{}
 	resolvedProviderSessionID := ""
 	reasoningIterations := 0
+	runProviderSessionID := ""
 	defer func() {
 		if err == nil {
 			return
+		}
+		if workflowStore != nil {
+			if finalized, finalErr := workflowStore.IsFinalizedFromDraft(responseSessionID); finalErr == nil && finalized {
+				log.Infof("Reasoning Search background error ignored because draft was already returned session=%s err=%v", responseSessionID, err)
+				return
+			}
+			if runProviderSessionID != "" {
+				if current, currentErr := reasoningStageProviderSessionCurrent(workflowStore, responseSessionID, runProviderSessionID); currentErr == nil && !current {
+					log.Infof("Reasoning Search background error ignored because a newer follow-up run is active session=%s err=%v", responseSessionID, err)
+					return
+				}
+			}
 		}
 		if workflowStore != nil {
 			if clearErr := workflowStore.SetResponseSnapshot(responseSessionID, nil); clearErr != nil && !errors.Is(clearErr, llm.ErrReasoningSessionNotFoundOrExpired) {
@@ -726,8 +1071,10 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	}
 	initialRequestCompleted := workflowSession.InitialRequestCompleted
 	cachedInitialResponse := workflowSession.CachedInitialResponse
+	draftFollowupSeed := workflowSession.DraftFollowupSeed
 	providerID := strings.TrimSpace(reasoningStage.ProviderSessionID)
 	providerSessionID := &providerID
+	runProviderSessionID = providerID
 	progressSessionID := responseSessionID
 	followupsUsed := workflowSession.FollowupCount
 	followupsRemaining := reasoningStage.MaxFollowups - followupsUsed
@@ -852,6 +1199,18 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 			},
 		)
 	}
+	if draftFollowupSeed != nil {
+		messages = append(messages,
+			llm.LLMBotMessage{
+				Role:    "user",
+				Content: draftFollowupSeed.Query,
+			},
+			llm.LLMBotMessage{
+				Role:    "assistant",
+				Content: buildReasoningSearchDraftFollowupSeedAssistantContent(draftFollowupSeed),
+			},
+		)
+	}
 	messages = append(messages, llm.LLMBotMessage{
 		Role:    "user",
 		Content: r.Query,
@@ -871,9 +1230,15 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	expectedQuery := strings.TrimSpace(r.Query)
 	validateResponseQuery := !initialRequestCompleted
 	currentProviderSessionID := providerSessionID
+	serviceCtx := ctx
+	if enableDraft {
+		serviceCtx = llm.ContextWithReasoningDraftState(ctx, workflowStore, responseSessionID, func(sessionID string) {
+			maybeStartReasoningSearchDraft(runtime, db, r.UILanguage, sessionID, r.Deb)
+		})
+	}
 	var previousReasoningAttempt *llm.ReasoningSearchResponse
 	for attempt := 1; attempt <= maxQueryMismatchValidationAttempts; attempt++ {
-		resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(ctx,
+		resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(serviceCtx,
 			currentProviderSessionID,
 			&progressSessionID,
 			responseSchema,
@@ -916,10 +1281,17 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		break
 	}
 	reasoningIterations = response.ReasoningIterations
+	if current, err := reasoningStageProviderSessionCurrent(workflowStore, responseSessionID, providerID); err != nil {
+		return err
+	} else if !current {
+		log.Infof("Reasoning Search result ignored because a newer follow-up run is active session=%s", responseSessionID)
+		return nil
+	}
 	reasoningStage.ProviderSessionID = resolvedProviderSessionID
 	if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStageReasoning, reasoningStage); err != nil {
 		return err
 	}
+	runProviderSessionID = reasoningStage.ProviderSessionID
 	if usedCachedInitialResponse {
 		if err := workflowStore.SetCachedInitialResponse(responseSessionID, nil); err != nil {
 			return err
@@ -938,6 +1310,13 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 			response.Debug.PlanningModelUsage = planningDebug.UsageBreakdown()
 			response.Debug.Add(planningDebug)
 		}
+	}
+	if finalized, err := workflowStore.IsFinalizedFromDraft(responseSessionID); err != nil {
+		return err
+	} else if finalized {
+		log.Infof("Reasoning Search reasoning stage finished after draft was already returned session=%s; skipping verification", responseSessionID)
+		progressStore.Complete(responseSessionID, progressIterationOffset+response.ReasoningIterations)
+		return nil
 	}
 	progressCompleteIteration := progressIterationOffset + response.ReasoningIterations
 	if verificationStage != nil {
@@ -1113,12 +1492,19 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 								log.Warnf("Reasoning Search rerun after verification failed: %v", err)
 								response = originalResponse
 							} else {
+								if current, currentErr := reasoningStageProviderSessionCurrent(workflowStore, responseSessionID, reasoningStage.ProviderSessionID); currentErr != nil {
+									return currentErr
+								} else if !current {
+									log.Infof("Reasoning Search verification rerun ignored because a newer follow-up run is active session=%s", responseSessionID)
+									return nil
+								}
 								resolvedProviderSessionID = rerunResolvedProviderSessionID
 								reasoningStage.ProviderSessionID = resolvedProviderSessionID
 								if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStageReasoning, reasoningStage); err != nil {
 									log.Warnf("Reasoning Search failed to persist rerun session state: %v", err)
 									response = originalResponse
 								} else {
+									runProviderSessionID = reasoningStage.ProviderSessionID
 									rerunResponse.SetSessionID(responseSessionID)
 									if err := enrichReasoningSearchResults(db, r.UILanguage, rerunResponse.Results); err != nil {
 										log.Warnf("Reasoning Search failed to enrich rerun results: %v", err)
@@ -1218,7 +1604,6 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 			}
 		}
 	}
-
 	if !initialRequestCompleted {
 		if err := workflowStore.SetFollowupState(responseSessionID, true, followupsUsed); err != nil {
 			return err
@@ -1227,6 +1612,24 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 
 	response.SetFollowupBudget(reasoningStage.MaxFollowups, followupsUsed, followupsRemaining)
 	reasoningIterations = response.ReasoningIterations
+	if finalized, err := workflowStore.IsFinalizedFromDraft(responseSessionID); err != nil {
+		return err
+	} else if finalized {
+		log.Infof("Reasoning Search finished after draft was already returned session=%s; keeping draft snapshot", responseSessionID)
+		progressStore.Complete(responseSessionID, progressCompleteIteration)
+		return nil
+	}
+	if current, err := reasoningStageProviderSessionCurrent(workflowStore, responseSessionID, reasoningStage.ProviderSessionID); err != nil {
+		return err
+	} else if !current {
+		log.Infof("Reasoning Search final response ignored because a newer follow-up run is active session=%s", responseSessionID)
+		return nil
+	}
+	if runs, usage, err := workflowStore.DraftModelUsage(responseSessionID); err != nil {
+		return err
+	} else {
+		mergeReasoningSearchDraftUsage(&response, runs, usage, r.Deb)
+	}
 	if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
 		return err
 	}
@@ -1299,6 +1702,25 @@ func refreshProviderReasoningSession(runtime *llm.Runtime, stage llm.ReasoningWo
 	if err := service.RefreshReasoningSession(providerSessionID); err != nil {
 		log.Warnf("Reasoning Search failed refreshing provider session: provider=%q err=%v", stage.Provider, err)
 	}
+}
+
+func reasoningStageProviderSessionCurrent(workflowStore *llm.ReasoningWorkflowSessionStore, sessionID string, expectedProviderSessionID string) (bool, error) {
+	if workflowStore == nil {
+		return false, errors.New("reasoning workflow is not initialized")
+	}
+	// A workflow session can outlive one provider-side reasoning session. For
+	// example, a draft follow-up starts a fresh provider session while the old
+	// background run may still finish later. Only the provider session currently
+	// stored on the workflow is allowed to persist results or mark failures.
+	workflowSession, err := workflowStore.Get(sessionID)
+	if err != nil {
+		return false, err
+	}
+	stage, ok := workflowSession.Stages[llm.ReasoningWorkflowStageReasoning]
+	if !ok {
+		return false, llm.ErrReasoningSessionNotFoundOrExpired
+	}
+	return strings.TrimSpace(stage.ProviderSessionID) == strings.TrimSpace(expectedProviderSessionID), nil
 }
 
 func buildFirstIterationPlannedTools(manager *llm.ReasoningToolManager, plan *llm.ReasoningSearchPlanningResponse) ([]llm.ToolCall, map[string]llm.ToolHandler, error) {

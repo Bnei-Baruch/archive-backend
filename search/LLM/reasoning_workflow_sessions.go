@@ -3,6 +3,8 @@ package llm
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"sync"
 	"time"
 )
@@ -10,6 +12,8 @@ import (
 const ReasoningWorkflowStageReasoning = "reasoning"
 const ReasoningWorkflowStagePlanning = "planning"
 const ReasoningWorkflowStageVerification = "verification"
+
+var ErrReasoningDraftNotReady = errors.New("reasoning draft is not ready")
 
 // ReasoningWorkflowSessionStore keeps client-facing workflow sessions in local
 // process memory. It works only on a single machine; multi-instance deployments
@@ -32,6 +36,7 @@ type ReasoningWorkflowStageSession struct {
 
 type ReasoningWorkflowSession struct {
 	ID                      string
+	Query                   string
 	Stages                  map[string]ReasoningWorkflowStageSession
 	InitialRequestCompleted bool
 	FollowupCount           int
@@ -40,9 +45,21 @@ type ReasoningWorkflowSession struct {
 	// session so the fetch endpoint can return it after the background run ends.
 	// This is session-scoped state, not the shared query-based ReasoningCache.
 	ResponseSnapshotJSON []byte
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-	ExpiresAt            time.Time
+	// PartialResults stores full ES result data collected during the run. A cheap
+	// draft model periodically turns this into a response that finish-now can
+	// return immediately.
+	PartialResults         []ReasoningSearchResult
+	PartialResultsRevision int
+	DraftResponseJSON      []byte
+	DraftRevision          int
+	DraftInProgress        bool
+	LastDraftAt            time.Time
+	FinalizedFromDraft     bool
+	DraftFollowupSeed      *ReasoningSearchResponse
+	DraftModelRuns         []ReasoningSearchUsageBreakdown
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	ExpiresAt              time.Time
 }
 
 type ReasoningWorkflowSessionStore struct {
@@ -114,6 +131,10 @@ func (s *ReasoningWorkflowSessionStore) Get(sessionID string) (*ReasoningWorkflo
 	}
 	copySession.CachedInitialResponse = cloneReasoningSearchCacheEntry(session.CachedInitialResponse)
 	copySession.ResponseSnapshotJSON = append([]byte(nil), session.ResponseSnapshotJSON...)
+	copySession.PartialResults = cloneReasoningSearchResults(session.PartialResults)
+	copySession.DraftResponseJSON = append([]byte(nil), session.DraftResponseJSON...)
+	copySession.DraftFollowupSeed = cloneReasoningSearchResponse(session.DraftFollowupSeed)
+	copySession.DraftModelRuns = append([]ReasoningSearchUsageBreakdown(nil), session.DraftModelRuns...)
 	return &copySession, nil
 }
 
@@ -156,6 +177,27 @@ func (s *ReasoningWorkflowSessionStore) SetStage(sessionID string, stageName str
 		session.Stages = map[string]ReasoningWorkflowStageSession{}
 	}
 	session.Stages[stageName] = stage
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func (s *ReasoningWorkflowSessionStore) SetQuery(sessionID string, query string) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+
+	session.Query = query
 	session.UpdatedAt = now
 	session.ExpiresAt = now.Add(s.ttl)
 	return nil
@@ -229,15 +271,341 @@ func (s *ReasoningWorkflowSessionStore) SetResponseSnapshot(sessionID string, re
 	}
 
 	session.ResponseSnapshotJSON = append([]byte(nil), responseJSON...)
+	session.DraftFollowupSeed = nil
+	if response == nil {
+		session.PartialResults = nil
+		session.PartialResultsRevision = 0
+		session.DraftResponseJSON = nil
+		session.DraftRevision = 0
+		session.DraftInProgress = false
+		session.LastDraftAt = time.Time{}
+		session.FinalizedFromDraft = false
+		session.DraftModelRuns = nil
+	}
 	session.UpdatedAt = now
 	session.ExpiresAt = now.Add(s.ttl)
 	return nil
+}
+
+func (s *ReasoningWorkflowSessionStore) AddPartialResults(sessionID string, results []ReasoningSearchResult) (int, int, error) {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return 0, 0, ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return 0, 0, ErrReasoningSessionNotFoundOrExpired
+	}
+	if session.FinalizedFromDraft {
+		return session.PartialResultsRevision, 0, nil
+	}
+
+	seen := make(map[string]bool, len(session.PartialResults))
+	for _, result := range session.PartialResults {
+		if result.MDBUID != "" {
+			seen[result.MDBUID] = true
+		}
+	}
+
+	added := 0
+	for _, result := range results {
+		result = cloneReasoningSearchResult(result)
+		if result.MDBUID == "" || seen[result.MDBUID] {
+			continue
+		}
+		seen[result.MDBUID] = true
+		session.PartialResults = append(session.PartialResults, result)
+		added++
+	}
+	if added > 0 {
+		session.PartialResultsRevision++
+		session.UpdatedAt = now
+		session.ExpiresAt = now.Add(s.ttl)
+	}
+
+	return session.PartialResultsRevision, added, nil
+}
+
+func (s *ReasoningWorkflowSessionStore) TryStartDraft(sessionID string, minInterval time.Duration, minResults int) ([]ReasoningSearchResult, int, string, bool, error) {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return nil, 0, "", false, ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return nil, 0, "", false, ErrReasoningSessionNotFoundOrExpired
+	}
+	if session.FinalizedFromDraft || session.DraftInProgress || len(session.PartialResults) < minResults || session.DraftRevision == session.PartialResultsRevision {
+		return nil, session.PartialResultsRevision, session.Query, false, nil
+	}
+	if minInterval > 0 && !session.LastDraftAt.IsZero() && now.Sub(session.LastDraftAt) < minInterval {
+		return nil, session.PartialResultsRevision, session.Query, false, nil
+	}
+
+	session.DraftInProgress = true
+	session.LastDraftAt = now
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+
+	return cloneReasoningSearchResults(session.PartialResults), session.PartialResultsRevision, session.Query, true, nil
+}
+
+func (s *ReasoningWorkflowSessionStore) FinishDraft(sessionID string, revision int, response *ReasoningSearchResponse) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if session.FinalizedFromDraft {
+		session.DraftInProgress = false
+		return nil
+	}
+
+	if response != nil && response.Debug != nil && len(response.Debug.DraftModelRuns) != 0 {
+		session.DraftModelRuns = append(session.DraftModelRuns, response.Debug.DraftModelRuns...)
+		response.Debug.DraftModelRuns = append([]ReasoningSearchUsageBreakdown(nil), session.DraftModelRuns...)
+		if usage := aggregateReasoningSearchUsageBreakdowns(session.DraftModelRuns); usage != nil {
+			response.Debug.DraftModelUsage = usage
+			response.UsedTokens = usage.TotalTokens
+			response.Debug.TotalTokens = usage.TotalTokens
+			response.Debug.InputTokens = usage.InputTokens
+			response.Debug.CachedInputTokens = usage.CachedInputTokens
+			response.Debug.UncachedInputTokens = usage.UncachedInputTokens
+			response.Debug.OutputTokens = usage.OutputTokens
+			response.Debug.ReasoningTokens = usage.ReasoningTokens
+			response.Debug.PricingConfigured = usage.PricingConfigured
+			response.Debug.InputPer1MTokensUSD = usage.InputPer1MTokensUSD
+			response.Debug.CachedInputPer1MTokensUSD = usage.CachedInputPer1MTokensUSD
+			response.Debug.OutputPer1MTokensUSD = usage.OutputPer1MTokensUSD
+			response.Debug.EstimatedInputCostUSD = usage.EstimatedInputCostUSD
+			response.Debug.EstimatedCachedInputCostUSD = usage.EstimatedCachedInputCostUSD
+			response.Debug.EstimatedOutputCostUSD = usage.EstimatedOutputCostUSD
+			response.Debug.EstimatedCostUSD = usage.EstimatedCostUSD
+		}
+	}
+
+	var responseJSON []byte
+	if response != nil {
+		raw, err := marshalJSON(response)
+		if err != nil {
+			return err
+		}
+		responseJSON = []byte(raw)
+	}
+
+	session.DraftResponseJSON = append([]byte(nil), responseJSON...)
+	session.DraftRevision = revision
+	session.DraftInProgress = false
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func (s *ReasoningWorkflowSessionStore) DraftModelUsage(sessionID string) ([]ReasoningSearchUsageBreakdown, *ReasoningSearchUsageBreakdown, error) {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return nil, nil, ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return nil, nil, ErrReasoningSessionNotFoundOrExpired
+	}
+
+	runs := append([]ReasoningSearchUsageBreakdown(nil), session.DraftModelRuns...)
+	return runs, aggregateReasoningSearchUsageBreakdowns(runs), nil
+}
+
+func (s *ReasoningWorkflowSessionStore) FailDraft(sessionID string) {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok || now.After(session.ExpiresAt) {
+		return
+	}
+	session.DraftInProgress = false
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+}
+
+func (s *ReasoningWorkflowSessionStore) FinalizeWithDraft(sessionID string) (*ReasoningSearchResponse, error) {
+	now := time.Now()
+
+	s.mu.Lock()
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		s.mu.Unlock()
+		return nil, ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		s.mu.Unlock()
+		return nil, ErrReasoningSessionNotFoundOrExpired
+	}
+	if len(session.DraftResponseJSON) == 0 {
+		s.mu.Unlock()
+		return nil, ErrReasoningDraftNotReady
+	}
+	raw := append([]byte(nil), session.DraftResponseJSON...)
+	session.ResponseSnapshotJSON = append([]byte(nil), raw...)
+	session.FinalizedFromDraft = true
+	session.InitialRequestCompleted = true
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	s.mu.Unlock()
+
+	response := ReasoningSearchResponse{}
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+func (s *ReasoningWorkflowSessionStore) StartDraftFollowup(sessionID string, query string, followupCount int, reasoningStage ReasoningWorkflowStageSession) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if !session.FinalizedFromDraft || len(session.ResponseSnapshotJSON) == 0 {
+		return ErrReasoningDraftNotReady
+	}
+
+	seed := ReasoningSearchResponse{}
+	if err := json.Unmarshal(session.ResponseSnapshotJSON, &seed); err != nil {
+		return err
+	}
+
+	if session.Stages == nil {
+		session.Stages = map[string]ReasoningWorkflowStageSession{}
+	}
+	session.Stages[ReasoningWorkflowStageReasoning] = reasoningStage
+	session.Query = query
+	session.InitialRequestCompleted = true
+	session.FollowupCount = followupCount
+	session.CachedInitialResponse = nil
+	session.ResponseSnapshotJSON = nil
+	session.PartialResults = nil
+	session.PartialResultsRevision = 0
+	session.DraftResponseJSON = nil
+	session.DraftRevision = 0
+	session.DraftInProgress = false
+	session.LastDraftAt = time.Time{}
+	session.FinalizedFromDraft = false
+	session.DraftFollowupSeed = &seed
+	session.DraftModelRuns = nil
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func (s *ReasoningWorkflowSessionStore) IsFinalizedFromDraft(sessionID string) (bool, error) {
+	now := time.Now()
+
+	s.mu.RLock()
+	session, ok := s.sessions[sessionID]
+	s.mu.RUnlock()
+	if !ok {
+		return false, ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		s.mu.Lock()
+		delete(s.sessions, sessionID)
+		s.mu.Unlock()
+		return false, ErrReasoningSessionNotFoundOrExpired
+	}
+	return session.FinalizedFromDraft, nil
 }
 
 func (s *ReasoningWorkflowSessionStore) Close() error {
 	close(s.stop)
 	<-s.done
 	return nil
+}
+
+func cloneReasoningSearchResults(results []ReasoningSearchResult) []ReasoningSearchResult {
+	if results == nil {
+		return nil
+	}
+	cloned := make([]ReasoningSearchResult, len(results))
+	for i, result := range results {
+		cloned[i] = cloneReasoningSearchResult(result)
+	}
+	return cloned
+}
+
+func cloneReasoningSearchResult(result ReasoningSearchResult) ReasoningSearchResult {
+	result.Highlights = append([]string(nil), result.Highlights...)
+	return result
+}
+
+func cloneReasoningSearchResponse(response *ReasoningSearchResponse) *ReasoningSearchResponse {
+	if response == nil {
+		return nil
+	}
+	raw, err := marshalJSON(response)
+	if err != nil {
+		return nil
+	}
+	cloned := ReasoningSearchResponse{}
+	if err := json.Unmarshal([]byte(raw), &cloned); err != nil {
+		return nil
+	}
+	return &cloned
+}
+
+func aggregateReasoningSearchUsageBreakdowns(usages []ReasoningSearchUsageBreakdown) *ReasoningSearchUsageBreakdown {
+	if len(usages) == 0 {
+		return nil
+	}
+	total := usages[0]
+	for _, usage := range usages[1:] {
+		total.TotalTokens += usage.TotalTokens
+		total.InputTokens += usage.InputTokens
+		total.CachedInputTokens += usage.CachedInputTokens
+		total.UncachedInputTokens += usage.UncachedInputTokens
+		total.OutputTokens += usage.OutputTokens
+		total.ReasoningTokens += usage.ReasoningTokens
+		total.EstimatedInputCostUSD += usage.EstimatedInputCostUSD
+		total.EstimatedCachedInputCostUSD += usage.EstimatedCachedInputCostUSD
+		total.EstimatedOutputCostUSD += usage.EstimatedOutputCostUSD
+		total.EstimatedCostUSD += usage.EstimatedCostUSD
+		total.PricingConfigured = total.PricingConfigured && usage.PricingConfigured
+	}
+	return &total
 }
 
 func (s *ReasoningWorkflowSessionStore) cleanupLoop() {

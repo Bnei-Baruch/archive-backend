@@ -75,6 +75,8 @@ type ReasoningSearchDebugInfo struct {
 	PlanningModelUsage           *ReasoningSearchUsageBreakdown   `json:"planning_model_usage,omitempty"`
 	MainModelUsage               *ReasoningSearchUsageBreakdown   `json:"main_model_usage,omitempty"`
 	AIToolsUsage                 *ReasoningSearchUsageBreakdown   `json:"ai_tools_usage,omitempty"`
+	DraftModelUsage              *ReasoningSearchUsageBreakdown   `json:"draft_model_usage,omitempty"`
+	DraftModelRuns               []ReasoningSearchUsageBreakdown  `json:"draft_model_runs,omitempty"`
 	AIToolsCalls                 []ReasoningSearchAIToolCallDebug `json:"ai_tools_calls,omitempty"`
 	VerificationModel            string                           `json:"verification_model,omitempty"`
 	VerificationReasoningEffort  string                           `json:"verification_reasoning_effort,omitempty"`
@@ -309,6 +311,10 @@ func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {
 		return
 	}
 
+	hadUsageOrCost := d.hasUsageOrCost()
+	hadPricingConfigured := d.PricingConfigured
+	otherHasUsageOrCost := other.hasUsageOrCost()
+
 	d.TotalTokens += other.TotalTokens
 	d.InputTokens += other.InputTokens
 	d.CachedInputTokens += other.CachedInputTokens
@@ -322,8 +328,20 @@ func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {
 	if len(other.AIToolsCalls) != 0 {
 		d.AIToolsCalls = append(d.AIToolsCalls, other.AIToolsCalls...)
 	}
-	if other.hasUsageOrCost() && !other.PricingConfigured {
-		d.PricingConfigured = false
+	if d.DraftModelUsage == nil && other.DraftModelUsage != nil {
+		copy := *other.DraftModelUsage
+		d.DraftModelUsage = &copy
+	}
+	if len(other.DraftModelRuns) != 0 {
+		d.DraftModelRuns = append(d.DraftModelRuns, other.DraftModelRuns...)
+		d.DraftModelUsage = aggregateReasoningSearchUsageBreakdowns(d.DraftModelRuns)
+	}
+	if otherHasUsageOrCost {
+		if !hadUsageOrCost {
+			d.PricingConfigured = other.PricingConfigured
+		} else {
+			d.PricingConfigured = hadPricingConfigured && other.PricingConfigured
+		}
 	}
 }
 

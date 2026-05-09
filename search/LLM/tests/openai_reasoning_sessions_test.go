@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -184,6 +185,31 @@ func TestReasoningProgressStoreResultFlags(t *testing.T) {
 	}
 }
 
+func TestReasoningProgressStoreDraftAvailabilityFlag(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	store.ReportDraftAvailability("session-1")
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if !status.HasDraftResults {
+		t.Fatalf("expected has_draft_results")
+	}
+
+	store.Reserve("session-1")
+	status, err = store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected second get error: %v", err)
+	}
+	if status.HasDraftResults {
+		t.Fatalf("reserve should reset has_draft_results")
+	}
+}
+
 func TestReasoningProgressSearchResultsAccumulateAcrossReports(t *testing.T) {
 	store := llm.NewReasoningProgressStore(5 * time.Minute)
 	defer store.Close()
@@ -219,6 +245,27 @@ func TestReasoningProgressSearchResultsAccumulateAcrossReports(t *testing.T) {
 	}
 	if !status.HasPotentiallyGoodResults {
 		t.Fatalf("expected accumulated unique results across searches to be potentially good")
+	}
+}
+
+func TestReasoningProgressSearchResultsEmptySignalsStillMarkAnyResults(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	ctx := llm.ContextWithReasoningToolState(context.Background(), store, "session-1")
+
+	llm.ReportReasoningProgressSearchResults(ctx, nil)
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if !status.HasAnyResults {
+		t.Fatalf("expected has_any_results")
+	}
+	if status.HasPotentiallyGoodResults {
+		t.Fatalf("did not expect has_potentially_good_results")
 	}
 }
 
@@ -551,5 +598,348 @@ func TestReasoningWorkflowSessionStoreFollowupLifecycle(t *testing.T) {
 	}
 	if session.FollowupCount != 2 {
 		t.Fatalf("unexpected follow-up count after second follow-up: %d", session.FollowupCount)
+	}
+}
+
+func TestReasoningWorkflowSessionStoreDraftLifecycle(t *testing.T) {
+	store := llm.NewReasoningWorkflowSessionStore(5 * time.Minute)
+	defer store.Close()
+
+	sessionID, err := store.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:          "openai",
+		Model:             "gpt-5.4",
+		ReasoningEffort:   "low",
+		MaxFollowups:      2,
+		ProviderSessionID: "provider-session",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if err := store.SetQuery(sessionID, "אהבה"); err != nil {
+		t.Fatalf("unexpected set query error: %v", err)
+	}
+
+	revision, added, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
+		{MDBUID: "uid-1", ResultType: "sources", Title: "Source", Highlights: []string{"one"}},
+		{MDBUID: "uid-2", ResultType: "units", Title: "Unit", Highlights: []string{"two"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected add partial results error: %v", err)
+	}
+	if revision != 1 || added != 2 {
+		t.Fatalf("unexpected revision/added: %d/%d", revision, added)
+	}
+
+	results, draftRevision, query, ok, err := store.TryStartDraft(sessionID, time.Minute, 2)
+	if err != nil {
+		t.Fatalf("unexpected try start draft error: %v", err)
+	}
+	if !ok || draftRevision != revision || query != "אהבה" || len(results) != 2 {
+		t.Fatalf("unexpected draft start: ok=%t revision=%d query=%q results=%d", ok, draftRevision, query, len(results))
+	}
+
+	response := &llm.ReasoningSearchResponse{
+		Query:   query,
+		Summary: "draft",
+		Results: []llm.ReasoningSearchResult{
+			{MDBUID: "uid-1", Reason: "reason"},
+		},
+	}
+	response.SetSessionID(sessionID)
+	if err := store.FinishDraft(sessionID, draftRevision, response); err != nil {
+		t.Fatalf("unexpected finish draft error: %v", err)
+	}
+
+	finalized, err := store.IsFinalizedFromDraft(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected finalized check error: %v", err)
+	}
+	if finalized {
+		t.Fatalf("did not expect finalized before finish-now")
+	}
+
+	draft, err := store.FinalizeWithDraft(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected finalize draft error: %v", err)
+	}
+	if draft.SessionID != sessionID || len(draft.Results) != 1 || draft.Results[0].MDBUID != "uid-1" {
+		t.Fatalf("unexpected draft response: %#v", draft)
+	}
+	finalized, err = store.IsFinalizedFromDraft(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected finalized check after finalize error: %v", err)
+	}
+	if !finalized {
+		t.Fatalf("expected finalized from draft")
+	}
+
+	updatedStage := llm.ReasoningWorkflowStageSession{
+		Provider:          "openai",
+		Model:             "gpt-5.4",
+		ReasoningEffort:   "low",
+		MaxFollowups:      2,
+		ProviderSessionID: "fresh-provider-session",
+	}
+	if err := store.StartDraftFollowup(sessionID, "follow-up query", 1, updatedStage); err != nil {
+		t.Fatalf("unexpected start draft follow-up error: %v", err)
+	}
+	session, err := store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected get after draft follow-up start: %v", err)
+	}
+	if session.FinalizedFromDraft {
+		t.Fatalf("expected draft finalized flag to be reset")
+	}
+	if !session.InitialRequestCompleted || session.FollowupCount != 1 {
+		t.Fatalf("unexpected follow-up state: completed=%t count=%d", session.InitialRequestCompleted, session.FollowupCount)
+	}
+	if session.Query != "follow-up query" {
+		t.Fatalf("unexpected follow-up query: %q", session.Query)
+	}
+	stage := session.Stages[llm.ReasoningWorkflowStageReasoning]
+	if stage.ProviderSessionID != "fresh-provider-session" {
+		t.Fatalf("unexpected provider session id: %q", stage.ProviderSessionID)
+	}
+	if session.DraftFollowupSeed == nil || session.DraftFollowupSeed.Summary != "draft" {
+		t.Fatalf("expected draft follow-up seed, got %#v", session.DraftFollowupSeed)
+	}
+}
+
+func TestReasoningWorkflowDraftRequiresMinimumResults(t *testing.T) {
+	store := llm.NewReasoningWorkflowSessionStore(time.Hour)
+	defer store.Close()
+
+	sessionID, err := store.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:        "openai",
+		Model:           "gpt-5.4",
+		ReasoningEffort: "low",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if err := store.SetQuery(sessionID, "אהבה"); err != nil {
+		t.Fatalf("unexpected set query error: %v", err)
+	}
+	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
+		{MDBUID: "uid-1", ResultType: "sources", Title: "Source"},
+	}); err != nil {
+		t.Fatalf("unexpected add partial results error: %v", err)
+	}
+
+	_, _, _, ok, err := store.TryStartDraft(sessionID, time.Minute, 2)
+	if err != nil {
+		t.Fatalf("unexpected try start draft error: %v", err)
+	}
+	if ok {
+		t.Fatalf("did not expect draft to start before minimum result count")
+	}
+
+	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
+		{MDBUID: "uid-2", ResultType: "units", Title: "Unit"},
+	}); err != nil {
+		t.Fatalf("unexpected second add partial results error: %v", err)
+	}
+
+	results, _, _, ok, err := store.TryStartDraft(sessionID, time.Minute, 2)
+	if err != nil {
+		t.Fatalf("unexpected try start draft after minimum error: %v", err)
+	}
+	if !ok || len(results) != 2 {
+		t.Fatalf("expected draft to start after minimum result count, ok=%t results=%d", ok, len(results))
+	}
+}
+
+func TestReasoningWorkflowDraftPartialResultsAreSessionIsolated(t *testing.T) {
+	store := llm.NewReasoningWorkflowSessionStore(time.Hour)
+	defer store.Close()
+
+	createSession := func(query string) string {
+		sessionID, err := store.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+			Provider:        "openai",
+			Model:           "gpt-5.4",
+			ReasoningEffort: "low",
+		})
+		if err != nil {
+			t.Fatalf("unexpected create error: %v", err)
+		}
+		if err := store.SetQuery(sessionID, query); err != nil {
+			t.Fatalf("unexpected set query error: %v", err)
+		}
+		return sessionID
+	}
+
+	sessionA := createSession("query-a")
+	sessionB := createSession("query-b")
+
+	var wg sync.WaitGroup
+	add := func(sessionID string, prefix string) {
+		defer wg.Done()
+		for i := 0; i < 20; i++ {
+			_, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{{
+				MDBUID: prefix + "-" + string(rune('a'+i)),
+				Title:  prefix,
+			}})
+			if err != nil {
+				t.Errorf("unexpected add partial results error: %v", err)
+			}
+		}
+	}
+	wg.Add(2)
+	go add(sessionA, "a")
+	go add(sessionB, "b")
+	wg.Wait()
+
+	resultsA, _, queryA, ok, err := store.TryStartDraft(sessionA, 0, 1)
+	if err != nil || !ok {
+		t.Fatalf("unexpected draft start for session A: ok=%t err=%v", ok, err)
+	}
+	resultsB, _, queryB, ok, err := store.TryStartDraft(sessionB, 0, 1)
+	if err != nil || !ok {
+		t.Fatalf("unexpected draft start for session B: ok=%t err=%v", ok, err)
+	}
+	if queryA != "query-a" || queryB != "query-b" {
+		t.Fatalf("unexpected draft queries: %q %q", queryA, queryB)
+	}
+	for _, result := range resultsA {
+		if len(result.MDBUID) == 0 || result.MDBUID[0] != 'a' {
+			t.Fatalf("session A got result from another session: %#v", result)
+		}
+	}
+	for _, result := range resultsB {
+		if len(result.MDBUID) == 0 || result.MDBUID[0] != 'b' {
+			t.Fatalf("session B got result from another session: %#v", result)
+		}
+	}
+}
+
+func TestReasoningWorkflowDraftAccumulatesModelRuns(t *testing.T) {
+	store := llm.NewReasoningWorkflowSessionStore(time.Hour)
+	defer store.Close()
+
+	sessionID, err := store.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:        "openai",
+		Model:           "gpt-5.4",
+		ReasoningEffort: "low",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if err := store.SetQuery(sessionID, "אהבה"); err != nil {
+		t.Fatalf("unexpected set query error: %v", err)
+	}
+	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
+		{MDBUID: "uid-1", ResultType: "sources", Title: "Source"},
+		{MDBUID: "uid-2", ResultType: "units", Title: "Unit"},
+	}); err != nil {
+		t.Fatalf("unexpected add partial results error: %v", err)
+	}
+
+	_, revision, _, ok, err := store.TryStartDraft(sessionID, 0, 2)
+	if err != nil || !ok {
+		t.Fatalf("unexpected first draft start: ok=%t err=%v", ok, err)
+	}
+	first := &llm.ReasoningSearchResponse{
+		Query:   "אהבה",
+		Summary: "first",
+		Results: []llm.ReasoningSearchResult{{MDBUID: "uid-1"}},
+		Debug: &llm.ReasoningSearchDebugInfo{
+			Enabled:           true,
+			Model:             "gpt-5.4-nano",
+			PricingConfigured: true,
+			TotalTokens:       10,
+			InputTokens:       7,
+			OutputTokens:      3,
+			EstimatedCostUSD:  0.1,
+			DraftModelRuns: []llm.ReasoningSearchUsageBreakdown{{
+				Model:             "gpt-5.4-nano",
+				PricingConfigured: true,
+				TotalTokens:       10,
+				InputTokens:       7,
+				OutputTokens:      3,
+				EstimatedCostUSD:  0.1,
+			}},
+		},
+	}
+	if err := store.FinishDraft(sessionID, revision, first); err != nil {
+		t.Fatalf("unexpected first finish draft error: %v", err)
+	}
+
+	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
+		{MDBUID: "uid-3", ResultType: "units", Title: "Unit 2"},
+	}); err != nil {
+		t.Fatalf("unexpected second add partial results error: %v", err)
+	}
+	_, revision, _, ok, err = store.TryStartDraft(sessionID, 0, 2)
+	if err != nil || !ok {
+		t.Fatalf("unexpected second draft start: ok=%t err=%v", ok, err)
+	}
+	second := &llm.ReasoningSearchResponse{
+		Query:   "אהבה",
+		Summary: "second",
+		Results: []llm.ReasoningSearchResult{{MDBUID: "uid-2"}},
+		Debug: &llm.ReasoningSearchDebugInfo{
+			Enabled:           true,
+			Model:             "gpt-5.4-nano",
+			PricingConfigured: true,
+			TotalTokens:       20,
+			InputTokens:       15,
+			OutputTokens:      5,
+			EstimatedCostUSD:  0.2,
+			DraftModelRuns: []llm.ReasoningSearchUsageBreakdown{{
+				Model:             "gpt-5.4-nano",
+				PricingConfigured: true,
+				TotalTokens:       20,
+				InputTokens:       15,
+				OutputTokens:      5,
+				EstimatedCostUSD:  0.2,
+			}},
+		},
+	}
+	if err := store.FinishDraft(sessionID, revision, second); err != nil {
+		t.Fatalf("unexpected second finish draft error: %v", err)
+	}
+
+	draft, err := store.FinalizeWithDraft(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected finalize draft error: %v", err)
+	}
+	if draft.Debug == nil {
+		t.Fatalf("expected draft debug")
+	}
+	if len(draft.Debug.DraftModelRuns) != 2 {
+		t.Fatalf("expected two draft model runs, got %d", len(draft.Debug.DraftModelRuns))
+	}
+	if draft.UsedTokens != 30 || draft.Debug.TotalTokens != 30 || draft.Debug.DraftModelUsage.TotalTokens != 30 {
+		t.Fatalf("unexpected accumulated tokens: used=%d debug=%d draft=%#v", draft.UsedTokens, draft.Debug.TotalTokens, draft.Debug.DraftModelUsage)
+	}
+	if !draft.Debug.PricingConfigured || draft.Debug.EstimatedCostUSD < 0.299 || draft.Debug.EstimatedCostUSD > 0.301 {
+		t.Fatalf("unexpected accumulated pricing: configured=%t cost=%f", draft.Debug.PricingConfigured, draft.Debug.EstimatedCostUSD)
+	}
+}
+
+func TestReasoningDebugInfoAddPreservesConfiguredPricing(t *testing.T) {
+	total := &llm.ReasoningSearchDebugInfo{}
+	total.Add(&llm.ReasoningSearchDebugInfo{
+		PricingConfigured: true,
+		TotalTokens:       10,
+		EstimatedCostUSD:  0.1,
+	})
+	if !total.PricingConfigured {
+		t.Fatalf("expected aggregate pricing to stay configured")
+	}
+	total.Add(&llm.ReasoningSearchDebugInfo{
+		PricingConfigured: true,
+		TotalTokens:       20,
+		EstimatedCostUSD:  0.2,
+	})
+	if !total.PricingConfigured {
+		t.Fatalf("expected aggregate pricing to stay configured after second priced usage")
+	}
+	total.Add(&llm.ReasoningSearchDebugInfo{
+		PricingConfigured: false,
+		TotalTokens:       5,
+	})
+	if total.PricingConfigured {
+		t.Fatalf("expected aggregate pricing to become unconfigured when one priced usage is missing")
 	}
 }

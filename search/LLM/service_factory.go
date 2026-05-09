@@ -62,6 +62,13 @@ type ReasoningSearchVerificationConfig struct {
 	MaxInputTokens int
 }
 
+type ReasoningSearchDraftConfig struct {
+	Provider  string
+	Model     string
+	Effort    string
+	MaxTokens int
+}
+
 type AIToolsConfig struct {
 	Provider         string
 	Model            string
@@ -886,6 +893,14 @@ func ReasoningSearchVerificationProviderFromConfig() string {
 	return provider
 }
 
+func ReasoningSearchDraftProviderFromConfig() string {
+	provider := strings.ToLower(strings.TrimSpace(viper.GetString("llm.reasoning-search-draft-provider")))
+	if provider == "" {
+		return AIToolsProviderFromConfig()
+	}
+	return provider
+}
+
 func ReasoningSearchVerificationMaxInputTokensFromConfig() int {
 	maxTokens := viper.GetInt("llm.reasoning-search-verification-max-input-tokens")
 	if maxTokens <= 0 {
@@ -1092,6 +1107,86 @@ func AIToolsConfigFromConfig() (*AIToolsConfig, error) {
 	cfg.MaxBatches = AIToolsMaxBatchesFromConfig()
 	cfg.BatchConcurrency = AIToolsBatchConcurrencyFromConfig(cfg.Provider)
 	return cfg, nil
+}
+
+func ReasoningSearchDraftConfigFromConfig() (*ReasoningSearchDraftConfig, error) {
+	provider := ReasoningSearchDraftProviderFromConfig()
+	aiToolsConfig, err := aiToolsConfigFromProvider(provider)
+	if err != nil {
+		return nil, err
+	}
+
+	model := strings.TrimSpace(viper.GetString(provider + ".reasoning-search-draft-model"))
+	if model == "" {
+		model = aiToolsConfig.Model
+	}
+	effort := strings.TrimSpace(viper.GetString(provider + ".reasoning-search-draft-effort"))
+	if effort == "" {
+		effort = aiToolsConfig.Effort
+	}
+	if err := validateReasoningSearchDraftEffort(provider, model, effort); err != nil {
+		return nil, err
+	}
+	maxTokens := viper.GetInt(provider + ".reasoning-search-draft-max-output-tokens")
+	if maxTokens <= 0 {
+		maxTokens = aiToolsConfig.MaxTokens
+	}
+	if maxTokens <= 0 {
+		maxTokens = defaultAIToolsMaxTokens
+	}
+
+	return &ReasoningSearchDraftConfig{
+		Provider:  provider,
+		Model:     model,
+		Effort:    effort,
+		MaxTokens: maxTokens,
+	}, nil
+}
+
+func validateReasoningSearchDraftEffort(provider string, model string, effort string) error {
+	switch provider {
+	case ProviderOpenAI:
+		if strings.HasPrefix(model, "gpt-oss") {
+			switch effort {
+			case "low", "medium", "high":
+				return nil
+			default:
+				return fmt.Errorf("reasoning effort %q is not supported for model %q; gpt-oss supports only low, medium, high", effort, model)
+			}
+		}
+	case ProviderOpenRouter, ProviderOllama:
+		switch effort {
+		case "minimal", "low", "medium", "high":
+			return nil
+		default:
+			return fmt.Errorf("reasoning effort %q is not supported for %s draft models; supported values are minimal, low, medium, high", effort, provider)
+		}
+	case ProviderZAI:
+		switch effort {
+		case "minimal", "low", "medium", "high", "xhigh":
+			return nil
+		default:
+			return fmt.Errorf("reasoning effort %q is not supported for Z.AI draft models; supported values are minimal, low, medium, high, xhigh", effort)
+		}
+	case ProviderArcee:
+		if effort != "" {
+			switch effort {
+			case "minimal", "low", "medium", "high":
+				return nil
+			default:
+				return fmt.Errorf("reasoning effort %q is not supported for Arcee draft models; supported values are minimal, low, medium, high", effort)
+			}
+		}
+	case ProviderDeepSeek:
+		if _, _, err := deepseekThinkingAndEffort(&effort); err != nil {
+			return err
+		}
+	case ProviderXAI:
+		if effort != "" {
+			return fmt.Errorf("xai.reasoning-search-draft-effort is not supported for model %q", model)
+		}
+	}
+	return nil
 }
 
 func AIToolsMaxBatchesFromConfig() int {

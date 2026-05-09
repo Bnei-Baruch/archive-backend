@@ -35,4 +35,6 @@ type Runtime struct {
 	Cancellations  *ReasoningCancellationStore
 	ReasoningCache *ReasoningSearchCacheStore
 	Services       map[string]Service
+	AIToolsConfig  *AIToolsConfig
+	DraftConfig    *ReasoningSearchDraftConfig
 }

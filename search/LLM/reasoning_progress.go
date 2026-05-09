@@ -37,6 +37,7 @@ type ReasoningProgressStatus struct {
 	QueryAnalyzed             bool      `json:"query_analyzed"`
 	HasAnyResults             bool      `json:"has_any_results"`
 	HasPotentiallyGoodResults bool      `json:"has_potentially_good_results"`
+	HasDraftResults           bool      `json:"has_draft_results"`
 	MayTakeLonger             bool      `json:"may_take_longer"`
 	NearFinish                bool      `json:"near_finish"`
 	UpdatedAt                 time.Time `json:"updated_at"`
@@ -81,6 +82,7 @@ func (s *ReasoningProgressStore) Reserve(sessionID string) {
 		status.QueryAnalyzed = false
 		status.HasAnyResults = false
 		status.HasPotentiallyGoodResults = false
+		status.HasDraftResults = false
 		status.MayTakeLonger = false
 		status.NearFinish = false
 		status.Done = false
@@ -191,6 +193,12 @@ func (s *ReasoningProgressStore) ReportResultAvailability(sessionID string, hasP
 		if hasPotentiallyGoodResults {
 			status.HasPotentiallyGoodResults = true
 		}
+	})
+}
+
+func (s *ReasoningProgressStore) ReportDraftAvailability(sessionID string) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.HasDraftResults = true
 	})
 }
 

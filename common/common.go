@@ -120,6 +120,8 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	verificationProvider := llm.ReasoningSearchVerificationProviderFromConfig()
 	aiToolsConfig, err := llm.AIToolsConfigFromConfig()
 	utils.Must(err)
+	draftConfig, err := llm.ReasoningSearchDraftConfigFromConfig()
+	utils.Must(err)
 	services := map[string]llm.Service{}
 
 	services[defaultProvider], err = llm.NewServiceForProviderWithProgress(defaultProvider, progress)
@@ -138,6 +140,10 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	}
 	if _, ok := services[aiToolsConfig.Provider]; !ok {
 		services[aiToolsConfig.Provider], err = llm.NewServiceForProviderWithProgress(aiToolsConfig.Provider, nil)
+		utils.Must(err)
+	}
+	if _, ok := services[draftConfig.Provider]; !ok {
+		services[draftConfig.Provider], err = llm.NewServiceForProviderWithProgress(draftConfig.Provider, nil)
 		utils.Must(err)
 	}
 
@@ -170,6 +176,8 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		Cancellations:  cancellations,
 		ReasoningCache: reasoningCache,
 		Services:       services,
+		AIToolsConfig:  aiToolsConfig,
+		DraftConfig:    draftConfig,
 	}
 
 	return clock

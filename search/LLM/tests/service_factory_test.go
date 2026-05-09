@@ -1008,6 +1008,102 @@ func TestAIToolsConfigFromConfigSupportsStub(t *testing.T) {
 	}
 }
 
+func TestReasoningSearchDraftConfigFromConfigUsesExplicitProvider(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldAIToolsProvider := viper.GetString("llm.ai-tools-provider")
+	oldDraftProvider := viper.GetString("llm.reasoning-search-draft-provider")
+	oldAIToolsModel := viper.GetString("openrouter.ai-tools-model")
+	oldAIToolsEffort := viper.GetString("openrouter.ai-tools-effort")
+	oldAIToolsMaxTokens := viper.GetInt("openrouter.ai-tools-max-output-tokens")
+	oldDraftModel := viper.GetString("openrouter.reasoning-search-draft-model")
+	oldDraftEffort := viper.GetString("openrouter.reasoning-search-draft-effort")
+	oldDraftMaxTokens := viper.GetInt("openrouter.reasoning-search-draft-max-output-tokens")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.ai-tools-provider", oldAIToolsProvider)
+	defer viper.Set("llm.reasoning-search-draft-provider", oldDraftProvider)
+	defer viper.Set("openrouter.ai-tools-model", oldAIToolsModel)
+	defer viper.Set("openrouter.ai-tools-effort", oldAIToolsEffort)
+	defer viper.Set("openrouter.ai-tools-max-output-tokens", oldAIToolsMaxTokens)
+	defer viper.Set("openrouter.reasoning-search-draft-model", oldDraftModel)
+	defer viper.Set("openrouter.reasoning-search-draft-effort", oldDraftEffort)
+	defer viper.Set("openrouter.reasoning-search-draft-max-output-tokens", oldDraftMaxTokens)
+
+	viper.Set("llm.provider", "openai")
+	viper.Set("llm.ai-tools-provider", "openai")
+	viper.Set("llm.reasoning-search-draft-provider", "openrouter")
+	viper.Set("openrouter.ai-tools-model", "openai/gpt-oss-120b")
+	viper.Set("openrouter.ai-tools-effort", "low")
+	viper.Set("openrouter.ai-tools-max-output-tokens", 1500)
+	viper.Set("openrouter.reasoning-search-draft-model", "openai/gpt-oss-20b")
+	viper.Set("openrouter.reasoning-search-draft-effort", "minimal")
+	viper.Set("openrouter.reasoning-search-draft-max-output-tokens", 777)
+
+	cfg, err := llm.ReasoningSearchDraftConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Provider != "openrouter" {
+		t.Fatalf("unexpected provider: %s", cfg.Provider)
+	}
+	if cfg.Model != "openai/gpt-oss-20b" {
+		t.Fatalf("unexpected model: %s", cfg.Model)
+	}
+	if cfg.Effort != "minimal" {
+		t.Fatalf("unexpected effort: %s", cfg.Effort)
+	}
+	if cfg.MaxTokens != 777 {
+		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
+	}
+}
+
+func TestReasoningSearchDraftConfigFromConfigDefaultsToAITools(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldAIToolsProvider := viper.GetString("llm.ai-tools-provider")
+	oldDraftProvider := viper.GetString("llm.reasoning-search-draft-provider")
+	oldAIToolsModel := viper.GetString("stub.ai-tools-model")
+	oldAIToolsEffort := viper.GetString("stub.ai-tools-effort")
+	oldAIToolsMaxTokens := viper.GetInt("stub.ai-tools-max-output-tokens")
+	oldDraftModel := viper.GetString("stub.reasoning-search-draft-model")
+	oldDraftEffort := viper.GetString("stub.reasoning-search-draft-effort")
+	oldDraftMaxTokens := viper.GetInt("stub.reasoning-search-draft-max-output-tokens")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.ai-tools-provider", oldAIToolsProvider)
+	defer viper.Set("llm.reasoning-search-draft-provider", oldDraftProvider)
+	defer viper.Set("stub.ai-tools-model", oldAIToolsModel)
+	defer viper.Set("stub.ai-tools-effort", oldAIToolsEffort)
+	defer viper.Set("stub.ai-tools-max-output-tokens", oldAIToolsMaxTokens)
+	defer viper.Set("stub.reasoning-search-draft-model", oldDraftModel)
+	defer viper.Set("stub.reasoning-search-draft-effort", oldDraftEffort)
+	defer viper.Set("stub.reasoning-search-draft-max-output-tokens", oldDraftMaxTokens)
+
+	viper.Set("llm.provider", "openai")
+	viper.Set("llm.ai-tools-provider", "stub")
+	viper.Set("llm.reasoning-search-draft-provider", "")
+	viper.Set("stub.ai-tools-model", "reader-stub")
+	viper.Set("stub.ai-tools-effort", "reader")
+	viper.Set("stub.ai-tools-max-output-tokens", 3333)
+	viper.Set("stub.reasoning-search-draft-model", "")
+	viper.Set("stub.reasoning-search-draft-effort", "")
+	viper.Set("stub.reasoning-search-draft-max-output-tokens", 0)
+
+	cfg, err := llm.ReasoningSearchDraftConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Provider != "stub" {
+		t.Fatalf("unexpected provider: %s", cfg.Provider)
+	}
+	if cfg.Model != "reader-stub" {
+		t.Fatalf("unexpected model: %s", cfg.Model)
+	}
+	if cfg.Effort != "reader" {
+		t.Fatalf("unexpected effort: %s", cfg.Effort)
+	}
+	if cfg.MaxTokens != 3333 {
+		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
+	}
+}
+
 func TestNewServiceFromConfigRejectsInvalidZAITemperature(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldToken := viper.GetString("zai.token")
