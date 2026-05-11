@@ -54,12 +54,14 @@ type ReasoningWorkflowSession struct {
 	DraftRevision          int
 	DraftInProgress        bool
 	LastDraftAt            time.Time
-	FinalizedFromDraft     bool
-	DraftFollowupSeed      *ReasoningSearchResponse
-	DraftModelRuns         []ReasoningSearchUsageBreakdown
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
-	ExpiresAt              time.Time
+	// Set only after the client explicitly asks to stop early and take the draft.
+	FinishNowRequested bool
+	FinalizedFromDraft bool
+	DraftFollowupSeed  *ReasoningSearchResponse
+	DraftModelRuns     []ReasoningSearchUsageBreakdown
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	ExpiresAt          time.Time
 }
 
 type ReasoningWorkflowSessionStore struct {
@@ -279,6 +281,7 @@ func (s *ReasoningWorkflowSessionStore) SetResponseSnapshot(sessionID string, re
 		session.DraftRevision = 0
 		session.DraftInProgress = false
 		session.LastDraftAt = time.Time{}
+		session.FinishNowRequested = false
 		session.FinalizedFromDraft = false
 		session.DraftModelRuns = nil
 	}
@@ -453,6 +456,46 @@ func (s *ReasoningWorkflowSessionStore) FailDraft(sessionID string) {
 	session.ExpiresAt = now.Add(s.ttl)
 }
 
+func (s *ReasoningWorkflowSessionStore) RequestFinishNow(sessionID string) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	session.FinishNowRequested = true
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func (s *ReasoningWorkflowSessionStore) ClearFinishNowRequest(sessionID string) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	session.FinishNowRequested = false
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
 func (s *ReasoningWorkflowSessionStore) FinalizeWithDraft(sessionID string) (*ReasoningSearchResponse, error) {
 	now := time.Now()
 
@@ -473,6 +516,9 @@ func (s *ReasoningWorkflowSessionStore) FinalizeWithDraft(sessionID string) (*Re
 	}
 	raw := append([]byte(nil), session.DraftResponseJSON...)
 	session.ResponseSnapshotJSON = append([]byte(nil), raw...)
+	// Keep this true so a near-simultaneous follow-up can distinguish a real
+	// finish-now flow from an ordinary running search with background drafts.
+	session.FinishNowRequested = true
 	session.FinalizedFromDraft = true
 	session.InitialRequestCompleted = true
 	session.UpdatedAt = now
@@ -524,6 +570,7 @@ func (s *ReasoningWorkflowSessionStore) StartDraftFollowup(sessionID string, que
 	session.DraftRevision = 0
 	session.DraftInProgress = false
 	session.LastDraftAt = time.Time{}
+	session.FinishNowRequested = false
 	session.FinalizedFromDraft = false
 	session.DraftFollowupSeed = &seed
 	session.DraftModelRuns = nil

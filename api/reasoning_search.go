@@ -155,9 +155,21 @@ func ReasoningSearchFinishNowHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
+	if err := runtime.Workflow.RequestFinishNow(sessionID); err != nil {
+		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
+			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
+			return
+		}
+		NewInternalError(err).Abort(c)
+		return
+	}
 
 	response, err := runtime.Workflow.FinalizeWithDraft(sessionID)
 	if err != nil {
+		// Roll back the intent flag when no draft could actually be returned.
+		if clearErr := runtime.Workflow.ClearFinishNowRequest(sessionID); clearErr != nil && !errors.Is(clearErr, llm.ErrReasoningSessionNotFoundOrExpired) {
+			log.Warnf("Reasoning Search failed clearing finish-now request session=%s: %v", sessionID, clearErr)
+		}
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
 			return
@@ -478,8 +490,26 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 			refreshProviderReasoningSession(runtime, reasoningStage)
 		}
 		if status, err := progressStore.Get(sessionID); err == nil {
-			if !status.Done {
-				return "", errReasoningSearchAlreadyRunning
+			if !status.Done && len(workflowSession.ResponseSnapshotJSON) == 0 {
+				if len(workflowSession.DraftResponseJSON) == 0 {
+					return "", errReasoningSearchAlreadyRunning
+				}
+				// A ready draft alone is not enough: only allow fast follow-up after
+				// an explicit finish-now request from the client.
+				if !workflowSession.FinishNowRequested {
+					return "", errReasoningSearchAlreadyRunning
+				}
+				// The user already asked to stop early; promote the ready draft to the
+				// official response so the follow-up can continue from visible results.
+				if _, err := workflowStore.FinalizeWithDraft(sessionID); err != nil {
+					return "", err
+				}
+				progressStore.Complete(sessionID, status.Iteration)
+				workflowSession, err = workflowStore.Get(sessionID)
+				if err != nil {
+					return "", err
+				}
+				reasoningStage = workflowSession.Stages[llm.ReasoningWorkflowStageReasoning]
 			}
 		} else if !errors.Is(err, llm.ErrReasoningProgressNotFoundOrExpired) {
 			return "", err
