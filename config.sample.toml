@@ -118,6 +118,12 @@ input_per_1m_tokens_usd=0.20
 cached_input_per_1m_tokens_usd=0.02
 output_per_1m_tokens_usd=1.25
 
+[[openai.pricing]]
+model="gpt-5-nano"
+input_per_1m_tokens_usd=0.05
+cached_input_per_1m_tokens_usd=0.005
+output_per_1m_tokens_usd=0.40
+
 [openrouter]
 token="sk-or-..."
 api-endpoint="" # optional; defaults to https://openrouter.ai/api/v1
