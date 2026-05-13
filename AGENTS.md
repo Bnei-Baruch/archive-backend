@@ -18,7 +18,7 @@ Instructions for coding agents working in this repository.
   - `es/` Elasticsearch indexing pipelines
   - `mdb/` SQLBoiler-generated MDB models
   - `events/` NATS-based event processing
-- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`, `[arcee]`, `[deepseek]`, `[claude]`); `[stub]` is local and makes no API calls.
+- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`, `[arcee]`, `[inception]`, `[deepseek]`, `[claude]`); `[stub]` is local and makes no API calls.
 - Config: `config.toml` (see `config.sample.toml`).
 
 ## LLM Architecture
@@ -31,9 +31,10 @@ Instructions for coding agents working in this repository.
 - xAI also uses `v1/responses` with iteration via `previous_response_id`, but resumed requests must omit `instructions`.
 - OpenRouter also uses `v1/responses`, but continues sessions by replaying full message history instead of `previous_response_id`.
 - Ollama uses `/api/chat` with message-history replay; it does not use `tool_choice`.
-- Arcee uses OpenAI-compatible `/chat/completions` with message-history replay.
+- Arcee and Inception use the shared replay chat-completions service (`search/LLM/replay_chat_completions_service.go`) with message-history replay.
 - DeepSeek uses the official `/chat/completions` API with message-history replay and preserves `reasoning_content` on tool-call turns.
 - Claude uses Anthropic Messages API `/v1/messages` with message-history replay.
+- Transient HTTP retry is opt-in and currently enabled only for Inception. Do not add retries globally to `callLLMAPI`; other providers should keep the direct call path unless explicitly requested.
 - Stub provider returns configured constant responses by `model` and query, and is intended for stage-isolation tests.
 - `common.Init()` builds one app-scoped `common.LLM_RUNTIME`; do not construct new LLM services per request.
 - `common.LLM_RUNTIME` stores the shared tool manager, progress/workflow stores, and provider services keyed by provider.
@@ -102,6 +103,7 @@ Instructions for coding agents working in this repository.
   - `[xai]` for xAI
   - `[zai]` for Z.AI
   - `[arcee]` for Arcee AI
+  - `[inception]` for Inception Labs
   - `[deepseek]` for DeepSeek official API
   - `[claude]` for Anthropic Claude
   - `[stub]` for local constant responses with no API calls
@@ -122,6 +124,7 @@ Instructions for coding agents working in this repository.
 - OpenRouter provider routing keys can be overridden per stage with `reasoning-search-*`, `reasoning-search-planning-*`, `reasoning-search-verification-*`, and `ai-tools-*` provider-routing keys under `[openrouter]`.
 - xAI Grok 4 fast reasoning models do not support `reasoning_effort`; keep xAI reasoning and planning effort config empty.
 - Arcee accepts optional `reasoning_effort` values `minimal`, `low`, `medium`, and `high`; leave it empty unless a model/stage needs it. Do not send it to `trinity-large-thinking`.
+- Inception Mercury models accept `reasoning_effort` values `instant`, `low`, `medium`, and `high`.
 - DeepSeek supports thinking by default; `minimal` disables thinking, `low`/`medium`/`high` map to `high`, and `xhigh`/`max` map to `max`.
 - Ollama supports `ollama.num-ctx`; `ollama.temperature` and `ollama.structured-output-prompt-schema` are optional.
 - Stub responses are configured with `[[stub.responses]]` entries keyed by `model` and `query`; use `query="*"` as a model-level fallback.

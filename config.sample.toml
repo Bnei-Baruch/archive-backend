@@ -56,19 +56,19 @@ url_template="https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2
 refresh-search-stats="5m"
 
 [llm]
-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "stub"
+provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "stub"
 postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache
-ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "stub"; defaults to llm.provider when empty
+ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "stub"; defaults to llm.provider when empty
 ai-query-tool-max-batches=5 # max document batches query_source_ai/query_transcript_ai may send to the reader model per call
-reasoning-search-draft-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "stub"; defaults to ai-tools-provider when empty
+reasoning-search-draft-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "stub"; defaults to ai-tools-provider when empty
 reasoning-search-cache-enabled=false
 reasoning-search-cache-ttl="120h" # default is 120h (5 days)
 reasoning-session-ttl="30m" # workflow/provider session TTL; renewed on status/result/follow-up requests
 reasoning-search-max-followups=2
 reasoning-search-planning-enabled=false
-reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "stub"; defaults to llm.provider when empty
+reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "stub"; defaults to llm.provider when empty
 reasoning-search-verification-enabled=false
-reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "stub"; defaults to llm.provider when empty
+reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "stub"; defaults to llm.provider when empty
 reasoning-search-verification-max-input-tokens=20000 # skip verification when accumulated reasoning/planning tokens are >= this value
 
 [openai]
@@ -123,6 +123,35 @@ model="gpt-5-nano"
 input_per_1m_tokens_usd=0.05
 cached_input_per_1m_tokens_usd=0.005
 output_per_1m_tokens_usd=0.40
+
+[inception]
+token="sk-..."
+api-endpoint="" # optional; defaults to https://api.inceptionlabs.ai/v1
+reasoning-search-model="mercury-2"
+reasoning-search-effort="medium" # "instant", "low", "medium", "high"
+reasoning-search-max-output-tokens=8000
+reasoning-search-max-iterations=20
+reasoning-search-rerun-max-iterations=8 # post-verification reasoning rerun
+ai-tools-model="mercury-2"
+ai-tools-effort="medium"
+ai-tools-max-output-tokens=1500
+ai-tools-batch-concurrency=3 # concurrent internal reader batches for query_source_ai/query_transcript_ai
+# reasoning-search-draft-model="mercury-2"
+# reasoning-search-draft-effort="medium"
+# reasoning-search-draft-max-output-tokens=1500
+# reasoning-search-planning-model="mercury-2"
+# reasoning-search-planning-effort="medium"
+# reasoning-search-planning-max-output-tokens=1500
+# reasoning-search-verification-model="mercury-2"
+# reasoning-search-verification-effort="medium"
+# reasoning-search-verification-max-output-tokens=2000
+request-timeout="2m"
+
+[[inception.pricing]]
+model="mercury-2"
+input_per_1m_tokens_usd=0.25
+cached_input_per_1m_tokens_usd=0.025
+output_per_1m_tokens_usd=0.75
 
 [openrouter]
 token="sk-or-..."

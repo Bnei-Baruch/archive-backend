@@ -168,6 +168,27 @@ func TestNewServiceFromConfigSupportsArcee(t *testing.T) {
 	}
 }
 
+func TestNewServiceFromConfigSupportsInception(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldToken := viper.GetString("inception.token")
+	oldEndpoint := viper.GetString("inception.api-endpoint")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("inception.token", oldToken)
+	defer viper.Set("inception.api-endpoint", oldEndpoint)
+
+	viper.Set("llm.provider", "inception")
+	viper.Set("inception.token", "test-token")
+	viper.Set("inception.api-endpoint", "")
+
+	service, err := llm.NewServiceFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := service.(*llm.InceptionService); !ok {
+		t.Fatalf("unexpected service type: %T", service)
+	}
+}
+
 func TestNewServiceFromConfigSupportsDeepSeek(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldToken := viper.GetString("deepseek.token")
@@ -288,6 +309,51 @@ func TestReasoningSearchConfigFromConfigUsesOpenAISection(t *testing.T) {
 	}
 	if cfg.Verification.MaxInputTokens != 5555 {
 		t.Fatalf("unexpected verification max input tokens: %d", cfg.Verification.MaxInputTokens)
+	}
+}
+
+func TestReasoningSearchConfigFromConfigSupportsInception(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldPlanningEnabled := viper.GetBool("llm.reasoning-search-planning-enabled")
+	oldVerificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
+	oldModel := viper.GetString("inception.reasoning-search-model")
+	oldEffort := viper.GetString("inception.reasoning-search-effort")
+	oldMaxTokens := viper.GetInt("inception.reasoning-search-max-output-tokens")
+	oldMaxIterations := viper.GetInt("inception.reasoning-search-max-iterations")
+	oldRerunMaxIterations := viper.GetInt("inception.reasoning-search-rerun-max-iterations")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-planning-enabled", oldPlanningEnabled)
+	defer viper.Set("llm.reasoning-search-verification-enabled", oldVerificationEnabled)
+	defer viper.Set("inception.reasoning-search-model", oldModel)
+	defer viper.Set("inception.reasoning-search-effort", oldEffort)
+	defer viper.Set("inception.reasoning-search-max-output-tokens", oldMaxTokens)
+	defer viper.Set("inception.reasoning-search-max-iterations", oldMaxIterations)
+	defer viper.Set("inception.reasoning-search-rerun-max-iterations", oldRerunMaxIterations)
+
+	viper.Set("llm.provider", "inception")
+	viper.Set("llm.reasoning-search-planning-enabled", false)
+	viper.Set("llm.reasoning-search-verification-enabled", false)
+	viper.Set("inception.reasoning-search-model", "mercury-2")
+	viper.Set("inception.reasoning-search-effort", "instant")
+	viper.Set("inception.reasoning-search-max-output-tokens", 4096)
+	viper.Set("inception.reasoning-search-max-iterations", 7)
+	viper.Set("inception.reasoning-search-rerun-max-iterations", 3)
+
+	cfg, err := llm.ReasoningSearchConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Provider != "inception" {
+		t.Fatalf("unexpected provider: %q", cfg.Provider)
+	}
+	if cfg.Model != "mercury-2" {
+		t.Fatalf("unexpected model: %q", cfg.Model)
+	}
+	if cfg.Effort != "instant" {
+		t.Fatalf("unexpected effort: %q", cfg.Effort)
+	}
+	if cfg.MaxTokens != 4096 || cfg.MaxIterations != 7 || cfg.RerunMaxIterations != 3 {
+		t.Fatalf("unexpected config: %#v", cfg)
 	}
 }
 
