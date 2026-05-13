@@ -347,6 +347,57 @@ func TestArceeGetStructuredOutputWithDebugUsesJSONMode(t *testing.T) {
 	}
 }
 
+func TestArceeStructuredOutputReturnsClearErrorForToolCalls(t *testing.T) {
+	service := NewArceeServiceWithOptions("test-token", nil, nil, "https://api.arcee.ai")
+	service.client = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			body := mustJSON(t, map[string]interface{}{
+				"choices": []map[string]interface{}{
+					{
+						"index": 0,
+						"message": map[string]interface{}{
+							"role":    "assistant",
+							"content": "",
+							"tool_calls": []map[string]interface{}{
+								{
+									"id":   "call_1",
+									"type": "function",
+									"function": map[string]interface{}{
+										"name":      "get_sources_by_author",
+										"arguments": `{"author_id":"bs"}`,
+									},
+								},
+							},
+						},
+					},
+				},
+				"usage": map[string]interface{}{
+					"prompt_tokens":     20,
+					"completion_tokens": 8,
+					"total_tokens":      28,
+				},
+			})
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body))}, nil
+		}),
+	}
+
+	output := ReasoningSearchVerificationResponse{}
+	_, err := service.GetStructuredOutputWithDebugInfo(
+		context.Background(),
+		GenerateReasoningSearchVerificationResponseJSONSchema(),
+		"auto",
+		nil,
+		[]LLMBotMessage{{Role: "system", Content: "Verify."}, {Role: "user", Content: "query"}},
+		nil,
+		nil,
+		true,
+		&output,
+	)
+	if err == nil || !strings.Contains(err.Error(), "tool calls in a plain structured-output response") {
+		t.Fatalf("expected tool-call-specific error, got %v", err)
+	}
+}
+
 func TestNormalizeArceeAPIBaseURL(t *testing.T) {
 	tests := map[string]string{
 		"":                            "https://api.arcee.ai/api/v1",

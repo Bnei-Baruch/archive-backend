@@ -21,6 +21,75 @@ type ReplayChatCompletionsService struct {
 
 var _ Service = (*ReplayChatCompletionsService)(nil)
 
+type ChatCompletionsRequest struct {
+	Model           string                         `json:"model"`
+	Messages        []LLMBotMessage                `json:"messages"`
+	MaxTokens       *int                           `json:"max_tokens,omitempty"`
+	Temperature     *float64                       `json:"temperature,omitempty"`
+	TopP            *float64                       `json:"top_p,omitempty"`
+	Stop            []string                       `json:"stop,omitempty"`
+	ResponseFormat  *ChatCompletionsResponseFormat `json:"response_format,omitempty"`
+	ReasoningEffort *string                        `json:"reasoning_effort,omitempty"`
+	Tools           []ToolCall                     `json:"tools,omitempty"`
+	ToolChoice      *string                        `json:"tool_choice,omitempty"`
+	Stream          bool                           `json:"stream"`
+}
+
+type ChatCompletionsResponseFormat struct {
+	Type string `json:"type"`
+}
+
+type ChatCompletionsToolArguments struct {
+	Raw json.RawMessage
+}
+
+func (a *ChatCompletionsToolArguments) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		a.Raw = json.RawMessage("{}")
+		return nil
+	}
+	var encoded string
+	if err := json.Unmarshal(data, &encoded); err == nil {
+		encoded = strings.TrimSpace(encoded)
+		if encoded == "" {
+			encoded = "{}"
+		}
+		a.Raw = json.RawMessage(encoded)
+		return nil
+	}
+	a.Raw = append(a.Raw[:0], data...)
+	return nil
+}
+
+type ChatCompletionsToolCallFunction struct {
+	Name      string                       `json:"name"`
+	Arguments ChatCompletionsToolArguments `json:"arguments"`
+}
+
+type ChatCompletionsToolCall struct {
+	ID       string                          `json:"id,omitempty"`
+	Type     string                          `json:"type,omitempty"`
+	Function ChatCompletionsToolCallFunction `json:"function"`
+}
+
+type ChatCompletionsMessage struct {
+	Role             string                    `json:"role"`
+	Content          string                    `json:"content,omitempty"`
+	Reasoning        string                    `json:"reasoning,omitempty"`
+	ReasoningContent string                    `json:"reasoning_content,omitempty"`
+	ToolCalls        []ChatCompletionsToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string                    `json:"tool_call_id,omitempty"`
+}
+
+type ChatCompletionsResponse struct {
+	Choices []struct {
+		Index   int                    `json:"index"`
+		Message ChatCompletionsMessage `json:"message"`
+	} `json:"choices"`
+	Usage *OpenAIUsage `json:"usage,omitempty"`
+}
+
 func (s *ReplayChatCompletionsService) GetStructuredOutput(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, _ *string, reasoningEffort *string, output interface{}) error {
 	msg, usageTotals, err := s.getChatResponseWithUsage(ctx, model, maxTokens, messages, &jsonSchema, reasoningEffort, false)
 	if usageTotals.TotalTokens > 0 {
@@ -266,13 +335,88 @@ func (s *ReplayChatCompletionsService) Close() error {
 	return s.sessions.Close()
 }
 
+func normalizeChatCompletionsMessages(messages []LLMBotMessage) ([]LLMBotMessage, error) {
+	sysMsgCount := 0
+	normalized := make([]LLMBotMessage, 0, len(messages))
+	for _, message := range messages {
+		normalizedMessage := message
+		if normalizedMessage.Role == "developer" {
+			normalizedMessage.Role = "system"
+		}
+		switch normalizedMessage.Role {
+		case "system":
+			sysMsgCount++
+		case "user", "assistant":
+		case "tool":
+			if normalizedMessage.ToolCallID == "" {
+				return nil, errors.New("tool message is missing tool_call_id")
+			}
+		default:
+			return nil, fmt.Errorf("unsupported message role for chat completions: %s", normalizedMessage.Role)
+		}
+		normalized = append(normalized, normalizedMessage)
+	}
+	if sysMsgCount != 1 {
+		return nil, fmt.Errorf("must include exactly one system message, found %d", sysMsgCount)
+	}
+	return normalized, nil
+}
+
+func chatCompletionsResponseFormat(jsonSchema *string) (*ChatCompletionsResponseFormat, error) {
+	if jsonSchema == nil {
+		return nil, nil
+	}
+	if !json.Valid([]byte(*jsonSchema)) {
+		return nil, fmt.Errorf("invalid json_schema")
+	}
+	return &ChatCompletionsResponseFormat{Type: "json_object"}, nil
+}
+
+func (m *ChatCompletionsMessage) reasoningText() string {
+	if strings.TrimSpace(m.Reasoning) != "" {
+		return m.Reasoning
+	}
+	return m.ReasoningContent
+}
+
+func (m *ChatCompletionsMessage) contentText() string {
+	if strings.TrimSpace(m.Content) != "" {
+		return m.Content
+	}
+	return m.ReasoningContent
+}
+
+func firstChatCompletionsChoice(resp *ChatCompletionsResponse) (*ChatCompletionsMessage, error) {
+	if resp == nil || len(resp.Choices) == 0 {
+		return nil, errors.New("chat completions returned no choices")
+	}
+	for _, choice := range resp.Choices {
+		if choice.Index == 0 {
+			return &choice.Message, nil
+		}
+	}
+	return &resp.Choices[0].Message, nil
+}
+
+func chatCompletionsAssistantMessage(message *ChatCompletionsMessage) (*LLMBotMessage, error) {
+	toolCalls := make([]MessageToolCall, 0, len(message.ToolCalls))
+	for _, toolCall := range message.ToolCalls {
+		rawArgs := toolCall.Function.Arguments.Raw
+		if len(rawArgs) == 0 {
+			rawArgs = json.RawMessage("{}")
+		}
+		toolCalls = append(toolCalls, MessageToolCall{ID: toolCall.ID, Type: "function", Function: ToolCallFunction{Name: toolCall.Function.Name, Arguments: compactToolCallArguments(rawArgs)}})
+	}
+	return &LLMBotMessage{Role: "assistant", Content: message.contentText(), Reasoning: message.reasoningText(), ToolCalls: toolCalls}, nil
+}
+
 func (s *ReplayChatCompletionsService) getChatResponseWithUsage(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, jsonSchema *string, reasoningEffort *string, logRawBody bool) (*LLMBotMessage, LLMUsageTotals, error) {
 	usageTotals := LLMUsageTotals{}
-	normalizedMessages, err := normalizeArceeMessages(messages)
+	normalizedMessages, err := normalizeChatCompletionsMessages(messages)
 	if err != nil {
 		return nil, usageTotals, err
 	}
-	responseFormat, err := arceeResponseFormat(jsonSchema)
+	responseFormat, err := chatCompletionsResponseFormat(jsonSchema)
 	if err != nil {
 		return nil, usageTotals, err
 	}
@@ -284,16 +428,20 @@ func (s *ReplayChatCompletionsService) getChatResponseWithUsage(ctx context.Cont
 		return nil, usageTotals, err
 	}
 
-	req := ArceeChatRequest{Model: model, Messages: normalizedMessages, MaxTokens: maxTokens, ResponseFormat: responseFormat, ReasoningEffort: reasoningEffort, Stream: false}
-	var chatResp ArceeChatResponse
+	req := ChatCompletionsRequest{Model: model, Messages: normalizedMessages, MaxTokens: maxTokens, ResponseFormat: responseFormat, ReasoningEffort: reasoningEffort, Stream: false}
+	var chatResp ChatCompletionsResponse
 	if err := s.callAPI(ctx, req, s.apiBaseURL+"/chat/completions", &chatResp, logRawBody); err != nil {
 		return nil, usageTotals, err
 	}
 	usageTotals.Add(chatResp.Usage)
-	msg, err := firstArceeMessage(&chatResp)
+	message, err := firstChatCompletionsChoice(&chatResp)
 	if err != nil {
 		return nil, usageTotals, err
 	}
+	if len(message.ToolCalls) > 0 {
+		return nil, usageTotals, errors.New("chat completions returned tool calls in a plain structured-output response")
+	}
+	msg := &LLMBotMessage{Role: message.Role, Content: message.contentText(), Reasoning: message.reasoningText()}
 	if strings.TrimSpace(msg.Content) == "" {
 		return nil, usageTotals, errors.New("chat completions returned empty assistant output")
 	}
@@ -335,19 +483,19 @@ func (s *ReplayChatCompletionsService) getReasoningResponseWithTools(ctx context
 		maxIterations = 8
 	}
 
-	normalizedMessages, err := normalizeArceeMessages(messages)
+	normalizedMessages, err := normalizeChatCompletionsMessages(messages)
 	if err != nil {
 		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	firstIterationNormalizedMessages := normalizedMessages
 	if len(firstIterationTools) > 0 {
 		firstIterationMessages := WithFirstIterationReasoningSearchSystemMessage(messages, firstIterationTools)
-		firstIterationNormalizedMessages, err = normalizeArceeMessages(firstIterationMessages)
+		firstIterationNormalizedMessages, err = normalizeChatCompletionsMessages(firstIterationMessages)
 		if err != nil {
 			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 	}
-	if _, err := arceeResponseFormat(jsonSchema); err != nil {
+	if _, err := chatCompletionsResponseFormat(jsonSchema); err != nil {
 		return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 	}
 	reasoningEffort, err = s.normalizeReasoningEffort(model, reasoningEffort)
@@ -388,15 +536,15 @@ func (s *ReplayChatCompletionsService) getReasoningResponseWithTools(ctx context
 			currentMessages = append(currentMessages, LLMBotMessage{Role: "user", Content: finalReasoningIterationInstruction})
 		}
 
-		req := ArceeChatRequest{Model: model, Messages: currentMessages, MaxTokens: maxTokens, ResponseFormat: nil, ReasoningEffort: reasoningEffort, Tools: currentTools, ToolChoice: currentToolChoice, Stream: false}
-		var chatResp ArceeChatResponse
+		req := ChatCompletionsRequest{Model: model, Messages: currentMessages, MaxTokens: maxTokens, ResponseFormat: nil, ReasoningEffort: reasoningEffort, Tools: currentTools, ToolChoice: currentToolChoice, Stream: false}
+		var chatResp ChatCompletionsResponse
 		if err := s.callAPI(ctx, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
 			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
 		stepUsage := reasoningUsageTotals(chatResp.Usage)
 		usageTotals.Add(chatResp.Usage)
-		message, err := firstArceeChoice(&chatResp)
+		message, err := firstChatCompletionsChoice(&chatResp)
 		if err != nil {
 			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
@@ -446,7 +594,7 @@ func (s *ReplayChatCompletionsService) getReasoningResponseWithTools(ctx context
 			return &LLMBotMessage{Role: "assistant", Content: content, Reasoning: message.reasoningText()}, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), nil
 		}
 
-		assistantMessage, err := arceeAssistantMessage(message)
+		assistantMessage, err := chatCompletionsAssistantMessage(message)
 		if err != nil {
 			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
