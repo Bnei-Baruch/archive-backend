@@ -818,11 +818,13 @@ func TestReasoningWorkflowDraftEvidenceKeepsLatestItems(t *testing.T) {
 
 	evidence := []llm.ReasoningSearchResultEvidence{
 		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 1, Content: "old"},
-		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 2, Content: "middle"},
-		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 3, Content: "recent"},
-		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 4, Content: "newest"},
+		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 2, Content: "older"},
+		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 3, Content: "middle"},
+		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 4, Content: "recent"},
+		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 5, Content: "newer"},
+		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 6, Content: "newest"},
 	}
-	if _, added, err := store.AddPartialResultEvidence(sessionID, "uid-1", evidence); err != nil || added != 4 {
+	if _, added, err := store.AddPartialResultEvidence(sessionID, "uid-1", evidence); err != nil || added != 6 {
 		t.Fatalf("unexpected add evidence result: added=%d err=%v", added, err)
 	}
 	results, _, _, ok, err := store.TryStartDraft(sessionID, 0, 1)
@@ -833,8 +835,8 @@ func TestReasoningWorkflowDraftEvidenceKeepsLatestItems(t *testing.T) {
 		t.Fatalf("expected draft to start, ok=%t results=%d", ok, len(results))
 	}
 	got := results[0].DraftEvidence
-	if len(got) != 3 || got[0].Content != "middle" || got[1].Content != "recent" || got[2].Content != "newest" {
-		t.Fatalf("expected latest three evidence items, got %#v", got)
+	if len(got) != 5 || got[0].Content != "older" || got[1].Content != "middle" || got[2].Content != "recent" || got[3].Content != "newer" || got[4].Content != "newest" {
+		t.Fatalf("expected latest evidence items, got %#v", got)
 	}
 }
 

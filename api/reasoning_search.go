@@ -99,7 +99,10 @@ func ReasoningSearchStartHandler(c *gin.Context) {
 	runtime.Cancellations.Set(sessionID, cancel)
 	go executeReasoningSearchInBackground(bgCtx, runtime, db, requestCopy, sessionID)
 
-	c.JSON(http.StatusAccepted, gin.H{"session_id": sessionID})
+	c.JSON(http.StatusAccepted, gin.H{
+		"session_id":   sessionID,
+		"result_ready": false,
+	})
 }
 
 func ReasoningSearchCancelHandler(c *gin.Context) {
@@ -183,6 +186,10 @@ func ReasoningSearchFinishNowHandler(c *gin.Context) {
 		return
 	}
 	log.Infof("Reasoning Search finish-now returned stored draft session=%s results=%d", sessionID, len(response.Results))
+	if runtime.Cancellations != nil {
+		canceled := runtime.Cancellations.Cancel(sessionID)
+		log.Infof("Reasoning Search finish-now canceled active background run session=%s canceled=%t", sessionID, canceled)
+	}
 	runtime.Progress.Complete(sessionID, 0)
 
 	c.JSON(http.StatusOK, gin.H{
