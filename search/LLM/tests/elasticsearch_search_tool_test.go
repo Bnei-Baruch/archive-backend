@@ -11,6 +11,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/search"
+	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 	llmtools "github.com/Bnei-Baruch/archive-backend/search/LLM/tools"
 )
 
@@ -228,6 +229,22 @@ func TestElasticsearchSearchToolExecuteRejectsUnknownFilter(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unsupported filter") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestElasticsearchSearchToolExecuteReturnsRecoverableErrorForMalformedArguments(t *testing.T) {
+	tool := llmtools.NewElasticsearchSearchTool(&fakeElasticsearchSearchEngine{}, 0)
+
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{"query":"אהבה" ×}`))
+	if err == nil {
+		t.Fatalf("expected malformed argument error")
+	}
+	var recoverable *llm.RecoverableToolError
+	if !errors.As(err, &recoverable) {
+		t.Fatalf("expected recoverable error, got %T %v", err, err)
+	}
+	if !strings.Contains(recoverable.Message, "valid JSON") {
+		t.Fatalf("unexpected recoverable message: %q", recoverable.Message)
 	}
 }
 

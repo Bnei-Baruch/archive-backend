@@ -246,7 +246,7 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 
 	args := elasticsearchSearchToolArgs{}
 	if err := json.Unmarshal(arguments, &args); err != nil {
-		return "", fmt.Errorf("elasticsearch_search: failed to parse arguments: %w", err)
+		return "", llm.NewRecoverableToolError("elasticsearch_search", fmt.Sprintf("arguments must be valid JSON: %v", err), `Call elasticsearch_search with a valid JSON object, for example {"query":"אהבה","language":"he","size":10}. Do not include prose or malformed characters inside the tool arguments.`)
 	}
 	llm.LogIfDeb(ctx, "elasticsearch_search: start query=%q language=%q sort_by=%q from=%d size=%d exact_phrase=%t", args.Query, args.Language, args.SortBy, args.From, args.Size, args.ExactPhrase)
 
