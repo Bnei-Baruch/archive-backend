@@ -628,6 +628,31 @@ func (s *ReasoningWorkflowSessionStore) StartDraftFollowup(sessionID string, que
 	if err := json.Unmarshal(session.ResponseSnapshotJSON, &seed); err != nil {
 		return err
 	}
+	if session.DraftFollowupSeed != nil {
+		previous := session.DraftFollowupSeed
+		if strings.TrimSpace(previous.Summary) != "" {
+			seed.Summary = strings.TrimSpace(seed.Summary + "\nPrevious draft context: " + previous.Summary)
+		}
+		// If a follow-up draft is followed by another question, keep the earlier
+		// visible draft in the seed too. Latest results stay first because they
+		// are the response the user most recently saw.
+		seen := map[string]bool{}
+		for _, result := range seed.Results {
+			if uid := strings.TrimSpace(result.MDBUID); uid != "" {
+				seen[uid] = true
+			}
+		}
+		for _, result := range previous.Results {
+			uid := strings.TrimSpace(result.MDBUID)
+			if uid != "" && seen[uid] {
+				continue
+			}
+			seed.Results = append(seed.Results, cloneReasoningSearchResult(result))
+			if uid != "" {
+				seen[uid] = true
+			}
+		}
+	}
 
 	if session.Stages == nil {
 		session.Stages = map[string]ReasoningWorkflowStageSession{}

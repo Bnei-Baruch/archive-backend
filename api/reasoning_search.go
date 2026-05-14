@@ -740,11 +740,23 @@ func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime
 			Role:    "system",
 			Content: systemMessage,
 		},
-		{
-			Role:    "user",
-			Content: string(input),
-		},
 	}
+	if workflowSession.DraftFollowupSeed != nil {
+		messages = append(messages,
+			llm.LLMBotMessage{
+				Role:    "user",
+				Content: workflowSession.DraftFollowupSeed.Query,
+			},
+			llm.LLMBotMessage{
+				Role:    "assistant",
+				Content: buildReasoningSearchDraftFollowupSeedAssistantContent(workflowSession.DraftFollowupSeed),
+			},
+		)
+	}
+	messages = append(messages, llm.LLMBotMessage{
+		Role:    "user",
+		Content: string(input),
+	})
 
 	response := llm.ReasoningSearchResponse{}
 	promptCacheKey := fmt.Sprintf("reasoning-search-draft:m=%s:e=%s", config.Model, config.Effort)

@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -702,6 +703,102 @@ func TestReasoningWorkflowSessionStoreDraftLifecycle(t *testing.T) {
 	}
 	if session.DraftFollowupSeed == nil || session.DraftFollowupSeed.Summary != "draft" {
 		t.Fatalf("expected draft follow-up seed, got %#v", session.DraftFollowupSeed)
+	}
+}
+
+func TestReasoningWorkflowDraftFollowupKeepsPreviousDraftContext(t *testing.T) {
+	store := llm.NewReasoningWorkflowSessionStore(5 * time.Minute)
+	defer store.Close()
+
+	sessionID, err := store.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:          "openai",
+		Model:             "gpt-5.4",
+		ReasoningEffort:   "low",
+		MaxFollowups:      3,
+		ProviderSessionID: "provider-session-1",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if err := store.SetQuery(sessionID, "initial query"); err != nil {
+		t.Fatalf("unexpected set query error: %v", err)
+	}
+	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{{MDBUID: "initial-uid", Title: "Initial"}}); err != nil {
+		t.Fatalf("unexpected add partial results error: %v", err)
+	}
+	_, revision, _, ok, err := store.TryStartDraft(sessionID, 0, 1)
+	if err != nil || !ok {
+		t.Fatalf("unexpected first draft start: ok=%t err=%v", ok, err)
+	}
+	firstDraft := &llm.ReasoningSearchResponse{
+		Query:   "initial query",
+		Summary: "first draft",
+		Results: []llm.ReasoningSearchResult{
+			{MDBUID: "initial-uid", Title: "Initial"},
+		},
+	}
+	firstDraft.SetSessionID(sessionID)
+	if err := store.FinishDraft(sessionID, revision, firstDraft); err != nil {
+		t.Fatalf("unexpected first finish draft error: %v", err)
+	}
+	if _, err := store.FinalizeWithDraft(sessionID); err != nil {
+		t.Fatalf("unexpected first finalize draft error: %v", err)
+	}
+	if err := store.StartDraftFollowup(sessionID, "first follow-up", 1, llm.ReasoningWorkflowStageSession{
+		Provider:          "openai",
+		Model:             "gpt-5.4",
+		ReasoningEffort:   "low",
+		MaxFollowups:      3,
+		ProviderSessionID: "provider-session-2",
+	}); err != nil {
+		t.Fatalf("unexpected first start follow-up error: %v", err)
+	}
+	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{{MDBUID: "followup-uid", Title: "Follow-up"}}); err != nil {
+		t.Fatalf("unexpected follow-up partial results error: %v", err)
+	}
+	_, revision, _, ok, err = store.TryStartDraft(sessionID, 0, 1)
+	if err != nil || !ok {
+		t.Fatalf("unexpected second draft start: ok=%t err=%v", ok, err)
+	}
+	secondDraft := &llm.ReasoningSearchResponse{
+		Query:   "first follow-up",
+		Summary: "second draft",
+		Results: []llm.ReasoningSearchResult{
+			{MDBUID: "followup-uid", Title: "Follow-up"},
+		},
+	}
+	secondDraft.SetSessionID(sessionID)
+	if err := store.FinishDraft(sessionID, revision, secondDraft); err != nil {
+		t.Fatalf("unexpected second finish draft error: %v", err)
+	}
+	if _, err := store.FinalizeWithDraft(sessionID); err != nil {
+		t.Fatalf("unexpected second finalize draft error: %v", err)
+	}
+	if err := store.StartDraftFollowup(sessionID, "second follow-up", 2, llm.ReasoningWorkflowStageSession{
+		Provider:          "openai",
+		Model:             "gpt-5.4",
+		ReasoningEffort:   "low",
+		MaxFollowups:      3,
+		ProviderSessionID: "provider-session-3",
+	}); err != nil {
+		t.Fatalf("unexpected second start follow-up error: %v", err)
+	}
+
+	session, err := store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if session.DraftFollowupSeed == nil {
+		t.Fatalf("expected draft follow-up seed")
+	}
+	if !strings.Contains(session.DraftFollowupSeed.Summary, "second draft") || !strings.Contains(session.DraftFollowupSeed.Summary, "first draft") {
+		t.Fatalf("expected both draft summaries in seed, got %q", session.DraftFollowupSeed.Summary)
+	}
+	if len(session.DraftFollowupSeed.Results) != 2 {
+		t.Fatalf("expected latest and previous draft results, got %#v", session.DraftFollowupSeed.Results)
+	}
+	if session.DraftFollowupSeed.Results[0].MDBUID != "followup-uid" || session.DraftFollowupSeed.Results[1].MDBUID != "initial-uid" {
+		t.Fatalf("expected latest result first and previous context second, got %#v", session.DraftFollowupSeed.Results)
 	}
 }
 

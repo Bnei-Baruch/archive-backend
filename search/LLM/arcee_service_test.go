@@ -150,9 +150,18 @@ func TestArceeReasoningWithToolsUsesChatCompletionsAPI(t *testing.T) {
 						{
 							"index": 0,
 							"message": map[string]interface{}{
-								"role":              "assistant",
-								"content":           nil,
-								"reasoning_content": `{}`,
+								"role":    "assistant",
+								"content": "",
+								"tool_calls": []map[string]interface{}{
+									{
+										"id":   "call_2",
+										"type": "function",
+										"function": map[string]interface{}{
+											"name":      "elasticsearch_search",
+											"arguments": `{"term":"עוד"}`,
+										},
+									},
+								},
 							},
 						},
 					},
@@ -163,6 +172,34 @@ func TestArceeReasoningWithToolsUsesChatCompletionsAPI(t *testing.T) {
 					},
 				})
 			case 4:
+				if payload["tools"] != nil {
+					t.Fatalf("did not expect tools in Arcee corrected final structured call")
+				}
+				if payload["tool_choice"] != nil {
+					t.Fatalf("did not expect tool_choice in Arcee corrected final structured call")
+				}
+				lastMessage, ok := messages[len(messages)-1].(map[string]interface{})
+				if !ok || !strings.Contains(fmt.Sprint(lastMessage["content"]), "Tools are not available") {
+					t.Fatalf("expected no-tools correction message: %#v", messages[len(messages)-1])
+				}
+				body = mustJSON(t, map[string]interface{}{
+					"choices": []map[string]interface{}{
+						{
+							"index": 0,
+							"message": map[string]interface{}{
+								"role":              "assistant",
+								"content":           nil,
+								"reasoning_content": `{}`,
+							},
+						},
+					},
+					"usage": map[string]interface{}{
+						"prompt_tokens":     15,
+						"completion_tokens": 4,
+						"total_tokens":      19,
+					},
+				})
+			case 5:
 				if payload["tools"] != nil {
 					t.Fatalf("did not expect tools in Arcee retry structured call")
 				}
@@ -253,8 +290,8 @@ func TestArceeReasoningWithToolsUsesChatCompletionsAPI(t *testing.T) {
 	if output.Answer != "done" {
 		t.Fatalf("unexpected answer: %s", output.Answer)
 	}
-	if len(requests) != 4 {
-		t.Fatalf("expected 4 requests, got %d", len(requests))
+	if len(requests) != 5 {
+		t.Fatalf("expected 5 requests, got %d", len(requests))
 	}
 }
 
