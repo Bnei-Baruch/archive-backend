@@ -21,6 +21,8 @@ type ReplayChatCompletionsService struct {
 
 var _ Service = (*ReplayChatCompletionsService)(nil)
 
+var errChatCompletionsToolCallsInPlainResponse = errors.New("chat completions returned tool calls in a plain structured-output response")
+
 type ChatCompletionsRequest struct {
 	Model           string                         `json:"model"`
 	Messages        []LLMBotMessage                `json:"messages"`
@@ -439,7 +441,7 @@ func (s *ReplayChatCompletionsService) getChatResponseWithUsage(ctx context.Cont
 		return nil, usageTotals, err
 	}
 	if len(message.ToolCalls) > 0 {
-		return nil, usageTotals, errors.New("chat completions returned tool calls in a plain structured-output response")
+		return nil, usageTotals, errChatCompletionsToolCallsInPlainResponse
 	}
 	msg := &LLMBotMessage{Role: message.Role, Content: message.contentText(), Reasoning: message.reasoningText()}
 	if strings.TrimSpace(msg.Content) == "" {
@@ -567,6 +569,14 @@ func (s *ReplayChatCompletionsService) getReasoningResponseWithTools(ctx context
 				if err := validateJSONRequiredTopLevelFields(content, *jsonSchema); err != nil {
 					normalizedMessages = append(normalizedMessages, LLMBotMessage{Role: "assistant", Content: content, Reasoning: message.reasoningText()})
 					msg, finalizeUsage, err := s.getChatResponseWithUsage(ctx, model, maxTokens, normalizedMessages, jsonSchema, reasoningEffort, deb)
+					if errors.Is(err, errChatCompletionsToolCallsInPlainResponse) {
+						// Some chat-completions providers still emit tool calls after tools were removed.
+						// Keep the recovery local to reasoning finalization so plain structured calls stay strict.
+						normalizedMessages = append(normalizedMessages, LLMBotMessage{Role: "user", Content: "Tools are not available in this final response step. Return only a complete JSON object that matches the required schema, using the archive results already found. Do not call tools."})
+						var correctionUsage LLMUsageTotals
+						msg, correctionUsage, err = s.getChatResponseWithUsage(ctx, model, maxTokens, normalizedMessages, jsonSchema, reasoningEffort, deb)
+						finalizeUsage.AddTotals(correctionUsage)
+					}
 					usageTotals.AddTotals(finalizeUsage)
 					stepUsage.AddTotals(finalizeUsage)
 					if err != nil {
@@ -575,6 +585,13 @@ func (s *ReplayChatCompletionsService) getReasoningResponseWithTools(ctx context
 					if err := validateJSONRequiredTopLevelFields(msg.Content, *jsonSchema); err != nil {
 						normalizedMessages = append(normalizedMessages, LLMBotMessage{Role: "assistant", Content: msg.Content, Reasoning: msg.Reasoning}, LLMBotMessage{Role: "user", Content: fmt.Sprintf("The previous response is invalid: %v. Return only a complete JSON object that matches the required schema, using the archive results already found. Do not return an empty object.", err)})
 						msg, retryUsage, err := s.getChatResponseWithUsage(ctx, model, maxTokens, normalizedMessages, jsonSchema, reasoningEffort, deb)
+						if errors.Is(err, errChatCompletionsToolCallsInPlainResponse) {
+							// Same provider quirk can happen after the schema correction prompt.
+							normalizedMessages = append(normalizedMessages, LLMBotMessage{Role: "user", Content: "Tools are not available in this final response step. Return only a complete JSON object that matches the required schema, using the archive results already found. Do not call tools."})
+							var correctionUsage LLMUsageTotals
+							msg, correctionUsage, err = s.getChatResponseWithUsage(ctx, model, maxTokens, normalizedMessages, jsonSchema, reasoningEffort, deb)
+							retryUsage.AddTotals(correctionUsage)
+						}
 						usageTotals.AddTotals(retryUsage)
 						stepUsage.AddTotals(retryUsage)
 						if err != nil {
