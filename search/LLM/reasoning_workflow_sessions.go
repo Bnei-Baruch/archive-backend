@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,6 +15,8 @@ const ReasoningWorkflowStagePlanning = "planning"
 const ReasoningWorkflowStageVerification = "verification"
 
 var ErrReasoningDraftNotReady = errors.New("reasoning draft is not ready")
+
+const maxDraftEvidencePerResult = 5
 
 // ReasoningWorkflowSessionStore keeps client-facing workflow sessions in local
 // process memory. It works only on a single machine; multi-instance deployments
@@ -50,6 +53,7 @@ type ReasoningWorkflowSession struct {
 	// return immediately.
 	PartialResults         []ReasoningSearchResult
 	PartialResultsRevision int
+	PartialResultEvidence  map[string][]ReasoningSearchResultEvidence
 	DraftResponseJSON      []byte
 	DraftRevision          int
 	DraftInProgress        bool
@@ -134,6 +138,12 @@ func (s *ReasoningWorkflowSessionStore) Get(sessionID string) (*ReasoningWorkflo
 	copySession.CachedInitialResponse = cloneReasoningSearchCacheEntry(session.CachedInitialResponse)
 	copySession.ResponseSnapshotJSON = append([]byte(nil), session.ResponseSnapshotJSON...)
 	copySession.PartialResults = cloneReasoningSearchResults(session.PartialResults)
+	if session.PartialResultEvidence != nil {
+		copySession.PartialResultEvidence = make(map[string][]ReasoningSearchResultEvidence, len(session.PartialResultEvidence))
+		for key, value := range session.PartialResultEvidence {
+			copySession.PartialResultEvidence[key] = append([]ReasoningSearchResultEvidence(nil), value...)
+		}
+	}
 	copySession.DraftResponseJSON = append([]byte(nil), session.DraftResponseJSON...)
 	copySession.DraftFollowupSeed = cloneReasoningSearchResponse(session.DraftFollowupSeed)
 	copySession.DraftModelRuns = append([]ReasoningSearchUsageBreakdown(nil), session.DraftModelRuns...)
@@ -277,6 +287,7 @@ func (s *ReasoningWorkflowSessionStore) SetResponseSnapshot(sessionID string, re
 	if response == nil {
 		session.PartialResults = nil
 		session.PartialResultsRevision = 0
+		session.PartialResultEvidence = nil
 		session.DraftResponseJSON = nil
 		session.DraftRevision = 0
 		session.DraftInProgress = false
@@ -334,6 +345,62 @@ func (s *ReasoningWorkflowSessionStore) AddPartialResults(sessionID string, resu
 	return session.PartialResultsRevision, added, nil
 }
 
+// AddPartialResultEvidence stores AI-reader excerpts by result UID. Drafts still
+// use only ES results; evidence is attached only when a matching ES result exists.
+func (s *ReasoningWorkflowSessionStore) AddPartialResultEvidence(sessionID string, documentID string, evidence []ReasoningSearchResultEvidence) (int, int, error) {
+	documentID = strings.TrimSpace(documentID)
+	if documentID == "" || len(evidence) == 0 {
+		return 0, 0, nil
+	}
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return 0, 0, ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return 0, 0, ErrReasoningSessionNotFoundOrExpired
+	}
+	if session.FinalizedFromDraft {
+		return session.PartialResultsRevision, 0, nil
+	}
+	if session.PartialResultEvidence == nil {
+		session.PartialResultEvidence = map[string][]ReasoningSearchResultEvidence{}
+	}
+
+	existing := session.PartialResultEvidence[documentID]
+	added := 0
+	for _, item := range evidence {
+		item = normalizeReasoningSearchResultEvidence(item, documentID)
+		if item.Content == "" || reasoningSearchEvidenceExists(existing, item) {
+			continue
+		}
+		if len(existing) >= maxDraftEvidencePerResult {
+			copy(existing, existing[1:])
+			existing = existing[:len(existing)-1]
+		}
+		existing = append(existing, item)
+		added++
+	}
+	if added == 0 {
+		return session.PartialResultsRevision, 0, nil
+	}
+	session.PartialResultEvidence[documentID] = existing
+	for _, result := range session.PartialResults {
+		if result.MDBUID == documentID {
+			session.PartialResultsRevision++
+			break
+		}
+	}
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return session.PartialResultsRevision, added, nil
+}
+
 func (s *ReasoningWorkflowSessionStore) TryStartDraft(sessionID string, minInterval time.Duration, minResults int) ([]ReasoningSearchResult, int, string, bool, error) {
 	now := time.Now()
 
@@ -360,7 +427,14 @@ func (s *ReasoningWorkflowSessionStore) TryStartDraft(sessionID string, minInter
 	session.UpdatedAt = now
 	session.ExpiresAt = now.Add(s.ttl)
 
-	return cloneReasoningSearchResults(session.PartialResults), session.PartialResultsRevision, session.Query, true, nil
+	results := cloneReasoningSearchResults(session.PartialResults)
+	for i := range results {
+		uid := strings.TrimSpace(results[i].MDBUID)
+		if uid != "" && len(session.PartialResultEvidence[uid]) > 0 {
+			results[i].DraftEvidence = append([]ReasoningSearchResultEvidence(nil), session.PartialResultEvidence[uid]...)
+		}
+	}
+	return results, session.PartialResultsRevision, session.Query, true, nil
 }
 
 func (s *ReasoningWorkflowSessionStore) FinishDraft(sessionID string, revision int, response *ReasoningSearchResponse) error {
@@ -566,6 +640,7 @@ func (s *ReasoningWorkflowSessionStore) StartDraftFollowup(sessionID string, que
 	session.ResponseSnapshotJSON = nil
 	session.PartialResults = nil
 	session.PartialResultsRevision = 0
+	session.PartialResultEvidence = nil
 	session.DraftResponseJSON = nil
 	session.DraftRevision = 0
 	session.DraftInProgress = false
@@ -616,7 +691,31 @@ func cloneReasoningSearchResults(results []ReasoningSearchResult) []ReasoningSea
 
 func cloneReasoningSearchResult(result ReasoningSearchResult) ReasoningSearchResult {
 	result.Highlights = append([]string(nil), result.Highlights...)
+	result.DraftEvidence = append([]ReasoningSearchResultEvidence(nil), result.DraftEvidence...)
 	return result
+}
+
+func normalizeReasoningSearchResultEvidence(item ReasoningSearchResultEvidence, documentID string) ReasoningSearchResultEvidence {
+	item.ToolName = strings.TrimSpace(item.ToolName)
+	item.DocumentType = strings.TrimSpace(item.DocumentType)
+	item.DocumentID = strings.TrimSpace(item.DocumentID)
+	if item.DocumentID == "" {
+		item.DocumentID = documentID
+	}
+	item.Query = strings.TrimSpace(item.Query)
+	item.Content = strings.TrimSpace(item.Content)
+	item.Reason = strings.TrimSpace(item.Reason)
+	item.SupportingSnippet = strings.TrimSpace(item.SupportingSnippet)
+	return item
+}
+
+func reasoningSearchEvidenceExists(existing []ReasoningSearchResultEvidence, candidate ReasoningSearchResultEvidence) bool {
+	for _, item := range existing {
+		if item.ToolName == candidate.ToolName && item.DocumentID == candidate.DocumentID && item.Query == candidate.Query && item.ChunkNumber == candidate.ChunkNumber && item.Content == candidate.Content {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneReasoningSearchResponse(response *ReasoningSearchResponse) *ReasoningSearchResponse {

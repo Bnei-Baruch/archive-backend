@@ -45,6 +45,7 @@ const reasoningSearchDraftMinResults = 8
 
 const reasoningSearchDraftInstruction = `Draft mode: prepare a partial archive search response from Elasticsearch results that were already collected while the main reasoning search is still running.
 Use only the supplied Elasticsearch results. Do not invent results, IDs, titles, highlights, dates, or content types.
+Some results may include draft_evidence from AI source/transcript lookup tools. Use this evidence only to judge and explain relevance of the supplied Elasticsearch result; do not treat evidence as a separate result.
 Keep mdb_uid values exactly as provided.
 The summary must say that the user asked for fast results and the answer is based on results gathered so far.`
 
@@ -684,6 +685,18 @@ func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime
 	if len(candidates) > 30 {
 		candidates = candidates[:30]
 	}
+	evidenceResultCount := 0
+	evidenceItemCount := 0
+	for _, candidate := range candidates {
+		if len(candidate.DraftEvidence) == 0 {
+			continue
+		}
+		evidenceResultCount++
+		evidenceItemCount += len(candidate.DraftEvidence)
+	}
+	if evidenceItemCount > 0 {
+		log.Infof("Reasoning Search draft evidence attached session=%s results=%d evidence_items=%d", sessionID, evidenceResultCount, evidenceItemCount)
+	}
 
 	workflowSession, err := runtime.Workflow.Get(sessionID)
 	if err != nil {
@@ -794,6 +807,7 @@ func mergeReasoningSearchDraftMetadata(response *llm.ReasoningSearchResponse, ca
 		if len(selected.Highlights) > 0 {
 			candidate.Highlights = append([]string(nil), selected.Highlights...)
 		}
+		candidate.DraftEvidence = nil
 		candidate.IsGroupingResult = candidate.IsGroupingResult || selected.IsGroupingResult
 		candidate.Origin = llm.ReasoningSearchResultOriginOriginal
 		merged = append(merged, candidate)

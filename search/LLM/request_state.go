@@ -70,6 +70,22 @@ func ReportReasoningPartialResults(ctx context.Context, results []ReasoningSearc
 	state.draftScheduler(state.draftSessionID)
 }
 
+func ReportReasoningResultEvidence(ctx context.Context, documentID string, evidence []ReasoningSearchResultEvidence) {
+	if ctx == nil || len(evidence) == 0 {
+		return
+	}
+	state := reasoningToolStateFromContext(ctx)
+	if state == nil || state.workflow == nil || state.draftSessionID == "" {
+		return
+	}
+
+	revision, added, err := state.workflow.AddPartialResultEvidence(state.draftSessionID, documentID, evidence)
+	if err != nil || added == 0 || revision <= 0 || state.draftScheduler == nil {
+		return
+	}
+	state.draftScheduler(state.draftSessionID)
+}
+
 func AddToolDebugInfo(ctx context.Context, info *ReasoningSearchDebugInfo) {
 	if ctx == nil || info == nil {
 		return

@@ -60,6 +60,20 @@ type ReasoningSearchResult struct {
 	Reason           string   `json:"reason"`
 	Highlights       []string `json:"highlights"`
 	IsGroupingResult bool     `json:"is_grouping_result"`
+	// DraftEvidence is internal draft input only and is cleared before responses are stored.
+	DraftEvidence []ReasoningSearchResultEvidence `json:"draft_evidence,omitempty"`
+}
+
+type ReasoningSearchResultEvidence struct {
+	ToolName          string `json:"tool_name"`
+	DocumentType      string `json:"document_type"`
+	DocumentID        string `json:"document_id"`
+	Query             string `json:"query"`
+	ChunkNumber       int    `json:"chunk_number,omitempty"`
+	EndChunkNumber    int    `json:"end_chunk_number,omitempty"`
+	Content           string `json:"content"`
+	Reason            string `json:"reason,omitempty"`
+	SupportingSnippet string `json:"supporting_snippet,omitempty"`
 }
 
 const (

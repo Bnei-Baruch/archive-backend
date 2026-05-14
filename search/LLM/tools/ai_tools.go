@@ -598,6 +598,7 @@ func (t *QuerySourceAITool) Execute(ctx context.Context, arguments json.RawMessa
 		llm.LogIfDeb(ctx, "query_source_ai: semantic selection failed source_id=%q file_id=%q language=%q err=%v", sourceID, entry.FileUID, language, err)
 		return aiQueryToolErrorOutput("query_source_ai", err), nil
 	}
+	reportAIQueryDraftEvidence(ctx, "query_source_ai", result)
 	output, err := marshalToolResult(result)
 	if err != nil {
 		return "", err
@@ -654,6 +655,7 @@ func (t *QueryTranscriptAITool) Execute(ctx context.Context, arguments json.RawM
 		llm.LogIfDeb(ctx, "query_transcript_ai: semantic selection failed content_unit_id=%q language=%q err=%v", contentUnitID, language, err)
 		return aiQueryToolErrorOutput("query_transcript_ai", err), nil
 	}
+	reportAIQueryDraftEvidence(ctx, "query_transcript_ai", result)
 	output, err := marshalToolResult(result)
 	if err != nil {
 		return "", err
@@ -781,6 +783,27 @@ func addAIQueryToolCallDebug(ctx context.Context, call llm.ReasoningSearchAITool
 	llm.AddToolDebugInfo(ctx, &llm.ReasoningSearchDebugInfo{
 		AIToolsCalls: []llm.ReasoningSearchAIToolCallDebug{call},
 	})
+}
+
+func reportAIQueryDraftEvidence(ctx context.Context, toolName string, result *aiQueryToolResult) {
+	if result == nil || result.DocumentID == "" || len(result.Matches) == 0 {
+		return
+	}
+	evidence := make([]llm.ReasoningSearchResultEvidence, 0, len(result.Matches))
+	for _, match := range result.Matches {
+		evidence = append(evidence, llm.ReasoningSearchResultEvidence{
+			ToolName:          toolName,
+			DocumentType:      result.DocumentType,
+			DocumentID:        result.DocumentID,
+			Query:             result.Query,
+			ChunkNumber:       match.ChunkNumber,
+			EndChunkNumber:    match.EndChunkNumber,
+			Content:           match.Content,
+			Reason:            match.Reason,
+			SupportingSnippet: match.SupportingSnippet,
+		})
+	}
+	llm.ReportReasoningResultEvidence(ctx, result.DocumentID, evidence)
 }
 
 func selectAIQueryBatchesWithReader(ctx context.Context, service llm.Service, config *llm.AIToolsConfig, query string, batches [][]aiQueryChunk, maxChunks int) ([]aiQueryBatchResult, error) {

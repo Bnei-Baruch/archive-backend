@@ -749,6 +749,95 @@ func TestReasoningWorkflowDraftRequiresMinimumResults(t *testing.T) {
 	}
 }
 
+func TestReasoningWorkflowDraftAttachesEvidenceToPartialResults(t *testing.T) {
+	store := llm.NewReasoningWorkflowSessionStore(time.Hour)
+	defer store.Close()
+
+	sessionID, err := store.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:        "openai",
+		Model:           "gpt-5.4",
+		ReasoningEffort: "low",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if err := store.SetQuery(sessionID, "אהבה"); err != nil {
+		t.Fatalf("unexpected set query error: %v", err)
+	}
+	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
+		{MDBUID: "uid-1", ResultType: "sources", Title: "Source"},
+		{MDBUID: "uid-2", ResultType: "units", Title: "Unit"},
+	}); err != nil {
+		t.Fatalf("unexpected add partial results error: %v", err)
+	}
+	revision, added, err := store.AddPartialResultEvidence(sessionID, "uid-1", []llm.ReasoningSearchResultEvidence{
+		{ToolName: "query_source_ai", DocumentType: "source", DocumentID: "uid-1", Query: "meaning", ChunkNumber: 3, Content: "supporting source text"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected add evidence error: %v", err)
+	}
+	if revision != 2 || added != 1 {
+		t.Fatalf("unexpected evidence revision/added: %d/%d", revision, added)
+	}
+
+	results, draftRevision, _, ok, err := store.TryStartDraft(sessionID, 0, 2)
+	if err != nil {
+		t.Fatalf("unexpected try start draft error: %v", err)
+	}
+	if !ok || draftRevision != revision {
+		t.Fatalf("expected draft to start with evidence revision, ok=%t revision=%d", ok, draftRevision)
+	}
+	if len(results) != 2 || len(results[0].DraftEvidence) != 1 || results[0].DraftEvidence[0].Content != "supporting source text" {
+		t.Fatalf("expected evidence on first draft result, got %#v", results)
+	}
+	if len(results[1].DraftEvidence) != 0 {
+		t.Fatalf("did not expect evidence on second draft result: %#v", results[1].DraftEvidence)
+	}
+}
+
+func TestReasoningWorkflowDraftEvidenceKeepsLatestItems(t *testing.T) {
+	store := llm.NewReasoningWorkflowSessionStore(time.Hour)
+	defer store.Close()
+
+	sessionID, err := store.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:        "openai",
+		Model:           "gpt-5.4",
+		ReasoningEffort: "low",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if err := store.SetQuery(sessionID, "אהבה"); err != nil {
+		t.Fatalf("unexpected set query error: %v", err)
+	}
+	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
+		{MDBUID: "uid-1", ResultType: "sources", Title: "Source"},
+	}); err != nil {
+		t.Fatalf("unexpected add partial results error: %v", err)
+	}
+
+	evidence := []llm.ReasoningSearchResultEvidence{
+		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 1, Content: "old"},
+		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 2, Content: "middle"},
+		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 3, Content: "recent"},
+		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 4, Content: "newest"},
+	}
+	if _, added, err := store.AddPartialResultEvidence(sessionID, "uid-1", evidence); err != nil || added != 4 {
+		t.Fatalf("unexpected add evidence result: added=%d err=%v", added, err)
+	}
+	results, _, _, ok, err := store.TryStartDraft(sessionID, 0, 1)
+	if err != nil {
+		t.Fatalf("unexpected try start draft error: %v", err)
+	}
+	if !ok || len(results) != 1 {
+		t.Fatalf("expected draft to start, ok=%t results=%d", ok, len(results))
+	}
+	got := results[0].DraftEvidence
+	if len(got) != 3 || got[0].Content != "middle" || got[1].Content != "recent" || got[2].Content != "newest" {
+		t.Fatalf("expected latest three evidence items, got %#v", got)
+	}
+}
+
 func TestReasoningWorkflowDraftPartialResultsAreSessionIsolated(t *testing.T) {
 	store := llm.NewReasoningWorkflowSessionStore(time.Hour)
 	defer store.Close()
