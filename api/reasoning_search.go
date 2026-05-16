@@ -1008,6 +1008,9 @@ func rapidSelectedResults(db *sql.DB, uiLanguage string, results []llm.Reasoning
 		return nil, err
 	}
 	for i := range missing {
+		if strings.TrimSpace(missing[i].ResultType) == "" {
+			continue
+		}
 		if len(evidenceByUID[missing[i].MDBUID]) > 0 {
 			missing[i].DraftEvidence = append([]llm.ReasoningSearchResultEvidence(nil), evidenceByUID[missing[i].MDBUID]...)
 		}
@@ -1301,7 +1304,7 @@ func executeReasoningSearchForSessionByMode(ctx context.Context, runtime *llm.Ru
 	return executeReasoningSearchForSession(ctx, runtime, db, r, responseSessionID, enableDraft)
 }
 
-func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) error {
+func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) (err error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1317,6 +1320,30 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 
 	workflowStore := runtime.Workflow
 	progressStore := runtime.Progress
+	progressIteration := 0
+	defer func() {
+		if err == nil {
+			return
+		}
+		if workflowStore != nil {
+			if clearErr := workflowStore.SetResponseSnapshot(responseSessionID, nil); clearErr != nil && !errors.Is(clearErr, llm.ErrReasoningSessionNotFoundOrExpired) {
+				log.Warnf("Rapid Reasoning Search failed clearing response snapshot: %v", clearErr)
+			}
+		}
+		if progressStore != nil {
+			// The LLM service may have already advanced progress; preserve the latest
+			// visible iteration when converting a rapid failure into terminal status.
+			if status, statusErr := progressStore.Get(responseSessionID); statusErr == nil && status.Iteration > progressIteration {
+				progressIteration = status.Iteration
+			}
+			if isReasoningSearchCancellation(err) {
+				progressStore.Cancel(responseSessionID, progressIteration)
+				return
+			}
+			progressStore.Fail(responseSessionID, progressIteration)
+		}
+	}()
+
 	session, err := workflowStore.Get(responseSessionID)
 	if err != nil {
 		return err
@@ -1378,6 +1405,7 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	if err != nil {
 		return err
 	}
+	progressIteration = gather.ReasoningIterations
 	gatherStage.ProviderSessionID = resolvedProviderSessionID
 	if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStageReasoning, gatherStage); err != nil {
 		return err
@@ -1399,8 +1427,18 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	if len(candidates) == 0 {
 		return errors.New("rapid reasoning search selected no gathered results")
 	}
+	// Debug should describe the cleaned finalizer input, not the raw UID list the
+	// gather model returned before duplicate/unknown IDs were removed.
+	selectedUIDsForDebug := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		uid := strings.TrimSpace(candidate.MDBUID)
+		if uid != "" {
+			selectedUIDsForDebug = append(selectedUIDsForDebug, uid)
+		}
+	}
 
 	progressStore.Finalizing(responseSessionID, gather.ReasoningIterations+1)
+	progressIteration = gather.ReasoningIterations + 1
 	responseSchema, err := llm.GenerateReasoningSearchResponseJSONSchemaForLanguage(outputLanguageName)
 	if err != nil {
 		return err
@@ -1455,9 +1493,9 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 		debug.RapidGatherLatencyMS = gatherLatencyMS
 		debug.RapidFinalizerLatencyMS = finalizerLatencyMS
 		debug.RapidGatheredCandidateCount = gatheredCandidateCount
-		debug.RapidSelectedUIDCount = len(gather.SelectedUIDs)
+		debug.RapidSelectedUIDCount = len(candidates)
 		debug.RapidFinalizerResultCount = len(candidates)
-		debug.RapidSelectedUIDs = append([]string(nil), gather.SelectedUIDs...)
+		debug.RapidSelectedUIDs = selectedUIDsForDebug
 		debug.Add(gather.Debug)
 		response.Debug = debug
 	}
