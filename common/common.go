@@ -122,10 +122,16 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	utils.Must(err)
 	draftConfig, err := llm.ReasoningSearchDraftConfigFromConfig()
 	utils.Must(err)
+	rapidConfig, err := llm.ReasoningSearchRapidConfigFromConfig()
+	utils.Must(err)
 	services := map[string]llm.Service{}
 
 	services[defaultProvider], err = llm.NewServiceForProviderWithProgress(defaultProvider, progress)
 	utils.Must(err)
+	if _, ok := services[rapidConfig.Gather.Provider]; !ok {
+		services[rapidConfig.Gather.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Gather.Provider, progress)
+		utils.Must(err)
+	}
 	if viper.GetBool("llm.reasoning-search-verification-enabled") {
 		if _, ok := services[verificationProvider]; !ok {
 			services[verificationProvider], err = llm.NewServiceForProviderWithProgress(verificationProvider, nil)
@@ -144,6 +150,10 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	}
 	if _, ok := services[draftConfig.Provider]; !ok {
 		services[draftConfig.Provider], err = llm.NewServiceForProviderWithProgress(draftConfig.Provider, nil)
+		utils.Must(err)
+	}
+	if _, ok := services[rapidConfig.Finalizer.Provider]; !ok {
+		services[rapidConfig.Finalizer.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Finalizer.Provider, nil)
 		utils.Must(err)
 	}
 
@@ -178,6 +188,7 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		Services:       services,
 		AIToolsConfig:  aiToolsConfig,
 		DraftConfig:    draftConfig,
+		RapidConfig:    rapidConfig,
 	}
 
 	return clock

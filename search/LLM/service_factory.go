@@ -34,6 +34,9 @@ const (
 	defaultAIToolsMaxTokens                          = 1500
 	defaultAIToolsMaxBatches                         = 5
 	defaultAIToolsBatchConcurrency                   = 2
+	defaultReasoningSearchRapidGatherMaxIterations   = 4
+	defaultReasoningSearchRapidGatherMaxTokens       = 2000
+	defaultReasoningSearchRapidFinalizerMaxTokens    = 4000
 )
 
 type ReasoningSearchConfig struct {
@@ -68,6 +71,19 @@ type ReasoningSearchDraftConfig struct {
 	Model     string
 	Effort    string
 	MaxTokens int
+}
+
+type ReasoningSearchRapidConfig struct {
+	Gather    ReasoningSearchRapidStageConfig
+	Finalizer ReasoningSearchRapidStageConfig
+}
+
+type ReasoningSearchRapidStageConfig struct {
+	Provider      string
+	Model         string
+	Effort        string
+	MaxTokens     int
+	MaxIterations int
 }
 
 type AIToolsConfig struct {
@@ -973,6 +989,66 @@ func ReasoningSearchDraftProviderFromConfig() string {
 		return AIToolsProviderFromConfig()
 	}
 	return provider
+}
+
+func ReasoningSearchRapidConfigFromConfig() (*ReasoningSearchRapidConfig, error) {
+	gatherProvider := strings.ToLower(strings.TrimSpace(viper.GetString("llm.reasoning-search-rapid-gather-provider")))
+	if gatherProvider == "" {
+		gatherProvider = ProviderFromConfig()
+	}
+	finalizerProvider := strings.ToLower(strings.TrimSpace(viper.GetString("llm.reasoning-search-rapid-finalizer-provider")))
+	if finalizerProvider == "" {
+		finalizerProvider = ProviderFromConfig()
+	}
+	gather, err := reasoningSearchRapidStageConfigFromProvider(gatherProvider, "gather", defaultReasoningSearchRapidGatherMaxTokens, defaultReasoningSearchRapidGatherMaxIterations)
+	if err != nil {
+		return nil, err
+	}
+	finalizer, err := reasoningSearchRapidStageConfigFromProvider(finalizerProvider, "finalizer", defaultReasoningSearchRapidFinalizerMaxTokens, 0)
+	if err != nil {
+		return nil, err
+	}
+	return &ReasoningSearchRapidConfig{Gather: gather, Finalizer: finalizer}, nil
+}
+
+func reasoningSearchRapidStageConfigFromProvider(provider string, stage string, defaultMaxTokens int, defaultMaxIterations int) (ReasoningSearchRapidStageConfig, error) {
+	model := strings.TrimSpace(viper.GetString(provider + ".reasoning-search-rapid-" + stage + "-model"))
+	if model == "" {
+		model = strings.TrimSpace(viper.GetString(provider + ".reasoning-search-model"))
+	}
+	if model == "" {
+		model = strings.TrimSpace(viper.GetString(provider + ".reasoning-model"))
+	}
+	if model == "" {
+		model = strings.TrimSpace(viper.GetString(provider + ".model"))
+	}
+	if model == "" {
+		return ReasoningSearchRapidStageConfig{}, fmt.Errorf("%s.reasoning-search-rapid-%s-model is empty", provider, stage)
+	}
+	effort := strings.TrimSpace(viper.GetString(provider + ".reasoning-search-rapid-" + stage + "-effort"))
+	if effort == "" {
+		switch provider {
+		case ProviderXAI, ProviderClaude, ProviderArcee:
+			effort = ""
+		default:
+			effort = defaultAIToolsEffort
+		}
+	}
+	if err := validateReasoningSearchDraftEffort(provider, model, effort); err != nil {
+		return ReasoningSearchRapidStageConfig{}, err
+	}
+	maxTokens := viper.GetInt(provider + ".reasoning-search-rapid-" + stage + "-max-output-tokens")
+	if maxTokens <= 0 {
+		maxTokens = defaultMaxTokens
+	}
+	maxIterations := 0
+	if defaultMaxIterations > 0 {
+		maxIterations = viper.GetInt(provider + ".reasoning-search-rapid-" + stage + "-max-iterations")
+		if maxIterations <= 0 {
+			maxIterations = defaultMaxIterations
+		}
+	}
+	return ReasoningSearchRapidStageConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens, MaxIterations: maxIterations}, nil
 }
 
 func ReasoningSearchVerificationMaxInputTokensFromConfig() int {

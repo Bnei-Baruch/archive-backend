@@ -149,6 +149,31 @@ func TestReasoningProgressStoreLifecycle(t *testing.T) {
 	}
 }
 
+func TestReasoningProgressStoreFinalizingPhase(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	store.Finalizing("session-1", 3)
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if status.State != llm.ReasoningProgressStateRunning {
+		t.Fatalf("unexpected state: %s", status.State)
+	}
+	if status.Phase != llm.ReasoningProgressPhaseFinalizing {
+		t.Fatalf("unexpected phase: %s", status.Phase)
+	}
+	if status.Message != "Finalizing results..." {
+		t.Fatalf("unexpected message: %s", status.Message)
+	}
+	if status.Iteration != 3 {
+		t.Fatalf("unexpected iteration: %d", status.Iteration)
+	}
+}
+
 func TestReasoningProgressStoreResultFlags(t *testing.T) {
 	store := llm.NewReasoningProgressStore(5 * time.Minute)
 	defer store.Close()
@@ -799,6 +824,67 @@ func TestReasoningWorkflowDraftFollowupKeepsPreviousDraftContext(t *testing.T) {
 	}
 	if session.DraftFollowupSeed.Results[0].MDBUID != "followup-uid" || session.DraftFollowupSeed.Results[1].MDBUID != "initial-uid" {
 		t.Fatalf("expected latest result first and previous context second, got %#v", session.DraftFollowupSeed.Results)
+	}
+}
+
+func TestReasoningWorkflowStartRapidFollowupUsesPreviousSnapshotAsSeed(t *testing.T) {
+	store := llm.NewReasoningWorkflowSessionStore(5 * time.Minute)
+	defer store.Close()
+
+	sessionID, err := store.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:          "openai",
+		Model:             "gpt-5.4-nano",
+		ReasoningEffort:   "low",
+		MaxFollowups:      2,
+		ProviderSessionID: "provider-session-1",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if err := store.SetRapid(sessionID, true); err != nil {
+		t.Fatalf("unexpected rapid state error: %v", err)
+	}
+	response := &llm.ReasoningSearchResponse{
+		Query:   "initial",
+		Summary: "initial summary",
+		Results: []llm.ReasoningSearchResult{
+			{MDBUID: "uid-1", Title: "Initial result"},
+		},
+	}
+	response.SetSessionID(sessionID)
+	if err := store.SetResponseSnapshot(sessionID, response); err != nil {
+		t.Fatalf("unexpected set snapshot error: %v", err)
+	}
+	if err := store.SetFollowupState(sessionID, true, 0); err != nil {
+		t.Fatalf("unexpected follow-up state error: %v", err)
+	}
+
+	if err := store.StartRapidFollowup(sessionID, "follow-up", 1, llm.ReasoningWorkflowStageSession{
+		Provider:          "openai",
+		Model:             "gpt-5.4-nano",
+		ReasoningEffort:   "low",
+		MaxFollowups:      2,
+		ProviderSessionID: "provider-session-2",
+	}); err != nil {
+		t.Fatalf("unexpected rapid follow-up start error: %v", err)
+	}
+
+	session, err := store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if !session.Rapid || session.Query != "follow-up" || session.FollowupCount != 1 {
+		t.Fatalf("unexpected rapid follow-up state: rapid=%t query=%q count=%d", session.Rapid, session.Query, session.FollowupCount)
+	}
+	if len(session.ResponseSnapshotJSON) != 0 {
+		t.Fatalf("expected response snapshot to be cleared for rapid follow-up")
+	}
+	if session.RapidFollowupSeed == nil || session.RapidFollowupSeed.Summary != "initial summary" {
+		t.Fatalf("expected previous response seed, got %#v", session.RapidFollowupSeed)
+	}
+	stage := session.Stages[llm.ReasoningWorkflowStageReasoning]
+	if stage.ProviderSessionID != "provider-session-2" {
+		t.Fatalf("expected fresh provider session, got %q", stage.ProviderSessionID)
 	}
 }
 

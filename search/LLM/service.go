@@ -37,4 +37,5 @@ type Runtime struct {
 	Services       map[string]Service
 	AIToolsConfig  *AIToolsConfig
 	DraftConfig    *ReasoningSearchDraftConfig
+	RapidConfig    *ReasoningSearchRapidConfig
 }

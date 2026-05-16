@@ -91,6 +91,14 @@ type ReasoningSearchDebugInfo struct {
 	AIToolsUsage                 *ReasoningSearchUsageBreakdown   `json:"ai_tools_usage,omitempty"`
 	DraftModelUsage              *ReasoningSearchUsageBreakdown   `json:"draft_model_usage,omitempty"`
 	DraftModelRuns               []ReasoningSearchUsageBreakdown  `json:"draft_model_runs,omitempty"`
+	RapidGatherModelUsage        *ReasoningSearchUsageBreakdown   `json:"rapid_gather_model_usage,omitempty"`
+	RapidFinalizerModelUsage     *ReasoningSearchUsageBreakdown   `json:"rapid_finalizer_model_usage,omitempty"`
+	RapidGatherLatencyMS         int64                            `json:"rapid_gather_latency_ms,omitempty"`
+	RapidFinalizerLatencyMS      int64                            `json:"rapid_finalizer_latency_ms,omitempty"`
+	RapidGatheredCandidateCount  int                              `json:"rapid_gathered_candidate_count,omitempty"`
+	RapidSelectedUIDCount        int                              `json:"rapid_selected_uid_count,omitempty"`
+	RapidFinalizerResultCount    int                              `json:"rapid_finalizer_result_count,omitempty"`
+	RapidSelectedUIDs            []string                         `json:"rapid_selected_uids,omitempty"`
 	AIToolsCalls                 []ReasoningSearchAIToolCallDebug `json:"ai_tools_calls,omitempty"`
 	VerificationModel            string                           `json:"verification_model,omitempty"`
 	VerificationReasoningEffort  string                           `json:"verification_reasoning_effort,omitempty"`
@@ -161,6 +169,8 @@ type ReasoningSearchPlanningToolSpec struct {
 	ParamsJSON         string   `json:"params_json"`
 	AlternativeQueries []string `json:"alternative_queries"`
 }
+
+var ReasoningSearchRapidGatherResponseJSONSchema = `{"type":"object","additionalProperties":false,"properties":{"done":{"type":"boolean"},"selected_uids":{"type":"array","items":{"type":"string"}}},"required":["done","selected_uids"]}`
 
 func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (string, error) {
 	languageName = strings.TrimSpace(languageName)
@@ -349,6 +359,32 @@ func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {
 	if len(other.DraftModelRuns) != 0 {
 		d.DraftModelRuns = append(d.DraftModelRuns, other.DraftModelRuns...)
 		d.DraftModelUsage = aggregateReasoningSearchUsageBreakdowns(d.DraftModelRuns)
+	}
+	if d.RapidGatherModelUsage == nil && other.RapidGatherModelUsage != nil {
+		copy := *other.RapidGatherModelUsage
+		d.RapidGatherModelUsage = &copy
+	}
+	if d.RapidFinalizerModelUsage == nil && other.RapidFinalizerModelUsage != nil {
+		copy := *other.RapidFinalizerModelUsage
+		d.RapidFinalizerModelUsage = &copy
+	}
+	if d.RapidGatherLatencyMS == 0 {
+		d.RapidGatherLatencyMS = other.RapidGatherLatencyMS
+	}
+	if d.RapidFinalizerLatencyMS == 0 {
+		d.RapidFinalizerLatencyMS = other.RapidFinalizerLatencyMS
+	}
+	if d.RapidGatheredCandidateCount == 0 {
+		d.RapidGatheredCandidateCount = other.RapidGatheredCandidateCount
+	}
+	if d.RapidSelectedUIDCount == 0 {
+		d.RapidSelectedUIDCount = other.RapidSelectedUIDCount
+	}
+	if d.RapidFinalizerResultCount == 0 {
+		d.RapidFinalizerResultCount = other.RapidFinalizerResultCount
+	}
+	if len(d.RapidSelectedUIDs) == 0 && len(other.RapidSelectedUIDs) != 0 {
+		d.RapidSelectedUIDs = append([]string(nil), other.RapidSelectedUIDs...)
 	}
 	if otherHasUsageOrCost {
 		if !hadUsageOrCost {

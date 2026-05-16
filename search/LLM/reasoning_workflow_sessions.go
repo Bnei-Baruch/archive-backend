@@ -13,6 +13,7 @@ import (
 const ReasoningWorkflowStageReasoning = "reasoning"
 const ReasoningWorkflowStagePlanning = "planning"
 const ReasoningWorkflowStageVerification = "verification"
+const ReasoningWorkflowStageRapidFinalizer = "rapid_finalizer"
 
 var ErrReasoningDraftNotReady = errors.New("reasoning draft is not ready")
 
@@ -41,9 +42,11 @@ type ReasoningWorkflowSession struct {
 	ID                      string
 	Query                   string
 	Stages                  map[string]ReasoningWorkflowStageSession
+	Rapid                   bool
 	InitialRequestCompleted bool
 	FollowupCount           int
 	CachedInitialResponse   *ReasoningSearchCacheEntry
+	RapidFollowupSeed       *ReasoningSearchResponse
 	// ResponseSnapshotJSON stores the exact final API response for this workflow
 	// session so the fetch endpoint can return it after the background run ends.
 	// This is session-scoped state, not the shared query-based ReasoningCache.
@@ -136,6 +139,7 @@ func (s *ReasoningWorkflowSessionStore) Get(sessionID string) (*ReasoningWorkflo
 		copySession.Stages[key] = value
 	}
 	copySession.CachedInitialResponse = cloneReasoningSearchCacheEntry(session.CachedInitialResponse)
+	copySession.RapidFollowupSeed = cloneReasoningSearchResponse(session.RapidFollowupSeed)
 	copySession.ResponseSnapshotJSON = append([]byte(nil), session.ResponseSnapshotJSON...)
 	copySession.PartialResults = cloneReasoningSearchResults(session.PartialResults)
 	if session.PartialResultEvidence != nil {
@@ -215,6 +219,27 @@ func (s *ReasoningWorkflowSessionStore) SetQuery(sessionID string, query string)
 	return nil
 }
 
+func (s *ReasoningWorkflowSessionStore) SetRapid(sessionID string, rapid bool) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+
+	session.Rapid = rapid
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
 func (s *ReasoningWorkflowSessionStore) SetFollowupState(sessionID string, initialRequestCompleted bool, followupCount int) error {
 	now := time.Now()
 
@@ -284,6 +309,7 @@ func (s *ReasoningWorkflowSessionStore) SetResponseSnapshot(sessionID string, re
 
 	session.ResponseSnapshotJSON = append([]byte(nil), responseJSON...)
 	session.DraftFollowupSeed = nil
+	session.RapidFollowupSeed = nil
 	if response == nil {
 		session.PartialResults = nil
 		session.PartialResultsRevision = 0
@@ -673,6 +699,56 @@ func (s *ReasoningWorkflowSessionStore) StartDraftFollowup(sessionID string, que
 	session.FinishNowRequested = false
 	session.FinalizedFromDraft = false
 	session.DraftFollowupSeed = &seed
+	session.DraftModelRuns = nil
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func (s *ReasoningWorkflowSessionStore) StartRapidFollowup(sessionID string, query string, followupCount int, gatherStage ReasoningWorkflowStageSession) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if len(session.ResponseSnapshotJSON) == 0 {
+		return ErrReasoningDraftNotReady
+	}
+
+	seed := ReasoningSearchResponse{}
+	if err := json.Unmarshal(session.ResponseSnapshotJSON, &seed); err != nil {
+		return err
+	}
+
+	if session.Stages == nil {
+		session.Stages = map[string]ReasoningWorkflowStageSession{}
+	}
+	session.Stages[ReasoningWorkflowStageReasoning] = gatherStage
+	session.Query = query
+	session.Rapid = true
+	session.InitialRequestCompleted = true
+	session.FollowupCount = followupCount
+	session.CachedInitialResponse = nil
+	session.RapidFollowupSeed = &seed
+	session.ResponseSnapshotJSON = nil
+	session.PartialResults = nil
+	session.PartialResultsRevision = 0
+	session.PartialResultEvidence = nil
+	session.DraftResponseJSON = nil
+	session.DraftRevision = 0
+	session.DraftInProgress = false
+	session.LastDraftAt = time.Time{}
+	session.FinishNowRequested = false
+	session.FinalizedFromDraft = false
+	session.DraftFollowupSeed = nil
 	session.DraftModelRuns = nil
 	session.UpdatedAt = now
 	session.ExpiresAt = now.Add(s.ttl)

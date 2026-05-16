@@ -22,6 +22,7 @@ type ReplayChatCompletionsService struct {
 var _ Service = (*ReplayChatCompletionsService)(nil)
 
 var errChatCompletionsToolCallsInPlainResponse = errors.New("chat completions returned tool calls in a plain structured-output response")
+var errChatCompletionsLengthWithoutOutput = errors.New("chat completions reached max_tokens before producing output")
 
 type ChatCompletionsRequest struct {
 	Model           string                         `json:"model"`
@@ -86,8 +87,9 @@ type ChatCompletionsMessage struct {
 
 type ChatCompletionsResponse struct {
 	Choices []struct {
-		Index   int                    `json:"index"`
-		Message ChatCompletionsMessage `json:"message"`
+		Index        int                    `json:"index"`
+		Message      ChatCompletionsMessage `json:"message"`
+		FinishReason string                 `json:"finish_reason,omitempty"`
 	} `json:"choices"`
 	Usage *OpenAIUsage `json:"usage,omitempty"`
 }
@@ -388,16 +390,16 @@ func (m *ChatCompletionsMessage) contentText() string {
 	return m.ReasoningContent
 }
 
-func firstChatCompletionsChoice(resp *ChatCompletionsResponse) (*ChatCompletionsMessage, error) {
+func firstChatCompletionsChoice(resp *ChatCompletionsResponse) (*ChatCompletionsMessage, string, error) {
 	if resp == nil || len(resp.Choices) == 0 {
-		return nil, errors.New("chat completions returned no choices")
+		return nil, "", errors.New("chat completions returned no choices")
 	}
 	for _, choice := range resp.Choices {
 		if choice.Index == 0 {
-			return &choice.Message, nil
+			return &choice.Message, choice.FinishReason, nil
 		}
 	}
-	return &resp.Choices[0].Message, nil
+	return &resp.Choices[0].Message, resp.Choices[0].FinishReason, nil
 }
 
 func chatCompletionsAssistantMessage(message *ChatCompletionsMessage) (*LLMBotMessage, error) {
@@ -436,7 +438,7 @@ func (s *ReplayChatCompletionsService) getChatResponseWithUsage(ctx context.Cont
 		return nil, usageTotals, err
 	}
 	usageTotals.Add(chatResp.Usage)
-	message, err := firstChatCompletionsChoice(&chatResp)
+	message, finishReason, err := firstChatCompletionsChoice(&chatResp)
 	if err != nil {
 		return nil, usageTotals, err
 	}
@@ -445,6 +447,9 @@ func (s *ReplayChatCompletionsService) getChatResponseWithUsage(ctx context.Cont
 	}
 	msg := &LLMBotMessage{Role: message.Role, Content: message.contentText(), Reasoning: message.reasoningText()}
 	if strings.TrimSpace(msg.Content) == "" {
+		if finishReason == "length" {
+			return nil, usageTotals, errChatCompletionsLengthWithoutOutput
+		}
 		return nil, usageTotals, errors.New("chat completions returned empty assistant output")
 	}
 	return msg, usageTotals, nil
@@ -546,7 +551,7 @@ func (s *ReplayChatCompletionsService) getReasoningResponseWithTools(ctx context
 		iterations = i + 1
 		stepUsage := reasoningUsageTotals(chatResp.Usage)
 		usageTotals.Add(chatResp.Usage)
-		message, err := firstChatCompletionsChoice(&chatResp)
+		message, finishReason, err := firstChatCompletionsChoice(&chatResp)
 		if err != nil {
 			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
@@ -558,6 +563,9 @@ func (s *ReplayChatCompletionsService) getReasoningResponseWithTools(ctx context
 		if len(message.ToolCalls) == 0 {
 			content := message.contentText()
 			if strings.TrimSpace(content) == "" {
+				if finishReason == "length" {
+					return nil, nil, LLMUsageTotals{}, 0, nil, nil, errChatCompletionsLengthWithoutOutput
+				}
 				return nil, nil, LLMUsageTotals{}, 0, nil, nil, errors.New("chat completions returned empty assistant output")
 			}
 			if len(usedTools) == 0 {

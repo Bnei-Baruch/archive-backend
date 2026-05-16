@@ -1170,6 +1170,51 @@ func TestReasoningSearchDraftConfigFromConfigDefaultsToAITools(t *testing.T) {
 	}
 }
 
+func TestReasoningSearchRapidConfigFromConfigUsesExplicitStages(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldGatherProvider := viper.GetString("llm.reasoning-search-rapid-gather-provider")
+	oldFinalizerProvider := viper.GetString("llm.reasoning-search-rapid-finalizer-provider")
+	oldGatherModel := viper.GetString("openai.reasoning-search-rapid-gather-model")
+	oldGatherEffort := viper.GetString("openai.reasoning-search-rapid-gather-effort")
+	oldGatherMaxTokens := viper.GetInt("openai.reasoning-search-rapid-gather-max-output-tokens")
+	oldGatherMaxIterations := viper.GetInt("openai.reasoning-search-rapid-gather-max-iterations")
+	oldFinalizerModel := viper.GetString("stub.reasoning-search-rapid-finalizer-model")
+	oldFinalizerEffort := viper.GetString("stub.reasoning-search-rapid-finalizer-effort")
+	oldFinalizerMaxTokens := viper.GetInt("stub.reasoning-search-rapid-finalizer-max-output-tokens")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-rapid-gather-provider", oldGatherProvider)
+	defer viper.Set("llm.reasoning-search-rapid-finalizer-provider", oldFinalizerProvider)
+	defer viper.Set("openai.reasoning-search-rapid-gather-model", oldGatherModel)
+	defer viper.Set("openai.reasoning-search-rapid-gather-effort", oldGatherEffort)
+	defer viper.Set("openai.reasoning-search-rapid-gather-max-output-tokens", oldGatherMaxTokens)
+	defer viper.Set("openai.reasoning-search-rapid-gather-max-iterations", oldGatherMaxIterations)
+	defer viper.Set("stub.reasoning-search-rapid-finalizer-model", oldFinalizerModel)
+	defer viper.Set("stub.reasoning-search-rapid-finalizer-effort", oldFinalizerEffort)
+	defer viper.Set("stub.reasoning-search-rapid-finalizer-max-output-tokens", oldFinalizerMaxTokens)
+
+	viper.Set("llm.provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-gather-provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-finalizer-provider", "stub")
+	viper.Set("openai.reasoning-search-rapid-gather-model", "gpt-5.4-nano")
+	viper.Set("openai.reasoning-search-rapid-gather-effort", "low")
+	viper.Set("openai.reasoning-search-rapid-gather-max-output-tokens", 1234)
+	viper.Set("openai.reasoning-search-rapid-gather-max-iterations", 3)
+	viper.Set("stub.reasoning-search-rapid-finalizer-model", "stub-finalizer")
+	viper.Set("stub.reasoning-search-rapid-finalizer-effort", "low")
+	viper.Set("stub.reasoning-search-rapid-finalizer-max-output-tokens", 4321)
+
+	cfg, err := llm.ReasoningSearchRapidConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Gather.Provider != "openai" || cfg.Gather.Model != "gpt-5.4-nano" || cfg.Gather.Effort != "low" || cfg.Gather.MaxTokens != 1234 || cfg.Gather.MaxIterations != 3 {
+		t.Fatalf("unexpected gather config: %#v", cfg.Gather)
+	}
+	if cfg.Finalizer.Provider != "stub" || cfg.Finalizer.Model != "stub-finalizer" || cfg.Finalizer.Effort != "low" || cfg.Finalizer.MaxTokens != 4321 || cfg.Finalizer.MaxIterations != 0 {
+		t.Fatalf("unexpected finalizer config: %#v", cfg.Finalizer)
+	}
+}
+
 func TestNewServiceFromConfigRejectsInvalidZAITemperature(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldToken := viper.GetString("zai.token")
