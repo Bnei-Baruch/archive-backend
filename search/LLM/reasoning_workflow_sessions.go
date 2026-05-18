@@ -17,7 +17,7 @@ const ReasoningWorkflowStageRapidFinalizer = "rapid_finalizer"
 
 var ErrReasoningDraftNotReady = errors.New("reasoning draft is not ready")
 
-const maxDraftEvidencePerResult = 5
+const maxLookupEvidencePerResult = 5
 
 // ReasoningWorkflowSessionStore keeps client-facing workflow sessions in local
 // process memory. It works only on a single machine; multi-instance deployments
@@ -56,7 +56,7 @@ type ReasoningWorkflowSession struct {
 	// return immediately.
 	PartialResults         []ReasoningSearchResult
 	PartialResultsRevision int
-	PartialResultEvidence  map[string][]ReasoningSearchResultEvidence
+	PartialLookupEvidence  map[string][]ReasoningSearchResultEvidence
 	DraftResponseJSON      []byte
 	DraftRevision          int
 	DraftInProgress        bool
@@ -142,10 +142,10 @@ func (s *ReasoningWorkflowSessionStore) Get(sessionID string) (*ReasoningWorkflo
 	copySession.RapidFollowupSeed = cloneReasoningSearchResponse(session.RapidFollowupSeed)
 	copySession.ResponseSnapshotJSON = append([]byte(nil), session.ResponseSnapshotJSON...)
 	copySession.PartialResults = cloneReasoningSearchResults(session.PartialResults)
-	if session.PartialResultEvidence != nil {
-		copySession.PartialResultEvidence = make(map[string][]ReasoningSearchResultEvidence, len(session.PartialResultEvidence))
-		for key, value := range session.PartialResultEvidence {
-			copySession.PartialResultEvidence[key] = append([]ReasoningSearchResultEvidence(nil), value...)
+	if session.PartialLookupEvidence != nil {
+		copySession.PartialLookupEvidence = make(map[string][]ReasoningSearchResultEvidence, len(session.PartialLookupEvidence))
+		for key, value := range session.PartialLookupEvidence {
+			copySession.PartialLookupEvidence[key] = append([]ReasoningSearchResultEvidence(nil), value...)
 		}
 	}
 	copySession.DraftResponseJSON = append([]byte(nil), session.DraftResponseJSON...)
@@ -313,7 +313,7 @@ func (s *ReasoningWorkflowSessionStore) SetResponseSnapshot(sessionID string, re
 	if response == nil {
 		session.PartialResults = nil
 		session.PartialResultsRevision = 0
-		session.PartialResultEvidence = nil
+		session.PartialLookupEvidence = nil
 		session.DraftResponseJSON = nil
 		session.DraftRevision = 0
 		session.DraftInProgress = false
@@ -371,9 +371,9 @@ func (s *ReasoningWorkflowSessionStore) AddPartialResults(sessionID string, resu
 	return session.PartialResultsRevision, added, nil
 }
 
-// AddPartialResultEvidence stores AI-reader excerpts by result UID. Drafts still
+// AddPartialLookupEvidence stores AI-reader excerpts by result UID. Drafts still
 // use only ES results; evidence is attached only when a matching ES result exists.
-func (s *ReasoningWorkflowSessionStore) AddPartialResultEvidence(sessionID string, documentID string, evidence []ReasoningSearchResultEvidence) (int, int, error) {
+func (s *ReasoningWorkflowSessionStore) AddPartialLookupEvidence(sessionID string, documentID string, evidence []ReasoningSearchResultEvidence) (int, int, error) {
 	documentID = strings.TrimSpace(documentID)
 	if documentID == "" || len(evidence) == 0 {
 		return 0, 0, nil
@@ -394,18 +394,18 @@ func (s *ReasoningWorkflowSessionStore) AddPartialResultEvidence(sessionID strin
 	if session.FinalizedFromDraft {
 		return session.PartialResultsRevision, 0, nil
 	}
-	if session.PartialResultEvidence == nil {
-		session.PartialResultEvidence = map[string][]ReasoningSearchResultEvidence{}
+	if session.PartialLookupEvidence == nil {
+		session.PartialLookupEvidence = map[string][]ReasoningSearchResultEvidence{}
 	}
 
-	existing := session.PartialResultEvidence[documentID]
+	existing := session.PartialLookupEvidence[documentID]
 	added := 0
 	for _, item := range evidence {
 		item = normalizeReasoningSearchResultEvidence(item, documentID)
 		if item.Content == "" || reasoningSearchEvidenceExists(existing, item) {
 			continue
 		}
-		if len(existing) >= maxDraftEvidencePerResult {
+		if len(existing) >= maxLookupEvidencePerResult {
 			copy(existing, existing[1:])
 			existing = existing[:len(existing)-1]
 		}
@@ -415,7 +415,7 @@ func (s *ReasoningWorkflowSessionStore) AddPartialResultEvidence(sessionID strin
 	if added == 0 {
 		return session.PartialResultsRevision, 0, nil
 	}
-	session.PartialResultEvidence[documentID] = existing
+	session.PartialLookupEvidence[documentID] = existing
 	for _, result := range session.PartialResults {
 		if result.MDBUID == documentID {
 			session.PartialResultsRevision++
@@ -456,8 +456,8 @@ func (s *ReasoningWorkflowSessionStore) TryStartDraft(sessionID string, minInter
 	results := cloneReasoningSearchResults(session.PartialResults)
 	for i := range results {
 		uid := strings.TrimSpace(results[i].MDBUID)
-		if uid != "" && len(session.PartialResultEvidence[uid]) > 0 {
-			results[i].DraftEvidence = append([]ReasoningSearchResultEvidence(nil), session.PartialResultEvidence[uid]...)
+		if uid != "" && len(session.PartialLookupEvidence[uid]) > 0 {
+			results[i].LookupEvidence = append([]ReasoningSearchResultEvidence(nil), session.PartialLookupEvidence[uid]...)
 		}
 	}
 	return results, session.PartialResultsRevision, session.Query, true, nil
@@ -691,7 +691,7 @@ func (s *ReasoningWorkflowSessionStore) StartDraftFollowup(sessionID string, que
 	session.ResponseSnapshotJSON = nil
 	session.PartialResults = nil
 	session.PartialResultsRevision = 0
-	session.PartialResultEvidence = nil
+	session.PartialLookupEvidence = nil
 	session.DraftResponseJSON = nil
 	session.DraftRevision = 0
 	session.DraftInProgress = false
@@ -741,7 +741,7 @@ func (s *ReasoningWorkflowSessionStore) StartRapidFollowup(sessionID string, que
 	session.ResponseSnapshotJSON = nil
 	session.PartialResults = nil
 	session.PartialResultsRevision = 0
-	session.PartialResultEvidence = nil
+	session.PartialLookupEvidence = nil
 	session.DraftResponseJSON = nil
 	session.DraftRevision = 0
 	session.DraftInProgress = false
@@ -792,7 +792,7 @@ func cloneReasoningSearchResults(results []ReasoningSearchResult) []ReasoningSea
 
 func cloneReasoningSearchResult(result ReasoningSearchResult) ReasoningSearchResult {
 	result.Highlights = append([]string(nil), result.Highlights...)
-	result.DraftEvidence = append([]ReasoningSearchResultEvidence(nil), result.DraftEvidence...)
+	result.LookupEvidence = append([]ReasoningSearchResultEvidence(nil), result.LookupEvidence...)
 	return result
 }
 

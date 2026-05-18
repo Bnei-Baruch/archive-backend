@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	log "github.com/Sirupsen/logrus"
 	"golang.org/x/text/language/display"
@@ -34,6 +35,11 @@ type ReasoningSearchCancelRequest struct {
 	SessionID string `json:"session_id" form:"session_id"`
 }
 
+const (
+	reasoningSearchDisplayHighlightMaxItems = 3
+	reasoningSearchDisplayHighlightMaxRunes = 200
+)
+
 type rapidGatherResponse struct {
 	llm.ReasoningSearchResponse `json:"-"`
 	Done                        bool     `json:"done"`
@@ -53,8 +59,9 @@ const reasoningSearchDraftMinResults = 8
 const reasoningSearchRapidSelectedUIDLimit = 12
 
 const reasoningSearchDraftInstruction = `Draft mode: prepare a partial archive search response from Elasticsearch results that were already collected while the main reasoning search is still running.
-Use only the supplied Elasticsearch results. Do not invent results, IDs, titles, highlights, dates, or content types.
-Some results may include draft_evidence from AI source/transcript lookup tools. Use this evidence only to judge and explain relevance of the supplied Elasticsearch result; do not treat evidence as a separate result.
+Use only the supplied Elasticsearch results. Do not invent results, IDs, titles, dates, or content types.
+Use search_highlights as Elasticsearch evidence for the result itself.
+Some results may include lookup_evidence from AI source/transcript lookup tools. Use this evidence only to judge and explain relevance of the supplied Elasticsearch result; do not treat evidence as a separate result.
 Keep mdb_uid values exactly as provided.
 The summary must say that the user asked for fast results and the answer is based on results gathered so far.`
 
@@ -64,8 +71,9 @@ Return selected_uids with the best candidate mdb_uid values collected from Elast
 Prefer Elasticsearch searches that collect varied candidate types. Use AI source/transcript tools only when they can add useful evidence to candidates already found.`, reasoningSearchRapidSelectedUIDLimit)
 
 const reasoningSearchRapidFinalizerInstruction = `Rapid search finalizer mode: create the final user-facing archive search response from the supplied gathered Elasticsearch candidates.
-Use only supplied candidates. Do not invent results, IDs, titles, highlights, dates, or content types.
-Some candidates may include draft_evidence from AI source/transcript lookup tools. Use this evidence only to judge and explain relevance of the supplied candidate; do not treat evidence as a separate result.
+Use only supplied candidates. Do not invent results, IDs, titles, dates, or content types.
+Use search_highlights as Elasticsearch evidence for the candidate itself.
+Some candidates may include lookup_evidence from AI source/transcript lookup tools. Use this evidence only to judge and explain relevance of the supplied candidate; do not treat evidence as a separate result.
 If previous_response is provided, use it only to understand the follow-up query and conversation context.
 Keep mdb_uid values exactly as provided.`
 
@@ -770,11 +778,11 @@ func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime
 	evidenceResultCount := 0
 	evidenceItemCount := 0
 	for _, candidate := range candidates {
-		if len(candidate.DraftEvidence) == 0 {
+		if len(candidate.LookupEvidence) == 0 {
 			continue
 		}
 		evidenceResultCount++
-		evidenceItemCount += len(candidate.DraftEvidence)
+		evidenceItemCount += len(candidate.LookupEvidence)
 	}
 	if evidenceItemCount > 0 {
 		log.Infof("Reasoning Search draft evidence attached session=%s results=%d evidence_items=%d", sessionID, evidenceResultCount, evidenceItemCount)
@@ -800,11 +808,11 @@ func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime
 	systemMessage = systemMessage + "\n\n" + reasoningSearchDraftInstruction
 
 	input, err := json.Marshal(struct {
-		Query   string                      `json:"query"`
-		Results []llm.ReasoningSearchResult `json:"results"`
+		Query   string                          `json:"query"`
+		Results []reasoningSearchCandidateInput `json:"results"`
 	}{
 		Query:   query,
-		Results: candidates,
+		Results: reasoningSearchCandidateInputs(candidates),
 	})
 	if err != nil {
 		return err
@@ -898,16 +906,186 @@ func mergeReasoningSearchDraftMetadata(response *llm.ReasoningSearchResponse, ca
 			continue
 		}
 		candidate.Reason = strings.TrimSpace(selected.Reason)
-		if len(selected.Highlights) > 0 {
-			candidate.Highlights = append([]string(nil), selected.Highlights...)
-		}
-		candidate.DraftEvidence = nil
 		candidate.IsGroupingResult = candidate.IsGroupingResult || selected.IsGroupingResult
 		candidate.Origin = llm.ReasoningSearchResultOriginOriginal
 		merged = append(merged, candidate)
 		seen[uid] = true
 	}
 	response.Results = merged
+	populateReasoningSearchHighlightsFromEvidence(response, candidates, nil)
+}
+
+func populateReasoningSearchHighlightsFromEvidence(response *llm.ReasoningSearchResponse, candidates []llm.ReasoningSearchResult, evidenceByUID map[string][]llm.ReasoningSearchResultEvidence) {
+	if response == nil || len(response.Results) == 0 {
+		return
+	}
+	byUID := map[string]llm.ReasoningSearchResult{}
+	for _, candidate := range candidates {
+		uid := strings.TrimSpace(candidate.MDBUID)
+		if uid != "" {
+			byUID[uid] = candidate
+		}
+	}
+	for i := range response.Results {
+		uid := strings.TrimSpace(response.Results[i].MDBUID)
+		response.Results[i].Highlights = nil
+		if candidate, ok := byUID[uid]; ok {
+			if len(candidate.LookupEvidence) == 0 && len(evidenceByUID[uid]) > 0 {
+				candidate.LookupEvidence = append([]llm.ReasoningSearchResultEvidence(nil), evidenceByUID[uid]...)
+			}
+			response.Results[i].Highlights = compactReasoningSearchHighlightsForDisplay(buildReasoningSearchHighlightsFromEvidence(candidate))
+		} else if len(evidenceByUID[uid]) > 0 {
+			response.Results[i].Highlights = compactReasoningSearchHighlightsForDisplay(buildReasoningSearchHighlightsFromEvidence(llm.ReasoningSearchResult{
+				LookupEvidence: evidenceByUID[uid],
+			}))
+		}
+		response.Results[i].LookupEvidence = nil
+	}
+}
+
+func buildReasoningSearchHighlightsFromEvidence(result llm.ReasoningSearchResult) []string {
+	highlights := []string{}
+	seen := map[string]bool{}
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		highlights = append(highlights, value)
+	}
+	for _, highlight := range result.Highlights {
+		add(highlight)
+	}
+	// Keep ES highlights first, then append AI-tool evidence as extra proof text.
+	for _, evidence := range result.LookupEvidence {
+		if strings.TrimSpace(evidence.SupportingSnippet) != "" {
+			add(evidence.SupportingSnippet)
+			continue
+		}
+		add(evidence.Content)
+	}
+	return highlights
+}
+
+func compactReasoningSearchHighlightsForDisplay(highlights []string) []string {
+	if len(highlights) == 0 {
+		return nil
+	}
+	items := append([]string(nil), highlights...)
+	if len(items) > reasoningSearchDisplayHighlightMaxItems {
+		items = items[:reasoningSearchDisplayHighlightMaxItems]
+	}
+	for i := range items {
+		items[i] = truncateHighlightForDisplay(items[i], reasoningSearchDisplayHighlightMaxRunes)
+	}
+	return items
+}
+
+func visibleHighlightRuneCount(value string) int {
+	count := 0
+	inTag := false
+	for _, r := range value {
+		switch {
+		case r == '<':
+			inTag = true
+		case r == '>':
+			inTag = false
+		case !inTag:
+			count++
+		}
+	}
+	return count
+}
+
+func truncateHighlightForDisplay(value string, maxRunes int) string {
+	value = strings.TrimSpace(value)
+	if value == "" || maxRunes <= 0 || visibleHighlightRuneCount(value) <= maxRunes {
+		return value
+	}
+
+	var b strings.Builder
+	visible := 0
+	openEm := 0
+	truncated := false
+
+	for i := 0; i < len(value); {
+		if value[i] == '<' {
+			end := strings.IndexByte(value[i:], '>')
+			if end < 0 {
+				break
+			}
+			tag := value[i : i+end+1]
+			b.WriteString(tag)
+			switch tag {
+			case "<em>":
+				openEm++
+			case "</em>":
+				if openEm > 0 {
+					openEm--
+				}
+			}
+			i += end + 1
+			continue
+		}
+
+		r, size := utf8.DecodeRuneInString(value[i:])
+		if r == utf8.RuneError && size == 0 {
+			break
+		}
+		if visible >= maxRunes {
+			truncated = true
+			break
+		}
+		b.WriteRune(r)
+		visible++
+		i += size
+	}
+
+	result := strings.TrimSpace(b.String())
+	if truncated {
+		result = strings.TrimRight(result, " ,;:.!?")
+		result += "..."
+	}
+	for openEm > 0 {
+		result += "</em>"
+		openEm--
+	}
+	return result
+}
+
+type reasoningSearchCandidateInput struct {
+	MDBUID           string                              `json:"mdb_uid"`
+	ResultType       string                              `json:"result_type"`
+	Title            string                              `json:"title"`
+	Description      string                              `json:"description,omitempty"`
+	ContentType      string                              `json:"content_type"`
+	ProgramName      string                              `json:"program_name,omitempty"`
+	Date             string                              `json:"date,omitempty"`
+	Reason           string                              `json:"reason,omitempty"`
+	SearchHighlights []string                            `json:"search_highlights,omitempty"`
+	IsGroupingResult bool                                `json:"is_grouping_result"`
+	LookupEvidence   []llm.ReasoningSearchResultEvidence `json:"lookup_evidence,omitempty"`
+}
+
+func reasoningSearchCandidateInputs(results []llm.ReasoningSearchResult) []reasoningSearchCandidateInput {
+	items := make([]reasoningSearchCandidateInput, 0, len(results))
+	for _, result := range results {
+		items = append(items, reasoningSearchCandidateInput{
+			MDBUID:           result.MDBUID,
+			ResultType:       result.ResultType,
+			Title:            result.Title,
+			Description:      result.Description,
+			ContentType:      result.ContentType,
+			ProgramName:      result.ProgramName,
+			Date:             result.Date,
+			Reason:           result.Reason,
+			SearchHighlights: append([]string(nil), result.Highlights...),
+			IsGroupingResult: result.IsGroupingResult,
+			LookupEvidence:   append([]llm.ReasoningSearchResultEvidence(nil), result.LookupEvidence...),
+		})
+	}
+	return items
 }
 
 func rapidCollectedResults(session *llm.ReasoningWorkflowSession) []llm.ReasoningSearchResult {
@@ -915,7 +1093,7 @@ func rapidCollectedResults(session *llm.ReasoningWorkflowSession) []llm.Reasonin
 		return nil
 	}
 	results := append([]llm.ReasoningSearchResult(nil), session.PartialResults...)
-	if session.PartialResultEvidence == nil {
+	if session.PartialLookupEvidence == nil {
 		return results
 	}
 	for i := range results {
@@ -923,7 +1101,7 @@ func rapidCollectedResults(session *llm.ReasoningWorkflowSession) []llm.Reasonin
 		if uid == "" {
 			continue
 		}
-		results[i].DraftEvidence = append([]llm.ReasoningSearchResultEvidence(nil), session.PartialResultEvidence[uid]...)
+		results[i].LookupEvidence = append([]llm.ReasoningSearchResultEvidence(nil), session.PartialLookupEvidence[uid]...)
 	}
 	return results
 }
@@ -935,13 +1113,12 @@ type reasoningSearchPreviousResponseContext struct {
 }
 
 type reasoningSearchPreviousResultItem struct {
-	MDBUID           string   `json:"mdb_uid"`
-	ResultType       string   `json:"result_type"`
-	Title            string   `json:"title"`
-	ContentType      string   `json:"content_type"`
-	Reason           string   `json:"reason"`
-	Highlights       []string `json:"highlights"`
-	IsGroupingResult bool     `json:"is_grouping_result"`
+	MDBUID           string `json:"mdb_uid"`
+	ResultType       string `json:"result_type"`
+	Title            string `json:"title"`
+	ContentType      string `json:"content_type"`
+	Reason           string `json:"reason"`
+	IsGroupingResult bool   `json:"is_grouping_result"`
 }
 
 func buildReasoningSearchPreviousResponseContext(response *llm.ReasoningSearchResponse) *reasoningSearchPreviousResponseContext {
@@ -960,7 +1137,6 @@ func buildReasoningSearchPreviousResponseContext(response *llm.ReasoningSearchRe
 			Title:            result.Title,
 			ContentType:      result.ContentType,
 			Reason:           result.Reason,
-			Highlights:       append([]string(nil), result.Highlights...),
 			IsGroupingResult: result.IsGroupingResult,
 		})
 	}
@@ -1012,7 +1188,7 @@ func rapidSelectedResults(db *sql.DB, uiLanguage string, results []llm.Reasoning
 			continue
 		}
 		if len(evidenceByUID[missing[i].MDBUID]) > 0 {
-			missing[i].DraftEvidence = append([]llm.ReasoningSearchResultEvidence(nil), evidenceByUID[missing[i].MDBUID]...)
+			missing[i].LookupEvidence = append([]llm.ReasoningSearchResultEvidence(nil), evidenceByUID[missing[i].MDBUID]...)
 		}
 		missing[i].IsGroupingResult = missing[i].ResultType == consts.ES_RESULT_TYPE_COLLECTIONS || missing[i].ResultType == consts.ES_RESULT_TYPE_TAGS
 		missing[i].Origin = llm.ReasoningSearchResultOriginOriginal
@@ -1054,13 +1230,13 @@ func buildReasoningSearchPreviousResponseSeedAssistantContent(response *llm.Reas
 		return ""
 	}
 	raw, err := json.Marshal(struct {
-		Query   string                      `json:"query"`
-		Summary string                      `json:"summary"`
-		Results []llm.ReasoningSearchResult `json:"results"`
+		Query   string                              `json:"query"`
+		Summary string                              `json:"summary"`
+		Results []reasoningSearchPreviousResultItem `json:"results"`
 	}{
 		Query:   response.Query,
 		Summary: response.Summary,
-		Results: response.Results,
+		Results: buildReasoningSearchPreviousResponseContext(response).Results,
 	})
 	if err != nil {
 		return response.Summary
@@ -1072,38 +1248,7 @@ func buildReasoningSearchDraftFollowupSeedAssistantContent(response *llm.Reasoni
 	if response == nil {
 		return ""
 	}
-	type seedResult struct {
-		MDBUID           string   `json:"mdb_uid"`
-		ResultType       string   `json:"result_type"`
-		Title            string   `json:"title"`
-		ContentType      string   `json:"content_type"`
-		Reason           string   `json:"reason"`
-		Highlights       []string `json:"highlights"`
-		IsGroupingResult bool     `json:"is_grouping_result"`
-	}
-	type seedPayload struct {
-		Query   string       `json:"query"`
-		Summary string       `json:"summary"`
-		Results []seedResult `json:"results"`
-	}
-
-	payload := seedPayload{
-		Query:   response.Query,
-		Summary: response.Summary,
-		Results: make([]seedResult, 0, len(response.Results)),
-	}
-	for _, result := range response.Results {
-		payload.Results = append(payload.Results, seedResult{
-			MDBUID:           result.MDBUID,
-			ResultType:       result.ResultType,
-			Title:            result.Title,
-			ContentType:      result.ContentType,
-			Reason:           result.Reason,
-			Highlights:       append([]string(nil), result.Highlights...),
-			IsGroupingResult: result.IsGroupingResult,
-		})
-	}
-	raw, err := json.Marshal(payload)
+	raw, err := json.Marshal(buildReasoningSearchPreviousResponseContext(response))
 	if err != nil {
 		return response.Summary
 	}
@@ -1420,7 +1565,7 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 		return errors.New("rapid reasoning search gathered no results")
 	}
 	gatheredCandidateCount := len(candidates)
-	candidates, err = rapidSelectedResults(db, r.UILanguage, candidates, session.PartialResultEvidence, gather.SelectedUIDs)
+	candidates, err = rapidSelectedResults(db, r.UILanguage, candidates, session.PartialLookupEvidence, gather.SelectedUIDs)
 	if err != nil {
 		return err
 	}
@@ -1446,11 +1591,11 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	finalizerInputPayload := struct {
 		Query            string                                  `json:"query"`
 		PreviousResponse *reasoningSearchPreviousResponseContext `json:"previous_response,omitempty"`
-		Results          []llm.ReasoningSearchResult             `json:"results"`
+		Results          []reasoningSearchCandidateInput         `json:"results"`
 	}{
 		Query:            r.Query,
 		PreviousResponse: buildReasoningSearchPreviousResponseContext(session.RapidFollowupSeed),
-		Results:          candidates,
+		Results:          reasoningSearchCandidateInputs(candidates),
 	}
 	var finalizerInputBuffer bytes.Buffer
 	finalizerInputEncoder := json.NewEncoder(&finalizerInputBuffer)
@@ -1759,12 +1904,13 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	expectedQuery := strings.TrimSpace(r.Query)
 	validateResponseQuery := !initialRequestCompleted
 	currentProviderSessionID := providerSessionID
-	serviceCtx := ctx
+	var draftScheduler func(string)
 	if enableDraft {
-		serviceCtx = llm.ContextWithReasoningDraftState(ctx, workflowStore, responseSessionID, func(sessionID string) {
+		draftScheduler = func(sessionID string) {
 			maybeStartReasoningSearchDraft(runtime, db, r.UILanguage, sessionID, r.Deb)
-		})
+		}
 	}
+	serviceCtx := llm.ContextWithReasoningDraftState(ctx, workflowStore, responseSessionID, draftScheduler)
 	var previousReasoningAttempt *llm.ReasoningSearchResponse
 	for attempt := 1; attempt <= maxQueryMismatchValidationAttempts; attempt++ {
 		resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(serviceCtx,
@@ -1829,6 +1975,11 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	response.SetSessionID(responseSessionID)
 	if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
 		return err
+	}
+	if currentSession, err := workflowStore.Get(responseSessionID); err != nil {
+		return err
+	} else {
+		populateReasoningSearchHighlightsFromEvidence(&response, currentSession.PartialResults, currentSession.PartialLookupEvidence)
 	}
 	for i := range response.Results {
 		response.Results[i].Origin = llm.ReasoningSearchResultOriginOriginal
@@ -2039,6 +2190,9 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 										log.Warnf("Reasoning Search failed to enrich rerun results: %v", err)
 										response = originalResponse
 									} else {
+										if currentSession, currentErr := workflowStore.Get(responseSessionID); currentErr == nil {
+											populateReasoningSearchHighlightsFromEvidence(&rerunResponse, currentSession.PartialResults, currentSession.PartialLookupEvidence)
+										}
 										rerunResponse.QueryMismatchRetry = rerunResponse.QueryMismatchRetry || originalResponse.QueryMismatchRetry
 										for i := range rerunResponse.Results {
 											rerunResponse.Results[i].Origin = llm.ReasoningSearchResultOriginRerun

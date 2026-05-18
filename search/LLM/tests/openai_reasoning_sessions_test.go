@@ -953,7 +953,7 @@ func TestReasoningWorkflowDraftAttachesEvidenceToPartialResults(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("unexpected add partial results error: %v", err)
 	}
-	revision, added, err := store.AddPartialResultEvidence(sessionID, "uid-1", []llm.ReasoningSearchResultEvidence{
+	revision, added, err := store.AddPartialLookupEvidence(sessionID, "uid-1", []llm.ReasoningSearchResultEvidence{
 		{ToolName: "query_source_ai", DocumentType: "source", DocumentID: "uid-1", Query: "meaning", ChunkNumber: 3, Content: "supporting source text"},
 	})
 	if err != nil {
@@ -970,15 +970,15 @@ func TestReasoningWorkflowDraftAttachesEvidenceToPartialResults(t *testing.T) {
 	if !ok || draftRevision != revision {
 		t.Fatalf("expected draft to start with evidence revision, ok=%t revision=%d", ok, draftRevision)
 	}
-	if len(results) != 2 || len(results[0].DraftEvidence) != 1 || results[0].DraftEvidence[0].Content != "supporting source text" {
+	if len(results) != 2 || len(results[0].LookupEvidence) != 1 || results[0].LookupEvidence[0].Content != "supporting source text" {
 		t.Fatalf("expected evidence on first draft result, got %#v", results)
 	}
-	if len(results[1].DraftEvidence) != 0 {
-		t.Fatalf("did not expect evidence on second draft result: %#v", results[1].DraftEvidence)
+	if len(results[1].LookupEvidence) != 0 {
+		t.Fatalf("did not expect evidence on second draft result: %#v", results[1].LookupEvidence)
 	}
 }
 
-func TestReasoningWorkflowDraftEvidenceKeepsLatestItems(t *testing.T) {
+func TestReasoningWorkflowLookupEvidenceKeepsLatestItems(t *testing.T) {
 	store := llm.NewReasoningWorkflowSessionStore(time.Hour)
 	defer store.Close()
 
@@ -1007,7 +1007,7 @@ func TestReasoningWorkflowDraftEvidenceKeepsLatestItems(t *testing.T) {
 		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 5, Content: "newer"},
 		{ToolName: "query_source_ai", DocumentID: "uid-1", Query: "q", ChunkNumber: 6, Content: "newest"},
 	}
-	if _, added, err := store.AddPartialResultEvidence(sessionID, "uid-1", evidence); err != nil || added != 6 {
+	if _, added, err := store.AddPartialLookupEvidence(sessionID, "uid-1", evidence); err != nil || added != 6 {
 		t.Fatalf("unexpected add evidence result: added=%d err=%v", added, err)
 	}
 	results, _, _, ok, err := store.TryStartDraft(sessionID, 0, 1)
@@ -1017,7 +1017,7 @@ func TestReasoningWorkflowDraftEvidenceKeepsLatestItems(t *testing.T) {
 	if !ok || len(results) != 1 {
 		t.Fatalf("expected draft to start, ok=%t results=%d", ok, len(results))
 	}
-	got := results[0].DraftEvidence
+	got := results[0].LookupEvidence
 	if len(got) != 5 || got[0].Content != "older" || got[1].Content != "middle" || got[2].Content != "recent" || got[3].Content != "newer" || got[4].Content != "newest" {
 		t.Fatalf("expected latest evidence items, got %#v", got)
 	}

@@ -79,7 +79,7 @@ func ReportReasoningResultEvidence(ctx context.Context, documentID string, evide
 		return
 	}
 
-	revision, added, err := state.workflow.AddPartialResultEvidence(state.draftSessionID, documentID, evidence)
+	revision, added, err := state.workflow.AddPartialLookupEvidence(state.draftSessionID, documentID, evidence)
 	if err != nil || added == 0 || revision <= 0 || state.draftScheduler == nil {
 		return
 	}

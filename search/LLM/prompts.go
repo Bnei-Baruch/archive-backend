@@ -157,7 +157,7 @@ func AppendReasoningSearchOutputLanguage(systemMessage string, languageName stri
 	if languageName == "" {
 		return systemMessage
 	}
-	return fmt.Sprintf("%s\n\nOutput language: %s. Write `summary` and every `results[].reason` in %s. Do not use another language in those fields. Keep `query` unchanged. Keep result titles and highlights as archive text; do not translate highlights.", systemMessage, languageName, languageName)
+	return fmt.Sprintf("%s\n\nOutput language: %s. Write `summary` and every `results[].reason` in %s. Do not use another language in those fields. Keep `query` unchanged.", systemMessage, languageName, languageName)
 }
 
 func GenerateSystemMessageForReasoningSearchPlanning(tools []ReasoningTool) string {

@@ -598,7 +598,7 @@ func (t *QuerySourceAITool) Execute(ctx context.Context, arguments json.RawMessa
 		llm.LogIfDeb(ctx, "query_source_ai: semantic selection failed source_id=%q file_id=%q language=%q err=%v", sourceID, entry.FileUID, language, err)
 		return aiQueryToolErrorOutput("query_source_ai", err), nil
 	}
-	reportAIQueryDraftEvidence(ctx, "query_source_ai", result)
+	reportAIQueryLookupEvidence(ctx, "query_source_ai", result)
 	output, err := marshalToolResult(result)
 	if err != nil {
 		return "", err
@@ -655,7 +655,7 @@ func (t *QueryTranscriptAITool) Execute(ctx context.Context, arguments json.RawM
 		llm.LogIfDeb(ctx, "query_transcript_ai: semantic selection failed content_unit_id=%q language=%q err=%v", contentUnitID, language, err)
 		return aiQueryToolErrorOutput("query_transcript_ai", err), nil
 	}
-	reportAIQueryDraftEvidence(ctx, "query_transcript_ai", result)
+	reportAIQueryLookupEvidence(ctx, "query_transcript_ai", result)
 	output, err := marshalToolResult(result)
 	if err != nil {
 		return "", err
@@ -785,7 +785,7 @@ func addAIQueryToolCallDebug(ctx context.Context, call llm.ReasoningSearchAITool
 	})
 }
 
-func reportAIQueryDraftEvidence(ctx context.Context, toolName string, result *aiQueryToolResult) {
+func reportAIQueryLookupEvidence(ctx context.Context, toolName string, result *aiQueryToolResult) {
 	if result == nil || result.DocumentID == "" || len(result.Matches) == 0 {
 		return
 	}

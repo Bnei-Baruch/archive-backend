@@ -322,7 +322,6 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 		`"results"`,
 		`"mdb_uid"`,
 		`"reason"`,
-		`"highlights"`,
 		`"is_grouping_result"`,
 	}
 
@@ -333,6 +332,9 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 	}
 	if strings.Contains(schema, `"result_type"`) {
 		t.Fatalf("did not expect result_type in LLM response schema: %s", schema)
+	}
+	if strings.Contains(schema, `"highlights"`) {
+		t.Fatalf("did not expect highlights in LLM response schema: %s", schema)
 	}
 
 }

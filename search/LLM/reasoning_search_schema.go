@@ -60,8 +60,8 @@ type ReasoningSearchResult struct {
 	Reason           string   `json:"reason"`
 	Highlights       []string `json:"highlights"`
 	IsGroupingResult bool     `json:"is_grouping_result"`
-	// DraftEvidence is internal draft input only and is cleared before responses are stored.
-	DraftEvidence []ReasoningSearchResultEvidence `json:"draft_evidence,omitempty"`
+	// LookupEvidence is internal lookup input only and is cleared before responses are stored.
+	LookupEvidence []ReasoningSearchResultEvidence `json:"lookup_evidence,omitempty"`
 }
 
 type ReasoningSearchResultEvidence struct {
@@ -269,19 +269,12 @@ func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (
 							"type":        "string",
 							"description": reasonDescription,
 						},
-						"highlights": map[string]interface{}{
-							"type":        "array",
-							"description": "Relevant highlight fragments from search results. Return an empty array if unavailable.",
-							"items": map[string]interface{}{
-								"type": "string",
-							},
-						},
 						"is_grouping_result": map[string]interface{}{
 							"type":        "boolean",
 							"description": "True for grouping or narrowing results such as collections or tags.",
 						},
 					},
-					"required": []string{"mdb_uid", "reason", "highlights", "is_grouping_result"},
+					"required": []string{"mdb_uid", "reason", "is_grouping_result"},
 				},
 			},
 		},
