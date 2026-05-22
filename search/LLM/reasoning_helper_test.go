@@ -62,3 +62,47 @@ func TestUnmarshalLLMJSONContentRejectsInvalidTrailingText(t *testing.T) {
 		t.Fatalf("expected invalid trailing text to fail")
 	}
 }
+
+func TestUnmarshalLLMJSONContentKeepsFirstNonEmptyDuplicateTopLevelField(t *testing.T) {
+	var payload struct {
+		Query   string   `json:"query"`
+		Results []string `json:"results"`
+	}
+
+	content := `{"query":"test","results":["first"],"results":[]}`
+	if err := unmarshalLLMJSONContent(content, &payload); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(payload.Results) != 1 || payload.Results[0] != "first" {
+		t.Fatalf("unexpected results: %#v", payload.Results)
+	}
+}
+
+func TestUnmarshalLLMJSONContentReplacesEmptyDuplicateTopLevelField(t *testing.T) {
+	var payload struct {
+		Query   string   `json:"query"`
+		Results []string `json:"results"`
+	}
+
+	content := `{"query":"test","results":[],"results":["second"]}`
+	if err := unmarshalLLMJSONContent(content, &payload); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(payload.Results) != 1 || payload.Results[0] != "second" {
+		t.Fatalf("unexpected results: %#v", payload.Results)
+	}
+}
+
+func TestUnmarshalLLMJSONContentUsesLastNonEmptyDuplicateTopLevelField(t *testing.T) {
+	var payload struct {
+		Query string `json:"query"`
+	}
+
+	content := `{"query":"first","query":"second"}`
+	if err := unmarshalLLMJSONContent(content, &payload); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if payload.Query != "second" {
+		t.Fatalf("expected last non-empty duplicate to win, got %q", payload.Query)
+	}
+}

@@ -293,6 +293,15 @@ func validateJSONRequiredTopLevelFields(content string, jsonSchema string) error
 }
 
 func unmarshalLLMJSONContent(content string, output interface{}) error {
+	// Go accepts duplicate object keys and keeps the last value. Some models
+	// emit useful results followed by a duplicate empty "results", so repair
+	// top-level duplicates before normal unmarshal can silently discard data.
+	if repaired, ok := repairDuplicateTopLevelJSONFields(content); ok {
+		if err := json.Unmarshal(repaired, output); err == nil {
+			log.Printf("Repaired duplicate top-level JSON fields in LLM structured output")
+			return nil
+		}
+	}
 	if err := json.Unmarshal([]byte(content), output); err == nil {
 		return nil
 	} else {
@@ -314,6 +323,75 @@ func unmarshalLLMJSONContent(content string, output interface{}) error {
 
 		return originalErr
 	}
+}
+
+func repairDuplicateTopLevelJSONFields(content string) ([]byte, bool) {
+	decoder := json.NewDecoder(strings.NewReader(content))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return nil, false
+	}
+
+	orderedKeys := []string{}
+	fields := map[string]json.RawMessage{}
+	repaired := false
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, false
+		}
+		key, ok := token.(string)
+		if !ok {
+			return nil, false
+		}
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return nil, false
+		}
+		if current, exists := fields[key]; exists {
+			repaired = true
+
+			currentEmpty := isEmptyJSONValue(current)
+			nextEmpty := isEmptyJSONValue(value)
+			if currentEmpty || !nextEmpty {
+				fields[key] = value
+			}
+			continue
+		}
+		orderedKeys = append(orderedKeys, key)
+		fields[key] = value
+	}
+
+	token, err = decoder.Token()
+	if err != nil || token != json.Delim('}') {
+		return nil, false
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return nil, false
+	}
+	if !repaired {
+		return nil, false
+	}
+
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	for i, key := range orderedKeys {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		keyBytes, _ := json.Marshal(key)
+		buf.Write(keyBytes)
+		buf.WriteByte(':')
+		buf.Write(fields[key])
+	}
+	buf.WriteByte('}')
+	return buf.Bytes(), true
+}
+
+func isEmptyJSONValue(value json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(value))
+	return trimmed == "" || trimmed == "null" || trimmed == "[]" || trimmed == "{}" || trimmed == `""`
 }
 
 func normalizeResponseTools(tools []ToolCall) ([]map[string]interface{}, error) {
