@@ -18,7 +18,7 @@ Instructions for coding agents working in this repository.
   - `es/` Elasticsearch indexing pipelines
   - `mdb/` SQLBoiler-generated MDB models
   - `events/` NATS-based event processing
-- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`, `[arcee]`, `[inception]`, `[deepseek]`, `[claude]`); `[stub]` is local and makes no API calls.
+- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`, `[arcee]`, `[inception]`, `[cohere]`, `[deepseek]`, `[claude]`); `[stub]` is local and makes no API calls.
 - Config: `config.toml` (see `config.sample.toml`).
 
 ## LLM Architecture
@@ -31,7 +31,7 @@ Instructions for coding agents working in this repository.
 - xAI also uses `v1/responses` with iteration via `previous_response_id`, but resumed requests must omit `instructions`.
 - OpenRouter also uses `v1/responses`, but continues sessions by replaying full message history instead of `previous_response_id`.
 - Ollama uses `/api/chat` with message-history replay; it does not use `tool_choice`.
-- Arcee and Inception use the shared replay chat-completions service (`search/LLM/replay_chat_completions_service.go`) with message-history replay.
+- Arcee, Inception, and Cohere use the shared replay chat-completions service (`search/LLM/replay_chat_completions_service.go`) with message-history replay.
 - DeepSeek uses the official `/chat/completions` API with message-history replay and preserves `reasoning_content` on tool-call turns.
 - Claude uses Anthropic Messages API `/v1/messages` with message-history replay.
 - Transient HTTP retry is opt-in and currently enabled only for Inception. Do not add retries globally to `callLLMAPI`; other providers should keep the direct call path unless explicitly requested.
@@ -79,7 +79,7 @@ Instructions for coding agents working in this repository.
 - Verification is currently a one-shot structured call, so its stored stage metadata may have an empty provider-native session id.
 - Reasoning workflow/progress/provider sessions are stored in memory only, with TTL from `llm.reasoning-session-ttl`.
 - Session-related endpoints such as status, result, and follow-up renew session expiry when the session still exists.
-- OpenRouter, Ollama, Arcee, DeepSeek, Z.AI, and Claude sessions store full replayable conversation history via `chat_reasoning_sessions.go`.
+- OpenRouter, Ollama, Arcee, Inception, Cohere, DeepSeek, Z.AI, and Claude sessions store full replayable conversation history via `chat_reasoning_sessions.go`.
 - If client sends a missing or expired `session_id`, the API returns an error; it does not silently start a new session.
 - OpenAI session state stores continuation data (`last_response_id`, model, effort), not the full prompt or hidden reasoning.
 - Planning failures are soft: the handler logs a warning and continues with reasoning without planner guidance.
@@ -104,6 +104,7 @@ Instructions for coding agents working in this repository.
   - `[zai]` for Z.AI
   - `[arcee]` for Arcee AI
   - `[inception]` for Inception Labs
+  - `[cohere]` for Cohere Compatibility API
   - `[deepseek]` for DeepSeek official API
   - `[claude]` for Anthropic Claude
   - `[stub]` for local constant responses with no API calls
@@ -125,6 +126,7 @@ Instructions for coding agents working in this repository.
 - xAI Grok 4 fast reasoning models do not support `reasoning_effort`; keep xAI reasoning and planning effort config empty.
 - Arcee accepts optional `reasoning_effort` values `minimal`, `low`, `medium`, and `high`; leave it empty unless a model/stage needs it. Do not send it to `trinity-large-thinking`.
 - Inception Mercury models accept `reasoning_effort` values `instant`, `low`, `medium`, and `high`.
+- Cohere Compatibility API accepts optional `reasoning_effort` values `none` and `high`; leave it empty unless a stage needs explicit thinking control.
 - DeepSeek supports thinking by default; `minimal` disables thinking, `low`/`medium`/`high` map to `high`, and `xhigh`/`max` map to `max`.
 - Ollama supports `ollama.num-ctx`; `ollama.temperature` and `ollama.structured-output-prompt-schema` are optional.
 - Stub responses are configured with `[[stub.responses]]` entries keyed by `model` and `query`; use `query="*"` as a model-level fallback.
