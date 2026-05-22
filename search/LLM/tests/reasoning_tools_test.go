@@ -330,13 +330,29 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 			t.Fatalf("expected schema to contain %s", snippet)
 		}
 	}
-	if strings.Contains(schema, `"result_type"`) {
-		t.Fatalf("did not expect result_type in LLM response schema: %s", schema)
-	}
-	if strings.Contains(schema, `"highlights"`) {
-		t.Fatalf("did not expect highlights in LLM response schema: %s", schema)
-	}
 
+	var schemaPayload map[string]interface{}
+	if err := json.Unmarshal([]byte(schema), &schemaPayload); err != nil {
+		t.Fatalf("unexpected schema JSON error: %v", err)
+	}
+	properties := schemaPayload["properties"].(map[string]interface{})
+	results := properties["results"].(map[string]interface{})
+	resultItems := results["items"].(map[string]interface{})
+	resultProperties := resultItems["properties"].(map[string]interface{})
+	excludedResultFields := []string{
+		"result_type",
+		"title",
+		"description",
+		"content_type",
+		"program_name",
+		"date",
+		"highlights",
+	}
+	for _, field := range excludedResultFields {
+		if _, ok := resultProperties[field]; ok {
+			t.Fatalf("did not expect result field %s in LLM response schema: %s", field, schema)
+		}
+	}
 }
 
 func TestGenerateReasoningSearchVerificationResponseJSONSchemaIncludesRequiredFields(t *testing.T) {

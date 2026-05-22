@@ -59,7 +59,7 @@ const reasoningSearchDraftMinResults = 8
 const reasoningSearchRapidSelectedUIDLimit = 12
 
 const reasoningSearchDraftInstruction = `Draft mode: prepare a partial archive search response from Elasticsearch results that were already collected while the main reasoning search is still running.
-Use only the supplied Elasticsearch results. Do not invent results, IDs, titles, dates, or content types.
+Use only the supplied Elasticsearch results. Do not invent results or IDs.
 Use search_highlights as Elasticsearch evidence for the result itself.
 Some results may include lookup_evidence from AI source/transcript lookup tools. Use this evidence only to judge and explain relevance of the supplied Elasticsearch result; do not treat evidence as a separate result.
 Keep mdb_uid values exactly as provided.
@@ -71,7 +71,7 @@ Return selected_uids with the best candidate mdb_uid values collected from Elast
 Prefer Elasticsearch searches that collect varied candidate types. Use AI source/transcript tools only when they can add useful evidence to candidates already found.`, reasoningSearchRapidSelectedUIDLimit)
 
 const reasoningSearchRapidFinalizerInstruction = `Rapid search finalizer mode: create the final user-facing archive search response from the supplied gathered Elasticsearch candidates.
-Use only supplied candidates. Do not invent results, IDs, titles, dates, or content types.
+Use only supplied candidates. Do not invent results or IDs.
 Use search_highlights as Elasticsearch evidence for the candidate itself.
 Some candidates may include lookup_evidence from AI source/transcript lookup tools. Use this evidence only to judge and explain relevance of the supplied candidate; do not treat evidence as a separate result.
 If previous_response is provided, use it only to understand the follow-up query and conversation context.
