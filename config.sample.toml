@@ -56,21 +56,22 @@ url_template="https://kabbalahmedia.info/imaginary/thumbnail?url=http%%3A%%2F%%2
 refresh-search-stats="5m"
 
 [llm]
-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "stub"
+provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "cohere", "stub"
 postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache
-ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "stub"; defaults to llm.provider when empty
+ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "cohere", "stub"; defaults to llm.provider when empty
 ai-query-tool-max-batches=5 # max document batches query_source_ai/query_transcript_ai may send to the reader model per call
-reasoning-search-draft-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "stub"; defaults to ai-tools-provider when empty
+reasoning-search-draft-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "cohere", "stub"; defaults to ai-tools-provider when empty
 reasoning-search-cache-enabled=false
 reasoning-search-cache-ttl="120h" # default is 120h (5 days)
 reasoning-session-ttl="30m" # workflow/provider session TTL; renewed on status/result/follow-up requests
 reasoning-search-max-followups=2
 reasoning-search-rapid-gather-provider="openai" # optional; defaults to llm.provider
+reasoning-search-rapid-finalizer-enabled=true # when false, rapid search returns gathered results directly without AI summary/reasons
 reasoning-search-rapid-finalizer-provider="openai" # optional; defaults to llm.provider
 reasoning-search-planning-enabled=false
-reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "stub"; defaults to llm.provider when empty
+reasoning-search-planning-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "cohere", "stub"; defaults to llm.provider when empty
 reasoning-search-verification-enabled=false
-reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "stub"; defaults to llm.provider when empty
+reasoning-search-verification-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "cohere", "stub"; defaults to llm.provider when empty
 reasoning-search-verification-max-input-tokens=20000 # skip verification when accumulated reasoning/planning tokens are >= this value
 
 [openai]
@@ -93,7 +94,7 @@ ai-tools-batch-concurrency=3 # concurrent internal reader batches for query_sour
 # reasoning-search-rapid-gather-max-output-tokens=2000
 # reasoning-search-rapid-gather-max-iterations=4
 reasoning-search-rapid-finalizer-model="gpt-5.4-mini"
-reasoning-search-rapid-finalizer-effort="low"
+reasoning-search-rapid-finalizer-effort="low" # ignored for OpenAI non-reasoning finalizer models such as gpt-4.1-nano
 reasoning-search-rapid-finalizer-max-output-tokens=4000
 # reasoning-search-planning-model="gpt-5.4-mini"
 # reasoning-search-planning-effort="medium"
@@ -165,6 +166,60 @@ model="mercury-2"
 input_per_1m_tokens_usd=0.25
 cached_input_per_1m_tokens_usd=0.025
 output_per_1m_tokens_usd=0.75
+
+[cohere]
+token="co_..."
+api-endpoint="" # optional; defaults to https://api.cohere.ai/compatibility/v1 and also accepts a full /chat/completions URL
+reasoning-search-model="command-a-03-2025" # latest public chat models include command-a-plus-05-2026, command-a-reasoning-08-2025, command-a-vision-07-2025, command-a-translate-08-2025
+reasoning-search-effort="" # optional; Cohere compatibility API supports only "none" and "high"
+reasoning-search-max-output-tokens=8000
+reasoning-search-max-iterations=20
+reasoning-search-rerun-max-iterations=8 # post-verification reasoning rerun
+ai-tools-model="command-r7b-12-2024"
+ai-tools-effort="" # optional; Cohere compatibility API supports only "none" and "high"
+ai-tools-max-output-tokens=1500
+ai-tools-batch-concurrency=3 # concurrent internal reader batches for query_source_ai/query_transcript_ai
+# reasoning-search-draft-model="command-r7b-12-2024"
+# reasoning-search-draft-effort=""
+# reasoning-search-draft-max-output-tokens=1500
+# reasoning-search-planning-model="command-a-03-2025"
+# reasoning-search-planning-effort=""
+# reasoning-search-planning-max-output-tokens=1500
+# reasoning-search-verification-model="command-a-03-2025"
+# reasoning-search-verification-effort=""
+# reasoning-search-verification-max-output-tokens=2000
+# reasoning-search-rapid-gather-model="command-r7b-12-2024"
+# reasoning-search-rapid-gather-effort=""
+# reasoning-search-rapid-gather-max-output-tokens=2000
+# reasoning-search-rapid-gather-max-iterations=4
+# reasoning-search-rapid-finalizer-model="command-a-03-2025"
+# reasoning-search-rapid-finalizer-effort=""
+# reasoning-search-rapid-finalizer-max-output-tokens=4000
+request-timeout="2m"
+
+[[cohere.pricing]]
+model="command-a-03-2025"
+input_per_1m_tokens_usd=2.50
+output_per_1m_tokens_usd=10.00
+
+[[cohere.pricing]]
+model="command-r7b-12-2024"
+input_per_1m_tokens_usd=0.0375
+output_per_1m_tokens_usd=0.15
+
+[[cohere.pricing]]
+model="command-r-08-2024"
+input_per_1m_tokens_usd=0.15
+output_per_1m_tokens_usd=0.60
+
+[[cohere.pricing]]
+model="command-r-plus-08-2024"
+input_per_1m_tokens_usd=2.50
+output_per_1m_tokens_usd=10.00
+
+# Cohere lists command-a-plus-05-2026, command-a-reasoning-08-2025, command-a-vision-07-2025,
+# and command-a-translate-08-2025 as latest live models, but without public per-token pricing.
+# Add explicit pricing entries here if your Cohere contract exposes billable token rates for them.
 
 [openrouter]
 token="sk-or-..."

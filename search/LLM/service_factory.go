@@ -18,6 +18,7 @@ const (
 	ProviderDeepSeek   = "deepseek"
 	ProviderClaude     = "claude"
 	ProviderInception  = "inception"
+	ProviderCohere     = "cohere"
 	ProviderStub       = "stub"
 )
 
@@ -74,8 +75,9 @@ type ReasoningSearchDraftConfig struct {
 }
 
 type ReasoningSearchRapidConfig struct {
-	Gather    ReasoningSearchRapidStageConfig
-	Finalizer ReasoningSearchRapidStageConfig
+	Gather           ReasoningSearchRapidStageConfig
+	Finalizer        ReasoningSearchRapidStageConfig
+	FinalizerEnabled bool
 }
 
 type ReasoningSearchRapidStageConfig struct {
@@ -303,6 +305,21 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		service := NewInceptionServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint)
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("inception.request-timeout")
+		return service, nil
+	case ProviderCohere:
+		token := viper.GetString("cohere.token")
+		if strings.TrimSpace(token) == "" {
+			return nil, fmt.Errorf("cohere.token is empty")
+		}
+		apiEndpoint := strings.TrimSpace(viper.GetString("cohere.api-endpoint"))
+		pricing := []ModelPricing{}
+		if err := viper.UnmarshalKey("cohere.pricing", &pricing); err != nil {
+			return nil, fmt.Errorf("failed to read cohere.pricing: %w", err)
+		}
+		sessionTTL := ReasoningSessionTTLFromConfig()
+		service := NewCohereServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint)
+		service.progress = progress
+		service.client.Timeout = requestTimeoutFromConfig("cohere.request-timeout")
 		return service, nil
 	case ProviderStub:
 		return NewStubLLMServiceFromConfig(progress)
@@ -904,6 +921,59 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			Planning:           planning,
 			Verification:       verification,
 		}, nil
+	case ProviderCohere:
+		model := strings.TrimSpace(viper.GetString("cohere.reasoning-search-model"))
+		if model == "" {
+			model = "command-a-03-2025"
+		}
+
+		effort := strings.TrimSpace(viper.GetString("cohere.reasoning-search-effort"))
+		if err := validateCohereReasoningEffort(effort); err != nil {
+			return nil, err
+		}
+
+		maxTokens := viper.GetInt("cohere.reasoning-search-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+
+		maxIterations := viper.GetInt("cohere.reasoning-search-max-iterations")
+		if maxIterations <= 0 {
+			maxIterations = defaultReasoningSearchMaxIterations
+		}
+		rerunMaxIterations := viper.GetInt("cohere.reasoning-search-rerun-max-iterations")
+		if rerunMaxIterations <= 0 {
+			rerunMaxIterations = defaultReasoningSearchRerunMaxIters
+		}
+
+		var planning *ReasoningSearchPlanningConfig
+		if planningEnabled {
+			var err error
+			planning, err = reasoningSearchPlanningConfigFromProvider(planningProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+		var verification *ReasoningSearchVerificationConfig
+		if verificationEnabled {
+			var err error
+			verification, err = reasoningSearchVerificationConfigFromProvider(verificationProvider, effort)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return &ReasoningSearchConfig{
+			Provider:           provider,
+			Model:              model,
+			Effort:             effort,
+			MaxTokens:          maxTokens,
+			MaxIterations:      maxIterations,
+			RerunMaxIterations: rerunMaxIterations,
+			MaxFollowups:       maxFollowups,
+			Planning:           planning,
+			Verification:       verification,
+		}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-model"))
 		if model == "" {
@@ -996,19 +1066,23 @@ func ReasoningSearchRapidConfigFromConfig() (*ReasoningSearchRapidConfig, error)
 	if gatherProvider == "" {
 		gatherProvider = ProviderFromConfig()
 	}
-	finalizerProvider := strings.ToLower(strings.TrimSpace(viper.GetString("llm.reasoning-search-rapid-finalizer-provider")))
-	if finalizerProvider == "" {
-		finalizerProvider = ProviderFromConfig()
-	}
 	gather, err := reasoningSearchRapidStageConfigFromProvider(gatherProvider, "gather", defaultReasoningSearchRapidGatherMaxTokens, defaultReasoningSearchRapidGatherMaxIterations)
 	if err != nil {
 		return nil, err
 	}
-	finalizer, err := reasoningSearchRapidStageConfigFromProvider(finalizerProvider, "finalizer", defaultReasoningSearchRapidFinalizerMaxTokens, 0)
-	if err != nil {
-		return nil, err
+	finalizerEnabled := !viper.IsSet("llm.reasoning-search-rapid-finalizer-enabled") || viper.GetBool("llm.reasoning-search-rapid-finalizer-enabled")
+	finalizer := ReasoningSearchRapidStageConfig{}
+	if finalizerEnabled {
+		finalizerProvider := strings.ToLower(strings.TrimSpace(viper.GetString("llm.reasoning-search-rapid-finalizer-provider")))
+		if finalizerProvider == "" {
+			finalizerProvider = ProviderFromConfig()
+		}
+		finalizer, err = reasoningSearchRapidStageConfigFromProvider(finalizerProvider, "finalizer", defaultReasoningSearchRapidFinalizerMaxTokens, 0)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return &ReasoningSearchRapidConfig{Gather: gather, Finalizer: finalizer}, nil
+	return &ReasoningSearchRapidConfig{Gather: gather, Finalizer: finalizer, FinalizerEnabled: finalizerEnabled}, nil
 }
 
 func reasoningSearchRapidStageConfigFromProvider(provider string, stage string, defaultMaxTokens int, defaultMaxIterations int) (ReasoningSearchRapidStageConfig, error) {
@@ -1027,8 +1101,10 @@ func reasoningSearchRapidStageConfigFromProvider(provider string, stage string, 
 	}
 	effort := strings.TrimSpace(viper.GetString(provider + ".reasoning-search-rapid-" + stage + "-effort"))
 	if effort == "" {
-		switch provider {
-		case ProviderXAI, ProviderClaude, ProviderArcee:
+		switch {
+		case stage == "finalizer":
+			effort = ""
+		case provider == ProviderXAI || provider == ProviderClaude || provider == ProviderArcee || provider == ProviderCohere:
 			effort = ""
 		default:
 			effort = defaultAIToolsEffort
@@ -1247,6 +1323,23 @@ func reasoningSearchPlanningConfigFromProvider(provider string, fallbackEffort s
 			maxTokens = defaultReasoningSearchPlanningMaxTokens
 		}
 		return &ReasoningSearchPlanningConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderCohere:
+		model := strings.TrimSpace(viper.GetString("cohere.reasoning-search-planning-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("cohere.reasoning-search-model"))
+		}
+		if model == "" {
+			model = "command-a-03-2025"
+		}
+		effort := strings.TrimSpace(viper.GetString("cohere.reasoning-search-planning-effort"))
+		if err := validateCohereReasoningEffort(effort); err != nil {
+			return nil, err
+		}
+		maxTokens := viper.GetInt("cohere.reasoning-search-planning-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchPlanningMaxTokens
+		}
+		return &ReasoningSearchPlanningConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-planning-model"))
 		if model == "" {
@@ -1321,6 +1414,9 @@ func ReasoningSearchDraftConfigFromConfig() (*ReasoningSearchDraftConfig, error)
 func validateReasoningSearchDraftEffort(provider string, model string, effort string) error {
 	switch provider {
 	case ProviderOpenAI:
+		if effort == "" {
+			return nil
+		}
 		if strings.HasPrefix(model, "gpt-oss") {
 			switch effort {
 			case "low", "medium", "high":
@@ -1342,6 +1438,10 @@ func validateReasoningSearchDraftEffort(provider string, model string, effort st
 			return nil
 		default:
 			return fmt.Errorf("reasoning effort %q is not supported for Inception draft models; supported values are instant, low, medium, high", effort)
+		}
+	case ProviderCohere:
+		if err := validateCohereReasoningEffort(effort); err != nil {
+			return fmt.Errorf("cohere.reasoning-search-draft-effort: %w", err)
 		}
 	case ProviderZAI:
 		switch effort {
@@ -1607,6 +1707,26 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			MaxTokens:      maxTokens,
 			MaxInputTokens: maxInputTokens,
 		}, nil
+	case ProviderCohere:
+		model := strings.TrimSpace(viper.GetString("cohere.reasoning-search-verification-model"))
+		if model == "" {
+			return nil, fmt.Errorf("cohere.reasoning-search-verification-model is empty")
+		}
+		effort := strings.TrimSpace(viper.GetString("cohere.reasoning-search-verification-effort"))
+		if err := validateCohereReasoningEffort(effort); err != nil {
+			return nil, err
+		}
+		maxTokens := viper.GetInt("cohere.reasoning-search-verification-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultReasoningSearchMaxTokens
+		}
+		return &ReasoningSearchVerificationConfig{
+			Provider:       provider,
+			Model:          model,
+			Effort:         effort,
+			MaxTokens:      maxTokens,
+			MaxInputTokens: maxInputTokens,
+		}, nil
 	case ProviderStub:
 		model := strings.TrimSpace(viper.GetString("stub.reasoning-search-verification-model"))
 		if model == "" {
@@ -1823,6 +1943,23 @@ func aiToolsConfigFromProvider(provider string) (*AIToolsConfig, error) {
 			return nil, fmt.Errorf("reasoning effort %q is not supported for Inception models; supported values are instant, low, medium, high", effort)
 		}
 		maxTokens := viper.GetInt("inception.ai-tools-max-output-tokens")
+		if maxTokens <= 0 {
+			maxTokens = defaultAIToolsMaxTokens
+		}
+		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
+	case ProviderCohere:
+		model := strings.TrimSpace(viper.GetString("cohere.ai-tools-model"))
+		if model == "" {
+			model = strings.TrimSpace(viper.GetString("cohere.reasoning-search-model"))
+		}
+		if model == "" {
+			model = "command-r7b-12-2024"
+		}
+		effort := strings.TrimSpace(viper.GetString("cohere.ai-tools-effort"))
+		if err := validateCohereReasoningEffort(effort); err != nil {
+			return nil, err
+		}
+		maxTokens := viper.GetInt("cohere.ai-tools-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultAIToolsMaxTokens
 		}

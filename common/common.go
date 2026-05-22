@@ -152,9 +152,11 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		services[draftConfig.Provider], err = llm.NewServiceForProviderWithProgress(draftConfig.Provider, nil)
 		utils.Must(err)
 	}
-	if _, ok := services[rapidConfig.Finalizer.Provider]; !ok {
-		services[rapidConfig.Finalizer.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Finalizer.Provider, nil)
-		utils.Must(err)
+	if rapidConfig.FinalizerEnabled {
+		if _, ok := services[rapidConfig.Finalizer.Provider]; !ok {
+			services[rapidConfig.Finalizer.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Finalizer.Provider, nil)
+			utils.Must(err)
+		}
 	}
 
 	var postgreSQLToolCacheTTL *time.Duration

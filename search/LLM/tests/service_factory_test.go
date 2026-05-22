@@ -189,6 +189,27 @@ func TestNewServiceFromConfigSupportsInception(t *testing.T) {
 	}
 }
 
+func TestNewServiceFromConfigSupportsCohere(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldToken := viper.GetString("cohere.token")
+	oldEndpoint := viper.GetString("cohere.api-endpoint")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("cohere.token", oldToken)
+	defer viper.Set("cohere.api-endpoint", oldEndpoint)
+
+	viper.Set("llm.provider", "cohere")
+	viper.Set("cohere.token", "test-token")
+	viper.Set("cohere.api-endpoint", "")
+
+	service, err := llm.NewServiceFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := service.(*llm.CohereService); !ok {
+		t.Fatalf("unexpected service type: %T", service)
+	}
+}
+
 func TestNewServiceFromConfigSupportsDeepSeek(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldToken := viper.GetString("deepseek.token")
@@ -963,6 +984,60 @@ func TestReasoningSearchConfigFromConfigRejectsInvalidArceeEffort(t *testing.T) 
 	}
 }
 
+func TestReasoningSearchConfigFromConfigRejectsInvalidCohereEffort(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldModel := viper.GetString("cohere.reasoning-search-model")
+	oldEffort := viper.GetString("cohere.reasoning-search-effort")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("cohere.reasoning-search-model", oldModel)
+	defer viper.Set("cohere.reasoning-search-effort", oldEffort)
+
+	viper.Set("llm.provider", "cohere")
+	viper.Set("cohere.reasoning-search-model", "command-a-03-2025")
+	viper.Set("cohere.reasoning-search-effort", "low")
+
+	_, err := llm.ReasoningSearchConfigFromConfig()
+	if err == nil {
+		t.Fatalf("expected error for invalid Cohere effort")
+	}
+	if !strings.Contains(err.Error(), "supported values are none, high") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestReasoningSearchConfigFromConfigCoherePlanningDoesNotInheritForeignEffort(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldPlanningEnabled := viper.GetBool("llm.reasoning-search-planning-enabled")
+	oldPlanningProvider := viper.GetString("llm.reasoning-search-planning-provider")
+	oldOpenAIModel := viper.GetString("openai.reasoning-search-model")
+	oldOpenAIEffort := viper.GetString("openai.reasoning-search-effort")
+	oldCoherePlanningModel := viper.GetString("cohere.reasoning-search-planning-model")
+	oldCoherePlanningEffort := viper.GetString("cohere.reasoning-search-planning-effort")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-planning-enabled", oldPlanningEnabled)
+	defer viper.Set("llm.reasoning-search-planning-provider", oldPlanningProvider)
+	defer viper.Set("openai.reasoning-search-model", oldOpenAIModel)
+	defer viper.Set("openai.reasoning-search-effort", oldOpenAIEffort)
+	defer viper.Set("cohere.reasoning-search-planning-model", oldCoherePlanningModel)
+	defer viper.Set("cohere.reasoning-search-planning-effort", oldCoherePlanningEffort)
+
+	viper.Set("llm.provider", "openai")
+	viper.Set("llm.reasoning-search-planning-enabled", true)
+	viper.Set("llm.reasoning-search-planning-provider", "cohere")
+	viper.Set("openai.reasoning-search-model", "gpt-5.4")
+	viper.Set("openai.reasoning-search-effort", "low")
+	viper.Set("cohere.reasoning-search-planning-model", "command-a-03-2025")
+	viper.Set("cohere.reasoning-search-planning-effort", "")
+
+	cfg, err := llm.ReasoningSearchConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Planning == nil || cfg.Planning.Provider != "cohere" || cfg.Planning.Effort != "" {
+		t.Fatalf("unexpected planning config: %#v", cfg.Planning)
+	}
+}
+
 func TestReasoningSearchConfigFromConfigRejectsInvalidDeepSeekEffort(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldModel := viper.GetString("deepseek.reasoning-search-model")
@@ -1183,6 +1258,7 @@ func TestReasoningSearchRapidConfigFromConfigUsesExplicitStages(t *testing.T) {
 	oldFinalizerMaxTokens := viper.GetInt("stub.reasoning-search-rapid-finalizer-max-output-tokens")
 	defer viper.Set("llm.provider", oldProvider)
 	defer viper.Set("llm.reasoning-search-rapid-gather-provider", oldGatherProvider)
+	defer viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
 	defer viper.Set("llm.reasoning-search-rapid-finalizer-provider", oldFinalizerProvider)
 	defer viper.Set("openai.reasoning-search-rapid-gather-model", oldGatherModel)
 	defer viper.Set("openai.reasoning-search-rapid-gather-effort", oldGatherEffort)
@@ -1194,6 +1270,7 @@ func TestReasoningSearchRapidConfigFromConfigUsesExplicitStages(t *testing.T) {
 
 	viper.Set("llm.provider", "openai")
 	viper.Set("llm.reasoning-search-rapid-gather-provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
 	viper.Set("llm.reasoning-search-rapid-finalizer-provider", "stub")
 	viper.Set("openai.reasoning-search-rapid-gather-model", "gpt-5.4-nano")
 	viper.Set("openai.reasoning-search-rapid-gather-effort", "low")
@@ -1210,8 +1287,104 @@ func TestReasoningSearchRapidConfigFromConfigUsesExplicitStages(t *testing.T) {
 	if cfg.Gather.Provider != "openai" || cfg.Gather.Model != "gpt-5.4-nano" || cfg.Gather.Effort != "low" || cfg.Gather.MaxTokens != 1234 || cfg.Gather.MaxIterations != 3 {
 		t.Fatalf("unexpected gather config: %#v", cfg.Gather)
 	}
+	if !cfg.FinalizerEnabled {
+		t.Fatalf("expected finalizer to be enabled")
+	}
 	if cfg.Finalizer.Provider != "stub" || cfg.Finalizer.Model != "stub-finalizer" || cfg.Finalizer.Effort != "low" || cfg.Finalizer.MaxTokens != 4321 || cfg.Finalizer.MaxIterations != 0 {
 		t.Fatalf("unexpected finalizer config: %#v", cfg.Finalizer)
+	}
+}
+
+func TestReasoningSearchRapidConfigFromConfigCanDisableFinalizer(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldGatherProvider := viper.GetString("llm.reasoning-search-rapid-gather-provider")
+	oldGatherModel := viper.GetString("openai.reasoning-search-rapid-gather-model")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
+	defer viper.Set("llm.reasoning-search-rapid-gather-provider", oldGatherProvider)
+	defer viper.Set("openai.reasoning-search-rapid-gather-model", oldGatherModel)
+
+	viper.Set("llm.provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-finalizer-enabled", false)
+	viper.Set("llm.reasoning-search-rapid-gather-provider", "openai")
+	viper.Set("openai.reasoning-search-rapid-gather-model", "gpt-5.4-nano")
+
+	cfg, err := llm.ReasoningSearchRapidConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.FinalizerEnabled {
+		t.Fatalf("expected finalizer to be disabled")
+	}
+	if cfg.Finalizer.Provider != "" || cfg.Finalizer.Model != "" {
+		t.Fatalf("expected empty finalizer config when disabled, got %#v", cfg.Finalizer)
+	}
+}
+
+func TestReasoningSearchRapidFinalizerOmitsOpenAIEffortWhenUnset(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldGatherProvider := viper.GetString("llm.reasoning-search-rapid-gather-provider")
+	oldFinalizerProvider := viper.GetString("llm.reasoning-search-rapid-finalizer-provider")
+	oldGatherModel := viper.GetString("openai.reasoning-search-rapid-gather-model")
+	oldFinalizerModel := viper.GetString("openai.reasoning-search-rapid-finalizer-model")
+	oldFinalizerEffort := viper.GetString("openai.reasoning-search-rapid-finalizer-effort")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
+	defer viper.Set("llm.reasoning-search-rapid-gather-provider", oldGatherProvider)
+	defer viper.Set("llm.reasoning-search-rapid-finalizer-provider", oldFinalizerProvider)
+	defer viper.Set("openai.reasoning-search-rapid-gather-model", oldGatherModel)
+	defer viper.Set("openai.reasoning-search-rapid-finalizer-model", oldFinalizerModel)
+	defer viper.Set("openai.reasoning-search-rapid-finalizer-effort", oldFinalizerEffort)
+
+	viper.Set("llm.provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
+	viper.Set("llm.reasoning-search-rapid-gather-provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-finalizer-provider", "openai")
+	viper.Set("openai.reasoning-search-rapid-gather-model", "gpt-5.4-nano")
+	viper.Set("openai.reasoning-search-rapid-finalizer-model", "gpt-6")
+	viper.Set("openai.reasoning-search-rapid-finalizer-effort", "")
+
+	cfg, err := llm.ReasoningSearchRapidConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Finalizer.Model != "gpt-6" {
+		t.Fatalf("unexpected finalizer model: %#v", cfg.Finalizer)
+	}
+	if cfg.Finalizer.Effort != "" {
+		t.Fatalf("expected finalizer effort to be omitted when unset, got %q", cfg.Finalizer.Effort)
+	}
+}
+
+func TestReasoningSearchRapidFinalizerUsesConfiguredOpenAIEffort(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldGatherProvider := viper.GetString("llm.reasoning-search-rapid-gather-provider")
+	oldFinalizerProvider := viper.GetString("llm.reasoning-search-rapid-finalizer-provider")
+	oldGatherModel := viper.GetString("openai.reasoning-search-rapid-gather-model")
+	oldFinalizerModel := viper.GetString("openai.reasoning-search-rapid-finalizer-model")
+	oldFinalizerEffort := viper.GetString("openai.reasoning-search-rapid-finalizer-effort")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
+	defer viper.Set("llm.reasoning-search-rapid-gather-provider", oldGatherProvider)
+	defer viper.Set("llm.reasoning-search-rapid-finalizer-provider", oldFinalizerProvider)
+	defer viper.Set("openai.reasoning-search-rapid-gather-model", oldGatherModel)
+	defer viper.Set("openai.reasoning-search-rapid-finalizer-model", oldFinalizerModel)
+	defer viper.Set("openai.reasoning-search-rapid-finalizer-effort", oldFinalizerEffort)
+
+	viper.Set("llm.provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
+	viper.Set("llm.reasoning-search-rapid-gather-provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-finalizer-provider", "openai")
+	viper.Set("openai.reasoning-search-rapid-gather-model", "gpt-5.4-nano")
+	viper.Set("openai.reasoning-search-rapid-finalizer-model", "gpt-6")
+	viper.Set("openai.reasoning-search-rapid-finalizer-effort", "low")
+
+	cfg, err := llm.ReasoningSearchRapidConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Finalizer.Effort != "low" {
+		t.Fatalf("expected configured finalizer effort, got %q", cfg.Finalizer.Effort)
 	}
 }
 

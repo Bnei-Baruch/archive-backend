@@ -664,13 +664,15 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 		if err := workflowStore.SetRapid(sessionID, true); err != nil {
 			return "", err
 		}
-		if err := workflowStore.SetStage(sessionID, llm.ReasoningWorkflowStageRapidFinalizer, llm.ReasoningWorkflowStageSession{
-			Provider:        runtime.RapidConfig.Finalizer.Provider,
-			Model:           runtime.RapidConfig.Finalizer.Model,
-			ReasoningEffort: runtime.RapidConfig.Finalizer.Effort,
-			MaxTokens:       runtime.RapidConfig.Finalizer.MaxTokens,
-		}); err != nil {
-			return "", err
+		if runtime.RapidConfig.FinalizerEnabled {
+			if err := workflowStore.SetStage(sessionID, llm.ReasoningWorkflowStageRapidFinalizer, llm.ReasoningWorkflowStageSession{
+				Provider:        runtime.RapidConfig.Finalizer.Provider,
+				Model:           runtime.RapidConfig.Finalizer.Model,
+				ReasoningEffort: runtime.RapidConfig.Finalizer.Effort,
+				MaxTokens:       runtime.RapidConfig.Finalizer.MaxTokens,
+			}); err != nil {
+				return "", err
+			}
 		}
 	}
 	if reasoningConfig.Verification != nil {
@@ -1177,22 +1179,21 @@ func rapidSelectedResults(db *sql.DB, uiLanguage string, results []llm.Reasoning
 			break
 		}
 	}
-	if len(missing) == 0 {
-		return selected, nil
-	}
-	if err := enrichReasoningSearchResults(db, uiLanguage, missing); err != nil {
-		return nil, err
-	}
-	for i := range missing {
-		if strings.TrimSpace(missing[i].ResultType) == "" {
-			continue
+	if len(missing) != 0 {
+		if err := enrichReasoningSearchResults(db, uiLanguage, missing); err != nil {
+			return nil, err
 		}
-		if len(evidenceByUID[missing[i].MDBUID]) > 0 {
-			missing[i].LookupEvidence = append([]llm.ReasoningSearchResultEvidence(nil), evidenceByUID[missing[i].MDBUID]...)
+		for i := range missing {
+			if strings.TrimSpace(missing[i].ResultType) == "" {
+				continue
+			}
+			if len(evidenceByUID[missing[i].MDBUID]) > 0 {
+				missing[i].LookupEvidence = append([]llm.ReasoningSearchResultEvidence(nil), evidenceByUID[missing[i].MDBUID]...)
+			}
+			missing[i].IsGroupingResult = missing[i].ResultType == consts.ES_RESULT_TYPE_COLLECTIONS || missing[i].ResultType == consts.ES_RESULT_TYPE_TAGS
+			missing[i].Origin = llm.ReasoningSearchResultOriginOriginal
+			byUID[missing[i].MDBUID] = missing[i]
 		}
-		missing[i].IsGroupingResult = missing[i].ResultType == consts.ES_RESULT_TYPE_COLLECTIONS || missing[i].ResultType == consts.ES_RESULT_TYPE_TAGS
-		missing[i].Origin = llm.ReasoningSearchResultOriginOriginal
-		byUID[missing[i].MDBUID] = missing[i]
 	}
 	selected = selected[:0]
 	seen = map[string]bool{}
@@ -1210,6 +1211,9 @@ func rapidSelectedResults(db *sql.DB, uiLanguage string, results []llm.Reasoning
 		if len(selected) == reasoningSearchRapidSelectedUIDLimit {
 			break
 		}
+	}
+	if err := enrichReasoningSearchResults(db, uiLanguage, selected); err != nil {
+		return nil, err
 	}
 	return selected, nil
 }
@@ -1494,18 +1498,8 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 		return err
 	}
 	gatherStage := session.Stages[llm.ReasoningWorkflowStageReasoning]
-	finalizerStage, ok := session.Stages[llm.ReasoningWorkflowStageRapidFinalizer]
-	if !ok {
-		finalizerStage = llm.ReasoningWorkflowStageSession{
-			Provider:        runtime.RapidConfig.Finalizer.Provider,
-			Model:           runtime.RapidConfig.Finalizer.Model,
-			ReasoningEffort: runtime.RapidConfig.Finalizer.Effort,
-			MaxTokens:       runtime.RapidConfig.Finalizer.MaxTokens,
-		}
-	}
 	gatherService := runtime.Services[gatherStage.Provider]
-	finalizerService := runtime.Services[finalizerStage.Provider]
-	if gatherService == nil || finalizerService == nil {
+	if gatherService == nil {
 		return errors.New("rapid reasoning llm service is not initialized")
 	}
 
@@ -1582,8 +1576,62 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 		}
 	}
 
+	followupsRemaining := gatherStage.MaxFollowups - session.FollowupCount
+	if followupsRemaining < 0 {
+		followupsRemaining = 0
+	}
+	if !runtime.RapidConfig.FinalizerEnabled {
+		response := llm.ReasoningSearchResponse{
+			Query:   r.Query,
+			Results: append([]llm.ReasoningSearchResult(nil), candidates...),
+		}
+		response.SetSessionID(responseSessionID)
+		response.SetUsedTools(gather.UsedTools)
+		response.SetReasoningSteps(gather.ReasoningSummary)
+		response.SetReasoningProcessStats(gather.UsedTokens, gather.ReasoningIterations)
+		for i := range response.Results {
+			response.Results[i].Reason = ""
+			response.Results[i].Origin = llm.ReasoningSearchResultOriginOriginal
+		}
+		populateReasoningSearchHighlightsFromEvidence(&response, candidates, session.PartialLookupEvidence)
+		response.SetFollowupBudget(gatherStage.MaxFollowups, session.FollowupCount, followupsRemaining)
+		if r.Deb {
+			debug := &llm.ReasoningSearchDebugInfo{}
+			debug.RapidGatherModelUsage = rapidMainModelUsage(gather.Debug)
+			debug.RapidGatherLatencyMS = gatherLatencyMS
+			debug.RapidGatheredCandidateCount = gatheredCandidateCount
+			debug.RapidSelectedUIDCount = len(candidates)
+			debug.RapidSelectedUIDs = selectedUIDsForDebug
+			debug.Add(gather.Debug)
+			response.Debug = debug
+		}
+		if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
+			return err
+		}
+		if !session.InitialRequestCompleted {
+			if err := workflowStore.SetFollowupState(responseSessionID, true, session.FollowupCount); err != nil {
+				return err
+			}
+		}
+		progressStore.Complete(responseSessionID, gather.ReasoningIterations)
+		return nil
+	}
+
 	progressStore.Finalizing(responseSessionID, gather.ReasoningIterations+1)
 	progressIteration = gather.ReasoningIterations + 1
+	finalizerStage, ok := session.Stages[llm.ReasoningWorkflowStageRapidFinalizer]
+	if !ok {
+		finalizerStage = llm.ReasoningWorkflowStageSession{
+			Provider:        runtime.RapidConfig.Finalizer.Provider,
+			Model:           runtime.RapidConfig.Finalizer.Model,
+			ReasoningEffort: runtime.RapidConfig.Finalizer.Effort,
+			MaxTokens:       runtime.RapidConfig.Finalizer.MaxTokens,
+		}
+	}
+	finalizerService := runtime.Services[finalizerStage.Provider]
+	if finalizerService == nil {
+		return errors.New("rapid reasoning finalizer llm service is not initialized")
+	}
 	responseSchema, err := llm.GenerateReasoningSearchResponseJSONSchemaForLanguage(outputLanguageName)
 	if err != nil {
 		return err
@@ -1650,10 +1698,6 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	}
 	for i := range response.Results {
 		response.Results[i].Origin = llm.ReasoningSearchResultOriginOriginal
-	}
-	followupsRemaining := gatherStage.MaxFollowups - session.FollowupCount
-	if followupsRemaining < 0 {
-		followupsRemaining = 0
 	}
 	response.SetFollowupBudget(gatherStage.MaxFollowups, session.FollowupCount, followupsRemaining)
 	if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
