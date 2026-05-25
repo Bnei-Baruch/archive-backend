@@ -16,6 +16,8 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
+const elasticsearchSearchMaxPartialResults = 12
+
 type ElasticsearchSearchEngine interface {
 	DoSearch(
 		ctx context.Context,
@@ -330,7 +332,13 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 	}
 	if elasticsearchSearchHasAnyResults(result) {
 		llm.ReportReasoningProgressSearchResults(ctx, elasticsearchSearchPotentiallyGoodResultSignals(result))
-		llm.ReportReasoningPartialResults(ctx, elasticsearchSearchPartialResults(result))
+		partialResults, unhandledUIDs := elasticsearchSearchPartialResults(result)
+		llm.ReportReasoningPartialResults(ctx, partialResults)
+		if len(unhandledUIDs) > 0 {
+			llm.AddToolDebugInfo(ctx, &llm.ReasoningSearchDebugInfo{
+				RapidClassifierUnhandledUIDs: unhandledUIDs,
+			})
+		}
 	}
 	llm.LogIfDeb(ctx, "elasticsearch_search: completed language=%q hits=%d", resultLanguage, hitCount)
 
@@ -359,16 +367,14 @@ func elasticsearchSearchHasPotentiallyGoodResults(result *search.QueryResult) bo
 	return len(signals) >= 4 && len(categories) >= 2
 }
 
-func elasticsearchSearchPartialResults(result *search.QueryResult) []llm.ReasoningSearchResult {
+func elasticsearchSearchPartialResults(result *search.QueryResult) ([]llm.ReasoningSearchResult, []string) {
 	if !elasticsearchSearchHasAnyResults(result) {
-		return nil
+		return nil, nil
 	}
 
 	results := []llm.ReasoningSearchResult{}
-	for i, hit := range result.SearchResult.Hits.Hits {
-		if i >= 12 {
-			break
-		}
+	unhandledUIDs := []string{}
+	for _, hit := range result.SearchResult.Hits.Hits {
 		if hit.Type != "result" || hit.Source == nil {
 			continue
 		}
@@ -377,6 +383,10 @@ func elasticsearchSearchPartialResults(result *search.QueryResult) []llm.Reasoni
 			continue
 		}
 		if strings.TrimSpace(src.MDB_UID) == "" {
+			continue
+		}
+		if len(results) >= elasticsearchSearchMaxPartialResults {
+			unhandledUIDs = append(unhandledUIDs, strings.TrimSpace(src.MDB_UID))
 			continue
 		}
 		contentType := elasticsearchSearchPrimaryContentType(src)
@@ -396,11 +406,12 @@ func elasticsearchSearchPartialResults(result *search.QueryResult) []llm.Reasoni
 			Description:      strings.TrimSpace(src.Description),
 			ContentType:      contentType,
 			Date:             date,
+			OriginalLanguage: elasticsearchSearchOriginalLanguage(src),
 			Highlights:       elasticsearchSearchHighlights(hit.Highlight),
 			IsGroupingResult: src.ResultType == consts.ES_RESULT_TYPE_COLLECTIONS || src.ResultType == consts.ES_RESULT_TYPE_TAGS,
 		})
 	}
-	return results
+	return results, unhandledUIDs
 }
 
 func elasticsearchSearchPrimaryContentType(src es.Result) string {
@@ -416,6 +427,14 @@ func elasticsearchSearchPrimaryContentType(src es.Result) string {
 	default:
 		return ""
 	}
+}
+
+func elasticsearchSearchOriginalLanguage(src es.Result) string {
+	values, err := es.KeyValuesToValues(consts.FILTER_ORIGINAL_LANGUAGE, src.FilterValues)
+	if err != nil || len(values) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(values[0])
 }
 
 func elasticsearchSearchHighlights(highlights map[string][]string) []string {

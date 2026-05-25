@@ -13,6 +13,7 @@ import (
 const ReasoningWorkflowStageReasoning = "reasoning"
 const ReasoningWorkflowStagePlanning = "planning"
 const ReasoningWorkflowStageVerification = "verification"
+const ReasoningWorkflowStageRapidClassifier = "rapid_classifier"
 const ReasoningWorkflowStageRapidFinalizer = "rapid_finalizer"
 
 var ErrReasoningDraftNotReady = errors.New("reasoning draft is not ready")
@@ -41,6 +42,7 @@ type ReasoningWorkflowStageSession struct {
 type ReasoningWorkflowSession struct {
 	ID                      string
 	Query                   string
+	UILanguage              string
 	Stages                  map[string]ReasoningWorkflowStageSession
 	Rapid                   bool
 	InitialRequestCompleted bool
@@ -57,10 +59,15 @@ type ReasoningWorkflowSession struct {
 	PartialResults         []ReasoningSearchResult
 	PartialResultsRevision int
 	PartialLookupEvidence  map[string][]ReasoningSearchResultEvidence
-	DraftResponseJSON      []byte
-	DraftRevision          int
-	DraftInProgress        bool
-	LastDraftAt            time.Time
+	// Per-result evidence revision lets rapid search reclassify only results
+	// whose AI lookup evidence changed.
+	PartialLookupEvidenceRevisions map[string]int
+	RapidClassifications           map[string]ReasoningSearchRapidClassification
+	RapidClassifierModelRuns       []ReasoningSearchUsageBreakdown
+	DraftResponseJSON              []byte
+	DraftRevision                  int
+	DraftInProgress                bool
+	LastDraftAt                    time.Time
 	// Set only after the client explicitly asks to stop early and take the draft.
 	FinishNowRequested bool
 	FinalizedFromDraft bool
@@ -148,9 +155,22 @@ func (s *ReasoningWorkflowSessionStore) Get(sessionID string) (*ReasoningWorkflo
 			copySession.PartialLookupEvidence[key] = append([]ReasoningSearchResultEvidence(nil), value...)
 		}
 	}
+	if session.PartialLookupEvidenceRevisions != nil {
+		copySession.PartialLookupEvidenceRevisions = make(map[string]int, len(session.PartialLookupEvidenceRevisions))
+		for key, value := range session.PartialLookupEvidenceRevisions {
+			copySession.PartialLookupEvidenceRevisions[key] = value
+		}
+	}
+	if session.RapidClassifications != nil {
+		copySession.RapidClassifications = make(map[string]ReasoningSearchRapidClassification, len(session.RapidClassifications))
+		for key, value := range session.RapidClassifications {
+			copySession.RapidClassifications[key] = value
+		}
+	}
 	copySession.DraftResponseJSON = append([]byte(nil), session.DraftResponseJSON...)
 	copySession.DraftFollowupSeed = cloneReasoningSearchResponse(session.DraftFollowupSeed)
 	copySession.DraftModelRuns = append([]ReasoningSearchUsageBreakdown(nil), session.DraftModelRuns...)
+	copySession.RapidClassifierModelRuns = append([]ReasoningSearchUsageBreakdown(nil), session.RapidClassifierModelRuns...)
 	return &copySession, nil
 }
 
@@ -198,7 +218,7 @@ func (s *ReasoningWorkflowSessionStore) SetStage(sessionID string, stageName str
 	return nil
 }
 
-func (s *ReasoningWorkflowSessionStore) SetQuery(sessionID string, query string) error {
+func (s *ReasoningWorkflowSessionStore) SetQuery(sessionID string, query string, uiLanguage string) error {
 	now := time.Now()
 
 	s.mu.Lock()
@@ -214,6 +234,7 @@ func (s *ReasoningWorkflowSessionStore) SetQuery(sessionID string, query string)
 	}
 
 	session.Query = query
+	session.UILanguage = strings.TrimSpace(uiLanguage)
 	session.UpdatedAt = now
 	session.ExpiresAt = now.Add(s.ttl)
 	return nil
@@ -311,16 +332,7 @@ func (s *ReasoningWorkflowSessionStore) SetResponseSnapshot(sessionID string, re
 	session.DraftFollowupSeed = nil
 	session.RapidFollowupSeed = nil
 	if response == nil {
-		session.PartialResults = nil
-		session.PartialResultsRevision = 0
-		session.PartialLookupEvidence = nil
-		session.DraftResponseJSON = nil
-		session.DraftRevision = 0
-		session.DraftInProgress = false
-		session.LastDraftAt = time.Time{}
-		session.FinishNowRequested = false
-		session.FinalizedFromDraft = false
-		session.DraftModelRuns = nil
+		clearReasoningWorkflowRunState(session)
 	}
 	session.UpdatedAt = now
 	session.ExpiresAt = now.Add(s.ttl)
@@ -397,6 +409,9 @@ func (s *ReasoningWorkflowSessionStore) AddPartialLookupEvidence(sessionID strin
 	if session.PartialLookupEvidence == nil {
 		session.PartialLookupEvidence = map[string][]ReasoningSearchResultEvidence{}
 	}
+	if session.PartialLookupEvidenceRevisions == nil {
+		session.PartialLookupEvidenceRevisions = map[string]int{}
+	}
 
 	existing := session.PartialLookupEvidence[documentID]
 	added := 0
@@ -416,6 +431,7 @@ func (s *ReasoningWorkflowSessionStore) AddPartialLookupEvidence(sessionID strin
 		return session.PartialResultsRevision, 0, nil
 	}
 	session.PartialLookupEvidence[documentID] = existing
+	session.PartialLookupEvidenceRevisions[documentID]++
 	for _, result := range session.PartialResults {
 		if result.MDBUID == documentID {
 			session.PartialResultsRevision++
@@ -541,6 +557,40 @@ func (s *ReasoningWorkflowSessionStore) DraftModelUsage(sessionID string) ([]Rea
 	return runs, aggregateReasoningSearchUsageBreakdowns(runs), nil
 }
 
+func (s *ReasoningWorkflowSessionStore) SetRapidClassifications(sessionID string, classifications []ReasoningSearchRapidClassification, runs []ReasoningSearchUsageBreakdown) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if session.RapidClassifications == nil {
+		session.RapidClassifications = map[string]ReasoningSearchRapidClassification{}
+	}
+	for _, item := range classifications {
+		item.MDBUID = strings.TrimSpace(item.MDBUID)
+		item.Relevance = strings.TrimSpace(item.Relevance)
+		item.Reason = strings.TrimSpace(item.Reason)
+		if item.MDBUID == "" || item.Relevance == "" {
+			continue
+		}
+		session.RapidClassifications[item.MDBUID] = item
+	}
+	if len(runs) > 0 {
+		session.RapidClassifierModelRuns = append(session.RapidClassifierModelRuns, runs...)
+	}
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
 func (s *ReasoningWorkflowSessionStore) FailDraft(sessionID string) {
 	now := time.Now()
 
@@ -656,8 +706,17 @@ func (s *ReasoningWorkflowSessionStore) StartDraftFollowup(sessionID string, que
 	}
 	if session.DraftFollowupSeed != nil {
 		previous := session.DraftFollowupSeed
-		if strings.TrimSpace(previous.Summary) != "" {
-			seed.Summary = strings.TrimSpace(seed.Summary + "\nPrevious draft context: " + previous.Summary)
+		previousSummary := ""
+		if previous.Summary != nil {
+			previousSummary = *previous.Summary
+		}
+		if strings.TrimSpace(previousSummary) != "" {
+			seedSummary := ""
+			if seed.Summary != nil {
+				seedSummary = *seed.Summary
+			}
+			mergedSummary := strings.TrimSpace(seedSummary + "\nPrevious draft context: " + previousSummary)
+			seed.Summary = &mergedSummary
 		}
 		// If a follow-up draft is followed by another question, keep the earlier
 		// visible draft in the seed too. Latest results stay first because they
@@ -689,23 +748,14 @@ func (s *ReasoningWorkflowSessionStore) StartDraftFollowup(sessionID string, que
 	session.FollowupCount = followupCount
 	session.CachedInitialResponse = nil
 	session.ResponseSnapshotJSON = nil
-	session.PartialResults = nil
-	session.PartialResultsRevision = 0
-	session.PartialLookupEvidence = nil
-	session.DraftResponseJSON = nil
-	session.DraftRevision = 0
-	session.DraftInProgress = false
-	session.LastDraftAt = time.Time{}
-	session.FinishNowRequested = false
-	session.FinalizedFromDraft = false
 	session.DraftFollowupSeed = &seed
-	session.DraftModelRuns = nil
+	clearReasoningWorkflowRunState(session)
 	session.UpdatedAt = now
 	session.ExpiresAt = now.Add(s.ttl)
 	return nil
 }
 
-func (s *ReasoningWorkflowSessionStore) StartRapidFollowup(sessionID string, query string, followupCount int, gatherStage ReasoningWorkflowStageSession) error {
+func (s *ReasoningWorkflowSessionStore) StartRapidFollowup(sessionID string, query string, uiLanguage string, followupCount int, gatherStage ReasoningWorkflowStageSession) error {
 	now := time.Now()
 
 	s.mu.Lock()
@@ -733,26 +783,34 @@ func (s *ReasoningWorkflowSessionStore) StartRapidFollowup(sessionID string, que
 	}
 	session.Stages[ReasoningWorkflowStageReasoning] = gatherStage
 	session.Query = query
+	session.UILanguage = strings.TrimSpace(uiLanguage)
 	session.Rapid = true
 	session.InitialRequestCompleted = true
 	session.FollowupCount = followupCount
 	session.CachedInitialResponse = nil
 	session.RapidFollowupSeed = &seed
 	session.ResponseSnapshotJSON = nil
+	session.DraftFollowupSeed = nil
+	clearReasoningWorkflowRunState(session)
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func clearReasoningWorkflowRunState(session *ReasoningWorkflowSession) {
 	session.PartialResults = nil
 	session.PartialResultsRevision = 0
 	session.PartialLookupEvidence = nil
+	session.PartialLookupEvidenceRevisions = nil
+	session.RapidClassifications = nil
+	session.RapidClassifierModelRuns = nil
 	session.DraftResponseJSON = nil
 	session.DraftRevision = 0
 	session.DraftInProgress = false
 	session.LastDraftAt = time.Time{}
 	session.FinishNowRequested = false
 	session.FinalizedFromDraft = false
-	session.DraftFollowupSeed = nil
 	session.DraftModelRuns = nil
-	session.UpdatedAt = now
-	session.ExpiresAt = now.Add(s.ttl)
-	return nil
 }
 
 func (s *ReasoningWorkflowSessionStore) IsFinalizedFromDraft(sessionID string) (bool, error) {

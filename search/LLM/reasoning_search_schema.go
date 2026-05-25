@@ -11,7 +11,7 @@ type ReasoningSearchResponse struct {
 	CacheHit                 bool                                 `json:"cache_hit"`
 	Query                    string                               `json:"query"`
 	QueryMismatchRetry       bool                                 `json:"query_mismatch_retry,omitempty"`
-	Summary                  string                               `json:"summary"`
+	Summary                  *string                              `json:"summary"`
 	ReasoningSummary         []ReasoningSearchReasoningStep       `json:"reasoning_summary"`
 	PlanningOutput           *ReasoningSearchPlanningResponse     `json:"planning_output,omitempty"`
 	PlanningReasoningSummary string                               `json:"planning_reasoning_summary,omitempty"`
@@ -57,9 +57,14 @@ type ReasoningSearchResult struct {
 	ContentType      string   `json:"content_type"`
 	ProgramName      string   `json:"program_name,omitempty"`
 	Date             string   `json:"date"`
+	OriginalLanguage string   `json:"original_language,omitempty"`
 	Reason           string   `json:"reason"`
+	Relevance        string   `json:"relevance,omitempty"`
 	Highlights       []string `json:"highlights"`
 	IsGroupingResult bool     `json:"is_grouping_result"`
+	CollectionUID    string   `json:"-"`
+	BaalSulamArticle bool     `json:"-"`
+	ConnectingSource bool     `json:"-"`
 	// LookupEvidence is internal lookup input only and is cleared before responses are stored.
 	LookupEvidence []ReasoningSearchResultEvidence `json:"lookup_evidence,omitempty"`
 }
@@ -74,6 +79,13 @@ type ReasoningSearchResultEvidence struct {
 	Content           string `json:"content"`
 	Reason            string `json:"reason,omitempty"`
 	SupportingSnippet string `json:"supporting_snippet,omitempty"`
+}
+
+type ReasoningSearchRapidClassification struct {
+	MDBUID           string `json:"mdb_uid"`
+	Relevance        string `json:"relevance"`
+	Reason           string `json:"reason"`
+	EvidenceRevision int    `json:"evidence_revision,omitempty"`
 }
 
 const (
@@ -92,13 +104,15 @@ type ReasoningSearchDebugInfo struct {
 	DraftModelUsage              *ReasoningSearchUsageBreakdown   `json:"draft_model_usage,omitempty"`
 	DraftModelRuns               []ReasoningSearchUsageBreakdown  `json:"draft_model_runs,omitempty"`
 	RapidGatherModelUsage        *ReasoningSearchUsageBreakdown   `json:"rapid_gather_model_usage,omitempty"`
+	RapidClassifierModelUsage    *ReasoningSearchUsageBreakdown   `json:"rapid_classifier_model_usage,omitempty"`
+	RapidClassifierModelRuns     []ReasoningSearchUsageBreakdown  `json:"rapid_classifier_model_runs,omitempty"`
 	RapidFinalizerModelUsage     *ReasoningSearchUsageBreakdown   `json:"rapid_finalizer_model_usage,omitempty"`
 	RapidGatherLatencyMS         int64                            `json:"rapid_gather_latency_ms,omitempty"`
 	RapidFinalizerLatencyMS      int64                            `json:"rapid_finalizer_latency_ms,omitempty"`
 	RapidGatheredCandidateCount  int                              `json:"rapid_gathered_candidate_count,omitempty"`
-	RapidSelectedUIDCount        int                              `json:"rapid_selected_uid_count,omitempty"`
+	RapidClassifierUnhandledUIDs []string                         `json:"rapid_classifier_unhandled_uids"`
+	RapidClassifierResultCount   int                              `json:"rapid_classifier_result_count,omitempty"`
 	RapidFinalizerResultCount    int                              `json:"rapid_finalizer_result_count,omitempty"`
-	RapidSelectedUIDs            []string                         `json:"rapid_selected_uids,omitempty"`
 	AIToolsCalls                 []ReasoningSearchAIToolCallDebug `json:"ai_tools_calls,omitempty"`
 	VerificationModel            string                           `json:"verification_model,omitempty"`
 	VerificationReasoningEffort  string                           `json:"verification_reasoning_effort,omitempty"`
@@ -170,7 +184,11 @@ type ReasoningSearchPlanningToolSpec struct {
 	AlternativeQueries []string `json:"alternative_queries"`
 }
 
-var ReasoningSearchRapidGatherResponseJSONSchema = `{"type":"object","additionalProperties":false,"properties":{"done":{"type":"boolean"},"selected_uids":{"type":"array","items":{"type":"string"}}},"required":["done","selected_uids"]}`
+var ReasoningSearchRapidGatherResponseJSONSchema = `{"type":"object","additionalProperties":false,"properties":{"done":{"type":"boolean"}},"required":["done"]}`
+
+var ReasoningSearchRapidClassificationResponseJSONSchema = `{"type":"object","additionalProperties":false,"properties":{"results":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"mdb_uid":{"type":"string"},"relevance":{"type":"string","enum":["highly_relevant","relevant","can_be_relevant","not_relevant"]},"reason":{"type":"string"}},"required":["mdb_uid","relevance","reason"]}}},"required":["results"]}`
+
+var ReasoningSearchRapidFinalizerResponseJSONSchema = `{"type":"object","additionalProperties":false,"properties":{"summary":{"type":"string"},"ordered_uids":{"type":"array","items":{"type":"string"}}},"required":["summary","ordered_uids"]}`
 
 func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (string, error) {
 	languageName = strings.TrimSpace(languageName)
@@ -357,6 +375,14 @@ func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {
 		copy := *other.RapidGatherModelUsage
 		d.RapidGatherModelUsage = &copy
 	}
+	if d.RapidClassifierModelUsage == nil && other.RapidClassifierModelUsage != nil {
+		copy := *other.RapidClassifierModelUsage
+		d.RapidClassifierModelUsage = &copy
+	}
+	if len(other.RapidClassifierModelRuns) != 0 {
+		d.RapidClassifierModelRuns = append(d.RapidClassifierModelRuns, other.RapidClassifierModelRuns...)
+		d.RapidClassifierModelUsage = aggregateReasoningSearchUsageBreakdowns(d.RapidClassifierModelRuns)
+	}
 	if d.RapidFinalizerModelUsage == nil && other.RapidFinalizerModelUsage != nil {
 		copy := *other.RapidFinalizerModelUsage
 		d.RapidFinalizerModelUsage = &copy
@@ -370,14 +396,25 @@ func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {
 	if d.RapidGatheredCandidateCount == 0 {
 		d.RapidGatheredCandidateCount = other.RapidGatheredCandidateCount
 	}
-	if d.RapidSelectedUIDCount == 0 {
-		d.RapidSelectedUIDCount = other.RapidSelectedUIDCount
+	if len(other.RapidClassifierUnhandledUIDs) != 0 {
+		seen := map[string]bool{}
+		for _, uid := range d.RapidClassifierUnhandledUIDs {
+			seen[uid] = true
+		}
+		for _, uid := range other.RapidClassifierUnhandledUIDs {
+			uid = strings.TrimSpace(uid)
+			if uid == "" || seen[uid] {
+				continue
+			}
+			d.RapidClassifierUnhandledUIDs = append(d.RapidClassifierUnhandledUIDs, uid)
+			seen[uid] = true
+		}
+	}
+	if d.RapidClassifierResultCount == 0 {
+		d.RapidClassifierResultCount = other.RapidClassifierResultCount
 	}
 	if d.RapidFinalizerResultCount == 0 {
 		d.RapidFinalizerResultCount = other.RapidFinalizerResultCount
-	}
-	if len(d.RapidSelectedUIDs) == 0 && len(other.RapidSelectedUIDs) != 0 {
-		d.RapidSelectedUIDs = append([]string(nil), other.RapidSelectedUIDs...)
 	}
 	if otherHasUsageOrCost {
 		if !hadUsageOrCost {

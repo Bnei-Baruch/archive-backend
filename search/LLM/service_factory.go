@@ -37,6 +37,7 @@ const (
 	defaultAIToolsBatchConcurrency                   = 2
 	defaultReasoningSearchRapidGatherMaxIterations   = 4
 	defaultReasoningSearchRapidGatherMaxTokens       = 2000
+	defaultReasoningSearchRapidClassifierMaxTokens   = 2500
 	defaultReasoningSearchRapidFinalizerMaxTokens    = 4000
 )
 
@@ -76,6 +77,7 @@ type ReasoningSearchDraftConfig struct {
 
 type ReasoningSearchRapidConfig struct {
 	Gather           ReasoningSearchRapidStageConfig
+	Classifier       ReasoningSearchRapidStageConfig
 	Finalizer        ReasoningSearchRapidStageConfig
 	FinalizerEnabled bool
 }
@@ -1070,7 +1072,16 @@ func ReasoningSearchRapidConfigFromConfig() (*ReasoningSearchRapidConfig, error)
 	if err != nil {
 		return nil, err
 	}
-	finalizerEnabled := !viper.IsSet("llm.reasoning-search-rapid-finalizer-enabled") || viper.GetBool("llm.reasoning-search-rapid-finalizer-enabled")
+	classifierProvider := strings.ToLower(strings.TrimSpace(viper.GetString("llm.reasoning-search-rapid-classifier-provider")))
+	if classifierProvider == "" {
+		classifierProvider = ProviderFromConfig()
+	}
+	classifier, err := reasoningSearchRapidStageConfigFromProvider(classifierProvider, "classifier", defaultReasoningSearchRapidClassifierMaxTokens, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	finalizerEnabled := viper.GetBool("llm.reasoning-search-rapid-finalizer-enabled")
 	finalizer := ReasoningSearchRapidStageConfig{}
 	if finalizerEnabled {
 		finalizerProvider := strings.ToLower(strings.TrimSpace(viper.GetString("llm.reasoning-search-rapid-finalizer-provider")))
@@ -1082,7 +1093,8 @@ func ReasoningSearchRapidConfigFromConfig() (*ReasoningSearchRapidConfig, error)
 			return nil, err
 		}
 	}
-	return &ReasoningSearchRapidConfig{Gather: gather, Finalizer: finalizer, FinalizerEnabled: finalizerEnabled}, nil
+
+	return &ReasoningSearchRapidConfig{Gather: gather, Classifier: classifier, Finalizer: finalizer, FinalizerEnabled: finalizerEnabled}, nil
 }
 
 func reasoningSearchRapidStageConfigFromProvider(provider string, stage string, defaultMaxTokens int, defaultMaxIterations int) (ReasoningSearchRapidStageConfig, error) {
@@ -1102,7 +1114,7 @@ func reasoningSearchRapidStageConfigFromProvider(provider string, stage string, 
 	effort := strings.TrimSpace(viper.GetString(provider + ".reasoning-search-rapid-" + stage + "-effort"))
 	if effort == "" {
 		switch {
-		case stage == "finalizer":
+		case stage == "classifier" || stage == "finalizer":
 			effort = ""
 		case provider == ProviderXAI || provider == ProviderClaude || provider == ProviderArcee || provider == ProviderCohere:
 			effort = ""

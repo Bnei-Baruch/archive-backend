@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -36,14 +37,30 @@ type ReasoningSearchCancelRequest struct {
 }
 
 const (
-	reasoningSearchDisplayHighlightMaxItems = 3
-	reasoningSearchDisplayHighlightMaxRunes = 200
+	reasoningSearchDisplayHighlightMaxItems     = 3
+	reasoningSearchDisplayHighlightMaxRunes     = 200
+	reasoningSearchRapidClassificationBatchSize = 20
+	reasoningSearchRapidGoodResultsThreshold    = 6
 )
 
 type rapidGatherResponse struct {
 	llm.ReasoningSearchResponse `json:"-"`
-	Done                        bool     `json:"done"`
-	SelectedUIDs                []string `json:"selected_uids"`
+	Done                        bool `json:"done"`
+}
+
+type rapidClassificationResponse struct {
+	Results []llm.ReasoningSearchRapidClassification `json:"results"`
+}
+
+type rapidFinalizerResponse struct {
+	Summary     string   `json:"summary"`
+	OrderedUIDs []string `json:"ordered_uids"`
+}
+
+type reasoningSearchStatusResponse struct {
+	*llm.ReasoningProgressStatus
+	RapidResultsAvailable bool                        `json:"rapid_results_available,omitempty"`
+	RapidResults          []llm.ReasoningSearchResult `json:"rapid_results,omitempty"`
 }
 
 var (
@@ -56,8 +73,6 @@ var (
 
 const reasoningSearchDraftMinInterval = 15 * time.Second
 const reasoningSearchDraftMinResults = 8
-const reasoningSearchRapidSelectedUIDLimit = 12
-
 const reasoningSearchDraftInstruction = `Draft mode: prepare a partial archive search response from Elasticsearch results that were already collected while the main reasoning search is still running.
 Use only the supplied Elasticsearch results. Do not invent results or IDs.
 Use search_highlights as Elasticsearch evidence for the result itself.
@@ -65,15 +80,14 @@ Some results may include lookup_evidence from AI source/transcript lookup tools.
 Keep mdb_uid values exactly as provided.
 The summary must say that the user asked for fast results and the answer is based on results gathered so far.`
 
-var reasoningSearchRapidGatherInstruction = fmt.Sprintf(`Rapid search gather mode: use archive tools to collect strong Elasticsearch candidates for the user query.
+const reasoningSearchRapidGatherInstruction = `Rapid search gather mode: use archive tools to collect strong Elasticsearch candidates for the user query.
 Do not create final search results for the user. Return only the JSON object required by the schema.
-Return selected_uids with the best candidate mdb_uid values collected from Elasticsearch. Select up to %d IDs, ordered best first.
-Prefer Elasticsearch searches that collect varied candidate types. Use AI source/transcript tools only when they can add useful evidence to candidates already found.`, reasoningSearchRapidSelectedUIDLimit)
+Prefer Elasticsearch searches that collect varied candidate types. Use AI source/transcript tools only when they can add useful evidence to candidates already found.`
 
-const reasoningSearchRapidFinalizerInstruction = `Rapid search finalizer mode: create the final user-facing archive search response from the supplied gathered Elasticsearch candidates.
+const reasoningSearchRapidFinalizerInstruction = `Rapid search finalizer mode: re-rank already-classified rapid search results and write the final summary.
 Use only supplied candidates. Do not invent results or IDs.
-Use search_highlights as Elasticsearch evidence for the candidate itself.
-Some candidates may include lookup_evidence from AI source/transcript lookup tools. Use this evidence only to judge and explain relevance of the supplied candidate; do not treat evidence as a separate result.
+Return ordered_uids with the supplied mdb_uid values in the best display order. Return every supplied mdb_uid exactly once.
+Use search_highlights and lookup_evidence only to decide ranking and summary; do not treat evidence as a separate result.
 If previous_response is provided, use it only to understand the follow-up query and conversation context.
 Keep mdb_uid values exactly as provided.`
 
@@ -185,6 +199,10 @@ func ReasoningSearchFinishNowHandler(c *gin.Context) {
 			return
 		}
 		NewInternalError(err).Abort(c)
+		return
+	}
+	if workflowSession, err := runtime.Workflow.Get(sessionID); err == nil && workflowSession.Rapid {
+		NewBadRequestError(errors.New("finish-now is not supported for rapid reasoning search")).Abort(c)
 		return
 	}
 	if err := runtime.Workflow.RequestFinishNow(sessionID); err != nil {
@@ -311,7 +329,22 @@ func ReasoningSearchStatusHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, status)
+	response := reasoningSearchStatusResponse{ReasoningProgressStatus: status}
+	workflowSession, sessionErr := runtime.Workflow.Get(sessionID)
+	if sessionErr == nil && workflowSession.Rapid {
+		db, _ := c.MustGet("MDB_DB").(*sql.DB)
+		if err := ensureRapidClassifications(c.Request.Context(), runtime, sessionID, workflowSession.Query, workflowSession.UILanguage, false); err != nil {
+			log.Warnf("Rapid Reasoning Search status classification failed session=%s: %v", sessionID, err)
+		}
+		if currentSession, err := runtime.Workflow.Get(sessionID); err == nil {
+			if results, err := buildRapidVisibleResults(db, currentSession.UILanguage, currentSession, false); err == nil && len(results) > 0 {
+				response.RapidResultsAvailable = true
+				response.RapidResults = results
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // Synchronous flow entrypoint: run the full reasoning search now and return the
@@ -518,6 +551,10 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 		if err != nil {
 			return "", err
 		}
+		effectiveUILanguage := r.UILanguage
+		if effectiveUILanguage == "" {
+			effectiveUILanguage = workflowSession.UILanguage
+		}
 		reasoningStage, ok := workflowSession.Stages[llm.ReasoningWorkflowStageReasoning]
 		if !ok || strings.TrimSpace(reasoningStage.ProviderSessionID) == "" {
 			return "", llm.ErrReasoningSessionNotFoundOrExpired
@@ -578,8 +615,26 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 					MaxFollowups:      reasoningStage.MaxFollowups,
 					ProviderSessionID: providerSessionID,
 				}
-				if err := workflowStore.StartRapidFollowup(sessionID, r.Query, nextFollowupCount, gatherStage); err != nil {
+				if err := workflowStore.StartRapidFollowup(sessionID, r.Query, effectiveUILanguage, nextFollowupCount, gatherStage); err != nil {
 					return "", err
+				}
+				if err := workflowStore.SetStage(sessionID, llm.ReasoningWorkflowStageRapidClassifier, llm.ReasoningWorkflowStageSession{
+					Provider:        rapidConfig.Classifier.Provider,
+					Model:           rapidConfig.Classifier.Model,
+					ReasoningEffort: rapidConfig.Classifier.Effort,
+					MaxTokens:       rapidConfig.Classifier.MaxTokens,
+				}); err != nil {
+					return "", err
+				}
+				if rapidConfig.FinalizerEnabled {
+					if err := workflowStore.SetStage(sessionID, llm.ReasoningWorkflowStageRapidFinalizer, llm.ReasoningWorkflowStageSession{
+						Provider:        rapidConfig.Finalizer.Provider,
+						Model:           rapidConfig.Finalizer.Model,
+						ReasoningEffort: rapidConfig.Finalizer.Effort,
+						MaxTokens:       rapidConfig.Finalizer.MaxTokens,
+					}); err != nil {
+						return "", err
+					}
 				}
 				progressStore.Reserve(sessionID)
 				progressStore.SetIterationOffset(sessionID, 0)
@@ -609,7 +664,7 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 		if err := workflowStore.SetResponseSnapshot(sessionID, nil); err != nil {
 			return "", err
 		}
-		if err := workflowStore.SetQuery(sessionID, r.Query); err != nil {
+		if err := workflowStore.SetQuery(sessionID, r.Query, effectiveUILanguage); err != nil {
 			return "", err
 		}
 		progressStore.Reserve(sessionID)
@@ -657,11 +712,19 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 	if err != nil {
 		return "", err
 	}
-	if err := workflowStore.SetQuery(sessionID, r.Query); err != nil {
+	if err := workflowStore.SetQuery(sessionID, r.Query, r.UILanguage); err != nil {
 		return "", err
 	}
 	if r.IsRapid {
 		if err := workflowStore.SetRapid(sessionID, true); err != nil {
+			return "", err
+		}
+		if err := workflowStore.SetStage(sessionID, llm.ReasoningWorkflowStageRapidClassifier, llm.ReasoningWorkflowStageSession{
+			Provider:        runtime.RapidConfig.Classifier.Provider,
+			Model:           runtime.RapidConfig.Classifier.Model,
+			ReasoningEffort: runtime.RapidConfig.Classifier.Effort,
+			MaxTokens:       runtime.RapidConfig.Classifier.MaxTokens,
+		}); err != nil {
 			return "", err
 		}
 		if runtime.RapidConfig.FinalizerEnabled {
@@ -720,9 +783,10 @@ func storeReasoningSearchCachedResponse(runtime *llm.Runtime, db *sql.DB, r Reas
 		return err
 	}
 
+	summary := cachedEntry.Summary
 	response := llm.ReasoningSearchResponse{
 		Query:    r.Query,
-		Summary:  cachedEntry.Summary,
+		Summary:  &summary,
 		CacheHit: true,
 		Results:  append([]llm.ReasoningSearchResult(nil), cachedEntry.Results...),
 	}
@@ -864,7 +928,7 @@ func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime
 			response.Debug = debug
 		}
 	}
-	mergeReasoningSearchDraftMetadata(&response, candidates)
+	mergeReasoningSearchSelectedResultMetadata(&response, candidates)
 	if len(response.Results) == 0 {
 		runtime.Workflow.FailDraft(sessionID)
 		return nil
@@ -882,7 +946,7 @@ func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime
 	return nil
 }
 
-func mergeReasoningSearchDraftMetadata(response *llm.ReasoningSearchResponse, candidates []llm.ReasoningSearchResult) {
+func mergeReasoningSearchSelectedResultMetadata(response *llm.ReasoningSearchResponse, candidates []llm.ReasoningSearchResult) {
 	if response == nil || len(response.Results) == 0 {
 		return
 	}
@@ -946,28 +1010,96 @@ func populateReasoningSearchHighlightsFromEvidence(response *llm.ReasoningSearch
 }
 
 func buildReasoningSearchHighlightsFromEvidence(result llm.ReasoningSearchResult) []string {
-	highlights := []string{}
+	candidates := []reasoningSearchHighlightCandidate{}
 	seen := map[string]bool{}
-	add := func(value string) {
+	add := func(value string, fromLookupEvidence bool) {
 		value = strings.TrimSpace(value)
 		if value == "" || seen[value] {
 			return
 		}
 		seen[value] = true
-		highlights = append(highlights, value)
+		candidates = append(candidates, reasoningSearchHighlightCandidate{
+			Text:               value,
+			FromLookupEvidence: fromLookupEvidence,
+			OriginalPos:        len(candidates),
+		})
 	}
 	for _, highlight := range result.Highlights {
-		add(highlight)
+		add(highlight, false)
 	}
-	// Keep ES highlights first, then append AI-tool evidence as extra proof text.
 	for _, evidence := range result.LookupEvidence {
 		if strings.TrimSpace(evidence.SupportingSnippet) != "" {
-			add(evidence.SupportingSnippet)
+			add(evidence.SupportingSnippet, true)
 			continue
 		}
-		add(evidence.Content)
+		add(evidence.Content, true)
+	}
+	return rankReasoningSearchHighlights(candidates)
+}
+
+type reasoningSearchHighlightCandidate struct {
+	Text               string
+	FromLookupEvidence bool
+	OriginalPos        int
+}
+
+func rankReasoningSearchHighlights(candidates []reasoningSearchHighlightCandidate) []string {
+	if len(candidates) == 0 {
+		return nil
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		leftScore := reasoningSearchHighlightScore(candidates[i])
+		rightScore := reasoningSearchHighlightScore(candidates[j])
+		if leftScore == rightScore {
+			return candidates[i].OriginalPos < candidates[j].OriginalPos
+		}
+		return leftScore > rightScore
+	})
+	highlights := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		highlights = append(highlights, candidate.Text)
 	}
 	return highlights
+}
+
+func reasoningSearchHighlightScore(candidate reasoningSearchHighlightCandidate) int {
+	score := visibleHighlightRuneCount(candidate.Text)
+	if score > 240 {
+		score = 240
+	}
+	emTextRunes, emSegments := emphasizedHighlightStats(candidate.Text)
+	score += emTextRunes*3 + emSegments*20
+	if candidate.FromLookupEvidence {
+		score += 1000
+	}
+	return score
+}
+
+func emphasizedHighlightStats(value string) (int, int) {
+	textRunes := 0
+	segments := 0
+	inEm := false
+	for i := 0; i < len(value); {
+		if strings.HasPrefix(value[i:], "<em>") {
+			if !inEm {
+				segments++
+			}
+			inEm = true
+			i += len("<em>")
+			continue
+		}
+		if strings.HasPrefix(value[i:], "</em>") {
+			inEm = false
+			i += len("</em>")
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(value[i:])
+		if inEm {
+			textRunes++
+		}
+		i += size
+	}
+	return textRunes, segments
 }
 
 func compactReasoningSearchHighlightsForDisplay(highlights []string) []string {
@@ -1064,6 +1196,7 @@ type reasoningSearchCandidateInput struct {
 	ContentType      string                              `json:"content_type"`
 	ProgramName      string                              `json:"program_name,omitempty"`
 	Date             string                              `json:"date,omitempty"`
+	OriginalLanguage string                              `json:"original_language,omitempty"`
 	Reason           string                              `json:"reason,omitempty"`
 	SearchHighlights []string                            `json:"search_highlights,omitempty"`
 	IsGroupingResult bool                                `json:"is_grouping_result"`
@@ -1081,6 +1214,7 @@ func reasoningSearchCandidateInputs(results []llm.ReasoningSearchResult) []reaso
 			ContentType:      result.ContentType,
 			ProgramName:      result.ProgramName,
 			Date:             result.Date,
+			OriginalLanguage: result.OriginalLanguage,
 			Reason:           result.Reason,
 			SearchHighlights: append([]string(nil), result.Highlights...),
 			IsGroupingResult: result.IsGroupingResult,
@@ -1127,9 +1261,13 @@ func buildReasoningSearchPreviousResponseContext(response *llm.ReasoningSearchRe
 	if response == nil {
 		return nil
 	}
+	summary := ""
+	if response.Summary != nil {
+		summary = *response.Summary
+	}
 	context := &reasoningSearchPreviousResponseContext{
 		Query:   response.Query,
-		Summary: response.Summary,
+		Summary: summary,
 		Results: make([]reasoningSearchPreviousResultItem, 0, len(response.Results)),
 	}
 	for _, result := range response.Results {
@@ -1145,77 +1283,310 @@ func buildReasoningSearchPreviousResponseContext(response *llm.ReasoningSearchRe
 	return context
 }
 
-func rapidSelectedResults(db *sql.DB, uiLanguage string, results []llm.ReasoningSearchResult, evidenceByUID map[string][]llm.ReasoningSearchResultEvidence, selectedUIDs []string) ([]llm.ReasoningSearchResult, error) {
-	if len(selectedUIDs) == 0 {
-		return nil, nil
+func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessionID string, query string, uiLanguage string, deb bool) error {
+	if runtime == nil || runtime.Workflow == nil || runtime.RapidConfig == nil {
+		return errors.New("rapid classifier workflow is not initialized")
 	}
-	byUID := map[string]llm.ReasoningSearchResult{}
-	for _, result := range results {
-		uid := strings.TrimSpace(result.MDBUID)
-		if uid != "" {
-			byUID[uid] = result
-		}
+	session, err := runtime.Workflow.Get(sessionID)
+	if err != nil {
+		return err
 	}
-	selected := make([]llm.ReasoningSearchResult, 0, len(selectedUIDs))
-	missing := make([]llm.ReasoningSearchResult, 0, len(selectedUIDs))
-	seen := map[string]bool{}
-	for _, rawUID := range selectedUIDs {
-		uid := strings.TrimSpace(rawUID)
-		if uid == "" || seen[uid] {
-			continue
-		}
-		result, ok := byUID[uid]
-		if !ok {
-			missing = append(missing, llm.ReasoningSearchResult{MDBUID: uid})
-			seen[uid] = true
-			if len(selected)+len(missing) == reasoningSearchRapidSelectedUIDLimit {
-				break
-			}
-			continue
-		}
-		selected = append(selected, result)
-		seen[uid] = true
-		if len(selected)+len(missing) == reasoningSearchRapidSelectedUIDLimit {
-			break
+	if !session.Rapid || len(session.PartialResults) == 0 {
+		return nil
+	}
+	stage, ok := session.Stages[llm.ReasoningWorkflowStageRapidClassifier]
+	if !ok {
+		stage = llm.ReasoningWorkflowStageSession{
+			Provider:        runtime.RapidConfig.Classifier.Provider,
+			Model:           runtime.RapidConfig.Classifier.Model,
+			ReasoningEffort: runtime.RapidConfig.Classifier.Effort,
+			MaxTokens:       runtime.RapidConfig.Classifier.MaxTokens,
 		}
 	}
-	if len(missing) != 0 {
-		if err := enrichReasoningSearchResults(db, uiLanguage, missing); err != nil {
-			return nil, err
+	service := runtime.Services[stage.Provider]
+	if service == nil {
+		return errors.New("rapid classifier llm service is not initialized")
+	}
+
+	pending := rapidClassificationPendingCandidates(session)
+	if len(pending) == 0 {
+		return nil
+	}
+	outputLanguageName := reasoningSearchOutputLanguageName(uiLanguage, query)
+	systemMessage := rapidClassificationSystemMessage(outputLanguageName)
+	allClassifications := []llm.ReasoningSearchRapidClassification{}
+	runs := []llm.ReasoningSearchUsageBreakdown{}
+	for start := 0; start < len(pending); start += reasoningSearchRapidClassificationBatchSize {
+		end := start + reasoningSearchRapidClassificationBatchSize
+		if end > len(pending) {
+			end = len(pending)
 		}
-		for i := range missing {
-			if strings.TrimSpace(missing[i].ResultType) == "" {
+		batch := pending[start:end]
+		payload := struct {
+			Query            string                                  `json:"query"`
+			PreviousResponse *reasoningSearchPreviousResponseContext `json:"previous_response,omitempty"`
+			Results          []reasoningSearchCandidateInput         `json:"results"`
+		}{
+			Query:            query,
+			PreviousResponse: buildReasoningSearchPreviousResponseContext(session.RapidFollowupSeed),
+			Results:          reasoningSearchCandidateInputs(batch),
+		}
+		var input bytes.Buffer
+		encoder := json.NewEncoder(&input)
+		encoder.SetEscapeHTML(false)
+		if err := encoder.Encode(payload); err != nil {
+			return err
+		}
+		response := rapidClassificationResponse{}
+		promptCacheKey := fmt.Sprintf("reasoning-search-rapid-classifier:m=%s:e=%s", stage.Model, stage.ReasoningEffort)
+		debug, err := service.GetStructuredOutputWithDebugInfo(
+			ctx,
+			llm.ReasoningSearchRapidClassificationResponseJSONSchema,
+			stage.Model,
+			&stage.MaxTokens,
+			[]llm.LLMBotMessage{
+				{Role: "system", Content: systemMessage},
+				{Role: "user", Content: strings.TrimSpace(input.String())},
+			},
+			&promptCacheKey,
+			&stage.ReasoningEffort,
+			deb,
+			&response,
+		)
+		if err != nil {
+			return err
+		}
+		evidenceRevisions := map[string]int{}
+		for _, candidate := range batch {
+			uid := strings.TrimSpace(candidate.MDBUID)
+			evidenceRevisions[uid] = session.PartialLookupEvidenceRevisions[uid]
+		}
+		classifiedUIDs := map[string]bool{}
+		for _, item := range response.Results {
+			item.MDBUID = strings.TrimSpace(item.MDBUID)
+			evidenceRevision, ok := evidenceRevisions[item.MDBUID]
+			if !ok {
 				continue
 			}
-			if len(evidenceByUID[missing[i].MDBUID]) > 0 {
-				missing[i].LookupEvidence = append([]llm.ReasoningSearchResultEvidence(nil), evidenceByUID[missing[i].MDBUID]...)
+			item.Relevance = normalizeRapidRelevance(item.Relevance)
+			item.EvidenceRevision = evidenceRevision
+			if item.MDBUID == "" || item.Relevance == "" {
+				continue
 			}
-			missing[i].IsGroupingResult = missing[i].ResultType == consts.ES_RESULT_TYPE_COLLECTIONS || missing[i].ResultType == consts.ES_RESULT_TYPE_TAGS
-			missing[i].Origin = llm.ReasoningSearchResultOriginOriginal
-			byUID[missing[i].MDBUID] = missing[i]
+			classifiedUIDs[item.MDBUID] = true
+			allClassifications = append(allClassifications, item)
+		}
+		for _, candidate := range batch {
+			uid := strings.TrimSpace(candidate.MDBUID)
+			if uid == "" || classifiedUIDs[uid] {
+				continue
+			}
+			allClassifications = append(allClassifications, llm.ReasoningSearchRapidClassification{
+				MDBUID:           uid,
+				Relevance:        "not_relevant",
+				EvidenceRevision: evidenceRevisions[uid],
+			})
+		}
+		if usage := rapidMainModelUsage(debug); usage != nil {
+			runs = append(runs, *usage)
 		}
 	}
-	selected = selected[:0]
-	seen = map[string]bool{}
-	for _, rawUID := range selectedUIDs {
-		uid := strings.TrimSpace(rawUID)
-		if uid == "" || seen[uid] {
+	if len(allClassifications) == 0 {
+		return nil
+	}
+	return runtime.Workflow.SetRapidClassifications(sessionID, allClassifications, runs)
+}
+
+func rapidClassificationPendingCandidates(session *llm.ReasoningWorkflowSession) []llm.ReasoningSearchResult {
+	if session == nil {
+		return nil
+	}
+	pending := []llm.ReasoningSearchResult{}
+	for _, result := range rapidCollectedResults(session) {
+		uid := strings.TrimSpace(result.MDBUID)
+		if uid == "" {
 			continue
 		}
-		result, ok := byUID[uid]
-		if !ok {
+		// Reclassify only when new AI lookup evidence arrived for this result.
+		evidenceRevision := session.PartialLookupEvidenceRevisions[uid]
+		classification, ok := session.RapidClassifications[uid]
+		if ok && classification.EvidenceRevision == evidenceRevision {
 			continue
 		}
-		selected = append(selected, result)
-		seen[uid] = true
-		if len(selected) == reasoningSearchRapidSelectedUIDLimit {
-			break
+		pending = append(pending, result)
+	}
+	return pending
+}
+
+func rapidClassificationSystemMessage(languageName string) string {
+	message := `Classify archive search candidates for relevance to the user query.
+Use these relevance values:
+- highly_relevant: direct strong match to the user's request, compatible with both the type of content and the content itself.
+- relevant: useful match, but not the strongest. If the user query looks like a citation from a source but the matching result is not source but program, lesson or blog post then set as relevant but not highly_relevant.
+- can_be_relevant: possibly useful if the user intended this direction or will help with more comprehensive enrichment.
+- not_relevant: omit from user-visible results.
+For relevant candidates, write a short reason based only on candidate metadata, search_highlights, and lookup_evidence.
+For not_relevant, keep reason empty.`
+	return llm.AppendReasoningSearchOutputLanguage(message, languageName)
+}
+
+func normalizeRapidRelevance(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "highly_relevant", "relevant", "can_be_relevant", "not_relevant":
+		return value
+	default:
+		return ""
+	}
+}
+
+func buildRapidVisibleResults(db *sql.DB, uiLanguage string, session *llm.ReasoningWorkflowSession, includeRelevance bool) ([]llm.ReasoningSearchResult, error) {
+	if session == nil {
+		return nil, nil
+	}
+	results := []llm.ReasoningSearchResult{}
+	for _, candidate := range rapidCollectedResults(session) {
+		uid := strings.TrimSpace(candidate.MDBUID)
+		classification, ok := session.RapidClassifications[uid]
+		if !ok || rapidRelevanceRank(classification.Relevance) == 0 {
+			continue
+		}
+		candidate.Reason = strings.TrimSpace(classification.Reason)
+		if includeRelevance {
+			candidate.Relevance = classification.Relevance
+		}
+		candidate.Origin = llm.ReasoningSearchResultOriginOriginal
+		results = append(results, candidate)
+	}
+	results = filterRapidVisibleResults(results, session.RapidClassifications)
+	if db != nil && len(results) > 0 {
+		if err := inferReasoningSearchResultTypes(db, results); err != nil {
+			return nil, err
 		}
 	}
-	if err := enrichReasoningSearchResults(db, uiLanguage, selected); err != nil {
-		return nil, err
+	sortRapidVisibleResults(results, session.RapidClassifications, uiLanguage)
+	if db != nil && len(results) > 0 {
+		if err := enrichReasoningSearchResults(db, uiLanguage, results); err != nil {
+			return nil, err
+		}
+		sortRapidVisibleResults(results, session.RapidClassifications, uiLanguage)
 	}
-	return selected, nil
+	response := &llm.ReasoningSearchResponse{Results: results}
+	populateReasoningSearchHighlightsFromEvidence(response, results, session.PartialLookupEvidence)
+	return response.Results, nil
+}
+
+func filterRapidVisibleResults(results []llm.ReasoningSearchResult, classifications map[string]llm.ReasoningSearchRapidClassification) []llm.ReasoningSearchResult {
+	goodCount := 0
+	for _, result := range results {
+		if rapidRelevanceRank(classifications[result.MDBUID].Relevance) >= 2 {
+			goodCount++
+		}
+	}
+	if goodCount < reasoningSearchRapidGoodResultsThreshold {
+		return results
+	}
+
+	// When there are enough clearly relevant results, possible matches add noise
+	// more than value. Keep them only for sparse result sets.
+	filtered := results[:0]
+	for _, result := range results {
+		if rapidRelevanceRank(classifications[result.MDBUID].Relevance) > 1 {
+			filtered = append(filtered, result)
+		}
+	}
+	return filtered
+}
+
+func sortRapidVisibleResults(results []llm.ReasoningSearchResult, classifications map[string]llm.ReasoningSearchRapidClassification, uiLanguage string) {
+	sort.SliceStable(results, func(i, j int) bool {
+		leftRelevance := rapidRelevanceRank(classifications[results[i].MDBUID].Relevance)
+		rightRelevance := rapidRelevanceRank(classifications[results[j].MDBUID].Relevance)
+		if leftRelevance != rightRelevance {
+			return leftRelevance > rightRelevance
+		}
+
+		leftScore := rapidResultSortScore(results[i], uiLanguage)
+		rightScore := rapidResultSortScore(results[j], uiLanguage)
+		if leftScore != rightScore {
+			return leftScore > rightScore
+		}
+
+		return false
+	})
+}
+
+func rapidResultSortScore(result llm.ReasoningSearchResult, uiLanguage string) int {
+	score := 0
+
+	// These are only tie-breakers inside the same classifier relevance bucket.
+	// We slightly prefer user-friendly video chapters, clips, likutim, recent
+	// material, results backed by AI lookup evidence, native-language content,
+	// Baal HaSulam articles, and "Connecting to Source" chapters. "The World"
+	// chapters are de-prioritized outside Spanish UI because that collection is
+	// usually Spanish-oriented.
+	switch result.ContentType {
+	case consts.CT_VIDEO_PROGRAM_CHAPTER:
+		score += 4
+	case consts.CT_LIKUTIM:
+		score += 2
+	case consts.CT_CLIP:
+		score += 4
+	}
+	if len(result.LookupEvidence) > 0 {
+		score += 2
+	}
+	if result.BaalSulamArticle {
+		score += 2
+	}
+	if result.ConnectingSource {
+		score += 2
+	}
+	score += rapidResultDateBoost(result.Date)
+
+	uiLanguage = strings.ToLower(strings.TrimSpace(uiLanguage))
+	if uiLanguage != "" && strings.EqualFold(strings.TrimSpace(result.OriginalLanguage), uiLanguage) {
+		score += 3
+	}
+	if uiLanguage != "" && uiLanguage != consts.LANG_SPANISH && result.CollectionUID == consts.PROGRAM_COLLECTION_EL_MUNDO {
+		score -= 3
+	}
+
+	return score
+}
+
+func rapidResultDateBoost(value string) int {
+	date, err := time.Parse("2006-01-02", strings.TrimSpace(value))
+	if err != nil {
+		return 0
+	}
+	age := time.Now().Year() - date.Year()
+	if age < 0 {
+		age = 0
+	}
+	switch {
+	case age <= 3:
+		return 3
+	case age <= 8:
+		return 2
+	case age <= 15:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func rapidRelevanceRank(value string) int {
+	switch normalizeRapidRelevance(value) {
+	case "highly_relevant":
+		return 3
+	case "relevant":
+		return 2
+	case "can_be_relevant":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func rapidMainModelUsage(debug *llm.ReasoningSearchDebugInfo) *llm.ReasoningSearchUsageBreakdown {
@@ -1229,9 +1600,126 @@ func rapidMainModelUsage(debug *llm.ReasoningSearchDebugInfo) *llm.ReasoningSear
 	return debug.UsageBreakdown()
 }
 
+func aggregateReasoningSearchUsageBreakdownsForAPI(usages []llm.ReasoningSearchUsageBreakdown) *llm.ReasoningSearchUsageBreakdown {
+	if len(usages) == 0 {
+		return nil
+	}
+	total := usages[0]
+	for _, usage := range usages[1:] {
+		total.TotalTokens += usage.TotalTokens
+		total.InputTokens += usage.InputTokens
+		total.CachedInputTokens += usage.CachedInputTokens
+		total.UncachedInputTokens += usage.UncachedInputTokens
+		total.OutputTokens += usage.OutputTokens
+		total.ReasoningTokens += usage.ReasoningTokens
+		total.EstimatedInputCostUSD += usage.EstimatedInputCostUSD
+		total.EstimatedCachedInputCostUSD += usage.EstimatedCachedInputCostUSD
+		total.EstimatedOutputCostUSD += usage.EstimatedOutputCostUSD
+		total.EstimatedCostUSD += usage.EstimatedCostUSD
+		total.PricingConfigured = total.PricingConfigured && usage.PricingConfigured
+	}
+	return &total
+}
+
+func finalizeRapidReasoningSearch(ctx context.Context, runtime *llm.Runtime, session *llm.ReasoningWorkflowSession, r ReasoningSearchRequest, outputLanguageName string, candidates []llm.ReasoningSearchResult) (llm.ReasoningSearchResponse, *llm.ReasoningSearchDebugInfo, int64, error) {
+	if runtime == nil || runtime.RapidConfig == nil {
+		return llm.ReasoningSearchResponse{}, nil, 0, errors.New("rapid finalizer workflow is not initialized")
+	}
+	stage, ok := session.Stages[llm.ReasoningWorkflowStageRapidFinalizer]
+	if !ok {
+		stage = llm.ReasoningWorkflowStageSession{
+			Provider:        runtime.RapidConfig.Finalizer.Provider,
+			Model:           runtime.RapidConfig.Finalizer.Model,
+			ReasoningEffort: runtime.RapidConfig.Finalizer.Effort,
+			MaxTokens:       runtime.RapidConfig.Finalizer.MaxTokens,
+		}
+	}
+	service := runtime.Services[stage.Provider]
+	if service == nil {
+		return llm.ReasoningSearchResponse{}, nil, 0, errors.New("rapid finalizer llm service is not initialized")
+	}
+	payload := struct {
+		Query            string                                  `json:"query"`
+		PreviousResponse *reasoningSearchPreviousResponseContext `json:"previous_response,omitempty"`
+		Results          []reasoningSearchCandidateInput         `json:"results"`
+	}{
+		Query:            r.Query,
+		PreviousResponse: buildReasoningSearchPreviousResponseContext(session.RapidFollowupSeed),
+		Results:          reasoningSearchCandidateInputs(candidates),
+	}
+	var input bytes.Buffer
+	encoder := json.NewEncoder(&input)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(payload); err != nil {
+		return llm.ReasoningSearchResponse{}, nil, 0, err
+	}
+	systemMessage := llm.AppendReasoningSearchOutputLanguage(reasoningSearchRapidFinalizerInstruction, outputLanguageName)
+	finalizerOutput := rapidFinalizerResponse{}
+	promptCacheKey := fmt.Sprintf("reasoning-search-rapid-finalizer:m=%s:e=%s", stage.Model, stage.ReasoningEffort)
+	started := time.Now()
+	debug, err := service.GetStructuredOutputWithDebugInfo(
+		ctx,
+		llm.ReasoningSearchRapidFinalizerResponseJSONSchema,
+		stage.Model,
+		&stage.MaxTokens,
+		[]llm.LLMBotMessage{
+			{Role: "system", Content: systemMessage},
+			{Role: "user", Content: strings.TrimSpace(input.String())},
+		},
+		&promptCacheKey,
+		&stage.ReasoningEffort,
+		r.Deb,
+		&finalizerOutput,
+	)
+	summary := strings.TrimSpace(finalizerOutput.Summary)
+	response := llm.ReasoningSearchResponse{
+		Query:            r.Query,
+		Summary:          &summary,
+		ReasoningSummary: []llm.ReasoningSearchReasoningStep{},
+		Results:          orderRapidFinalizerResults(candidates, finalizerOutput.OrderedUIDs),
+	}
+	return response, debug, time.Since(started).Milliseconds(), err
+}
+
+func orderRapidFinalizerResults(candidates []llm.ReasoningSearchResult, orderedUIDs []string) []llm.ReasoningSearchResult {
+	byUID := map[string]llm.ReasoningSearchResult{}
+	for _, candidate := range candidates {
+		uid := strings.TrimSpace(candidate.MDBUID)
+		if uid != "" {
+			byUID[uid] = candidate
+		}
+	}
+
+	results := make([]llm.ReasoningSearchResult, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, rawUID := range orderedUIDs {
+		uid := strings.TrimSpace(rawUID)
+		if uid == "" || seen[uid] {
+			continue
+		}
+		if candidate, ok := byUID[uid]; ok {
+			results = append(results, candidate)
+			seen[uid] = true
+		}
+	}
+	for _, candidate := range candidates {
+		uid := strings.TrimSpace(candidate.MDBUID)
+		if uid == "" || seen[uid] {
+			continue
+		}
+		results = append(results, candidate)
+		seen[uid] = true
+	}
+	return results
+}
+
 func buildReasoningSearchPreviousResponseSeedAssistantContent(response *llm.ReasoningSearchResponse) string {
 	if response == nil {
 		return ""
+	}
+	summary := ""
+	if response.Summary != nil {
+		summary = *response.Summary
 	}
 	raw, err := json.Marshal(struct {
 		Query   string                              `json:"query"`
@@ -1239,11 +1727,11 @@ func buildReasoningSearchPreviousResponseSeedAssistantContent(response *llm.Reas
 		Results []reasoningSearchPreviousResultItem `json:"results"`
 	}{
 		Query:   response.Query,
-		Summary: response.Summary,
+		Summary: summary,
 		Results: buildReasoningSearchPreviousResponseContext(response).Results,
 	})
 	if err != nil {
-		return response.Summary
+		return summary
 	}
 	return "Previous visible response. Use it as conversation context for the user's follow-up, but verify and improve with current tools/results when needed:\n" + string(raw)
 }
@@ -1254,7 +1742,10 @@ func buildReasoningSearchDraftFollowupSeedAssistantContent(response *llm.Reasoni
 	}
 	raw, err := json.Marshal(buildReasoningSearchPreviousResponseContext(response))
 	if err != nil {
-		return response.Summary
+		if response.Summary == nil {
+			return ""
+		}
+		return *response.Summary
 	}
 	return "Previous visible response was an early draft based on partial Elasticsearch results. Use it as conversation context for the user's follow-up, but verify and improve it with tools when needed:\n" + string(raw)
 }
@@ -1559,116 +2050,40 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 		return errors.New("rapid reasoning search gathered no results")
 	}
 	gatheredCandidateCount := len(candidates)
-	candidates, err = rapidSelectedResults(db, r.UILanguage, candidates, session.PartialLookupEvidence, gather.SelectedUIDs)
-	if err != nil {
-		return err
-	}
-	if len(candidates) == 0 {
-		return errors.New("rapid reasoning search selected no gathered results")
-	}
-	// Debug should describe the cleaned finalizer input, not the raw UID list the
-	// gather model returned before duplicate/unknown IDs were removed.
-	selectedUIDsForDebug := make([]string, 0, len(candidates))
-	for _, candidate := range candidates {
-		uid := strings.TrimSpace(candidate.MDBUID)
-		if uid != "" {
-			selectedUIDsForDebug = append(selectedUIDsForDebug, uid)
-		}
-	}
-
 	followupsRemaining := gatherStage.MaxFollowups - session.FollowupCount
 	if followupsRemaining < 0 {
 		followupsRemaining = 0
 	}
-	if !runtime.RapidConfig.FinalizerEnabled {
-		response := llm.ReasoningSearchResponse{
-			Query:   r.Query,
-			Results: append([]llm.ReasoningSearchResult(nil), candidates...),
-		}
-		response.SetSessionID(responseSessionID)
-		response.SetUsedTools(gather.UsedTools)
-		response.SetReasoningSteps(gather.ReasoningSummary)
-		response.SetReasoningProcessStats(gather.UsedTokens, gather.ReasoningIterations)
-		for i := range response.Results {
-			response.Results[i].Reason = ""
-			response.Results[i].Origin = llm.ReasoningSearchResultOriginOriginal
-		}
-		populateReasoningSearchHighlightsFromEvidence(&response, candidates, session.PartialLookupEvidence)
-		response.SetFollowupBudget(gatherStage.MaxFollowups, session.FollowupCount, followupsRemaining)
-		if r.Deb {
-			debug := &llm.ReasoningSearchDebugInfo{}
-			debug.RapidGatherModelUsage = rapidMainModelUsage(gather.Debug)
-			debug.RapidGatherLatencyMS = gatherLatencyMS
-			debug.RapidGatheredCandidateCount = gatheredCandidateCount
-			debug.RapidSelectedUIDCount = len(candidates)
-			debug.RapidSelectedUIDs = selectedUIDsForDebug
-			debug.Add(gather.Debug)
-			response.Debug = debug
-		}
-		if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
-			return err
-		}
-		if !session.InitialRequestCompleted {
-			if err := workflowStore.SetFollowupState(responseSessionID, true, session.FollowupCount); err != nil {
-				return err
-			}
-		}
-		progressStore.Complete(responseSessionID, gather.ReasoningIterations)
-		return nil
-	}
-
 	progressStore.Finalizing(responseSessionID, gather.ReasoningIterations+1)
 	progressIteration = gather.ReasoningIterations + 1
-	finalizerStage, ok := session.Stages[llm.ReasoningWorkflowStageRapidFinalizer]
-	if !ok {
-		finalizerStage = llm.ReasoningWorkflowStageSession{
-			Provider:        runtime.RapidConfig.Finalizer.Provider,
-			Model:           runtime.RapidConfig.Finalizer.Model,
-			ReasoningEffort: runtime.RapidConfig.Finalizer.Effort,
-			MaxTokens:       runtime.RapidConfig.Finalizer.MaxTokens,
+	if err := ensureRapidClassifications(ctx, runtime, responseSessionID, r.Query, r.UILanguage, r.Deb); err != nil {
+		return err
+	}
+	session, err = workflowStore.Get(responseSessionID)
+	if err != nil {
+		return err
+	}
+	classifiedResults, err := buildRapidVisibleResults(db, r.UILanguage, session, r.Deb)
+	if err != nil {
+		return err
+	}
+	response := llm.ReasoningSearchResponse{
+		Query:   r.Query,
+		Results: classifiedResults,
+	}
+	finalizerDebug := (*llm.ReasoningSearchDebugInfo)(nil)
+	finalizerLatencyMS := int64(0)
+	if runtime.RapidConfig.FinalizerEnabled && len(classifiedResults) > 0 {
+		finalizedResponse, debug, latencyMS, err := finalizeRapidReasoningSearch(ctx, runtime, session, r, outputLanguageName, classifiedResults)
+		if err != nil {
+			return err
 		}
+		finalizerDebug = debug
+		finalizerLatencyMS = latencyMS
+		response = finalizedResponse
+		response.Query = r.Query
+		mergeReasoningSearchSelectedResultMetadata(&response, classifiedResults)
 	}
-	finalizerService := runtime.Services[finalizerStage.Provider]
-	if finalizerService == nil {
-		return errors.New("rapid reasoning finalizer llm service is not initialized")
-	}
-	responseSchema, err := llm.GenerateReasoningSearchResponseJSONSchemaForLanguage(outputLanguageName)
-	if err != nil {
-		return err
-	}
-	finalizerInputPayload := struct {
-		Query            string                                  `json:"query"`
-		PreviousResponse *reasoningSearchPreviousResponseContext `json:"previous_response,omitempty"`
-		Results          []reasoningSearchCandidateInput         `json:"results"`
-	}{
-		Query:            r.Query,
-		PreviousResponse: buildReasoningSearchPreviousResponseContext(session.RapidFollowupSeed),
-		Results:          reasoningSearchCandidateInputs(candidates),
-	}
-	var finalizerInputBuffer bytes.Buffer
-	finalizerInputEncoder := json.NewEncoder(&finalizerInputBuffer)
-	finalizerInputEncoder.SetEscapeHTML(false)
-	if err := finalizerInputEncoder.Encode(finalizerInputPayload); err != nil {
-		return err
-	}
-	// Rapid finalization is a no-tools formatting/ranking pass over already
-	// selected candidates, so keep the prompt small and avoid tool instructions.
-	finalizerSystemMessage := reasoningSearchRapidFinalizerInstruction
-	finalizerSystemMessage = llm.AppendReasoningSearchOutputLanguage(finalizerSystemMessage, outputLanguageName)
-	finalizerMessages := []llm.LLMBotMessage{
-		{Role: "system", Content: finalizerSystemMessage},
-		{Role: "user", Content: strings.TrimSpace(finalizerInputBuffer.String())},
-	}
-
-	response := llm.ReasoningSearchResponse{}
-	promptCacheKey := fmt.Sprintf("reasoning-search-rapid-finalizer:m=%s:e=%s", finalizerStage.Model, finalizerStage.ReasoningEffort)
-	finalizerStarted := time.Now()
-	finalizerDebug, err := finalizerService.GetStructuredOutputWithDebugInfo(ctx, responseSchema, finalizerStage.Model, &finalizerStage.MaxTokens, finalizerMessages, &promptCacheKey, &finalizerStage.ReasoningEffort, r.Deb, &response)
-	finalizerLatencyMS := time.Since(finalizerStarted).Milliseconds()
-	if err != nil {
-		return err
-	}
-	response.Query = r.Query
 	response.SetSessionID(responseSessionID)
 	response.SetUsedTools(gather.UsedTools)
 	response.SetReasoningSteps(gather.ReasoningSummary)
@@ -1676,30 +2091,41 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	if finalizerDebug != nil {
 		response.UsedTokens += finalizerDebug.TotalTokens
 	}
-	if r.Deb {
-		debug := finalizerDebug
-		if debug == nil {
-			debug = &llm.ReasoningSearchDebugInfo{}
-		}
-		debug.RapidGatherModelUsage = rapidMainModelUsage(gather.Debug)
-		debug.RapidFinalizerModelUsage = rapidMainModelUsage(finalizerDebug)
-		debug.RapidGatherLatencyMS = gatherLatencyMS
-		debug.RapidFinalizerLatencyMS = finalizerLatencyMS
-		debug.RapidGatheredCandidateCount = gatheredCandidateCount
-		debug.RapidSelectedUIDCount = len(candidates)
-		debug.RapidFinalizerResultCount = len(candidates)
-		debug.RapidSelectedUIDs = selectedUIDsForDebug
-		debug.Add(gather.Debug)
-		response.Debug = debug
-	}
-	mergeReasoningSearchDraftMetadata(&response, candidates)
-	if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
-		return err
-	}
-	for i := range response.Results {
-		response.Results[i].Origin = llm.ReasoningSearchResultOriginOriginal
+	classifierUsage := aggregateReasoningSearchUsageBreakdownsForAPI(session.RapidClassifierModelRuns)
+	if classifierUsage != nil {
+		response.UsedTokens += classifierUsage.TotalTokens
 	}
 	response.SetFollowupBudget(gatherStage.MaxFollowups, session.FollowupCount, followupsRemaining)
+	if r.Deb {
+		debug := &llm.ReasoningSearchDebugInfo{}
+		debug.RapidGatherModelUsage = rapidMainModelUsage(gather.Debug)
+		debug.RapidGatherLatencyMS = gatherLatencyMS
+		debug.RapidGatheredCandidateCount = gatheredCandidateCount
+		debug.RapidClassifierUnhandledUIDs = []string{}
+		debug.RapidClassifierResultCount = len(classifiedResults)
+		debug.RapidFinalizerModelUsage = rapidMainModelUsage(finalizerDebug)
+		debug.RapidFinalizerLatencyMS = finalizerLatencyMS
+		debug.RapidFinalizerResultCount = len(response.Results)
+		debug.Add(gather.Debug)
+		if classifierUsage != nil {
+			debug.Add(&llm.ReasoningSearchDebugInfo{
+				PricingConfigured:           classifierUsage.PricingConfigured,
+				TotalTokens:                 classifierUsage.TotalTokens,
+				InputTokens:                 classifierUsage.InputTokens,
+				CachedInputTokens:           classifierUsage.CachedInputTokens,
+				UncachedInputTokens:         classifierUsage.UncachedInputTokens,
+				OutputTokens:                classifierUsage.OutputTokens,
+				ReasoningTokens:             classifierUsage.ReasoningTokens,
+				EstimatedInputCostUSD:       classifierUsage.EstimatedInputCostUSD,
+				EstimatedCachedInputCostUSD: classifierUsage.EstimatedCachedInputCostUSD,
+				EstimatedOutputCostUSD:      classifierUsage.EstimatedOutputCostUSD,
+				EstimatedCostUSD:            classifierUsage.EstimatedCostUSD,
+				RapidClassifierModelRuns:    append([]llm.ReasoningSearchUsageBreakdown(nil), session.RapidClassifierModelRuns...),
+			})
+		}
+		debug.Add(finalizerDebug)
+		response.Debug = debug
+	}
 	if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
 		return err
 	}
@@ -2060,6 +2486,10 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 				verificationStage.Model,
 				verificationStage.ReasoningEffort,
 			)
+			summary := ""
+			if response.Summary != nil {
+				summary = *response.Summary
+			}
 			verificationInput, err := json.Marshal(struct {
 				Query            string                             `json:"query"`
 				Summary          string                             `json:"summary"`
@@ -2067,7 +2497,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 				Results          []llm.ReasoningSearchResult        `json:"results"`
 			}{
 				Query:            r.Query,
-				Summary:          response.Summary,
+				Summary:          summary,
 				ReasoningSummary: response.ReasoningSummary,
 				Results:          response.Results,
 			})

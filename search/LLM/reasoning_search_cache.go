@@ -363,9 +363,13 @@ func BuildReasoningSearchCacheEntryFromResponse(response *ReasoningSearchRespons
 		})
 	}
 
+	summary := ""
+	if response.Summary != nil {
+		summary = *response.Summary
+	}
 	return &ReasoningSearchCacheEntry{
 		Query:   response.Query,
-		Summary: response.Summary,
+		Summary: summary,
 		Results: results,
 	}
 }

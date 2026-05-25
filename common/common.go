@@ -132,6 +132,16 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		services[rapidConfig.Gather.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Gather.Provider, progress)
 		utils.Must(err)
 	}
+	if _, ok := services[rapidConfig.Classifier.Provider]; !ok {
+		services[rapidConfig.Classifier.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Classifier.Provider, nil)
+		utils.Must(err)
+	}
+	if rapidConfig.FinalizerEnabled {
+		if _, ok := services[rapidConfig.Finalizer.Provider]; !ok {
+			services[rapidConfig.Finalizer.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Finalizer.Provider, nil)
+			utils.Must(err)
+		}
+	}
 	if viper.GetBool("llm.reasoning-search-verification-enabled") {
 		if _, ok := services[verificationProvider]; !ok {
 			services[verificationProvider], err = llm.NewServiceForProviderWithProgress(verificationProvider, nil)
@@ -152,13 +162,6 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		services[draftConfig.Provider], err = llm.NewServiceForProviderWithProgress(draftConfig.Provider, nil)
 		utils.Must(err)
 	}
-	if rapidConfig.FinalizerEnabled {
-		if _, ok := services[rapidConfig.Finalizer.Provider]; !ok {
-			services[rapidConfig.Finalizer.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Finalizer.Provider, nil)
-			utils.Must(err)
-		}
-	}
-
 	var postgreSQLToolCacheTTL *time.Duration
 	if viper.IsSet("llm.postgresql-tool-cache-ttl") {
 		ttl := viper.GetDuration("llm.postgresql-tool-cache-ttl")

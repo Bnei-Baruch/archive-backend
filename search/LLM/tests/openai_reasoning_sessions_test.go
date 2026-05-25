@@ -641,7 +641,7 @@ func TestReasoningWorkflowSessionStoreDraftLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected create error: %v", err)
 	}
-	if err := store.SetQuery(sessionID, "אהבה"); err != nil {
+	if err := store.SetQuery(sessionID, "אהבה", ""); err != nil {
 		t.Fatalf("unexpected set query error: %v", err)
 	}
 
@@ -664,9 +664,10 @@ func TestReasoningWorkflowSessionStoreDraftLifecycle(t *testing.T) {
 		t.Fatalf("unexpected draft start: ok=%t revision=%d query=%q results=%d", ok, draftRevision, query, len(results))
 	}
 
+	summary := "draft"
 	response := &llm.ReasoningSearchResponse{
 		Query:   query,
-		Summary: "draft",
+		Summary: &summary,
 		Results: []llm.ReasoningSearchResult{
 			{MDBUID: "uid-1", Reason: "reason"},
 		},
@@ -726,7 +727,7 @@ func TestReasoningWorkflowSessionStoreDraftLifecycle(t *testing.T) {
 	if stage.ProviderSessionID != "fresh-provider-session" {
 		t.Fatalf("unexpected provider session id: %q", stage.ProviderSessionID)
 	}
-	if session.DraftFollowupSeed == nil || session.DraftFollowupSeed.Summary != "draft" {
+	if session.DraftFollowupSeed == nil || session.DraftFollowupSeed.Summary == nil || *session.DraftFollowupSeed.Summary != "draft" {
 		t.Fatalf("expected draft follow-up seed, got %#v", session.DraftFollowupSeed)
 	}
 }
@@ -745,7 +746,7 @@ func TestReasoningWorkflowDraftFollowupKeepsPreviousDraftContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected create error: %v", err)
 	}
-	if err := store.SetQuery(sessionID, "initial query"); err != nil {
+	if err := store.SetQuery(sessionID, "initial query", ""); err != nil {
 		t.Fatalf("unexpected set query error: %v", err)
 	}
 	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{{MDBUID: "initial-uid", Title: "Initial"}}); err != nil {
@@ -755,9 +756,10 @@ func TestReasoningWorkflowDraftFollowupKeepsPreviousDraftContext(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("unexpected first draft start: ok=%t err=%v", ok, err)
 	}
+	firstSummary := "first draft"
 	firstDraft := &llm.ReasoningSearchResponse{
 		Query:   "initial query",
-		Summary: "first draft",
+		Summary: &firstSummary,
 		Results: []llm.ReasoningSearchResult{
 			{MDBUID: "initial-uid", Title: "Initial"},
 		},
@@ -785,9 +787,10 @@ func TestReasoningWorkflowDraftFollowupKeepsPreviousDraftContext(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("unexpected second draft start: ok=%t err=%v", ok, err)
 	}
+	secondSummary := "second draft"
 	secondDraft := &llm.ReasoningSearchResponse{
 		Query:   "first follow-up",
-		Summary: "second draft",
+		Summary: &secondSummary,
 		Results: []llm.ReasoningSearchResult{
 			{MDBUID: "followup-uid", Title: "Follow-up"},
 		},
@@ -816,8 +819,8 @@ func TestReasoningWorkflowDraftFollowupKeepsPreviousDraftContext(t *testing.T) {
 	if session.DraftFollowupSeed == nil {
 		t.Fatalf("expected draft follow-up seed")
 	}
-	if !strings.Contains(session.DraftFollowupSeed.Summary, "second draft") || !strings.Contains(session.DraftFollowupSeed.Summary, "first draft") {
-		t.Fatalf("expected both draft summaries in seed, got %q", session.DraftFollowupSeed.Summary)
+	if session.DraftFollowupSeed.Summary == nil || !strings.Contains(*session.DraftFollowupSeed.Summary, "second draft") || !strings.Contains(*session.DraftFollowupSeed.Summary, "first draft") {
+		t.Fatalf("expected both draft summaries in seed, got %#v", session.DraftFollowupSeed.Summary)
 	}
 	if len(session.DraftFollowupSeed.Results) != 2 {
 		t.Fatalf("expected latest and previous draft results, got %#v", session.DraftFollowupSeed.Results)
@@ -844,9 +847,13 @@ func TestReasoningWorkflowStartRapidFollowupUsesPreviousSnapshotAsSeed(t *testin
 	if err := store.SetRapid(sessionID, true); err != nil {
 		t.Fatalf("unexpected rapid state error: %v", err)
 	}
+	if err := store.SetQuery(sessionID, "initial", "he"); err != nil {
+		t.Fatalf("unexpected set query error: %v", err)
+	}
+	summary := "initial summary"
 	response := &llm.ReasoningSearchResponse{
 		Query:   "initial",
-		Summary: "initial summary",
+		Summary: &summary,
 		Results: []llm.ReasoningSearchResult{
 			{MDBUID: "uid-1", Title: "Initial result"},
 		},
@@ -859,7 +866,7 @@ func TestReasoningWorkflowStartRapidFollowupUsesPreviousSnapshotAsSeed(t *testin
 		t.Fatalf("unexpected follow-up state error: %v", err)
 	}
 
-	if err := store.StartRapidFollowup(sessionID, "follow-up", 1, llm.ReasoningWorkflowStageSession{
+	if err := store.StartRapidFollowup(sessionID, "follow-up", "he", 1, llm.ReasoningWorkflowStageSession{
 		Provider:          "openai",
 		Model:             "gpt-5.4-nano",
 		ReasoningEffort:   "low",
@@ -873,13 +880,13 @@ func TestReasoningWorkflowStartRapidFollowupUsesPreviousSnapshotAsSeed(t *testin
 	if err != nil {
 		t.Fatalf("unexpected get error: %v", err)
 	}
-	if !session.Rapid || session.Query != "follow-up" || session.FollowupCount != 1 {
-		t.Fatalf("unexpected rapid follow-up state: rapid=%t query=%q count=%d", session.Rapid, session.Query, session.FollowupCount)
+	if !session.Rapid || session.Query != "follow-up" || session.UILanguage != "he" || session.FollowupCount != 1 {
+		t.Fatalf("unexpected rapid follow-up state: rapid=%t query=%q ui_language=%q count=%d", session.Rapid, session.Query, session.UILanguage, session.FollowupCount)
 	}
 	if len(session.ResponseSnapshotJSON) != 0 {
 		t.Fatalf("expected response snapshot to be cleared for rapid follow-up")
 	}
-	if session.RapidFollowupSeed == nil || session.RapidFollowupSeed.Summary != "initial summary" {
+	if session.RapidFollowupSeed == nil || session.RapidFollowupSeed.Summary == nil || *session.RapidFollowupSeed.Summary != "initial summary" {
 		t.Fatalf("expected previous response seed, got %#v", session.RapidFollowupSeed)
 	}
 	stage := session.Stages[llm.ReasoningWorkflowStageReasoning]
@@ -900,7 +907,7 @@ func TestReasoningWorkflowDraftRequiresMinimumResults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected create error: %v", err)
 	}
-	if err := store.SetQuery(sessionID, "אהבה"); err != nil {
+	if err := store.SetQuery(sessionID, "אהבה", ""); err != nil {
 		t.Fatalf("unexpected set query error: %v", err)
 	}
 	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
@@ -944,7 +951,7 @@ func TestReasoningWorkflowDraftAttachesEvidenceToPartialResults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected create error: %v", err)
 	}
-	if err := store.SetQuery(sessionID, "אהבה"); err != nil {
+	if err := store.SetQuery(sessionID, "אהבה", ""); err != nil {
 		t.Fatalf("unexpected set query error: %v", err)
 	}
 	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
@@ -990,7 +997,7 @@ func TestReasoningWorkflowLookupEvidenceKeepsLatestItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected create error: %v", err)
 	}
-	if err := store.SetQuery(sessionID, "אהבה"); err != nil {
+	if err := store.SetQuery(sessionID, "אהבה", ""); err != nil {
 		t.Fatalf("unexpected set query error: %v", err)
 	}
 	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
@@ -1036,7 +1043,7 @@ func TestReasoningWorkflowDraftPartialResultsAreSessionIsolated(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected create error: %v", err)
 		}
-		if err := store.SetQuery(sessionID, query); err != nil {
+		if err := store.SetQuery(sessionID, query, ""); err != nil {
 			t.Fatalf("unexpected set query error: %v", err)
 		}
 		return sessionID
@@ -1098,7 +1105,7 @@ func TestReasoningWorkflowDraftAccumulatesModelRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected create error: %v", err)
 	}
-	if err := store.SetQuery(sessionID, "אהבה"); err != nil {
+	if err := store.SetQuery(sessionID, "אהבה", ""); err != nil {
 		t.Fatalf("unexpected set query error: %v", err)
 	}
 	if _, _, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
@@ -1112,9 +1119,10 @@ func TestReasoningWorkflowDraftAccumulatesModelRuns(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("unexpected first draft start: ok=%t err=%v", ok, err)
 	}
+	firstSummary := "first"
 	first := &llm.ReasoningSearchResponse{
 		Query:   "אהבה",
-		Summary: "first",
+		Summary: &firstSummary,
 		Results: []llm.ReasoningSearchResult{{MDBUID: "uid-1"}},
 		Debug: &llm.ReasoningSearchDebugInfo{
 			Enabled:           true,
@@ -1147,9 +1155,10 @@ func TestReasoningWorkflowDraftAccumulatesModelRuns(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("unexpected second draft start: ok=%t err=%v", ok, err)
 	}
+	secondSummary := "second"
 	second := &llm.ReasoningSearchResponse{
 		Query:   "אהבה",
-		Summary: "second",
+		Summary: &secondSummary,
 		Results: []llm.ReasoningSearchResult{{MDBUID: "uid-2"}},
 		Debug: &llm.ReasoningSearchDebugInfo{
 			Enabled:           true,

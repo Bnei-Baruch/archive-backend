@@ -439,8 +439,8 @@ func TestOpenRouterResultsReadyToolStopsForcedToolUse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if output.Summary != "done" {
-		t.Fatalf("unexpected summary: %s", output.Summary)
+	if output.Summary == nil || *output.Summary != "done" {
+		t.Fatalf("unexpected summary: %#v", output.Summary)
 	}
 	if len(output.UsedTools) != 1 || output.UsedTools[0] != openRouterResultsReadyToolName {
 		t.Fatalf("expected results_ready in used_tools, got %#v", output.UsedTools)

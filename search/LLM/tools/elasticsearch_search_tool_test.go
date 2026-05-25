@@ -2,6 +2,7 @@ package tools
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -93,6 +94,7 @@ func TestElasticsearchSearchHasPotentiallyGoodResultsOnlyChecksTopSix(t *testing
 type elasticsearchSearchTestHit struct {
 	ResultType  string
 	ContentType string
+	MDBUID      string
 }
 
 func elasticsearchSearchTestUnitHit(contentType string) elasticsearchSearchTestHit {
@@ -106,6 +108,9 @@ func elasticsearchSearchQueryResultWithHits(testHits ...elasticsearchSearchTestH
 	hits := make([]*elastic.SearchHit, 0, len(testHits))
 	for _, testHit := range testHits {
 		sourceMap := map[string]interface{}{"result_type": testHit.ResultType}
+		if testHit.MDBUID != "" {
+			sourceMap["mdb_uid"] = testHit.MDBUID
+		}
 		if testHit.ContentType != "" {
 			sourceMap["filter_values"] = []string{es.KeyValue("content_type", testHit.ContentType)}
 		}
@@ -120,5 +125,26 @@ func elasticsearchSearchQueryResultWithHits(testHits ...elasticsearchSearchTestH
 				Hits:      hits,
 			},
 		},
+	}
+}
+
+func TestElasticsearchSearchPartialResultsReportsUnhandledUIDs(t *testing.T) {
+	hits := []elasticsearchSearchTestHit{}
+	for i := 0; i < 14; i++ {
+		hits = append(hits, elasticsearchSearchTestHit{
+			ResultType:  consts.ES_RESULT_TYPE_UNITS,
+			ContentType: consts.CT_ARTICLE,
+			MDBUID:      fmt.Sprintf("uid-%02d", i),
+		})
+	}
+
+	partialResults, unhandledUIDs := elasticsearchSearchPartialResults(elasticsearchSearchQueryResultWithHits(hits...))
+
+	if len(partialResults) != 12 {
+		t.Fatalf("expected 12 handled partial results, got %d", len(partialResults))
+	}
+	expected := []string{"uid-12", "uid-13"}
+	if !reflect.DeepEqual(unhandledUIDs, expected) {
+		t.Fatalf("unexpected unhandled UIDs: got %#v want %#v", unhandledUIDs, expected)
 	}
 }

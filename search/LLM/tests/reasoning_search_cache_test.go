@@ -51,9 +51,10 @@ func TestReasoningSearchCacheKeyForQueryRejectsQueriesWithTooManyWords(t *testin
 }
 
 func TestBuildReasoningSearchCacheEntryFromResponseStripsMetadata(t *testing.T) {
+	summary := "summary"
 	entry := llm.BuildReasoningSearchCacheEntryFromResponse(&llm.ReasoningSearchResponse{
 		Query:   "ד' בחינות דאור ישר",
-		Summary: "summary",
+		Summary: &summary,
 		Results: []llm.ReasoningSearchResult{
 			{
 				MDBUID:           "abc",
@@ -84,9 +85,10 @@ func TestBuildReasoningSearchCacheEntryFromResponseStripsMetadata(t *testing.T) 
 }
 
 func TestBuildReasoningSearchCacheEntryFromResponseSkipsEmptyResults(t *testing.T) {
+	summary := "summary"
 	entry := llm.BuildReasoningSearchCacheEntryFromResponse(&llm.ReasoningSearchResponse{
 		Query:   "query",
-		Summary: "summary",
+		Summary: &summary,
 		Results: []llm.ReasoningSearchResult{},
 	})
 	if entry != nil {
@@ -176,10 +178,11 @@ func TestReasoningWorkflowSessionStoreResponseSnapshotLifecycle(t *testing.T) {
 		t.Fatalf("unexpected create error: %v", err)
 	}
 
+	summary := "summary"
 	response := &llm.ReasoningSearchResponse{
 		SessionID: "session",
 		Query:     "query",
-		Summary:   "summary",
+		Summary:   &summary,
 		Results: []llm.ReasoningSearchResult{
 			{MDBUID: "abc", ResultType: "units", Title: "Title", Reason: "why"},
 		},

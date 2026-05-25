@@ -1248,37 +1248,50 @@ func TestReasoningSearchDraftConfigFromConfigDefaultsToAITools(t *testing.T) {
 func TestReasoningSearchRapidConfigFromConfigUsesExplicitStages(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldGatherProvider := viper.GetString("llm.reasoning-search-rapid-gather-provider")
+	oldClassifierProvider := viper.GetString("llm.reasoning-search-rapid-classifier-provider")
+	oldFinalizerEnabled := viper.GetBool("llm.reasoning-search-rapid-finalizer-enabled")
 	oldFinalizerProvider := viper.GetString("llm.reasoning-search-rapid-finalizer-provider")
 	oldGatherModel := viper.GetString("openai.reasoning-search-rapid-gather-model")
 	oldGatherEffort := viper.GetString("openai.reasoning-search-rapid-gather-effort")
 	oldGatherMaxTokens := viper.GetInt("openai.reasoning-search-rapid-gather-max-output-tokens")
 	oldGatherMaxIterations := viper.GetInt("openai.reasoning-search-rapid-gather-max-iterations")
+	oldClassifierModel := viper.GetString("stub.reasoning-search-rapid-classifier-model")
+	oldClassifierEffort := viper.GetString("stub.reasoning-search-rapid-classifier-effort")
+	oldClassifierMaxTokens := viper.GetInt("stub.reasoning-search-rapid-classifier-max-output-tokens")
 	oldFinalizerModel := viper.GetString("stub.reasoning-search-rapid-finalizer-model")
 	oldFinalizerEffort := viper.GetString("stub.reasoning-search-rapid-finalizer-effort")
 	oldFinalizerMaxTokens := viper.GetInt("stub.reasoning-search-rapid-finalizer-max-output-tokens")
 	defer viper.Set("llm.provider", oldProvider)
 	defer viper.Set("llm.reasoning-search-rapid-gather-provider", oldGatherProvider)
-	defer viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
+	defer viper.Set("llm.reasoning-search-rapid-classifier-provider", oldClassifierProvider)
+	defer viper.Set("llm.reasoning-search-rapid-finalizer-enabled", oldFinalizerEnabled)
 	defer viper.Set("llm.reasoning-search-rapid-finalizer-provider", oldFinalizerProvider)
 	defer viper.Set("openai.reasoning-search-rapid-gather-model", oldGatherModel)
 	defer viper.Set("openai.reasoning-search-rapid-gather-effort", oldGatherEffort)
 	defer viper.Set("openai.reasoning-search-rapid-gather-max-output-tokens", oldGatherMaxTokens)
 	defer viper.Set("openai.reasoning-search-rapid-gather-max-iterations", oldGatherMaxIterations)
+	defer viper.Set("stub.reasoning-search-rapid-classifier-model", oldClassifierModel)
+	defer viper.Set("stub.reasoning-search-rapid-classifier-effort", oldClassifierEffort)
+	defer viper.Set("stub.reasoning-search-rapid-classifier-max-output-tokens", oldClassifierMaxTokens)
 	defer viper.Set("stub.reasoning-search-rapid-finalizer-model", oldFinalizerModel)
 	defer viper.Set("stub.reasoning-search-rapid-finalizer-effort", oldFinalizerEffort)
 	defer viper.Set("stub.reasoning-search-rapid-finalizer-max-output-tokens", oldFinalizerMaxTokens)
 
 	viper.Set("llm.provider", "openai")
 	viper.Set("llm.reasoning-search-rapid-gather-provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-classifier-provider", "stub")
 	viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
 	viper.Set("llm.reasoning-search-rapid-finalizer-provider", "stub")
 	viper.Set("openai.reasoning-search-rapid-gather-model", "gpt-5.4-nano")
 	viper.Set("openai.reasoning-search-rapid-gather-effort", "low")
 	viper.Set("openai.reasoning-search-rapid-gather-max-output-tokens", 1234)
 	viper.Set("openai.reasoning-search-rapid-gather-max-iterations", 3)
+	viper.Set("stub.reasoning-search-rapid-classifier-model", "stub-classifier")
+	viper.Set("stub.reasoning-search-rapid-classifier-effort", "low")
+	viper.Set("stub.reasoning-search-rapid-classifier-max-output-tokens", 4321)
 	viper.Set("stub.reasoning-search-rapid-finalizer-model", "stub-finalizer")
 	viper.Set("stub.reasoning-search-rapid-finalizer-effort", "low")
-	viper.Set("stub.reasoning-search-rapid-finalizer-max-output-tokens", 4321)
+	viper.Set("stub.reasoning-search-rapid-finalizer-max-output-tokens", 5432)
 
 	cfg, err := llm.ReasoningSearchRapidConfigFromConfig()
 	if err != nil {
@@ -1287,27 +1300,70 @@ func TestReasoningSearchRapidConfigFromConfigUsesExplicitStages(t *testing.T) {
 	if cfg.Gather.Provider != "openai" || cfg.Gather.Model != "gpt-5.4-nano" || cfg.Gather.Effort != "low" || cfg.Gather.MaxTokens != 1234 || cfg.Gather.MaxIterations != 3 {
 		t.Fatalf("unexpected gather config: %#v", cfg.Gather)
 	}
+	if cfg.Classifier.Provider != "stub" || cfg.Classifier.Model != "stub-classifier" || cfg.Classifier.Effort != "low" || cfg.Classifier.MaxTokens != 4321 || cfg.Classifier.MaxIterations != 0 {
+		t.Fatalf("unexpected classifier config: %#v", cfg.Classifier)
+	}
 	if !cfg.FinalizerEnabled {
 		t.Fatalf("expected finalizer to be enabled")
 	}
-	if cfg.Finalizer.Provider != "stub" || cfg.Finalizer.Model != "stub-finalizer" || cfg.Finalizer.Effort != "low" || cfg.Finalizer.MaxTokens != 4321 || cfg.Finalizer.MaxIterations != 0 {
+	if cfg.Finalizer.Provider != "stub" || cfg.Finalizer.Model != "stub-finalizer" || cfg.Finalizer.Effort != "low" || cfg.Finalizer.MaxTokens != 5432 || cfg.Finalizer.MaxIterations != 0 {
 		t.Fatalf("unexpected finalizer config: %#v", cfg.Finalizer)
 	}
 }
 
-func TestReasoningSearchRapidConfigFromConfigCanDisableFinalizer(t *testing.T) {
+func TestReasoningSearchRapidClassifierOmitsOpenAIEffortWhenUnset(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldGatherProvider := viper.GetString("llm.reasoning-search-rapid-gather-provider")
+	oldClassifierProvider := viper.GetString("llm.reasoning-search-rapid-classifier-provider")
 	oldGatherModel := viper.GetString("openai.reasoning-search-rapid-gather-model")
+	oldClassifierModel := viper.GetString("openai.reasoning-search-rapid-classifier-model")
+	oldClassifierEffort := viper.GetString("openai.reasoning-search-rapid-classifier-effort")
 	defer viper.Set("llm.provider", oldProvider)
-	defer viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
 	defer viper.Set("llm.reasoning-search-rapid-gather-provider", oldGatherProvider)
+	defer viper.Set("llm.reasoning-search-rapid-classifier-provider", oldClassifierProvider)
 	defer viper.Set("openai.reasoning-search-rapid-gather-model", oldGatherModel)
+	defer viper.Set("openai.reasoning-search-rapid-classifier-model", oldClassifierModel)
+	defer viper.Set("openai.reasoning-search-rapid-classifier-effort", oldClassifierEffort)
 
 	viper.Set("llm.provider", "openai")
-	viper.Set("llm.reasoning-search-rapid-finalizer-enabled", false)
 	viper.Set("llm.reasoning-search-rapid-gather-provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-classifier-provider", "openai")
 	viper.Set("openai.reasoning-search-rapid-gather-model", "gpt-5.4-nano")
+	viper.Set("openai.reasoning-search-rapid-classifier-model", "gpt-6")
+	viper.Set("openai.reasoning-search-rapid-classifier-effort", "")
+
+	cfg, err := llm.ReasoningSearchRapidConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Classifier.Model != "gpt-6" {
+		t.Fatalf("unexpected classifier model: %#v", cfg.Classifier)
+	}
+	if cfg.Classifier.Effort != "" {
+		t.Fatalf("expected classifier effort to be omitted when unset, got %q", cfg.Classifier.Effort)
+	}
+}
+
+func TestReasoningSearchRapidConfigFromConfigDisablesFinalizerByDefault(t *testing.T) {
+	oldProvider := viper.GetString("llm.provider")
+	oldGatherProvider := viper.GetString("llm.reasoning-search-rapid-gather-provider")
+	oldClassifierProvider := viper.GetString("llm.reasoning-search-rapid-classifier-provider")
+	oldFinalizerEnabled := viper.GetBool("llm.reasoning-search-rapid-finalizer-enabled")
+	oldGatherModel := viper.GetString("openai.reasoning-search-rapid-gather-model")
+	oldClassifierModel := viper.GetString("openai.reasoning-search-rapid-classifier-model")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("llm.reasoning-search-rapid-gather-provider", oldGatherProvider)
+	defer viper.Set("llm.reasoning-search-rapid-classifier-provider", oldClassifierProvider)
+	defer viper.Set("llm.reasoning-search-rapid-finalizer-enabled", oldFinalizerEnabled)
+	defer viper.Set("openai.reasoning-search-rapid-gather-model", oldGatherModel)
+	defer viper.Set("openai.reasoning-search-rapid-classifier-model", oldClassifierModel)
+
+	viper.Set("llm.provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-gather-provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-classifier-provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-finalizer-enabled", false)
+	viper.Set("openai.reasoning-search-rapid-gather-model", "gpt-5.4-nano")
+	viper.Set("openai.reasoning-search-rapid-classifier-model", "gpt-5.4-mini")
 
 	cfg, err := llm.ReasoningSearchRapidConfigFromConfig()
 	if err != nil {
@@ -1317,74 +1373,37 @@ func TestReasoningSearchRapidConfigFromConfigCanDisableFinalizer(t *testing.T) {
 		t.Fatalf("expected finalizer to be disabled")
 	}
 	if cfg.Finalizer.Provider != "" || cfg.Finalizer.Model != "" {
-		t.Fatalf("expected empty finalizer config when disabled, got %#v", cfg.Finalizer)
+		t.Fatalf("expected empty finalizer config, got %#v", cfg.Finalizer)
 	}
 }
 
-func TestReasoningSearchRapidFinalizerOmitsOpenAIEffortWhenUnset(t *testing.T) {
+func TestReasoningSearchRapidClassifierUsesConfiguredOpenAIEffort(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldGatherProvider := viper.GetString("llm.reasoning-search-rapid-gather-provider")
-	oldFinalizerProvider := viper.GetString("llm.reasoning-search-rapid-finalizer-provider")
+	oldClassifierProvider := viper.GetString("llm.reasoning-search-rapid-classifier-provider")
 	oldGatherModel := viper.GetString("openai.reasoning-search-rapid-gather-model")
-	oldFinalizerModel := viper.GetString("openai.reasoning-search-rapid-finalizer-model")
-	oldFinalizerEffort := viper.GetString("openai.reasoning-search-rapid-finalizer-effort")
+	oldClassifierModel := viper.GetString("openai.reasoning-search-rapid-classifier-model")
+	oldClassifierEffort := viper.GetString("openai.reasoning-search-rapid-classifier-effort")
 	defer viper.Set("llm.provider", oldProvider)
-	defer viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
 	defer viper.Set("llm.reasoning-search-rapid-gather-provider", oldGatherProvider)
-	defer viper.Set("llm.reasoning-search-rapid-finalizer-provider", oldFinalizerProvider)
+	defer viper.Set("llm.reasoning-search-rapid-classifier-provider", oldClassifierProvider)
 	defer viper.Set("openai.reasoning-search-rapid-gather-model", oldGatherModel)
-	defer viper.Set("openai.reasoning-search-rapid-finalizer-model", oldFinalizerModel)
-	defer viper.Set("openai.reasoning-search-rapid-finalizer-effort", oldFinalizerEffort)
+	defer viper.Set("openai.reasoning-search-rapid-classifier-model", oldClassifierModel)
+	defer viper.Set("openai.reasoning-search-rapid-classifier-effort", oldClassifierEffort)
 
 	viper.Set("llm.provider", "openai")
-	viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
 	viper.Set("llm.reasoning-search-rapid-gather-provider", "openai")
-	viper.Set("llm.reasoning-search-rapid-finalizer-provider", "openai")
+	viper.Set("llm.reasoning-search-rapid-classifier-provider", "openai")
 	viper.Set("openai.reasoning-search-rapid-gather-model", "gpt-5.4-nano")
-	viper.Set("openai.reasoning-search-rapid-finalizer-model", "gpt-6")
-	viper.Set("openai.reasoning-search-rapid-finalizer-effort", "")
+	viper.Set("openai.reasoning-search-rapid-classifier-model", "gpt-6")
+	viper.Set("openai.reasoning-search-rapid-classifier-effort", "low")
 
 	cfg, err := llm.ReasoningSearchRapidConfigFromConfig()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Finalizer.Model != "gpt-6" {
-		t.Fatalf("unexpected finalizer model: %#v", cfg.Finalizer)
-	}
-	if cfg.Finalizer.Effort != "" {
-		t.Fatalf("expected finalizer effort to be omitted when unset, got %q", cfg.Finalizer.Effort)
-	}
-}
-
-func TestReasoningSearchRapidFinalizerUsesConfiguredOpenAIEffort(t *testing.T) {
-	oldProvider := viper.GetString("llm.provider")
-	oldGatherProvider := viper.GetString("llm.reasoning-search-rapid-gather-provider")
-	oldFinalizerProvider := viper.GetString("llm.reasoning-search-rapid-finalizer-provider")
-	oldGatherModel := viper.GetString("openai.reasoning-search-rapid-gather-model")
-	oldFinalizerModel := viper.GetString("openai.reasoning-search-rapid-finalizer-model")
-	oldFinalizerEffort := viper.GetString("openai.reasoning-search-rapid-finalizer-effort")
-	defer viper.Set("llm.provider", oldProvider)
-	defer viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
-	defer viper.Set("llm.reasoning-search-rapid-gather-provider", oldGatherProvider)
-	defer viper.Set("llm.reasoning-search-rapid-finalizer-provider", oldFinalizerProvider)
-	defer viper.Set("openai.reasoning-search-rapid-gather-model", oldGatherModel)
-	defer viper.Set("openai.reasoning-search-rapid-finalizer-model", oldFinalizerModel)
-	defer viper.Set("openai.reasoning-search-rapid-finalizer-effort", oldFinalizerEffort)
-
-	viper.Set("llm.provider", "openai")
-	viper.Set("llm.reasoning-search-rapid-finalizer-enabled", true)
-	viper.Set("llm.reasoning-search-rapid-gather-provider", "openai")
-	viper.Set("llm.reasoning-search-rapid-finalizer-provider", "openai")
-	viper.Set("openai.reasoning-search-rapid-gather-model", "gpt-5.4-nano")
-	viper.Set("openai.reasoning-search-rapid-finalizer-model", "gpt-6")
-	viper.Set("openai.reasoning-search-rapid-finalizer-effort", "low")
-
-	cfg, err := llm.ReasoningSearchRapidConfigFromConfig()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.Finalizer.Effort != "low" {
-		t.Fatalf("expected configured finalizer effort, got %q", cfg.Finalizer.Effort)
+	if cfg.Classifier.Effort != "low" {
+		t.Fatalf("expected configured classifier effort, got %q", cfg.Classifier.Effort)
 	}
 }
 

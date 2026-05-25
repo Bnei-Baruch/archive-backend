@@ -18,7 +18,7 @@ Instructions for coding agents working in this repository.
   - `es/` Elasticsearch indexing pipelines
   - `mdb/` SQLBoiler-generated MDB models
   - `events/` NATS-based event processing
-- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), LLM providers (`[openai]`, `[openrouter]`, `[ollama]`, `[xai]`, `[zai]`, `[arcee]`, `[inception]`, `[cohere]`, `[deepseek]`, `[claude]`); `[stub]` is local and makes no API calls.
+- Main external services: Postgres (`[mdb]`), Elasticsearch (`[elasticsearch]`), NATS (`[nats]`), assets/doc2text (`[assets_service]` / unzip URL), and the configured LLM provider. `[stub]` is local and makes no API calls.
 - Config: `config.toml` (see `config.sample.toml`).
 
 ## LLM Architecture
@@ -60,10 +60,12 @@ Instructions for coding agents working in this repository.
 - `POST /search/reasoning/start` may receive `cancel_session_id` to cancel a previous background run before starting the new one.
 - `POST /search/reasoning/cancel` cancels a running background search by workflow `session_id`.
 - `POST /search/reasoning/finish-now` finalizes the latest prepared draft response for a workflow `session_id`; it does not generate results inline. If no draft is ready, it returns a conflict error.
+- `finish-now` is only for the regular reasoning flow. Rapid reasoning search does not support it.
 - `GET /search/reasoning/status` reports background progress for that workflow session.
 - `GET /search/reasoning/result` fetches the stored per-session response snapshot after the background run completes.
 - Background progress terminal states include `completed`, `failed`, and `canceled`.
 - Status also exposes progress hints such as result availability, potentially good results, long-running risk, near-finish, query-analyzed, and draft availability. `has_draft_results=true` means the client may offer `finish-now`.
+- For rapid reasoning search, status may also return `rapid_results_available=true` plus `rapid_results` before the final stored response is fetched.
 - Response includes `session_id`, `cache_hit`, `used_tools`, token stats, and debug/cost details when `deb=true`.
 - The backend persists a `reasoning` workflow stage and, when enabled, `planning` and `verification` workflow stages.
 - The backend uses two different storage mechanisms for reasoning search:
@@ -74,12 +76,18 @@ Instructions for coding agents working in this repository.
 - Draft model token/cost usage is included in draft and final response totals when available and, when `deb=true`, under `debug.draft_model_usage`. Individual draft generations are listed separately under `debug.draft_model_runs`.
 - Follow-up after draft results must not continue the old hidden provider context. The backend starts a fresh provider reasoning session for the same workflow session and seeds the visible draft response as prior assistant context before the user's follow-up query.
 - Old background reasoning runs may finish after a draft was returned or after a draft follow-up started. They must not overwrite or clear the newer workflow state.
+- Rapid reasoning search is a separate flow: gather results with the main reasoning model, classify them with a separate classifier model in batches, optionally run a finalizer, and expose visible rapid results through status.
+- Rapid classification runs on batches of results, not per result. The current batch size is defined in `api/reasoning_search.go`.
+- Rapid classification is incremental: results are re-classified only when new lookup evidence was attached to that result.
+- Rapid finalizer is optional. When disabled, the stored rapid response keeps `summary=null` and returns the classifier-sorted results directly.
+- Rapid results are sorted first by classifier relevance, then by backend tie-breakers such as content type, lookup evidence, language match, freshness, and a few source/collection-specific boosts.
+- Result highlights shown to the user are not model-generated. They come from ES highlights plus lookup evidence snippets, then are ranked and truncated for display in the backend.
 - Workflow stages own their provider/model/effort settings; handlers should execute a stage from stored workflow state, not by re-reading current config for existing sessions.
 - Planning is a one-shot structured-output call that runs only on the initial request, not on follow-ups. It returns request-specific guidance plus optional first-iteration tool restrictions.
 - Verification is currently a one-shot structured call, so its stored stage metadata may have an empty provider-native session id.
 - Reasoning workflow/progress/provider sessions are stored in memory only, with TTL from `llm.reasoning-session-ttl`.
 - Session-related endpoints such as status, result, and follow-up renew session expiry when the session still exists.
-- OpenRouter, Ollama, Arcee, Inception, Cohere, DeepSeek, Z.AI, and Claude sessions store full replayable conversation history via `chat_reasoning_sessions.go`.
+- Providers that replay full conversation history store their sessions via `chat_reasoning_sessions.go`.
 - If client sends a missing or expired `session_id`, the API returns an error; it does not silently start a new session.
 - OpenAI session state stores continuation data (`last_response_id`, model, effort), not the full prompt or hidden reasoning.
 - Planning failures are soft: the handler logs a warning and continues with reasoning without planner guidance.
@@ -96,18 +104,12 @@ Instructions for coding agents working in this repository.
 - Draft response provider selection lives under `[llm]`:
   - `llm.reasoning-search-draft-provider`
   - Defaults to `llm.ai-tools-provider` when empty.
-- Reasoning search config is provider-specific:
-  - `[openai]` for OpenAI
-  - `[openrouter]` for OpenRouter
-  - `[ollama]` for Ollama
-  - `[xai]` for xAI
-  - `[zai]` for Z.AI
-  - `[arcee]` for Arcee AI
-  - `[inception]` for Inception Labs
-  - `[cohere]` for Cohere Compatibility API
-  - `[deepseek]` for DeepSeek official API
-  - `[claude]` for Anthropic Claude
-  - `[stub]` for local constant responses with no API calls
+- Rapid search provider selection lives under `[llm]`:
+  - `llm.reasoning-search-rapid-gather-provider`
+  - `llm.reasoning-search-rapid-classifier-provider`
+  - `llm.reasoning-search-rapid-finalizer-provider`
+  - `llm.reasoning-search-rapid-finalizer-enabled`
+- Provider-specific model settings live under the provider section in `config.toml` / `config.sample.toml`. Supported provider sections and defaults are defined in `search/LLM/service_factory.go`.
 - Verification model settings are also provider-specific:
   - `<provider>.reasoning-search-verification-model`
   - `<provider>.reasoning-search-verification-effort`
@@ -121,6 +123,10 @@ Instructions for coding agents working in this repository.
   - `<provider>.reasoning-search-draft-effort`
   - `<provider>.reasoning-search-draft-max-output-tokens`
   - When unset, draft settings fall back to the selected AI-tools provider settings.
+- Rapid gather/classifier/finalizer model settings are also provider-specific:
+  - `<provider>.reasoning-search-rapid-gather-*`
+  - `<provider>.reasoning-search-rapid-classifier-*`
+  - `<provider>.reasoning-search-rapid-finalizer-*`
 - OpenRouter supports configurable provider routing and `openrouter.enforced-tool-use-iterations`; `0` disables forced tool use.
 - OpenRouter provider routing keys can be overridden per stage with `reasoning-search-*`, `reasoning-search-planning-*`, `reasoning-search-verification-*`, and `ai-tools-*` provider-routing keys under `[openrouter]`.
 - xAI Grok 4 fast reasoning models do not support `reasoning_effort`; keep xAI reasoning and planning effort config empty.

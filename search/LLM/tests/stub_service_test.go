@@ -84,8 +84,8 @@ func TestStubServiceReturnsReasoningSessionOutput(t *testing.T) {
 	if strings.TrimSpace(sessionID) == "" {
 		t.Fatalf("expected generated session id")
 	}
-	if output.Summary != "stub summary" {
-		t.Fatalf("unexpected summary: %s", output.Summary)
+	if output.Summary == nil || *output.Summary != "stub summary" {
+		t.Fatalf("unexpected summary: %#v", output.Summary)
 	}
 	if output.ReasoningIterations != 1 {
 		t.Fatalf("unexpected iterations: %d", output.ReasoningIterations)
@@ -183,7 +183,7 @@ func TestStubServiceSupportsWildcardFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if output.Summary != "fallback summary" {
-		t.Fatalf("unexpected summary: %s", output.Summary)
+	if output.Summary == nil || *output.Summary != "fallback summary" {
+		t.Fatalf("unexpected summary: %#v", output.Summary)
 	}
 }

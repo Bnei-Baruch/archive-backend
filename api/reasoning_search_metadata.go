@@ -17,10 +17,14 @@ import (
 )
 
 type reasoningSearchResultMetadata struct {
-	Title       string
-	ContentType string
-	ProgramName string
-	Date        string
+	Title            string
+	ContentType      string
+	ProgramName      string
+	Date             string
+	OriginalLanguage string
+	CollectionUID    string
+	BaalSulamArticle bool
+	ConnectingSource bool
 }
 
 func enrichReasoningSearchResults(db *sql.DB, uiLanguage string, results []llm.ReasoningSearchResult) error {
@@ -75,6 +79,18 @@ func enrichReasoningSearchResults(db *sql.DB, uiLanguage string, results []llm.R
 				result.ContentType = meta.ContentType
 				result.ProgramName = meta.ProgramName
 				result.Date = meta.Date
+				if meta.OriginalLanguage != "" {
+					result.OriginalLanguage = meta.OriginalLanguage
+				}
+				if meta.CollectionUID != "" {
+					result.CollectionUID = meta.CollectionUID
+				}
+				if meta.BaalSulamArticle {
+					result.BaalSulamArticle = true
+				}
+				if meta.ConnectingSource {
+					result.ConnectingSource = true
+				}
 			}
 		}
 	}
@@ -249,7 +265,7 @@ func loadReasoningSearchContentUnitMetadata(db *sql.DB, r BaseRequest, uids []st
 			programCollectionIDs = append(programCollectionIDs, collection.ID)
 		}
 	}
-	programI18nsMap, err := loadCI18ns(db, r, reasoningSearchUniqueInt64s(programCollectionIDs))
+	programI18nsMap, err := loadCI18ns(db, r, utils.UniqueInt64s(programCollectionIDs))
 	if err != nil {
 		return nil, err
 	}
@@ -263,6 +279,7 @@ func loadReasoningSearchContentUnitMetadata(db *sql.DB, r BaseRequest, uids []st
 			setCUI18n(contentUnit, r, i18ns)
 		}
 		programName := ""
+		programCollectionUID := ""
 		for _, ccu := range item.R.CollectionsContentUnits {
 			if ccu.R == nil || ccu.R.Collection == nil {
 				continue
@@ -284,14 +301,17 @@ func loadReasoningSearchContentUnitMetadata(db *sql.DB, r BaseRequest, uids []st
 			}
 			programName = strings.TrimSpace(program.Name)
 			if programName != "" {
+				programCollectionUID = collection.UID
 				break
 			}
 		}
 		metadata[item.UID] = reasoningSearchResultMetadata{
-			Title:       contentUnit.Name,
-			ContentType: contentUnit.ContentType,
-			ProgramName: programName,
-			Date:        reasoningSearchUtilsDateString(contentUnit.FilmDate),
+			Title:            contentUnit.Name,
+			ContentType:      contentUnit.ContentType,
+			ProgramName:      programName,
+			Date:             reasoningSearchUtilsDateString(contentUnit.FilmDate),
+			OriginalLanguage: strings.TrimSpace(contentUnit.OriginalLanguage),
+			CollectionUID:    programCollectionUID,
 		}
 	}
 
@@ -364,7 +384,7 @@ func loadReasoningSearchSourceMetadata(db *sql.DB, r BaseRequest, uids []string)
 	}
 
 	for len(pendingParents) > 0 {
-		parentIDs := reasoningSearchUniqueInt64s(pendingParents)
+		parentIDs := utils.UniqueInt64s(pendingParents)
 		pendingParents = nil
 
 		missingParentIDs := make([]int64, 0, len(parentIDs))
@@ -416,14 +436,22 @@ func loadReasoningSearchSourceMetadata(db *sql.DB, r BaseRequest, uids []string)
 		rootIDByLeafUID[leafUID] = rootID
 		rootIDs = append(rootIDs, rootID)
 	}
-	authorNamesByRootID, err := loadReasoningSearchAuthorNamesBySourceID(db, reasoningSearchUniqueInt64s(rootIDs))
+	authorNamesByRootID, err := loadReasoningSearchAuthorNamesBySourceID(db, utils.UniqueInt64s(rootIDs))
 	if err != nil {
 		return nil, err
 	}
 
 	for leafUID, leaf := range leafByUID {
 		names := []string{}
+		baalSulamArticle := false
+		connectingSource := false
 		for current := leaf; current != nil; {
+			if current.UID == consts.SRC_ARTICLES_BAAL_SULAM {
+				baalSulamArticle = true
+			}
+			if current.UID == consts.SRC_CONNECTING_TO_THE_SOURCE {
+				connectingSource = true
+			}
 			names = append(names, preferredSourceI18nName(current.Name, r, i18nsMap[current.ID]))
 			if !current.ParentID.Valid {
 				break
@@ -442,8 +470,10 @@ func loadReasoningSearchSourceMetadata(db *sql.DB, r BaseRequest, uids []string)
 			title = authorName + " > " + title
 		}
 		metadata[leafUID] = reasoningSearchResultMetadata{
-			Title:       title,
-			ContentType: consts.CT_SOURCE,
+			Title:            title,
+			ContentType:      consts.CT_SOURCE,
+			BaalSulamArticle: baalSulamArticle,
+			ConnectingSource: connectingSource,
 		}
 	}
 
@@ -601,19 +631,6 @@ func reasoningSearchCollectionDate(collection *mdbmodels.Collection, converted *
 		return &t
 	}
 	return nil
-}
-
-func reasoningSearchUniqueInt64s(values []int64) []int64 {
-	seen := make(map[int64]bool, len(values))
-	unique := make([]int64, 0, len(values))
-	for _, value := range values {
-		if seen[value] {
-			continue
-		}
-		seen[value] = true
-		unique = append(unique, value)
-	}
-	return unique
 }
 
 func loadSourceI18ns(db *sql.DB, r BaseRequest, ids []int64) (map[int64]map[string]*mdbmodels.SourceI18n, error) {

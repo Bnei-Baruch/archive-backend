@@ -125,6 +125,19 @@ func ConvertArgsString(args []string) []interface{} {
 	return c
 }
 
+func UniqueInt64s(values []int64) []int64 {
+	seen := make(map[int64]bool, len(values))
+	unique := make([]int64, 0, len(values))
+	for _, value := range values {
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+		unique = append(unique, value)
+	}
+	return unique
+}
+
 func Int64InSlice(i int64, s []int64) bool {
 	for _, v := range s {
 		if v == i {
