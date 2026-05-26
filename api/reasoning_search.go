@@ -337,7 +337,7 @@ func ReasoningSearchStatusHandler(c *gin.Context) {
 			log.Warnf("Rapid Reasoning Search status classification failed session=%s: %v", sessionID, err)
 		}
 		if currentSession, err := runtime.Workflow.Get(sessionID); err == nil {
-			if results, err := buildRapidVisibleResults(db, currentSession.UILanguage, currentSession, false); err == nil && len(results) > 0 {
+			if results, err := buildRapidVisibleResults(db, currentSession.UILanguage, currentSession); err == nil && len(results) > 0 {
 				response.RapidResultsAvailable = true
 				response.RapidResults = results
 			}
@@ -1514,7 +1514,7 @@ func normalizeRapidRelevance(value string) string {
 	}
 }
 
-func buildRapidVisibleResults(db *sql.DB, uiLanguage string, session *llm.ReasoningWorkflowSession, includeRelevance bool) ([]llm.ReasoningSearchResult, error) {
+func buildRapidVisibleResults(db *sql.DB, uiLanguage string, session *llm.ReasoningWorkflowSession) ([]llm.ReasoningSearchResult, error) {
 	if session == nil {
 		return nil, nil
 	}
@@ -1526,9 +1526,7 @@ func buildRapidVisibleResults(db *sql.DB, uiLanguage string, session *llm.Reason
 			continue
 		}
 		candidate.Reason = strings.TrimSpace(classification.Reason)
-		if includeRelevance {
-			candidate.Relevance = classification.Relevance
-		}
+		candidate.Relevance = classification.Relevance
 		candidate.Origin = llm.ReasoningSearchResultOriginOriginal
 		results = append(results, candidate)
 	}
@@ -2137,7 +2135,7 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	if err != nil {
 		return err
 	}
-	classifiedResults, err := buildRapidVisibleResults(db, r.UILanguage, session, r.Deb)
+	classifiedResults, err := buildRapidVisibleResults(db, r.UILanguage, session)
 	if err != nil {
 		return err
 	}

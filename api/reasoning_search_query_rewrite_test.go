@@ -123,7 +123,7 @@ func TestBuildRapidVisibleResultsOmitsNotRelevantAndSortsByRelevance(t *testing.
 		},
 	}
 
-	results, err := buildRapidVisibleResults(nil, "", session, true)
+	results, err := buildRapidVisibleResults(nil, "", session)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -140,15 +140,6 @@ func TestBuildRapidVisibleResultsOmitsNotRelevantAndSortsByRelevance(t *testing.
 		t.Fatalf("expected possible result third, got %#v", results)
 	}
 
-	results, err = buildRapidVisibleResults(nil, "", session, false)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	for _, result := range results {
-		if result.Relevance != "" {
-			t.Fatalf("expected relevance to be hidden outside debug mode, got %#v", results)
-		}
-	}
 }
 
 func TestBuildRapidVisibleResultsDropsPossibleResultsWhenEnoughGoodResults(t *testing.T) {
@@ -165,7 +156,7 @@ func TestBuildRapidVisibleResultsDropsPossibleResultsWhenEnoughGoodResults(t *te
 	results, err := buildRapidVisibleResults(nil, "", &llm.ReasoningWorkflowSession{
 		PartialResults:       partialResults,
 		RapidClassifications: classifications,
-	}, true)
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
