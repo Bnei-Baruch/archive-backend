@@ -71,7 +71,7 @@ func TestBuildReasoningSearchHighlightsRanksAIAndRelevantESHighlights(t *testing
 		},
 	}
 
-	highlights := buildReasoningSearchHighlightsFromEvidence(result)
+	highlights := buildReasoningSearchHighlightsFromEvidence(result, "משה", "תפקידו של משה")
 	if len(highlights) < 3 {
 		t.Fatalf("expected ranked highlights, got %#v", highlights)
 	}
@@ -83,6 +83,27 @@ func TestBuildReasoningSearchHighlightsRanksAIAndRelevantESHighlights(t *testing
 	}
 	if highlights[2] == "רק מילת קישור <em>עם</em>" {
 		t.Fatalf("expected short linking-word emphasis not to rank near the top, got %#v", highlights)
+	}
+}
+
+func TestBuildReasoningSearchHighlightsPrefersReasonAnchors(t *testing.T) {
+	result := llm.ReasoningSearchResult{
+		Highlights: []string{
+			`נמצא מה שהאדם מתייגע בתורה ומצות, הוא מסיבת שחסר לנו את חשיבותו וגדלותו של הבורא יתברך.`,
+			`וזה ענין שותפות, שיש להנבראים עם הבורא.`,
+			`עמי אתה - להיות שותף עמי.`,
+		},
+	}
+
+	highlights := buildReasoningSearchHighlightsFromEvidence(result, "שותפות עם הבורא", `נראה כהתאמה הטובה ביותר: "עמי אתה" - "להיות שותף עמי" וכן "וזה ענין שותפות"`)
+	if len(highlights) < 2 {
+		t.Fatalf("expected ranked highlights, got %#v", highlights)
+	}
+	if highlights[0] != `עמי אתה - להיות שותף עמי.` && highlights[0] != `וזה ענין שותפות, שיש להנבראים עם הבורא.` {
+		t.Fatalf("expected reason-supporting highlight first, got %#v", highlights)
+	}
+	if highlights[len(highlights)-1] == `עמי אתה - להיות שותף עמי.` {
+		t.Fatalf("expected quoted reason anchor not to sink to the bottom, got %#v", highlights)
 	}
 }
 

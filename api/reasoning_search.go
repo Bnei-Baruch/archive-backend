@@ -38,7 +38,7 @@ type ReasoningSearchCancelRequest struct {
 
 const (
 	reasoningSearchDisplayHighlightMaxItems     = 3
-	reasoningSearchDisplayHighlightMaxRunes     = 350
+	reasoningSearchDisplayHighlightMaxRunes     = 450
 	reasoningSearchRapidClassificationBatchSize = 20
 	reasoningSearchRapidGoodResultsThreshold    = 6
 )
@@ -999,17 +999,17 @@ func populateReasoningSearchHighlightsFromEvidence(response *llm.ReasoningSearch
 			if len(candidate.LookupEvidence) == 0 && len(evidenceByUID[uid]) > 0 {
 				candidate.LookupEvidence = append([]llm.ReasoningSearchResultEvidence(nil), evidenceByUID[uid]...)
 			}
-			response.Results[i].Highlights = compactReasoningSearchHighlightsForDisplay(buildReasoningSearchHighlightsFromEvidence(candidate))
+			response.Results[i].Highlights = compactReasoningSearchHighlightsForDisplay(buildReasoningSearchHighlightsFromEvidence(candidate, response.Query, response.Results[i].Reason))
 		} else if len(evidenceByUID[uid]) > 0 {
 			response.Results[i].Highlights = compactReasoningSearchHighlightsForDisplay(buildReasoningSearchHighlightsFromEvidence(llm.ReasoningSearchResult{
 				LookupEvidence: evidenceByUID[uid],
-			}))
+			}, response.Query, response.Results[i].Reason))
 		}
 		response.Results[i].LookupEvidence = nil
 	}
 }
 
-func buildReasoningSearchHighlightsFromEvidence(result llm.ReasoningSearchResult) []string {
+func buildReasoningSearchHighlightsFromEvidence(result llm.ReasoningSearchResult, query string, reason string) []string {
 	candidates := []reasoningSearchHighlightCandidate{}
 	seen := map[string]bool{}
 	add := func(value string, fromLookupEvidence bool) {
@@ -1034,7 +1034,7 @@ func buildReasoningSearchHighlightsFromEvidence(result llm.ReasoningSearchResult
 		}
 		add(evidence.Content, true)
 	}
-	return rankReasoningSearchHighlights(candidates)
+	return rankReasoningSearchHighlights(candidates, query, reason)
 }
 
 type reasoningSearchHighlightCandidate struct {
@@ -1043,13 +1043,13 @@ type reasoningSearchHighlightCandidate struct {
 	OriginalPos        int
 }
 
-func rankReasoningSearchHighlights(candidates []reasoningSearchHighlightCandidate) []string {
+func rankReasoningSearchHighlights(candidates []reasoningSearchHighlightCandidate, query string, reason string) []string {
 	if len(candidates) == 0 {
 		return nil
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
-		leftScore := reasoningSearchHighlightScore(candidates[i])
-		rightScore := reasoningSearchHighlightScore(candidates[j])
+		leftScore := reasoningSearchHighlightScore(candidates[i], query, reason)
+		rightScore := reasoningSearchHighlightScore(candidates[j], query, reason)
 		if leftScore == rightScore {
 			return candidates[i].OriginalPos < candidates[j].OriginalPos
 		}
@@ -1062,8 +1062,9 @@ func rankReasoningSearchHighlights(candidates []reasoningSearchHighlightCandidat
 	return highlights
 }
 
-func reasoningSearchHighlightScore(candidate reasoningSearchHighlightCandidate) int {
-	score := visibleHighlightRuneCount(candidate.Text)
+func reasoningSearchHighlightScore(candidate reasoningSearchHighlightCandidate, query string, reason string) int {
+	visibleText := visibleHighlightText(candidate.Text)
+	score := utf8.RuneCountInString(visibleText)
 	if score > 240 {
 		score = 240
 	}
@@ -1076,6 +1077,13 @@ func reasoningSearchHighlightScore(candidate reasoningSearchHighlightCandidate) 
 	}
 	if candidate.FromLookupEvidence {
 		score += 1000
+	}
+	score += reasoningSearchHighlightMatchScore(visibleText, query, 40)
+	score += reasoningSearchHighlightMatchScore(visibleText, reason, 25)
+	for _, phrase := range extractQuotedPhrases(reason) {
+		if strings.Contains(visibleText, phrase) {
+			score += 200
+		}
 	}
 	return score
 }
@@ -1122,6 +1130,11 @@ func compactReasoningSearchHighlightsForDisplay(highlights []string) []string {
 }
 
 func visibleHighlightRuneCount(value string) int {
+	return utf8.RuneCountInString(visibleHighlightText(value))
+}
+
+func visibleHighlightText(value string) string {
+	var b strings.Builder
 	count := 0
 	inTag := false
 	for _, r := range value {
@@ -1131,10 +1144,66 @@ func visibleHighlightRuneCount(value string) int {
 		case r == '>':
 			inTag = false
 		case !inTag:
+			b.WriteRune(r)
 			count++
 		}
 	}
-	return count
+	if count == 0 {
+		return ""
+	}
+	return b.String()
+}
+
+func reasoningSearchHighlightMatchScore(text string, source string, perToken int) int {
+	score := 0
+	for _, token := range tokenizeReasoningSearchHighlightText(source) {
+		if strings.Contains(text, token) {
+			score += perToken
+		}
+	}
+	return score
+}
+
+func tokenizeReasoningSearchHighlightText(value string) []string {
+	parts := strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	tokens := make([]string, 0, len(parts))
+	seen := map[string]bool{}
+	for _, part := range parts {
+		if utf8.RuneCountInString(part) <= 2 || seen[part] {
+			continue
+		}
+		seen[part] = true
+		tokens = append(tokens, part)
+	}
+	return tokens
+}
+
+func extractQuotedPhrases(value string) []string {
+	phrases := []string{}
+	seen := map[string]bool{}
+	for _, pair := range [][2]string{{`"`, `"`}, {"“", "”"}, {"„", "”"}} {
+		start := 0
+		for {
+			left := strings.Index(value[start:], pair[0])
+			if left < 0 {
+				break
+			}
+			left += start + len(pair[0])
+			right := strings.Index(value[left:], pair[1])
+			if right < 0 {
+				break
+			}
+			phrase := strings.TrimSpace(value[left : left+right])
+			if utf8.RuneCountInString(phrase) > 2 && !seen[phrase] {
+				seen[phrase] = true
+				phrases = append(phrases, phrase)
+			}
+			start = left + right + len(pair[1])
+		}
+	}
+	return phrases
 }
 
 func truncateHighlightForDisplay(value string, maxRunes int) string {
