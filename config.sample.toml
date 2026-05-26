@@ -60,6 +60,7 @@ provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "de
 postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache
 ai-tools-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "cohere", "stub"; defaults to llm.provider when empty
 ai-query-tool-max-batches=5 # max document batches query_source_ai/query_transcript_ai may send to the reader model per call
+reasoning-search-draft-enabled=true
 reasoning-search-draft-provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "inception", "cohere", "stub"; defaults to ai-tools-provider when empty
 reasoning-search-cache-enabled=false
 reasoning-search-cache-ttl="120h" # default is 120h (5 days)

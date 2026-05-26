@@ -1200,6 +1200,7 @@ func TestReasoningSearchDraftConfigFromConfigUsesExplicitProvider(t *testing.T) 
 func TestReasoningSearchDraftConfigFromConfigDefaultsToAITools(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldAIToolsProvider := viper.GetString("llm.ai-tools-provider")
+	oldDraftEnabled := viper.GetString("llm.reasoning-search-draft-enabled")
 	oldDraftProvider := viper.GetString("llm.reasoning-search-draft-provider")
 	oldAIToolsModel := viper.GetString("stub.ai-tools-model")
 	oldAIToolsEffort := viper.GetString("stub.ai-tools-effort")
@@ -1209,6 +1210,7 @@ func TestReasoningSearchDraftConfigFromConfigDefaultsToAITools(t *testing.T) {
 	oldDraftMaxTokens := viper.GetInt("stub.reasoning-search-draft-max-output-tokens")
 	defer viper.Set("llm.provider", oldProvider)
 	defer viper.Set("llm.ai-tools-provider", oldAIToolsProvider)
+	defer viper.Set("llm.reasoning-search-draft-enabled", oldDraftEnabled)
 	defer viper.Set("llm.reasoning-search-draft-provider", oldDraftProvider)
 	defer viper.Set("stub.ai-tools-model", oldAIToolsModel)
 	defer viper.Set("stub.ai-tools-effort", oldAIToolsEffort)
@@ -1219,6 +1221,7 @@ func TestReasoningSearchDraftConfigFromConfigDefaultsToAITools(t *testing.T) {
 
 	viper.Set("llm.provider", "openai")
 	viper.Set("llm.ai-tools-provider", "stub")
+	viper.Set("llm.reasoning-search-draft-enabled", true)
 	viper.Set("llm.reasoning-search-draft-provider", "")
 	viper.Set("stub.ai-tools-model", "reader-stub")
 	viper.Set("stub.ai-tools-effort", "reader")
@@ -1242,6 +1245,21 @@ func TestReasoningSearchDraftConfigFromConfigDefaultsToAITools(t *testing.T) {
 	}
 	if cfg.MaxTokens != 3333 {
 		t.Fatalf("unexpected max tokens: %d", cfg.MaxTokens)
+	}
+}
+
+func TestReasoningSearchDraftConfigFromConfigCanBeDisabled(t *testing.T) {
+	oldDraftEnabled := viper.GetString("llm.reasoning-search-draft-enabled")
+	defer viper.Set("llm.reasoning-search-draft-enabled", oldDraftEnabled)
+
+	viper.Set("llm.reasoning-search-draft-enabled", false)
+
+	cfg, err := llm.ReasoningSearchDraftConfigFromConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg != nil {
+		t.Fatalf("expected nil config when drafts are disabled, got %#v", cfg)
 	}
 }
 

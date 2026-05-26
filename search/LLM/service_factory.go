@@ -1390,6 +1390,9 @@ func AIToolsConfigFromConfig() (*AIToolsConfig, error) {
 }
 
 func ReasoningSearchDraftConfigFromConfig() (*ReasoningSearchDraftConfig, error) {
+	if viper.IsSet("llm.reasoning-search-draft-enabled") && !viper.GetBool("llm.reasoning-search-draft-enabled") {
+		return nil, nil
+	}
 	provider := ReasoningSearchDraftProviderFromConfig()
 	aiToolsConfig, err := aiToolsConfigFromProvider(provider)
 	if err != nil {

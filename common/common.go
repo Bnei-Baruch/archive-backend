@@ -158,9 +158,11 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		services[aiToolsConfig.Provider], err = llm.NewServiceForProviderWithProgress(aiToolsConfig.Provider, nil)
 		utils.Must(err)
 	}
-	if _, ok := services[draftConfig.Provider]; !ok {
-		services[draftConfig.Provider], err = llm.NewServiceForProviderWithProgress(draftConfig.Provider, nil)
-		utils.Must(err)
+	if draftConfig != nil {
+		if _, ok := services[draftConfig.Provider]; !ok {
+			services[draftConfig.Provider], err = llm.NewServiceForProviderWithProgress(draftConfig.Provider, nil)
+			utils.Must(err)
+		}
 	}
 	var postgreSQLToolCacheTTL *time.Duration
 	if viper.IsSet("llm.postgresql-tool-cache-ttl") {
