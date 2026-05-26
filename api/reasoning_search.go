@@ -38,7 +38,7 @@ type ReasoningSearchCancelRequest struct {
 
 const (
 	reasoningSearchDisplayHighlightMaxItems     = 3
-	reasoningSearchDisplayHighlightMaxRunes     = 200
+	reasoningSearchDisplayHighlightMaxRunes     = 350
 	reasoningSearchRapidClassificationBatchSize = 20
 	reasoningSearchRapidGoodResultsThreshold    = 6
 )
@@ -1068,7 +1068,12 @@ func reasoningSearchHighlightScore(candidate reasoningSearchHighlightCandidate) 
 		score = 240
 	}
 	emTextRunes, emSegments := emphasizedHighlightStats(candidate.Text)
-	score += emTextRunes*3 + emSegments*20
+	score += emTextRunes * 3
+	if emTextRunes > 2 {
+		score += emSegments * 8
+	} else if emTextRunes > 0 {
+		score -= 20
+	}
 	if candidate.FromLookupEvidence {
 		score += 1000
 	}
@@ -1421,7 +1426,7 @@ func rapidClassificationPendingCandidates(session *llm.ReasoningWorkflowSession)
 func rapidClassificationSystemMessage(languageName string) string {
 	message := `Classify archive search candidates for relevance to the user query.
 Use these relevance values:
-- highly_relevant: direct strong match to the user's request, compatible with both the type of content and the content itself.
+- highly_relevant: direct strong match to the user's request, compatible with both the desired type of content and the content itself.
 - relevant: useful match, but not the strongest. If the user query looks like a citation from a source but the matching result is not source but program, lesson or blog post then set as relevant but not highly_relevant.
 - can_be_relevant: possibly useful if the user intended this direction or will help with more comprehensive enrichment.
 - not_relevant: omit from user-visible results.

@@ -62,6 +62,7 @@ func TestBuildReasoningSearchHighlightsRanksAIAndRelevantESHighlights(t *testing
 	result := llm.ReasoningSearchResult{
 		Highlights: []string{
 			"<em>משה</em>",
+			"רק מילת קישור <em>עם</em>",
 			"פתיח קצר על <em>משה</em>",
 			"קטע ארוך יותר שמסביר את <em>משה</em> ואת <em>תפקידו</em> בהקשר השאלה",
 		},
@@ -79,6 +80,9 @@ func TestBuildReasoningSearchHighlightsRanksAIAndRelevantESHighlights(t *testing
 	}
 	if highlights[1] != "קטע ארוך יותר שמסביר את <em>משה</em> ואת <em>תפקידו</em> בהקשר השאלה" {
 		t.Fatalf("expected richer ES highlight second, got %#v", highlights)
+	}
+	if highlights[2] == "רק מילת קישור <em>עם</em>" {
+		t.Fatalf("expected short linking-word emphasis not to rank near the top, got %#v", highlights)
 	}
 }
 
@@ -197,8 +201,8 @@ func TestSortRapidVisibleResultsUsesSoftBoosts(t *testing.T) {
 
 	sortRapidVisibleResults(results, classifications, consts.LANG_HEBREW)
 
-	if results[0].MDBUID != "program" {
-		t.Fatalf("expected regular program chapter to win same-relevance soft sorting, got %#v", results)
+	if results[0].MDBUID != "clip" {
+		t.Fatalf("expected clip to keep the top boost and win on stable ordering, got %#v", results)
 	}
 	if results[len(results)-1].MDBUID != "source" {
 		t.Fatalf("expected unboosted source last, got %#v", results)
