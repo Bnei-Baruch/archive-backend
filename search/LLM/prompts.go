@@ -41,6 +41,42 @@ The main Kabbalist authors whose writings are studied in Bnei Baruch are:
  Some known books: The Study of the Ten Sefirot also known as Talmud Eser Sefirot or TES (תע״ס) (source_id=xtKmrbb9), The Book of Zohar (source_id=AwGBQX2L), Introduction to Talomud Eser Sefirot (הקדמה לתע״ס) (source_id=OqZMFGHu), Preface to the Wisdom of Kabbalah (פתיחה לחכמת הקבלה) (source_id=kB3eD83I), Shamati (source_id=qMUUn22b).
  `
 
+// Rapid search uses a separate prompt. The difference is that it does not ask a clarification question in case of ambiguity. And in case that there are no relevant results at all, it will return an empty list and set the no_results flag to true.
+const GeneralRapidReasoningSearchInstruction = `You are a search agent for the ‘Kabbalah Media’ website (also known as the archive). Your role is to provide best results for the user based on the user query. You have access to a powerful search tool that can query the archive with a text query and various filters. The archive contains media content such as videos, articles, books, and more. When you receive a user query, your task is to determine how to best use the search tool to find relevant content in the archive. You should consider the user's query and decide on the most effective search strategy, which may involve using specific filters.
+If user query is a general term or a broad topic, look for the best results that introduce the topic to a wide audience, usually the best match for this is a video program. An article that covers the topic in an accessible way is also a good match. But also sources from books can be included since the user can be looking for a more in-depth and comprehensive content.
+For canonical Kabbalah terms, verify the answer using direct source material (result_type sources) before finalizing. In the final results, you may still rank accessible lessons or introductory content first when they better fit a broad audience, but include at least one authoritative source (preferably baal ha-sulam) result when relevant.
+Optimal number of results to return is 6.
+If only one result is relevant, find and include other results that the user might find useful, even if they are not a perfect match for the original query.
+Pay attention to the correct context based interpretation of the user query, especially when it contains idiomatic phrases or domain-specific terminology.
+Important: Your task is only to find the relevant results, not to explain the topics or the content.
+
+If the archive is not containing any data that can be relevant to the user query, you should return an empty list of results and set the no_results field to true in the output.
+
+About the content field in the archive and the organization that created it:
+
+The organization that created this archive is Bnei Baruch, also known as קבלה לעם.
+The organization was founded by Dr. Michael Laitman, a student and personal assistant of Rabbi Baruch Ashlag. Dr. Laitman, often referred in the search queries as “Rav” or “Rav Laitman,” is the primary teacher whose content users are usually seeking—especially from the daily Kabbalah lessons.
+The organization has a global presence, with students in many countries and content available in multiple languages. Students worldwide that study in various frameworks of the organization are sometimes called the 'world kli'. The term 'women kli' is used to refer to the women students, which is a significant part of the student body and also has dedicated lessons for them.
+The term 'kenes' (כנס) or 'convention' or 'congress' is used to refer to special events that take place a few times a year, where students gather for several days of study and connection.
+The term 'ten' is used to refer to a small group of students (usually 10 or more) that practice between themselves connection according to Kabbalistic principles. Basicaly, most of the students are part of a ten, and the ten is the main framework for practicing connection.
+The term 'yeshivat haverim' (ישיבת חברים) is a social event for students to gather and connect.
+The term 'daily lesson' or 'morning lesson' refers to the main daily Kabbalah lesson given by Dr. Michael Laitman during early morning hours (IST time).
+
+The main Kabbalist authors whose writings are studied in Bnei Baruch are:
+- Rabbi Shimon Bar Yochai (Rashbi), lived in the 2nd and 3rd centuries CE, The author of The Book of Zohar.
+- Yehuda Leib HaLevi Ashlag (1885-1954) is known as Baal HaSulam (Owner of the Ladder) (בעל הסולם) for his Sulam (ladder) commentary on The Book of Zohar.
+- Baruch Shalom HaLevi Ashlag (The Rabash, רב״ש), (1907-1991), son and successor of Yehuda Leib HaLevi Ashlag (Baal HaSulam)
+
+‘Kabbalah Media’ is the official archive of the Bnei Baruch Kabbalah Education & Research Institute. It is updated regularly and provides viewable and downloadable materials including:
+
+- Daily Kabbalah Lessons (video/audio)
+- Other Kabbalah lessons, lectures, TV programs, music, clips
+- Books, articles, and excerpts.
+
+ Some of the popular programs: New Life (collection_id=zf4lLwyI), Conversations on the way (collection_id=EBc96va7), Weekly Torah Portion with Oren Levi (collection_id=Y4TA9hLP), Writers Meeting (collection_id=CwdCR0xR).
+ Some known books: The Study of the Ten Sefirot also known as Talmud Eser Sefirot or TES (תע״ס) (source_id=xtKmrbb9), The Book of Zohar (source_id=AwGBQX2L), Introduction to Talomud Eser Sefirot (הקדמה לתע״ס) (source_id=OqZMFGHu), Preface to the Wisdom of Kabbalah (פתיחה לחכמת הקבלה) (source_id=kB3eD83I), Shamati (source_id=qMUUn22b).
+ `
+
 const ReasoningSearchVerificationInstructionMask = `You are verifying the quality of the search results of a search agent for the ‘Kabbalah Media’ website (also known as the archive).
 Below are the instructions given to the search agent:
 
@@ -109,7 +145,15 @@ const reasoningSearchToolUsageHeader = "Available tools and usage instructions:"
 const reasoningSearchPlanningHeader = "YOU MUST FOLLOW THIS INSTRUCTION ON SEARCH STRATEGY FOR THE GIVEN QUERY:"
 
 func GenerateSystemMessageForReasoningSearch(tools []ReasoningTool, remainingIterations int, followupsRemaining int) string {
-	msg := fmt.Sprintf("Today is %s. \n%s", time.Now().Format("Monday, January 2, 2006"), GeneralReasoningSearchInstruction)
+	return generateSystemMessageForSearchInstruction(GeneralReasoningSearchInstruction, tools, remainingIterations, followupsRemaining)
+}
+
+func GenerateSystemMessageForRapidReasoningSearch(tools []ReasoningTool, remainingIterations int, followupsRemaining int) string {
+	return generateSystemMessageForSearchInstruction(GeneralRapidReasoningSearchInstruction, tools, remainingIterations, followupsRemaining)
+}
+
+func generateSystemMessageForSearchInstruction(instruction string, tools []ReasoningTool, remainingIterations int, followupsRemaining int) string {
+	msg := fmt.Sprintf("Today is %s. \n%s", time.Now().Format("Monday, January 2, 2006"), instruction)
 	if remainingIterations < 5 {
 		msg = fmt.Sprintf("%s\n\nCurrent request tool rounds remaining: %d. A follow-up request in the same session renews this budget.", msg, remainingIterations)
 	}

@@ -46,6 +46,7 @@ const (
 type rapidGatherResponse struct {
 	llm.ReasoningSearchResponse `json:"-"`
 	Done                        bool `json:"done"`
+	NoResults                   bool `json:"no_results"`
 }
 
 type rapidClassificationResponse struct {
@@ -82,7 +83,9 @@ The summary must say that the user asked for fast results and the answer is base
 
 const reasoningSearchRapidGatherInstruction = `Rapid search gather mode: use archive tools to collect strong Elasticsearch candidates for the user query.
 Do not create final search results for the user. Return only the JSON object required by the schema.
-Prefer Elasticsearch searches that collect varied candidate types. Use AI source/transcript tools only when they can add useful evidence to candidates already found.`
+Prefer Elasticsearch searches that collect varied candidate types. Use AI source/transcript tools only when they can add useful evidence to candidates already found.
+If you conclude that the archive has no relevant results for the query, return no_results=true.
+Set no_results=false in every other case, including uncertainty or incomplete investigation.`
 
 const reasoningSearchRapidFinalizerInstruction = `Rapid search finalizer mode: re-rank already-classified rapid search results and write the final summary.
 Use only supplied candidates. Do not invent results or IDs.
@@ -2067,7 +2070,7 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	}
 
 	outputLanguageName := reasoningSearchOutputLanguageName(r.UILanguage, r.Query)
-	systemMessage := llm.GenerateSystemMessageForReasoningSearch(runtime.Tools.Tools(), gatherStage.MaxIterations, gatherStage.MaxFollowups-session.FollowupCount)
+	systemMessage := llm.GenerateSystemMessageForRapidReasoningSearch(runtime.Tools.Tools(), gatherStage.MaxIterations, gatherStage.MaxFollowups-session.FollowupCount)
 	systemMessage = llm.AppendReasoningSearchOutputLanguage(systemMessage, outputLanguageName)
 	systemMessage += "\n\n" + reasoningSearchRapidGatherInstruction
 	messages := []llm.LLMBotMessage{{Role: "system", Content: systemMessage}}
@@ -2119,6 +2122,42 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	}
 	candidates := rapidCollectedResults(session)
 	if len(candidates) == 0 {
+		if gather.NoResults {
+			followupsRemaining := gatherStage.MaxFollowups - session.FollowupCount
+			if followupsRemaining < 0 {
+				followupsRemaining = 0
+			}
+			response := llm.ReasoningSearchResponse{
+				Query:     r.Query,
+				NoResults: true,
+				Results:   []llm.ReasoningSearchResult{},
+			}
+			response.SetSessionID(responseSessionID)
+			response.SetUsedTools(gather.UsedTools)
+			response.SetReasoningSteps(gather.ReasoningSummary)
+			response.SetReasoningProcessStats(gather.UsedTokens, gather.ReasoningIterations)
+			response.SetFollowupBudget(gatherStage.MaxFollowups, session.FollowupCount, followupsRemaining)
+			if r.Deb {
+				debug := &llm.ReasoningSearchDebugInfo{
+					RapidGatherModelUsage:        rapidMainModelUsage(gather.Debug),
+					RapidGatherLatencyMS:         gatherLatencyMS,
+					RapidGatheredCandidateCount:  0,
+					RapidClassifierUnhandledUIDs: []string{},
+				}
+				debug.Add(gather.Debug)
+				response.Debug = debug
+			}
+			if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
+				return err
+			}
+			if !session.InitialRequestCompleted {
+				if err := workflowStore.SetFollowupState(responseSessionID, true, session.FollowupCount); err != nil {
+					return err
+				}
+			}
+			progressStore.Complete(responseSessionID, gather.ReasoningIterations)
+			return nil
+		}
 		return errors.New("rapid reasoning search gathered no results")
 	}
 	gatheredCandidateCount := len(candidates)

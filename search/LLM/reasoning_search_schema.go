@@ -10,6 +10,7 @@ type ReasoningSearchResponse struct {
 	SessionID                string                               `json:"session_id"`
 	CacheHit                 bool                                 `json:"cache_hit"`
 	Query                    string                               `json:"query"`
+	NoResults                bool                                 `json:"no_results,omitempty"`
 	QueryMismatchRetry       bool                                 `json:"query_mismatch_retry,omitempty"`
 	Summary                  *string                              `json:"summary"`
 	ReasoningSummary         []ReasoningSearchReasoningStep       `json:"reasoning_summary"`
@@ -184,7 +185,7 @@ type ReasoningSearchPlanningToolSpec struct {
 	AlternativeQueries []string `json:"alternative_queries"`
 }
 
-var ReasoningSearchRapidGatherResponseJSONSchema = `{"type":"object","additionalProperties":false,"properties":{"done":{"type":"boolean"}},"required":["done"]}`
+var ReasoningSearchRapidGatherResponseJSONSchema = `{"type":"object","additionalProperties":false,"properties":{"done":{"type":"boolean"},"no_results":{"type":"boolean"}},"required":["done","no_results"]}`
 
 var ReasoningSearchRapidClassificationResponseJSONSchema = `{"type":"object","additionalProperties":false,"properties":{"results":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"mdb_uid":{"type":"string"},"relevance":{"type":"string","enum":["highly_relevant","relevant","can_be_relevant","not_relevant"]},"reason":{"type":"string"}},"required":["mdb_uid","relevance","reason"]}}},"required":["results"]}`
 

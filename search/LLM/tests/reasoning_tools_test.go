@@ -190,6 +190,35 @@ func TestGenerateSystemMessageForReasoningSearchIncludesToolUsage(t *testing.T) 
 	}
 }
 
+func TestGenerateSystemMessageForRapidReasoningSearchUsesRapidInstruction(t *testing.T) {
+	manager, err := llm.NewReasoningToolManager(
+		&fakeReasoningTool{
+			definition:       llm.ReasoningToolDefinition{Name: "tool_a"},
+			usageExplanation: "Tool: tool_a\nUse it first.",
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error creating manager: %v", err)
+	}
+
+	message := llm.GenerateSystemMessageForRapidReasoningSearch(manager.Tools(), 4, 0)
+	if !strings.Contains(message, "Optimal number of results to return is 6.") {
+		t.Fatalf("expected rapid instruction body in message: %s", message)
+	}
+	if strings.Contains(message, "ask one concise clarification question") {
+		t.Fatalf("did not expect regular-search clarification instruction in rapid message: %s", message)
+	}
+	if !strings.Contains(message, "Tool: tool_a\nUse it first.") {
+		t.Fatalf("expected tool usage explanation in rapid message: %s", message)
+	}
+	if !strings.Contains(message, "Current request tool rounds remaining: 4.") {
+		t.Fatalf("expected remaining iterations text when tool budget is low: %s", message)
+	}
+	if !strings.Contains(message, "no further follow-up requests remain in this session after this response") {
+		t.Fatalf("expected no-followup instruction when budget is exhausted: %s", message)
+	}
+}
+
 func TestBuildFirstIterationReasoningSearchSystemMessageUsesPlannedToolDocs(t *testing.T) {
 	systemMessage := strings.Join([]string{
 		"Base instructions.",
