@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 )
 
@@ -47,6 +48,26 @@ func TestValidateReasoningSearchResponseQueryAllowsQuotePunctuationVariants(t *t
 	err := validateReasoningSearchResponseQuery("ציטוטים על ט'\"ו' בשבט", response)
 	if err != nil {
 		t.Fatalf("expected quote punctuation variant to pass, got %v", err)
+	}
+}
+
+func TestReasoningSearchBlogOriginalLanguage(t *testing.T) {
+	cases := []struct {
+		name string
+		blog *mdbmodels.Blog
+		want string
+	}{
+		{name: "ru by type", blog: &mdbmodels.Blog{Name: "laitman-ru"}, want: consts.LANG_RUSSIAN},
+		{name: "es by type", blog: &mdbmodels.Blog{Name: "laitman-es"}, want: consts.LANG_SPANISH},
+		{name: "he by type", blog: &mdbmodels.Blog{Name: "laitman-co-il"}, want: consts.LANG_HEBREW},
+		{name: "en by type", blog: &mdbmodels.Blog{Name: "laitman-com"}, want: consts.LANG_ENGLISH},
+		{name: "unknown", blog: &mdbmodels.Blog{Name: "unknown", URL: "https://example.com"}, want: ""},
+	}
+
+	for _, tc := range cases {
+		if got := reasoningSearchBlogOriginalLanguage(tc.blog); got != tc.want {
+			t.Fatalf("%s: got %q want %q", tc.name, got, tc.want)
+		}
 	}
 }
 

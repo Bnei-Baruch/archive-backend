@@ -542,14 +542,37 @@ func loadReasoningSearchBlogPostMetadata(db *sql.DB, _ BaseRequest, uids []strin
 
 	for _, post := range posts {
 		mdbUID := fmt.Sprintf("%d-%d", post.BlogID, post.WPID)
+		blog := mdb.BLOGS_REGISTRY.ByID[post.BlogID]
 		metadata[mdbUID] = reasoningSearchResultMetadata{
-			Title:       post.Title,
-			ContentType: consts.CT_BLOG_POST,
-			Date:        post.PostedAt.Format("2006-01-02"),
+			Title:            post.Title,
+			ContentType:      consts.CT_BLOG_POST,
+			Date:             post.PostedAt.Format("2006-01-02"),
+			OriginalLanguage: reasoningSearchBlogOriginalLanguage(blog),
 		}
 	}
 
 	return metadata, nil
+}
+
+func reasoningSearchBlogOriginalLanguage(blog *mdbmodels.Blog) string {
+	if blog == nil {
+		return ""
+	}
+
+	// Blog posts do not store original_language on the post itself; it is implied
+	// by the blog type they belong to.
+	switch strings.TrimSpace(blog.Name) {
+	case "laitman-ru":
+		return consts.LANG_RUSSIAN
+	case "laitman-es":
+		return consts.LANG_SPANISH
+	case "laitman-co-il":
+		return consts.LANG_HEBREW
+	case "laitman-com":
+		return consts.LANG_ENGLISH
+	default:
+		return ""
+	}
 }
 
 func loadReasoningSearchTweetMetadata(db *sql.DB, _ BaseRequest, uids []string) (map[string]reasoningSearchResultMetadata, error) {
