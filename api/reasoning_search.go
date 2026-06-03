@@ -41,6 +41,7 @@ const (
 	reasoningSearchDisplayHighlightMaxRunes     = 450
 	reasoningSearchRapidClassificationBatchSize = 20
 	reasoningSearchRapidGoodResultsThreshold    = 6
+	reasoningSearchRapidBootstrapSize           = 12
 )
 
 type rapidGatherResponse struct {
@@ -2086,6 +2087,28 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	providerSessionID := &providerID
 	gather := rapidGatherResponse{}
 	gatherCtx := llm.ContextWithReasoningDraftState(ctx, workflowStore, responseSessionID, nil)
+	var bootstrapDone chan error
+	if handler, ok := runtime.Tools.ToolHandlers()["elasticsearch_search"]; ok {
+		// Seed rapid search with one plain ES query immediately, before the gather
+		// model decides its first tool call. This uses the normalized user query.
+		bootstrapQuery := strings.TrimSpace(r.Query)
+		if bootstrapQuery != "" {
+			bootstrapArgs, marshalErr := json.Marshal(map[string]interface{}{
+				"query":    bootstrapQuery,
+				"language": r.UILanguage,
+				"size":     reasoningSearchRapidBootstrapSize,
+				"sort_by":  consts.SORT_BY_RELEVANCE,
+			})
+			if marshalErr != nil {
+				return marshalErr
+			}
+			bootstrapDone = make(chan error, 1)
+			go func() {
+				_, bootstrapErr := handler(gatherCtx, bootstrapArgs)
+				bootstrapDone <- bootstrapErr
+			}()
+		}
+	}
 	rapidGatherSchema := llm.ReasoningSearchRapidGatherResponseJSONSchema
 	gatherStarted := time.Now()
 	resolvedProviderSessionID, err := gatherService.GetReasoningStructuredOutputWithToolsForSession(
@@ -2114,6 +2137,12 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	gatherStage.ProviderSessionID = resolvedProviderSessionID
 	if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStageReasoning, gatherStage); err != nil {
 		return err
+	}
+	if bootstrapDone != nil {
+		bootstrapErr := <-bootstrapDone
+		if bootstrapErr != nil && !isReasoningSearchCancellation(bootstrapErr) {
+			log.Warnf("Rapid Reasoning Search bootstrap Elasticsearch failed session=%s: %v", responseSessionID, bootstrapErr)
+		}
 	}
 
 	session, err = workflowStore.Get(responseSessionID)
