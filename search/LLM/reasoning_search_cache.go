@@ -358,7 +358,7 @@ func BuildReasoningSearchCacheEntryFromResponse(response *ReasoningSearchRespons
 			MDBUID:           result.MDBUID,
 			ResultType:       result.ResultType,
 			Reason:           result.Reason,
-			Highlights:       append([]string(nil), result.Highlights...),
+			Highlights:       append([]ReasoningSearchHighlight(nil), result.Highlights...),
 			IsGroupingResult: result.IsGroupingResult,
 		})
 	}
@@ -394,7 +394,7 @@ func cloneReasoningSearchCacheEntry(entry *ReasoningSearchCacheEntry) *Reasoning
 			ProgramName:      result.ProgramName,
 			Date:             result.Date,
 			Reason:           result.Reason,
-			Highlights:       append([]string(nil), result.Highlights...),
+			Highlights:       append([]ReasoningSearchHighlight(nil), result.Highlights...),
 			IsGroupingResult: result.IsGroupingResult,
 		})
 	}
@@ -468,7 +468,7 @@ func BuildReasoningSearchCacheSeedAssistantContent(entry *ReasoningSearchCacheEn
 			MDBUID:           result.MDBUID,
 			ResultType:       result.ResultType,
 			Reason:           result.Reason,
-			Highlights:       append([]string(nil), result.Highlights...),
+			Highlights:       GetReasoningSearchHighlightSnippetTexts(result.Highlights),
 			IsGroupingResult: result.IsGroupingResult,
 		})
 	}

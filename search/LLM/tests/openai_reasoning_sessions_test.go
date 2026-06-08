@@ -646,8 +646,8 @@ func TestReasoningWorkflowSessionStoreDraftLifecycle(t *testing.T) {
 	}
 
 	revision, added, err := store.AddPartialResults(sessionID, []llm.ReasoningSearchResult{
-		{MDBUID: "uid-1", ResultType: "sources", Title: "Source", Highlights: []string{"one"}},
-		{MDBUID: "uid-2", ResultType: "units", Title: "Unit", Highlights: []string{"two"}},
+		{MDBUID: "uid-1", ResultType: "sources", Title: "Source", Highlights: []llm.ReasoningSearchHighlight{{Field: "content", Text: "one"}}},
+		{MDBUID: "uid-2", ResultType: "units", Title: "Unit", Highlights: []llm.ReasoningSearchHighlight{{Field: "content", Text: "two"}}},
 	})
 	if err != nil {
 		t.Fatalf("unexpected add partial results error: %v", err)

@@ -998,56 +998,55 @@ func populateReasoningSearchHighlightsFromEvidence(response *llm.ReasoningSearch
 	}
 	for i := range response.Results {
 		uid := strings.TrimSpace(response.Results[i].MDBUID)
-		response.Results[i].Highlights = nil
-		if candidate, ok := byUID[uid]; ok {
-			if len(candidate.LookupEvidence) == 0 && len(evidenceByUID[uid]) > 0 {
-				candidate.LookupEvidence = append([]llm.ReasoningSearchResultEvidence(nil), evidenceByUID[uid]...)
-			}
-			response.Results[i].Highlights = compactReasoningSearchHighlightsForDisplay(buildReasoningSearchHighlightsFromEvidence(candidate, response.Query, response.Results[i].Reason))
-		} else if len(evidenceByUID[uid]) > 0 {
-			response.Results[i].Highlights = compactReasoningSearchHighlightsForDisplay(buildReasoningSearchHighlightsFromEvidence(llm.ReasoningSearchResult{
-				LookupEvidence: evidenceByUID[uid],
-			}, response.Query, response.Results[i].Reason))
+		candidate := byUID[uid]
+		if len(candidate.LookupEvidence) == 0 && len(evidenceByUID[uid]) > 0 {
+			candidate.LookupEvidence = append([]llm.ReasoningSearchResultEvidence(nil), evidenceByUID[uid]...)
 		}
+		response.Results[i].Highlights = compactReasoningSearchHighlightsForDisplay(
+			buildReasoningSearchHighlightsFromEvidence(candidate, response.Query, response.Results[i].Reason),
+		)
 		response.Results[i].LookupEvidence = nil
 	}
 }
 
-func buildReasoningSearchHighlightsFromEvidence(result llm.ReasoningSearchResult, query string, reason string) []string {
+func buildReasoningSearchHighlightsFromEvidence(result llm.ReasoningSearchResult, query string, reason string) []llm.ReasoningSearchHighlight {
 	candidates := []reasoningSearchHighlightCandidate{}
 	seen := map[string]bool{}
-	add := func(value string, fromLookupEvidence bool) {
+	add := func(field string, value string, fromLookupEvidence bool) {
+		field = strings.TrimSpace(field)
 		value = strings.TrimSpace(value)
 		if value == "" || seen[value] {
 			return
 		}
 		seen[value] = true
 		candidates = append(candidates, reasoningSearchHighlightCandidate{
+			Field:              field,
 			Text:               value,
 			FromLookupEvidence: fromLookupEvidence,
 			OriginalPos:        len(candidates),
 		})
 	}
 	for _, highlight := range result.Highlights {
-		add(highlight, false)
+		add(highlight.Field, highlight.Text, false)
 	}
 	for _, evidence := range result.LookupEvidence {
-		if strings.TrimSpace(evidence.SupportingSnippet) != "" {
-			add(evidence.SupportingSnippet, true)
-			continue
+		text := evidence.SupportingSnippet
+		if strings.TrimSpace(text) == "" {
+			text = evidence.Content
 		}
-		add(evidence.Content, true)
+		add("content", text, true) // 'content' is the field name for evidence highlights
 	}
 	return rankReasoningSearchHighlights(candidates, query, reason)
 }
 
 type reasoningSearchHighlightCandidate struct {
+	Field              string
 	Text               string
 	FromLookupEvidence bool
 	OriginalPos        int
 }
 
-func rankReasoningSearchHighlights(candidates []reasoningSearchHighlightCandidate, query string, reason string) []string {
+func rankReasoningSearchHighlights(candidates []reasoningSearchHighlightCandidate, query string, reason string) []llm.ReasoningSearchHighlight {
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -1059,9 +1058,12 @@ func rankReasoningSearchHighlights(candidates []reasoningSearchHighlightCandidat
 		}
 		return leftScore > rightScore
 	})
-	highlights := make([]string, 0, len(candidates))
+	highlights := make([]llm.ReasoningSearchHighlight, 0, len(candidates))
 	for _, candidate := range candidates {
-		highlights = append(highlights, candidate.Text)
+		highlights = append(highlights, llm.ReasoningSearchHighlight{
+			Field: candidate.Field,
+			Text:  candidate.Text,
+		})
 	}
 	return highlights
 }
@@ -1119,16 +1121,16 @@ func emphasizedHighlightStats(value string) (int, int) {
 	return textRunes, segments
 }
 
-func compactReasoningSearchHighlightsForDisplay(highlights []string) []string {
+func compactReasoningSearchHighlightsForDisplay(highlights []llm.ReasoningSearchHighlight) []llm.ReasoningSearchHighlight {
 	if len(highlights) == 0 {
 		return nil
 	}
-	items := append([]string(nil), highlights...)
+	items := append([]llm.ReasoningSearchHighlight(nil), highlights...)
 	if len(items) > reasoningSearchDisplayHighlightMaxItems {
 		items = items[:reasoningSearchDisplayHighlightMaxItems]
 	}
 	for i := range items {
-		items[i] = truncateHighlightForDisplay(items[i], reasoningSearchDisplayHighlightMaxRunes)
+		items[i].Text = truncateHighlightForDisplay(items[i].Text, reasoningSearchDisplayHighlightMaxRunes)
 	}
 	return items
 }
@@ -1294,7 +1296,7 @@ func reasoningSearchCandidateInputs(results []llm.ReasoningSearchResult) []reaso
 			Date:             result.Date,
 			OriginalLanguage: result.OriginalLanguage,
 			Reason:           result.Reason,
-			SearchHighlights: append([]string(nil), result.Highlights...),
+			SearchHighlights: llm.GetReasoningSearchHighlightSnippetTexts(result.Highlights),
 			IsGroupingResult: result.IsGroupingResult,
 			LookupEvidence:   append([]llm.ReasoningSearchResultEvidence(nil), result.LookupEvidence...),
 		})

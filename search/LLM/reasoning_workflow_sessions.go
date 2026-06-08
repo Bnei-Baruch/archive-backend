@@ -849,7 +849,7 @@ func cloneReasoningSearchResults(results []ReasoningSearchResult) []ReasoningSea
 }
 
 func cloneReasoningSearchResult(result ReasoningSearchResult) ReasoningSearchResult {
-	result.Highlights = append([]string(nil), result.Highlights...)
+	result.Highlights = append([]ReasoningSearchHighlight(nil), result.Highlights...)
 	result.LookupEvidence = append([]ReasoningSearchResultEvidence(nil), result.LookupEvidence...)
 	return result
 }

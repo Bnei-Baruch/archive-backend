@@ -49,25 +49,9 @@ type ReasoningSearchReasoningToolCall struct {
 	Params string `json:"params"`
 }
 
-type ReasoningSearchResult struct {
-	MDBUID           string   `json:"mdb_uid"`
-	Origin           string   `json:"origin,omitempty"`
-	ResultType       string   `json:"result_type"`
-	Title            string   `json:"title"`
-	Description      string   `json:"description"`
-	ContentType      string   `json:"content_type"`
-	ProgramName      string   `json:"program_name,omitempty"`
-	Date             string   `json:"date"`
-	OriginalLanguage string   `json:"original_language,omitempty"`
-	Reason           string   `json:"reason"`
-	Relevance        string   `json:"relevance,omitempty"`
-	Highlights       []string `json:"highlights"`
-	IsGroupingResult bool     `json:"is_grouping_result"`
-	CollectionUID    string   `json:"-"`
-	BaalSulamArticle bool     `json:"-"`
-	ConnectingSource bool     `json:"-"`
-	// LookupEvidence is internal lookup input only and is cleared before responses are stored.
-	LookupEvidence []ReasoningSearchResultEvidence `json:"lookup_evidence,omitempty"`
+type ReasoningSearchHighlight struct {
+	Field string `json:"field"`
+	Text  string `json:"text"`
 }
 
 type ReasoningSearchResultEvidence struct {
@@ -80,6 +64,27 @@ type ReasoningSearchResultEvidence struct {
 	Content           string `json:"content"`
 	Reason            string `json:"reason,omitempty"`
 	SupportingSnippet string `json:"supporting_snippet,omitempty"`
+}
+
+type ReasoningSearchResult struct {
+	MDBUID           string                     `json:"mdb_uid"`
+	Origin           string                     `json:"origin,omitempty"`
+	ResultType       string                     `json:"result_type"`
+	Title            string                     `json:"title"`
+	Description      string                     `json:"description"`
+	ContentType      string                     `json:"content_type"`
+	ProgramName      string                     `json:"program_name,omitempty"`
+	Date             string                     `json:"date"`
+	OriginalLanguage string                     `json:"original_language,omitempty"`
+	Reason           string                     `json:"reason"`
+	Relevance        string                     `json:"relevance,omitempty"`
+	Highlights       []ReasoningSearchHighlight `json:"highlights"`
+	IsGroupingResult bool                       `json:"is_grouping_result"`
+	CollectionUID    string                     `json:"-"`
+	BaalSulamArticle bool                       `json:"-"`
+	ConnectingSource bool                       `json:"-"`
+	// LookupEvidence is internal lookup input only and is cleared before responses are stored.
+	LookupEvidence []ReasoningSearchResultEvidence `json:"lookup_evidence,omitempty"`
 }
 
 type ReasoningSearchRapidClassification struct {
@@ -340,6 +345,20 @@ func (r *ReasoningSearchResponse) SetFollowupBudget(maxFollowups int, used int, 
 	r.MaxFollowups = maxFollowups
 	r.FollowupsUsed = used
 	r.FollowupsRemaining = remaining
+}
+
+// GetReasoningSearchHighlightSnippetTexts strips structured highlight metadata for model-facing payloads.
+func GetReasoningSearchHighlightSnippetTexts(highlights []ReasoningSearchHighlight) []string {
+	if len(highlights) == 0 {
+		return nil
+	}
+	items := make([]string, 0, len(highlights))
+	for _, highlight := range highlights {
+		if text := strings.TrimSpace(highlight.Text); text != "" {
+			items = append(items, text)
+		}
+	}
+	return items
 }
 
 func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {

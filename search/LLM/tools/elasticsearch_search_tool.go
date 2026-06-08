@@ -437,33 +437,28 @@ func elasticsearchSearchOriginalLanguage(src es.Result) string {
 	return strings.TrimSpace(values[0])
 }
 
-func elasticsearchSearchHighlights(highlights map[string][]string) []string {
+func elasticsearchSearchHighlights(highlights map[string][]string) []llm.ReasoningSearchHighlight {
 	if len(highlights) == 0 {
-		return []string{}
+		return []llm.ReasoningSearchHighlight{}
 	}
 
-	result := []string{}
-	seen := map[string]bool{}
-	add := func(values []string) {
+	result := []llm.ReasoningSearchHighlight{}
+	seen := map[string]struct{}{}
+	for field, values := range highlights {
+		field = strings.TrimSpace(field)
 		for _, value := range values {
 			value = strings.TrimSpace(value)
-			if value == "" || seen[value] {
+			if value == "" {
 				continue
 			}
-			seen[value] = true
-			result = append(result, value)
-		}
-	}
-
-	for _, field := range []string{"title", "full_title", "description", "description.language", "content", "content.language"} {
-		add(highlights[field])
-	}
-	for field, values := range highlights {
-		switch field {
-		case "title", "full_title", "description", "description.language", "content", "content.language":
-			continue
-		default:
-			add(values)
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			result = append(result, llm.ReasoningSearchHighlight{
+				Field: field,
+				Text:  value,
+			})
 		}
 	}
 	return result

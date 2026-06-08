@@ -81,11 +81,11 @@ func TestValidateReasoningSearchResponseQueryRejectsTopicDrift(t *testing.T) {
 
 func TestBuildReasoningSearchHighlightsRanksAIAndRelevantESHighlights(t *testing.T) {
 	result := llm.ReasoningSearchResult{
-		Highlights: []string{
-			"<em>משה</em>",
-			"רק מילת קישור <em>עם</em>",
-			"פתיח קצר על <em>משה</em>",
-			"קטע ארוך יותר שמסביר את <em>משה</em> ואת <em>תפקידו</em> בהקשר השאלה",
+		Highlights: []llm.ReasoningSearchHighlight{
+			{Field: "content", Text: "<em>משה</em>"},
+			{Field: "content", Text: "רק מילת קישור <em>עם</em>"},
+			{Field: "content", Text: "פתיח קצר על <em>משה</em>"},
+			{Field: "content", Text: "קטע ארוך יותר שמסביר את <em>משה</em> ואת <em>תפקידו</em> בהקשר השאלה"},
 		},
 		LookupEvidence: []llm.ReasoningSearchResultEvidence{
 			{SupportingSnippet: "עדות מכלי AI על התאמת המקור לשאלה"},
@@ -96,23 +96,23 @@ func TestBuildReasoningSearchHighlightsRanksAIAndRelevantESHighlights(t *testing
 	if len(highlights) < 3 {
 		t.Fatalf("expected ranked highlights, got %#v", highlights)
 	}
-	if highlights[0] != "עדות מכלי AI על התאמת המקור לשאלה" {
+	if highlights[0].Field != "content" || highlights[0].Text != "עדות מכלי AI על התאמת המקור לשאלה" {
 		t.Fatalf("expected AI evidence first, got %#v", highlights)
 	}
-	if highlights[1] != "קטע ארוך יותר שמסביר את <em>משה</em> ואת <em>תפקידו</em> בהקשר השאלה" {
+	if highlights[1].Field != "content" || highlights[1].Text != "קטע ארוך יותר שמסביר את <em>משה</em> ואת <em>תפקידו</em> בהקשר השאלה" {
 		t.Fatalf("expected richer ES highlight second, got %#v", highlights)
 	}
-	if highlights[2] == "רק מילת קישור <em>עם</em>" {
+	if highlights[2].Text == "רק מילת קישור <em>עם</em>" {
 		t.Fatalf("expected short linking-word emphasis not to rank near the top, got %#v", highlights)
 	}
 }
 
 func TestBuildReasoningSearchHighlightsPrefersReasonAnchors(t *testing.T) {
 	result := llm.ReasoningSearchResult{
-		Highlights: []string{
-			`נמצא מה שהאדם מתייגע בתורה ומצות, הוא מסיבת שחסר לנו את חשיבותו וגדלותו של הבורא יתברך.`,
-			`וזה ענין שותפות, שיש להנבראים עם הבורא.`,
-			`עמי אתה - להיות שותף עמי.`,
+		Highlights: []llm.ReasoningSearchHighlight{
+			{Field: "content", Text: `נמצא מה שהאדם מתייגע בתורה ומצות, הוא מסיבת שחסר לנו את חשיבותו וגדלותו של הבורא יתברך.`},
+			{Field: "content", Text: `וזה ענין שותפות, שיש להנבראים עם הבורא.`},
+			{Field: "content", Text: `עמי אתה - להיות שותף עמי.`},
 		},
 	}
 
@@ -120,10 +120,10 @@ func TestBuildReasoningSearchHighlightsPrefersReasonAnchors(t *testing.T) {
 	if len(highlights) < 2 {
 		t.Fatalf("expected ranked highlights, got %#v", highlights)
 	}
-	if highlights[0] != `עמי אתה - להיות שותף עמי.` && highlights[0] != `וזה ענין שותפות, שיש להנבראים עם הבורא.` {
+	if highlights[0].Text != `עמי אתה - להיות שותף עמי.` && highlights[0].Text != `וזה ענין שותפות, שיש להנבראים עם הבורא.` {
 		t.Fatalf("expected reason-supporting highlight first, got %#v", highlights)
 	}
-	if highlights[len(highlights)-1] == `עמי אתה - להיות שותף עמי.` {
+	if highlights[len(highlights)-1].Text == `עמי אתה - להיות שותף עמי.` {
 		t.Fatalf("expected quoted reason anchor not to sink to the bottom, got %#v", highlights)
 	}
 }
@@ -131,10 +131,10 @@ func TestBuildReasoningSearchHighlightsPrefersReasonAnchors(t *testing.T) {
 func TestBuildRapidVisibleResultsOmitsNotRelevantAndSortsByRelevance(t *testing.T) {
 	session := &llm.ReasoningWorkflowSession{
 		PartialResults: []llm.ReasoningSearchResult{
-			{MDBUID: "maybe", ContentType: "SOURCE", Highlights: []string{"maybe"}},
-			{MDBUID: "no", Highlights: []string{"no"}},
-			{MDBUID: "strong", Highlights: []string{"strong"}},
-			{MDBUID: "program", ContentType: "VIDEO_PROGRAM_CHAPTER", Highlights: []string{"program"}},
+			{MDBUID: "maybe", ContentType: "SOURCE", Highlights: []llm.ReasoningSearchHighlight{{Field: "content", Text: "maybe"}}},
+			{MDBUID: "no", Highlights: []llm.ReasoningSearchHighlight{{Field: "content", Text: "no"}}},
+			{MDBUID: "strong", Highlights: []llm.ReasoningSearchHighlight{{Field: "content", Text: "strong"}}},
+			{MDBUID: "program", ContentType: "VIDEO_PROGRAM_CHAPTER", Highlights: []llm.ReasoningSearchHighlight{{Field: "content", Text: "program"}}},
 		},
 		RapidClassifications: map[string]llm.ReasoningSearchRapidClassification{
 			"maybe":   {MDBUID: "maybe", Relevance: "can_be_relevant", Reason: "maybe reason"},

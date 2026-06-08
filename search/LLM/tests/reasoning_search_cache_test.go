@@ -64,7 +64,7 @@ func TestBuildReasoningSearchCacheEntryFromResponseStripsMetadata(t *testing.T) 
 				ContentType:      "VIDEO_PROGRAM_CHAPTER",
 				Date:             "2024-01-01",
 				Reason:           "why",
-				Highlights:       []string{"match"},
+				Highlights:       []llm.ReasoningSearchHighlight{{Field: "content", Text: "match"}},
 				IsGroupingResult: true,
 			},
 		},
