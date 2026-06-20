@@ -79,7 +79,7 @@ The main Kabbalist authors whose writings are studied in Bnei Baruch are:
 
 const ReasoningSearchRapidClassificationInstruction = `Classify archive search candidates for relevance to the user query.
 Use these relevance values:
-- highly_relevant: direct strong match to the user's request, compatible with both the desired type of content and the content itself.
+- highly_relevant: direct strong match to the user's request, compatible with both the desired type of content and the content itself. Set this value only on a high confidence that the candidate matches the user intention, otherwise set other value.
 - relevant: useful match, but not the strongest. If the user query looks like a citation from a source but the matching result is not source but program, lesson or blog post then set as relevant but not highly_relevant.
 - can_be_relevant: possibly useful if the user intended this direction or will help with more comprehensive enrichment.
 - not_relevant: omit from user-visible results.
