@@ -1393,7 +1393,7 @@ func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessi
 		return nil
 	}
 	outputLanguageName := reasoningSearchOutputLanguageName(uiLanguage, query)
-	systemMessage := rapidClassificationSystemMessage(outputLanguageName)
+	classifierSystemMessage := llm.AppendReasoningSearchOutputLanguage(llm.ReasoningSearchRapidClassificationInstruction, outputLanguageName)
 	allClassifications := []llm.ReasoningSearchRapidClassification{}
 	runs := []llm.ReasoningSearchUsageBreakdown{}
 	for start := 0; start < len(pending); start += reasoningSearchRapidClassificationBatchSize {
@@ -1425,7 +1425,7 @@ func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessi
 			stage.Model,
 			&stage.MaxTokens,
 			[]llm.LLMBotMessage{
-				{Role: "system", Content: systemMessage},
+				{Role: "system", Content: classifierSystemMessage},
 				{Role: "user", Content: strings.TrimSpace(input.String())},
 			},
 			&promptCacheKey,
@@ -1496,18 +1496,6 @@ func rapidClassificationPendingCandidates(session *llm.ReasoningWorkflowSession)
 		pending = append(pending, result)
 	}
 	return pending
-}
-
-func rapidClassificationSystemMessage(languageName string) string {
-	message := `Classify archive search candidates for relevance to the user query.
-Use these relevance values:
-- highly_relevant: direct strong match to the user's request, compatible with both the desired type of content and the content itself.
-- relevant: useful match, but not the strongest. If the user query looks like a citation from a source but the matching result is not source but program, lesson or blog post then set as relevant but not highly_relevant.
-- can_be_relevant: possibly useful if the user intended this direction or will help with more comprehensive enrichment.
-- not_relevant: omit from user-visible results.
-For relevant candidates, write a short reason based only on candidate metadata, search_highlights, and lookup_evidence.
-For not_relevant, keep reason empty.`
-	return llm.AppendReasoningSearchOutputLanguage(message, languageName)
 }
 
 func normalizeRapidRelevance(value string) string {

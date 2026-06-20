@@ -77,6 +77,15 @@ The main Kabbalist authors whose writings are studied in Bnei Baruch are:
  Some known books: The Study of the Ten Sefirot also known as Talmud Eser Sefirot or TES (תע״ס) (source_id=xtKmrbb9), The Book of Zohar (source_id=AwGBQX2L), Introduction to Talomud Eser Sefirot (הקדמה לתע״ס) (source_id=OqZMFGHu), Preface to the Wisdom of Kabbalah (פתיחה לחכמת הקבלה) (source_id=kB3eD83I), Shamati (source_id=qMUUn22b).
  `
 
+const ReasoningSearchRapidClassificationInstruction = `Classify archive search candidates for relevance to the user query.
+Use these relevance values:
+- highly_relevant: direct strong match to the user's request, compatible with both the desired type of content and the content itself.
+- relevant: useful match, but not the strongest. If the user query looks like a citation from a source but the matching result is not source but program, lesson or blog post then set as relevant but not highly_relevant.
+- can_be_relevant: possibly useful if the user intended this direction or will help with more comprehensive enrichment.
+- not_relevant: omit from user-visible results.
+For relevant candidates, write a short reason based only on candidate metadata, search_highlights, and lookup_evidence.
+For not_relevant, keep reason empty.`
+
 const ReasoningSearchVerificationInstructionMask = `You are verifying the quality of the search results of a search agent for the ‘Kabbalah Media’ website (also known as the archive).
 Below are the instructions given to the search agent:
 
