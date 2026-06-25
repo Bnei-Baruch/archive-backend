@@ -887,6 +887,7 @@ var VARIABLE_TO_FILTER = map[string]string{
 	VAR_SOURCE:              "source",
 	VAR_POSITION:            "position",
 	VAR_PROGRAM:             "program",
+	VAR_DIVISION_TYPE:       "divisionType",
 }
 
 // Latency log

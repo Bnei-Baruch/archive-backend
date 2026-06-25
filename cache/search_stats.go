@@ -344,6 +344,35 @@ func (ssc *SearchStatsCacheImpl) loadSourcesByPositionAndParent() (map[string]st
 		key := fmt.Sprintf("%v-%v-%v", parent_uid, position, type_id)
 		ret[key] = source_uid
 	}
+
+	// The query is intended for creating relations between parent to grandchild division
+	// (source to part while there is a volume in between) of the TES,
+	// having UID 'xtKmrbb9'
+	query = `select p.uid as parent_uid, gc.uid as source_uid, gc.type_id 
+	from sources p
+		join sources c on c.parent_id = p.id
+		join sources gc on gc.parent_id = c.id
+	where c.position is not null and p.uid = 'xtKmrbb9'
+	order by c.position, gc.position`
+	rows, err = queries.Raw(ssc.mdb, query).Query()
+	if err != nil {
+		return nil, errors.Wrap(err, "queries.Raw")
+	}
+	defer rows.Close()
+	position := 0
+	for rows.Next() {
+		var parent_uid string // uid of parent source
+		var source_uid string // uid of child source
+		var type_id int64     // type of child source
+		position++
+		err = rows.Scan(&parent_uid, &source_uid, &type_id)
+		if err != nil {
+			return nil, errors.Wrap(err, "rows.Scan")
+		}
+		key := fmt.Sprintf("%v-%v-%v", parent_uid, position, type_id)
+		ret[key] = source_uid
+	}
+
 	return ret, nil
 }
 
