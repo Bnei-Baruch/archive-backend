@@ -94,7 +94,6 @@ func (cm *CacheManagerImpl) SearchStats() SearchStatsCache {
 
 func (cm *CacheManagerImpl) Refresh() {
 	for _, p := range cm.providers {
-		log.Infof("Refreshing %s", p)
 		if err := p.Refresh(); err != nil {
 			log.Errorf("Refresh %s: %s", p, err.Error())
 			utils.LogError(err)
