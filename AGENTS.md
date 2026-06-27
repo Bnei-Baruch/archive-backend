@@ -71,7 +71,10 @@ Instructions for coding agents working in this repository.
 - The backend uses two different storage mechanisms for reasoning search:
   - `ReasoningCache`: shared query-based cache for reusable initial results.
   - response snapshot: exact per-session final API response stored on the workflow session for later fetch by `session_id`.
-- During background reasoning, Elasticsearch tool results are accumulated as partial workflow results. A configured draft model periodically converts those partial ES results into a stored draft response. Draft generation is throttled and requires enough partial results; it uses only ES result data.
+- During background reasoning, tool results are accumulated on the workflow session as `PartialResults`. ES search results and PostgreSQL lookup results both feed this shared candidate pool.
+- In the regular reasoning flow, `PartialResults` are used by draft generation: a configured draft model periodically converts the collected candidates into a stored draft response for `finish-now`.
+- In the rapid reasoning flow, `PartialResults` are used by the classifier: the gather model collects candidates, the classifier assigns relevance/reason in batches, and status can expose classified rapid results before the run finishes.
+- AI lookup tools do not create candidates by themselves; they attach lookup evidence/snippets to already collected candidates by UID. Rapid classification can re-run for candidates whose lookup evidence changed.
 - `finish-now` copies the stored draft response into the normal response snapshot, marks progress completed, and returns only readiness metadata. The client then fetches the actual draft response through `GET /search/reasoning/result`.
 - Draft model token/cost usage is included in draft and final response totals when available and, when `deb=true`, under `debug.draft_model_usage`. Individual draft generations are listed separately under `debug.draft_model_runs`.
 - Follow-up after draft results must not continue the old hidden provider context. The backend starts a fresh provider reasoning session for the same workflow session and seeds the visible draft response as prior assistant context before the user's follow-up query.
