@@ -743,6 +743,7 @@ func (t *GetAvailableBooksTool) Execute(ctx context.Context, arguments json.RawM
 	if cached, ok := t.cache.get("get_available_books"); ok {
 		llm.LogIfDeb(ctx, "get_available_books: cache hit")
 		llm.LogIfDeb(ctx, "get_available_books: output=%s", cached)
+		reportCachedAvailableBooksPartialResults(ctx, cached)
 		return cached, nil
 	}
 
@@ -811,6 +812,7 @@ func (t *GetAvailableBooksTool) Execute(ctx context.Context, arguments json.RawM
 	if len(items) > 0 {
 		t.cache.set("get_available_books", result)
 	}
+	reportAvailableBookPartialResults(ctx, items)
 	llm.LogIfDeb(ctx, "get_available_books: returning count=%d", len(items))
 	llm.LogIfDeb(ctx, "get_available_books: output=%s", result)
 	return result, nil
@@ -965,6 +967,7 @@ func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.Raw
 	if cached, ok := t.cache.get(cacheKey); ok {
 		llm.LogIfDeb(ctx, "get_sources_by_author: cache hit author_id=%q language=%q limit=%d", authorID, language, limit)
 		llm.LogIfDeb(ctx, "get_sources_by_author: output=%s", cached)
+		reportCachedSourcesByAuthorPartialResults(ctx, cached)
 		return cached, nil
 	}
 
@@ -1015,6 +1018,7 @@ func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.Raw
 	if len(items) > 0 {
 		t.cache.set(cacheKey, result)
 	}
+	reportSourcePartialResults(ctx, items)
 	return result, nil
 }
 
@@ -1039,6 +1043,7 @@ func (t *GetSourcesBySourceTool) Execute(ctx context.Context, arguments json.Raw
 	cacheKey := fmt.Sprintf("get_sources_by_source|source_id=%s|language=%s|limit=%d", sourceID, language, limit)
 	if cached, ok := t.cache.get(cacheKey); ok {
 		llm.LogIfDeb(ctx, "get_sources_by_source: cache hit source_id=%q language=%q limit=%d", sourceID, language, limit)
+		reportCachedSourcesBySourcePartialResults(ctx, cached)
 		return cached, nil
 	}
 
@@ -1078,6 +1083,7 @@ func (t *GetSourcesBySourceTool) Execute(ctx context.Context, arguments json.Raw
 	if len(items) > 0 {
 		t.cache.set(cacheKey, result)
 	}
+	reportSourceNodePartialResults(ctx, items)
 	return result, nil
 }
 
@@ -1105,6 +1111,7 @@ func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMess
 	)
 	if cached, ok := t.cache.get(cacheKey); ok {
 		llm.LogIfDeb(ctx, "get_collections: cache hit collection_id=%q content_type=%q language=%q limit=%d", collectionID, contentType, language, limit)
+		reportCachedCollectionsPartialResults(ctx, cached)
 		return cached, nil
 	}
 
@@ -1176,6 +1183,7 @@ func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMess
 	if len(items) > 0 {
 		t.cache.set(cacheKey, result)
 	}
+	reportCollectionPartialResults(ctx, items)
 	return result, nil
 }
 
@@ -1199,6 +1207,7 @@ func (t *GetContentUnitTool) Execute(ctx context.Context, arguments json.RawMess
 	cacheKey := fmt.Sprintf("get_content_unit|content_unit_id=%s|language=%s", contentUnitID, language)
 	if cached, ok := t.cache.get(cacheKey); ok {
 		llm.LogIfDeb(ctx, "get_content_unit: cache hit content_unit_id=%q language=%q", contentUnitID, language)
+		reportCachedContentUnitLookupPartialResults(ctx, cached)
 		return cached, nil
 	}
 
@@ -1230,6 +1239,11 @@ func (t *GetContentUnitTool) Execute(ctx context.Context, arguments json.RawMess
 	}
 	llm.LogIfDeb(ctx, "get_content_unit: completed content_unit_id=%q collections=%d sources=%d tags=%d", contentUnitID, len(collections), len(sources), len(tags))
 	t.cache.set(cacheKey, result)
+	reportContentUnitLookupPartialResults(ctx, contentUnitLookupToolResult{
+		ContentUnit: *contentUnit,
+		Collections: collections,
+		Sources:     sources,
+	})
 	return result, nil
 }
 
@@ -1272,6 +1286,7 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 	cacheKey := fmt.Sprintf("get_content_units_by_collection|collection_id=%s|language=%s|limit=%d", collectionID, language, limit)
 	if cached, ok := t.cache.get(cacheKey); ok {
 		llm.LogIfDeb(ctx, "get_content_units_by_collection: cache hit collection_id=%q language=%q limit=%d", collectionID, language, limit)
+		reportCachedContentUnitsByCollectionPartialResults(ctx, cached)
 		return cached, nil
 	}
 
@@ -1341,6 +1356,10 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 	if len(items) > 0 {
 		t.cache.set(cacheKey, result)
 	}
+	reportContentUnitsByCollectionPartialResults(ctx, contentUnitsByCollectionToolResult{
+		Collection: collection,
+		Items:      items,
+	})
 	return result, nil
 }
 
@@ -1629,6 +1648,176 @@ func scanSourceNodeToolResult(scanner interface {
 		&item.HasChildren,
 	)
 	return item, err
+}
+
+func reportCachedAvailableBooksPartialResults(ctx context.Context, cached string) {
+	result := availableBooksToolResult{}
+	if json.Unmarshal([]byte(cached), &result) == nil {
+		reportAvailableBookPartialResults(ctx, result.Items)
+	}
+}
+
+func reportCachedSourcesByAuthorPartialResults(ctx context.Context, cached string) {
+	result := sourcesByAuthorToolResult{}
+	if json.Unmarshal([]byte(cached), &result) == nil {
+		reportSourcePartialResults(ctx, result.Items)
+	}
+}
+
+func reportCachedSourcesBySourcePartialResults(ctx context.Context, cached string) {
+	result := sourcesBySourceToolResult{}
+	if json.Unmarshal([]byte(cached), &result) == nil {
+		reportSourceNodePartialResults(ctx, result.Items)
+	}
+}
+
+func reportCachedCollectionsPartialResults(ctx context.Context, cached string) {
+	result := collectionsToolResult{}
+	if json.Unmarshal([]byte(cached), &result) == nil {
+		reportCollectionPartialResults(ctx, result.Items)
+	}
+}
+
+func reportCachedContentUnitLookupPartialResults(ctx context.Context, cached string) {
+	result := contentUnitLookupToolResult{}
+	if json.Unmarshal([]byte(cached), &result) == nil {
+		reportContentUnitLookupPartialResults(ctx, result)
+	}
+}
+
+func reportCachedContentUnitsByCollectionPartialResults(ctx context.Context, cached string) {
+	result := contentUnitsByCollectionToolResult{}
+	if json.Unmarshal([]byte(cached), &result) == nil {
+		reportContentUnitsByCollectionPartialResults(ctx, result)
+	}
+}
+
+func reportAvailableBookPartialResults(ctx context.Context, items []availableBookToolItem) {
+	results := make([]llm.ReasoningSearchResult, 0, len(items))
+	uiLanguage := llm.ReasoningSearchUILanguage(ctx)
+	for _, item := range items {
+		uid := strings.TrimSpace(item.SourceID)
+		if uid == "" {
+			continue
+		}
+		var title, description string
+		if uiLanguage == "he" {
+			title = firstNonEmpty(item.SourceHE, item.SourceEN)
+			description = firstNonEmpty(item.AuthorHE, item.AuthorEN)
+		} else {
+			title = firstNonEmpty(item.SourceEN, item.SourceHE)
+			description = firstNonEmpty(item.AuthorEN, item.AuthorHE)
+		}
+		results = append(results, llm.ReasoningSearchResult{
+			MDBUID:      uid,
+			ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+			Title:       title,
+			Description: description,
+			ContentType: consts.CT_SOURCE,
+		})
+	}
+	llm.ReportReasoningPartialResults(ctx, results)
+}
+
+func reportSourcePartialResults(ctx context.Context, items []sourceToolResult) {
+	results := make([]llm.ReasoningSearchResult, 0, len(items))
+	for _, item := range items {
+		results = append(results, sourceToolResultToReasoningSearchResult(item))
+	}
+	llm.ReportReasoningPartialResults(ctx, results)
+}
+
+func reportSourceNodePartialResults(ctx context.Context, items []sourceNodeToolResult) {
+	results := make([]llm.ReasoningSearchResult, 0, len(items))
+	for _, item := range items {
+		results = append(results, sourceNodeToolResultToReasoningSearchResult(item))
+	}
+	llm.ReportReasoningPartialResults(ctx, results)
+}
+
+func reportCollectionPartialResults(ctx context.Context, items []collectionToolResult) {
+	results := make([]llm.ReasoningSearchResult, 0, len(items))
+	for _, item := range items {
+		uid := strings.TrimSpace(item.UID)
+		if uid == "" {
+			continue
+		}
+		results = append(results, llm.ReasoningSearchResult{
+			MDBUID:           uid,
+			ResultType:       consts.ES_RESULT_TYPE_COLLECTIONS,
+			Title:            firstNonEmpty(item.Name, uid),
+			Description:      item.Description,
+			ContentType:      item.ContentType,
+			Date:             firstNonEmpty(item.FilmDate, item.StartDate),
+			IsGroupingResult: true,
+		})
+	}
+	llm.ReportReasoningPartialResults(ctx, results)
+}
+
+func reportContentUnitLookupPartialResults(ctx context.Context, result contentUnitLookupToolResult) {
+	reportContentUnitPartialResults(ctx, []contentUnitToolResult{result.ContentUnit})
+	reportCollectionPartialResults(ctx, result.Collections)
+	reportSourceNodePartialResults(ctx, result.Sources)
+}
+
+func reportContentUnitsByCollectionPartialResults(ctx context.Context, result contentUnitsByCollectionToolResult) {
+	if result.Collection != nil {
+		reportCollectionPartialResults(ctx, []collectionToolResult{*result.Collection})
+	}
+	reportContentUnitPartialResults(ctx, result.Items)
+}
+
+func reportContentUnitPartialResults(ctx context.Context, items []contentUnitToolResult) {
+	results := make([]llm.ReasoningSearchResult, 0, len(items))
+	for _, item := range items {
+		uid := strings.TrimSpace(item.UID)
+		if uid == "" {
+			continue
+		}
+		results = append(results, llm.ReasoningSearchResult{
+			MDBUID:           uid,
+			ResultType:       consts.ES_RESULT_TYPE_UNITS,
+			Title:            firstNonEmpty(item.Name, item.NameInCollection, uid),
+			Description:      item.Description,
+			ContentType:      item.ContentType,
+			Date:             item.FilmDate,
+			OriginalLanguage: item.OriginalLanguage,
+		})
+	}
+	llm.ReportReasoningPartialResults(ctx, results)
+}
+
+func sourceToolResultToReasoningSearchResult(item sourceToolResult) llm.ReasoningSearchResult {
+	return llm.ReasoningSearchResult{
+		MDBUID:      strings.TrimSpace(item.UID),
+		ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+		Title:       firstNonEmpty(item.Name, item.UID),
+		Description: item.Description,
+		ContentType: consts.CT_SOURCE,
+		Date:        item.Year,
+	}
+}
+
+func sourceNodeToolResultToReasoningSearchResult(item sourceNodeToolResult) llm.ReasoningSearchResult {
+	return llm.ReasoningSearchResult{
+		MDBUID:      strings.TrimSpace(item.UID),
+		ResultType:  consts.ES_RESULT_TYPE_SOURCES,
+		Title:       firstNonEmpty(item.Name, item.UID),
+		Description: item.Description,
+		ContentType: consts.CT_SOURCE,
+		Date:        item.Year,
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func shouldIncludeAvailableBook(candidate availableBookCandidate, linkedUIDs map[string]struct{}) bool {

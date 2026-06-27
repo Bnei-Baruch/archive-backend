@@ -383,8 +383,8 @@ func (s *ReasoningWorkflowSessionStore) AddPartialResults(sessionID string, resu
 	return session.PartialResultsRevision, added, nil
 }
 
-// AddPartialLookupEvidence stores AI-reader excerpts by result UID. Drafts still
-// use only ES results; evidence is attached only when a matching ES result exists.
+// AddPartialLookupEvidence stores AI-reader excerpts by result UID. Evidence is
+// attached to any collected candidate with the same UID.
 func (s *ReasoningWorkflowSessionStore) AddPartialLookupEvidence(sessionID string, documentID string, evidence []ReasoningSearchResultEvidence) (int, int, error) {
 	documentID = strings.TrimSpace(documentID)
 	if documentID == "" || len(evidence) == 0 {

@@ -1437,9 +1437,16 @@ func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessi
 			return err
 		}
 		evidenceRevisions := map[string]int{}
+		var candidatesByUID map[string]llm.ReasoningSearchResult
+		if deb {
+			candidatesByUID = map[string]llm.ReasoningSearchResult{}
+		}
 		for _, candidate := range batch {
 			uid := strings.TrimSpace(candidate.MDBUID)
 			evidenceRevisions[uid] = session.PartialLookupEvidenceRevisions[uid]
+			if deb {
+				candidatesByUID[uid] = candidate
+			}
 		}
 		classifiedUIDs := map[string]bool{}
 		for _, item := range response.Results {
@@ -1454,6 +1461,9 @@ func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessi
 				continue
 			}
 			classifiedUIDs[item.MDBUID] = true
+			if deb {
+				logRapidClassificationDecision(sessionID, candidatesByUID[item.MDBUID], item, true)
+			}
 			allClassifications = append(allClassifications, item)
 		}
 		for _, candidate := range batch {
@@ -1461,11 +1471,15 @@ func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessi
 			if uid == "" || classifiedUIDs[uid] {
 				continue
 			}
-			allClassifications = append(allClassifications, llm.ReasoningSearchRapidClassification{
+			item := llm.ReasoningSearchRapidClassification{
 				MDBUID:           uid,
 				Relevance:        "not_relevant",
 				EvidenceRevision: evidenceRevisions[uid],
-			})
+			}
+			if deb {
+				logRapidClassificationDecision(sessionID, candidate, item, false)
+			}
+			allClassifications = append(allClassifications, item)
 		}
 		if usage := rapidMainModelUsage(debug); usage != nil {
 			runs = append(runs, *usage)
@@ -1496,6 +1510,26 @@ func rapidClassificationPendingCandidates(session *llm.ReasoningWorkflowSession)
 		pending = append(pending, result)
 	}
 	return pending
+}
+
+func logRapidClassificationDecision(sessionID string, result llm.ReasoningSearchResult, classification llm.ReasoningSearchRapidClassification, returnedByClassifier bool) {
+	const yellow = "\033[33m"
+	const reset = "\033[0m"
+	source := "classifier"
+	if !returnedByClassifier {
+		source = "omitted_by_classifier_fallback"
+	}
+	log.Infof("%sRapid classifier decision source=%s session=%s uid=%s relevance=%s content_type=%s title=%q reason=%q%s",
+		yellow,
+		source,
+		sessionID,
+		classification.MDBUID,
+		classification.Relevance,
+		result.ContentType,
+		result.Title,
+		classification.Reason,
+		reset,
+	)
 }
 
 func normalizeRapidRelevance(value string) string {
@@ -2076,7 +2110,8 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	providerID := strings.TrimSpace(gatherStage.ProviderSessionID)
 	providerSessionID := &providerID
 	gather := rapidGatherResponse{}
-	gatherCtx := llm.ContextWithReasoningDraftState(ctx, workflowStore, responseSessionID, nil)
+	gatherCtx := llm.ContextWithReasoningSearchUILanguage(ctx, r.UILanguage)
+	gatherCtx = llm.ContextWithReasoningDraftState(gatherCtx, workflowStore, responseSessionID, nil)
 	var bootstrapDone chan error
 	if handler, ok := runtime.Tools.ToolHandlers()["elasticsearch_search"]; ok {
 		// Seed rapid search with one plain ES query immediately, before the gather
@@ -2510,7 +2545,8 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 			maybeStartReasoningSearchDraft(runtime, db, r.UILanguage, sessionID, r.Deb)
 		}
 	}
-	serviceCtx := llm.ContextWithReasoningDraftState(ctx, workflowStore, responseSessionID, draftScheduler)
+	serviceCtx := llm.ContextWithReasoningSearchUILanguage(ctx, r.UILanguage)
+	serviceCtx = llm.ContextWithReasoningDraftState(serviceCtx, workflowStore, responseSessionID, draftScheduler)
 	var previousReasoningAttempt *llm.ReasoningSearchResponse
 	for attempt := 1; attempt <= maxQueryMismatchValidationAttempts; attempt++ {
 		resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(serviceCtx,

@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"strings"
 	"sync"
 )
 
@@ -15,6 +16,7 @@ type reasoningToolState struct {
 	workflow            *ReasoningWorkflowSessionStore
 	draftSessionID      string
 	draftScheduler      func(string)
+	uiLanguage          string
 	resultKeys          map[string]bool
 	resultCategories    map[string]bool
 	concreteResultCount int
@@ -44,6 +46,23 @@ func ContextWithReasoningDraftState(ctx context.Context, workflow *ReasoningWork
 	state.draftSessionID = sessionID
 	state.draftScheduler = scheduler
 	return context.WithValue(ctx, reasoningToolStateContextKey{}, state)
+}
+
+func ContextWithReasoningSearchUILanguage(ctx context.Context, uiLanguage string) context.Context {
+	state := reasoningToolStateFromContext(ctx)
+	if state == nil {
+		state = &reasoningToolState{}
+	}
+	state.uiLanguage = strings.ToLower(strings.TrimSpace(uiLanguage))
+	return context.WithValue(ctx, reasoningToolStateContextKey{}, state)
+}
+
+func ReasoningSearchUILanguage(ctx context.Context) string {
+	state := reasoningToolStateFromContext(ctx)
+	if state == nil {
+		return ""
+	}
+	return state.uiLanguage
 }
 
 func reasoningToolStateFromContext(ctx context.Context) *reasoningToolState {
