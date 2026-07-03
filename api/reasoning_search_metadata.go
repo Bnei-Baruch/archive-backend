@@ -436,7 +436,7 @@ func loadReasoningSearchSourceMetadata(db *sql.DB, r BaseRequest, uids []string)
 		rootIDByLeafUID[leafUID] = rootID
 		rootIDs = append(rootIDs, rootID)
 	}
-	authorNamesByRootID, err := loadReasoningSearchAuthorNamesBySourceID(db, utils.UniqueInt64s(rootIDs))
+	authorNamesByRootID, err := loadReasoningSearchAuthorNamesBySourceID(db, r.UILanguage, utils.UniqueInt64s(rootIDs))
 	if err != nil {
 		return nil, err
 	}
@@ -726,7 +726,7 @@ func preferredTagI18nLabel(r BaseRequest, i18ns map[string]*mdbmodels.TagI18n) s
 	return ""
 }
 
-func loadReasoningSearchAuthorNamesBySourceID(db *sql.DB, sourceIDs []int64) (map[int64]string, error) {
+func loadReasoningSearchAuthorNamesBySourceID(db *sql.DB, uiLanguage string, sourceIDs []int64) (map[int64]string, error) {
 	result := map[int64]string{}
 	if len(sourceIDs) == 0 {
 		return result, nil
@@ -737,7 +737,7 @@ func loadReasoningSearchAuthorNamesBySourceID(db *sql.DB, sourceIDs []int64) (ma
 		idStrings[i] = strconv.FormatInt(id, 10)
 	}
 	query := fmt.Sprintf(
-		`SELECT a.name, asrc.source_id
+		`SELECT a.id, a.name, asrc.source_id
 		FROM authors a
 		INNER JOIN authors_sources asrc ON a.id = asrc.author_id
 		WHERE asrc.source_id IN (%s)
@@ -751,23 +751,75 @@ func loadReasoningSearchAuthorNamesBySourceID(db *sql.DB, sourceIDs []int64) (ma
 	}
 	defer rows.Close()
 
+	authorIDBySourceID := map[int64]int64{}
+	fallbackNameByAuthorID := map[int64]string{}
+	authorIDs := []int64{}
 	for rows.Next() {
 		var (
+			authorID int64
 			name     string
 			sourceID int64
 		)
-		if err := rows.Scan(&name, &sourceID); err != nil {
+		if err := rows.Scan(&authorID, &name, &sourceID); err != nil {
 			return nil, err
 		}
-		if _, exists := result[sourceID]; !exists {
-			result[sourceID] = name
+		if _, exists := authorIDBySourceID[sourceID]; !exists {
+			authorIDBySourceID[sourceID] = authorID
+			fallbackNameByAuthorID[authorID] = name
+			authorIDs = append(authorIDs, authorID)
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
+	i18nsMap, err := loadAuthorI18ns(db, uiLanguage, authorIDs)
+	if err != nil {
+		return nil, err
+	}
+	for sourceID, authorID := range authorIDBySourceID {
+		result[sourceID] = preferredAuthorI18nName(fallbackNameByAuthorID[authorID], uiLanguage, i18nsMap[authorID])
+	}
+
 	return result, nil
+}
+
+func loadAuthorI18ns(db *sql.DB, uiLanguage string, ids []int64) (map[int64]map[string]*mdbmodels.AuthorI18n, error) {
+	i18nsMap := make(map[int64]map[string]*mdbmodels.AuthorI18n, len(ids))
+	if len(ids) == 0 {
+		return i18nsMap, nil
+	}
+
+	language := strings.TrimSpace(uiLanguage)
+	if language == "" {
+		return i18nsMap, nil
+	}
+
+	i18ns, err := mdbmodels.AuthorI18ns(
+		qm.WhereIn("author_id in ?", utils.ConvertArgsInt64(utils.UniqueInt64s(ids))...),
+		qm.Where("language = ?", language),
+	).All(db)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, item := range i18ns {
+		byLanguage, ok := i18nsMap[item.AuthorID]
+		if !ok {
+			byLanguage = make(map[string]*mdbmodels.AuthorI18n, 1)
+			i18nsMap[item.AuthorID] = byLanguage
+		}
+		byLanguage[item.Language] = item
+	}
+
+	return i18nsMap, nil
+}
+
+func preferredAuthorI18nName(fallback string, uiLanguage string, i18ns map[string]*mdbmodels.AuthorI18n) string {
+	if item, ok := i18ns[strings.TrimSpace(uiLanguage)]; ok && item.Name.Valid && item.Name.String != "" {
+		return item.Name.String
+	}
+	return fallback
 }
 
 func parseReasoningSearchBlogPostUID(uid string) (int64, int64, bool) {

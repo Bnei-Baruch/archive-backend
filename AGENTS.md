@@ -71,7 +71,7 @@ Instructions for coding agents working in this repository.
 - The backend uses two different storage mechanisms for reasoning search:
   - `ReasoningCache`: shared query-based cache for reusable initial results.
   - response snapshot: exact per-session final API response stored on the workflow session for later fetch by `session_id`.
-- During background reasoning, tool results are accumulated on the workflow session as `PartialResults`. ES search results and PostgreSQL lookup results both feed this shared candidate pool.
+- During background reasoning, tool results are accumulated on the workflow session as `PartialResults`. ES search results and concrete PostgreSQL lookup results feed this shared candidate pool. PartialResults from `get_available_books` is limited to core author roots (`bs`, `rh`, `ar`).
 - In the regular reasoning flow, `PartialResults` are used by draft generation: a configured draft model periodically converts the collected candidates into a stored draft response for `finish-now`.
 - In the rapid reasoning flow, `PartialResults` are used by the classifier: the gather model collects candidates, the classifier assigns relevance/reason in batches, and status can expose classified rapid results before the run finishes.
 - AI lookup tools do not create candidates by themselves; they attach lookup evidence/snippets to already collected candidates by UID. Rapid classification can re-run for candidates whose lookup evidence changed.

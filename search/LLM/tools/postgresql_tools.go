@@ -682,15 +682,15 @@ Behavior:
 
 func (t *GetAvailableBooksTool) UsageExplanation() string {
 	return `Tool: get_available_books
-		Use this tool when you need top-level author->books discovery before building a source filter for elasticsearch_search.
-		This tool is backed by PostgreSQL and returns top-level books under authors, not a cached static list.
-		If the author is already known, prefer get_sources_by_author first. Use get_available_books mainly when the relevant book/article root under an author is still unknown or ambiguous.
-		Use this tool to find the relevant source id first, and then use get_sources_by_source to drill deeper and get the concrete child source ids.
-	Arguments:
-	- none. Do not pass arguments.
+Use this tool when you need top-level author->books discovery before building a source filter for elasticsearch_search.
+This tool is backed by PostgreSQL and returns top-level books under authors, not a cached static list.
+If the author is already known, prefer get_sources_by_author first. Use get_available_books mainly when the relevant book/article root under an author is still unknown or ambiguous.
+Use this tool to find the relevant source id first, and then use get_sources_by_source to drill deeper and get the concrete child source ids.
+Arguments:
+- none. Do not pass arguments.
 Behavior:
-	- Returns structured JSON items with author_id, author_en, author_he, source_id, source_en, and source_he.
-	- source_id values can be used as source_id input to get_sources_by_source or as source filter values in elasticsearch_search.`
+- Returns structured JSON items with author_id, author_en, author_he, source_id, source_en, and source_he.
+- source_id values can be used as source_id input to get_sources_by_source or as source filter values in elasticsearch_search.`
 }
 
 func (t *GetSourcesBySourceTool) Definition() llm.ReasoningToolDefinition {
@@ -1694,25 +1694,22 @@ func reportCachedContentUnitsByCollectionPartialResults(ctx context.Context, cac
 
 func reportAvailableBookPartialResults(ctx context.Context, items []availableBookToolItem) {
 	results := make([]llm.ReasoningSearchResult, 0, len(items))
-	uiLanguage := llm.ReasoningSearchUILanguage(ctx)
 	for _, item := range items {
 		uid := strings.TrimSpace(item.SourceID)
 		if uid == "" {
 			continue
 		}
-		var title, description string
-		if uiLanguage == "he" {
-			title = firstNonEmpty(item.SourceHE, item.SourceEN)
-			description = firstNonEmpty(item.AuthorHE, item.AuthorEN)
-		} else {
-			title = firstNonEmpty(item.SourceEN, item.SourceHE)
-			description = firstNonEmpty(item.AuthorEN, item.AuthorHE)
+		// get_available_books is broad navigation data. Only core author roots are
+		// useful enough to seed PartialResults without flooding the classifier.
+		switch strings.TrimSpace(item.AuthorID) {
+		case "bs", "rh", "ar":
+		default:
+			continue
 		}
 		results = append(results, llm.ReasoningSearchResult{
 			MDBUID:      uid,
 			ResultType:  consts.ES_RESULT_TYPE_SOURCES,
-			Title:       title,
-			Description: description,
+			Title:       firstNonEmpty(item.SourceHE, item.SourceEN),
 			ContentType: consts.CT_SOURCE,
 		})
 	}
@@ -1745,7 +1742,7 @@ func reportCollectionPartialResults(ctx context.Context, items []collectionToolR
 		results = append(results, llm.ReasoningSearchResult{
 			MDBUID:           uid,
 			ResultType:       consts.ES_RESULT_TYPE_COLLECTIONS,
-			Title:            firstNonEmpty(item.Name, uid),
+			Title:            strings.TrimSpace(item.Name),
 			Description:      item.Description,
 			ContentType:      item.ContentType,
 			Date:             firstNonEmpty(item.FilmDate, item.StartDate),
@@ -1778,7 +1775,7 @@ func reportContentUnitPartialResults(ctx context.Context, items []contentUnitToo
 		results = append(results, llm.ReasoningSearchResult{
 			MDBUID:           uid,
 			ResultType:       consts.ES_RESULT_TYPE_UNITS,
-			Title:            firstNonEmpty(item.Name, item.NameInCollection, uid),
+			Title:            firstNonEmpty(item.Name, item.NameInCollection),
 			Description:      item.Description,
 			ContentType:      item.ContentType,
 			Date:             item.FilmDate,
@@ -1792,7 +1789,7 @@ func sourceToolResultToReasoningSearchResult(item sourceToolResult) llm.Reasonin
 	return llm.ReasoningSearchResult{
 		MDBUID:      strings.TrimSpace(item.UID),
 		ResultType:  consts.ES_RESULT_TYPE_SOURCES,
-		Title:       firstNonEmpty(item.Name, item.UID),
+		Title:       strings.TrimSpace(item.Name),
 		Description: item.Description,
 		ContentType: consts.CT_SOURCE,
 		Date:        item.Year,
@@ -1803,7 +1800,7 @@ func sourceNodeToolResultToReasoningSearchResult(item sourceNodeToolResult) llm.
 	return llm.ReasoningSearchResult{
 		MDBUID:      strings.TrimSpace(item.UID),
 		ResultType:  consts.ES_RESULT_TYPE_SOURCES,
-		Title:       firstNonEmpty(item.Name, item.UID),
+		Title:       strings.TrimSpace(item.Name),
 		Description: item.Description,
 		ContentType: consts.CT_SOURCE,
 		Date:        item.Year,

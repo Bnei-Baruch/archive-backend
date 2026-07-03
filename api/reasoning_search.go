@@ -2110,8 +2110,7 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	providerID := strings.TrimSpace(gatherStage.ProviderSessionID)
 	providerSessionID := &providerID
 	gather := rapidGatherResponse{}
-	gatherCtx := llm.ContextWithReasoningSearchUILanguage(ctx, r.UILanguage)
-	gatherCtx = llm.ContextWithReasoningDraftState(gatherCtx, workflowStore, responseSessionID, nil)
+	gatherCtx := llm.ContextWithReasoningDraftState(ctx, workflowStore, responseSessionID, nil)
 	var bootstrapDone chan error
 	if handler, ok := runtime.Tools.ToolHandlers()["elasticsearch_search"]; ok {
 		// Seed rapid search with one plain ES query immediately, before the gather
@@ -2545,8 +2544,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 			maybeStartReasoningSearchDraft(runtime, db, r.UILanguage, sessionID, r.Deb)
 		}
 	}
-	serviceCtx := llm.ContextWithReasoningSearchUILanguage(ctx, r.UILanguage)
-	serviceCtx = llm.ContextWithReasoningDraftState(serviceCtx, workflowStore, responseSessionID, draftScheduler)
+	serviceCtx := llm.ContextWithReasoningDraftState(ctx, workflowStore, responseSessionID, draftScheduler)
 	var previousReasoningAttempt *llm.ReasoningSearchResponse
 	for attempt := 1; attempt <= maxQueryMismatchValidationAttempts; attempt++ {
 		resolvedProviderSessionID, err = service.GetReasoningStructuredOutputWithToolsForSession(serviceCtx,
