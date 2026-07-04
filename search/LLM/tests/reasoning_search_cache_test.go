@@ -9,12 +9,32 @@ import (
 )
 
 func TestReasoningSearchCacheKeyForQueryNormalizesPlusSeparatedQuery(t *testing.T) {
-	key, ok := llm.ReasoningSearchCacheKeyForQuery("חיים חדשים+ברית הנישואין")
+	key, ok := llm.ReasoningSearchCacheKeyForQuery("חיים חדשים+ברית הנישואין", false)
 	if !ok {
 		t.Fatalf("expected query to be cacheable")
 	}
 	if key != "חיים חדשים ברית הנישואין" {
 		t.Fatalf("unexpected cache key: %q", key)
+	}
+}
+
+func TestReasoningSearchCacheKeyForQueryNamespacesRapidSearch(t *testing.T) {
+	key, ok := llm.ReasoningSearchCacheKeyForQuery("חיים חדשים+ברית הנישואין", true)
+	if !ok {
+		t.Fatalf("expected query to be cacheable")
+	}
+	if key != "rapid:חיים חדשים ברית הנישואין" {
+		t.Fatalf("unexpected rapid cache key: %q", key)
+	}
+}
+
+func TestReasoningSearchCacheKeyForQueryAllowsTasteOfLifeRapidSearch(t *testing.T) {
+	key, ok := llm.ReasoningSearchCacheKeyForQuery("טעם החיים", true)
+	if !ok {
+		t.Fatalf("expected query to be cacheable")
+	}
+	if key != "rapid:טעם החיים" {
+		t.Fatalf("unexpected rapid cache key: %q", key)
 	}
 }
 
@@ -38,14 +58,14 @@ func TestReasoningSearchCacheKeyForQueryRejectsTemporalQueries(t *testing.T) {
 	}
 
 	for _, query := range testCases {
-		if key, ok := llm.ReasoningSearchCacheKeyForQuery(query); ok {
+		if key, ok := llm.ReasoningSearchCacheKeyForQuery(query, false); ok {
 			t.Fatalf("expected temporal query %q to bypass cache, got key %q", query, key)
 		}
 	}
 }
 
 func TestReasoningSearchCacheKeyForQueryRejectsQueriesWithTooManyWords(t *testing.T) {
-	if key, ok := llm.ReasoningSearchCacheKeyForQuery("one two three four five six seven eight nine ten"); ok {
+	if key, ok := llm.ReasoningSearchCacheKeyForQuery("one two three four five six seven eight nine ten", false); ok {
 		t.Fatalf("expected query to bypass cache, got key %q", key)
 	}
 }
@@ -82,6 +102,9 @@ func TestBuildReasoningSearchCacheEntryFromResponseStripsMetadata(t *testing.T) 
 	if entry.Results[0].Reason != "why" {
 		t.Fatalf("unexpected reason: %#v", entry.Results[0])
 	}
+	if entry.Summary == nil || *entry.Summary != "summary" {
+		t.Fatalf("unexpected summary: %#v", entry.Summary)
+	}
 }
 
 func TestBuildReasoningSearchCacheEntryFromResponseSkipsEmptyResults(t *testing.T) {
@@ -93,6 +116,20 @@ func TestBuildReasoningSearchCacheEntryFromResponseSkipsEmptyResults(t *testing.
 	})
 	if entry != nil {
 		t.Fatalf("expected nil cache entry for empty results, got %#v", entry)
+	}
+}
+
+func TestBuildReasoningSearchCacheEntryFromResponseKeepsIntentionalNoResults(t *testing.T) {
+	entry := llm.BuildReasoningSearchCacheEntryFromResponse(&llm.ReasoningSearchResponse{
+		Query:     "query",
+		NoResults: true,
+		Results:   []llm.ReasoningSearchResult{},
+	})
+	if entry == nil || !entry.NoResults {
+		t.Fatalf("expected no-results cache entry, got %#v", entry)
+	}
+	if entry.Summary != nil {
+		t.Fatalf("expected nil summary to be preserved, got %#v", entry.Summary)
 	}
 }
 
@@ -109,9 +146,10 @@ func TestReasoningWorkflowSessionStoreCachedInitialResponseLifecycle(t *testing.
 		t.Fatalf("unexpected create error: %v", err)
 	}
 
+	summary := "summary"
 	entry := &llm.ReasoningSearchCacheEntry{
 		Query:   "חיים חדשים נישואין פרק ב",
-		Summary: "summary",
+		Summary: &summary,
 		Results: []llm.ReasoningSearchResult{{MDBUID: "abc", ResultType: "units", Reason: "why"}},
 	}
 	if err := store.SetCachedInitialResponse(sessionID, entry); err != nil {
@@ -129,14 +167,14 @@ func TestReasoningWorkflowSessionStoreCachedInitialResponseLifecycle(t *testing.
 		t.Fatalf("unexpected cached query: %q", session.CachedInitialResponse.Query)
 	}
 
-	session.CachedInitialResponse.Summary = "changed"
+	*session.CachedInitialResponse.Summary = "changed"
 
 	session, err = store.Get(sessionID)
 	if err != nil {
 		t.Fatalf("unexpected second get error: %v", err)
 	}
-	if session.CachedInitialResponse.Summary != "summary" {
-		t.Fatalf("expected cached seed copy to be isolated, got %q", session.CachedInitialResponse.Summary)
+	if session.CachedInitialResponse.Summary == nil || *session.CachedInitialResponse.Summary != "summary" {
+		t.Fatalf("expected cached seed copy to be isolated, got %#v", session.CachedInitialResponse.Summary)
 	}
 
 	if err := store.SetCachedInitialResponse(sessionID, nil); err != nil {
@@ -152,9 +190,10 @@ func TestReasoningWorkflowSessionStoreCachedInitialResponseLifecycle(t *testing.
 }
 
 func TestBuildReasoningSearchCacheSeedAssistantContent(t *testing.T) {
+	summary := "summary"
 	content := llm.BuildReasoningSearchCacheSeedAssistantContent(&llm.ReasoningSearchCacheEntry{
 		Query:   "query",
-		Summary: "summary",
+		Summary: &summary,
 		Results: []llm.ReasoningSearchResult{{MDBUID: "abc", ResultType: "units", Reason: "why"}},
 	})
 	if !strings.Contains(content, "Cached initial reasoning search response:") {

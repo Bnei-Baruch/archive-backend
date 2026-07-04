@@ -56,7 +56,7 @@ Instructions for coding agents working in this repository.
 - The API `session_id` is a workflow session id owned by the backend, not a provider-native LLM session id.
 - `POST /search/reasoning` runs the full reasoning search synchronously and returns the final response directly.
 - `POST /search/reasoning/start` starts the reasoning run in background and returns the workflow `session_id`.
-- `POST /search/reasoning/cache` checks the shared query cache; on hit it creates a fresh workflow session, stores a response snapshot, and returns the new `session_id`.
+- `POST /search/reasoning/cache` checks the shared query cache for regular or rapid search based on `is_rapid`; on hit it creates a fresh workflow session, stores a response snapshot, and returns the new `session_id`.
 - `POST /search/reasoning/start` may receive `cancel_session_id` to cancel a previous background run before starting the new one.
 - `POST /search/reasoning/cancel` cancels a running background search by workflow `session_id`.
 - `POST /search/reasoning/finish-now` finalizes the latest prepared draft response for a workflow `session_id`; it does not generate results inline. If no draft is ready, it returns a conflict error.
@@ -71,6 +71,7 @@ Instructions for coding agents working in this repository.
 - The backend uses two different storage mechanisms for reasoning search:
   - `ReasoningCache`: shared query-based cache for reusable initial results.
   - response snapshot: exact per-session final API response stored on the workflow session for later fetch by `session_id`.
+- Rapid cache entries are separated from regular cache entries and preserve rapid fields such as `summary=null`, `no_results`, and result `relevance`.
 - During background reasoning, tool results are accumulated on the workflow session as `PartialResults`. ES search results and concrete PostgreSQL lookup results feed this shared candidate pool. PartialResults from `get_available_books` is limited to core author roots (`bs`, `rh`, `ar`).
 - In the regular reasoning flow, `PartialResults` are used by draft generation: a configured draft model periodically converts the collected candidates into a stored draft response for `finish-now`.
 - In the rapid reasoning flow, `PartialResults` are used by the classifier: the gather model collects candidates, the classifier assigns relevance/reason in batches, and status can expose classified rapid results before the run finishes.

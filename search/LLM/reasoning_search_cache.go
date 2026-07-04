@@ -18,9 +18,10 @@ const (
 )
 
 type ReasoningSearchCacheEntry struct {
-	Query   string
-	Summary string
-	Results []ReasoningSearchResult
+	Query     string
+	Summary   *string
+	NoResults bool
+	Results   []ReasoningSearchResult
 }
 
 type reasoningSearchCacheStoreEntry struct {
@@ -319,7 +320,7 @@ func (s *ReasoningSearchCacheStore) deleteExpired() {
 	}
 }
 
-func ReasoningSearchCacheKeyForQuery(query string) (string, bool) {
+func ReasoningSearchCacheKeyForQuery(query string, isRapid bool) (string, bool) {
 	key := normalizeReasoningSearchCacheKeyQuery(query)
 	if key == "" {
 		return "", false
@@ -344,11 +345,14 @@ func ReasoningSearchCacheKeyForQuery(query string) (string, bool) {
 		return "", false
 	}
 
+	if isRapid {
+		return "rapid:" + key, true
+	}
 	return key, true
 }
 
 func BuildReasoningSearchCacheEntryFromResponse(response *ReasoningSearchResponse) *ReasoningSearchCacheEntry {
-	if response == nil || len(response.Results) == 0 {
+	if response == nil || (!response.NoResults && len(response.Results) == 0) {
 		return nil
 	}
 
@@ -358,20 +362,22 @@ func BuildReasoningSearchCacheEntryFromResponse(response *ReasoningSearchRespons
 			MDBUID:           result.MDBUID,
 			ResultType:       result.ResultType,
 			Reason:           result.Reason,
+			Relevance:        result.Relevance,
 			Highlights:       append([]ReasoningSearchHighlight(nil), result.Highlights...),
 			IsGroupingResult: result.IsGroupingResult,
 		})
 	}
 
-	summary := ""
+	entry := &ReasoningSearchCacheEntry{
+		Query:     response.Query,
+		NoResults: response.NoResults,
+		Results:   results,
+	}
 	if response.Summary != nil {
-		summary = *response.Summary
+		summary := *response.Summary
+		entry.Summary = &summary
 	}
-	return &ReasoningSearchCacheEntry{
-		Query:   response.Query,
-		Summary: summary,
-		Results: results,
-	}
+	return entry
 }
 
 func cloneReasoningSearchCacheEntry(entry *ReasoningSearchCacheEntry) *ReasoningSearchCacheEntry {
@@ -380,9 +386,13 @@ func cloneReasoningSearchCacheEntry(entry *ReasoningSearchCacheEntry) *Reasoning
 	}
 
 	cloned := &ReasoningSearchCacheEntry{
-		Query:   entry.Query,
-		Summary: entry.Summary,
-		Results: make([]ReasoningSearchResult, 0, len(entry.Results)),
+		Query:     entry.Query,
+		NoResults: entry.NoResults,
+		Results:   make([]ReasoningSearchResult, 0, len(entry.Results)),
+	}
+	if entry.Summary != nil {
+		summary := *entry.Summary
+		cloned.Summary = &summary
 	}
 	for _, result := range entry.Results {
 		cloned.Results = append(cloned.Results, ReasoningSearchResult{
@@ -394,6 +404,7 @@ func cloneReasoningSearchCacheEntry(entry *ReasoningSearchCacheEntry) *Reasoning
 			ProgramName:      result.ProgramName,
 			Date:             result.Date,
 			Reason:           result.Reason,
+			Relevance:        result.Relevance,
 			Highlights:       append([]ReasoningSearchHighlight(nil), result.Highlights...),
 			IsGroupingResult: result.IsGroupingResult,
 		})
@@ -453,15 +464,17 @@ func BuildReasoningSearchCacheSeedAssistantContent(entry *ReasoningSearchCacheEn
 		IsGroupingResult bool     `json:"is_grouping_result"`
 	}
 	type seedPayload struct {
-		Query   string       `json:"query"`
-		Summary string       `json:"summary"`
-		Results []seedResult `json:"results"`
+		Query     string       `json:"query"`
+		Summary   *string      `json:"summary"`
+		NoResults bool         `json:"no_results,omitempty"`
+		Results   []seedResult `json:"results"`
 	}
 
 	payload := seedPayload{
-		Query:   entry.Query,
-		Summary: entry.Summary,
-		Results: make([]seedResult, 0, len(entry.Results)),
+		Query:     entry.Query,
+		Summary:   entry.Summary,
+		NoResults: entry.NoResults,
+		Results:   make([]seedResult, 0, len(entry.Results)),
 	}
 	for _, result := range entry.Results {
 		payload.Results = append(payload.Results, seedResult{
@@ -474,7 +487,10 @@ func BuildReasoningSearchCacheSeedAssistantContent(entry *ReasoningSearchCacheEn
 	}
 	raw, err := marshalJSON(payload)
 	if err != nil {
-		return entry.Summary
+		if entry.Summary != nil {
+			return *entry.Summary
+		}
+		return ""
 	}
 	return "Cached initial reasoning search response:\n" + raw
 }

@@ -249,6 +249,9 @@ func ReasoningSearchFinishNowHandler(c *gin.Context) {
 	})
 }
 
+// ReasoningCache is shared by query and is not tied to a workflow session.
+// On a hit, create a fresh session snapshot so clients can keep using the
+// normal status/result/follow-up flow with a session_id.
 func ReasoningSearchCacheHandler(c *gin.Context) {
 	r := ReasoningSearchRequest{}
 	if c.Bind(&r) != nil {
@@ -267,7 +270,7 @@ func ReasoningSearchCacheHandler(c *gin.Context) {
 		return
 	}
 
-	cacheKey, cacheEligible := llm.ReasoningSearchCacheKeyForQuery(r.Query)
+	cacheKey, cacheEligible := llm.ReasoningSearchCacheKeyForQuery(r.Query, r.IsRapid)
 	if !cacheEligible {
 		c.JSON(http.StatusOK, gin.H{"cache_hit": false})
 		return
@@ -787,12 +790,12 @@ func storeReasoningSearchCachedResponse(runtime *llm.Runtime, db *sql.DB, r Reas
 		return err
 	}
 
-	summary := cachedEntry.Summary
 	response := llm.ReasoningSearchResponse{
-		Query:    r.Query,
-		Summary:  &summary,
-		CacheHit: true,
-		Results:  append([]llm.ReasoningSearchResult(nil), cachedEntry.Results...),
+		Query:     r.Query,
+		Summary:   cachedEntry.Summary,
+		NoResults: cachedEntry.NoResults,
+		CacheHit:  true,
+		Results:   append([]llm.ReasoningSearchResult(nil), cachedEntry.Results...),
 	}
 	response.SetUsedTools([]string{})
 	response.SetSessionID(sessionID)
@@ -2089,11 +2092,26 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 		return err
 	}
 	gatherStage := session.Stages[llm.ReasoningWorkflowStageReasoning]
+	initialRequestCompleted := session.InitialRequestCompleted
+	cacheKey := ""
+	cacheEligible := false
+	if runtime.ReasoningCache != nil && !r.Deb {
+		cacheKey, cacheEligible = llm.ReasoningSearchCacheKeyForQuery(r.Query, true)
+	}
+	if cacheEligible && !initialRequestCompleted {
+		if cachedEntry, ok := runtime.ReasoningCache.Get(cacheKey); ok {
+			if err := storeReasoningSearchCachedResponse(runtime, db, r, responseSessionID, cachedEntry, gatherStage.MaxFollowups); err != nil {
+				return err
+			}
+			log.Infof("Rapid Reasoning Search Cache Hit: [%s]", cacheKey)
+			return nil
+		}
+	}
+
 	gatherService := runtime.Services[gatherStage.Provider]
 	if gatherService == nil {
 		return errors.New("rapid reasoning llm service is not initialized")
 	}
-
 	outputLanguageName := reasoningSearchOutputLanguageName(r.UILanguage, r.Query)
 	systemMessage := llm.GenerateSystemMessageForRapidReasoningSearch(runtime.Tools.Tools(), gatherStage.MaxIterations, gatherStage.MaxFollowups-session.FollowupCount)
 	systemMessage = llm.AppendReasoningSearchOutputLanguage(systemMessage, outputLanguageName)
@@ -2208,6 +2226,9 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 					return err
 				}
 			}
+			if cacheEligible && !initialRequestCompleted && runtime.ReasoningCache != nil {
+				runtime.ReasoningCache.Set(cacheKey, llm.BuildReasoningSearchCacheEntryFromResponse(&response))
+			}
 			progressStore.Complete(responseSessionID, gather.ReasoningIterations)
 			return nil
 		}
@@ -2297,6 +2318,9 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 		if err := workflowStore.SetFollowupState(responseSessionID, true, session.FollowupCount); err != nil {
 			return err
 		}
+	}
+	if cacheEligible && !initialRequestCompleted && runtime.ReasoningCache != nil {
+		runtime.ReasoningCache.Set(cacheKey, llm.BuildReasoningSearchCacheEntryFromResponse(&response))
 	}
 	progressStore.Complete(responseSessionID, gather.ReasoningIterations+1)
 	return nil
@@ -2393,7 +2417,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	cacheKey := ""
 	cacheEligible := false
 	if runtime.ReasoningCache != nil && !r.Deb {
-		cacheKey, cacheEligible = llm.ReasoningSearchCacheKeyForQuery(r.Query)
+		cacheKey, cacheEligible = llm.ReasoningSearchCacheKeyForQuery(r.Query, false)
 	}
 	if cacheEligible && !initialRequestCompleted {
 		if cachedEntry, ok := runtime.ReasoningCache.Get(cacheKey); ok {
