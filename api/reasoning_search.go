@@ -1007,6 +1007,8 @@ func populateReasoningSearchHighlightsFromEvidence(response *llm.ReasoningSearch
 		}
 		response.Results[i].Highlights = compactReasoningSearchHighlightsForDisplay(
 			buildReasoningSearchHighlightsFromEvidence(candidate, response.Query, response.Results[i].Reason),
+			response.Query,
+			response.Results[i].Reason,
 		)
 		response.Results[i].LookupEvidence = nil
 	}
@@ -1124,18 +1126,55 @@ func emphasizedHighlightStats(value string) (int, int) {
 	return textRunes, segments
 }
 
-func compactReasoningSearchHighlightsForDisplay(highlights []llm.ReasoningSearchHighlight) []llm.ReasoningSearchHighlight {
+func compactReasoningSearchHighlightsForDisplay(highlights []llm.ReasoningSearchHighlight, query string, reason string) []llm.ReasoningSearchHighlight {
 	if len(highlights) == 0 {
 		return nil
 	}
-	items := append([]llm.ReasoningSearchHighlight(nil), highlights...)
-	if len(items) > reasoningSearchDisplayHighlightMaxItems {
-		items = items[:reasoningSearchDisplayHighlightMaxItems]
-	}
-	for i := range items {
-		items[i].Text = truncateHighlightForDisplay(items[i].Text, reasoningSearchDisplayHighlightMaxRunes)
+	items := make([]llm.ReasoningSearchHighlight, 0, reasoningSearchDisplayHighlightMaxItems)
+	for _, highlight := range highlights {
+		highlight.Text = truncateHighlightForDisplay(highlight.Text, reasoningSearchDisplayHighlightMaxRunes, query, reason)
+		if strings.TrimSpace(visibleHighlightText(highlight.Text)) == "" {
+			continue
+		}
+		items = addDistinctReasoningSearchDisplayHighlight(items, highlight)
+		if len(items) >= reasoningSearchDisplayHighlightMaxItems {
+			continue
+		}
 	}
 	return items
+}
+
+func addDistinctReasoningSearchDisplayHighlight(items []llm.ReasoningSearchHighlight, candidate llm.ReasoningSearchHighlight) []llm.ReasoningSearchHighlight {
+	candidateText := normalizeReasoningSearchDisplayHighlight(candidate.Text)
+	if candidateText == "" {
+		return items
+	}
+	candidateRunes := utf8.RuneCountInString(candidateText)
+	for i, item := range items {
+		itemText := normalizeReasoningSearchDisplayHighlight(item.Text)
+		if itemText == "" {
+			continue
+		}
+		itemContainsCandidate := strings.Contains(itemText, candidateText)
+		candidateContainsItem := strings.Contains(candidateText, itemText)
+		if !itemContainsCandidate && !candidateContainsItem {
+			continue
+		}
+		// ES highlights and lookup snippets can quote the same sentence with
+		// different fields/emphasis. Keep the more informative visible text.
+		if candidateContainsItem && candidateRunes > utf8.RuneCountInString(itemText) {
+			items[i] = candidate
+		}
+		return items
+	}
+	if len(items) >= reasoningSearchDisplayHighlightMaxItems {
+		return items
+	}
+	return append(items, candidate)
+}
+
+func normalizeReasoningSearchDisplayHighlight(value string) string {
+	return strings.ToLower(strings.Join(strings.Fields(visibleHighlightText(value)), " "))
 }
 
 func visibleHighlightRuneCount(value string) int {
@@ -1215,12 +1254,47 @@ func extractQuotedPhrases(value string) []string {
 	return phrases
 }
 
-func truncateHighlightForDisplay(value string, maxRunes int) string {
+func truncateHighlightForDisplay(value string, maxRunes int, query string, reason string) string {
 	value = strings.TrimSpace(value)
 	if value == "" || maxRunes <= 0 || visibleHighlightRuneCount(value) <= maxRunes {
 		return value
 	}
 
+	// Long lookup snippets can contain the useful sentence far from the start.
+	// Prefer a window around a relevance anchor; keep prefix truncation only
+	// when there is no reliable query/reason/emphasis signal.
+	visibleText := visibleHighlightText(value)
+	visibleRunes := utf8.RuneCountInString(visibleText)
+	anchor, matchRunes, ok := bestReasoningSearchHighlightAnchor(value, visibleText, query, reason)
+	if !ok {
+		return truncateHighlightPrefixForDisplay(value, maxRunes)
+	}
+
+	start := anchor - maxRunes/3
+	if start < 0 {
+		start = 0
+	}
+	if matchRunes > maxRunes {
+		matchRunes = maxRunes
+	}
+	if start+maxRunes < anchor+matchRunes {
+		start = anchor + matchRunes - maxRunes
+	}
+	if start+maxRunes > visibleRunes {
+		start = visibleRunes - maxRunes
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + maxRunes
+	if end > visibleRunes {
+		end = visibleRunes
+	}
+	ret := truncateHighlightWindowForDisplay(value, start, end)
+	return ret
+}
+
+func truncateHighlightPrefixForDisplay(value string, maxRunes int) string {
 	var b strings.Builder
 	visible := 0
 	openEm := 0
@@ -1262,11 +1336,165 @@ func truncateHighlightForDisplay(value string, maxRunes int) string {
 	result := strings.TrimSpace(b.String())
 	if truncated {
 		result = strings.TrimRight(result, " ,;:.!?")
-		result += "..."
 	}
 	for openEm > 0 {
 		result += "</em>"
 		openEm--
+	}
+	return result
+}
+
+type reasoningSearchHighlightAnchor struct {
+	Position   int
+	MatchRunes int
+	Score      int
+}
+
+func bestReasoningSearchHighlightAnchor(rawText string, visibleText string, query string, reason string) (int, int, bool) {
+	visibleLower := strings.ToLower(visibleText)
+	best := reasoningSearchHighlightAnchor{Position: -1}
+	consider := func(needle string, score int) {
+		needle = strings.TrimSpace(strings.ToLower(needle))
+		if utf8.RuneCountInString(needle) <= 2 {
+			return
+		}
+		idx := strings.Index(visibleLower, needle)
+		if idx < 0 {
+			return
+		}
+		position := utf8.RuneCountInString(visibleLower[:idx])
+		matchRunes := utf8.RuneCountInString(needle)
+		score += matchRunes
+		if best.Position < 0 || score > best.Score || (score == best.Score && position < best.Position) {
+			best = reasoningSearchHighlightAnchor{Position: position, MatchRunes: matchRunes, Score: score}
+		}
+	}
+
+	// Ranking priority mirrors what makes a highlight useful to the user:
+	// phrases explicitly cited by the model reason, then query terms, then
+	// reason terms, and finally meaningful existing <em> emphasis.
+	for _, phrase := range extractQuotedPhrases(reason) {
+		consider(phrase, 1000)
+	}
+	for _, token := range tokenizeReasoningSearchHighlightText(query) {
+		consider(token, 700)
+	}
+	for _, token := range tokenizeReasoningSearchHighlightText(reason) {
+		consider(token, 400)
+	}
+	for _, anchor := range meaningfulEmphasisAnchors(rawText) {
+		if best.Position < 0 || anchor.Score > best.Score || (anchor.Score == best.Score && anchor.Position < best.Position) {
+			best = anchor
+		}
+	}
+	if best.Position < 0 {
+		return 0, 0, false
+	}
+	return best.Position, best.MatchRunes, true
+}
+
+func meaningfulEmphasisAnchors(value string) []reasoningSearchHighlightAnchor {
+	anchors := []reasoningSearchHighlightAnchor{}
+	inEm := false
+	visible := 0
+	start := 0
+	length := 0
+	for i := 0; i < len(value); {
+		switch {
+		case strings.HasPrefix(value[i:], "<em>"):
+			inEm = true
+			start = visible
+			length = 0
+			i += len("<em>")
+			continue
+		case strings.HasPrefix(value[i:], "</em>"):
+			// Ignore tiny emphasized linking words such as "עם"; they make poor
+			// display anchors and already receive a low score during ranking.
+			if inEm && length > 2 {
+				anchors = append(anchors, reasoningSearchHighlightAnchor{
+					Position:   start,
+					MatchRunes: length,
+					Score:      300 + length,
+				})
+			}
+			inEm = false
+			i += len("</em>")
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(value[i:])
+		if size == 0 {
+			break
+		}
+		visible++
+		if inEm {
+			length++
+		}
+		i += size
+	}
+	if inEm && length > 2 {
+		anchors = append(anchors, reasoningSearchHighlightAnchor{
+			Position:   start,
+			MatchRunes: length,
+			Score:      300 + length,
+		})
+	}
+	return anchors
+}
+
+func truncateHighlightWindowForDisplay(value string, startVisible int, endVisible int) string {
+	var b strings.Builder
+	visible := 0
+	inEm := false
+	emOpenedInWindow := false
+	windowStarted := false
+
+	// Window boundaries are counted on visible text, but the raw value may
+	// contain <em> tags. Re-open/close emphasis as needed so the client receives
+	// valid markup even when the cut starts or ends inside an emphasized span.
+	for i := 0; i < len(value); {
+		if strings.HasPrefix(value[i:], "<em>") {
+			inEm = true
+			if windowStarted && visible < endVisible {
+				b.WriteString("<em>")
+				emOpenedInWindow = true
+			}
+			i += len("<em>")
+			continue
+		}
+		if strings.HasPrefix(value[i:], "</em>") {
+			if windowStarted && visible <= endVisible && emOpenedInWindow {
+				b.WriteString("</em>")
+				emOpenedInWindow = false
+			}
+			inEm = false
+			i += len("</em>")
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(value[i:])
+		if size == 0 {
+			break
+		}
+		if visible >= endVisible {
+			break
+		}
+		if visible >= startVisible {
+			if !windowStarted {
+				windowStarted = true
+				if inEm {
+					b.WriteString("<em>")
+					emOpenedInWindow = true
+				}
+			}
+			b.WriteRune(r)
+		}
+		visible++
+		i += size
+	}
+
+	result := strings.TrimSpace(b.String())
+	result = strings.Trim(result, " ,;:.!?")
+	if emOpenedInWindow {
+		result += "</em>"
 	}
 	return result
 }

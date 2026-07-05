@@ -1481,22 +1481,24 @@ func findAIQueryExcerptAnchor(content string, query string, reason string, suppo
 	lowerContent := strings.ToLower(content)
 	candidates := buildAIQueryExcerptCandidates(supportingSnippet, query, reason)
 	for _, candidate := range candidates {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" {
-			continue
-		}
-		lowerCandidate := strings.ToLower(candidate)
+		lowerCandidate := strings.ToLower(candidate.Text)
 		if idx := strings.Index(lowerContent, lowerCandidate); idx >= 0 {
-			return idx, len(candidate)
+			return idx, len(candidate.Text)
 		}
 	}
 	return -1, 0
 }
 
-func buildAIQueryExcerptCandidates(values ...string) []string {
+type aiQueryExcerptCandidate struct {
+	Text  string
+	Score int
+	Order int
+}
+
+func buildAIQueryExcerptCandidates(supportingSnippet string, query string, reason string) []aiQueryExcerptCandidate {
 	seen := map[string]bool{}
-	candidates := make([]string, 0, 16)
-	addCandidate := func(value string) {
+	candidates := make([]aiQueryExcerptCandidate, 0, 16)
+	addCandidate := func(value string, score int) {
 		value = strings.TrimSpace(value)
 		if value == "" {
 			return
@@ -1506,22 +1508,67 @@ func buildAIQueryExcerptCandidates(values ...string) []string {
 			return
 		}
 		seen[key] = true
-		candidates = append(candidates, value)
+		candidates = append(candidates, aiQueryExcerptCandidate{
+			Text:  value,
+			Score: score + minAIQueryInt(utf8.RuneCountInString(value), 40),
+			Order: len(candidates),
+		})
 	}
-	for _, value := range values {
-		for _, phrase := range splitAIQueryExcerptParts(value) {
-			addCandidate(phrase)
-			for _, token := range splitAIQueryExcerptParts(phrase) {
-				if utf8.RuneCountInString(token) >= 4 {
-					addCandidate(token)
-				}
-			}
-		}
+
+	// Anchor priority is intentionally not length-only: a shorter user-query
+	// term such as "השולחן" should beat a longer generic phrase from the model
+	// reason. Supporting snippets are still strongest when they match content.
+	for _, phrase := range splitAIQueryExcerptParts(supportingSnippet) {
+		addCandidate(phrase, 1000)
+	}
+	for _, token := range aiQueryKeywords(supportingSnippet) {
+		addCandidate(token, 900)
+	}
+	for _, token := range aiQueryKeywords(query) {
+		addCandidate(token, 700)
+	}
+	for _, phrase := range extractAIQueryQuotedPhrases(reason) {
+		addCandidate(phrase, 600)
+	}
+	for _, phrase := range splitAIQueryExcerptParts(reason) {
+		addCandidate(phrase, 400)
+	}
+	for _, token := range aiQueryKeywords(reason) {
+		addCandidate(token, 300)
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
-		return utf8.RuneCountInString(candidates[i]) > utf8.RuneCountInString(candidates[j])
+		if candidates[i].Score == candidates[j].Score {
+			return candidates[i].Order < candidates[j].Order
+		}
+		return candidates[i].Score > candidates[j].Score
 	})
 	return candidates
+}
+
+func extractAIQueryQuotedPhrases(value string) []string {
+	phrases := []string{}
+	seen := map[string]bool{}
+	for _, pair := range [][2]string{{`"`, `"`}, {"“", "”"}, {"„", "”"}} {
+		start := 0
+		for {
+			left := strings.Index(value[start:], pair[0])
+			if left < 0 {
+				break
+			}
+			left += start + len(pair[0])
+			right := strings.Index(value[left:], pair[1])
+			if right < 0 {
+				break
+			}
+			phrase := strings.TrimSpace(value[left : left+right])
+			if utf8.RuneCountInString(phrase) > 2 && !seen[phrase] {
+				seen[phrase] = true
+				phrases = append(phrases, phrase)
+			}
+			start = left + right + len(pair[1])
+		}
+	}
+	return phrases
 }
 
 func splitAIQueryExcerptParts(value string) []string {

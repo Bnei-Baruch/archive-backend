@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -125,6 +126,54 @@ func TestBuildReasoningSearchHighlightsPrefersReasonAnchors(t *testing.T) {
 	}
 	if highlights[len(highlights)-1].Text == `עמי אתה - להיות שותף עמי.` {
 		t.Fatalf("expected quoted reason anchor not to sink to the bottom, got %#v", highlights)
+	}
+}
+
+func TestTruncateHighlightForDisplayCentersReasonAnchor(t *testing.T) {
+	text := strings.Repeat("פתיחה רחוקה ", 80) +
+		`וזה ענין שותפות, שיש להנבראים עם הבורא.` +
+		strings.Repeat(" המשך רחוק", 80)
+
+	got := truncateHighlightForDisplay(text, 80, "שותפות עם הבורא", `נראה מתאים בגלל "וזה ענין שותפות"`)
+	if !strings.Contains(got, "וזה ענין שותפות") {
+		t.Fatalf("expected truncated highlight to include reason anchor, got %q", got)
+	}
+	if strings.Contains(got, "...") {
+		t.Fatalf("did not expect ellipses in truncated highlight, got %q", got)
+	}
+}
+
+func TestTruncateHighlightForDisplayPreservesEmphasisAroundAnchor(t *testing.T) {
+	text := strings.Repeat("רקע רחוק ", 80) +
+		`לפני <em>משה רבנו</em> אחרי` +
+		strings.Repeat(" המשך רחוק", 80)
+
+	got := truncateHighlightForDisplay(text, 60, "משה רבנו", "")
+	if !strings.Contains(got, "<em>משה רבנו</em>") {
+		t.Fatalf("expected truncated highlight to preserve emphasized anchor, got %q", got)
+	}
+	if strings.Contains(got, "...") {
+		t.Fatalf("did not expect ellipses in truncated highlight, got %q", got)
+	}
+}
+
+func TestCompactReasoningSearchHighlightsRemovesOverlappingSnippets(t *testing.T) {
+	highlights := []llm.ReasoningSearchHighlight{
+		{Field: "content", Text: "תחילת קטע לכן כשיש איזו אסיפה של חברים, צריכים לזכור להעלות על השולחן את השאלה. דהיינו, שכל אחד ישאל לעצמו, כמה כבר אנו התקדמנו באהבת הזולת."},
+		{Field: "content.language", Text: "לכן כשיש איזו אסיפה של <em>חברים</em>, צריכים לזכור להעלות על השולחן את השאלה."},
+		{Field: "content.language", Text: "דהיינו, שכל אחד ישאל לעצמו, <em>כמה</em> כבר אנו <em>התקדמנו</em> <em>באהבת</em> הזולת."},
+		{Field: "content", Text: "קטע נוסף שאינו חופף על חשיבות החברה והעבודה המשותפת."},
+	}
+
+	got := compactReasoningSearchHighlightsForDisplay(highlights, "שולחן התקדמנו אהבת חברים", "")
+	if len(got) != 2 {
+		t.Fatalf("expected overlapping highlights to compact to 2 distinct snippets, got %#v", got)
+	}
+	if !strings.Contains(visibleHighlightText(got[0].Text), "להעלות על השולחן") || !strings.Contains(visibleHighlightText(got[0].Text), "התקדמנו באהבת") {
+		t.Fatalf("expected long source snippet to remain, got %#v", got)
+	}
+	if !strings.Contains(visibleHighlightText(got[1].Text), "קטע נוסף") {
+		t.Fatalf("expected distinct highlight to fill available slot, got %#v", got)
 	}
 }
 

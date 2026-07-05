@@ -2,6 +2,7 @@ package tools
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -123,5 +124,27 @@ func TestAIQueryShouldRetrySelectionForJSONSyntaxError(t *testing.T) {
 	}
 	if !aiQueryShouldRetrySelection(err) {
 		t.Fatalf("expected syntax error to be retryable")
+	}
+}
+
+func TestExtractAIQueryExcerptPrefersQueryAnchorOverOpening(t *testing.T) {
+	content := strings.Repeat("פתיחה על רוחניות ונשמה. ", 50) +
+		`לכן כשיש איזו אסיפה של חברים, צריכים לזכור להעלות על השולחן את השאלה כמה כבר אנו התקדמנו באהבת הזולת.` +
+		strings.Repeat(" המשך כללי.", 50)
+
+	excerpt := extractAIQueryExcerpt(content, "דברי רבש שצריך לשים על השולחן כמה התקדמנו באהבת חברים", "", "", 180)
+	if !strings.Contains(excerpt, "השולחן") || !strings.Contains(excerpt, "התקדמנו") {
+		t.Fatalf("expected excerpt around query anchor, got %q", excerpt)
+	}
+}
+
+func TestExtractAIQueryExcerptPrefersSupportingSnippetWhenPresent(t *testing.T) {
+	content := strings.Repeat("פתיחה כללית. ", 50) +
+		`כאן נמצא הציטוט המדויק על להעלות על השולחן את השאלה.` +
+		strings.Repeat(" המשך כללי.", 50)
+
+	excerpt := extractAIQueryExcerpt(content, "שולחן", "", "הציטוט המדויק על להעלות על השולחן", 120)
+	if !strings.Contains(excerpt, "הציטוט המדויק") || !strings.Contains(excerpt, "השולחן") {
+		t.Fatalf("expected excerpt around supporting snippet, got %q", excerpt)
 	}
 }
