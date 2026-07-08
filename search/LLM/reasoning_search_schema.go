@@ -198,7 +198,7 @@ var ReasoningSearchRapidFinalizerResponseJSONSchema = `{"type":"object","additio
 
 func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (string, error) {
 	languageName = strings.TrimSpace(languageName)
-	summaryDescription := "A short explanation of the best results found for the user. Include clarification requests, or follow-up guidance here when needed. Refer to the user's requests and not to internal verification feedback messages if there are any, because they are hidden from the user."
+	summaryDescription := "A short explanation of the best results found for the user. Include clarification requests, or follow-up guidance here when needed. Refer to the user's requests and not to internal verification feedback messages if there are any, because they are hidden from the user. Return null when no_results is true."
 	reasonDescription := "Short description of the result and explanation of why this result was selected for the user."
 	if languageName != "" {
 		summaryDescription += " Write this field in " + languageName + "."
@@ -214,8 +214,12 @@ func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (
 				"description": "The original user query.",
 			},
 			"summary": map[string]interface{}{
-				"type":        "string",
+				"type":        []string{"string", "null"},
 				"description": summaryDescription,
+			},
+			"no_results": map[string]interface{}{
+				"type":        "boolean",
+				"description": "Set true only when the archive has no relevant results for the user query. Set false for uncertainty, incomplete search, tool issues, or weak but possible matches.",
 			},
 			"reasoning_summary": map[string]interface{}{
 				"type":        "array",
@@ -302,7 +306,7 @@ func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (
 				},
 			},
 		},
-		"required": []string{"query", "summary", "reasoning_summary", "results"},
+		"required": []string{"query", "summary", "no_results", "reasoning_summary", "results"},
 	}
 
 	payload, err := json.Marshal(schema)

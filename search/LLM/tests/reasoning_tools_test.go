@@ -347,6 +347,7 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 	requiredSnippets := []string{
 		`"query"`,
 		`"summary"`,
+		`"no_results"`,
 		`"reasoning_summary"`,
 		`"results"`,
 		`"mdb_uid"`,
@@ -365,6 +366,11 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 		t.Fatalf("unexpected schema JSON error: %v", err)
 	}
 	properties := schemaPayload["properties"].(map[string]interface{})
+	summary := properties["summary"].(map[string]interface{})
+	summaryTypes, ok := summary["type"].([]interface{})
+	if !ok || len(summaryTypes) != 2 || summaryTypes[0] != "string" || summaryTypes[1] != "null" {
+		t.Fatalf("expected summary to allow string or null, got %#v", summary["type"])
+	}
 	results := properties["results"].(map[string]interface{})
 	resultItems := results["items"].(map[string]interface{})
 	resultProperties := resultItems["properties"].(map[string]interface{})

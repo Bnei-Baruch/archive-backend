@@ -67,6 +67,7 @@ Instructions for coding agents working in this repository.
 - Status also exposes progress hints such as result availability, potentially good results, long-running risk, near-finish, query-analyzed, and draft availability. `has_draft_results=true` means the client may offer `finish-now`.
 - For rapid reasoning search, status may also return `rapid_results_available=true` plus `rapid_results` before the final stored response is fetched.
 - Response includes `session_id`, `cache_hit`, `used_tools`, token stats, and debug/cost details when `deb=true`.
+- Both regular and rapid reasoning search can complete successfully with `no_results=true`, `results=[]`, and `summary=null`; this means the backend intentionally concluded that no archive results are relevant, not that the search failed.
 - The backend persists a `reasoning` workflow stage and, when enabled, `planning` and `verification` workflow stages.
 - The backend uses two different storage mechanisms for reasoning search:
   - `ReasoningCache`: shared query-based cache for reusable initial results.

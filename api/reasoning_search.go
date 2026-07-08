@@ -925,6 +925,7 @@ func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime
 	response.SetSessionID(sessionID)
 	response.SetUsedTools([]string{"elasticsearch_search"})
 	response.SetReasoningSteps([]llm.ReasoningSearchReasoningStep{})
+	normalizeReasoningSearchNoResults(&response)
 	if debug != nil {
 		response.UsedTokens = debug.TotalTokens
 		if usage := debug.UsageBreakdown(); usage != nil {
@@ -1533,6 +1534,20 @@ func reasoningSearchCandidateInputs(results []llm.ReasoningSearchResult) []reaso
 		})
 	}
 	return items
+}
+
+func normalizeReasoningSearchNoResults(response *llm.ReasoningSearchResponse) {
+	if response == nil {
+		return
+	}
+	// no_results is only an intentional empty-result state. If a model returns
+	// results as well, prefer the concrete results and clear the flag.
+	if response.NoResults && len(response.Results) > 0 {
+		response.NoResults = false
+	}
+	if response.NoResults {
+		response.Summary = nil
+	}
 }
 
 func rapidCollectedResults(session *llm.ReasoningWorkflowSession) []llm.ReasoningSearchResult {
@@ -2841,6 +2856,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		}
 		break
 	}
+	normalizeReasoningSearchNoResults(&response)
 	reasoningIterations = response.ReasoningIterations
 	if current, err := reasoningStageProviderSessionCurrent(workflowStore, responseSessionID, providerID); err != nil {
 		return err
@@ -2889,7 +2905,12 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if verificationStage.MaxInputTokensForVerification > 0 && response.UsedTokens >= verificationStage.MaxInputTokensForVerification {
+		if response.NoResults {
+			// Verification is result-quality oriented. For an intentional
+			// no-results answer, running it would usually just force needless
+			// reruns of an already completed empty search.
+			log.Infof("Reasoning Search verification skipped: reasoning stage intentionally returned no results")
+		} else if verificationStage.MaxInputTokensForVerification > 0 && response.UsedTokens >= verificationStage.MaxInputTokensForVerification {
 			log.Infof("Reasoning Search verification skipped: total tokens %d reached threshold %d", response.UsedTokens, verificationStage.MaxInputTokensForVerification)
 		} else if verificationService := runtime.Services[verificationStage.Provider]; verificationService == nil {
 			log.Warnf("Reasoning Search verification skipped: service for provider %q is not initialized", verificationStage.Provider)
@@ -2922,8 +2943,11 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 			} else {
 				verificationMessages := []llm.LLMBotMessage{
 					{
-						Role:    "system",
-						Content: fmt.Sprintf(llm.ReasoningSearchVerificationInstructionMask, llm.GeneralReasoningSearchInstruction),
+						Role: "system",
+						Content: fmt.Sprintf(
+							llm.ReasoningSearchVerificationInstructionMask,
+							fmt.Sprintf("%s\n%s", llm.GeneralReasoningSearchBaseInstruction, llm.ReasoningSearchClarificationInstruction),
+						),
 					},
 					{
 						Role:    "user",
@@ -3054,6 +3078,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 								}
 								break
 							}
+							normalizeReasoningSearchNoResults(&rerunResponse)
 							progressStore.SetIterationOffset(responseSessionID, 0)
 							if err != nil {
 								if isReasoningSearchCancellation(err) {
