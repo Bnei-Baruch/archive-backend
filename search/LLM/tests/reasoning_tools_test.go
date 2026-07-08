@@ -203,7 +203,7 @@ func TestGenerateSystemMessageForRapidReasoningSearchUsesRapidInstruction(t *tes
 
 	message := llm.GenerateSystemMessageForRapidReasoningSearch(manager.Tools(), 4, 0)
 	if !strings.Contains(message, "Optimal number of results to return is 6.") {
-		t.Fatalf("expected rapid instruction body in message: %s", message)
+		t.Fatalf("expected optimal result count instruction in rapid message: %s", message)
 	}
 	if strings.Contains(message, "ask one concise clarification question") {
 		t.Fatalf("did not expect regular-search clarification instruction in rapid message: %s", message)
@@ -344,35 +344,46 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 		t.Fatalf("unexpected schema error: %v", err)
 	}
 
-	requiredSnippets := []string{
-		`"query"`,
-		`"summary"`,
-		`"no_results"`,
-		`"reasoning_summary"`,
-		`"results"`,
-		`"mdb_uid"`,
-		`"reason"`,
-		`"is_grouping_result"`,
-	}
-
-	for _, snippet := range requiredSnippets {
-		if !strings.Contains(schema, snippet) {
-			t.Fatalf("expected schema to contain %s", snippet)
-		}
-	}
-
+	// Parse the schema instead of matching raw JSON fragments, so this test
+	// protects the actual structured-output contract exposed to models.
 	var schemaPayload map[string]interface{}
 	if err := json.Unmarshal([]byte(schema), &schemaPayload); err != nil {
 		t.Fatalf("unexpected schema JSON error: %v", err)
 	}
+
+	required := map[string]bool{}
+	for _, value := range schemaPayload["required"].([]interface{}) {
+		required[value.(string)] = true
+	}
+	for _, field := range []string{"query", "summary", "no_results", "reasoning_summary", "results"} {
+		if !required[field] {
+			t.Fatalf("expected top-level field %q to be required: %s", field, schema)
+		}
+	}
+
 	properties := schemaPayload["properties"].(map[string]interface{})
 	summary := properties["summary"].(map[string]interface{})
 	summaryTypes, ok := summary["type"].([]interface{})
 	if !ok || len(summaryTypes) != 2 || summaryTypes[0] != "string" || summaryTypes[1] != "null" {
 		t.Fatalf("expected summary to allow string or null, got %#v", summary["type"])
 	}
+	noResults := properties["no_results"].(map[string]interface{})
+	if noResults["type"] != "boolean" {
+		t.Fatalf("expected no_results to be boolean, got %#v", noResults["type"])
+	}
+
 	results := properties["results"].(map[string]interface{})
 	resultItems := results["items"].(map[string]interface{})
+	resultRequired := map[string]bool{}
+	for _, value := range resultItems["required"].([]interface{}) {
+		resultRequired[value.(string)] = true
+	}
+	for _, field := range []string{"mdb_uid", "reason", "is_grouping_result"} {
+		if !resultRequired[field] {
+			t.Fatalf("expected result field %q to be required: %s", field, schema)
+		}
+	}
+
 	resultProperties := resultItems["properties"].(map[string]interface{})
 	excludedResultFields := []string{
 		"result_type",
@@ -393,14 +404,19 @@ func TestGenerateReasoningSearchResponseJSONSchemaIncludesRequiredFields(t *test
 func TestGenerateReasoningSearchVerificationResponseJSONSchemaIncludesRequiredFields(t *testing.T) {
 	schema := llm.GenerateReasoningSearchVerificationResponseJSONSchema()
 
-	requiredSnippets := []string{
-		`"needs_another_iteration"`,
-		`"recommendation"`,
+	// Required fields are the important contract here; formatting of the JSON
+	// schema is irrelevant.
+	var schemaPayload map[string]interface{}
+	if err := json.Unmarshal([]byte(schema), &schemaPayload); err != nil {
+		t.Fatalf("unexpected schema JSON error: %v", err)
 	}
-
-	for _, snippet := range requiredSnippets {
-		if !strings.Contains(schema, snippet) {
-			t.Fatalf("expected schema to contain %s", snippet)
+	required := map[string]bool{}
+	for _, value := range schemaPayload["required"].([]interface{}) {
+		required[value.(string)] = true
+	}
+	for _, field := range []string{"needs_another_iteration", "recommendation"} {
+		if !required[field] {
+			t.Fatalf("expected verification field %q to be required: %s", field, schema)
 		}
 	}
 }
@@ -486,7 +502,7 @@ func TestPostgreSQLToolDefinitions(t *testing.T) {
 	}
 }
 
-func TestGetAvailableBooksToolReturnsItems(t *testing.T) {
+func TestGetAvailableBooksToolFailsWhenDBIsNil(t *testing.T) {
 	tool := llmtools.NewGetAvailableBooksTool(nil, 0)
 
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{}`))

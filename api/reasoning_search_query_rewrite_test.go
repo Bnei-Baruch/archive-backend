@@ -109,6 +109,8 @@ func TestBuildReasoningSearchHighlightsRanksAIAndRelevantESHighlights(t *testing
 }
 
 func TestBuildReasoningSearchHighlightsPrefersReasonAnchors(t *testing.T) {
+	// The final reason may cite a phrase that was not the strongest ES highlight.
+	// Ranking should still surface snippets that support the selected reason.
 	result := llm.ReasoningSearchResult{
 		Highlights: []llm.ReasoningSearchHighlight{
 			{Field: "content", Text: `נמצא מה שהאדם מתייגע בתורה ומצות, הוא מסיבת שחסר לנו את חשיבותו וגדלותו של הבורא יתברך.`},
@@ -158,6 +160,8 @@ func TestTruncateHighlightForDisplayPreservesEmphasisAroundAnchor(t *testing.T) 
 }
 
 func TestCompactReasoningSearchHighlightsRemovesOverlappingSnippets(t *testing.T) {
+	// A long lookup/source snippet can cover several shorter ES highlights.
+	// The client should get distinct display snippets, not nested duplicates.
 	highlights := []llm.ReasoningSearchHighlight{
 		{Field: "content", Text: "תחילת קטע לכן כשיש איזו אסיפה של חברים, צריכים לזכור להעלות על השולחן את השאלה. דהיינו, שכל אחד ישאל לעצמו, כמה כבר אנו התקדמנו באהבת הזולת."},
 		{Field: "content.language", Text: "לכן כשיש איזו אסיפה של <em>חברים</em>, צריכים לזכור להעלות על השולחן את השאלה."},
@@ -209,7 +213,6 @@ func TestBuildRapidVisibleResultsOmitsNotRelevantAndSortsByRelevance(t *testing.
 	if results[2].MDBUID != "maybe" || results[2].Reason != "maybe reason" || results[2].Relevance != "can_be_relevant" {
 		t.Fatalf("expected possible result third, got %#v", results)
 	}
-
 }
 
 func TestBuildRapidVisibleResultsDropsPossibleResultsWhenEnoughGoodResults(t *testing.T) {
@@ -238,6 +241,8 @@ func TestBuildRapidVisibleResultsDropsPossibleResultsWhenEnoughGoodResults(t *te
 }
 
 func TestSortRapidVisibleResultsCanRunAgainAfterEnrichment(t *testing.T) {
+	// Rapid status can expose results before DB enrichment completes. Sorting must
+	// be safe to run once with sparse metadata and again after content_type exists.
 	classifications := map[string]llm.ReasoningSearchRapidClassification{
 		"source":  {MDBUID: "source", Relevance: "highly_relevant"},
 		"program": {MDBUID: "program", Relevance: "highly_relevant"},
@@ -260,42 +265,36 @@ func TestSortRapidVisibleResultsCanRunAgainAfterEnrichment(t *testing.T) {
 }
 
 func TestSortRapidVisibleResultsUsesSoftBoosts(t *testing.T) {
-	classifications := map[string]llm.ReasoningSearchRapidClassification{
-		"source":  {MDBUID: "source", Relevance: "highly_relevant"},
-		"clip":    {MDBUID: "clip", Relevance: "highly_relevant"},
-		"baal":    {MDBUID: "baal", Relevance: "highly_relevant"},
-		"likutim": {MDBUID: "likutim", Relevance: "highly_relevant"},
-		"connect": {MDBUID: "connect", Relevance: "highly_relevant"},
-		"native":  {MDBUID: "native", Relevance: "highly_relevant"},
-		"world":   {MDBUID: "world", Relevance: "highly_relevant"},
-		"program": {MDBUID: "program", Relevance: "highly_relevant"},
+	// Scores are only tie-breakers inside the same classifier relevance bucket.
+	// Assert the boosts directly so the test documents each backend preference.
+	base := rapidResultSortScore(llm.ReasoningSearchResult{ContentType: consts.CT_SOURCE}, consts.LANG_HEBREW)
+
+	boosted := []llm.ReasoningSearchResult{
+		{ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER},
+		{ContentType: consts.CT_CLIP},
+		{ContentType: consts.CT_LIKUTIM},
+		{ContentType: consts.CT_SOURCE, BaalSulamArticle: true},
+		{ContentType: consts.CT_SOURCE, ConnectingSource: true},
+		{ContentType: consts.CT_SOURCE, OriginalLanguage: consts.LANG_HEBREW},
+		{ContentType: consts.CT_SOURCE, Date: time.Now().Format("2006-01-02")},
+		{ContentType: consts.CT_SOURCE, LookupEvidence: []llm.ReasoningSearchResultEvidence{{Content: "evidence"}}},
 	}
-	results := []llm.ReasoningSearchResult{
-		{MDBUID: "source", ContentType: consts.CT_SOURCE},
-		{MDBUID: "clip", ContentType: consts.CT_CLIP},
-		{MDBUID: "baal", ContentType: consts.CT_SOURCE, BaalSulamArticle: true},
-		{MDBUID: "likutim", ContentType: consts.CT_LIKUTIM},
-		{MDBUID: "connect", ContentType: consts.CT_SOURCE, ConnectingSource: true},
-		{MDBUID: "native", ContentType: consts.CT_SOURCE, OriginalLanguage: consts.LANG_HEBREW},
-		{MDBUID: "world", ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER, CollectionUID: consts.PROGRAM_COLLECTION_EL_MUNDO},
-		{MDBUID: "program", ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER},
+	for _, result := range boosted {
+		if score := rapidResultSortScore(result, consts.LANG_HEBREW); score <= base {
+			t.Fatalf("expected boosted result %#v to score above base source score %d, got %d", result, base, score)
+		}
 	}
 
-	sortRapidVisibleResults(results, classifications, consts.LANG_HEBREW)
-
-	if results[0].MDBUID != "clip" {
-		t.Fatalf("expected clip to keep the top boost and win on stable ordering, got %#v", results)
-	}
-	if results[len(results)-1].MDBUID != "source" {
-		t.Fatalf("expected unboosted source last, got %#v", results)
-	}
 	if rapidResultSortScore(llm.ReasoningSearchResult{ContentType: consts.CT_LIKUTIM}, "") != rapidResultSortScore(llm.ReasoningSearchResult{ConnectingSource: true}, "") {
 		t.Fatalf("expected LIKUTIM and Connecting to Source to get the same boost")
 	}
-	for i, result := range results {
-		if result.MDBUID == "world" && i < 3 {
-			t.Fatalf("expected El Mundo program to be de-prioritized outside Spanish UI, got %#v", results)
-		}
+	program := llm.ReasoningSearchResult{ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER}
+	world := llm.ReasoningSearchResult{ContentType: consts.CT_VIDEO_PROGRAM_CHAPTER, CollectionUID: consts.PROGRAM_COLLECTION_EL_MUNDO}
+	if rapidResultSortScore(world, consts.LANG_HEBREW) >= rapidResultSortScore(program, consts.LANG_HEBREW) {
+		t.Fatalf("expected El Mundo chapters to be de-prioritized outside Spanish UI")
+	}
+	if rapidResultSortScore(world, consts.LANG_SPANISH) != rapidResultSortScore(program, consts.LANG_SPANISH) {
+		t.Fatalf("did not expect El Mundo penalty for Spanish UI")
 	}
 }
 
@@ -344,6 +343,8 @@ func TestOrderRapidFinalizerResultsUsesModelOrderAndKeepsMissingCandidates(t *te
 }
 
 func TestPrepareReasoningSearchSessionAllowsFollowupWhenSnapshotExistsDespiteRunningProgress(t *testing.T) {
+	// A response snapshot means a previous background run already produced a
+	// user-visible result. Stale running progress must not block the follow-up.
 	workflow := llm.NewReasoningWorkflowSessionStore(time.Hour)
 	defer workflow.Close()
 	progress := llm.NewReasoningProgressStore(time.Hour)
@@ -386,6 +387,8 @@ func TestPrepareReasoningSearchSessionAllowsFollowupWhenSnapshotExistsDespiteRun
 }
 
 func TestPrepareReasoningSearchSessionFinalizesReadyDraftForFastFollowup(t *testing.T) {
+	// If the user requested finish-now and immediately sends a follow-up, finalize
+	// the ready draft first so the follow-up has visible prior context.
 	workflow := llm.NewReasoningWorkflowSessionStore(time.Hour)
 	defer workflow.Close()
 	progress := llm.NewReasoningProgressStore(time.Hour)
