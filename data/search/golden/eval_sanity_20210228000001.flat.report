@@ -1,0 +1,17 @@
+Language,Query,Weight,Bucket,Comment,Expectation,Parsed,SearchQuality,Rank
+he,542,1.00,מספר תכנית (חיים חדשים),,https://kabbalahmedia.info/he/programs/cu/AsNLozeK,et_content_units|AsNLozeK|,Good,3
+he,חיים חדשים 820,1.00,חיים חדשים + פרק,,https://kabbalahmedia.info/he/programs/cu/S5cSiwqb,et_content_units|S5cSiwqb|,Good,1
+he,ובכל זאת אנחנו רוצים לשייך לה איזו עצמאות,1.00,תמליל,,https://kabbalahmedia.info/he/lessons/cu/2MgmeVgY,et_content_units|2MgmeVgY|,Good,1
+he,מאור ושמש,1.00,ספר קבלה,,https://kabbalahmedia.info/he/sources/VQgwvH3M,et_sources|VQgwvH3M|,Good,1
+he,מקובלים כותבים,1.00,תכנית טלוויזיה,,https://kabbalahmedia.info/he/programs/c/fLWpcUjQ,et_collections|fLWpcUjQ|,Good,1
+he,חיים חדשים,1.00,חיים חדשים,,https://kabbalahmedia.info/he/programs/c/zf4lLwyI,et_collections|zf4lLwyI|,Good,1
+he,זוגיות,1.00,נושא חינוך אינטגראלי,,https://kabbalahmedia.info/he/programs?topic=VUpFlBnu_pXpozaXB_BdfLfqsa,et_programs||topic - VUpFlBnu_pXpozaXB_BdfLfqsa,Good,1
+he,חיים חדשים קטעים נבחרים,1.00,חיים חדשים + נושא,,https://kabbalahmedia.info/he/programs/c/G30TMsPn,et_collections|G30TMsPn|,Good,1
+he,מאמר החירות,1.00,ספר קבלה,,https://kabbalahmedia.info/he/sources/4AtF9tGS,et_sources|4AtF9tGS|,Good,1
+ru,новая жизнь 820,1.00,,,https://kabbalahmedia.info/he/programs/cu/S5cSiwqb,et_content_units|S5cSiwqb|,Good,1
+ru,шамати,1.00,,,https://kabbalahmedia.info/he/sources/qMUUn22b,et_sources|qMUUn22b|,Good,1
+ru,Последнее поколение,1.00,TV Program,,https://kabbalahmedia.info/ru/programs/c/DE7rP7vf,et_collections|DE7rP7vf|,Good,3
+ru,письмо 62,1.00,source,,https://kabbalahmedia.info/he/sources/YkCg0RF5,et_sources|YkCg0RF5|,Good,1
+en,webinar,1.00,שיעור קבלה כללי,,https://kabbalahmedia.info/lessons/virtual/c/VwCQ0OBq,et_collections|VwCQ0OBq|,Good,2
+en,new life,1.00,חיים חדשים,,https://kabbalahmedia.info/programs/c/zf4lLwyI,et_collections|zf4lLwyI|,Good,1
+en,new life 820,1.00,חיים חדשים + פרק,,https://kabbalahmedia.info/he/programs/cu/S5cSiwqb,et_content_units|S5cSiwqb|,Good,2
