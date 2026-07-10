@@ -56,6 +56,10 @@
                 }, 
                 "content": {
                     "fields": {
+                        "typo_suggest": {
+                            "type": "text", 
+                            "analyzer": "typo_suggest"
+                        }, 
                         "language": {
                             "type": "text", 
                             "analyzer": "spanish_synonym"
@@ -95,13 +99,18 @@
             "number_of_replicas": 0, 
             "analysis": {
                 "filter": {
-                    "spanish_stemmer": {
-                        "type": "stemmer", 
-                        "language": "light_spanish"
+                    "shingle": {
+                        "min_shingle_size": 2, 
+                        "type": "shingle", 
+                        "max_shingle_size": 3
                     }, 
                     "spanish_stop": {
                         "stopwords": "_spanish_", 
                         "type": "stop"
+                    }, 
+                    "spanish_stemmer": {
+                        "type": "stemmer", 
+                        "language": "light_spanish"
                     }, 
                     "synonym_graph": {
                         "synonyms": [], 
@@ -146,6 +155,13 @@
                     }
                 }, 
                 "analyzer": {
+                    "typo_suggest": {
+                        "filter": [
+                            "lowercase", 
+                            "shingle"
+                        ], 
+                        "tokenizer": "standard"
+                    }, 
                     "spanish_synonym": {
                         "filter": [
                             "lowercase", 

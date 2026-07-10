@@ -335,12 +335,28 @@ def get_filters_imp(lang):
         return None
 
 
+def merge(lang, a, b):
+    b = b(lang)
+    if b:
+        a.update(b)
+
+    return a
+
+
 SETTINGS = {
     "index": {
         "number_of_shards": 1,
         "number_of_replicas": 0,
         "analysis": {
-            "analyzer": get_analyzer_imp,
+            "analyzer": lambda x: merge(x, {
+                "typo_suggest": {
+                    "tokenizer": "standard",
+                    "filter": [
+                        "lowercase",
+                        "shingle",
+                    ]
+                }
+            }, get_analyzer_imp),
             # "analyzer": {
             #      Tested, but didnt bring quality enough results:
             #     "phonetic_analyzer": {
@@ -382,7 +398,13 @@ SETTINGS = {
                     ],
                 },
             },
-            "filter": get_filters_imp,
+            "filter": lambda x: merge(x, {
+                "shingle": {
+                    "type": "shingle",
+                    "min_shingle_size": 2,
+                    "max_shingle_size": 3
+                },
+            }, get_filters_imp),
             # "filter": {
             #     "icu_transliterate": lambda lang: is_cyrillic(lang, {
             #       "type": "icu_transform",
@@ -485,6 +507,10 @@ RESULTS_TEMPLATE = {
                         "language": {
                             "type": "text",
                             "analyzer": lambda x: LANGUAGE_ANALYZER[x],
+                        },
+                        "typo_suggest": {
+                            "type": "text",
+                            "analyzer": "typo_suggest",
                         },
                     },
                 },
