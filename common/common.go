@@ -29,10 +29,15 @@ var (
 )
 
 func Init() time.Time {
-	return InitWithDefault(nil, nil)
+	return InitWithOptions(nil, nil, true)
 }
 
 func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.Time {
+	return InitWithOptions(defaultDb, defaultCache, true)
+}
+
+// InitWithOptions initializes common resources with optional ES6 connection
+func InitWithOptions(defaultDb *sql.DB, defaultCache *cache.CacheManager, initES6 bool) time.Time {
 	var err error
 	clock := time.Now()
 
@@ -70,23 +75,26 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	log.Info("Initializing type registries")
 	utils.Must(mdb.InitTypeRegistries(DB))
 
-	log.Info("Setting up connection to ElasticSearch")
-	url := viper.GetString("elasticsearch.url")
-	ESC = search.MakeESManager(url)
+	// Initialize ES6 only if requested (not needed for ES9 indexing)
+	if initES6 {
+		log.Info("Setting up connection to ElasticSearch")
+		url := viper.GetString("elasticsearch.url")
+		ESC = search.MakeESManager(url)
 
-	esc, err := ESC.GetClient()
-	if esc != nil && err == nil {
-		esversion, err := esc.ElasticsearchVersion(url)
-		utils.Must(err)
-		log.Infof("Elasticsearch version %s", esversion)
+		esc, err := ESC.GetClient()
+		if esc != nil && err == nil {
+			esversion, err := esc.ElasticsearchVersion(url)
+			utils.Must(err)
+			log.Infof("Elasticsearch version %s", esversion)
+		}
+
+		es.InitEnv()
+
+		TOKENS_CACHE = search.MakeTokensCache(consts.TOKEN_CACHE_SIZE)
+
+		// Moving to Grammars V2 that are indexed and searched.
+		VARIABLES, err = search.MakeVariablesV2(es.DataFolder("search", "variables"))
 	}
-
-	es.InitEnv()
-
-	TOKENS_CACHE = search.MakeTokensCache(consts.TOKEN_CACHE_SIZE)
-
-	// Moving to Grammars V2 that are indexed and searched.
-	VARIABLES, err = search.MakeVariablesV2(es.DataFolder("search", "variables"))
 	//utils.Must(err)
 	//GRAMMARS, err = search.MakeGrammars(viper.GetString("elasticsearch.grammars"), esc, TOKENS_CACHE, VARIABLES)
 	//utils.Must(err)
@@ -105,6 +113,8 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 
 func Shutdown() {
 	utils.Must(DB.Close())
-	ESC.Stop()
+	if ESC != nil {
+		ESC.Stop()
+	}
 	CACHE.Close()
 }

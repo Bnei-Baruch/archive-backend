@@ -32,6 +32,7 @@ type Result struct {
 	FullTitle   string `json:"full_title"`
 	Description string `json:"description,omitempty"`
 	Content     string `json:"content,omitempty"`
+	FullContent string `json:"full_content,omitempty"` // Combined content for LLM/vector search
 
 	EffectiveDate *utils.Date `json:"effective_date,omitempty"`
 

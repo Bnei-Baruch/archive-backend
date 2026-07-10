@@ -1,0 +1,229 @@
+{
+  "mappings": {
+    "properties": {
+      "content": {
+        "analyzer": "standard",
+        "fields": {
+          "icu": {
+            "analyzer": "he_icu",
+            "type": "text"
+          },
+          "icu_hunspell": {
+            "analyzer": "he_icu_hunspell",
+            "type": "text"
+          },
+          "language": {
+            "analyzer": "he_hunspell",
+            "type": "text"
+          }
+        },
+        "type": "text"
+      },
+      "description": {
+        "analyzer": "standard",
+        "fields": {
+          "icu": {
+            "analyzer": "he_icu",
+            "type": "text"
+          },
+          "icu_hunspell": {
+            "analyzer": "he_icu_hunspell",
+            "type": "text"
+          },
+          "language": {
+            "analyzer": "he_hunspell",
+            "type": "text"
+          }
+        },
+        "type": "text"
+      },
+      "effective_date": {
+        "format": "strict_date",
+        "type": "date"
+      },
+      "filter_values": {
+        "type": "keyword"
+      },
+      "full_content": {
+        "analyzer": "standard",
+        "fields": {
+          "icu": {
+            "analyzer": "he_icu",
+            "type": "text"
+          },
+          "icu_hunspell": {
+            "analyzer": "he_icu_hunspell",
+            "type": "text"
+          },
+          "language": {
+            "analyzer": "he_hunspell",
+            "type": "text"
+          }
+        },
+        "type": "text"
+      },
+      "full_title": {
+        "analyzer": "standard",
+        "fields": {
+          "icu": {
+            "analyzer": "he_icu",
+            "type": "text"
+          },
+          "icu_hunspell": {
+            "analyzer": "he_icu_hunspell",
+            "type": "text"
+          },
+          "language": {
+            "analyzer": "he_hunspell",
+            "type": "text"
+          }
+        },
+        "type": "text"
+      },
+      "index_date": {
+        "format": "strict_date",
+        "type": "date"
+      },
+      "mdb_uid": {
+        "type": "keyword"
+      },
+      "result_type": {
+        "type": "keyword"
+      },
+      "title": {
+        "analyzer": "standard",
+        "fields": {
+          "icu": {
+            "analyzer": "he_icu",
+            "type": "text"
+          },
+          "icu_hunspell": {
+            "analyzer": "he_icu_hunspell",
+            "type": "text"
+          },
+          "language": {
+            "analyzer": "he_hunspell",
+            "type": "text"
+          }
+        },
+        "type": "text"
+      },
+      "title_suggest": {
+        "analyzer": "standard",
+        "contexts": [
+          {
+            "name": "result_type",
+            "path": "result_type",
+            "type": "category"
+          }
+        ],
+        "fields": {
+          "language": {
+            "analyzer": "he_hunspell",
+            "contexts": [
+              {
+                "name": "result_type",
+                "path": "result_type",
+                "type": "category"
+              }
+            ],
+            "type": "completion"
+          }
+        },
+        "type": "completion"
+      },
+      "typed_uids": {
+        "type": "keyword"
+      }
+    }
+  },
+  "settings": {
+    "index": {
+      "analysis": {
+        "analyzer": {
+          "he_hunspell": {
+            "char_filter": [
+              "quotes"
+            ],
+            "filter": [
+              "synonym_graph",
+              "he_IL"
+            ],
+            "tokenizer": "standard"
+          },
+          "he_icu": {
+            "char_filter": [
+              "quotes"
+            ],
+            "filter": [
+              "icu_normalizer",
+              "icu_folding",
+              "synonym_graph"
+            ],
+            "tokenizer": "icu_tokenizer"
+          },
+          "he_icu_hunspell": {
+            "char_filter": [
+              "quotes"
+            ],
+            "filter": [
+              "icu_normalizer",
+              "synonym_graph",
+              "he_IL"
+            ],
+            "tokenizer": "icu_tokenizer"
+          }
+        },
+        "char_filter": {
+          "quotes": {
+            "mappings": [
+              "\\u05F3\\u05F3=\u003e\\u0029",
+              "\\u059C\\u059C=\u003e\\u0029",
+              "\\u059D\\u059D=\u003e\\u0029",
+              "\\u05F3=\u003e\\u0027",
+              "\\u059C=\u003e\\u0027",
+              "\\u059D=\u003e\\u0027",
+              "\\u05F4=\u003e",
+              "\\u0027\\u0027=\u003e\\u0029",
+              "\\u0091\\u0091=\u003e\\u0029",
+              "\\u0092\\u0092=\u003e\\u0029",
+              "\\u2018\\u2018=\u003e\\u0029",
+              "\\u2019\\u2019=\u003e\\u0029",
+              "\\u201B\\u201B=\u003e\\u0029",
+              "\\u0091=\u003e\\u0027",
+              "\\u0092=\u003e\\u0027",
+              "\\u2018=\u003e\\u0027",
+              "\\u2019=\u003e\\u0027",
+              "\\u201B=\u003e\\u0027",
+              "\\u0022=\u003e",
+              "\\u201C=\u003e",
+              "\\u201D=\u003e"
+            ],
+            "type": "mapping"
+          }
+        },
+        "filter": {
+          "he_IL": {
+            "dedup": true,
+            "locale": "he_IL",
+            "type": "hunspell"
+          },
+          "icu_folding": {
+            "type": "icu_folding"
+          },
+          "icu_normalizer": {
+            "name": "nfkc_cf",
+            "type": "icu_normalizer"
+          },
+          "synonym_graph": {
+            "synonyms": [],
+            "tokenizer": "keyword",
+            "type": "synonym_graph"
+          }
+        }
+      },
+      "number_of_replicas": 0,
+      "number_of_shards": 1
+    }
+  }
+}
