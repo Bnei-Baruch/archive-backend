@@ -46,7 +46,7 @@ The main Kabbalist authors whose writings are studied in Bnei Baruch are:
 
 const ReasoningSearchClarificationInstruction = `If the user query is ambiguous or lacks a key detail needed for a good search, ask one concise clarification question. This can be in addition to some results that you can find without the clarification, but the question should be asked to improve the search results.`
 
-const ReasoningSearchRapidClassificationInstruction = `Classify archive search candidates for relevance to the user query.
+const ReasoningSearchRapidClassificationInstruction = `Classify archive search candidates for relevance to the user query. Also look at the previous_response queries to understand the context of the current query.
 Use these relevance values:
 - highly_relevant: direct strong match to the user's request, compatible with both the desired type of content and the content itself. Set this value only on a high confidence that the candidate matches the user intention, otherwise set other value.
 - relevant: useful match, but not the strongest. If the user query looks like a citation from a source but the matching result is not source but program, lesson or blog post then set as relevant but not highly_relevant.
