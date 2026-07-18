@@ -755,7 +755,90 @@ func (s *ReasoningWorkflowSessionStore) StartDraftFollowup(sessionID string, que
 	return nil
 }
 
-func (s *ReasoningWorkflowSessionStore) StartRapidFollowup(sessionID string, query string, uiLanguage string, followupCount int, gatherStage ReasoningWorkflowStageSession) error {
+func (s *ReasoningWorkflowSessionStore) StartNonRapidFollowupFromSnapshot(sessionID string, query string, uiLanguage string, followupCount int, reasoningStage ReasoningWorkflowStageSession) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if !session.Rapid || len(session.ResponseSnapshotJSON) == 0 {
+		return ErrReasoningDraftNotReady
+	}
+
+	seed := ReasoningSearchResponse{}
+	if err := json.Unmarshal(session.ResponseSnapshotJSON, &seed); err != nil {
+		return err
+	}
+
+	if session.Stages == nil {
+		session.Stages = map[string]ReasoningWorkflowStageSession{}
+	}
+	session.Stages[ReasoningWorkflowStageReasoning] = reasoningStage
+	delete(session.Stages, ReasoningWorkflowStagePlanning)
+	delete(session.Stages, ReasoningWorkflowStageVerification)
+	delete(session.Stages, ReasoningWorkflowStageRapidClassifier)
+	delete(session.Stages, ReasoningWorkflowStageRapidFinalizer)
+	session.Query = query
+	session.UILanguage = strings.TrimSpace(uiLanguage)
+	session.Rapid = false
+	session.InitialRequestCompleted = true
+	session.FollowupCount = followupCount
+	session.CachedInitialResponse = nil
+	session.ResponseSnapshotJSON = nil
+	// Non-rapid reasoning search already reads DraftFollowupSeed as visible
+	// prior assistant context. Reuse that path for mode switches so no hidden
+	// provider context is required when moving from rapid to non-rapid search.
+	session.DraftFollowupSeed = &seed
+	session.RapidFollowupSeed = nil
+	clearReasoningWorkflowRunState(session)
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func (s *ReasoningWorkflowSessionStore) StartNonRapidFollowup(sessionID string, query string, uiLanguage string, followupCount int) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if now.After(session.ExpiresAt) {
+		delete(s.sessions, sessionID)
+		return ErrReasoningSessionNotFoundOrExpired
+	}
+	// Consuming the snapshot under the session lock prevents two concurrent
+	// follow-ups from both replacing the active mode and run state.
+	if session.Rapid || len(session.ResponseSnapshotJSON) == 0 {
+		return ErrReasoningDraftNotReady
+	}
+
+	session.Query = query
+	session.UILanguage = strings.TrimSpace(uiLanguage)
+	session.InitialRequestCompleted = true
+	session.FollowupCount = followupCount
+	session.CachedInitialResponse = nil
+	session.ResponseSnapshotJSON = nil
+	session.DraftFollowupSeed = nil
+	session.RapidFollowupSeed = nil
+	clearReasoningWorkflowRunState(session)
+	session.UpdatedAt = now
+	session.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func (s *ReasoningWorkflowSessionStore) StartRapidFollowupFromSnapshot(sessionID string, query string, uiLanguage string, followupCount int, gatherStage ReasoningWorkflowStageSession) error {
 	now := time.Now()
 
 	s.mu.Lock()
@@ -782,6 +865,8 @@ func (s *ReasoningWorkflowSessionStore) StartRapidFollowup(sessionID string, que
 		session.Stages = map[string]ReasoningWorkflowStageSession{}
 	}
 	session.Stages[ReasoningWorkflowStageReasoning] = gatherStage
+	delete(session.Stages, ReasoningWorkflowStagePlanning)
+	delete(session.Stages, ReasoningWorkflowStageVerification)
 	session.Query = query
 	session.UILanguage = strings.TrimSpace(uiLanguage)
 	session.Rapid = true

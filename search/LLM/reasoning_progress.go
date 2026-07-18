@@ -46,6 +46,8 @@ type ReasoningProgressStatus struct {
 	Seq                       int64     `json:"seq"`
 	ExpiresAt                 time.Time `json:"-"`
 	IterationOffset           int       `json:"-"`
+	// Follow-ups reuse SessionID, so this identifies the current run within it.
+	RunRevision int64 `json:"-"`
 }
 
 type ReasoningProgressStore struct {
@@ -75,6 +77,8 @@ func NewReasoningProgressStore(ttl time.Duration) *ReasoningProgressStore {
 
 func (s *ReasoningProgressStore) Reserve(sessionID string) {
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		// Invalidate completion attempts from the previous run of this session.
+		status.RunRevision++
 		status.State = ReasoningProgressStatePending
 		status.Phase = ReasoningProgressPhasePending
 		status.Iteration = 0
@@ -88,6 +92,37 @@ func (s *ReasoningProgressStore) Reserve(sessionID string) {
 		status.NearFinish = false
 		status.Done = false
 	})
+}
+
+// CompleteRun ignores completion from an older background run after a
+// follow-up has reserved the same workflow session.
+func (s *ReasoningProgressStore) CompleteRun(sessionID string, runRevision int64, iteration int) bool {
+	if s == nil || sessionID == "" {
+		return false
+	}
+
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	status, ok := s.statuses[sessionID]
+	if !ok || status.RunRevision != runRevision {
+		return false
+	}
+	status.State = ReasoningProgressStateCompleted
+	status.Phase = ReasoningProgressPhaseDone
+	if iteration < status.Iteration {
+		iteration = status.Iteration
+	}
+	status.Iteration = iteration
+	status.ToolName = ""
+	status.Message = "Done."
+	status.Done = true
+	s.nextSeq++
+	status.Seq = s.nextSeq
+	status.UpdatedAt = now
+	status.ExpiresAt = now.Add(s.ttl)
+	return true
 }
 
 func (s *ReasoningProgressStore) Thinking(sessionID string, iteration int, nearFinish bool) {

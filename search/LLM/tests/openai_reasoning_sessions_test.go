@@ -149,6 +149,32 @@ func TestReasoningProgressStoreLifecycle(t *testing.T) {
 	}
 }
 
+func TestReasoningProgressStoreIgnoresCompletionFromPreviousRun(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	firstRun, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected first run status error: %v", err)
+	}
+	store.Reserve("session-1")
+
+	if store.CompleteRun("session-1", firstRun.RunRevision, 3) {
+		t.Fatalf("expected completion from previous run to be ignored")
+	}
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected current run status error: %v", err)
+	}
+	if status.Done || status.State != llm.ReasoningProgressStatePending {
+		t.Fatalf("expected current run to remain pending, got state=%q done=%t", status.State, status.Done)
+	}
+	if !store.CompleteRun("session-1", status.RunRevision, 4) {
+		t.Fatalf("expected current run completion to succeed")
+	}
+}
+
 func TestReasoningProgressStoreFinalizingPhase(t *testing.T) {
 	store := llm.NewReasoningProgressStore(5 * time.Minute)
 	defer store.Close()
@@ -830,7 +856,7 @@ func TestReasoningWorkflowDraftFollowupKeepsPreviousDraftContext(t *testing.T) {
 	}
 }
 
-func TestReasoningWorkflowStartRapidFollowupUsesPreviousSnapshotAsSeed(t *testing.T) {
+func TestReasoningWorkflowStartRapidFollowupFromSnapshotUsesPreviousSnapshotAsSeed(t *testing.T) {
 	store := llm.NewReasoningWorkflowSessionStore(5 * time.Minute)
 	defer store.Close()
 
@@ -866,7 +892,7 @@ func TestReasoningWorkflowStartRapidFollowupUsesPreviousSnapshotAsSeed(t *testin
 		t.Fatalf("unexpected follow-up state error: %v", err)
 	}
 
-	if err := store.StartRapidFollowup(sessionID, "follow-up", "he", 1, llm.ReasoningWorkflowStageSession{
+	if err := store.StartRapidFollowupFromSnapshot(sessionID, "follow-up", "he", 1, llm.ReasoningWorkflowStageSession{
 		Provider:          "openai",
 		Model:             "gpt-5.4-nano",
 		ReasoningEffort:   "low",
@@ -892,6 +918,44 @@ func TestReasoningWorkflowStartRapidFollowupUsesPreviousSnapshotAsSeed(t *testin
 	stage := session.Stages[llm.ReasoningWorkflowStageReasoning]
 	if stage.ProviderSessionID != "provider-session-2" {
 		t.Fatalf("expected fresh provider session, got %q", stage.ProviderSessionID)
+	}
+}
+
+func TestReasoningWorkflowSnapshotCanStartOnlyOneFollowup(t *testing.T) {
+	store := llm.NewReasoningWorkflowSessionStore(5 * time.Minute)
+	defer store.Close()
+
+	sessionID, err := store.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:          "openai",
+		Model:             "gpt-5.4",
+		MaxFollowups:      2,
+		ProviderSessionID: "non-rapid-provider-session",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if err := store.SetResponseSnapshot(sessionID, &llm.ReasoningSearchResponse{Query: "initial"}); err != nil {
+		t.Fatalf("unexpected snapshot error: %v", err)
+	}
+
+	if err := store.StartRapidFollowupFromSnapshot(sessionID, "rapid follow-up", "he", 1, llm.ReasoningWorkflowStageSession{
+		Provider:          "openai",
+		Model:             "gpt-5.4-nano",
+		MaxFollowups:      2,
+		ProviderSessionID: "rapid-provider-session",
+	}); err != nil {
+		t.Fatalf("unexpected rapid follow-up error: %v", err)
+	}
+	if err := store.StartNonRapidFollowup(sessionID, "competing follow-up", "he", 1); !errors.Is(err, llm.ErrReasoningDraftNotReady) {
+		t.Fatalf("expected competing follow-up to be rejected, got %v", err)
+	}
+
+	session, err := store.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected session error: %v", err)
+	}
+	if !session.Rapid || session.Query != "rapid follow-up" || session.RapidFollowupSeed == nil {
+		t.Fatalf("expected accepted rapid follow-up state to remain intact")
 	}
 }
 

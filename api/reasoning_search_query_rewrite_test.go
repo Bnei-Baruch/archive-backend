@@ -12,6 +12,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
+	"github.com/spf13/viper"
 )
 
 func TestRewriteReasoningSearchQueryAddsApostropheToStandaloneHebrewLetters(t *testing.T) {
@@ -561,5 +562,269 @@ func TestPrepareReasoningSearchSessionBlocksFollowupAfterFailedFinishNowAttempt(
 	})
 	if !errors.Is(err, errReasoningSearchAlreadyRunning) {
 		t.Fatalf("expected running error after failed finish-now attempt, got %v", err)
+	}
+}
+
+func TestPrepareReasoningSearchSessionSwitchesNonRapidFollowupToRapid(t *testing.T) {
+	workflow := llm.NewReasoningWorkflowSessionStore(time.Hour)
+	defer workflow.Close()
+	progress := llm.NewReasoningProgressStore(time.Hour)
+	defer progress.Close()
+	service := llm.NewStubLLMService(nil)
+
+	sessionID, err := workflow.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:          "stub",
+		Model:             "non-rapid-model",
+		ReasoningEffort:   "low",
+		MaxFollowups:      2,
+		ProviderSessionID: "non-rapid-provider-session",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if err := workflow.SetQuery(sessionID, "initial query", "he"); err != nil {
+		t.Fatalf("unexpected set query error: %v", err)
+	}
+	if err := workflow.SetFollowupState(sessionID, true, 0); err != nil {
+		t.Fatalf("unexpected follow-up state error: %v", err)
+	}
+	summary := "non-rapid result"
+	if err := workflow.SetResponseSnapshot(sessionID, &llm.ReasoningSearchResponse{
+		Query:   "initial query",
+		Summary: &summary,
+		Results: []llm.ReasoningSearchResult{
+			{MDBUID: "non-rapid-uid", Title: "non-rapid result"},
+		},
+	}); err != nil {
+		t.Fatalf("unexpected snapshot error: %v", err)
+	}
+
+	requestSessionID := sessionID
+	gotSessionID, err := prepareReasoningSearchSession(nil, &llm.Runtime{
+		Workflow: workflow,
+		Progress: progress,
+		Services: map[string]llm.Service{"stub": service},
+		RapidConfig: &llm.ReasoningSearchRapidConfig{
+			Gather: llm.ReasoningSearchRapidStageConfig{
+				Provider:      "stub",
+				Model:         "rapid-gather-model",
+				Effort:        "low",
+				MaxTokens:     1000,
+				MaxIterations: 3,
+			},
+			Classifier: llm.ReasoningSearchRapidStageConfig{
+				Provider:  "stub",
+				Model:     "rapid-classifier-model",
+				MaxTokens: 1000,
+			},
+		},
+	}, &ReasoningSearchRequest{
+		Query:      "rapid follow-up",
+		SessionID:  &requestSessionID,
+		UILanguage: "he",
+		IsRapid:    true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected mode switch error: %v", err)
+	}
+	if gotSessionID != sessionID {
+		t.Fatalf("unexpected session id: %q", gotSessionID)
+	}
+
+	session, err := workflow.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected workflow get error: %v", err)
+	}
+	if !session.Rapid {
+		t.Fatalf("expected session to switch to rapid mode")
+	}
+	if session.FollowupCount != 1 {
+		t.Fatalf("unexpected follow-up count: %d", session.FollowupCount)
+	}
+	if len(session.ResponseSnapshotJSON) != 0 {
+		t.Fatalf("expected previous snapshot to be cleared")
+	}
+	if session.RapidFollowupSeed == nil || session.RapidFollowupSeed.Summary == nil || *session.RapidFollowupSeed.Summary != "non-rapid result" {
+		t.Fatalf("expected previous response as rapid seed, got %#v", session.RapidFollowupSeed)
+	}
+	reasoningStage := session.Stages[llm.ReasoningWorkflowStageReasoning]
+	if reasoningStage.ProviderSessionID == "" || reasoningStage.ProviderSessionID == "non-rapid-provider-session" {
+		t.Fatalf("expected fresh rapid provider session, got %q", reasoningStage.ProviderSessionID)
+	}
+	if reasoningStage.Model != "rapid-gather-model" {
+		t.Fatalf("unexpected rapid gather model: %q", reasoningStage.Model)
+	}
+}
+
+func TestPrepareReasoningSearchSessionSwitchesRapidFollowupToNonRapid(t *testing.T) {
+	oldProvider := viper.Get("llm.provider")
+	oldModel := viper.Get("stub.reasoning-search-model")
+	oldEffort := viper.Get("stub.reasoning-search-effort")
+	oldPlanningEnabled := viper.Get("llm.reasoning-search-planning-enabled")
+	oldVerificationEnabled := viper.Get("llm.reasoning-search-verification-enabled")
+	t.Cleanup(func() {
+		viper.Set("llm.provider", oldProvider)
+		viper.Set("stub.reasoning-search-model", oldModel)
+		viper.Set("stub.reasoning-search-effort", oldEffort)
+		viper.Set("llm.reasoning-search-planning-enabled", oldPlanningEnabled)
+		viper.Set("llm.reasoning-search-verification-enabled", oldVerificationEnabled)
+	})
+	viper.Set("llm.provider", "stub")
+	viper.Set("stub.reasoning-search-model", "non-rapid-model")
+	viper.Set("stub.reasoning-search-effort", "low")
+	viper.Set("llm.reasoning-search-planning-enabled", false)
+	viper.Set("llm.reasoning-search-verification-enabled", false)
+
+	workflow := llm.NewReasoningWorkflowSessionStore(time.Hour)
+	defer workflow.Close()
+	progress := llm.NewReasoningProgressStore(time.Hour)
+	defer progress.Close()
+	service := llm.NewStubLLMService(nil)
+
+	sessionID, err := workflow.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:          "stub",
+		Model:             "rapid-gather-model",
+		ReasoningEffort:   "low",
+		MaxFollowups:      2,
+		ProviderSessionID: "rapid-provider-session",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if err := workflow.SetRapid(sessionID, true); err != nil {
+		t.Fatalf("unexpected set rapid error: %v", err)
+	}
+	if err := workflow.SetStage(sessionID, llm.ReasoningWorkflowStageRapidClassifier, llm.ReasoningWorkflowStageSession{
+		Provider: "stub",
+		Model:    "rapid-classifier-model",
+	}); err != nil {
+		t.Fatalf("unexpected classifier stage error: %v", err)
+	}
+	if err := workflow.SetQuery(sessionID, "initial query", "he"); err != nil {
+		t.Fatalf("unexpected set query error: %v", err)
+	}
+	if err := workflow.SetFollowupState(sessionID, true, 0); err != nil {
+		t.Fatalf("unexpected follow-up state error: %v", err)
+	}
+	summary := "rapid result"
+	if err := workflow.SetResponseSnapshot(sessionID, &llm.ReasoningSearchResponse{
+		Query:   "initial query",
+		Summary: &summary,
+		Results: []llm.ReasoningSearchResult{
+			{MDBUID: "rapid-uid", Title: "rapid result"},
+		},
+	}); err != nil {
+		t.Fatalf("unexpected snapshot error: %v", err)
+	}
+
+	requestSessionID := sessionID
+	gotSessionID, err := prepareReasoningSearchSession(nil, &llm.Runtime{
+		Workflow: workflow,
+		Progress: progress,
+		Services: map[string]llm.Service{"stub": service},
+	}, &ReasoningSearchRequest{
+		Query:      "non-rapid follow-up",
+		SessionID:  &requestSessionID,
+		UILanguage: "he",
+		IsRapid:    false,
+	})
+	if err != nil {
+		t.Fatalf("unexpected mode switch error: %v", err)
+	}
+	if gotSessionID != sessionID {
+		t.Fatalf("unexpected session id: %q", gotSessionID)
+	}
+
+	session, err := workflow.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected workflow get error: %v", err)
+	}
+	if session.Rapid {
+		t.Fatalf("expected session to switch to non-rapid reasoning search mode")
+	}
+	if session.FollowupCount != 1 {
+		t.Fatalf("unexpected follow-up count: %d", session.FollowupCount)
+	}
+	if len(session.ResponseSnapshotJSON) != 0 {
+		t.Fatalf("expected previous snapshot to be cleared")
+	}
+	if session.DraftFollowupSeed == nil || session.DraftFollowupSeed.Summary == nil || *session.DraftFollowupSeed.Summary != "rapid result" {
+		t.Fatalf("expected previous response as regular seed, got %#v", session.DraftFollowupSeed)
+	}
+	if _, ok := session.Stages[llm.ReasoningWorkflowStageRapidClassifier]; ok {
+		t.Fatalf("expected stale rapid classifier stage to be removed")
+	}
+	reasoningStage := session.Stages[llm.ReasoningWorkflowStageReasoning]
+	if reasoningStage.ProviderSessionID == "" || reasoningStage.ProviderSessionID == "rapid-provider-session" {
+		t.Fatalf("expected fresh non-rapid provider session, got %q", reasoningStage.ProviderSessionID)
+	}
+	if reasoningStage.Model != "non-rapid-model" {
+		t.Fatalf("unexpected non-rapid reasoning search model: %q", reasoningStage.Model)
+	}
+}
+
+func TestPrepareReasoningSearchSessionKeepsProviderSessionForNonRapidFollowup(t *testing.T) {
+	workflow := llm.NewReasoningWorkflowSessionStore(time.Hour)
+	defer workflow.Close()
+	progress := llm.NewReasoningProgressStore(time.Hour)
+	defer progress.Close()
+
+	sessionID, err := workflow.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{
+		Provider:          "stub",
+		Model:             "non-rapid-model",
+		ReasoningEffort:   "low",
+		MaxFollowups:      2,
+		ProviderSessionID: "existing-provider-session",
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+	if err := workflow.SetQuery(sessionID, "initial query", "he"); err != nil {
+		t.Fatalf("unexpected set query error: %v", err)
+	}
+	if err := workflow.SetFollowupState(sessionID, true, 0); err != nil {
+		t.Fatalf("unexpected follow-up state error: %v", err)
+	}
+	summary := "previous result"
+	if err := workflow.SetResponseSnapshot(sessionID, &llm.ReasoningSearchResponse{
+		Query:   "initial query",
+		Summary: &summary,
+	}); err != nil {
+		t.Fatalf("unexpected snapshot error: %v", err)
+	}
+
+	requestSessionID := sessionID
+	gotSessionID, err := prepareReasoningSearchSession(nil, &llm.Runtime{
+		Workflow: workflow,
+		Progress: progress,
+	}, &ReasoningSearchRequest{
+		Query:      "non-rapid follow-up",
+		SessionID:  &requestSessionID,
+		UILanguage: "he",
+		IsRapid:    false,
+	})
+	if err != nil {
+		t.Fatalf("unexpected follow-up error: %v", err)
+	}
+	if gotSessionID != sessionID {
+		t.Fatalf("unexpected session id: %q", gotSessionID)
+	}
+
+	session, err := workflow.Get(sessionID)
+	if err != nil {
+		t.Fatalf("unexpected workflow get error: %v", err)
+	}
+	if session.Rapid {
+		t.Fatalf("expected session to stay in non-rapid reasoning search mode")
+	}
+	if session.FollowupCount != 1 {
+		t.Fatalf("unexpected follow-up count: %d", session.FollowupCount)
+	}
+	if session.DraftFollowupSeed != nil || session.RapidFollowupSeed != nil {
+		t.Fatalf("expected same-mode non-rapid follow-up not to seed from snapshot")
+	}
+	reasoningStage := session.Stages[llm.ReasoningWorkflowStageReasoning]
+	if reasoningStage.ProviderSessionID != "existing-provider-session" {
+		t.Fatalf("expected existing provider session to continue, got %q", reasoningStage.ProviderSessionID)
 	}
 }

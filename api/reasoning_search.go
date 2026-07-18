@@ -209,6 +209,7 @@ func ReasoningSearchFinishNowHandler(c *gin.Context) {
 		NewBadRequestError(errors.New("finish-now is not supported for rapid reasoning search")).Abort(c)
 		return
 	}
+	progressStatus, _ := runtime.Progress.Get(sessionID)
 	if err := runtime.Workflow.RequestFinishNow(sessionID); err != nil {
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
@@ -240,7 +241,11 @@ func ReasoningSearchFinishNowHandler(c *gin.Context) {
 		canceled := runtime.Cancellations.Cancel(sessionID)
 		log.Infof("Reasoning Search finish-now canceled active background run session=%s canceled=%t", sessionID, canceled)
 	}
-	runtime.Progress.Complete(sessionID, 0)
+	if progressStatus != nil {
+		runtime.Progress.CompleteRun(sessionID, progressStatus.RunRevision, 0)
+	} else {
+		runtime.Progress.Complete(sessionID, 0)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"session_id":   sessionID,
@@ -600,7 +605,11 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 				return "", &llm.MaxReasoningFollowupsError{MaxFollowups: reasoningStage.MaxFollowups}
 			}
 			nextFollowupCount := workflowSession.FollowupCount + 1
-			if workflowSession.Rapid {
+			modeChanged := workflowSession.Rapid != r.IsRapid
+			if modeChanged && len(workflowSession.ResponseSnapshotJSON) == 0 {
+				return "", errReasoningSearchAlreadyRunning
+			}
+			if r.IsRapid {
 				rapidConfig := runtime.RapidConfig
 				if rapidConfig == nil {
 					return "", errors.New("rapid reasoning search is not initialized")
@@ -622,7 +631,10 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 					MaxFollowups:      reasoningStage.MaxFollowups,
 					ProviderSessionID: providerSessionID,
 				}
-				if err := workflowStore.StartRapidFollowup(sessionID, r.Query, effectiveUILanguage, nextFollowupCount, gatherStage); err != nil {
+				if err := workflowStore.StartRapidFollowupFromSnapshot(sessionID, r.Query, effectiveUILanguage, nextFollowupCount, gatherStage); err != nil {
+					if errors.Is(err, llm.ErrReasoningDraftNotReady) {
+						return "", errReasoningSearchAlreadyRunning
+					}
 					return "", err
 				}
 				if err := workflowStore.SetStage(sessionID, llm.ReasoningWorkflowStageRapidClassifier, llm.ReasoningWorkflowStageSession{
@@ -639,6 +651,53 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 						Model:           rapidConfig.Finalizer.Model,
 						ReasoningEffort: rapidConfig.Finalizer.Effort,
 						MaxTokens:       rapidConfig.Finalizer.MaxTokens,
+					}); err != nil {
+						return "", err
+					}
+				}
+				progressStore.Reserve(sessionID)
+				progressStore.SetIterationOffset(sessionID, 0)
+				return sessionID, nil
+			}
+			if modeChanged {
+				reasoningConfig, err := llm.ReasoningSearchConfigFromConfig()
+				if err != nil {
+					return "", err
+				}
+				service := runtime.Services[reasoningConfig.Provider]
+				if service == nil {
+					return "", errors.New("reasoning llm service is not initialized")
+				}
+				providerSessionID, err := service.ReserveReasoningSession(ctx, reasoningConfig.Model, &reasoningConfig.Effort)
+				if err != nil {
+					return "", err
+				}
+				reasoningStage = llm.ReasoningWorkflowStageSession{
+					Provider:           reasoningConfig.Provider,
+					Model:              reasoningConfig.Model,
+					ReasoningEffort:    reasoningConfig.Effort,
+					MaxTokens:          reasoningConfig.MaxTokens,
+					MaxIterations:      reasoningConfig.MaxIterations,
+					RerunMaxIterations: reasoningConfig.RerunMaxIterations,
+					MaxFollowups:       reasoningStage.MaxFollowups,
+					ProviderSessionID:  providerSessionID,
+				}
+				// Rapid -> non-rapid follow-up cannot use the rapid provider
+				// history. Start a fresh non-rapid reasoning session from the
+				// visible response snapshot the user already received.
+				if err := workflowStore.StartNonRapidFollowupFromSnapshot(sessionID, r.Query, effectiveUILanguage, nextFollowupCount, reasoningStage); err != nil {
+					if errors.Is(err, llm.ErrReasoningDraftNotReady) {
+						return "", errReasoningSearchAlreadyRunning
+					}
+					return "", err
+				}
+				if reasoningConfig.Verification != nil {
+					if err := workflowStore.SetStage(sessionID, llm.ReasoningWorkflowStageVerification, llm.ReasoningWorkflowStageSession{
+						Provider:                      reasoningConfig.Verification.Provider,
+						Model:                         reasoningConfig.Verification.Model,
+						ReasoningEffort:               reasoningConfig.Verification.Effort,
+						MaxTokens:                     reasoningConfig.Verification.MaxTokens,
+						MaxInputTokensForVerification: reasoningConfig.Verification.MaxInputTokens,
 					}); err != nil {
 						return "", err
 					}
@@ -664,9 +723,18 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 				progressStore.SetIterationOffset(sessionID, 0)
 				return sessionID, nil
 			}
-			if err := workflowStore.SetFollowupState(sessionID, true, nextFollowupCount); err != nil {
+			// Non-rapid -> non-rapid follow-up should keep the provider-native
+			// continuation state (OpenAI previous_response_id, replay history,
+			// etc.). Only mode switches and draft follow-ups seed from snapshots.
+			if err := workflowStore.StartNonRapidFollowup(sessionID, r.Query, effectiveUILanguage, nextFollowupCount); err != nil {
+				if errors.Is(err, llm.ErrReasoningDraftNotReady) {
+					return "", errReasoningSearchAlreadyRunning
+				}
 				return "", err
 			}
+			progressStore.Reserve(sessionID)
+			progressStore.SetIterationOffset(sessionID, 0)
+			return sessionID, nil
 		}
 		if err := workflowStore.SetResponseSnapshot(sessionID, nil); err != nil {
 			return "", err
@@ -781,6 +849,10 @@ func storeReasoningSearchCachedResponse(runtime *llm.Runtime, db *sql.DB, r Reas
 	if cachedEntry == nil {
 		return errors.New("reasoning search cache entry is nil")
 	}
+	progressStatus, err := runtime.Progress.Get(sessionID)
+	if err != nil {
+		return err
+	}
 
 	cachedEntry.Query = r.Query
 	if err := runtime.Workflow.SetCachedInitialResponse(sessionID, cachedEntry); err != nil {
@@ -806,7 +878,7 @@ func storeReasoningSearchCachedResponse(runtime *llm.Runtime, db *sql.DB, r Reas
 	if err := runtime.Workflow.SetResponseSnapshot(sessionID, &response); err != nil {
 		return err
 	}
-	runtime.Progress.Complete(sessionID, 0)
+	runtime.Progress.CompleteRun(sessionID, progressStatus.RunRevision, 0)
 	return nil
 }
 
@@ -2306,6 +2378,12 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 
 	workflowStore := runtime.Workflow
 	progressStore := runtime.Progress
+	progressStatus, err := progressStore.Get(responseSessionID)
+	if err != nil {
+		return err
+	}
+	// Keep this run's revision so a later follow-up cannot be completed by it.
+	progressRunRevision := progressStatus.RunRevision
 	progressIteration := 0
 	defer func() {
 		if err == nil {
@@ -2418,6 +2496,12 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	if err != nil {
 		return err
 	}
+	if current, err := reasoningStageProviderSessionCurrent(workflowStore, responseSessionID, providerID); err != nil {
+		return err
+	} else if !current {
+		log.Infof("Rapid Reasoning Search gather response ignored because a newer follow-up run is active session=%s", responseSessionID)
+		return nil
+	}
 	progressIteration = gather.ReasoningIterations
 	gatherStage.ProviderSessionID = resolvedProviderSessionID
 	if err := workflowStore.SetStage(responseSessionID, llm.ReasoningWorkflowStageReasoning, gatherStage); err != nil {
@@ -2461,6 +2545,12 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 				debug.Add(gather.Debug)
 				response.Debug = debug
 			}
+			if current, err := reasoningStageProviderSessionCurrent(workflowStore, responseSessionID, gatherStage.ProviderSessionID); err != nil {
+				return err
+			} else if !current {
+				log.Infof("Rapid Reasoning Search no-results response ignored because a newer follow-up run is active session=%s", responseSessionID)
+				return nil
+			}
 			if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
 				return err
 			}
@@ -2472,7 +2562,7 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 			if cacheEligible && !initialRequestCompleted && runtime.ReasoningCache != nil {
 				runtime.ReasoningCache.Set(cacheKey, llm.BuildReasoningSearchCacheEntryFromResponse(&response))
 			}
-			progressStore.Complete(responseSessionID, gather.ReasoningIterations)
+			progressStore.CompleteRun(responseSessionID, progressRunRevision, gather.ReasoningIterations)
 			return nil
 		}
 		return errors.New("rapid reasoning search gathered no results")
@@ -2554,6 +2644,12 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 		debug.Add(finalizerDebug)
 		response.Debug = debug
 	}
+	if current, err := reasoningStageProviderSessionCurrent(workflowStore, responseSessionID, gatherStage.ProviderSessionID); err != nil {
+		return err
+	} else if !current {
+		log.Infof("Rapid Reasoning Search final response ignored because a newer follow-up run is active session=%s", responseSessionID)
+		return nil
+	}
 	if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
 		return err
 	}
@@ -2565,7 +2661,7 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	if cacheEligible && !initialRequestCompleted && runtime.ReasoningCache != nil {
 		runtime.ReasoningCache.Set(cacheKey, llm.BuildReasoningSearchCacheEntryFromResponse(&response))
 	}
-	progressStore.Complete(responseSessionID, gather.ReasoningIterations+1)
+	progressStore.CompleteRun(responseSessionID, progressRunRevision, gather.ReasoningIterations+1)
 	return nil
 }
 
@@ -2592,6 +2688,12 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 
 	workflowStore := runtime.Workflow
 	progressStore := runtime.Progress
+	progressStatus, err := progressStore.Get(responseSessionID)
+	if err != nil {
+		return err
+	}
+	// Keep this run's revision so a later follow-up cannot be completed by it.
+	progressRunRevision := progressStatus.RunRevision
 	response := llm.ReasoningSearchResponse{}
 	resolvedProviderSessionID := ""
 	reasoningIterations := 0
@@ -2897,7 +2999,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		return err
 	} else if finalized {
 		log.Infof("Reasoning Search reasoning stage finished after draft was already returned session=%s; skipping verification", responseSessionID)
-		progressStore.Complete(responseSessionID, progressIterationOffset+response.ReasoningIterations)
+		progressStore.CompleteRun(responseSessionID, progressRunRevision, progressIterationOffset+response.ReasoningIterations)
 		return nil
 	}
 	progressCompleteIteration := progressIterationOffset + response.ReasoningIterations
@@ -3214,7 +3316,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		return err
 	} else if finalized {
 		log.Infof("Reasoning Search finished after draft was already returned session=%s; keeping draft snapshot", responseSessionID)
-		progressStore.Complete(responseSessionID, progressCompleteIteration)
+		progressStore.CompleteRun(responseSessionID, progressRunRevision, progressCompleteIteration)
 		return nil
 	}
 	if current, err := reasoningStageProviderSessionCurrent(workflowStore, responseSessionID, reasoningStage.ProviderSessionID); err != nil {
@@ -3231,7 +3333,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
 		return err
 	}
-	progressStore.Complete(responseSessionID, progressCompleteIteration)
+	progressStore.CompleteRun(responseSessionID, progressRunRevision, progressCompleteIteration)
 	if cacheEligible && !initialRequestCompleted && runtime.ReasoningCache != nil {
 		runtime.ReasoningCache.Set(cacheKey, llm.BuildReasoningSearchCacheEntryFromResponse(&response))
 	}

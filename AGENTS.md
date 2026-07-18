@@ -60,26 +60,28 @@ Instructions for coding agents working in this repository.
 - `POST /search/reasoning/start` may receive `cancel_session_id` to cancel a previous background run before starting the new one.
 - `POST /search/reasoning/cancel` cancels a running background search by workflow `session_id`.
 - `POST /search/reasoning/finish-now` finalizes the latest prepared draft response for a workflow `session_id`; it does not generate results inline. If no draft is ready, it returns a conflict error.
-- `finish-now` is only for the regular reasoning flow. Rapid reasoning search does not support it.
+- `finish-now` is only for the non-rapid reasoning search flow. Rapid reasoning search does not support it.
 - `GET /search/reasoning/status` reports background progress for that workflow session.
 - `GET /search/reasoning/result` fetches the stored per-session response snapshot after the background run completes.
 - Background progress terminal states include `completed`, `failed`, and `canceled`.
 - Status also exposes progress hints such as result availability, potentially good results, long-running risk, near-finish, query-analyzed, and draft availability. `has_draft_results=true` means the client may offer `finish-now`.
 - For rapid reasoning search, status may also return `rapid_results_available=true` plus `rapid_results` before the final stored response is fetched.
 - Response includes `session_id`, `cache_hit`, `used_tools`, token stats, and debug/cost details when `deb=true`.
-- Both regular and rapid reasoning search can complete successfully with `no_results=true`, `results=[]`, and `summary=null`; this means the backend intentionally concluded that no archive results are relevant, not that the search failed.
+- Both non-rapid and rapid reasoning search can complete successfully with `no_results=true`, `results=[]`, and `summary=null`; this means the backend intentionally concluded that no archive results are relevant, not that the search failed.
 - The backend persists a `reasoning` workflow stage and, when enabled, `planning` and `verification` workflow stages.
 - The backend uses two different storage mechanisms for reasoning search:
   - `ReasoningCache`: shared query-based cache for reusable initial results.
   - response snapshot: exact per-session final API response stored on the workflow session for later fetch by `session_id`.
 - Rapid cache entries are separated from regular cache entries and preserve rapid fields such as `summary=null`, `no_results`, and result `relevance`.
 - During background reasoning, tool results are accumulated on the workflow session as `PartialResults`. ES search results and concrete PostgreSQL lookup results feed this shared candidate pool. PartialResults from `get_available_books` is limited to core author roots (`bs`, `rh`, `ar`).
-- In the regular reasoning flow, `PartialResults` are used by draft generation: a configured draft model periodically converts the collected candidates into a stored draft response for `finish-now`.
+- In the non-rapid reasoning search flow, `PartialResults` are used by draft generation: a configured draft model periodically converts the collected candidates into a stored draft response for `finish-now`.
 - In the rapid reasoning flow, `PartialResults` are used by the classifier: the gather model collects candidates, the classifier assigns relevance/reason in batches, and status can expose classified rapid results before the run finishes.
 - AI lookup tools do not create candidates by themselves; they attach lookup evidence/snippets to already collected candidates by UID. Rapid classification can re-run for candidates whose lookup evidence changed.
 - `finish-now` copies the stored draft response into the normal response snapshot, marks progress completed, and returns only readiness metadata. The client then fetches the actual draft response through `GET /search/reasoning/result`.
 - Draft model token/cost usage is included in draft and final response totals when available and, when `deb=true`, under `debug.draft_model_usage`. Individual draft generations are listed separately under `debug.draft_model_runs`.
 - Follow-up after draft results must not continue the old hidden provider context. The backend starts a fresh provider reasoning session for the same workflow session and seeds the visible draft response as prior assistant context before the user's follow-up query.
+- Follow-up may switch between non-rapid and rapid reasoning search. When the mode changes, start a fresh provider reasoning session and seed it from the stored visible response snapshot; do not reuse provider-native continuation state from the previous mode.
+- Same-mode non-rapid follow-up is different: keep the existing provider-native continuation state, such as OpenAI `previous_response_id` or replay-provider history. Do not seed it from the stored response snapshot unless it is a draft follow-up.
 - Old background reasoning runs may finish after a draft was returned or after a draft follow-up started. They must not overwrite or clear the newer workflow state.
 - Rapid reasoning search is a separate flow: gather results with the main reasoning model, classify them with a separate classifier model in batches, optionally run a finalizer, and expose visible rapid results through status.
 - Rapid classification runs on batches of results, not per result. The current batch size is defined in `api/reasoning_search.go`.
