@@ -8,18 +8,17 @@ Stress test the reasoning search background flow.
 Works with Python 2.7+ and Python 3 without external packages.
 
 Example:
-  ./scripts/reasoning_search_stress.py \
-    --base-url https://staging.example.com \
+  ./misc/reasoning_search_stress.py \
+    --base-url http://172.18.0.7:8080 \
     --requests 30 \
     --concurrency 20 \
-    --mode rapid \
-    --docker-container archive-backend
+    --mode mixed
 
 Outputs:
   - runs.jsonl: one JSON object per search request
   - runs.csv: compact per-search metrics
-  - resources.csv: host and optional Docker container samples
-  - summary.json: aggregate result
+  - resources.csv: host, backend, Elasticsearch, and Postgres samples
+  - summary.json: aggregate search result and peak resource usage
 """
 
 import argparse
@@ -82,6 +81,12 @@ DEFAULT_QUERIES = [
 ]
 
 TERMINAL_STATES = set(["completed", "failed", "canceled"])
+
+DEFAULT_DOCKER_CONTAINERS = [
+    ("backend", "archive-docker-archive_backend-1"),
+    ("elasticsearch", "archive-docker-elastic-1"),
+    ("postgres", "archive-docker-postgres_mdb-1"),
+]
 
 
 class MethodRequest(urllib_request.Request):
@@ -173,7 +178,14 @@ def parse_args():
     parser.add_argument("--poll-interval", type=float, default=2.0)
     parser.add_argument("--timeout", type=float, default=420.0, help="Per-search timeout in seconds")
     parser.add_argument("--resource-interval", type=float, default=2.0)
-    parser.add_argument("--docker-container", help="Optional container name/id to sample with docker stats")
+    parser.add_argument(
+        "--docker-container",
+        action="append",
+        dest="docker_containers",
+        default=[],
+        help="Container name/id to sample with docker stats. Repeat for multiple containers; defaults to backend, Elasticsearch, and Postgres.",
+    )
+    parser.add_argument("--no-docker-stats", action="store_true", help="Disable Docker resource sampling")
     parser.add_argument("--output-dir", help="Defaults to stress-results/<timestamp>")
     parser.add_argument(
         "--header",
@@ -181,7 +193,12 @@ def parse_args():
         default=[],
         help="Extra HTTP header, e.g. 'Authorization: Bearer TOKEN'. Can be repeated.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.no_docker_stats:
+        args.docker_containers = []
+    elif not args.docker_containers:
+        args.docker_containers = [item[1] for item in DEFAULT_DOCKER_CONTAINERS]
+    return args
 
 
 def load_queries(path):
@@ -382,12 +399,17 @@ def run_search(index, query, is_rapid, args):
 
 def read_host_stats():
     stats = {
+        "cpu_count": "",
         "load1": "",
         "load5": "",
         "load15": "",
         "mem_total_kb": "",
         "mem_available_kb": "",
     }
+    try:
+        stats["cpu_count"] = os.sysconf(os.sysconf_names["SC_NPROCESSORS_ONLN"])
+    except (KeyError, TypeError, ValueError, OSError, AttributeError):
+        pass
     try:
         with open("/proc/loadavg", "r") as f:
             parts = f.read().split()
@@ -408,38 +430,65 @@ def read_host_stats():
     return stats
 
 
-def read_docker_stats(container):
-    if not container:
+def read_docker_stats(containers):
+    if not containers:
         return {}
     try:
         process = subprocess.Popen(
-            ["docker", "stats", "--no-stream", "--format", "{{json .}}", container],
+            ["docker", "stats", "--no-stream", "--format", "{{json .}}"] + containers,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         stdout, stderr = process.communicate()
     except EnvironmentError as e:
-        return {"docker_error": repr(e)}
-    if process.returncode != 0:
-        return {"docker_error": to_text(stderr).strip()}
+        return dict((container, {"docker_error": repr(e)}) for container in containers)
     lines = to_text(stdout).strip().splitlines()
-    if not lines:
-        return {"docker_error": "empty docker stats output"}
+    parsed = []
+    for line in lines:
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        parsed.append(item)
+    error = to_text(stderr).strip()
+    if process.returncode != 0 and not error:
+        error = "docker stats failed"
+    stats = {}
+    for container in containers:
+        for item in parsed:
+            if item.get("Name") == container or to_text(item.get("ID", "")).startswith(container):
+                stats[container] = item
+                break
+        if container not in stats:
+            stats[container] = {"docker_error": error or "empty docker stats output"}
+    return stats
+
+
+def container_role(container):
+    for role, default_container in DEFAULT_DOCKER_CONTAINERS:
+        if container == default_container:
+            return role
+    return container
+
+
+def number(value):
     try:
-        return json.loads(lines[-1])
-    except ValueError:
-        return {"docker_error": to_text(stdout).strip()}
+        return float(to_text(value).strip().rstrip("%"))
+    except (TypeError, ValueError):
+        return None
 
 
-def build_resource_row(args, host, docker):
+def build_resource_row(host, container, role, docker):
     return {
         "ts": datetime.utcnow().isoformat() + "Z",
+        "cpu_count": host.get("cpu_count", ""),
         "load1": host.get("load1", ""),
         "load5": host.get("load5", ""),
         "load15": host.get("load15", ""),
         "mem_total_kb": host.get("mem_total_kb", ""),
         "mem_available_kb": host.get("mem_available_kb", ""),
-        "container": docker.get("Name", args.docker_container or ""),
+        "container_role": role,
+        "container": docker.get("Name", container),
         "container_cpu_perc": docker.get("CPUPerc", ""),
         "container_mem_usage": docker.get("MemUsage", ""),
         "container_mem_perc": docker.get("MemPerc", ""),
@@ -450,14 +499,59 @@ def build_resource_row(args, host, docker):
     }
 
 
-def resource_sampler(args, stop_event, output_path):
+def update_resource_summary(summary, host, role, container, docker):
+    host_summary = summary["host"]
+    cpu_count = number(host.get("cpu_count"))
+    load1 = number(host.get("load1"))
+    available_kb = number(host.get("mem_available_kb"))
+    total_kb = number(host.get("mem_total_kb"))
+    if cpu_count:
+        host_summary["cpu_count"] = int(cpu_count)
+    if load1 is not None:
+        host_summary["max_load1"] = max(host_summary.get("max_load1", 0), load1)
+        if cpu_count:
+            host_summary["max_load1_per_cpu"] = max(host_summary.get("max_load1_per_cpu", 0), load1 / cpu_count)
+    if available_kb is not None:
+        current_min = host_summary.get("min_mem_available_kb")
+        host_summary["min_mem_available_kb"] = available_kb if current_min is None else min(current_min, available_kb)
+        if total_kb:
+            used_percent = 100.0 * (total_kb - available_kb) / total_kb
+            host_summary["max_mem_used_percent"] = max(host_summary.get("max_mem_used_percent", 0), used_percent)
+
+    if not container:
+        return
+    container_summary = summary["containers"].setdefault(role, {
+        "container": container,
+        "max_cpu_percent": 0,
+        "max_mem_percent": 0,
+        "max_pids": 0,
+        "samples": 0,
+        "sample_errors": 0,
+    })
+    container_summary["samples"] += 1
+    cpu_percent = number(docker.get("CPUPerc"))
+    mem_percent = number(docker.get("MemPerc"))
+    pids = number(docker.get("PIDs"))
+    if cpu_percent is not None:
+        container_summary["max_cpu_percent"] = max(container_summary["max_cpu_percent"], cpu_percent)
+    if mem_percent is not None:
+        container_summary["max_mem_percent"] = max(container_summary["max_mem_percent"], mem_percent)
+    if pids is not None:
+        container_summary["max_pids"] = max(container_summary["max_pids"], int(pids))
+    if docker.get("docker_error"):
+        container_summary["sample_errors"] += 1
+
+
+def resource_sampler(args, stop_event, output_path, resource_summary):
     fields = [
         "ts",
+        "cpu_count",
         "load1",
         "load5",
         "load15",
         "mem_total_kb",
         "mem_available_kb",
+        "container_role",
         "container",
         "container_cpu_perc",
         "container_mem_usage",
@@ -471,18 +565,20 @@ def resource_sampler(args, stop_event, output_path):
         write_csv_row(f, fields, dict((field, field) for field in fields))
         f.flush()
         while not stop_event.is_set():
+            sample_started = time.time()
             host = read_host_stats()
-
-            # Write host stats first so the file is useful even if docker stats
-            # is slow or unavailable on the staging host.
-            write_csv_row(f, fields, build_resource_row(args, host, {}))
+            docker_stats = read_docker_stats(args.docker_containers)
+            if args.docker_containers:
+                for container in args.docker_containers:
+                    role = container_role(container)
+                    docker = docker_stats.get(container, {})
+                    write_csv_row(f, fields, build_resource_row(host, container, role, docker))
+                    update_resource_summary(resource_summary, host, role, container, docker)
+            else:
+                write_csv_row(f, fields, build_resource_row(host, "", "host", {}))
+                update_resource_summary(resource_summary, host, "host", "", {})
             f.flush()
-
-            if args.docker_container:
-                docker = read_docker_stats(args.docker_container)
-                write_csv_row(f, fields, build_resource_row(args, host, docker))
-            f.flush()
-            stop_event.wait(args.resource_interval)
+            stop_event.wait(max(0, args.resource_interval - (time.time() - sample_started)))
 
 
 def writer_thread(output_dir, results_queue, stop_event):
@@ -572,7 +668,7 @@ def run_all(planned, args, results_queue):
     return results
 
 
-def summarize(results, output_dir, args):
+def summarize(results, output_dir, args, resource_summary):
     latencies = sorted([r["total_latency_ms"] for r in results])
     completed = [r for r in results if r["state"] == "completed"]
     failed = [r for r in results if r["state"] != "completed"]
@@ -594,6 +690,7 @@ def summarize(results, output_dir, args):
         "p95_latency_ms": percentile(latencies, 95),
         "max_latency_ms": max(latencies) if latencies else None,
         "total_used_tokens": sum([(r.get("used_tokens") or 0) for r in completed]),
+        "resources": resource_summary,
         "state_counts": {},
         "failed_examples": [],
         "output_dir": output_dir,
@@ -657,9 +754,10 @@ def main():
         planned.append((i + 1, queries[i % len(queries)], is_rapid))
 
     stop_resources = threading.Event()
+    resource_summary = {"host": {}, "containers": {}}
     resource_thread = threading.Thread(
         target=resource_sampler,
-        args=(args, stop_resources, os.path.join(output_dir, "resources.csv")),
+        args=(args, stop_resources, os.path.join(output_dir, "resources.csv"), resource_summary),
     )
     resource_thread.daemon = True
     resource_thread.start()
@@ -675,6 +773,10 @@ def main():
         % (args.requests, args.concurrency, args.mode, text_type(args.debug).lower())
     )
     print_line("Writing results to %s" % output_dir)
+    if args.docker_containers:
+        print_line("Sampling Docker containers: %s" % ", ".join(args.docker_containers))
+    else:
+        print_line("Docker resource sampling disabled")
 
     started = time.time()
     try:
@@ -685,7 +787,7 @@ def main():
         stop_resources.set()
         resource_thread.join(5)
 
-    summary = summarize(results, output_dir, args)
+    summary = summarize(results, output_dir, args, resource_summary)
     elapsed = time.time() - started
     print_line(json_dumps(summary, pretty=True))
     print_output_files(output_dir)
