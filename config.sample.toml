@@ -109,6 +109,31 @@ reasoning-search-rapid-classifier-max-output-tokens=2500
 # reasoning-search-verification-max-output-tokens=2000
 request-timeout="2m"
 
+# Standard short-context pricing. The gpt-5.6 alias uses gpt-5.6-sol pricing.
+[[openai.pricing]]
+model="gpt-5.6"
+input_per_1m_tokens_usd=5.00
+cached_input_per_1m_tokens_usd=0.50
+output_per_1m_tokens_usd=30.00
+
+[[openai.pricing]]
+model="gpt-5.6-sol"
+input_per_1m_tokens_usd=5.00
+cached_input_per_1m_tokens_usd=0.50
+output_per_1m_tokens_usd=30.00
+
+[[openai.pricing]]
+model="gpt-5.6-terra"
+input_per_1m_tokens_usd=2.00
+cached_input_per_1m_tokens_usd=0.20
+output_per_1m_tokens_usd=12.00
+
+[[openai.pricing]]
+model="gpt-5.6-luna"
+input_per_1m_tokens_usd=0.20
+cached_input_per_1m_tokens_usd=0.02
+output_per_1m_tokens_usd=1.20
+
 [[openai.pricing]]
 model="gpt-5.5"
 input_per_1m_tokens_usd=5.00
