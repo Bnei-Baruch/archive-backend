@@ -133,7 +133,7 @@ func (t *ElasticsearchSearchTool) UsageExplanation() string {
 	return `Tool: elasticsearch_search
 Elasticsearch holds an index of the archive content retrieved from PostgreSQL (the DB that stores various metadata about the content like content type, source, title and more) and docx/pdf files of sources (library items) and lessons/programs transcripts.
 Use this tool for archive search when you need relevant results by text query, filters, or both.
-Important note: Since the search engine is technically limited and based on lexical match, you should make multiple searches with the necessary variations of the query: Using similar words to the original query and different filter combinations. Sometime is reasonable to limit the text query to a simple terms combination to avoid missing relevant results. Also include plural and singular forms, different word order, and similar formulations of the same query.
+Important note: Since the search engine is technically limited and based on lexical match, you should make multiple searches with the necessary variations of the query: Using similar words to the original query and different filter combinations. Sometime is reasonable to limit the text query to a simple terms combination to avoid missing relevant results. Also include plural and singular forms, different word order, translations to Hebrew, and similar formulations of the same query.
 
 The following search filters are supported and can be used in combination: 
 
