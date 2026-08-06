@@ -1712,7 +1712,7 @@ func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessi
 	}
 	outputLanguageName := reasoningSearchOutputLanguageName(uiLanguage, query)
 	classifierSystemMessage := llm.AppendReasoningSearchOutputLanguage(
-		fmt.Sprintf("%s\n\n%s", llm.GeneralReasoningSearchBaseInstruction, llm.ReasoningSearchRapidClassificationInstruction),
+		fmt.Sprintf(llm.ReasoningSearchRapidClassificationInstructionMask, llm.GeneralReasoningSearchBaseInstruction),
 		outputLanguageName,
 	)
 	allClassifications := []llm.ReasoningSearchRapidClassification{}
