@@ -149,6 +149,22 @@ func TestReasoningProgressStoreLifecycle(t *testing.T) {
 	}
 }
 
+func TestReasoningProgressStoreFailureReason(t *testing.T) {
+	store := llm.NewReasoningProgressStore(5 * time.Minute)
+	defer store.Close()
+
+	store.Reserve("session-1")
+	store.Fail("session-1", 2, errors.New("provider returned HTTP 503"))
+
+	status, err := store.Get("session-1")
+	if err != nil {
+		t.Fatalf("unexpected get error: %v", err)
+	}
+	if status.State != llm.ReasoningProgressStateFailed || status.Error != "provider returned HTTP 503" {
+		t.Fatalf("unexpected failure status: state=%q error=%q", status.State, status.Error)
+	}
+}
+
 func TestReasoningProgressStoreIgnoresCompletionFromPreviousRun(t *testing.T) {
 	store := llm.NewReasoningProgressStore(5 * time.Minute)
 	defer store.Close()

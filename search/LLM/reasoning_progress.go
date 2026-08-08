@@ -2,6 +2,7 @@ package llm
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"time"
 )
@@ -35,6 +36,7 @@ type ReasoningProgressStatus struct {
 	Iteration                 int       `json:"iteration"`
 	ToolName                  string    `json:"tool_name,omitempty"`
 	Message                   string    `json:"message"`
+	Error                     string    `json:"error,omitempty"`
 	QueryAnalyzed             bool      `json:"query_analyzed"`
 	HasAnyResults             bool      `json:"has_any_results"`
 	HasPotentiallyGoodResults bool      `json:"has_potentially_good_results"`
@@ -84,6 +86,7 @@ func (s *ReasoningProgressStore) Reserve(sessionID string) {
 		status.Iteration = 0
 		status.ToolName = ""
 		status.Message = "Waiting to start..."
+		status.Error = ""
 		status.QueryAnalyzed = false
 		status.HasAnyResults = false
 		status.HasPotentiallyGoodResults = false
@@ -117,6 +120,7 @@ func (s *ReasoningProgressStore) CompleteRun(sessionID string, runRevision int64
 	status.Iteration = iteration
 	status.ToolName = ""
 	status.Message = "Done."
+	status.Error = ""
 	status.Done = true
 	s.nextSeq++
 	status.Seq = s.nextSeq
@@ -195,17 +199,28 @@ func (s *ReasoningProgressStore) Complete(sessionID string, iteration int) {
 		status.Iteration = iteration
 		status.ToolName = ""
 		status.Message = "Done."
+		status.Error = ""
 		status.Done = true
 	})
 }
 
-func (s *ReasoningProgressStore) Fail(sessionID string, iteration int) {
+func (s *ReasoningProgressStore) Fail(sessionID string, iteration int, failures ...error) {
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
 		status.State = ReasoningProgressStateFailed
 		status.Phase = ReasoningProgressPhaseError
 		status.Iteration = status.IterationOffset + iteration
 		status.ToolName = ""
 		status.Message = "Failed."
+		status.Error = ""
+		if len(failures) > 0 {
+			var errorMessages []string
+			for _, err := range failures {
+				if err != nil {
+					errorMessages = append(errorMessages, err.Error())
+				}
+			}
+			status.Error = strings.Join(errorMessages, "; ")
+		}
 		status.Done = true
 	})
 }
@@ -221,6 +236,7 @@ func (s *ReasoningProgressStore) Cancel(sessionID string, iteration int) {
 		status.Iteration = iteration
 		status.ToolName = ""
 		status.Message = "Canceled."
+		status.Error = ""
 		status.Done = true
 	})
 }

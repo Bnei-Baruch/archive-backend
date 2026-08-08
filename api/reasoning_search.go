@@ -2188,7 +2188,7 @@ func executeReasoningSearchInBackground(ctx context.Context, runtime *llm.Runtim
 				}
 			}
 			if runtime != nil && runtime.Progress != nil {
-				runtime.Progress.Fail(responseSessionID, 0)
+				runtime.Progress.Fail(responseSessionID, 0, fmt.Errorf("panic: %v", recovered))
 			}
 		}
 	}()
@@ -2407,7 +2407,7 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 				progressStore.Cancel(responseSessionID, progressIteration)
 				return
 			}
-			progressStore.Fail(responseSessionID, progressIteration)
+			progressStore.Fail(responseSessionID, progressIteration, err)
 		}
 	}()
 
@@ -2727,7 +2727,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 				progressStore.Cancel(responseSessionID, reasoningIterations)
 				return
 			}
-			progressStore.Fail(responseSessionID, reasoningIterations)
+			progressStore.Fail(responseSessionID, reasoningIterations, err)
 		}
 	}()
 
