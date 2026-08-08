@@ -52,7 +52,7 @@ func NewStubLLMService(entries []StubLLMResponseConfig) *StubLLMService {
 	}
 }
 
-func (s *StubLLMService) GetStructuredOutput(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, user *string, reasoningEffort *string, output interface{}) error {
+func (s *StubLLMService) GetStructuredOutput(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (s *StubLLMService) GetStructuredOutput(ctx context.Context, jsonSchema str
 	return unmarshalStubResponse(jsonSchema, content, output)
 }
 
-func (s *StubLLMService) GetStructuredOutputWithDebugInfo(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, user *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
+func (s *StubLLMService) GetStructuredOutputWithDebugInfo(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, debug bool, output interface{}) (*ReasoningSearchDebugInfo, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (s *StubLLMService) GetStructuredOutputWithDebugInfo(ctx context.Context, j
 	return s.stubDebugInfo(model, reasoningEffort), nil
 }
 
-func (s *StubLLMService) GetChatResponse(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
+func (s *StubLLMService) GetChatResponse(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string) (*LLMBotMessage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -88,19 +88,19 @@ func (s *StubLLMService) GetChatResponse(ctx context.Context, model string, maxT
 	return &LLMBotMessage{Role: "assistant", Content: content}, nil
 }
 
-func (s *StubLLMService) GetChatResponseWithDebugInfo(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, user *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
-	msg, err := s.GetChatResponse(ctx, model, maxTokens, messages, user, frequencyPenalty, jsonSchema, reasoningEffort)
+func (s *StubLLMService) GetChatResponseWithDebugInfo(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, frequencyPenalty *float64, jsonSchema *string, reasoningEffort *string, debug bool) (*LLMBotMessage, *ReasoningSearchDebugInfo, error) {
+	msg, err := s.GetChatResponse(ctx, model, maxTokens, messages, promptCacheKey, frequencyPenalty, jsonSchema, reasoningEffort)
 	if err != nil {
 		return nil, nil, err
 	}
 	return msg, s.stubDebugInfo(model, reasoningEffort), nil
 }
 
-func (s *StubLLMService) GetReasoningResponseWithTools(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, tools []ToolCall, toolHandlers map[string]ToolHandler, user *string, reasoningEffort *string, deb bool, maxIterations int) (*LLMBotMessage, error) {
-	return s.GetChatResponse(ctx, model, maxTokens, messages, user, nil, nil, reasoningEffort)
+func (s *StubLLMService) GetReasoningResponseWithTools(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, tools []ToolCall, toolHandlers map[string]ToolHandler, promptCacheKey *string, reasoningEffort *string, deb bool, maxIterations int) (*LLMBotMessage, error) {
+	return s.GetChatResponse(ctx, model, maxTokens, messages, promptCacheKey, nil, nil, reasoningEffort)
 }
 
-func (s *StubLLMService) GetReasoningStructuredOutputWithToolsForSession(ctx context.Context, sessionID *string, progressSessionID *string, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, tools []ToolCall, toolHandlers map[string]ToolHandler, firstIterationTools []ToolCall, firstIterationToolHandlers map[string]ToolHandler, user *string, reasoningEffort *string, deb bool, maxIterations int, output interface{}) (string, error) {
+func (s *StubLLMService) GetReasoningStructuredOutputWithToolsForSession(ctx context.Context, sessionID *string, progressSessionID *string, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, tools []ToolCall, toolHandlers map[string]ToolHandler, firstIterationTools []ToolCall, firstIterationToolHandlers map[string]ToolHandler, promptCacheKey *string, reasoningEffort *string, deb bool, maxIterations int, output interface{}) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

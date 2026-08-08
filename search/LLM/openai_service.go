@@ -20,8 +20,11 @@ func NewOpenAIServiceWithPricing(token string, pricing []ModelPricing) *OpenAISe
 }
 
 func NewOpenAIServiceWithOptions(token string, pricing []ModelPricing, sessions *OpenAIReasoningSessionStore, apiBaseURL string) *OpenAIService {
+	service := newOpenAICompatibleAPIServiceWithOptions(token, pricing, sessions, apiBaseURL)
+	service.supportsExplicitPromptCaching = true
+	service.explicitPromptCachingEnabled = true
 	return &OpenAIService{
-		OpenAICompatibleAPIService: newOpenAICompatibleAPIServiceWithOptions(token, pricing, sessions, apiBaseURL),
+		OpenAICompatibleAPIService: service,
 	}
 }
 

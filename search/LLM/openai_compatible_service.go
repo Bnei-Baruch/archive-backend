@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -17,6 +18,9 @@ type OpenAICompatibleAPIService struct {
 	*BaseLLMService
 	sessions                               *OpenAIReasoningSessionStore
 	omitInstructionsWithPreviousResponseID bool
+	supportsExplicitPromptCaching          bool
+	explicitPromptCachingEnabled           bool
+	explicitPromptCachingOverrides         map[string]bool
 }
 
 func newOpenAICompatibleAPIServiceWithOptions(token string, pricing []ModelPricing, sessions *OpenAIReasoningSessionStore, apiBaseURL string) *OpenAICompatibleAPIService {
@@ -39,15 +43,99 @@ func newOpenAICompatibleAPIServiceWithOptions(token string, pricing []ModelPrici
 // Structs for OpenAI API interaction
 
 type ChatRequest struct {
-	Model               string          `json:"model"`
-	Messages            []LLMBotMessage `json:"messages"`
-	MaxTokens           *int            `json:"max_tokens,omitempty"`
-	MaxCompletionTokens *int            `json:"max_completion_tokens,omitempty"`
-	PromptCacheKey      *string         `json:"prompt_cache_key,omitempty"`
-	FrequencyPenalty    *float64        `json:"frequency_penalty,omitempty"`
-	ResponseFormat      *ResponseFormat `json:"response_format,omitempty"`
-	ReasoningEffort     *string         `json:"reasoning_effort,omitempty"`
-	Tools               []ToolCall      `json:"tools,omitempty"`
+	Model               string              `json:"model"`
+	Messages            interface{}         `json:"messages"`
+	MaxTokens           *int                `json:"max_tokens,omitempty"`
+	MaxCompletionTokens *int                `json:"max_completion_tokens,omitempty"`
+	PromptCacheKey      *string             `json:"prompt_cache_key,omitempty"`
+	PromptCacheOptions  *PromptCacheOptions `json:"prompt_cache_options,omitempty"`
+	FrequencyPenalty    *float64            `json:"frequency_penalty,omitempty"`
+	ResponseFormat      *ResponseFormat     `json:"response_format,omitempty"`
+	ReasoningEffort     *string             `json:"reasoning_effort,omitempty"`
+	Tools               []ToolCall          `json:"tools,omitempty"`
+}
+
+type PromptCacheOptions struct {
+	Mode string `json:"mode"`
+}
+
+func (s *OpenAICompatibleAPIService) promptCacheOptions(model string, promptCacheKey *string) *PromptCacheOptions {
+	if !s.supportsExplicitPromptCaching || promptCacheKey == nil || strings.TrimSpace(*promptCacheKey) == "" || !supportsExplicitOpenAIPromptCaching(model) {
+		return nil
+	}
+	enabled := s.explicitPromptCachingEnabled
+	// Rapid stages can choose a different caching mode while sharing the same OpenAI service.
+	for prefix, override := range s.explicitPromptCachingOverrides {
+		if strings.HasPrefix(*promptCacheKey, prefix) {
+			enabled = override
+			break
+		}
+	}
+	if !enabled {
+		return nil
+	}
+	return &PromptCacheOptions{Mode: "explicit"}
+}
+
+func supportsExplicitOpenAIPromptCaching(model string) bool {
+	// Explicit caching is supported for GPT-5.6 and later OpenAI model families
+	model = strings.ToLower(strings.TrimSpace(model))
+	if !strings.HasPrefix(model, "gpt-") {
+		return false
+	}
+	version := strings.TrimPrefix(model, "gpt-")
+	version = strings.SplitN(version, "-", 2)[0]
+	parts := strings.SplitN(version, ".", 2)
+	major, err := strconv.Atoi(parts[0])
+	if err != nil || major < 5 {
+		return false
+	}
+	if major > 5 {
+		return true
+	}
+	if len(parts) != 2 {
+		return false
+	}
+	minor, err := strconv.Atoi(parts[1])
+	return err == nil && minor >= 6
+}
+
+func responsesPromptMessage(role string, content string, cacheBreakpoint bool) map[string]interface{} {
+	if !cacheBreakpoint {
+		return map[string]interface{}{"role": role, "content": content}
+	}
+	return map[string]interface{}{
+		"type": "message",
+		"role": role,
+		"content": []map[string]interface{}{
+			{
+				"type":                    "input_text",
+				"text":                    content,
+				"prompt_cache_breakpoint": map[string]string{"mode": "explicit"},
+			},
+		},
+	}
+}
+
+func chatMessagesWithPromptCacheBreakpoint(messages []LLMBotMessage) []interface{} {
+	result := make([]interface{}, 0, len(messages))
+	for _, message := range messages {
+		if message.Role != "system" && message.Role != "developer" {
+			result = append(result, message)
+			continue
+		}
+		result = append(result, map[string]interface{}{
+			"role": message.Role,
+			"content": []map[string]interface{}{
+				{
+					"type":                    "text",
+					"text":                    message.Content,
+					"prompt_cache_breakpoint": map[string]string{"mode": "explicit"},
+				},
+			},
+		})
+	}
+	return result
 }
 
 type ToolCall struct {
@@ -156,12 +244,14 @@ func (s *OpenAICompatibleAPIService) getStructuredOutputWithUsage(ctx context.Co
 	}
 
 	instructions := ""
+	instructionRole := ""
 	input := []interface{}{}
 	sysMsgCount := 0
 	for _, m := range messages {
 		if m.Role == "system" || m.Role == "developer" {
 			sysMsgCount++
 			instructions = m.Content
+			instructionRole = m.Role
 			continue
 		}
 		if m.Role == "tool" {
@@ -183,6 +273,14 @@ func (s *OpenAICompatibleAPIService) getStructuredOutputWithUsage(ctx context.Co
 	if sysMsgCount != 1 {
 		return nil, "", LLMUsageTotals{}, fmt.Errorf("must include exactly one system message, found %d", sysMsgCount)
 	}
+	promptCacheOptions := s.promptCacheOptions(model, promptCacheKey)
+	var instructionsForRequest *string
+	if promptCacheOptions != nil {
+		// The reusable instruction prefix is marked explicitly; user and tool data remain outside the cached prefix.
+		input = append([]interface{}{responsesPromptMessage(instructionRole, instructions, true)}, input...)
+	} else {
+		instructionsForRequest = &instructions
+	}
 
 	text, err := buildResponsesText(&jsonSchema)
 	if err != nil {
@@ -190,13 +288,14 @@ func (s *OpenAICompatibleAPIService) getStructuredOutputWithUsage(ctx context.Co
 	}
 
 	req := ResponsesRequest{
-		Model:           model,
-		Input:           input,
-		Instructions:    &instructions,
-		MaxOutputTokens: maxTokens,
-		PromptCacheKey:  promptCacheKey,
-		Text:            text,
-		Provider:        provider,
+		Model:              model,
+		Input:              input,
+		Instructions:       instructionsForRequest,
+		MaxOutputTokens:    maxTokens,
+		PromptCacheKey:     promptCacheKey,
+		PromptCacheOptions: promptCacheOptions,
+		Text:               text,
+		Provider:           provider,
 	}
 	if reasoningEffort != nil || logRawBody {
 		req.Reasoning = &ResponsesReasoning{}
@@ -290,13 +389,19 @@ func (s *OpenAICompatibleAPIService) getChatResponseWithUsage(ctx context.Contex
 		}
 	}
 
+	promptCacheOptions := s.promptCacheOptions(model, promptCacheKey)
+	requestMessages := interface{}(messages)
+	if promptCacheOptions != nil {
+		requestMessages = chatMessagesWithPromptCacheBreakpoint(messages)
+	}
 	req := ChatRequest{
-		Model:            model,
-		Messages:         messages,
-		PromptCacheKey:   promptCacheKey,
-		FrequencyPenalty: frequencyPenalty,
-		ResponseFormat:   respFmt,
-		ReasoningEffort:  reasoningEffort,
+		Model:              model,
+		Messages:           requestMessages,
+		PromptCacheKey:     promptCacheKey,
+		PromptCacheOptions: promptCacheOptions,
+		FrequencyPenalty:   frequencyPenalty,
+		ResponseFormat:     respFmt,
+		ReasoningEffort:    reasoningEffort,
 	}
 	if useMaxCompletionTokens {
 		req.MaxCompletionTokens = maxTokens
@@ -583,10 +688,11 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 			}
 			cost := s.estimateCost(model, effort, usageTotals)
 			log.Printf(
-				"OpenAI %s usage: input=%d cached_input=%d output=%d reasoning=%d total=%d estimated_cost_usd=%.8f pricing_configured=%t",
+				"OpenAI %s usage: input=%d cached_input=%d cache_write=%d output=%d reasoning=%d total=%d estimated_cost_usd=%.8f pricing_configured=%t",
 				methodName,
 				usageTotals.InputTokens,
 				usageTotals.CachedInputTokens,
+				usageTotals.CacheWriteTokens,
 				usageTotals.OutputTokens,
 				usageTotals.ReasoningTokens,
 				usageTotals.TotalTokens,
@@ -610,11 +716,13 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 
 	sysMsgCount := 0
 	var instructions string
+	var instructionRole string
 	initialInput := []interface{}{}
 	for _, m := range messages {
 		if m.Role == "system" || m.Role == "developer" {
 			sysMsgCount++
 			instructions = m.Content
+			instructionRole = m.Role
 			continue
 		}
 		if m.Role == "tool" {
@@ -663,6 +771,18 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 
 	previousResponseID := initialPreviousResponseID
 	nextInput := initialInput
+	promptCacheOptions := s.promptCacheOptions(model, promptCacheKey)
+	if promptCacheOptions != nil {
+		instructionContent := instructions
+		if previousResponseID == nil && len(firstIterationTools) > 0 {
+			instructionContent = firstIterationInstructions
+		}
+		// Planned instructions and tool definitions vary by query. Explicit mode without a breakpoint
+		// avoids paying to cache that one-off prefix while still caching stable search stages.
+		cacheBreakpoint := previousResponseID == nil && len(firstIterationTools) == 0 && !strings.Contains(instructionContent, reasoningSearchPlanningHeader)
+		// A resumed session already contains its original breakpoint. Add only the updated follow-up instructions.
+		nextInput = append([]interface{}{responsesPromptMessage(instructionRole, instructionContent, cacheBreakpoint)}, nextInput...)
+	}
 
 	for i := 0; i < maxIterations; i++ {
 		stepStarted := time.Now()
@@ -676,12 +796,15 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 			isNearFinish = s.progress.IsNearFinish(progressSessionID, currentIteration, maxIterations)
 			s.progress.Thinking(progressSessionID, currentIteration, isNearFinish)
 		}
-		instructionsForRequest := &instructions
-		if i == 0 && len(firstIterationTools) > 0 {
-			instructionsForRequest = &firstIterationInstructions
-		}
-		if previousResponseID != nil && s.omitInstructionsWithPreviousResponseID {
-			instructionsForRequest = nil
+		var instructionsForRequest *string
+		if promptCacheOptions == nil {
+			instructionsForRequest = &instructions
+			if i == 0 && len(firstIterationTools) > 0 {
+				instructionsForRequest = &firstIterationInstructions
+			}
+			if previousResponseID != nil && s.omitInstructionsWithPreviousResponseID {
+				instructionsForRequest = nil
+			}
 		}
 		currentTools := normalizedTools
 		currentToolHandlers := toolHandlers
@@ -690,6 +813,10 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 			currentToolHandlers = firstIterationToolHandlers
 		}
 		requestInput := nextInput
+		if promptCacheOptions != nil && i == 1 && initialPreviousResponseID == nil && len(firstIterationTools) > 0 {
+			// The planned tool restriction applied only to the first turn; restore the normal instructions afterward.
+			requestInput = append([]interface{}{responsesPromptMessage("developer", instructions, false)}, requestInput...)
+		}
 		if isFinalIteration {
 			currentTools = nil
 			currentToolHandlers = nil
@@ -697,7 +824,7 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 				finalInstructions := appendFinalReasoningIterationInstruction(*instructionsForRequest)
 				instructionsForRequest = &finalInstructions
 			} else {
-				requestInput = append([]interface{}{}, nextInput...)
+				requestInput = append([]interface{}{}, requestInput...)
 				requestInput = append(requestInput, map[string]string{
 					"role":    "user",
 					"content": finalReasoningIterationInstruction,
@@ -711,6 +838,7 @@ func (s *OpenAICompatibleAPIService) getReasoningResponseWithTools(
 			PreviousResponseID: previousResponseID,
 			MaxOutputTokens:    maxTokens,
 			PromptCacheKey:     promptCacheKey,
+			PromptCacheOptions: promptCacheOptions,
 			Text:               text,
 			Tools:              currentTools,
 		}

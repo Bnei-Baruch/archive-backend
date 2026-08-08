@@ -121,6 +121,19 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		}
 		sessionTTL := ReasoningSessionTTLFromConfig()
 		service := NewOpenAIServiceWithOptions(token, pricing, NewOpenAIReasoningSessionStore(sessionTTL), apiEndpoint)
+		if viper.IsSet("openai.explicit-prompt-caching-enabled") {
+			service.explicitPromptCachingEnabled = viper.GetBool("openai.explicit-prompt-caching-enabled")
+		}
+		service.explicitPromptCachingOverrides = map[string]bool{}
+		for prefix, configKey := range map[string]string{
+			"reasoning-search-rapid-gather:":     "openai.reasoning-search-rapid-gather-explicit-prompt-caching-enabled",
+			"reasoning-search-rapid-classifier:": "openai.reasoning-search-rapid-classifier-explicit-prompt-caching-enabled",
+			"reasoning-search-rapid-finalizer:":  "openai.reasoning-search-rapid-finalizer-explicit-prompt-caching-enabled",
+		} {
+			if viper.IsSet(configKey) {
+				service.explicitPromptCachingOverrides[prefix] = viper.GetBool(configKey)
+			}
+		}
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("openai.request-timeout")
 		return service, nil

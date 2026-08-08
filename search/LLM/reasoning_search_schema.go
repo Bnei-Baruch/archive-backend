@@ -127,15 +127,18 @@ type ReasoningSearchDebugInfo struct {
 	TotalTokens                  int                              `json:"total_tokens"`
 	InputTokens                  int                              `json:"input_tokens"`
 	CachedInputTokens            int                              `json:"cached_input_tokens"`
+	CacheWriteTokens             int                              `json:"cache_write_tokens"`
 	UncachedInputTokens          int                              `json:"uncached_input_tokens"`
 	OutputTokens                 int                              `json:"output_tokens"`
 	ReasoningTokens              int                              `json:"reasoning_tokens"`
 	PricingConfigured            bool                             `json:"pricing_configured"`
 	InputPer1MTokensUSD          float64                          `json:"input_per_1m_tokens_usd"`
 	CachedInputPer1MTokensUSD    float64                          `json:"cached_input_per_1m_tokens_usd"`
+	CacheWritePer1MTokensUSD     float64                          `json:"cache_write_per_1m_tokens_usd"`
 	OutputPer1MTokensUSD         float64                          `json:"output_per_1m_tokens_usd"`
 	EstimatedInputCostUSD        float64                          `json:"estimated_input_cost_usd"`
 	EstimatedCachedInputCostUSD  float64                          `json:"estimated_cached_input_cost_usd"`
+	EstimatedCacheWriteCostUSD   float64                          `json:"estimated_cache_write_cost_usd"`
 	EstimatedOutputCostUSD       float64                          `json:"estimated_output_cost_usd"`
 	EstimatedCostUSD             float64                          `json:"estimated_cost_usd"`
 }
@@ -161,15 +164,18 @@ type ReasoningSearchUsageBreakdown struct {
 	TotalTokens                 int     `json:"total_tokens"`
 	InputTokens                 int     `json:"input_tokens"`
 	CachedInputTokens           int     `json:"cached_input_tokens"`
+	CacheWriteTokens            int     `json:"cache_write_tokens"`
 	UncachedInputTokens         int     `json:"uncached_input_tokens"`
 	OutputTokens                int     `json:"output_tokens"`
 	ReasoningTokens             int     `json:"reasoning_tokens"`
 	PricingConfigured           bool    `json:"pricing_configured"`
 	InputPer1MTokensUSD         float64 `json:"input_per_1m_tokens_usd"`
 	CachedInputPer1MTokensUSD   float64 `json:"cached_input_per_1m_tokens_usd"`
+	CacheWritePer1MTokensUSD    float64 `json:"cache_write_per_1m_tokens_usd"`
 	OutputPer1MTokensUSD        float64 `json:"output_per_1m_tokens_usd"`
 	EstimatedInputCostUSD       float64 `json:"estimated_input_cost_usd"`
 	EstimatedCachedInputCostUSD float64 `json:"estimated_cached_input_cost_usd"`
+	EstimatedCacheWriteCostUSD  float64 `json:"estimated_cache_write_cost_usd"`
 	EstimatedOutputCostUSD      float64 `json:"estimated_output_cost_usd"`
 	EstimatedCostUSD            float64 `json:"estimated_cost_usd"`
 }
@@ -377,11 +383,13 @@ func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {
 	d.TotalTokens += other.TotalTokens
 	d.InputTokens += other.InputTokens
 	d.CachedInputTokens += other.CachedInputTokens
+	d.CacheWriteTokens += other.CacheWriteTokens
 	d.UncachedInputTokens += other.UncachedInputTokens
 	d.OutputTokens += other.OutputTokens
 	d.ReasoningTokens += other.ReasoningTokens
 	d.EstimatedInputCostUSD += other.EstimatedInputCostUSD
 	d.EstimatedCachedInputCostUSD += other.EstimatedCachedInputCostUSD
+	d.EstimatedCacheWriteCostUSD += other.EstimatedCacheWriteCostUSD
 	d.EstimatedOutputCostUSD += other.EstimatedOutputCostUSD
 	d.EstimatedCostUSD += other.EstimatedCostUSD
 	if len(other.AIToolsCalls) != 0 {
@@ -456,11 +464,13 @@ func (d *ReasoningSearchDebugInfo) hasUsageOrCost() bool {
 	return d.TotalTokens != 0 ||
 		d.InputTokens != 0 ||
 		d.CachedInputTokens != 0 ||
+		d.CacheWriteTokens != 0 ||
 		d.UncachedInputTokens != 0 ||
 		d.OutputTokens != 0 ||
 		d.ReasoningTokens != 0 ||
 		d.EstimatedInputCostUSD != 0 ||
 		d.EstimatedCachedInputCostUSD != 0 ||
+		d.EstimatedCacheWriteCostUSD != 0 ||
 		d.EstimatedOutputCostUSD != 0 ||
 		d.EstimatedCostUSD != 0
 }
@@ -475,15 +485,18 @@ func (d *ReasoningSearchDebugInfo) UsageBreakdown() *ReasoningSearchUsageBreakdo
 		TotalTokens:                 d.TotalTokens,
 		InputTokens:                 d.InputTokens,
 		CachedInputTokens:           d.CachedInputTokens,
+		CacheWriteTokens:            d.CacheWriteTokens,
 		UncachedInputTokens:         d.UncachedInputTokens,
 		OutputTokens:                d.OutputTokens,
 		ReasoningTokens:             d.ReasoningTokens,
 		PricingConfigured:           d.PricingConfigured,
 		InputPer1MTokensUSD:         d.InputPer1MTokensUSD,
 		CachedInputPer1MTokensUSD:   d.CachedInputPer1MTokensUSD,
+		CacheWritePer1MTokensUSD:    d.CacheWritePer1MTokensUSD,
 		OutputPer1MTokensUSD:        d.OutputPer1MTokensUSD,
 		EstimatedInputCostUSD:       d.EstimatedInputCostUSD,
 		EstimatedCachedInputCostUSD: d.EstimatedCachedInputCostUSD,
+		EstimatedCacheWriteCostUSD:  d.EstimatedCacheWriteCostUSD,
 		EstimatedOutputCostUSD:      d.EstimatedOutputCostUSD,
 		EstimatedCostUSD:            d.EstimatedCostUSD,
 	}

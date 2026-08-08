@@ -79,6 +79,12 @@ reasoning-search-verification-max-input-tokens=20000 # skip verification when ac
 [openai]
 token="sk-..."
 api-endpoint="" # optional custom OpenAI-compatible API base URL for gpt-oss, e.g. http://localhost:1234 or http://localhost:1234/v1
+# Automatic caching was cheaper for non-rapid search because it reused the growing conversation and tool context.
+explicit-prompt-caching-enabled=false # GPT-5.6+ only; true enables explicit caching
+# Rapid-stage settings override the global flag. Gather uses automatic caching; explicit caching reduced normalized classifier input cost across repeated batch calls.
+reasoning-search-rapid-gather-explicit-prompt-caching-enabled=false
+reasoning-search-rapid-classifier-explicit-prompt-caching-enabled=true
+reasoning-search-rapid-finalizer-explicit-prompt-caching-enabled=false # keep automatic caching until explicit finalizer caching is tested
 reasoning-search-model="gpt-5.4" # "gpt-5.4-mini", "gpt-5.4-nano", "gpt-oss-20b", "gpt-oss-120b"
 reasoning-search-effort="high" # gpt-oss supports only "low", "medium", "high"; invalid values return an error
 reasoning-search-max-output-tokens=8000

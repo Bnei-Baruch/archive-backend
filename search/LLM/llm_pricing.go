@@ -13,6 +13,7 @@ type ModelPricing struct {
 type LLMUsageTotals struct {
 	InputTokens       int
 	CachedInputTokens int
+	CacheWriteTokens  int
 	OutputTokens      int
 	ReasoningTokens   int
 	TotalTokens       int
@@ -22,9 +23,11 @@ type LLMCostBreakdown struct {
 	PricingConfigured           bool
 	InputPer1MTokensUSD         float64
 	CachedInputPer1MTokensUSD   float64
+	CacheWritePer1MTokensUSD    float64
 	OutputPer1MTokensUSD        float64
 	EstimatedInputCostUSD       float64
 	EstimatedCachedInputCostUSD float64
+	EstimatedCacheWriteCostUSD  float64
 	EstimatedOutputCostUSD      float64
 	EstimatedCostUSD            float64
 }
@@ -40,6 +43,7 @@ func (u *LLMUsageTotals) Add(usage *OpenAIUsage) {
 
 	if usage.InputTokensDetails != nil {
 		u.CachedInputTokens += usage.InputTokensDetails.CachedTokens
+		u.CacheWriteTokens += usage.InputTokensDetails.CacheWriteTokens
 	}
 	if usage.OutputTokensDetails != nil {
 		u.ReasoningTokens += usage.OutputTokensDetails.ReasoningTokens
@@ -49,13 +53,14 @@ func (u *LLMUsageTotals) Add(usage *OpenAIUsage) {
 func (u *LLMUsageTotals) AddTotals(other LLMUsageTotals) {
 	u.InputTokens += other.InputTokens
 	u.CachedInputTokens += other.CachedInputTokens
+	u.CacheWriteTokens += other.CacheWriteTokens
 	u.OutputTokens += other.OutputTokens
 	u.ReasoningTokens += other.ReasoningTokens
 	u.TotalTokens += other.TotalTokens
 }
 
 func (u LLMUsageTotals) UncachedInputTokens() int {
-	uncached := u.InputTokens - u.CachedInputTokens
+	uncached := u.InputTokens - u.CachedInputTokens - u.CacheWriteTokens
 	if uncached < 0 {
 		return 0
 	}
@@ -73,19 +78,28 @@ func (s *BaseLLMService) estimateCost(model string, effort string, usage LLMUsag
 		cachedInputRate = pricing.InputPer1MTokensUSD
 	}
 
-	inputCost := float64(usage.UncachedInputTokens()) * pricing.InputPer1MTokensUSD / 1000000
+	// Cache writes are part of input_tokens, so charge them at the write rate instead of charging them twice.
+	regularInputTokens := usage.UncachedInputTokens()
+	cacheWriteRate := 0.0
+	if usage.CacheWriteTokens > 0 {
+		cacheWriteRate = pricing.InputPer1MTokensUSD * 1.25
+	}
+	inputCost := float64(regularInputTokens) * pricing.InputPer1MTokensUSD / 1000000
 	cachedInputCost := float64(usage.CachedInputTokens) * cachedInputRate / 1000000
+	cacheWriteCost := float64(usage.CacheWriteTokens) * cacheWriteRate / 1000000
 	outputCost := float64(usage.OutputTokens) * pricing.OutputPer1MTokensUSD / 1000000
 
 	return LLMCostBreakdown{
 		PricingConfigured:           true,
 		InputPer1MTokensUSD:         pricing.InputPer1MTokensUSD,
 		CachedInputPer1MTokensUSD:   cachedInputRate,
+		CacheWritePer1MTokensUSD:    cacheWriteRate,
 		OutputPer1MTokensUSD:        pricing.OutputPer1MTokensUSD,
 		EstimatedInputCostUSD:       inputCost,
 		EstimatedCachedInputCostUSD: cachedInputCost,
+		EstimatedCacheWriteCostUSD:  cacheWriteCost,
 		EstimatedOutputCostUSD:      outputCost,
-		EstimatedCostUSD:            inputCost + cachedInputCost + outputCost,
+		EstimatedCostUSD:            inputCost + cachedInputCost + cacheWriteCost + outputCost,
 	}
 }
 

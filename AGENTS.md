@@ -28,6 +28,7 @@ Instructions for coding agents working in this repository.
   - `search/LLM/base_service.go`: provider-agnostic client/pricing/debug helpers
   - `search/LLM/openai_compatible_service.go`: shared OpenAI-compatible `/v1/responses` and chat logic
 - OpenAI reasoning + tools flow uses `v1/responses` with iteration via `previous_response_id`.
+- Native OpenAI GPT-5.6+ requests support explicit prompt caching for stable instruction prefixes. When enabled, query-specific planned turns intentionally have no cache breakpoint, avoiding billable one-off cache writes.
 - xAI also uses `v1/responses` with iteration via `previous_response_id`, but resumed requests must omit `instructions`.
 - OpenRouter also uses `v1/responses`, but continues sessions by replaying full message history instead of `previous_response_id`.
 - Ollama uses `/api/chat` with message-history replay; it does not use `tool_choice`.
@@ -97,6 +98,8 @@ Instructions for coding agents working in this repository.
 - Providers that replay full conversation history store their sessions via `chat_reasoning_sessions.go`.
 - If client sends a missing or expired `session_id`, the API returns an error; it does not silently start a new session.
 - OpenAI session state stores continuation data (`last_response_id`, model, effort), not the full prompt or hidden reasoning.
+- OpenAI explicit prompt caching has a global flag and optional rapid gather/classifier/finalizer overrides; unset stage overrides inherit the global setting.
+- Tested defaults use automatic caching globally and for rapid gather because it better reuses growing conversation and tool context. Rapid classifier uses explicit caching because its stable instruction prefix is reused across variable candidate batches. Rapid finalizer remains automatic until explicit finalizer caching is tested.
 - Planning failures are soft: the handler logs a warning and continues with reasoning without planner guidance.
 - In debug mode, planning token/cost usage is merged into the response totals and exposed via `debug.planning_model_usage`.
 

@@ -20,6 +20,7 @@ type ResponsesRequest struct {
 	PreviousResponseID *string                  `json:"previous_response_id,omitempty"`
 	MaxOutputTokens    *int                     `json:"max_output_tokens,omitempty"`
 	PromptCacheKey     *string                  `json:"prompt_cache_key,omitempty"`
+	PromptCacheOptions *PromptCacheOptions      `json:"prompt_cache_options,omitempty"`
 	Reasoning          *ResponsesReasoning      `json:"reasoning,omitempty"`
 	Text               *ResponsesText           `json:"text,omitempty"`
 	Tools              []map[string]interface{} `json:"tools,omitempty"`
@@ -162,7 +163,8 @@ func (u *OpenAIUsage) UnmarshalJSON(data []byte) error {
 }
 
 type OpenAIInputTokensDetails struct {
-	CachedTokens int `json:"cached_tokens,omitempty"`
+	CachedTokens     int `json:"cached_tokens,omitempty"`
+	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
 }
 
 type OpenAIOutputTokensDetails struct {

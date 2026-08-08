@@ -507,15 +507,18 @@ func (s *ReasoningWorkflowSessionStore) FinishDraft(sessionID string, revision i
 			response.Debug.TotalTokens = usage.TotalTokens
 			response.Debug.InputTokens = usage.InputTokens
 			response.Debug.CachedInputTokens = usage.CachedInputTokens
+			response.Debug.CacheWriteTokens = usage.CacheWriteTokens
 			response.Debug.UncachedInputTokens = usage.UncachedInputTokens
 			response.Debug.OutputTokens = usage.OutputTokens
 			response.Debug.ReasoningTokens = usage.ReasoningTokens
 			response.Debug.PricingConfigured = usage.PricingConfigured
 			response.Debug.InputPer1MTokensUSD = usage.InputPer1MTokensUSD
 			response.Debug.CachedInputPer1MTokensUSD = usage.CachedInputPer1MTokensUSD
+			response.Debug.CacheWritePer1MTokensUSD = usage.CacheWritePer1MTokensUSD
 			response.Debug.OutputPer1MTokensUSD = usage.OutputPer1MTokensUSD
 			response.Debug.EstimatedInputCostUSD = usage.EstimatedInputCostUSD
 			response.Debug.EstimatedCachedInputCostUSD = usage.EstimatedCachedInputCostUSD
+			response.Debug.EstimatedCacheWriteCostUSD = usage.EstimatedCacheWriteCostUSD
 			response.Debug.EstimatedOutputCostUSD = usage.EstimatedOutputCostUSD
 			response.Debug.EstimatedCostUSD = usage.EstimatedCostUSD
 		}
@@ -986,11 +989,13 @@ func aggregateReasoningSearchUsageBreakdowns(usages []ReasoningSearchUsageBreakd
 		total.TotalTokens += usage.TotalTokens
 		total.InputTokens += usage.InputTokens
 		total.CachedInputTokens += usage.CachedInputTokens
+		total.CacheWriteTokens += usage.CacheWriteTokens
 		total.UncachedInputTokens += usage.UncachedInputTokens
 		total.OutputTokens += usage.OutputTokens
 		total.ReasoningTokens += usage.ReasoningTokens
 		total.EstimatedInputCostUSD += usage.EstimatedInputCostUSD
 		total.EstimatedCachedInputCostUSD += usage.EstimatedCachedInputCostUSD
+		total.EstimatedCacheWriteCostUSD += usage.EstimatedCacheWriteCostUSD
 		total.EstimatedOutputCostUSD += usage.EstimatedOutputCostUSD
 		total.EstimatedCostUSD += usage.EstimatedCostUSD
 		total.PricingConfigured = total.PricingConfigured && usage.PricingConfigured

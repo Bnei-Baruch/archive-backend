@@ -883,10 +883,14 @@ func selectAIQueryBatch(ctx context.Context, service llm.Service, config *llm.AI
 		{Role: "system", Content: aiQueryChunkSelectorPrompt},
 		{Role: "user", Content: prompt},
 	}
+	promptCacheKey := llm.BuildShardedPromptCacheKey(
+		fmt.Sprintf("ai-tools-reader:m=%s:e=%s", config.Model, config.Effort),
+		query,
+	)
 	if debugMode {
 		run := func() ([]aiQuerySelectedChunk, *llm.ReasoningSearchDebugInfo, error) {
 			response := &aiQueryChunkSelectionWithReasons{}
-			debug, err := service.GetStructuredOutputWithDebugInfo(ctx, schema, config.Model, &config.MaxTokens, messages, nil, &config.Effort, true, response)
+			debug, err := service.GetStructuredOutputWithDebugInfo(ctx, schema, config.Model, &config.MaxTokens, messages, &promptCacheKey, &config.Effort, true, response)
 			return aiQuerySelectedChunksFromReasons(response), debug, err
 		}
 		selected, debug, err := run()
@@ -899,7 +903,7 @@ func selectAIQueryBatch(ctx context.Context, service llm.Service, config *llm.AI
 	}
 	run := func() ([]aiQuerySelectedChunk, *llm.ReasoningSearchDebugInfo, error) {
 		response := &aiQueryChunkSelection{}
-		debug, err := service.GetStructuredOutputWithDebugInfo(ctx, schema, config.Model, &config.MaxTokens, messages, nil, &config.Effort, false, response)
+		debug, err := service.GetStructuredOutputWithDebugInfo(ctx, schema, config.Model, &config.MaxTokens, messages, &promptCacheKey, &config.Effort, false, response)
 		return aiQuerySelectedChunksFromPlain(response), debug, err
 	}
 	selected, debug, err := run()

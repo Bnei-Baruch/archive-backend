@@ -987,7 +987,10 @@ func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime
 	})
 
 	response := llm.ReasoningSearchResponse{}
-	promptCacheKey := fmt.Sprintf("reasoning-search-draft:m=%s:e=%s", config.Model, config.Effort)
+	promptCacheKey := llm.BuildShardedPromptCacheKey(
+		fmt.Sprintf("reasoning-search-draft:m=%s:e=%s", config.Model, config.Effort),
+		sessionID,
+	)
 	debug, err := service.GetStructuredOutputWithDebugInfo(ctx, schema, config.Model, &config.MaxTokens, messages, &promptCacheKey, &config.Effort, deb, &response)
 	if err != nil {
 		return err
@@ -1739,7 +1742,10 @@ func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessi
 			return err
 		}
 		response := rapidClassificationResponse{}
-		promptCacheKey := fmt.Sprintf("reasoning-search-rapid-classifier:m=%s:e=%s", stage.Model, stage.ReasoningEffort)
+		promptCacheKey := llm.BuildShardedPromptCacheKey(
+			fmt.Sprintf("reasoning-search-rapid-classifier:m=%s:e=%s", stage.Model, stage.ReasoningEffort),
+			sessionID,
+		)
 		debug, err := service.GetStructuredOutputWithDebugInfo(
 			ctx,
 			llm.ReasoningSearchRapidClassificationResponseJSONSchema,
@@ -2030,11 +2036,13 @@ func aggregateReasoningSearchUsageBreakdownsForAPI(usages []llm.ReasoningSearchU
 		total.TotalTokens += usage.TotalTokens
 		total.InputTokens += usage.InputTokens
 		total.CachedInputTokens += usage.CachedInputTokens
+		total.CacheWriteTokens += usage.CacheWriteTokens
 		total.UncachedInputTokens += usage.UncachedInputTokens
 		total.OutputTokens += usage.OutputTokens
 		total.ReasoningTokens += usage.ReasoningTokens
 		total.EstimatedInputCostUSD += usage.EstimatedInputCostUSD
 		total.EstimatedCachedInputCostUSD += usage.EstimatedCachedInputCostUSD
+		total.EstimatedCacheWriteCostUSD += usage.EstimatedCacheWriteCostUSD
 		total.EstimatedOutputCostUSD += usage.EstimatedOutputCostUSD
 		total.EstimatedCostUSD += usage.EstimatedCostUSD
 		total.PricingConfigured = total.PricingConfigured && usage.PricingConfigured
@@ -2076,7 +2084,10 @@ func finalizeRapidReasoningSearch(ctx context.Context, runtime *llm.Runtime, ses
 	}
 	systemMessage := llm.AppendReasoningSearchOutputLanguage(reasoningSearchRapidFinalizerInstruction, outputLanguageName)
 	finalizerOutput := rapidFinalizerResponse{}
-	promptCacheKey := fmt.Sprintf("reasoning-search-rapid-finalizer:m=%s:e=%s", stage.Model, stage.ReasoningEffort)
+	promptCacheKey := llm.BuildShardedPromptCacheKey(
+		fmt.Sprintf("reasoning-search-rapid-finalizer:m=%s:e=%s", stage.Model, stage.ReasoningEffort),
+		session.ID,
+	)
 	started := time.Now()
 	debug, err := service.GetStructuredOutputWithDebugInfo(
 		ctx,
@@ -2252,11 +2263,13 @@ func mergeReasoningSearchUsageBreakdown(dst **llm.ReasoningSearchUsageBreakdown,
 	(*dst).TotalTokens += src.TotalTokens
 	(*dst).InputTokens += src.InputTokens
 	(*dst).CachedInputTokens += src.CachedInputTokens
+	(*dst).CacheWriteTokens += src.CacheWriteTokens
 	(*dst).UncachedInputTokens += src.UncachedInputTokens
 	(*dst).OutputTokens += src.OutputTokens
 	(*dst).ReasoningTokens += src.ReasoningTokens
 	(*dst).EstimatedInputCostUSD += src.EstimatedInputCostUSD
 	(*dst).EstimatedCachedInputCostUSD += src.EstimatedCachedInputCostUSD
+	(*dst).EstimatedCacheWriteCostUSD += src.EstimatedCacheWriteCostUSD
 	(*dst).EstimatedOutputCostUSD += src.EstimatedOutputCostUSD
 	(*dst).EstimatedCostUSD += src.EstimatedCostUSD
 	if !src.PricingConfigured {
@@ -2336,11 +2349,13 @@ func mergeReasoningSearchDraftUsage(response *llm.ReasoningSearchResponse, runs 
 		TotalTokens:                 usage.TotalTokens,
 		InputTokens:                 usage.InputTokens,
 		CachedInputTokens:           usage.CachedInputTokens,
+		CacheWriteTokens:            usage.CacheWriteTokens,
 		UncachedInputTokens:         usage.UncachedInputTokens,
 		OutputTokens:                usage.OutputTokens,
 		ReasoningTokens:             usage.ReasoningTokens,
 		EstimatedInputCostUSD:       usage.EstimatedInputCostUSD,
 		EstimatedCachedInputCostUSD: usage.EstimatedCachedInputCostUSD,
+		EstimatedCacheWriteCostUSD:  usage.EstimatedCacheWriteCostUSD,
 		EstimatedOutputCostUSD:      usage.EstimatedOutputCostUSD,
 		EstimatedCostUSD:            usage.EstimatedCostUSD,
 		DraftModelUsage:             usage,
@@ -2476,6 +2491,10 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 		}
 	}
 	rapidGatherSchema := llm.ReasoningSearchRapidGatherResponseJSONSchema
+	gatherPromptCacheKey := llm.BuildShardedPromptCacheKey(
+		fmt.Sprintf("reasoning-search-rapid-gather:m=%s:e=%s", gatherStage.Model, gatherStage.ReasoningEffort),
+		responseSessionID,
+	)
 	gatherStarted := time.Now()
 	resolvedProviderSessionID, err := gatherService.GetReasoningStructuredOutputWithToolsForSession(
 		gatherCtx,
@@ -2489,7 +2508,7 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 		runtime.Tools.ToolHandlers(),
 		nil,
 		nil,
-		nil,
+		&gatherPromptCacheKey,
 		&gatherStage.ReasoningEffort,
 		r.Deb,
 		gatherStage.MaxIterations,
@@ -2634,11 +2653,13 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 				TotalTokens:                 classifierUsage.TotalTokens,
 				InputTokens:                 classifierUsage.InputTokens,
 				CachedInputTokens:           classifierUsage.CachedInputTokens,
+				CacheWriteTokens:            classifierUsage.CacheWriteTokens,
 				UncachedInputTokens:         classifierUsage.UncachedInputTokens,
 				OutputTokens:                classifierUsage.OutputTokens,
 				ReasoningTokens:             classifierUsage.ReasoningTokens,
 				EstimatedInputCostUSD:       classifierUsage.EstimatedInputCostUSD,
 				EstimatedCachedInputCostUSD: classifierUsage.EstimatedCachedInputCostUSD,
+				EstimatedCacheWriteCostUSD:  classifierUsage.EstimatedCacheWriteCostUSD,
 				EstimatedOutputCostUSD:      classifierUsage.EstimatedOutputCostUSD,
 				EstimatedCostUSD:            classifierUsage.EstimatedCostUSD,
 				RapidClassifierModelRuns:    append([]llm.ReasoningSearchUsageBreakdown(nil), session.RapidClassifierModelRuns...),
@@ -2798,10 +2819,13 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		} else {
 			progressIterationOffset++
 			progressStore.Planning(responseSessionID, progressIterationOffset)
-			planningPromptCacheKey := fmt.Sprintf(
-				"reasoning-search-planning:m=%s:e=%s",
-				planningStage.Model,
-				planningStage.ReasoningEffort,
+			planningPromptCacheKey := llm.BuildShardedPromptCacheKey(
+				fmt.Sprintf(
+					"reasoning-search-planning:m=%s:e=%s",
+					planningStage.Model,
+					planningStage.ReasoningEffort,
+				),
+				responseSessionID,
 			)
 			planningMessages := []llm.LLMBotMessage{
 				{
@@ -2896,10 +2920,13 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		Content: r.Query,
 	})
 
-	promptCacheKey := fmt.Sprintf(
-		"reasoning-search:m=%s:e=%s",
-		reasoningStage.Model,
-		reasoningStage.ReasoningEffort,
+	promptCacheKey := llm.BuildShardedPromptCacheKey(
+		fmt.Sprintf(
+			"reasoning-search:m=%s:e=%s",
+			reasoningStage.Model,
+			reasoningStage.ReasoningEffort,
+		),
+		responseSessionID,
 	)
 
 	log.Infof("Reasoning Search Query: [%s]", r.Query)
@@ -3023,10 +3050,13 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 			progressCompleteIteration++
 			progressStore.Verifying(responseSessionID, progressCompleteIteration)
 
-			verificationPromptCacheKey := fmt.Sprintf(
-				"reasoning-search-verification:m=%s:e=%s",
-				verificationStage.Model,
-				verificationStage.ReasoningEffort,
+			verificationPromptCacheKey := llm.BuildShardedPromptCacheKey(
+				fmt.Sprintf(
+					"reasoning-search-verification:m=%s:e=%s",
+					verificationStage.Model,
+					verificationStage.ReasoningEffort,
+				),
+				responseSessionID,
 			)
 			summary := ""
 			if response.Summary != nil {
