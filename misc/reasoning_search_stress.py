@@ -263,6 +263,19 @@ def endpoint(base_url, path, params=None):
     return url
 
 
+def payload_error_reason(payload):
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            return to_text(error.get("message") or json_dumps(error))
+        if error:
+            return to_text(error)
+        for key in ("message", "title", "detail", "raw_error", "raw_response"):
+            if payload.get(key):
+                return to_text(payload[key])
+    return payload_preview(payload)
+
+
 def run_search(index, query, is_rapid, args):
     started = time.time()
     result = {
@@ -282,6 +295,8 @@ def run_search(index, query, is_rapid, args):
         "no_results": None,
         "cache_hit": None,
         "used_tokens": None,
+        "error_reason": "",
+        "error_payload": None,
         "error": "",
         "error_preview": "",
     }
@@ -309,6 +324,8 @@ def run_search(index, query, is_rapid, args):
         result["status_http"] = status_code
         if status_code >= 300:
             result["state"] = "start_failed"
+            result["error_reason"] = payload_error_reason(payload)
+            result["error_payload"] = payload
             result["error"] = "POST %s returned HTTP %s: %s" % (start_url, status_code, payload_preview(payload))
             result["error_preview"] = compact_text(result["error"], 300)
             return result
@@ -317,6 +334,8 @@ def run_search(index, query, is_rapid, args):
         result["session_id"] = session_id
         if not session_id:
             result["state"] = "start_failed"
+            result["error_reason"] = "response has no session_id"
+            result["error_payload"] = payload
             result["error"] = "POST %s returned HTTP %s but response has no session_id: %s" % (
                 start_url,
                 status_code,
@@ -340,6 +359,8 @@ def run_search(index, query, is_rapid, args):
             result["status_http"] = status_code
             if status_code >= 300:
                 result["state"] = "status_failed"
+                result["error_reason"] = payload_error_reason(status)
+                result["error_payload"] = status
                 result["error"] = "GET %s returned HTTP %s: %s" % (status_url, status_code, payload_preview(status))
                 result["error_preview"] = compact_text(result["error"], 300)
                 return result
@@ -356,10 +377,16 @@ def run_search(index, query, is_rapid, args):
                 result["rapid_first_results_ms"] = int((time.time() - started) * 1000)
 
             if state in TERMINAL_STATES:
+                if state != "completed":
+                    result["error_reason"] = status.get("error") or status.get("message") or state
+                    result["error_payload"] = status
+                    result["error"] = result["error_reason"]
+                    result["error_preview"] = compact_text(result["error_reason"], 300)
                 break
 
         if result["state"] not in TERMINAL_STATES:
             result["state"] = "timeout"
+            result["error_reason"] = "timed out after %ss" % args.timeout
             result["error"] = "timed out after %ss" % args.timeout
             result["error_preview"] = result["error"]
             return result
@@ -376,6 +403,8 @@ def run_search(index, query, is_rapid, args):
             result["status_http"] = status_code
             if status_code >= 300:
                 result["state"] = "result_failed"
+                result["error_reason"] = payload_error_reason(final_payload)
+                result["error_payload"] = final_payload
                 result["error"] = "GET %s returned HTTP %s: %s" % (result_url, status_code, payload_preview(final_payload))
                 result["error_preview"] = compact_text(result["error"], 300)
                 return result
@@ -387,6 +416,7 @@ def run_search(index, query, is_rapid, args):
         return result
     except Exception as e:
         result["state"] = "exception"
+        result["error_reason"] = repr(e)
         if current_request:
             result["error"] = "%s failed: %s" % (current_request, repr(e))
         else:
@@ -600,6 +630,8 @@ def writer_thread(output_dir, results_queue, stop_event):
         "no_results",
         "cache_hit",
         "used_tokens",
+        "error_reason",
+        "error_payload",
         "error_preview",
         "error",
     ]
@@ -612,7 +644,10 @@ def writer_thread(output_dir, results_queue, stop_event):
                 continue
             jsonl.write(json_dumps(result) + "\n")
             jsonl.flush()
-            write_csv_row(csvfile, csv_fields, result)
+            csv_result = dict(result)
+            if csv_result.get("error_payload") is not None:
+                csv_result["error_payload"] = json_dumps(csv_result["error_payload"])
+            write_csv_row(csvfile, csv_fields, csv_result)
             csvfile.flush()
             line = (
                 "[%03d] %-13s %7.1fs results=%-2s rapid=%-5s query=%s"
@@ -709,7 +744,8 @@ def summarize(results, output_dir, args, resource_summary):
                 "state": result.get("state"),
                 "status_http": result.get("status_http"),
                 "query": result.get("query"),
-                "error": result.get("error_preview") or compact_text(result.get("error", ""), 300),
+                "error_reason": result.get("error_reason") or result.get("error"),
+                "error_payload": result.get("error_payload"),
             })
 
     path = os.path.join(output_dir, "summary.json")
