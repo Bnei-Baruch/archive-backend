@@ -13,6 +13,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
+	es9common "github.com/Bnei-Baruch/archive-backend/es9/common"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	"github.com/Bnei-Baruch/archive-backend/search"
 	"github.com/Bnei-Baruch/archive-backend/utils"
@@ -21,6 +22,7 @@ import (
 var (
 	DB     *sql.DB
 	ESC    *search.ESManager
+	ES9C   *es9common.ES9Manager
 	CACHE  cache.CacheManager
 	//GRAMMARS     search.Grammars
 	VARIABLES    search.VariablesV2
@@ -95,6 +97,12 @@ func InitWithOptions(defaultDb *sql.DB, defaultCache *cache.CacheManager, initES
 		// Moving to Grammars V2 that are indexed and searched.
 		VARIABLES, err = search.MakeVariablesV2(es.DataFolder("search", "variables"))
 	}
+
+	if url := viper.GetString("elasticsearch9.url"); url != "" {
+		log.Info("Setting up connection to Elasticsearch 9")
+		ES9C = es9common.MakeES9Manager(url)
+	}
+
 	//utils.Must(err)
 	//GRAMMARS, err = search.MakeGrammars(viper.GetString("elasticsearch.grammars"), esc, TOKENS_CACHE, VARIABLES)
 	//utils.Must(err)
@@ -115,6 +123,9 @@ func Shutdown() {
 	utils.Must(DB.Close())
 	if ESC != nil {
 		ESC.Stop()
+	}
+	if ES9C != nil {
+		ES9C.Stop()
 	}
 	CACHE.Close()
 }

@@ -16,10 +16,11 @@ import (
 )
 
 // Set MDB, ES & LOGGER etc. clients in context
-func DataStoresMiddleware(mbdDB *sql.DB, esManager, cm interface{} /*grammars interface{},*/, tc interface{}, cms interface{}, variables interface{}) gin.HandlerFunc {
+func DataStoresMiddleware(mbdDB *sql.DB, esManager, cm interface{} /*grammars interface{},*/, tc interface{}, cms interface{}, variables interface{}, es9Manager interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set("MDB_DB", mbdDB)
 		c.Set("ES_MANAGER", esManager)
+		c.Set("ES9_MANAGER", es9Manager)
 		c.Set("CACHE", cm)
 		//c.Set("GRAMMARS", grammars)
 		c.Set("VARIABLES", variables)

@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/volatiletech/null/v8"
 )
@@ -96,6 +97,13 @@ type QueryResult struct {
 type Engine interface {
 	GetSuggestions(ctx context.Context, query Query) (interface{}, error)
 	DoSearch(ctx context.Context, query Query, from int, size int, preference string) (interface{}, error)
+}
+
+// SearchEngine is satisfied by both ESEngine (ES6) and ES9Engine.
+// Used by API handlers so they can be toggled without code changes.
+type SearchEngine interface {
+	DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchTweets bool, searchLessonSeries bool, withHighlights bool, timeoutForHighlight time.Duration) (*QueryResult, error)
+	GetSuggestions(ctx context.Context, query Query, preference string) (interface{}, error)
 }
 
 type SearchRequestOptions struct {
