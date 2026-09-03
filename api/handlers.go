@@ -26,6 +26,7 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
+	es9common "github.com/Bnei-Baruch/archive-backend/es9/common"
 	"github.com/Bnei-Baruch/archive-backend/mdb"
 	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	"github.com/Bnei-Baruch/archive-backend/search"
@@ -705,6 +706,22 @@ func SearchStatsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
+// withES9 returns an ES9-backed engine when elasticsearch.use-es9 is set and an
+// ES9 client is available; otherwise the given ES6 engine. Both satisfy
+// search.SearchEngine so handlers stay engine-agnostic. inner is reused (and its
+// ExecutionTimeLog stays valid) because ES9Engine embeds the same *ESEngine.
+func withES9(c *gin.Context, inner *search.ESEngine) search.SearchEngine {
+	if viper.GetBool("elasticsearch.use-es9") {
+		if m, _ := c.MustGet("ES9_MANAGER").(*es9common.ES9Manager); m != nil {
+			if esc9, err := m.GetClient(); err == nil && esc9 != nil {
+				return search.NewES9Engine(esc9, inner)
+			}
+			log.Warn("elasticsearch.use-es9 set but ES9 client unavailable; using ES6")
+		}
+	}
+	return inner
+}
+
 func SearchHandler(c *gin.Context) {
 	log.Debugf("Language: %s", c.Query("language"))
 	log.Infof("Query: [%s]", c.Query("q"))
@@ -772,7 +789,8 @@ func SearchHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables, consts.ES_SEARCH_RESULT_TYPES)
+	inner := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables, consts.ES_SEARCH_RESULT_TYPES)
+	se := withES9(c, inner)
 
 	// Detect input language
 	detectQuery := strings.Join(append(query.ExactTerms, query.Term), " ")
@@ -830,7 +848,7 @@ func SearchHandler(c *gin.Context) {
 
 	if query.Deb {
 		timeLogArr := []search.TimeLog{}
-		for k, v := range se.ExecutionTimeLog.ToMap() {
+		for k, v := range inner.ExecutionTimeLog.ToMap() {
 			ms := int64(v / time.Millisecond)
 			timeLogArr = append(timeLogArr, search.TimeLog{Operation: k, Time: ms})
 		}
@@ -842,7 +860,7 @@ func SearchHandler(c *gin.Context) {
 			if hit.Type == consts.SEARCH_RESULT_TWEETS_MANY {
 				// Move Tweets from innerHits to Source, to make client more consistent (work with source only).
 				// Should be done after the logging to avoid errors with source field
-				err = se.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
+				err = inner.NativizeTweetsHitForClient(hit, consts.SEARCH_RESULT_TWEETS_MANY)
 			}
 			//  Temp. workround until client could handle null values in Highlight fields (WIP by David)
 			//	TBD check if already fixed in client
@@ -877,7 +895,8 @@ func AutocompleteHandler(c *gin.Context) {
 		return
 	}
 
-	se := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables, consts.ES_SEARCH_RESULT_TYPES)
+	inner := search.NewESEngine(esc, db, cacheM /*, grammars*/, tc, variables, consts.ES_SEARCH_RESULT_TYPES)
+	se := withES9(c, inner)
 
 	// Detect input language
 	log.Infof("Detect language input: (%s, %s, %s)", q, c.Query("language"), c.Request.Header.Get("Accept-Language"))
