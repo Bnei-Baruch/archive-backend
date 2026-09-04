@@ -31,6 +31,12 @@ var indexGrammarsCmd = &cobra.Command{
 	Run:   indexGrammarsFn,
 }
 
+var indexGrammarsES9Cmd = &cobra.Command{
+	Use:   "index_grammars_es9",
+	Short: "Import Grammars to Elasticsearch 9.",
+	Run:   indexGrammarsES9Fn,
+}
+
 var prepareDocsCmd = &cobra.Command{
 	Use:   "prepare_docs",
 	Short: "Prepares all docs via Unzip service.",
@@ -83,6 +89,8 @@ func init() {
 	RootCmd.AddCommand(indexGrammarsCmd)
 	indexGrammarsCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be used for new index.")
 	indexGrammarsCmd.PersistentFlags().BoolVar(&updateAlias, "update_alias", true, "If set to false will not update alias.")
+	RootCmd.AddCommand(indexGrammarsES9Cmd)
+	indexGrammarsES9Cmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be used for new index (empty = serving name prod_grammars_<lang>).")
 	RootCmd.AddCommand(prepareDocsCmd)
 	deleteIndexCmd.PersistentFlags().StringVar(&indexDate, "index_date", "", "Index date to be deleted.")
 	deleteIndexCmd.MarkFlagRequired("index_date")
@@ -148,6 +156,37 @@ func indexGrammarsFn(cmd *cobra.Command, args []string) {
 		utils.Must(es.SwitchAlias(alias, prev, search.GrammarIndexName("%s", date), esc))
 	} else {
 		log.Info("Not switching alias.")
+	}
+
+	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
+}
+
+func indexGrammarsES9Fn(cmd *cobra.Command, args []string) {
+	clock := common.Init()
+	defer common.Shutdown()
+	log.Infof("Initialized.")
+
+	if common.ES9C == nil {
+		log.Error("ES9 is not configured. Set [elasticsearch9] url in config.")
+		return
+	}
+
+	// Empty index date -> prod_grammars_<lang>, the name GrammarIndexNameForServing
+	// resolves to when elasticsearch.grammar-index-date is unset. A non-empty date
+	// builds prod_grammars_<lang>_<date>; select it for serving via that config.
+	date := indexDate
+
+	variables, err := search.MakeVariablesV2(es.DataFolder("search", "variables"))
+	utils.Must(err)
+	log.Infof("Variables loaded.")
+	grammars, err := search.MakeGrammarsV2(es.DataFolder("search", "grammars"))
+	utils.Must(err)
+	log.Infof("Grammars loaded.")
+
+	if err := search.IndexGrammarsES9(common.ES9C, date, grammars, variables, common.CACHE); err != nil {
+		log.Error(errors.Wrap(err, "Failed to index grammars to ES9."))
+	} else {
+		log.Info("ES9 grammar indexed.")
 	}
 
 	log.Infof("Total run time: %s", time.Now().Sub(clock).String())
