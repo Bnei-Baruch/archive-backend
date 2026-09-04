@@ -35,6 +35,10 @@ type ESEngine struct {
 	TokensCache       *TokensCache
 	variables         VariablesV2
 	searchResultTypes []string
+	// msearchExec executes grammar/intent multi-searches and returns the shared
+	// result types. Defaults to the ES6 implementation (execES6Msearch);
+	// ES9Engine overrides it (execES9Msearch) to route these searches to ES9.
+	msearchExec func(ctx context.Context, reqs []*elastic.SearchRequest, indices []string, preference string) ([]*SearchResult, error)
 }
 
 type ClassificationIntent struct {
@@ -161,7 +165,7 @@ func (s bySourceFirst) Less(i, j int) bool {
 // TODO: All interactions with ES should be throttled to prevent downstream pressure
 
 func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager /*, grammars Grammars*/, tc *TokensCache, variables VariablesV2, searchResultTypes []string) *ESEngine {
-	return &ESEngine{
+	e := &ESEngine{
 		esc:              esc,
 		mdb:              db,
 		cache:            cache,
@@ -171,6 +175,26 @@ func NewESEngine(esc *elastic.Client, db *sql.DB, cache cache.CacheManager /*, g
 		variables:         variables,
 		searchResultTypes: searchResultTypes,
 	}
+	e.msearchExec = e.execES6Msearch
+	return e
+}
+
+// execES6Msearch runs the given requests as a multi-search against ES6 and
+// converts the responses to the shared result types. indices and preference are
+// unused here: the olivere requests already carry them in their msearch header.
+func (e *ESEngine) execES6Msearch(ctx context.Context, reqs []*elastic.SearchRequest, indices []string, preference string) ([]*SearchResult, error) {
+	ms := e.esc.MultiSearch()
+	ms.Add(reqs...)
+	mr, err := ms.Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range mr.Responses {
+		if r.Error != nil {
+			return nil, errors.Errorf("Failed multi get: %+v", r.Error)
+		}
+	}
+	return fromOlivereResponses(mr.Responses), nil
 }
 
 func SuggestionHasOptions(ss SearchSuggest) bool {

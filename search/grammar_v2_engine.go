@@ -31,36 +31,30 @@ func (e *ESEngine) SuggestGrammarsV2(query *Query, preference string) (map[strin
 		return suggests, nil
 	}
 
-	multiSearchService := e.esc.MultiSearch()
-
+	requests := []*elastic.SearchRequest{}
+	indices := []string{}
 	for _, language := range query.LanguageOrder {
 		// Suggester:
-		multiSearchService.Add(NewResultsSuggestGrammarV2CompletionRequest(query, language, preference))
-		// Search (will not match part of words): multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference))
+		requests = append(requests, NewResultsSuggestGrammarV2CompletionRequest(query, language, preference))
+		indices = append(indices, GrammarIndexNameForServing(language))
+		// Search (will not match part of words): NewSuggestGammarV2Request(query, language, preference)
 	}
 
-	mr, err := multiSearchService.Do(context.TODO())
+	grammarSuggestResponses, err := e.msearchExec(context.TODO(), requests, indices, preference)
 	elapsed := time.Since(start)
 	if elapsed > 10*time.Millisecond {
-		fmt.Printf("multiSearchService.Do - %s\n\n", elapsed.String())
+		fmt.Printf("grammar suggest msearch - %s\n\n", elapsed.String())
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "Error looking for grammar suggest.")
 	}
 
-	if len(mr.Responses) != len(query.LanguageOrder) {
+	if len(grammarSuggestResponses) != len(query.LanguageOrder) {
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
-			len(mr.Responses), len(query.LanguageOrder)))
+			len(grammarSuggestResponses), len(query.LanguageOrder)))
 	}
 
 	start = time.Now()
-	for _, r := range mr.Responses {
-		if r.Error != nil {
-			log.Warnf("%+v", r.Error)
-			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", r.Error))
-		}
-	}
-	grammarSuggestResponses := fromOlivereResponses(mr.Responses)
 	for i, currentResults := range grammarSuggestResponses {
 		// Suggester
 		if SuggestionHasOptions(currentResults.Suggest) {
@@ -212,38 +206,35 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 			}
 		}
 	}
-	multiSearchService := e.esc.MultiSearch()
+	requests := []*elastic.SearchRequest{}
+	indices := []string{}
 	if searchLandingPagesOnly {
 		for _, language := range query.LanguageOrder {
 			hitType := "landing-pages"
-			multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference, &hitType))
+			requests = append(requests, NewSuggestGammarV2Request(query, language, preference, &hitType))
+			indices = append(indices, GrammarIndexNameForServing(language))
 		}
 	} else {
 		for _, language := range query.LanguageOrder {
-			multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference, nil))
-			multiSearchService.Add(NewGammarPerculateRequest(query, language, preference))
+			requests = append(requests, NewSuggestGammarV2Request(query, language, preference, nil))
+			indices = append(indices, GrammarIndexNameForServing(language))
+			requests = append(requests, NewGammarPerculateRequest(query, language, preference))
+			indices = append(indices, GrammarIndexNameForServing(language))
 		}
 	}
 	beforeGrammarSearch := time.Now()
-	mr, err := multiSearchService.Do(context.TODO())
+	grammarSearchResponses, err := e.msearchExec(context.TODO(), requests, indices, preference)
 	e.timeTrack(beforeGrammarSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "Error looking for grammar search.")
 	}
 
-	if len(mr.Responses) != len(query.LanguageOrder)*queriesNumForLang {
+	if len(grammarSearchResponses) != len(query.LanguageOrder)*queriesNumForLang {
 		return nil, nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
-			len(mr.Responses), len(query.LanguageOrder)*queriesNumForLang))
+			len(grammarSearchResponses), len(query.LanguageOrder)*queriesNumForLang))
 	}
 
 	start := time.Now()
-	for _, r := range mr.Responses {
-		if r.Error != nil {
-			log.Warnf("%+v", r.Error)
-			return nil, nil, errors.New(fmt.Sprintf("Failed multi get: %+v", r.Error))
-		}
-	}
-	grammarSearchResponses := fromOlivereResponses(mr.Responses)
 	filterIntentsByLanguage := map[string][]Intent{}
 	for i, currentResults := range grammarSearchResponses {
 		language := query.LanguageOrder[i/queriesNumForLang]

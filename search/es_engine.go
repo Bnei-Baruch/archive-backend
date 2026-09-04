@@ -15,6 +15,7 @@ import (
 	elasticsearch "github.com/elastic/go-elasticsearch/v9"
 	"github.com/pkg/errors"
 	"github.com/volatiletech/null/v8"
+	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -34,7 +35,29 @@ type ES9Engine struct {
 // esc9  - the ES9 HTTP client
 // inner - the existing ESEngine; its sub-engine methods are reused via embedding.
 func NewES9Engine(esc9 *elasticsearch.Client, inner *ESEngine) *ES9Engine {
-	return &ES9Engine{esc9: esc9, ESEngine: inner}
+	e := &ES9Engine{esc9: esc9, ESEngine: inner}
+	// Route the embedded engine's grammar/intent multi-searches to ES9.
+	inner.msearchExec = e.execES9Msearch
+	return e
+}
+
+// execES9Msearch serializes the olivere requests to their JSON bodies and runs
+// them against ES9 via es9Msearch. indices and preference are passed explicitly
+// because olivere does not expose them from a built request.
+func (e *ES9Engine) execES9Msearch(ctx context.Context, reqs []*elastic.SearchRequest, indices []string, preference string) ([]*SearchResult, error) {
+	bodies := make([]map[string]interface{}, len(reqs))
+	for i, req := range reqs {
+		bodyStr, err := req.Body()
+		if err != nil {
+			return nil, fmt.Errorf("execES9Msearch: body[%d]: %w", i, err)
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal([]byte(bodyStr), &m); err != nil {
+			return nil, fmt.Errorf("execES9Msearch: unmarshal body[%d]: %w", i, err)
+		}
+		bodies[i] = m
+	}
+	return e.es9Msearch(ctx, bodies, indices, preference)
 }
 
 // ---------------------------------------------------------------------------
