@@ -115,13 +115,13 @@ func NewResultsSuggestGrammarV2CompletionRequest(query *Query, language string, 
 		Preference(preference)
 }
 
-func NewFilteredResultsSearchRequest(text string, filters map[string][]string, contentType string, programCollection string, sources []string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, error) {
+func NewFilteredResultsSearchRequest(text string, filters map[string][]string, contentType string, programCollection string, sources []string, from int, size int, sortBy string, resultTypes []string, language string, preference string, deb bool) ([]*elastic.SearchRequest, []string, error) {
 	// THOSE CONSTRAINTS ARE NO LONGER TRUE...
 	if contentType == "" && programCollection == "" && len(sources) == 0 {
-		return nil, fmt.Errorf("No contentType or programCollection or sources provided for NewFilteredResultsSearchRequest().")
+		return nil, nil, fmt.Errorf("No contentType or programCollection or sources provided for NewFilteredResultsSearchRequest().")
 	}
 	if contentType != "" && len(sources) > 0 {
-		return nil, fmt.Errorf("Filter by source and content type combination is not currently supported.")
+		return nil, nil, fmt.Errorf("Filter by source and content type combination is not currently supported.")
 	}
 	var searchSources bool
 	filtersCopy := map[string][]string{}
@@ -135,12 +135,12 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 		if contentType != "" {
 			// by content type filter
 			if len(filters) > 0 && !hasCommonFilter(filters, consts.CT_VARIABLE_TO_FILTER_VALUES[contentType]) {
-				return nil, fmt.Errorf("No common query filters with filters by content type operation.")
+				return nil, nil, fmt.Errorf("No common query filters with filters by content type operation.")
 			}
 			filters, _ = consts.CT_VARIABLE_TO_FILTER_VALUES[contentType] // We override the given query filters. Consider merging filters.
 			_, enableSourcesSearch := consts.CT_VARIABLES_ENABLE_SOURCES_SEARCH[contentType]
 			if len(filters) == 0 && !enableSourcesSearch {
-				return nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES and not in CT_VARIABLES_ENABLE_SOURCES_SEARCH.", contentType)
+				return nil, nil, fmt.Errorf("Content type '%s' is not found in CT_VARIABLE_TO_FILTER_VALUES and not in CT_VARIABLES_ENABLE_SOURCES_SEARCH.", contentType)
 			}
 			searchSources = searchSources && enableSourcesSearch
 		}
@@ -154,13 +154,14 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 		filters[consts.FILTER_COLLECTION] = []string{programCollection}
 	}
 	requests := []*elastic.SearchRequest{}
+	indices := []string{}
 	if searchSources {
 		sourceOnlyFilter := map[string][]string{consts.FILTER_CONTENT_TYPE: []string{consts.CT_SOURCE}}
 		if len(sources) > 0 {
 			sourceOnlyFilter[consts.FILTER_SOURCE] = sources
 		}
 		titlesOnly := contentType == consts.VAR_CT_BOOK_TITLES
-		sourceRequests, err := NewResultsSearchRequests(
+		sourceRequests, sourceIndices, err := NewResultsSearchRequests(
 			SearchRequestOptions{
 				resultTypes:        []string{consts.ES_RESULT_TYPE_SOURCES},
 				index:              "",
@@ -174,13 +175,14 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 				filterOutCUSources: []string{},
 				titlesOnly:         titlesOnly})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		requests = append(requests, sourceRequests...)
+		indices = append(indices, sourceIndices...)
 	}
 	if !isSectionSources {
 		if len(filters) > 0 {
-			nonSourceRequests, err := NewResultsSearchRequests(
+			nonSourceRequests, nonSourceIndices, err := NewResultsSearchRequests(
 				SearchRequestOptions{
 					resultTypes:        resultTypes,
 					index:              "",
@@ -193,13 +195,14 @@ func NewFilteredResultsSearchRequest(text string, filters map[string][]string, c
 					partialHighlight:   false,
 					filterOutCUSources: []string{}})
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			requests = append(requests, nonSourceRequests...)
+			indices = append(indices, nonSourceIndices...)
 		}
 	}
 
-	return requests, nil
+	return requests, indices, nil
 }
 
 func wordToHist(word string) map[rune]int {

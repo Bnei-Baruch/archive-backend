@@ -291,17 +291,20 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 			if contentType != "" || programCollection != "" || len(sources) > 0 {
 				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Program collection is '%s', Sources are '%+v'.", contentType, text, programCollection, sources)
 				requests := []*elastic.SearchRequest{}
-				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				indices := []string{}
+				textValSearchRequests, textValIndices, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 				if err != nil {
 					return nil, err
 				}
 				requests = append(requests, textValSearchRequests...)
+				indices = append(indices, textValIndices...)
 				if !searchWithoutTerm && contentType != consts.VAR_CT_ARTICLES {
-					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+					fullTermSearchRequests, fullTermIndices, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 					if err != nil {
 						return nil, err
 					}
 					requests = append(requests, fullTermSearchRequests...)
+					indices = append(indices, fullTermIndices...)
 				}
 				if len(requests) > 0 {
 					wg.Add(1)
@@ -321,7 +324,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 						} else {
 							scoreMultiplication = &intentValue.Score
 						}
-						results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement, scoreMultiplication)
+						results, hitIdsMap, maxScore, err := e.filterSearch(requests, indices, preference, scoreIncrement, scoreMultiplication)
 						if err != nil {
 							log.Errorf("FilterSearch error: %+v", err)
 							return
@@ -1097,28 +1100,18 @@ func retrieveTextVarValues(str string) []string {
 
 // Results search according to grammar based filter.
 // Return: Results, Unique list of hit id's as a map, Max score
-func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncrement *float64, scoreMultiplication *float64) ([]*SearchResult, map[string]bool, *float64, error) {
+func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, indices []string, preference string, scoreIncrement *float64, scoreMultiplication *float64) ([]*SearchResult, map[string]bool, *float64, error) {
 	results := []*SearchResult{}
 	hitIdsMap := map[string]bool{}
 	var maxScore *float64
 
-	multiSearchFilteredService := e.esc.MultiSearch()
-	multiSearchFilteredService.Add(requests...)
 	beforeFilterSearch := time.Now()
-	mr, err := multiSearchFilteredService.Do(context.TODO())
+	filterResponses, err := e.msearchExec(context.TODO(), requests, indices, preference)
 	e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO) // TBC differentiate calls to filterSearch under single request
 
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
 	}
-
-	for _, r := range mr.Responses {
-		if r.Error != nil {
-			log.Warnf("%+v", r.Error)
-			return nil, nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", r.Error))
-		}
-	}
-	filterResponses := fromOlivereResponses(mr.Responses)
 	for _, currentResults := range filterResponses {
 		if haveHits(currentResults) {
 			var currentMaxScore *float64

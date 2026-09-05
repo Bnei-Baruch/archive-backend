@@ -10,6 +10,8 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 
 	"github.com/pkg/errors"
+	"gopkg.in/olivere/elastic.v6"
+
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
 	log "github.com/Sirupsen/logrus"
@@ -100,7 +102,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 		}
 	}
 
-	mssFirstRound := e.esc.MultiSearch()
+	firstRoundRequests := []*elastic.SearchRequest{}
+	firstRoundIndices := []string{}
 	potentialIntents := make([]Intent, 0)
 	size := consts.INTENTS_SEARCH_DEFAULT_COUNT
 	for _, language := range query.LanguageOrder {
@@ -161,7 +164,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 				log.Warnf("ESEngine.AddIntents - Failed on creating tags request %+v", err)
 				return nil, err
 			}
-			mssFirstRound.Add(req)
+			firstRoundRequests = append(firstRoundRequests, req)
+			firstRoundIndices = append(firstRoundIndices, index)
 			potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, grammarIntent})
 		}
 		if searchSources && searchSourcesForLang {
@@ -181,27 +185,22 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 				log.Warnf("ESEngine.AddIntents - Failed on creating sources request %+v", err)
 				return nil, err
 			}
-			mssFirstRound.Add(req)
+			firstRoundRequests = append(firstRoundRequests, req)
+			firstRoundIndices = append(firstRoundIndices, index)
 			potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, grammarIntent})
 		}
 	}
 	beforeFirstRoundDo := time.Now()
-	mr, err := mssFirstRound.Do(context.TODO())
+	firstRoundResponses, err := e.msearchExec(context.TODO(), firstRoundRequests, firstRoundIndices, preference)
 	e.timeTrack(beforeFirstRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO)
 	if err != nil {
 		return intents, errors.Wrap(err, "ESEngine.AddIntents - Error multisearch Do.")
 	}
 
 	// Build second request to evaluate how close the search is toward the full name.
-	mssSecondRound := e.esc.MultiSearch()
+	secondRoundRequests := []*elastic.SearchRequest{}
+	secondRoundIndices := []string{}
 	finalIntents := make([]Intent, 0)
-	for _, r := range mr.Responses {
-		if r.Error != nil {
-			log.Warnf("ESEngine.AddIntents - First Run %+v", r.Error)
-			return intents, errors.New("ESEngine.AddIntents - First Run Failed multi get (S).")
-		}
-	}
-	firstRoundResponses := fromOlivereResponses(mr.Responses)
 	for i := 0; i < len(potentialIntents); i++ {
 		res := firstRoundResponses[i]
 		if haveHits(res) {
@@ -228,7 +227,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 						log.Warnf("ESEngine.AddIntents - Failed on creating second round request %+v", err)
 						return nil, err
 					}
-					mssSecondRound.Add(req)
+					secondRoundRequests = append(secondRoundRequests, req)
+					secondRoundIndices = append(secondRoundIndices, es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, intent.Language))
 					finalIntents = append(finalIntents, *intent)
 				}
 			}
@@ -240,21 +240,11 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 	}
 
 	beforeSecondRoundDo := time.Now()
-	mr, err = mssSecondRound.Do(context.TODO())
+	secondRoundResponses, err := e.msearchExec(context.TODO(), secondRoundRequests, secondRoundIndices, preference)
 	e.timeTrack(beforeSecondRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO)
 	if err != nil {
 		return intents, errors.Wrap(err, "ESEngine.AddIntents - Second round Do failed")
 	}
-	for _, r := range mr.Responses {
-		if r.Error != nil {
-			log.Warnf("ESEngine.AddIntents - Second Run %+v", r.Error)
-			if len(r.Error.RootCause) > 0 {
-				log.Warnf("ESEngine.AddIntents - Second Run %+v", r.Error.RootCause[0])
-			}
-			return intents, errors.New("ESEngine.AddIntents - Second Run Failed multi get (S).")
-		}
-	}
-	secondRoundResponses := fromOlivereResponses(mr.Responses)
 	for i := 0; i < len(finalIntents); i++ {
 		res := secondRoundResponses[i]
 		intentValue, intentOk := finalIntents[i].Value.(ClassificationIntent)

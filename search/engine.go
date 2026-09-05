@@ -846,7 +846,7 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 		}
 	}
 	multiSearchService := e.esc.MultiSearch()
-	requests, err := NewResultsSearchRequests(
+	requests, _, err := NewResultsSearchRequests(
 		SearchRequestOptions{
 			resultTypes:        resultTypes,
 			index:              "",
