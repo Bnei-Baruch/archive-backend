@@ -106,6 +106,7 @@
               "quotes"
             ],
             "filter": [
+              "lowercase",
               "synonym_graph"
             ],
             "tokenizer": "standard"

@@ -107,6 +107,7 @@
             ],
             "filter": [
               "english_possessive_stemmer",
+              "lowercase",
               "en_stop",
               "en_stemmer",
               "synonym_graph"

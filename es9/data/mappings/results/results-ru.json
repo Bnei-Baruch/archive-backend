@@ -106,6 +106,7 @@
               "quotes"
             ],
             "filter": [
+              "lowercase",
               "ru_stop",
               "ru_stemmer",
               "synonym_graph"

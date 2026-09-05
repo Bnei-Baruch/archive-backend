@@ -217,7 +217,7 @@ func generateAnalyzers(lang *LanguageAnalyzerConfig) map[string]interface{} {
 	// PRIMARY ANALYZER: Language-specific with synonyms
 	if lang.HunspellLocale != "" {
 		// Hebrew-like: Hunspell-based
-		filters = []string{"synonym_graph", lang.HunspellLocale}
+		filters = []string{"lowercase", "synonym_graph", lang.HunspellLocale}
 		analyzers[lang.Code+"_hunspell"] = map[string]interface{}{
 			"tokenizer":   tokenizer,
 			"char_filter": []string{"quotes"},
@@ -229,7 +229,7 @@ func generateAnalyzers(lang *LanguageAnalyzerConfig) map[string]interface{} {
 		if lang.Code == consts.LANG_ENGLISH {
 			filters = append(filters, "english_possessive_stemmer")
 		}
-		filters = append(filters, lang.Code+"_stop", lang.Code+"_stemmer", "synonym_graph")
+		filters = append(filters, "lowercase", lang.Code+"_stop", lang.Code+"_stemmer", "synonym_graph")
 
 		analyzers[lang.Code+"_stemmer"] = map[string]interface{}{
 			"tokenizer":   tokenizer,
@@ -241,7 +241,7 @@ func generateAnalyzers(lang *LanguageAnalyzerConfig) map[string]interface{} {
 		analyzers[lang.Code+"_standard"] = map[string]interface{}{
 			"tokenizer":   tokenizer,
 			"char_filter": []string{"quotes"},
-			"filter":      []string{"synonym_graph"},
+			"filter":      []string{"lowercase", "synonym_graph"},
 		}
 	}
 

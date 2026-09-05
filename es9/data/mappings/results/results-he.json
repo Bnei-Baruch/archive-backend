@@ -146,6 +146,7 @@
               "quotes"
             ],
             "filter": [
+              "lowercase",
               "synonym_graph",
               "he_IL"
             ],
