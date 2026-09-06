@@ -5,20 +5,49 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 )
 
+// loadSynonyms reads the tab-separated synonym groups for a language (the same
+// data/es/synonyms/<lang>.txt files ES6 loads) and returns them as ES synonym
+// rules ("a, b, c"). Returns empty when there is no synonym file for the
+// language (only en/he/ru have one).
+func loadSynonyms(langCode string) []string {
+	rules := []string{}
+	data, err := os.ReadFile(filepath.Join("es9", "data", "synonyms", langCode+".txt"))
+	if err != nil {
+		return rules
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		terms := []string{}
+		for _, t := range strings.Split(line, "\t") {
+			if t = strings.TrimSpace(t); t != "" {
+				terms = append(terms, t)
+			}
+		}
+		if len(terms) >= 2 {
+			rules = append(rules, strings.Join(terms, ", "))
+		}
+	}
+	return rules
+}
+
 // LanguageAnalyzerConfig defines how to analyze text for a specific language
 type LanguageAnalyzerConfig struct {
-	Code           string   // Language code (en, he, ru, etc.)
-	Name           string   // Display name
-	HunspellLocale string   // Hunspell locale (e.g., "he_IL", empty if not supported)
-	NeedsICU       bool     // Whether to create ICU analyzer variant
-	NeedsCJK       bool     // Whether to use CJK tokenizer
-	StopWords      string   // Stop words list (_english_, _russian_, etc.)
-	Stemmer        string   // Stemmer type (english, russian, light_spanish, etc.)
-	SynonymFile    string   // Path to synonym file
+	Code           string // Language code (en, he, ru, etc.)
+	Name           string // Display name
+	HunspellLocale string // Hunspell locale (e.g., "he_IL", empty if not supported)
+	NeedsICU       bool   // Whether to create ICU analyzer variant
+	NeedsCJK       bool   // Whether to use CJK tokenizer
+	StopWords      string // Stop words list (_english_, _russian_, etc.)
+	Stemmer        string // Stemmer type (english, russian, light_spanish, etc.)
+	SynonymFile    string // Path to synonym file
 }
 
 // GetLanguageConfigs returns analyzer configurations for all supported languages
@@ -149,7 +178,7 @@ func generateFilters(lang *LanguageAnalyzerConfig) map[string]interface{} {
 	filters["synonym_graph"] = map[string]interface{}{
 		"type":      "synonym_graph",
 		"tokenizer": "keyword",
-		"synonyms":  []string{}, // Load from file in production
+		"synonyms":  loadSynonyms(lang.Code),
 	}
 
 	// Hunspell (if supported)
@@ -324,17 +353,17 @@ func generateMappings(lang *LanguageAnalyzerConfig) map[string]interface{} {
 
 	properties := map[string]interface{}{
 		// Metadata fields
-		"result_type": map[string]interface{}{"type": "keyword"},
-		"index_date":  map[string]interface{}{"type": "date", "format": "strict_date"},
-		"mdb_uid":     map[string]interface{}{"type": "keyword"},
-		"typed_uids":  map[string]interface{}{"type": "keyword"},
+		"result_type":   map[string]interface{}{"type": "keyword"},
+		"index_date":    map[string]interface{}{"type": "date", "format": "strict_date"},
+		"mdb_uid":       map[string]interface{}{"type": "keyword"},
+		"typed_uids":    map[string]interface{}{"type": "keyword"},
 		"filter_values": map[string]interface{}{"type": "keyword"},
 
 		// Searchable text fields
-		"title":      textField("title"),
-		"full_title": textField("full_title"),
-		"description": textField("description"),
-		"content":    textField("content"),
+		"title":        textField("title"),
+		"full_title":   textField("full_title"),
+		"description":  textField("description"),
+		"content":      textField("content"),
 		"full_content": textField("full_content"),
 
 		// Completion suggester
