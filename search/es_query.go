@@ -500,7 +500,14 @@ func esCreateHighlightBody(terms []string, numFragments int, partialHighlight bo
 			fieldsMap["title.language"] = map[string]interface{}{"number_of_fragments": 0, "highlight_query": hq}
 		}
 	}
-	return map[string]interface{}{"fields": fieldsMap}
+	// ES >= 7 rejects highlighting fields longer than index.highlight.max_analyzed_offset
+	// (default 1,000,000) with a 400. Some content fields exceed that (e.g. a 1.8M-char
+	// Hebrew transcript). Setting max_analyzed_offset just under the index limit makes ES
+	// truncate long fields instead of failing the whole search (ES6/6.8 had no such guard).
+	return map[string]interface{}{
+		"fields":              fieldsMap,
+		"max_analyzed_offset": 999999,
+	}
 }
 
 // NewESResultsSearchBody builds the ES9 request body + index + preference for a results search.
