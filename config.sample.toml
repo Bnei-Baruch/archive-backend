@@ -32,7 +32,7 @@ prepare-docs-parallelism=2
 check-typo=true
 timeout-for-highlight="8s"
 use-es9=false  # route search/autocomplete through Elasticsearch 9 (requires [elasticsearch9] url)
-keep-es6-incremental=false  # during an ES9 bake (use-es9=true), also keep ES6 fresh via events for safe rollback
+stop-es6-incremental=false  # at final ES9 cutover set true to stop ES6 event indexing (default: ES6 keeps indexing for safe rollback)
 
 [elasticsearch9]
 url="http://127.0.0.1:9201"

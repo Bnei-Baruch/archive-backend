@@ -81,10 +81,10 @@ func RunListener() {
 	utils.Must(err)
 
 	log.Info("Initialize search engine indexer")
-	// use-es9 selects the primary (served) index; keep-es6-incremental additionally keeps
-	// ES6 fresh during an ES9 bake so a rollback needs no catch-up reindex.
+	// use-es9 selects the primary (served) index. By default ES6 keeps indexing too (safe
+	// rollback); set stop-es6-incremental=true at the final cutover to stop ES6.
 	useES9 := viper.GetBool("elasticsearch.use-es9")
-	keepES6 := viper.GetBool("elasticsearch.keep-es6-incremental")
+	stopES6 := viper.GetBool("elasticsearch.stop-es6-incremental")
 	var chain MultiEventIndexer
 	if useES9 {
 		es9URL := viper.GetString("elasticsearch9.url")
@@ -93,7 +93,7 @@ func RunListener() {
 		}
 		chain = append(chain, MakeES9Indexer(common.DB, es9common.MakeES9Manager(es9URL), "results", viper.GetString("elasticsearch.unzip-url")))
 	}
-	if !useES9 || keepES6 {
+	if !useES9 || !stopES6 {
 		chain = append(chain, makeES6EventIndexer())
 	}
 	if len(chain) == 1 {
@@ -101,7 +101,7 @@ func RunListener() {
 	} else {
 		indexer = chain
 	}
-	log.Infof("Events: incremental indexing — use-es9=%v keep-es6=%v (%d target(s))", useES9, keepES6, len(chain))
+	log.Infof("Events: incremental indexing — use-es9=%v stop-es6=%v (%d target(s))", useES9, stopES6, len(chain))
 
 	log.Info("Initialize indexer queue")
 	indexerQueue = new(IndexerQueue)
