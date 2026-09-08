@@ -451,6 +451,103 @@ func (m *ES9Manager) DeleteByResultType(ctx context.Context, indexName string, r
 	return deleted, nil
 }
 
+// DeleteByTypedUids deletes docs of a result_type whose typed_uids match any given value,
+// returning the mdb_uids (== _id) that were removed so the caller can re-add them.
+// Used by incremental indexing to refresh docs affected by an MDB change.
+func (m *ES9Manager) DeleteByTypedUids(ctx context.Context, indexName, resultType string, typedUids []string) ([]string, error) {
+	client, err := m.GetClient()
+	if err != nil {
+		return nil, err
+	}
+
+	esQuery := map[string]interface{}{
+		"bool": map[string]interface{}{
+			"filter": []map[string]interface{}{
+				{"term": map[string]interface{}{"result_type": resultType}},
+				{"terms": map[string]interface{}{"typed_uids": typedUids}},
+			},
+		},
+	}
+
+	// Collect the mdb_uids that match (incremental scope is small, one search suffices).
+	searchBody := map[string]interface{}{"query": esQuery, "_source": false, "size": 10000}
+	var sbuf bytes.Buffer
+	if err := json.NewEncoder(&sbuf).Encode(searchBody); err != nil {
+		return nil, fmt.Errorf("error encoding search: %w", err)
+	}
+	sres, err := client.Search(
+		client.Search.WithContext(ctx),
+		client.Search.WithIndex(indexName),
+		client.Search.WithBody(&sbuf),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error searching typed_uids: %w", err)
+	}
+	defer sres.Body.Close()
+	if sres.IsError() {
+		if sres.StatusCode == 404 {
+			return nil, nil // index not created yet
+		}
+		return nil, fmt.Errorf("search typed_uids failed: %s", sres.String())
+	}
+	var sr struct {
+		Hits struct {
+			Hits []struct {
+				ID string `json:"_id"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+	if err := json.NewDecoder(sres.Body).Decode(&sr); err != nil {
+		return nil, fmt.Errorf("error parsing search: %w", err)
+	}
+	if len(sr.Hits.Hits) == 0 {
+		return nil, nil
+	}
+	removed := make([]string, 0, len(sr.Hits.Hits))
+	for _, h := range sr.Hits.Hits {
+		removed = append(removed, h.ID)
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(map[string]interface{}{"query": esQuery}); err != nil {
+		return nil, fmt.Errorf("error encoding query: %w", err)
+	}
+	res, err := client.DeleteByQuery(
+		[]string{indexName},
+		&buf,
+		client.DeleteByQuery.WithContext(ctx),
+		client.DeleteByQuery.WithRefresh(true),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error executing delete by query: %w", err)
+	}
+	defer res.Body.Close()
+	if res.IsError() {
+		return nil, fmt.Errorf("delete by query failed: %s", res.String())
+	}
+	return removed, nil
+}
+
+// Refresh makes recent writes to the matching indices searchable immediately.
+func (m *ES9Manager) Refresh(ctx context.Context, indexPattern string) error {
+	client, err := m.GetClient()
+	if err != nil {
+		return err
+	}
+	res, err := client.Indices.Refresh(
+		client.Indices.Refresh.WithContext(ctx),
+		client.Indices.Refresh.WithIndex(indexPattern),
+	)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.IsError() {
+		return fmt.Errorf("refresh failed: %s", res.String())
+	}
+	return nil
+}
+
 // GetExistingUIDs retrieves all _id values for documents with a specific result_type
 // Returns a map[string]bool for fast lookup
 func (m *ES9Manager) GetExistingUIDs(ctx context.Context, indexName string, resultType string) (map[string]bool, error) {

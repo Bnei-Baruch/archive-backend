@@ -247,6 +247,17 @@ func contentUnitsScopeBySource(mdb *sql.DB, sourceUID string) ([]string, error) 
 	return uids, nil
 }
 
+// Exported wrappers for ES9 incremental indexing reuse.
+func ContentUnitsScopeByFile(mdb *sql.DB, fileUID string) ([]string, error) {
+	return contentUnitsScopeByFile(mdb, fileUID)
+}
+func ContentUnitsScopeByCollection(mdb *sql.DB, cUID string) ([]string, error) {
+	return contentUnitsScopeByCollection(mdb, cUID)
+}
+func ContentUnitsScopeBySource(mdb *sql.DB, sourceUID string) ([]string, error) {
+	return contentUnitsScopeBySource(mdb, sourceUID)
+}
+
 // DEBUG FUNCTIONS
 
 func DumpDB(mdb *sql.DB, title string) error {

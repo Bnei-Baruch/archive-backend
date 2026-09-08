@@ -12,10 +12,11 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/es"
+	es9common "github.com/Bnei-Baruch/archive-backend/es9/common"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-var indexer *es.Indexer
+var indexer EventIndexer
 var indexerQueue WorkQueue
 
 func shutDown(signalChan chan os.Signal, sc stan.Conn, indexerQueue WorkQueue, cleanupDone chan bool) {
@@ -62,18 +63,27 @@ func RunListener() {
 	utils.Must(err)
 
 	log.Info("Initialize search engine indexer")
-	esc, err := common.ESC.GetClient()
-	if err != nil {
-		log.Fatalf("Elastic is not available in RunListener():  %+v", err)
-	}
-	if viper.GetBool("server.fake-indexer") {
-		indexer, err = es.MakeFakeIndexer(common.DB, esc)
-		utils.Must(err)
+	if viper.GetBool("elasticsearch.use-es9") {
+		es9URL := viper.GetString("elasticsearch9.url")
+		if es9URL == "" {
+			log.Fatal("elasticsearch.use-es9 set but elasticsearch9.url not configured")
+		}
+		indexer = MakeES9Indexer(common.DB, es9common.MakeES9Manager(es9URL), "results", viper.GetString("elasticsearch.unzip-url"))
+		log.Info("Events: incremental indexing routed to ES9 (units index only until fan-out)")
 	} else {
-		err, date := es.ProdIndexDate(esc)
-		utils.Must(err)
-		indexer, err = es.MakeProdIndexer(date, common.DB, esc)
-		utils.Must(err)
+		esc, err := common.ESC.GetClient()
+		if err != nil {
+			log.Fatalf("Elastic is not available in RunListener():  %+v", err)
+		}
+		if viper.GetBool("server.fake-indexer") {
+			indexer, err = es.MakeFakeIndexer(common.DB, esc)
+			utils.Must(err)
+		} else {
+			err, date := es.ProdIndexDate(esc)
+			utils.Must(err)
+			indexer, err = es.MakeProdIndexer(date, common.DB, esc)
+			utils.Must(err)
+		}
 	}
 
 	log.Info("Initialize indexer queue")

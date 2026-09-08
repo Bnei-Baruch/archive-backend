@@ -255,6 +255,9 @@ func (p *Pipeline) startProducers(
 
 	for i := 0; i < p.config.NumProducers; i++ {
 		start := i * chunkSize
+		if start >= len(items) {
+			break // fewer items than producers; remaining producers get nothing
+		}
 		end := start + chunkSize
 		if end > len(items) {
 			end = len(items)
