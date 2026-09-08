@@ -166,7 +166,9 @@ func ParseQuery(q string) Query {
 }
 
 // Here we build the span_near query with span_multi sub queries to allow effective fuzzy search
-//  with slop and special cases like avoiding numeric values from applying fuzziness and handling of single hebrew letter in the query.
+//
+//	with slop and special cases like avoiding numeric values from applying fuzziness and handling of single hebrew letter in the query.
+//
 // The query is not supported in the elastic SDK so we build it manually.
 // Arguments:
 // field - the field where we search (title, full_title, description, content).
@@ -230,7 +232,9 @@ func addMustNotSeries(q Query) *elastic.BoolQuery {
 // resultTypes - list of search result types: sources, topics, CU's, etc..
 // docIds - optional list of _uid's for filtering the search. If the parameter value is nil, no filtering is applied. Used for highlight search.
 // filterOutCUSources - optional list of sources for which we want to filter out the CU's that connected to those sources
+//
 //	(in order to avoid duplication between carousel and regular results).
+//
 // titlesOnly - limit our search only to title fields: title, full_title and description in case we search for intent sources. Used for intent search.
 func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, titlesOnly bool) (elastic.Query, error) {
 	boolQuery := elastic.NewBoolQuery().Must(
@@ -640,7 +644,7 @@ func createHighlightQuery(terms []string, n int, partialHighlight bool) *elastic
 	return query
 }
 
-func NewResultsSearchRequests(options SearchRequestOptions) ([]*elastic.SearchRequest, error) {
+func NewResultsSearchRequests(options SearchRequestOptions) ([]*elastic.SearchRequest, []string, error) {
 	requests := make([]*elastic.SearchRequest, 0)
 	indices := make([]string, len(options.query.LanguageOrder))
 	for i := range options.query.LanguageOrder {
@@ -650,11 +654,11 @@ func NewResultsSearchRequests(options SearchRequestOptions) ([]*elastic.SearchRe
 		options.index = index
 		request, err := NewResultsSearchRequest(options)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		requests = append(requests, request)
 	}
-	return requests, nil
+	return requests, indices, nil
 }
 
 func NewResultsSuggestRequest(resultTypes []string, index string, query Query, preference string) *elastic.SearchRequest {

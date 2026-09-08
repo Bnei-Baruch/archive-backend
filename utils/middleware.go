@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -15,10 +16,11 @@ import (
 )
 
 // Set MDB, ES & LOGGER etc. clients in context
-func DataStoresMiddleware(mbdDB *sql.DB, esManager, cm interface{} /*grammars interface{},*/, tc interface{}, cms interface{}, variables interface{}) gin.HandlerFunc {
+func DataStoresMiddleware(mbdDB *sql.DB, esManager, cm interface{} /*grammars interface{},*/, tc interface{}, cms interface{}, variables interface{}, es9Manager interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set("MDB_DB", mbdDB)
 		c.Set("ES_MANAGER", esManager)
+		c.Set("ES9_MANAGER", es9Manager)
 		c.Set("CACHE", cm)
 		//c.Set("GRAMMARS", grammars)
 		c.Set("VARIABLES", variables)
@@ -46,12 +48,19 @@ func LoggerMiddleware() gin.HandlerFunc {
 	}
 }
 
+const stackTailLines = 30
+
 // Recover with error
 func RecoveryMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if rval := recover(); rval != nil {
-				debug.PrintStack()
+				stack := debug.Stack()
+				lines := strings.Split(string(stack), "\n")
+				if len(lines) > stackTailLines {
+					lines = lines[len(lines)-stackTailLines:]
+				}
+				log.Errorf("panic stack (last %d lines):\n%s", stackTailLines, strings.Join(lines, "\n"))
 				err, ok := rval.(error)
 				if !ok {
 					err = errors.Errorf("panic: %s", rval)

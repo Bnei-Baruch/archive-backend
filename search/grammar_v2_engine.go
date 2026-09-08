@@ -31,34 +31,31 @@ func (e *ESEngine) SuggestGrammarsV2(query *Query, preference string) (map[strin
 		return suggests, nil
 	}
 
-	multiSearchService := e.esc.MultiSearch()
-
+	requests := []*elastic.SearchRequest{}
+	indices := []string{}
 	for _, language := range query.LanguageOrder {
 		// Suggester:
-		multiSearchService.Add(NewResultsSuggestGrammarV2CompletionRequest(query, language, preference))
-		// Search (will not match part of words): multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference))
+		requests = append(requests, NewResultsSuggestGrammarV2CompletionRequest(query, language, preference))
+		indices = append(indices, GrammarIndexNameForServing(language))
+		// Search (will not match part of words): NewSuggestGammarV2Request(query, language, preference)
 	}
 
-	mr, err := multiSearchService.Do(context.TODO())
+	grammarSuggestResponses, err := e.msearchExec(context.TODO(), requests, indices, preference)
 	elapsed := time.Since(start)
 	if elapsed > 10*time.Millisecond {
-		fmt.Printf("multiSearchService.Do - %s\n\n", elapsed.String())
+		fmt.Printf("grammar suggest msearch - %s\n\n", elapsed.String())
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "Error looking for grammar suggest.")
 	}
 
-	if len(mr.Responses) != len(query.LanguageOrder) {
+	if len(grammarSuggestResponses) != len(query.LanguageOrder) {
 		return nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
-			len(mr.Responses), len(query.LanguageOrder)))
+			len(grammarSuggestResponses), len(query.LanguageOrder)))
 	}
 
 	start = time.Now()
-	for i, currentResults := range mr.Responses {
-		if currentResults.Error != nil {
-			log.Warnf("%+v", currentResults.Error)
-			return nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
-		}
+	for i, currentResults := range grammarSuggestResponses {
 		// Suggester
 		if SuggestionHasOptions(currentResults.Suggest) {
 			language := query.LanguageOrder[i]
@@ -84,7 +81,7 @@ func (e *ESEngine) SuggestGrammarsV2(query *Query, preference string) (map[strin
 	return suggests, nil
 }
 
-func (e *ESEngine) suggestOptionsToVariablesByPhrases(query *Query, suggest *elastic.SearchSuggest) ([]VariablesByPhrase, error) {
+func (e *ESEngine) suggestOptionsToVariablesByPhrases(query *Query, suggest *SearchSuggest) ([]VariablesByPhrase, error) {
 	ret := []VariablesByPhrase(nil)
 	for _, v := range *suggest {
 		for _, s := range v {
@@ -95,7 +92,7 @@ func (e *ESEngine) suggestOptionsToVariablesByPhrases(query *Query, suggest *ela
 						return nil, err
 					}
 					rule := ruleObj.GrammarRule
-					// log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", option.Score, option.Index, option.Type, option.Id, rule)
+					// log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", option.Score, option.Index, option.Type, option.ID, rule)
 					if len(rule.Values) != len(rule.Variables) {
 						return nil, errors.New(fmt.Sprintf("Expected Variables to be of size %d, but it is %d", len(rule.Values), len(rule.Variables)))
 					}
@@ -105,7 +102,7 @@ func (e *ESEngine) suggestOptionsToVariablesByPhrases(query *Query, suggest *ela
 					}
 					if GrammarVariablesMatch(rule.Intent, vMap, e.cache) {
 						//log.Infof("Chosen: %s", chosen)
-						//log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", option.Score, option.Index, option.Type, option.Id, rule)
+						//log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", option.Score, option.Index, option.Type, option.ID, rule)
 						//log.Infof("Options: %+v", option)
 						//log.Infof("vMap: [%+v]", vMap)
 						// Map from lang => Original Full Phrase => $Var => values
@@ -121,7 +118,7 @@ func (e *ESEngine) suggestOptionsToVariablesByPhrases(query *Query, suggest *ela
 	return ret, nil
 }
 
-func (e *ESEngine) suggestResultsToVariablesByPhrases(query *Query, result *elastic.SearchResult) ([]VariablesByPhrase, error) {
+func (e *ESEngine) suggestResultsToVariablesByPhrases(query *Query, result *SearchResult) ([]VariablesByPhrase, error) {
 	ret := []VariablesByPhrase(nil)
 	if haveHits(result) {
 		// log.Infof("Total Hits: %d, Max Score: %.2f", result.Hits.TotalHits, *result.Hits.MaxScore)
@@ -130,7 +127,7 @@ func (e *ESEngine) suggestResultsToVariablesByPhrases(query *Query, result *elas
 			if err := json.Unmarshal(*hit.Source, &rule); err != nil {
 				return nil, err
 			}
-			// log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", *hit.Score, hit.Index, hit.Type, hit.Id, rule)
+			// log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", *hit.Score, hit.Index, hit.Type, hit.ID, rule)
 			if len(rule.Values) != len(rule.Variables) {
 				return nil, errors.New(fmt.Sprintf("Expected Variables to be of size %d, but it is %d", len(rule.Values), len(rule.Variables)))
 			}
@@ -201,7 +198,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 				if err != nil {
 					return nil, nil, errors.Wrap(err, "sourcePathFromSql")
 				}
-				intents, err := e.getSingleHitIntentsBySource(*sourceUid, query.Filters, language, path, 3000.0, elastic.SearchExplanation{})
+				intents, err := e.getSingleHitIntentsBySource(*sourceUid, query.Filters, language, path, 3000.0, SearchExplanation{})
 				if err != nil {
 					return nil, nil, errors.Wrap(err, "getSingleHitIntentsBySource")
 				}
@@ -209,37 +206,37 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 			}
 		}
 	}
-	multiSearchService := e.esc.MultiSearch()
+	requests := []*elastic.SearchRequest{}
+	indices := []string{}
 	if searchLandingPagesOnly {
 		for _, language := range query.LanguageOrder {
 			hitType := "landing-pages"
-			multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference, &hitType))
+			requests = append(requests, NewSuggestGammarV2Request(query, language, preference, &hitType))
+			indices = append(indices, GrammarIndexNameForServing(language))
 		}
 	} else {
 		for _, language := range query.LanguageOrder {
-			multiSearchService.Add(NewSuggestGammarV2Request(query, language, preference, nil))
-			multiSearchService.Add(NewGammarPerculateRequest(query, language, preference))
+			requests = append(requests, NewSuggestGammarV2Request(query, language, preference, nil))
+			indices = append(indices, GrammarIndexNameForServing(language))
+			requests = append(requests, NewGammarPerculateRequest(query, language, preference))
+			indices = append(indices, GrammarIndexNameForServing(language))
 		}
 	}
 	beforeGrammarSearch := time.Now()
-	mr, err := multiSearchService.Do(context.TODO())
+	grammarSearchResponses, err := e.msearchExec(context.TODO(), requests, indices, preference)
 	e.timeTrack(beforeGrammarSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "Error looking for grammar search.")
 	}
 
-	if len(mr.Responses) != len(query.LanguageOrder)*queriesNumForLang {
+	if len(grammarSearchResponses) != len(query.LanguageOrder)*queriesNumForLang {
 		return nil, nil, errors.New(fmt.Sprintf("Unexpected number of results %d, expected %d",
-			len(mr.Responses), len(query.LanguageOrder)*queriesNumForLang))
+			len(grammarSearchResponses), len(query.LanguageOrder)*queriesNumForLang))
 	}
 
 	start := time.Now()
 	filterIntentsByLanguage := map[string][]Intent{}
-	for i, currentResults := range mr.Responses {
-		if currentResults.Error != nil {
-			log.Warnf("%+v", currentResults.Error)
-			return nil, nil, errors.New(fmt.Sprintf("Failed multi get: %+v", currentResults.Error))
-		}
+	for i, currentResults := range grammarSearchResponses {
 		language := query.LanguageOrder[i/queriesNumForLang]
 		if haveHits(currentResults) {
 			if languageSingleHitIntents, languageFilterIntents, err := e.searchResultsToIntents(query, language, currentResults); err != nil {
@@ -294,17 +291,20 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 			if contentType != "" || programCollection != "" || len(sources) > 0 {
 				log.Infof("Filtered Search Request: ContentType is '%s', Text is '%s', Program collection is '%s', Sources are '%+v'.", contentType, text, programCollection, sources)
 				requests := []*elastic.SearchRequest{}
-				textValSearchRequests, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+				indices := []string{}
+				textValSearchRequests, textValIndices, err := NewFilteredResultsSearchRequest(text, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 				if err != nil {
 					return nil, err
 				}
 				requests = append(requests, textValSearchRequests...)
+				indices = append(indices, textValIndices...)
 				if !searchWithoutTerm && contentType != consts.VAR_CT_ARTICLES {
-					fullTermSearchRequests, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
+					fullTermSearchRequests, fullTermIndices, err := NewFilteredResultsSearchRequest(originalSearchTerm, filters, contentType, programCollection, sources, from, size, sortBy, resultTypes, intent.Language, preference, deb)
 					if err != nil {
 						return nil, err
 					}
 					requests = append(requests, fullTermSearchRequests...)
+					indices = append(indices, fullTermIndices...)
 				}
 				if len(requests) > 0 {
 					wg.Add(1)
@@ -324,7 +324,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 						} else {
 							scoreMultiplication = &intentValue.Score
 						}
-						results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement, scoreMultiplication)
+						results, hitIdsMap, maxScore, err := e.filterSearch(requests, indices, preference, scoreIncrement, scoreMultiplication)
 						if err != nil {
 							log.Errorf("FilterSearch error: %+v", err)
 							return
@@ -411,7 +411,7 @@ func updateIntentCount(intentsCount map[string][]Intent, intent Intent) float64 
 }
 
 // Return values: singleHitIntents, filterIntents, error
-func (e *ESEngine) searchResultsToIntents(query *Query, language string, result *elastic.SearchResult) ([]Intent, []Intent, error) {
+func (e *ESEngine) searchResultsToIntents(query *Query, language string, result *SearchResult) ([]Intent, []Intent, error) {
 	// log.Infof("Total Hits: %d, Max Score: %.2f", result.Hits.TotalHits, *result.Hits.MaxScore)
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH_GRAMMARS_RESULTSTOINTENTS)
 	filterIntents := []Intent(nil)
@@ -437,7 +437,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 			return nil, nil, err
 		}
 		rule := ruleObj.GrammarRule
-		// log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", *hit.Score, hit.Index, hit.Type, hit.Id, rule)
+		// log.Infof("Score: %.2f, Index: %s, Type: %s, Id: %s, Source: %+v", *hit.Score, hit.Index, hit.Type, hit.ID, rule)
 		if len(rule.Values) != len(rule.Variables) {
 			return nil, nil, errors.New(fmt.Sprintf("Expected Variables to be of size %d, but it is %d", len(rule.Values), len(rule.Variables)))
 		}
@@ -534,7 +534,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				if err != nil {
 					return nil, nil, err
 				}
-				var expl elastic.SearchExplanation
+				var expl SearchExplanation
 				if hit.Explanation != nil {
 					expl = *hit.Explanation
 				}
@@ -605,7 +605,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				if err != nil {
 					return nil, nil, err
 				}
-				var expl elastic.SearchExplanation
+				var expl SearchExplanation
 				if hit.Explanation != nil {
 					expl = *hit.Explanation
 				}
@@ -717,7 +717,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	return normalizedSingleHitIntents, filterIntents, nil
 }
 
-func (e *ESEngine) conventionsLandingPageToCollectionHit(year string, location string) (*elastic.SearchHit, *string, error) {
+func (e *ESEngine) conventionsLandingPageToCollectionHit(year string, location string) (*SearchHit, *string, error) {
 	queryMask := `select c.uid, c.properties from collections c 
 	where c.type_id=%d
 	%s`
@@ -756,7 +756,7 @@ func (e *ESEngine) conventionsLandingPageToCollectionHit(year string, location s
 	return e.collectionHitFromSql(query)
 }
 
-func (e *ESEngine) holidaysLandingPageToCollectionHit(year string, holiday string) (*elastic.SearchHit, *string, error) {
+func (e *ESEngine) holidaysLandingPageToCollectionHit(year string, holiday string) (*SearchHit, *string, error) {
 	queryMask := `select c.uid, c.properties from collections c
 	join tags t on c.properties ->> 'holiday_tag' = t.uid
 	%s`
@@ -777,7 +777,7 @@ func (e *ESEngine) holidaysLandingPageToCollectionHit(year string, holiday strin
 	return e.collectionHitFromSql(query)
 }
 
-func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *string, error) {
+func (e *ESEngine) collectionHitFromSql(query string) (*SearchHit, *string, error) {
 	var properties json.RawMessage
 	var mdbUID string
 	var effectiveDate es.EffectiveDate
@@ -803,7 +803,7 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *stri
 		return nil, nil, err
 	}
 
-	hit := &elastic.SearchHit{
+	hit := &SearchHit{
 		Source: (*json.RawMessage)(&resultJson),
 		Type:   "result",
 		Index:  consts.GRAMMAR_LP_SINGLE_COLLECTION,
@@ -811,7 +811,7 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *stri
 	return hit, &mdbUID, nil
 }
 
-func (e *ESEngine) contentUnitHitFromSql(uid string, language string) (*elastic.SearchHit, error) {
+func (e *ESEngine) contentUnitHitFromSql(uid string, language string) (*SearchHit, error) {
 	var title string
 	var properties json.RawMessage
 	var effectiveDate es.EffectiveDate
@@ -842,7 +842,7 @@ func (e *ESEngine) contentUnitHitFromSql(uid string, language string) (*elastic.
 		return nil, err
 	}
 
-	hit := &elastic.SearchHit{
+	hit := &SearchHit{
 		Source: (*json.RawMessage)(&resultJson),
 		Type:   "result",
 		Index:  consts.GRAMMAR_GENERATED_CU_HIT,
@@ -851,7 +851,7 @@ func (e *ESEngine) contentUnitHitFromSql(uid string, language string) (*elastic.
 }
 
 // return: hit result, hit mdb uid, error
-func (e *ESEngine) contentUnitHitBySourceFromSql(sourceUid string, contentType string, language string) (*elastic.SearchHit, string, error) {
+func (e *ESEngine) contentUnitHitBySourceFromSql(sourceUid string, contentType string, language string) (*SearchHit, string, error) {
 	var title string
 	var uid string
 	var properties json.RawMessage
@@ -889,7 +889,7 @@ func (e *ESEngine) contentUnitHitBySourceFromSql(sourceUid string, contentType s
 		return nil, "", err
 	}
 
-	hit := &elastic.SearchHit{
+	hit := &SearchHit{
 		Source: (*json.RawMessage)(&resultJson),
 		Type:   "result",
 		Index:  consts.GRAMMAR_GENERATED_CU_HIT,
@@ -956,7 +956,7 @@ func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position
 	return ret, nil
 }
 
-func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string][]string, language string, title string, score float64, explanation elastic.SearchExplanation) ([]Intent, error) {
+func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string][]string, language string, title string, score float64, explanation SearchExplanation) ([]Intent, error) {
 	var getLessonCI bool
 	var getProgramCI bool
 	var getSourceGI bool
@@ -1057,7 +1057,7 @@ func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string
 		singleSourceIntent := GrammarIntent{
 			Score:       score,
 			Explanation: &explanation,
-			SingleHit: &elastic.SearchHit{
+			SingleHit: &SearchHit{
 				Source: (*json.RawMessage)(&srcResultJson),
 				Type:   "result",
 				Index:  consts.GRAMMAR_GENERATED_SOURCE_HIT,
@@ -1100,30 +1100,23 @@ func retrieveTextVarValues(str string) []string {
 
 // Results search according to grammar based filter.
 // Return: Results, Unique list of hit id's as a map, Max score
-func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncrement *float64, scoreMultiplication *float64) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
-	results := []*elastic.SearchResult{}
+func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, indices []string, preference string, scoreIncrement *float64, scoreMultiplication *float64) ([]*SearchResult, map[string]bool, *float64, error) {
+	results := []*SearchResult{}
 	hitIdsMap := map[string]bool{}
 	var maxScore *float64
 
-	multiSearchFilteredService := e.esc.MultiSearch()
-	multiSearchFilteredService.Add(requests...)
 	beforeFilterSearch := time.Now()
-	mr, err := multiSearchFilteredService.Do(context.TODO())
+	filterResponses, err := e.msearchExec(context.TODO(), requests, indices, preference)
 	e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO) // TBC differentiate calls to filterSearch under single request
 
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
 	}
-
-	for _, currentResults := range mr.Responses {
-		if currentResults.Error != nil {
-			log.Warnf("%+v", currentResults.Error)
-			return nil, nil, nil, errors.New(fmt.Sprintf("Failed multi get in grammar based filter search: %+v", currentResults.Error))
-		}
+	for _, currentResults := range filterResponses {
 		if haveHits(currentResults) {
 			var currentMaxScore *float64
 			for _, hit := range currentResults.Hits.Hits {
-				hitIdsMap[hit.Id] = true
+				hitIdsMap[hit.ID] = true
 				if hit.Score != nil {
 					if scoreMultiplication != nil {
 						*hit.Score *= *scoreMultiplication

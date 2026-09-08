@@ -26,7 +26,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/volatiletech/sqlboiler/v4/queries"
-	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/es"
@@ -575,7 +574,7 @@ func FilterValueToUid(value string) string {
 	return sl[len(sl)-1]
 }
 
-func HitMatchesExpectation(hit *elastic.SearchHit, hitSource HitSource, e Expectation) bool {
+func HitMatchesExpectation(hit *SearchHit, hitSource HitSource, e Expectation) bool {
 	hitType := hit.Type
 	if hitType == "result" {
 		hitType = hitSource.ResultType
@@ -1458,7 +1457,7 @@ func evalResultToHitSources(result EvalResult) ([]HitSource, error) {
 			hitSource := HitSource{}
 			if err := json.Unmarshal(*hit.Source, &hitSource); err != nil {
 				// Check if hit source is carrousel (tweets for example)
-				carrousel := []*elastic.SearchHit{}
+				carrousel := []*SearchHit{}
 				if err = json.Unmarshal(*hit.Source, &carrousel); err != nil {
 					return nil, err
 				}

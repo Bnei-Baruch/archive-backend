@@ -17,7 +17,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
-func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, query Query) (error, *Intent, *Query) {
+func (e *ESEngine) AddIntentSecondRound(h *SearchHit, intent Intent, query Query) (error, *Intent, *Query) {
 	var classificationIntent ClassificationIntent
 	if err := json.Unmarshal(*h.Source, &classificationIntent); err != nil {
 		return err, nil, nil
@@ -102,7 +102,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 		}
 	}
 
-	mssFirstRound := e.esc.MultiSearch()
+	firstRoundRequests := []*elastic.SearchRequest{}
+	firstRoundIndices := []string{}
 	potentialIntents := make([]Intent, 0)
 	size := consts.INTENTS_SEARCH_DEFAULT_COUNT
 	for _, language := range query.LanguageOrder {
@@ -163,7 +164,8 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 				log.Warnf("ESEngine.AddIntents - Failed on creating tags request %+v", err)
 				return nil, err
 			}
-			mssFirstRound.Add(req)
+			firstRoundRequests = append(firstRoundRequests, req)
+			firstRoundIndices = append(firstRoundIndices, index)
 			potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_TAG, language, grammarIntent})
 		}
 		if searchSources && searchSourcesForLang {
@@ -183,26 +185,24 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 				log.Warnf("ESEngine.AddIntents - Failed on creating sources request %+v", err)
 				return nil, err
 			}
-			mssFirstRound.Add(req)
+			firstRoundRequests = append(firstRoundRequests, req)
+			firstRoundIndices = append(firstRoundIndices, index)
 			potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, grammarIntent})
 		}
 	}
 	beforeFirstRoundDo := time.Now()
-	mr, err := mssFirstRound.Do(context.TODO())
+	firstRoundResponses, err := e.msearchExec(context.TODO(), firstRoundRequests, firstRoundIndices, preference)
 	e.timeTrack(beforeFirstRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO)
 	if err != nil {
 		return intents, errors.Wrap(err, "ESEngine.AddIntents - Error multisearch Do.")
 	}
 
 	// Build second request to evaluate how close the search is toward the full name.
-	mssSecondRound := e.esc.MultiSearch()
+	secondRoundRequests := []*elastic.SearchRequest{}
+	secondRoundIndices := []string{}
 	finalIntents := make([]Intent, 0)
 	for i := 0; i < len(potentialIntents); i++ {
-		res := mr.Responses[i]
-		if res.Error != nil {
-			log.Warnf("ESEngine.AddIntents - First Run %+v", res.Error)
-			return intents, errors.New("ESEngine.AddIntents - First Run Failed multi get (S).")
-		}
+		res := firstRoundResponses[i]
 		if haveHits(res) {
 			for _, h := range res.Hits.Hits {
 				err, intent, secondRoundQuery := e.AddIntentSecondRound(h, potentialIntents[i], queryWithoutFilters)
@@ -227,23 +227,26 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 						log.Warnf("ESEngine.AddIntents - Failed on creating second round request %+v", err)
 						return nil, err
 					}
-					mssSecondRound.Add(req)
+					secondRoundRequests = append(secondRoundRequests, req)
+					secondRoundIndices = append(secondRoundIndices, es.IndexNameForServing("prod", consts.ES_RESULTS_INDEX, intent.Language))
 					finalIntents = append(finalIntents, *intent)
 				}
 			}
 		}
 	}
 
+	if len(finalIntents) == 0 {
+		return intents, nil
+	}
+
 	beforeSecondRoundDo := time.Now()
-	mr, err = mssSecondRound.Do(context.TODO())
+	secondRoundResponses, err := e.msearchExec(context.TODO(), secondRoundRequests, secondRoundIndices, preference)
 	e.timeTrack(beforeSecondRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO)
+	if err != nil {
+		return intents, errors.Wrap(err, "ESEngine.AddIntents - Second round Do failed")
+	}
 	for i := 0; i < len(finalIntents); i++ {
-		res := mr.Responses[i]
-		if res.Error != nil {
-			log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error)
-			log.Warnf("ESEngine.AddIntents - Second Run %+v", res.Error.RootCause[0])
-			return intents, errors.New("ESEngine.AddIntents - Second Run Failed multi get (S).")
-		}
+		res := secondRoundResponses[i]
 		intentValue, intentOk := finalIntents[i].Value.(ClassificationIntent)
 		if !intentOk {
 			return intents, errors.New(fmt.Sprintf("ESEngine.AddIntents - Unexpected intent value: %+v", finalIntents[i].Value))

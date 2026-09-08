@@ -8,8 +8,6 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
-
 	"github.com/Bnei-Baruch/archive-backend/cache"
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/Bnei-Baruch/archive-backend/utils"
@@ -23,12 +21,12 @@ type FilterValue struct {
 }
 
 type GrammarIntent struct {
-	LandingPage     string                     `json:"landing_page,omitempty"`
-	FilterValues    []FilterValue              `json:"filter_values,omitempty"`
-	Score           float64                    `json:"score,omitempty"`
-	Explanation     *elastic.SearchExplanation `json:"explanation,omitempty"`
-	SingleHit       *elastic.SearchHit         `json:"single_hit,omitempty"`
-	SingleHitMdbUid *string                    `json:"single_hit_mdb_uid,omitempty"`
+	LandingPage     string             `json:"landing_page,omitempty"`
+	FilterValues    []FilterValue      `json:"filter_values,omitempty"`
+	Score           float64            `json:"score,omitempty"`
+	Explanation     *SearchExplanation `json:"explanation,omitempty"`
+	SingleHit       *SearchHit         `json:"single_hit,omitempty"`
+	SingleHitMdbUid *string            `json:"single_hit_mdb_uid,omitempty"`
 }
 
 func (e *ESEngine) SuggestGrammars(query *Query) (map[string][]VariablesByPhrase, error) {

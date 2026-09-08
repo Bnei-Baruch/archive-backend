@@ -6,16 +6,14 @@ import (
 	"fmt"
 	"time"
 
-	"gopkg.in/olivere/elastic.v6"
-
 	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/pkg/errors"
 )
 
-func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, preference string) (map[string]*elastic.SearchResult, error) {
-	tweetsByLang := make(map[string]*elastic.SearchResult)
+func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, preference string) (map[string]*SearchResult, error) {
+	tweetsByLang := make(map[string]*SearchResult)
 	mssTweets := e.esc.MultiSearch()
-	requests, err := NewResultsSearchRequests(
+	requests, _, err := NewResultsSearchRequests(
 		// Inside the carousel, the tweets are always sorted by relevance.
 		//The EffectiveDate of the carousel itself will be equal to the EffectiveDate of the most relevant tweet.
 		SearchRequestOptions{
@@ -46,11 +44,13 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 		return nil, err
 	}
 
-	for i, currentResults := range mr.Responses {
-		if currentResults.Error != nil {
-			err := errors.New(fmt.Sprintf("Failed tweets multi get: %+v", currentResults.Error))
-			return nil, err
+	for _, r := range mr.Responses {
+		if r.Error != nil {
+			return nil, errors.New(fmt.Sprintf("Failed tweets multi get: %+v", r.Error))
 		}
+	}
+	tweetResponses := fromOlivereResponses(mr.Responses)
+	for i, currentResults := range tweetResponses {
 		if haveHits(currentResults) {
 			lang := query.LanguageOrder[i]
 			tweetsByLang[lang] = currentResults
@@ -65,7 +65,7 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 	return combinedToSingleHit, nil
 }
 
-func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.SearchResult, hitType string) (map[string]*elastic.SearchResult, error) {
+func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*SearchResult, hitType string) (map[string]*SearchResult, error) {
 
 	//  Create single hit result for each language.
 	//  Set the score as the highest score of all hits per language.
@@ -73,19 +73,19 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 	for _, result := range resultsByLang {
 		hitsClone := *result.Hits
 
-		innerHitsMap := make(map[string]*elastic.SearchHitInnerHits)
-		innerHitsMap[hitType] = &elastic.SearchHitInnerHits{
+		innerHitsMap := make(map[string]*SearchHitInnerHits)
+		innerHitsMap[hitType] = &SearchHitInnerHits{
 			Hits: &hitsClone,
 		}
 
-		hit := &elastic.SearchHit{
+		hit := &SearchHit{
 			Source:    result.Hits.Hits[0].Source,
 			Type:      hitType,
 			Score:     result.Hits.Hits[0].Score,
 			InnerHits: innerHitsMap,
 		}
 
-		result.Hits.Hits = []*elastic.SearchHit{hit}
+		result.Hits.Hits = []*SearchHit{hit}
 		result.Hits.TotalHits = 1
 		result.Hits.MaxScore = result.Hits.Hits[0].Score
 	}
@@ -94,7 +94,7 @@ func (e *ESEngine) CombineResultsToSingleHit(resultsByLang map[string]*elastic.S
 }
 
 // Moving data from InnerHits to Source (as marshaled json) (this is for client).
-func (e *ESEngine) NativizeTweetsHitForClient(hit *elastic.SearchHit, innerHitsKey string) error {
+func (e *ESEngine) NativizeTweetsHitForClient(hit *SearchHit, innerHitsKey string) error {
 	if hit.InnerHits == nil {
 		return errors.New("NativizeHitForClient - InnerHits is nil.")
 	}

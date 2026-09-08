@@ -12,10 +12,11 @@ import (
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/es"
+	es9common "github.com/Bnei-Baruch/archive-backend/es9/common"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-var indexer *es.Indexer
+var indexer EventIndexer
 var indexerQueue WorkQueue
 
 func shutDown(signalChan chan os.Signal, sc stan.Conn, indexerQueue WorkQueue, cleanupDone chan bool) {
@@ -31,6 +32,24 @@ func shutDown(signalChan chan os.Signal, sc stan.Conn, indexerQueue WorkQueue, c
 
 		cleanupDone <- true
 	}
+}
+
+// makeES6EventIndexer builds the ES6 (olivere) incremental indexer (fake or prod).
+func makeES6EventIndexer() EventIndexer {
+	esc, err := common.ESC.GetClient()
+	if err != nil {
+		log.Fatalf("Elastic is not available in RunListener():  %+v", err)
+	}
+	if viper.GetBool("server.fake-indexer") {
+		idx, err := es.MakeFakeIndexer(common.DB, esc)
+		utils.Must(err)
+		return idx
+	}
+	err, date := es.ProdIndexDate(esc)
+	utils.Must(err)
+	idx, err := es.MakeProdIndexer(date, common.DB, esc)
+	utils.Must(err)
+	return idx
 }
 
 func RunListener() {
@@ -62,19 +81,27 @@ func RunListener() {
 	utils.Must(err)
 
 	log.Info("Initialize search engine indexer")
-	esc, err := common.ESC.GetClient()
-	if err != nil {
-		log.Fatalf("Elastic is not available in RunListener():  %+v", err)
+	// use-es9 selects the primary (served) index. By default ES6 keeps indexing too (safe
+	// rollback); set stop-es6-incremental=true at the final cutover to stop ES6.
+	useES9 := viper.GetBool("elasticsearch.use-es9")
+	stopES6 := viper.GetBool("elasticsearch.stop-es6-incremental")
+	var chain MultiEventIndexer
+	if useES9 {
+		es9URL := viper.GetString("elasticsearch9.url")
+		if es9URL == "" {
+			log.Fatal("elasticsearch.use-es9 set but elasticsearch9.url not configured")
+		}
+		chain = append(chain, MakeES9Indexer(common.DB, es9common.MakeES9Manager(es9URL), "results", viper.GetString("elasticsearch.unzip-url")))
 	}
-	if viper.GetBool("server.fake-indexer") {
-		indexer, err = es.MakeFakeIndexer(common.DB, esc)
-		utils.Must(err)
+	if !useES9 || !stopES6 {
+		chain = append(chain, makeES6EventIndexer())
+	}
+	if len(chain) == 1 {
+		indexer = chain[0]
 	} else {
-		err, date := es.ProdIndexDate(esc)
-		utils.Must(err)
-		indexer, err = es.MakeProdIndexer(date, common.DB, esc)
-		utils.Must(err)
+		indexer = chain
 	}
+	log.Infof("Events: incremental indexing — use-es9=%v stop-es6=%v (%d target(s))", useES9, stopES6, len(chain))
 
 	log.Info("Initialize indexer queue")
 	indexerQueue = new(IndexerQueue)

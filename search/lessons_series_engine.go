@@ -11,11 +11,10 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/es"
 	"github.com/Bnei-Baruch/archive-backend/utils"
 	"github.com/pkg/errors"
-	"gopkg.in/olivere/elastic.v6"
 )
 
-func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*elastic.SearchResult, error) {
-	byLang := make(map[string]*elastic.SearchResult)
+func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*SearchResult, error) {
+	byLang := make(map[string]*SearchResult)
 	mss := e.esc.MultiSearch()
 	_, queryTermHasDigit := utils.HasNumeric(query.Term)
 	filter := map[string][]string{consts.FILTER_CONTENT_TYPE: {consts.CT_LESSONS_SERIES}}
@@ -45,11 +44,13 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 		return nil, err
 	}
 
-	for i, res := range mr.Responses {
-		if res.Error != nil {
-			err := errors.New(fmt.Sprintf("Failed series get: %+v", res.Error))
-			return nil, err
+	for _, r := range mr.Responses {
+		if r.Error != nil {
+			return nil, errors.New(fmt.Sprintf("Failed series get: %+v", r.Error))
 		}
+	}
+	seriesResponses := fromOlivereResponses(mr.Responses)
+	for i, res := range seriesResponses {
 		if haveHits(res) {
 			lang := query.LanguageOrder[i]
 			byLang[lang] = res
@@ -63,11 +64,11 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 	return combineBySourceOrTag(byLang), nil
 }
 
-func combineBySourceOrTag(byLang map[string]*elastic.SearchResult) map[string]*elastic.SearchResult {
+func combineBySourceOrTag(byLang map[string]*SearchResult) map[string]*SearchResult {
 	for l, r := range byLang {
-		hitBySource := make(map[string]*elastic.SearchHit)
-		hitByTag := make(map[string]*elastic.SearchHit)
-		hitsWithoutSourceOrTag := []*elastic.SearchHit{}
+		hitBySource := make(map[string]*SearchHit)
+		hitByTag := make(map[string]*SearchHit)
+		hitsWithoutSourceOrTag := []*SearchHit{}
 		var maxScore *float64
 		for _, h := range r.Hits.Hits {
 			suid, tuid := getHitSourceAndTag(h)
@@ -87,11 +88,11 @@ func combineBySourceOrTag(byLang map[string]*elastic.SearchResult) map[string]*e
 			}
 		}
 
-		byLang[l].Hits = new(elastic.SearchHits)
+		byLang[l].Hits = new(SearchHits)
 		byLang[l].Hits.MaxScore = maxScore
 		byLang[l].Hits.Hits = hitsWithoutSourceOrTag
 		for k, h := range hitBySource {
-			newH := &elastic.SearchHit{
+			newH := &SearchHit{
 				Source:      h.Source,
 				Type:        consts.SEARCH_RESULT_LESSONS_SERIES_BY_SOURCE,
 				Score:       h.Score,
@@ -105,7 +106,7 @@ func combineBySourceOrTag(byLang map[string]*elastic.SearchResult) map[string]*e
 			byLang[l].Hits.Hits = append(byLang[l].Hits.Hits, newH)
 		}
 		for k, h := range hitByTag {
-			newH := &elastic.SearchHit{
+			newH := &SearchHit{
 				Source:      h.Source,
 				Type:        consts.SEARCH_RESULT_LESSONS_SERIES_BY_TAG,
 				Score:       h.Score,
@@ -125,7 +126,7 @@ func combineBySourceOrTag(byLang map[string]*elastic.SearchResult) map[string]*e
 	return byLang
 }
 
-func getHitSourceAndTag(hit *elastic.SearchHit) (string, string) {
+func getHitSourceAndTag(hit *SearchHit) (string, string) {
 	var res es.Result
 	if err := json.Unmarshal(*hit.Source, &res); err != nil {
 		return "", ""

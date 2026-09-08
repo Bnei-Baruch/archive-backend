@@ -360,15 +360,17 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.FILTER_MEDIA_LANGUAGE, val)...)
 			}
 			if byLang, ok := indexData.Transcripts[cu.UID]; ok {
-				if val, ok := byLang[i18n.Language]; ok {
+				if files, ok := byLang[i18n.Language]; ok && len(files) > 0 {
+					// Use first file (already prioritized by insert_type and created_at)
+					file := files[0]
 					var err error
-					unit.Content, err = index.assetsService.Doc2Text(val[0])
+					unit.Content, err = index.assetsService.Doc2Text(file.UID)
 					if unit.Content == "" {
-						log.Warnf("Content Units Index - Transcript empty: %s", val[0])
+						log.Warnf("Content Units Index - Transcript empty: %s", file.UID)
 					}
-					indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("Content Units Index - Error parsing docx: %s", val[0]))
+					indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("Content Units Index - Error parsing docx: %s", file.UID))
 					if err == nil {
-						unit.TypedUids = append(unit.TypedUids, KeyValue(consts.ES_UID_TYPE_FILE, val[0]))
+						unit.TypedUids = append(unit.TypedUids, KeyValue(consts.ES_UID_TYPE_FILE, file.UID))
 					}
 				}
 			}

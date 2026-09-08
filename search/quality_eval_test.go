@@ -15,7 +15,6 @@ import (
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
-	"gopkg.in/olivere/elastic.v6"
 
 	"github.com/Bnei-Baruch/archive-backend/common"
 	"github.com/Bnei-Baruch/archive-backend/consts"
@@ -58,8 +57,8 @@ func TestEval(t *testing.T) {
 	suite.Run(t, new(QualityEvalSuite))
 }
 
-func createHitSourceExpectation(index string, hitType string, resultType string, mdbUid string, expectation string) (elastic.SearchHit, search.HitSource, search.Expectation) {
-	return elastic.SearchHit{Index: index, Type: hitType}, search.HitSource{ResultType: resultType, MdbUid: mdbUid}, search.ParseExpectation(expectation, nil)
+func createHitSourceExpectation(index string, hitType string, resultType string, mdbUid string, expectation string) (search.SearchHit, search.HitSource, search.Expectation) {
+	return search.SearchHit{Index: index, Type: hitType}, search.HitSource{ResultType: resultType, MdbUid: mdbUid}, search.ParseExpectation(expectation, nil)
 }
 
 func (suite *QualityEvalSuite) TestHitMatchesExpectation() {
