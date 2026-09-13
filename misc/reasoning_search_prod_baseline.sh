@@ -10,7 +10,7 @@ INTERVAL=2
 DOCKER_STATS_TIMEOUT="${DOCKER_STATS_TIMEOUT:-10}"
 LATENCY_BUCKET_MS="${LATENCY_BUCKET_MS:-100}"
 MAX_LATENCY_SECONDS="${MAX_LATENCY_SECONDS:-600}"
-ACCESS_LOG="${ACCESS_LOG:-/sites/archive-backend/logs/nginx-access.log}"
+ACCESS_LOG="${ACCESS_LOG:-/var/lib/docker/volumes/archive-docker_nginx_data/_data/access-archive-backend.log}"
 OUTPUT_DIR="${OUTPUT_DIR:-$HOME/prod-peak-$(date -u +%Y%m%dT%H%M%SZ)}"
 
 BACKEND_CONTAINER="archive-docker-archive_backend-1"
