@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/spf13/viper"
 	"golang.org/x/text/language/display"
 	"gopkg.in/gin-gonic/gin.v1"
 
@@ -42,6 +43,7 @@ const (
 	reasoningSearchRapidClassificationBatchSize = 20
 	reasoningSearchRapidGoodResultsThreshold    = 6
 	reasoningSearchRapidBootstrapSize           = 12
+	defaultReasoningSearchMaxQueryCharacters    = 1600
 )
 
 type rapidGatherResponse struct {
@@ -520,6 +522,13 @@ func normalizeReasoningSearchRequest(r *ReasoningSearchRequest) error {
 	r.Query = strings.TrimSpace(r.Query)
 	if r.Query == "" {
 		return errors.New("q is required")
+	}
+	maxQueryCharacters := viper.GetInt("llm.reasoning-search-max-query-characters")
+	if maxQueryCharacters <= 0 {
+		maxQueryCharacters = defaultReasoningSearchMaxQueryCharacters
+	}
+	if utf8.RuneCountInString(r.Query) > maxQueryCharacters {
+		return fmt.Errorf("q must not exceed %d characters", maxQueryCharacters)
 	}
 	r.Query = rewriteReasoningSearchQuery(r.Query)
 	r.UILanguage = strings.ToLower(strings.TrimSpace(r.UILanguage))
@@ -2322,6 +2331,9 @@ func mergeReasoningSearchAttemptStats(dst *llm.ReasoningSearchResponse, src *llm
 		}
 		if len(src.Debug.AIToolsCalls) != 0 {
 			debugCopy.AIToolsCalls = append([]llm.ReasoningSearchAIToolCallDebug(nil), src.Debug.AIToolsCalls...)
+		}
+		if len(src.Debug.SkippedToolCalls) != 0 {
+			debugCopy.SkippedToolCalls = append([]llm.ReasoningSearchSkippedToolCallDebug(nil), src.Debug.SkippedToolCalls...)
 		}
 		dst.Debug = &debugCopy
 		return

@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
+
+	"github.com/spf13/viper"
 )
 
 type ReasoningToolDefinition struct {
@@ -27,7 +30,8 @@ type ReasoningToolExecution struct {
 }
 
 type ReasoningToolExecutionResult struct {
-	Output string
+	Output  string
+	Skipped bool // True when this tool call was not executed because the per-iteration limit was reached.
 }
 
 type ReasoningToolManager struct {
@@ -176,7 +180,10 @@ func wrapReasoningToolHandler(name string, handler ToolHandler) ToolHandler {
 	}
 }
 
-const parallelReasoningToolConcurrency = 4
+const (
+	parallelReasoningToolConcurrency           = 4
+	defaultReasoningSearchMaxToolsPerIteration = 30
+)
 
 // Execute tool calls in parallel when the model emits them as one batch.
 // Results are written back by input index so provider messages keep the
@@ -186,7 +193,31 @@ func ExecuteReasoningToolExecutions(ctx context.Context, calls []ReasoningToolEx
 	if len(calls) == 0 {
 		return results, nil
 	}
-	if len(calls) <= 1 {
+	maxTools := viper.GetInt("llm.reasoning-search-max-tools-per-iteration")
+	if maxTools <= 0 {
+		maxTools = defaultReasoningSearchMaxToolsPerIteration
+	}
+	if len(calls) > maxTools {
+		skippedCalls := calls[maxTools:]
+		skippedNames := make([]string, 0, len(skippedCalls))
+		skippedDebug := make([]ReasoningSearchSkippedToolCallDebug, 0, len(skippedCalls))
+		for _, call := range skippedCalls {
+			skippedNames = append(skippedNames, call.Name)
+			skippedDebug = append(skippedDebug, ReasoningSearchSkippedToolCallDebug{
+				Name:   call.Name,
+				Params: string(call.Arguments),
+			})
+		}
+		log.Printf("LLM reasoning tool call limit exceeded: total=%d limit=%d skipped=%d tools=%s", len(calls), maxTools, len(skippedCalls), strings.Join(skippedNames, ","))
+		AddToolDebugInfo(ctx, &ReasoningSearchDebugInfo{SkippedToolCalls: skippedDebug})
+
+		limitResult := fmt.Sprintf(`{"error":"tool_call_limit_reached","message":"Only the first %d tool calls were executed in this iteration."}`, maxTools)
+		for i := maxTools; i < len(calls); i++ {
+			results[i] = ReasoningToolExecutionResult{Output: limitResult, Skipped: true}
+		}
+		calls = calls[:maxTools]
+	}
+	if len(calls) == 1 {
 		output, err := executeReasoningToolExecution(ctx, calls[0], currentHandlers, plannedHandlers)
 		if err != nil {
 			return nil, err

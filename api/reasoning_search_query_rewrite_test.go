@@ -45,6 +45,23 @@ func TestRewriteReasoningSearchQueryKeepsExistingGereshAndWords(t *testing.T) {
 	}
 }
 
+func TestNormalizeReasoningSearchRequestLimitsQueryCharacters(t *testing.T) {
+	oldLimit := viper.Get("llm.reasoning-search-max-query-characters")
+	defer viper.Set("llm.reasoning-search-max-query-characters", oldLimit)
+	viper.Set("llm.reasoning-search-max-query-characters", 3)
+
+	allowed := ReasoningSearchRequest{Query: "אבג"}
+	if err := normalizeReasoningSearchRequest(&allowed); err != nil {
+		t.Fatalf("expected three Unicode characters to be allowed, got %v", err)
+	}
+
+	tooLong := ReasoningSearchRequest{Query: "אבגד"}
+	err := normalizeReasoningSearchRequest(&tooLong)
+	if err == nil || !strings.Contains(err.Error(), "must not exceed 3 characters") {
+		t.Fatalf("expected query length error, got %v", err)
+	}
+}
+
 func TestValidateReasoningSearchResponseQueryAllowsQuotePunctuationVariants(t *testing.T) {
 	response := &llm.ReasoningSearchResponse{Query: "ציטוטים על ט''ו בשבט"}
 	err := validateReasoningSearchResponseQuery("ציטוטים על ט'\"ו' בשבט", response)

@@ -641,7 +641,7 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 				"call_id": toolCall.CallID,
 				"output":  toolResults[idx].Output,
 			})
-			if toolCall.Name == openRouterResultsReadyToolName {
+			if toolCall.Name == openRouterResultsReadyToolName && !toolResults[idx].Skipped {
 				resultsReadyCalled = true
 			}
 		}

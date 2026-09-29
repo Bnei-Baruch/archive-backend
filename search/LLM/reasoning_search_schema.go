@@ -100,47 +100,53 @@ const (
 )
 
 type ReasoningSearchDebugInfo struct {
-	Enabled                      bool                             `json:"enabled"`
-	Model                        string                           `json:"model"`
-	ReasoningEffort              string                           `json:"reasoning_effort"`
-	ReasoningSummary             string                           `json:"reasoning_summary,omitempty"`
-	PlanningModelUsage           *ReasoningSearchUsageBreakdown   `json:"planning_model_usage,omitempty"`
-	MainModelUsage               *ReasoningSearchUsageBreakdown   `json:"main_model_usage,omitempty"`
-	AIToolsUsage                 *ReasoningSearchUsageBreakdown   `json:"ai_tools_usage,omitempty"`
-	DraftModelUsage              *ReasoningSearchUsageBreakdown   `json:"draft_model_usage,omitempty"`
-	DraftModelRuns               []ReasoningSearchUsageBreakdown  `json:"draft_model_runs,omitempty"`
-	RapidGatherModelUsage        *ReasoningSearchUsageBreakdown   `json:"rapid_gather_model_usage,omitempty"`
-	RapidClassifierModelUsage    *ReasoningSearchUsageBreakdown   `json:"rapid_classifier_model_usage,omitempty"`
-	RapidClassifierModelRuns     []ReasoningSearchUsageBreakdown  `json:"rapid_classifier_model_runs,omitempty"`
-	RapidFinalizerModelUsage     *ReasoningSearchUsageBreakdown   `json:"rapid_finalizer_model_usage,omitempty"`
-	RapidGatherLatencyMS         int64                            `json:"rapid_gather_latency_ms,omitempty"`
-	RapidFinalizerLatencyMS      int64                            `json:"rapid_finalizer_latency_ms,omitempty"`
-	RapidGatheredCandidateCount  int                              `json:"rapid_gathered_candidate_count,omitempty"`
-	RapidClassifierUnhandledUIDs []string                         `json:"rapid_classifier_unhandled_uids"`
-	RapidClassifierResultCount   int                              `json:"rapid_classifier_result_count,omitempty"`
-	RapidFinalizerResultCount    int                              `json:"rapid_finalizer_result_count,omitempty"`
-	AIToolsCalls                 []ReasoningSearchAIToolCallDebug `json:"ai_tools_calls,omitempty"`
-	VerificationModel            string                           `json:"verification_model,omitempty"`
-	VerificationReasoningEffort  string                           `json:"verification_reasoning_effort,omitempty"`
-	VerificationTotalTokens      int                              `json:"verification_total_tokens,omitempty"`
-	VerificationEstimatedCostUSD float64                          `json:"verification_estimated_cost_usd,omitempty"`
-	TotalTokens                  int                              `json:"total_tokens"`
-	InputTokens                  int                              `json:"input_tokens"`
-	CachedInputTokens            int                              `json:"cached_input_tokens"`
-	CacheWriteTokens             int                              `json:"cache_write_tokens"`
-	UncachedInputTokens          int                              `json:"uncached_input_tokens"`
-	OutputTokens                 int                              `json:"output_tokens"`
-	ReasoningTokens              int                              `json:"reasoning_tokens"`
-	PricingConfigured            bool                             `json:"pricing_configured"`
-	InputPer1MTokensUSD          float64                          `json:"input_per_1m_tokens_usd"`
-	CachedInputPer1MTokensUSD    float64                          `json:"cached_input_per_1m_tokens_usd"`
-	CacheWritePer1MTokensUSD     float64                          `json:"cache_write_per_1m_tokens_usd"`
-	OutputPer1MTokensUSD         float64                          `json:"output_per_1m_tokens_usd"`
-	EstimatedInputCostUSD        float64                          `json:"estimated_input_cost_usd"`
-	EstimatedCachedInputCostUSD  float64                          `json:"estimated_cached_input_cost_usd"`
-	EstimatedCacheWriteCostUSD   float64                          `json:"estimated_cache_write_cost_usd"`
-	EstimatedOutputCostUSD       float64                          `json:"estimated_output_cost_usd"`
-	EstimatedCostUSD             float64                          `json:"estimated_cost_usd"`
+	Enabled                      bool                                  `json:"enabled"`
+	Model                        string                                `json:"model"`
+	ReasoningEffort              string                                `json:"reasoning_effort"`
+	ReasoningSummary             string                                `json:"reasoning_summary,omitempty"`
+	PlanningModelUsage           *ReasoningSearchUsageBreakdown        `json:"planning_model_usage,omitempty"`
+	MainModelUsage               *ReasoningSearchUsageBreakdown        `json:"main_model_usage,omitempty"`
+	AIToolsUsage                 *ReasoningSearchUsageBreakdown        `json:"ai_tools_usage,omitempty"`
+	DraftModelUsage              *ReasoningSearchUsageBreakdown        `json:"draft_model_usage,omitempty"`
+	DraftModelRuns               []ReasoningSearchUsageBreakdown       `json:"draft_model_runs,omitempty"`
+	RapidGatherModelUsage        *ReasoningSearchUsageBreakdown        `json:"rapid_gather_model_usage,omitempty"`
+	RapidClassifierModelUsage    *ReasoningSearchUsageBreakdown        `json:"rapid_classifier_model_usage,omitempty"`
+	RapidClassifierModelRuns     []ReasoningSearchUsageBreakdown       `json:"rapid_classifier_model_runs,omitempty"`
+	RapidFinalizerModelUsage     *ReasoningSearchUsageBreakdown        `json:"rapid_finalizer_model_usage,omitempty"`
+	RapidGatherLatencyMS         int64                                 `json:"rapid_gather_latency_ms,omitempty"`
+	RapidFinalizerLatencyMS      int64                                 `json:"rapid_finalizer_latency_ms,omitempty"`
+	RapidGatheredCandidateCount  int                                   `json:"rapid_gathered_candidate_count,omitempty"`
+	RapidClassifierUnhandledUIDs []string                              `json:"rapid_classifier_unhandled_uids"`
+	RapidClassifierResultCount   int                                   `json:"rapid_classifier_result_count,omitempty"`
+	RapidFinalizerResultCount    int                                   `json:"rapid_finalizer_result_count,omitempty"`
+	AIToolsCalls                 []ReasoningSearchAIToolCallDebug      `json:"ai_tools_calls,omitempty"`
+	SkippedToolCalls             []ReasoningSearchSkippedToolCallDebug `json:"skipped_tool_calls,omitempty"`
+	VerificationModel            string                                `json:"verification_model,omitempty"`
+	VerificationReasoningEffort  string                                `json:"verification_reasoning_effort,omitempty"`
+	VerificationTotalTokens      int                                   `json:"verification_total_tokens,omitempty"`
+	VerificationEstimatedCostUSD float64                               `json:"verification_estimated_cost_usd,omitempty"`
+	TotalTokens                  int                                   `json:"total_tokens"`
+	InputTokens                  int                                   `json:"input_tokens"`
+	CachedInputTokens            int                                   `json:"cached_input_tokens"`
+	CacheWriteTokens             int                                   `json:"cache_write_tokens"`
+	UncachedInputTokens          int                                   `json:"uncached_input_tokens"`
+	OutputTokens                 int                                   `json:"output_tokens"`
+	ReasoningTokens              int                                   `json:"reasoning_tokens"`
+	PricingConfigured            bool                                  `json:"pricing_configured"`
+	InputPer1MTokensUSD          float64                               `json:"input_per_1m_tokens_usd"`
+	CachedInputPer1MTokensUSD    float64                               `json:"cached_input_per_1m_tokens_usd"`
+	CacheWritePer1MTokensUSD     float64                               `json:"cache_write_per_1m_tokens_usd"`
+	OutputPer1MTokensUSD         float64                               `json:"output_per_1m_tokens_usd"`
+	EstimatedInputCostUSD        float64                               `json:"estimated_input_cost_usd"`
+	EstimatedCachedInputCostUSD  float64                               `json:"estimated_cached_input_cost_usd"`
+	EstimatedCacheWriteCostUSD   float64                               `json:"estimated_cache_write_cost_usd"`
+	EstimatedOutputCostUSD       float64                               `json:"estimated_output_cost_usd"`
+	EstimatedCostUSD             float64                               `json:"estimated_cost_usd"`
+}
+
+type ReasoningSearchSkippedToolCallDebug struct {
+	Name   string `json:"name"`
+	Params string `json:"params"`
 }
 
 type ReasoningSearchAIToolCallDebug struct {
@@ -394,6 +400,9 @@ func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {
 	d.EstimatedCostUSD += other.EstimatedCostUSD
 	if len(other.AIToolsCalls) != 0 {
 		d.AIToolsCalls = append(d.AIToolsCalls, other.AIToolsCalls...)
+	}
+	if len(other.SkippedToolCalls) != 0 {
+		d.SkippedToolCalls = append(d.SkippedToolCalls, other.SkippedToolCalls...)
 	}
 	if d.DraftModelUsage == nil && other.DraftModelUsage != nil {
 		copy := *other.DraftModelUsage

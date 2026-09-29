@@ -100,6 +100,7 @@ Instructions for coding agents working in this repository.
 - OpenAI session state stores continuation data (`last_response_id`, model, effort), not the full prompt or hidden reasoning.
 - OpenAI explicit prompt caching has a global flag and optional rapid gather/classifier/finalizer overrides; unset stage overrides inherit the global setting.
 - Tested defaults use automatic caching globally and for rapid gather because it better reuses growing conversation and tool context. Rapid classifier uses explicit caching because its stable instruction prefix is reused across variable candidate batches. Rapid finalizer remains automatic until explicit finalizer caching is tested.
+- Reasoning search limits query length with `llm.reasoning-search-max-query-characters` and tool calls per model iteration with `llm.reasoning-search-max-tools-per-iteration`. Excess tool calls are not executed but still receive protocol-compatible tool outputs, are logged, and appear under `debug.skipped_tool_calls`.
 - Planning failures are soft: the handler logs a warning and continues with reasoning without planner guidance.
 - In debug mode, planning token/cost usage is merged into the response totals and exposed via `debug.planning_model_usage`.
 
