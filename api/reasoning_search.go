@@ -44,7 +44,17 @@ const (
 	reasoningSearchRapidGoodResultsThreshold    = 6
 	reasoningSearchRapidBootstrapSize           = 12
 	defaultReasoningSearchMaxQueryCharacters    = 1600
+	reasoningSearchQueryTooLongErrorCode        = "reasoning_search_query_too_long"
 )
+
+type reasoningSearchQueryTooLongError struct {
+	MaxCharacters    int
+	ActualCharacters int
+}
+
+func (e *reasoningSearchQueryTooLongError) Error() string {
+	return fmt.Sprintf("q must not exceed %d characters", e.MaxCharacters)
+}
 
 type rapidGatherResponse struct {
 	llm.ReasoningSearchResponse `json:"-"`
@@ -106,7 +116,7 @@ func ReasoningSearchStartHandler(c *gin.Context) {
 		return
 	}
 	if err := normalizeReasoningSearchRequest(&r); err != nil {
-		NewBadRequestError(err).Abort(c)
+		abortReasoningSearchValidationError(c, err)
 		return
 	}
 
@@ -265,7 +275,7 @@ func ReasoningSearchCacheHandler(c *gin.Context) {
 		return
 	}
 	if err := normalizeReasoningSearchRequest(&r); err != nil {
-		NewBadRequestError(err).Abort(c)
+		abortReasoningSearchValidationError(c, err)
 		return
 	}
 	r.SessionID = nil
@@ -370,7 +380,7 @@ func ReasoningSearchHandler(c *gin.Context) {
 		return
 	}
 	if err := normalizeReasoningSearchRequest(&r); err != nil {
-		NewBadRequestError(err).Abort(c)
+		abortReasoningSearchValidationError(c, err)
 		return
 	}
 
@@ -527,8 +537,12 @@ func normalizeReasoningSearchRequest(r *ReasoningSearchRequest) error {
 	if maxQueryCharacters <= 0 {
 		maxQueryCharacters = defaultReasoningSearchMaxQueryCharacters
 	}
-	if utf8.RuneCountInString(r.Query) > maxQueryCharacters {
-		return fmt.Errorf("q must not exceed %d characters", maxQueryCharacters)
+	actualQueryCharacters := utf8.RuneCountInString(r.Query)
+	if actualQueryCharacters > maxQueryCharacters {
+		return &reasoningSearchQueryTooLongError{
+			MaxCharacters:    maxQueryCharacters,
+			ActualCharacters: actualQueryCharacters,
+		}
 	}
 	r.Query = rewriteReasoningSearchQuery(r.Query)
 	r.UILanguage = strings.ToLower(strings.TrimSpace(r.UILanguage))
@@ -548,6 +562,23 @@ func normalizeReasoningSearchRequest(r *ReasoningSearchRequest) error {
 		}
 	}
 	return nil
+}
+
+func abortReasoningSearchValidationError(c *gin.Context, err error) {
+	queryTooLongErr := &reasoningSearchQueryTooLongError{}
+	if errors.As(err, &queryTooLongErr) {
+		c.Abort()
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":            "error",
+			"code":              reasoningSearchQueryTooLongErrorCode,
+			"error":             queryTooLongErr.Error(),
+			"field":             "q",
+			"max_characters":    queryTooLongErr.MaxCharacters,
+			"actual_characters": queryTooLongErr.ActualCharacters,
+		})
+		return
+	}
+	NewBadRequestError(err).Abort(c)
 }
 
 // Both flows share the same preparation rules so follow-up limits, progress

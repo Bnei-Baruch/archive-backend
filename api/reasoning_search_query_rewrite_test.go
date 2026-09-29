@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	mdbmodels "github.com/Bnei-Baruch/archive-backend/mdb/models"
 	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 	"github.com/spf13/viper"
+	"gopkg.in/gin-gonic/gin.v1"
 )
 
 func TestRewriteReasoningSearchQueryAddsApostropheToStandaloneHebrewLetters(t *testing.T) {
@@ -59,6 +62,53 @@ func TestNormalizeReasoningSearchRequestLimitsQueryCharacters(t *testing.T) {
 	err := normalizeReasoningSearchRequest(&tooLong)
 	if err == nil || !strings.Contains(err.Error(), "must not exceed 3 characters") {
 		t.Fatalf("expected query length error, got %v", err)
+	}
+	queryTooLongErr := &reasoningSearchQueryTooLongError{}
+	if !errors.As(err, &queryTooLongErr) || queryTooLongErr.MaxCharacters != 3 || queryTooLongErr.ActualCharacters != 4 {
+		t.Fatalf("unexpected typed query length error: %#v", queryTooLongErr)
+	}
+}
+
+func TestReasoningSearchHandlersReturnStructuredQueryTooLongError(t *testing.T) {
+	oldLimit := viper.Get("llm.reasoning-search-max-query-characters")
+	defer viper.Set("llm.reasoning-search-max-query-characters", oldLimit)
+	viper.Set("llm.reasoning-search-max-query-characters", 3)
+
+	handlers := map[string]gin.HandlerFunc{
+		"sync":  ReasoningSearchHandler,
+		"start": ReasoningSearchStartHandler,
+		"cache": ReasoningSearchCacheHandler,
+	}
+	for name, handler := range handlers {
+		t.Run(name, func(t *testing.T) {
+			router := gin.New()
+			router.POST("/search", handler)
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/search", strings.NewReader(`{"q":"אבגד"}`))
+			request.Header.Set("Content-Type", "application/json")
+			router.ServeHTTP(recorder, request)
+
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("expected status 400, got %d: %s", recorder.Code, recorder.Body.String())
+			}
+			response := struct {
+				Status           string `json:"status"`
+				Code             string `json:"code"`
+				Error            string `json:"error"`
+				Field            string `json:"field"`
+				MaxCharacters    int    `json:"max_characters"`
+				ActualCharacters int    `json:"actual_characters"`
+			}{}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
+			if response.Status != "error" || response.Code != reasoningSearchQueryTooLongErrorCode || response.Field != "q" || response.MaxCharacters != 3 || response.ActualCharacters != 4 {
+				t.Fatalf("unexpected response: %#v", response)
+			}
+			if response.Error != "q must not exceed 3 characters" {
+				t.Fatalf("unexpected error message: %q", response.Error)
+			}
+		})
 	}
 }
 
