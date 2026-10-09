@@ -1,0 +1,591 @@
+package llm
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
+type ReasoningSearchResponse struct {
+	SessionID                string                               `json:"session_id"`
+	CacheHit                 bool                                 `json:"cache_hit"`
+	Query                    string                               `json:"query"`
+	NoResults                bool                                 `json:"no_results,omitempty"`
+	QueryMismatchRetry       bool                                 `json:"query_mismatch_retry,omitempty"`
+	Summary                  *string                              `json:"summary"`
+	ReasoningSummary         []ReasoningSearchReasoningStep       `json:"reasoning_summary"`
+	PlanningOutput           *ReasoningSearchPlanningResponse     `json:"planning_output,omitempty"`
+	PlanningReasoningSummary string                               `json:"planning_reasoning_summary,omitempty"`
+	VerificationOutput       *ReasoningSearchVerificationResponse `json:"verification_output,omitempty"`
+	MaxFollowups             int                                  `json:"max_followups"`
+	FollowupsUsed            int                                  `json:"followups_used"`
+	FollowupsRemaining       int                                  `json:"followups_remaining"`
+	UsedTokens               int                                  `json:"used_tokens"`
+	ReasoningIterations      int                                  `json:"reasoning_iterations"`
+	UsedTools                []string                             `json:"used_tools"`
+	Results                  []ReasoningSearchResult              `json:"results"`
+	Debug                    *ReasoningSearchDebugInfo            `json:"debug,omitempty"`
+}
+
+type ReasoningSearchReasoningStep struct {
+	Number    int                                `json:"number"`
+	Thoughts  string                             `json:"thoughts"`
+	ToolCalls []ReasoningSearchReasoningToolCall `json:"tool_calls"`
+	Usage     ReasoningSearchReasoningStepUsage  `json:"usage"`
+	LatencyMS int64                              `json:"latency_ms"`
+}
+
+type ReasoningSearchReasoningStepUsage struct {
+	TotalTokens         int `json:"total_tokens"`
+	InputTokens         int `json:"input_tokens"`
+	CachedInputTokens   int `json:"cached_input_tokens"`
+	UncachedInputTokens int `json:"uncached_input_tokens"`
+	OutputTokens        int `json:"output_tokens"`
+	ReasoningTokens     int `json:"reasoning_tokens"`
+}
+
+type ReasoningSearchReasoningToolCall struct {
+	Name   string `json:"name"`
+	Params string `json:"params"`
+}
+
+type ReasoningSearchHighlight struct {
+	Field string `json:"field"`
+	Text  string `json:"text"`
+}
+
+type ReasoningSearchResultEvidence struct {
+	ToolName          string `json:"tool_name"`
+	DocumentType      string `json:"document_type"`
+	DocumentID        string `json:"document_id"`
+	Query             string `json:"query"`
+	ChunkNumber       int    `json:"chunk_number,omitempty"`
+	EndChunkNumber    int    `json:"end_chunk_number,omitempty"`
+	Content           string `json:"content"`
+	Reason            string `json:"reason,omitempty"`
+	SupportingSnippet string `json:"supporting_snippet,omitempty"`
+}
+
+type ReasoningSearchResult struct {
+	MDBUID           string                     `json:"mdb_uid"`
+	Origin           string                     `json:"origin,omitempty"`
+	ResultType       string                     `json:"result_type"`
+	Title            string                     `json:"title"`
+	Description      string                     `json:"description"`
+	ContentType      string                     `json:"content_type"`
+	ProgramName      string                     `json:"program_name,omitempty"`
+	Date             string                     `json:"date"`
+	OriginalLanguage string                     `json:"original_language,omitempty"`
+	Reason           string                     `json:"reason"`
+	Relevance        string                     `json:"relevance,omitempty"`
+	Highlights       []ReasoningSearchHighlight `json:"highlights"`
+	IsGroupingResult bool                       `json:"is_grouping_result"`
+	CollectionUID    string                     `json:"-"`
+	BaalSulamArticle bool                       `json:"-"`
+	ConnectingSource bool                       `json:"-"`
+	// LookupEvidence is internal lookup input only and is cleared before responses are stored.
+	LookupEvidence []ReasoningSearchResultEvidence `json:"lookup_evidence,omitempty"`
+}
+
+type ReasoningSearchRapidClassification struct {
+	MDBUID           string `json:"mdb_uid"`
+	Relevance        string `json:"relevance"`
+	Reason           string `json:"reason"`
+	EvidenceRevision int    `json:"evidence_revision,omitempty"`
+}
+
+const (
+	ReasoningSearchResultOriginOriginal = "original"
+	ReasoningSearchResultOriginRerun    = "rerun"
+)
+
+type ReasoningSearchDebugInfo struct {
+	Enabled                      bool                                  `json:"enabled"`
+	Model                        string                                `json:"model"`
+	ReasoningEffort              string                                `json:"reasoning_effort"`
+	ReasoningSummary             string                                `json:"reasoning_summary,omitempty"`
+	PlanningModelUsage           *ReasoningSearchUsageBreakdown        `json:"planning_model_usage,omitempty"`
+	MainModelUsage               *ReasoningSearchUsageBreakdown        `json:"main_model_usage,omitempty"`
+	AIToolsUsage                 *ReasoningSearchUsageBreakdown        `json:"ai_tools_usage,omitempty"`
+	DraftModelUsage              *ReasoningSearchUsageBreakdown        `json:"draft_model_usage,omitempty"`
+	DraftModelRuns               []ReasoningSearchUsageBreakdown       `json:"draft_model_runs,omitempty"`
+	RapidGatherModelUsage        *ReasoningSearchUsageBreakdown        `json:"rapid_gather_model_usage,omitempty"`
+	RapidClassifierModelUsage    *ReasoningSearchUsageBreakdown        `json:"rapid_classifier_model_usage,omitempty"`
+	RapidClassifierModelRuns     []ReasoningSearchUsageBreakdown       `json:"rapid_classifier_model_runs,omitempty"`
+	RapidFinalizerModelUsage     *ReasoningSearchUsageBreakdown        `json:"rapid_finalizer_model_usage,omitempty"`
+	RapidGatherLatencyMS         int64                                 `json:"rapid_gather_latency_ms,omitempty"`
+	RapidFinalizerLatencyMS      int64                                 `json:"rapid_finalizer_latency_ms,omitempty"`
+	RapidGatheredCandidateCount  int                                   `json:"rapid_gathered_candidate_count,omitempty"`
+	RapidClassifierUnhandledUIDs []string                              `json:"rapid_classifier_unhandled_uids"`
+	RapidClassifierResultCount   int                                   `json:"rapid_classifier_result_count,omitempty"`
+	RapidFinalizerResultCount    int                                   `json:"rapid_finalizer_result_count,omitempty"`
+	AIToolsCalls                 []ReasoningSearchAIToolCallDebug      `json:"ai_tools_calls,omitempty"`
+	SkippedToolCalls             []ReasoningSearchSkippedToolCallDebug `json:"skipped_tool_calls,omitempty"`
+	VerificationModel            string                                `json:"verification_model,omitempty"`
+	VerificationReasoningEffort  string                                `json:"verification_reasoning_effort,omitempty"`
+	VerificationTotalTokens      int                                   `json:"verification_total_tokens,omitempty"`
+	VerificationEstimatedCostUSD float64                               `json:"verification_estimated_cost_usd,omitempty"`
+	TotalTokens                  int                                   `json:"total_tokens"`
+	InputTokens                  int                                   `json:"input_tokens"`
+	CachedInputTokens            int                                   `json:"cached_input_tokens"`
+	CacheWriteTokens             int                                   `json:"cache_write_tokens"`
+	UncachedInputTokens          int                                   `json:"uncached_input_tokens"`
+	OutputTokens                 int                                   `json:"output_tokens"`
+	ReasoningTokens              int                                   `json:"reasoning_tokens"`
+	PricingConfigured            bool                                  `json:"pricing_configured"`
+	InputPer1MTokensUSD          float64                               `json:"input_per_1m_tokens_usd"`
+	CachedInputPer1MTokensUSD    float64                               `json:"cached_input_per_1m_tokens_usd"`
+	CacheWritePer1MTokensUSD     float64                               `json:"cache_write_per_1m_tokens_usd"`
+	OutputPer1MTokensUSD         float64                               `json:"output_per_1m_tokens_usd"`
+	EstimatedInputCostUSD        float64                               `json:"estimated_input_cost_usd"`
+	EstimatedCachedInputCostUSD  float64                               `json:"estimated_cached_input_cost_usd"`
+	EstimatedCacheWriteCostUSD   float64                               `json:"estimated_cache_write_cost_usd"`
+	EstimatedOutputCostUSD       float64                               `json:"estimated_output_cost_usd"`
+	EstimatedCostUSD             float64                               `json:"estimated_cost_usd"`
+}
+
+type ReasoningSearchSkippedToolCallDebug struct {
+	Name   string `json:"name"`
+	Params string `json:"params"`
+}
+
+type ReasoningSearchAIToolCallDebug struct {
+	ToolName           string  `json:"tool_name"`
+	DocumentType       string  `json:"document_type"`
+	DocumentID         string  `json:"document_id"`
+	Query              string  `json:"query"`
+	DocumentBatchCount int     `json:"document_batch_count"`
+	SelectedBatchCount int     `json:"selected_batch_count"`
+	LoadLatencyMS      int64   `json:"load_latency_ms"`
+	BatchLatenciesMS   []int64 `json:"batch_latencies_ms"`
+	MaxBatchLatencyMS  int64   `json:"max_batch_latency_ms"`
+	ReaderLatencyMS    int64   `json:"reader_latency_ms"`
+	ReturnedCount      int     `json:"returned_count"`
+	Error              string  `json:"error,omitempty"`
+}
+
+type ReasoningSearchUsageBreakdown struct {
+	Model                       string  `json:"model"`
+	ReasoningEffort             string  `json:"reasoning_effort"`
+	TotalTokens                 int     `json:"total_tokens"`
+	InputTokens                 int     `json:"input_tokens"`
+	CachedInputTokens           int     `json:"cached_input_tokens"`
+	CacheWriteTokens            int     `json:"cache_write_tokens"`
+	UncachedInputTokens         int     `json:"uncached_input_tokens"`
+	OutputTokens                int     `json:"output_tokens"`
+	ReasoningTokens             int     `json:"reasoning_tokens"`
+	PricingConfigured           bool    `json:"pricing_configured"`
+	InputPer1MTokensUSD         float64 `json:"input_per_1m_tokens_usd"`
+	CachedInputPer1MTokensUSD   float64 `json:"cached_input_per_1m_tokens_usd"`
+	CacheWritePer1MTokensUSD    float64 `json:"cache_write_per_1m_tokens_usd"`
+	OutputPer1MTokensUSD        float64 `json:"output_per_1m_tokens_usd"`
+	EstimatedInputCostUSD       float64 `json:"estimated_input_cost_usd"`
+	EstimatedCachedInputCostUSD float64 `json:"estimated_cached_input_cost_usd"`
+	EstimatedCacheWriteCostUSD  float64 `json:"estimated_cache_write_cost_usd"`
+	EstimatedOutputCostUSD      float64 `json:"estimated_output_cost_usd"`
+	EstimatedCostUSD            float64 `json:"estimated_cost_usd"`
+}
+
+type ReasoningSearchVerificationResponse struct {
+	NeedsAnotherIteration bool   `json:"needs_another_iteration"`
+	Recommendation        string `json:"recommendation"`
+}
+
+type ReasoningSearchPlanningResponse struct {
+	InstructionText     string                            `json:"instruction_text"`
+	FirstIterationTools []ReasoningSearchPlanningToolSpec `json:"first_iteration_tools"`
+}
+
+type ReasoningSearchPlanningToolSpec struct {
+	ToolName           string   `json:"tool_name"`
+	ParamsJSON         string   `json:"params_json"`
+	AlternativeQueries []string `json:"alternative_queries"`
+}
+
+var ReasoningSearchRapidGatherResponseJSONSchema = `{"type":"object","additionalProperties":false,"properties":{"done":{"type":"boolean"},"no_results":{"type":"boolean"}},"required":["done","no_results"]}`
+
+var ReasoningSearchRapidClassificationResponseJSONSchema = `{"type":"object","additionalProperties":false,"properties":{"results":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"mdb_uid":{"type":"string"},"relevance":{"type":"string","enum":["highly_relevant","relevant","can_be_relevant","not_relevant"]},"reason":{"type":"string"}},"required":["mdb_uid","relevance","reason"]}}},"required":["results"]}`
+
+var ReasoningSearchRapidFinalizerResponseJSONSchema = `{"type":"object","additionalProperties":false,"properties":{"summary":{"type":"string"},"ordered_uids":{"type":"array","items":{"type":"string"}}},"required":["summary","ordered_uids"]}`
+
+func GenerateReasoningSearchResponseJSONSchemaForLanguage(languageName string) (string, error) {
+	languageName = strings.TrimSpace(languageName)
+	summaryDescription := "A short explanation of the best results found for the user. Include clarification requests, or follow-up guidance here when needed. Refer to the user's requests and not to internal verification feedback messages if there are any, because they are hidden from the user. Return null when no_results is true."
+	reasonDescription := "Short description of the result and explanation of why this result was selected for the user."
+	if languageName != "" {
+		summaryDescription += " Write this field in " + languageName + "."
+		reasonDescription += " Write this field in " + languageName + "."
+	}
+
+	schema := map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]interface{}{
+			"query": map[string]interface{}{
+				"type":        "string",
+				"description": "The original user query.",
+			},
+			"summary": map[string]interface{}{
+				"type":        []string{"string", "null"},
+				"description": summaryDescription,
+			},
+			"no_results": map[string]interface{}{
+				"type":        "boolean",
+				"description": "Set true only when the archive has no relevant results for the user query. Set false for uncertainty, incomplete search, tool issues, or weak but possible matches.",
+			},
+			"reasoning_summary": map[string]interface{}{
+				"type":        "array",
+				"description": "Return an empty array. The backend fills this field with per-step debug data when debug mode is enabled.",
+				"items": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]interface{}{
+						"number": map[string]interface{}{
+							"type": "integer",
+						},
+						"thoughts": map[string]interface{}{
+							"type": "string",
+						},
+						"tool_calls": map[string]interface{}{
+							"type": "array",
+							"items": map[string]interface{}{
+								"type":                 "object",
+								"additionalProperties": false,
+								"properties": map[string]interface{}{
+									"name": map[string]interface{}{
+										"type": "string",
+									},
+									"params": map[string]interface{}{
+										"type": "string",
+									},
+								},
+								"required": []string{"name", "params"},
+							},
+						},
+						"usage": map[string]interface{}{
+							"type":                 "object",
+							"additionalProperties": false,
+							"properties": map[string]interface{}{
+								"total_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+								"input_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+								"cached_input_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+								"uncached_input_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+								"output_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+								"reasoning_tokens": map[string]interface{}{
+									"type": "integer",
+								},
+							},
+							"required": []string{"total_tokens", "input_tokens", "cached_input_tokens", "uncached_input_tokens", "output_tokens", "reasoning_tokens"},
+						},
+						"latency_ms": map[string]interface{}{
+							"type": "integer",
+						},
+					},
+					"required": []string{"number", "thoughts", "tool_calls", "usage", "latency_ms"},
+				},
+			},
+			"results": map[string]interface{}{
+				"type":        "array",
+				"description": "Best matching results from the archive. Prefer direct content results when possible.",
+				"items": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]interface{}{
+						"mdb_uid": map[string]interface{}{
+							"type":        "string",
+							"description": "The result MDB UID.",
+						},
+						"reason": map[string]interface{}{
+							"type":        "string",
+							"description": reasonDescription,
+						},
+						"is_grouping_result": map[string]interface{}{
+							"type":        "boolean",
+							"description": "True for grouping or narrowing results such as collections or tags.",
+						},
+					},
+					"required": []string{"mdb_uid", "reason", "is_grouping_result"},
+				},
+			},
+		},
+		"required": []string{"query", "summary", "no_results", "reasoning_summary", "results"},
+	}
+
+	payload, err := json.Marshal(schema)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal reasoning search response schema: %w", err)
+	}
+	return string(payload), nil
+}
+
+func (r *ReasoningSearchResponse) SetReasoningSteps(steps []ReasoningSearchReasoningStep) {
+	if steps == nil {
+		r.ReasoningSummary = []ReasoningSearchReasoningStep{}
+		return
+	}
+	r.ReasoningSummary = steps
+}
+
+func (r *ReasoningSearchResponse) SetReasoningProcessStats(usedTokens int, reasoningIterations int) {
+	r.UsedTokens = usedTokens
+	r.ReasoningIterations = reasoningIterations
+}
+
+func (r *ReasoningSearchResponse) SetReasoningDebugInfo(debug *ReasoningSearchDebugInfo) {
+	r.Debug = debug
+}
+
+func (r *ReasoningSearchResponse) SetUsedTools(usedTools []string) {
+	if usedTools == nil {
+		r.UsedTools = []string{}
+		return
+	}
+	r.UsedTools = usedTools
+}
+
+func (r *ReasoningSearchResponse) SetSessionID(sessionID string) {
+	r.SessionID = sessionID
+}
+
+func (r *ReasoningSearchResponse) SetFollowupBudget(maxFollowups int, used int, remaining int) {
+	r.MaxFollowups = maxFollowups
+	r.FollowupsUsed = used
+	r.FollowupsRemaining = remaining
+}
+
+// GetReasoningSearchHighlightSnippetTexts strips structured highlight metadata for model-facing payloads.
+func GetReasoningSearchHighlightSnippetTexts(highlights []ReasoningSearchHighlight) []string {
+	if len(highlights) == 0 {
+		return nil
+	}
+	items := make([]string, 0, len(highlights))
+	for _, highlight := range highlights {
+		if text := strings.TrimSpace(highlight.Text); text != "" {
+			items = append(items, text)
+		}
+	}
+	return items
+}
+
+func (d *ReasoningSearchDebugInfo) Add(other *ReasoningSearchDebugInfo) {
+	if d == nil || other == nil {
+		return
+	}
+
+	hadUsageOrCost := d.hasUsageOrCost()
+	hadPricingConfigured := d.PricingConfigured
+	otherHasUsageOrCost := other.hasUsageOrCost()
+
+	d.TotalTokens += other.TotalTokens
+	d.InputTokens += other.InputTokens
+	d.CachedInputTokens += other.CachedInputTokens
+	d.CacheWriteTokens += other.CacheWriteTokens
+	d.UncachedInputTokens += other.UncachedInputTokens
+	d.OutputTokens += other.OutputTokens
+	d.ReasoningTokens += other.ReasoningTokens
+	d.EstimatedInputCostUSD += other.EstimatedInputCostUSD
+	d.EstimatedCachedInputCostUSD += other.EstimatedCachedInputCostUSD
+	d.EstimatedCacheWriteCostUSD += other.EstimatedCacheWriteCostUSD
+	d.EstimatedOutputCostUSD += other.EstimatedOutputCostUSD
+	d.EstimatedCostUSD += other.EstimatedCostUSD
+	if len(other.AIToolsCalls) != 0 {
+		d.AIToolsCalls = append(d.AIToolsCalls, other.AIToolsCalls...)
+	}
+	if len(other.SkippedToolCalls) != 0 {
+		d.SkippedToolCalls = append(d.SkippedToolCalls, other.SkippedToolCalls...)
+	}
+	if d.DraftModelUsage == nil && other.DraftModelUsage != nil {
+		copy := *other.DraftModelUsage
+		d.DraftModelUsage = &copy
+	}
+	if len(other.DraftModelRuns) != 0 {
+		d.DraftModelRuns = append(d.DraftModelRuns, other.DraftModelRuns...)
+		d.DraftModelUsage = aggregateReasoningSearchUsageBreakdowns(d.DraftModelRuns)
+	}
+	if d.RapidGatherModelUsage == nil && other.RapidGatherModelUsage != nil {
+		copy := *other.RapidGatherModelUsage
+		d.RapidGatherModelUsage = &copy
+	}
+	if d.RapidClassifierModelUsage == nil && other.RapidClassifierModelUsage != nil {
+		copy := *other.RapidClassifierModelUsage
+		d.RapidClassifierModelUsage = &copy
+	}
+	if len(other.RapidClassifierModelRuns) != 0 {
+		d.RapidClassifierModelRuns = append(d.RapidClassifierModelRuns, other.RapidClassifierModelRuns...)
+		d.RapidClassifierModelUsage = aggregateReasoningSearchUsageBreakdowns(d.RapidClassifierModelRuns)
+	}
+	if d.RapidFinalizerModelUsage == nil && other.RapidFinalizerModelUsage != nil {
+		copy := *other.RapidFinalizerModelUsage
+		d.RapidFinalizerModelUsage = &copy
+	}
+	if d.RapidGatherLatencyMS == 0 {
+		d.RapidGatherLatencyMS = other.RapidGatherLatencyMS
+	}
+	if d.RapidFinalizerLatencyMS == 0 {
+		d.RapidFinalizerLatencyMS = other.RapidFinalizerLatencyMS
+	}
+	if d.RapidGatheredCandidateCount == 0 {
+		d.RapidGatheredCandidateCount = other.RapidGatheredCandidateCount
+	}
+	if len(other.RapidClassifierUnhandledUIDs) != 0 {
+		seen := map[string]bool{}
+		for _, uid := range d.RapidClassifierUnhandledUIDs {
+			seen[uid] = true
+		}
+		for _, uid := range other.RapidClassifierUnhandledUIDs {
+			uid = strings.TrimSpace(uid)
+			if uid == "" || seen[uid] {
+				continue
+			}
+			d.RapidClassifierUnhandledUIDs = append(d.RapidClassifierUnhandledUIDs, uid)
+			seen[uid] = true
+		}
+	}
+	if d.RapidClassifierResultCount == 0 {
+		d.RapidClassifierResultCount = other.RapidClassifierResultCount
+	}
+	if d.RapidFinalizerResultCount == 0 {
+		d.RapidFinalizerResultCount = other.RapidFinalizerResultCount
+	}
+	if otherHasUsageOrCost {
+		if !hadUsageOrCost {
+			d.PricingConfigured = other.PricingConfigured
+		} else {
+			d.PricingConfigured = hadPricingConfigured && other.PricingConfigured
+		}
+	}
+}
+
+func (d *ReasoningSearchDebugInfo) hasUsageOrCost() bool {
+	if d == nil {
+		return false
+	}
+	return d.TotalTokens != 0 ||
+		d.InputTokens != 0 ||
+		d.CachedInputTokens != 0 ||
+		d.CacheWriteTokens != 0 ||
+		d.UncachedInputTokens != 0 ||
+		d.OutputTokens != 0 ||
+		d.ReasoningTokens != 0 ||
+		d.EstimatedInputCostUSD != 0 ||
+		d.EstimatedCachedInputCostUSD != 0 ||
+		d.EstimatedCacheWriteCostUSD != 0 ||
+		d.EstimatedOutputCostUSD != 0 ||
+		d.EstimatedCostUSD != 0
+}
+
+func (d *ReasoningSearchDebugInfo) UsageBreakdown() *ReasoningSearchUsageBreakdown {
+	if d == nil {
+		return nil
+	}
+	return &ReasoningSearchUsageBreakdown{
+		Model:                       d.Model,
+		ReasoningEffort:             d.ReasoningEffort,
+		TotalTokens:                 d.TotalTokens,
+		InputTokens:                 d.InputTokens,
+		CachedInputTokens:           d.CachedInputTokens,
+		CacheWriteTokens:            d.CacheWriteTokens,
+		UncachedInputTokens:         d.UncachedInputTokens,
+		OutputTokens:                d.OutputTokens,
+		ReasoningTokens:             d.ReasoningTokens,
+		PricingConfigured:           d.PricingConfigured,
+		InputPer1MTokensUSD:         d.InputPer1MTokensUSD,
+		CachedInputPer1MTokensUSD:   d.CachedInputPer1MTokensUSD,
+		CacheWritePer1MTokensUSD:    d.CacheWritePer1MTokensUSD,
+		OutputPer1MTokensUSD:        d.OutputPer1MTokensUSD,
+		EstimatedInputCostUSD:       d.EstimatedInputCostUSD,
+		EstimatedCachedInputCostUSD: d.EstimatedCachedInputCostUSD,
+		EstimatedCacheWriteCostUSD:  d.EstimatedCacheWriteCostUSD,
+		EstimatedOutputCostUSD:      d.EstimatedOutputCostUSD,
+		EstimatedCostUSD:            d.EstimatedCostUSD,
+	}
+}
+
+func GenerateReasoningSearchVerificationResponseJSONSchema() string {
+	return `{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "needs_another_iteration": {
+      "type": "boolean",
+      "description": "True when the reasoning step should run one more time using the recommendation below."
+    },
+    "recommendation": {
+      "type": "string",
+      "description": "A short recommendation on how to improve the current results. Return an empty string when no extra iteration is needed."
+    }
+  },
+  "required": ["needs_another_iteration", "recommendation"]
+}`
+}
+
+func GenerateReasoningSearchPlanningResponseJSONSchema(tools []ReasoningTool) string {
+	toolNames := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if tool == nil {
+			continue
+		}
+		name := tool.Definition().Name
+		if name == "" {
+			continue
+		}
+		toolNames = append(toolNames, name)
+	}
+
+	schema := map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]interface{}{
+			"instruction_text": map[string]interface{}{
+				"type":        "string",
+				"description": "Short request-specific instruction text to inject into the reasoning system prompt.",
+			},
+			"first_iteration_tools": map[string]interface{}{
+				"type":        "array",
+				"description": "Planned first-iteration tool options. These will be the only tool options available on the first reasoning iteration.",
+				"maxItems":    4,
+				"items": map[string]interface{}{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]interface{}{
+						"tool_name": map[string]interface{}{
+							"type":        "string",
+							"enum":        toolNames,
+							"description": "One of the available tool names.",
+						},
+						"params_json": map[string]interface{}{
+							"type":        "string",
+							"description": "A JSON object string with predefined arguments for the selected tool. Example: {\"query\":\"חיים חדשים\",\"language\":\"he\"}.",
+						},
+						"alternative_queries": map[string]interface{}{
+							"type":        "array",
+							"description": "Only for elasticsearch_search. Alternative query strings that should be converted into additional first-iteration tool options using the same non-query params. Use an empty array for other tools.",
+							"items": map[string]interface{}{
+								"type": "string",
+							},
+							"maxItems": 4,
+						},
+					},
+					"required": []string{"tool_name", "params_json", "alternative_queries"},
+				},
+			},
+		},
+		"required": []string{"instruction_text", "first_iteration_tools"},
+	}
+
+	payload, err := json.Marshal(schema)
+	if err != nil {
+		return `{"type":"object","additionalProperties":false,"properties":{"instruction_text":{"type":"string"},"first_iteration_tools":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"tool_name":{"type":"string"},"params_json":{"type":"string"},"alternative_queries":{"type":"array","items":{"type":"string"}}},"required":["tool_name","params_json","alternative_queries"]}}},"required":["instruction_text","first_iteration_tools"]}`
+	}
+	return string(payload)
+}

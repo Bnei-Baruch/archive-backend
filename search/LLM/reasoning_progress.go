@@ -1,0 +1,429 @@
+package llm
+
+import (
+	"errors"
+	"strings"
+	"sync"
+	"time"
+)
+
+const (
+	ReasoningProgressStatePending   = "pending"
+	ReasoningProgressStateRunning   = "running"
+	ReasoningProgressStateCompleted = "completed"
+	ReasoningProgressStateFailed    = "failed"
+	ReasoningProgressStateCanceled  = "canceled"
+
+	ReasoningProgressPhasePending     = "pending"
+	ReasoningProgressPhasePlanning    = "planning"
+	ReasoningProgressPhaseThinking    = "thinking"
+	ReasoningProgressPhaseRunningTool = "running_tool"
+	ReasoningProgressPhaseVerifying   = "verifying"
+	ReasoningProgressPhaseFinalizing  = "finalizing"
+	ReasoningProgressPhaseDone        = "done"
+	ReasoningProgressPhaseError       = "error"
+	ReasoningProgressPhaseCanceled    = "canceled"
+)
+
+var ErrReasoningProgressNotFoundOrExpired = errors.New("reasoning progress not found or expired")
+
+// ReasoningProgressStore keeps transient per-session progress in local process memory.
+// It is suitable only for a single backend instance or sticky routing to one machine.
+type ReasoningProgressStatus struct {
+	SessionID                 string    `json:"session_id"`
+	State                     string    `json:"state"`
+	Phase                     string    `json:"phase"`
+	Iteration                 int       `json:"iteration"`
+	ToolName                  string    `json:"tool_name,omitempty"`
+	Message                   string    `json:"message"`
+	Error                     string    `json:"error,omitempty"`
+	QueryAnalyzed             bool      `json:"query_analyzed"`
+	HasAnyResults             bool      `json:"has_any_results"`
+	HasPotentiallyGoodResults bool      `json:"has_potentially_good_results"`
+	HasDraftResults           bool      `json:"has_draft_results"`
+	MayTakeLonger             bool      `json:"may_take_longer"`
+	NearFinish                bool      `json:"near_finish"`
+	UpdatedAt                 time.Time `json:"updated_at"`
+	Done                      bool      `json:"done"`
+	Seq                       int64     `json:"seq"`
+	ExpiresAt                 time.Time `json:"-"`
+	IterationOffset           int       `json:"-"`
+	// Follow-ups reuse SessionID, so this identifies the current run within it.
+	RunRevision int64 `json:"-"`
+}
+
+type ReasoningProgressStore struct {
+	mu       sync.RWMutex
+	statuses map[string]*ReasoningProgressStatus
+	ttl      time.Duration
+	nextSeq  int64
+	stop     chan struct{}
+	done     chan struct{}
+}
+
+func NewReasoningProgressStore(ttl time.Duration) *ReasoningProgressStore {
+	if ttl <= 0 {
+		ttl = defaultOpenAIReasoningSessionTTL
+	}
+
+	store := &ReasoningProgressStore{
+		statuses: map[string]*ReasoningProgressStatus{},
+		ttl:      ttl,
+		stop:     make(chan struct{}),
+		done:     make(chan struct{}),
+	}
+	go store.cleanupLoop()
+
+	return store
+}
+
+func (s *ReasoningProgressStore) Reserve(sessionID string) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		// Invalidate completion attempts from the previous run of this session.
+		status.RunRevision++
+		status.State = ReasoningProgressStatePending
+		status.Phase = ReasoningProgressPhasePending
+		status.Iteration = 0
+		status.ToolName = ""
+		status.Message = "Waiting to start..."
+		status.Error = ""
+		status.QueryAnalyzed = false
+		status.HasAnyResults = false
+		status.HasPotentiallyGoodResults = false
+		status.HasDraftResults = false
+		status.MayTakeLonger = false
+		status.NearFinish = false
+		status.Done = false
+	})
+}
+
+// CompleteRun ignores completion from an older background run after a
+// follow-up has reserved the same workflow session.
+func (s *ReasoningProgressStore) CompleteRun(sessionID string, runRevision int64, iteration int) bool {
+	if s == nil || sessionID == "" {
+		return false
+	}
+
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	status, ok := s.statuses[sessionID]
+	if !ok || status.RunRevision != runRevision {
+		return false
+	}
+	status.State = ReasoningProgressStateCompleted
+	status.Phase = ReasoningProgressPhaseDone
+	if iteration < status.Iteration {
+		iteration = status.Iteration
+	}
+	status.Iteration = iteration
+	status.ToolName = ""
+	status.Message = "Done."
+	status.Error = ""
+	status.Done = true
+	s.nextSeq++
+	status.Seq = s.nextSeq
+	status.UpdatedAt = now
+	status.ExpiresAt = now.Add(s.ttl)
+	return true
+}
+
+func (s *ReasoningProgressStore) Thinking(sessionID string, iteration int, nearFinish bool) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.State = ReasoningProgressStateRunning
+		status.Phase = ReasoningProgressPhaseThinking
+		status.Iteration = status.IterationOffset + iteration
+		status.ToolName = ""
+		status.Message = "Thinking..."
+		status.NearFinish = nearFinish
+		status.Done = false
+	})
+}
+
+func (s *ReasoningProgressStore) Planning(sessionID string, iteration int) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.State = ReasoningProgressStateRunning
+		status.Phase = ReasoningProgressPhasePlanning
+		status.Iteration = iteration
+		status.ToolName = ""
+		status.Message = "Analyzing query and preparing search strategy..."
+		status.Done = false
+	})
+}
+
+func (s *ReasoningProgressStore) RunningTool(sessionID string, iteration int, toolName string) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.State = ReasoningProgressStateRunning
+		status.Phase = ReasoningProgressPhaseRunningTool
+		status.Iteration = status.IterationOffset + iteration
+		status.ToolName = toolName
+		status.Message = reasoningProgressToolMessage(toolName)
+		status.QueryAnalyzed = true
+		if reasoningProgressToolMayTakeLonger(toolName) {
+			status.MayTakeLonger = true
+		}
+		status.Done = false
+	})
+}
+
+func (s *ReasoningProgressStore) Verifying(sessionID string, iteration int) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.State = ReasoningProgressStateRunning
+		status.Phase = ReasoningProgressPhaseVerifying
+		status.Iteration = iteration
+		status.ToolName = ""
+		status.Message = "Verifing results..."
+		status.Done = false
+	})
+}
+
+func (s *ReasoningProgressStore) Finalizing(sessionID string, iteration int) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.State = ReasoningProgressStateRunning
+		status.Phase = ReasoningProgressPhaseFinalizing
+		status.Iteration = iteration
+		status.ToolName = ""
+		status.Message = "Finalizing results..."
+		status.Done = false
+	})
+}
+
+func (s *ReasoningProgressStore) Complete(sessionID string, iteration int) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.State = ReasoningProgressStateCompleted
+		status.Phase = ReasoningProgressPhaseDone
+		if iteration < status.Iteration {
+			iteration = status.Iteration
+		}
+		status.Iteration = iteration
+		status.ToolName = ""
+		status.Message = "Done."
+		status.Error = ""
+		status.Done = true
+	})
+}
+
+func (s *ReasoningProgressStore) Fail(sessionID string, iteration int, failures ...error) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.State = ReasoningProgressStateFailed
+		status.Phase = ReasoningProgressPhaseError
+		status.Iteration = status.IterationOffset + iteration
+		status.ToolName = ""
+		status.Message = "Failed."
+		status.Error = ""
+		if len(failures) > 0 {
+			var errorMessages []string
+			for _, err := range failures {
+				if err != nil {
+					errorMessages = append(errorMessages, err.Error())
+				}
+			}
+			status.Error = strings.Join(errorMessages, "; ")
+		}
+		status.Done = true
+	})
+}
+
+func (s *ReasoningProgressStore) Cancel(sessionID string, iteration int) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.State = ReasoningProgressStateCanceled
+		status.Phase = ReasoningProgressPhaseCanceled
+		iteration = status.IterationOffset + iteration
+		if iteration < status.Iteration {
+			iteration = status.Iteration
+		}
+		status.Iteration = iteration
+		status.ToolName = ""
+		status.Message = "Canceled."
+		status.Error = ""
+		status.Done = true
+	})
+}
+
+func (s *ReasoningProgressStore) SetIterationOffset(sessionID string, offset int) {
+	if offset < 0 {
+		offset = 0
+	}
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.IterationOffset = offset
+	})
+}
+
+func (s *ReasoningProgressStore) ReportResultAvailability(sessionID string, hasPotentiallyGoodResults bool) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.HasAnyResults = true
+		if hasPotentiallyGoodResults {
+			status.HasPotentiallyGoodResults = true
+		}
+	})
+}
+
+func (s *ReasoningProgressStore) ReportDraftAvailability(sessionID string) {
+	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.HasDraftResults = true
+	})
+}
+
+func (s *ReasoningProgressStore) IsNearFinish(sessionID string, currentIteration int, maxIterations int) bool {
+	mayTakeLonger := false
+
+	s.mu.RLock()
+	if status, ok := s.statuses[sessionID]; ok {
+		mayTakeLonger = status.MayTakeLonger
+	}
+	s.mu.RUnlock()
+
+	return reasoningProgressIsNearFinish(currentIteration, maxIterations, mayTakeLonger)
+}
+
+func (s *ReasoningProgressStore) Get(sessionID string) (*ReasoningProgressStatus, error) {
+	now := time.Now()
+
+	s.mu.RLock()
+	status, ok := s.statuses[sessionID]
+	s.mu.RUnlock()
+	if !ok {
+		return nil, ErrReasoningProgressNotFoundOrExpired
+	}
+	if now.After(status.ExpiresAt) {
+		s.mu.Lock()
+		delete(s.statuses, sessionID)
+		s.mu.Unlock()
+		return nil, ErrReasoningProgressNotFoundOrExpired
+	}
+
+	statusCopy := *status
+	return &statusCopy, nil
+}
+
+func (s *ReasoningProgressStore) Refresh(sessionID string) error {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	status, ok := s.statuses[sessionID]
+	if !ok {
+		return ErrReasoningProgressNotFoundOrExpired
+	}
+	if now.After(status.ExpiresAt) {
+		delete(s.statuses, sessionID)
+		return ErrReasoningProgressNotFoundOrExpired
+	}
+
+	status.UpdatedAt = now
+	status.ExpiresAt = now.Add(s.ttl)
+	return nil
+}
+
+func (s *ReasoningProgressStore) Close() error {
+	close(s.stop)
+	<-s.done
+	return nil
+}
+
+func (s *ReasoningProgressStore) cleanupLoop() {
+	ticker := time.NewTicker(openAIReasoningSessionCleanupInterval(s.ttl))
+	defer func() {
+		ticker.Stop()
+		close(s.done)
+	}()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.deleteExpired()
+		case <-s.stop:
+			return
+		}
+	}
+}
+
+func (s *ReasoningProgressStore) deleteExpired() {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for sessionID, status := range s.statuses {
+		if now.After(status.ExpiresAt) {
+			delete(s.statuses, sessionID)
+		}
+	}
+}
+
+func (s *ReasoningProgressStore) update(sessionID string, mutate func(*ReasoningProgressStatus)) {
+	if s == nil || sessionID == "" {
+		return
+	}
+
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	status, ok := s.statuses[sessionID]
+	if !ok {
+		status = &ReasoningProgressStatus{SessionID: sessionID}
+		s.statuses[sessionID] = status
+	}
+	mutate(status)
+	s.nextSeq++
+	status.Seq = s.nextSeq
+	status.UpdatedAt = now
+	status.ExpiresAt = now.Add(s.ttl)
+}
+
+func reasoningProgressToolMessage(toolName string) string {
+	toolName = CanonicalReasoningToolName(toolName)
+	switch toolName {
+	case "elasticsearch_search":
+		return "Searching archive..."
+	case "query_source_ai":
+		return "Checking source text..."
+	case "query_transcript_ai":
+		return "Checking transcript..."
+	case "get_available_books":
+		return "Looking up books..."
+	case "get_sources_by_author":
+		return "Looking up author sources..."
+	case "get_sources_by_source":
+		return "Looking up source structure..."
+	case "get_collections":
+		return "Looking up collections..."
+	case "get_content_units_by_collection":
+		return "Looking up collection items..."
+	default:
+		return "Using tool..."
+	}
+}
+
+func reasoningProgressToolMayTakeLonger(toolName string) bool {
+	switch CanonicalReasoningToolName(toolName) {
+	case "query_source_ai", "query_transcript_ai":
+		return true
+	default:
+		return false
+	}
+}
+
+func reasoningProgressIsNearFinish(currentIteration int, maxIterations int, mayTakeLonger bool) bool {
+	if currentIteration <= 0 || maxIterations <= 0 {
+		return false
+	}
+
+	thresholdPercent := 50
+	if mayTakeLonger {
+		thresholdPercent = 65
+	}
+
+	// Use ceil(maxIterations * percent / 100), so the flag turns on only after
+	// the visible iteration actually reaches the configured percentage.
+	thresholdIteration := (maxIterations*thresholdPercent + 99) / 100
+	if thresholdIteration < 1 {
+		thresholdIteration = 1
+	}
+
+	return currentIteration >= thresholdIteration
+}
