@@ -40,6 +40,7 @@ Instructions for coding agents working in this repository.
 - `common.Init()` builds one app-scoped `common.LLM_RUNTIME`; do not construct new LLM services per request.
 - `common.LLM_RUNTIME` stores the shared tool manager, progress/workflow stores, and provider services keyed by provider.
 - Tool implementations live under `search/LLM/tools/`.
+- AI source/transcript lookup tools pass the search context through `AssetsService.Doc2Text` to the HTTP request so cancel and finish-now interrupt in-flight document fetches.
 - LLM package tests live under `search/LLM/tests/`.
 
 ## Tooling Infrastructure

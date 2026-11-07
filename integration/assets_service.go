@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -12,7 +13,7 @@ import (
 )
 
 type AssetsService interface {
-	Doc2Text(uid string) (string, error)
+	Doc2Text(ctx context.Context, uid string) (string, error)
 	Prepare(uids []string) (bool, map[string]int, error)
 }
 
@@ -30,26 +31,27 @@ func NewAssetsService(url string) AssetsService {
 	}
 }
 
-func (s *DefaultAssetsService) Doc2Text(uid string) (string, error) {
-	resp, err := s.client.Get(fmt.Sprintf("%s/doc2text/%s", s.baseUrl, uid))
-
+func (s *DefaultAssetsService) Doc2Text(ctx context.Context, uid string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.baseUrl+"/doc2text/"+uid, nil)
 	if err != nil {
-		return "", errors.Wrap(err,"client.Get")
+		return "", fmt.Errorf("http.NewRequestWithContext: %w", err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		return "", errors.Errorf("%d %s", resp.StatusCode , resp.Status)
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("client.Do: %w", err)
 	}
-
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.Errorf("%d %s", resp.StatusCode, resp.Status)
+	}
 
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", errors.Wrap(err,"ioutil.ReadAll")
+		return "", fmt.Errorf("ioutil.ReadAll: %w", err)
 	}
 
 	return string(bodyBytes), nil
 }
-
 
 type unzipResponse struct {
 	Code    int    `json:"code"`
@@ -59,20 +61,20 @@ type unzipResponse struct {
 func (s *DefaultAssetsService) Prepare(uids []string) (bool, map[string]int, error) {
 	resp, err := s.client.Get(fmt.Sprintf("%s/prepare/%s", s.baseUrl, strings.Join(uids, ",")))
 	if err != nil {
-		return false, nil, errors.Wrap(err,"client.Get")
+		return false, nil, errors.Wrap(err, "client.Get")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return false, nil, errors.Errorf("%d %s", resp.StatusCode , resp.Status)
+		return false, nil, errors.Errorf("%d %s", resp.StatusCode, resp.Status)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return false, nil, errors.Wrap(err,"ioutil.ReadAll")
+		return false, nil, errors.Wrap(err, "ioutil.ReadAll")
 	}
 
 	var data []unzipResponse
 	if err := json.Unmarshal(body, &data); err != nil {
-		return false, nil, errors.Wrap(err,"json.Unmarshal")
+		return false, nil, errors.Wrap(err, "json.Unmarshal")
 	}
 
 	if len(data) != len(uids) {

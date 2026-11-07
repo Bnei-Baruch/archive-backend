@@ -592,7 +592,7 @@ func (t *QuerySourceAITool) Execute(ctx context.Context, arguments json.RawMessa
 	language := strings.ToLower(strings.TrimSpace(args.Language))
 	maxChunks := normalizeAIQueryToolMaxChunks(args.MaxChunks)
 	loadStart := time.Now()
-	entry, err := loadSourceDocumentEntry(t.lookup, sourceID, language)
+	entry, err := loadSourceDocumentEntry(ctx, t.lookup, sourceID, language)
 	loadLatencyMS := time.Since(loadStart).Milliseconds()
 	if err != nil {
 		addAIQueryToolCallDebug(ctx, llm.ReasoningSearchAIToolCallDebug{
@@ -650,7 +650,7 @@ func (t *QueryTranscriptAITool) Execute(ctx context.Context, arguments json.RawM
 	llm.LogIfDeb(ctx, "query_transcript_ai: start content_unit_id=%q language=%q query=%q max_chunks=%d", contentUnitID, language, query, maxChunks)
 
 	loadStart := time.Now()
-	entry, err := loadTranscriptDocumentEntry(t.lookup, contentUnitID, language)
+	entry, err := loadTranscriptDocumentEntry(ctx, t.lookup, contentUnitID, language)
 	loadLatencyMS := time.Since(loadStart).Milliseconds()
 	if err != nil {
 		addAIQueryToolCallDebug(ctx, llm.ReasoningSearchAIToolCallDebug{
@@ -938,7 +938,7 @@ func selectAIQueryBatch(ctx context.Context, service llm.Service, config *llm.AI
 	return selected, debug, nil
 }
 
-func loadSourceDocumentEntry(tool *aiSourceDocumentLoader, sourceID string, language string) (*aiQueryDocumentCacheEntry, error) {
+func loadSourceDocumentEntry(ctx context.Context, tool *aiSourceDocumentLoader, sourceID string, language string) (*aiQueryDocumentCacheEntry, error) {
 	return loadAIQueryDocumentEntry(
 		&tool.cache,
 		sourceID+"|"+language,
@@ -946,7 +946,7 @@ func loadSourceDocumentEntry(tool *aiSourceDocumentLoader, sourceID string, lang
 			return tool.resolveFileUID(sourceID, language)
 		},
 		func(fileUID string) (string, error) {
-			content, err := tool.assetsService.Doc2Text(fileUID)
+			content, err := tool.assetsService.Doc2Text(ctx, fileUID)
 			if err != nil {
 				return "", fmt.Errorf("source text could not be retrieved: %w", err)
 			}
@@ -955,7 +955,7 @@ func loadSourceDocumentEntry(tool *aiSourceDocumentLoader, sourceID string, lang
 	)
 }
 
-func loadTranscriptDocumentEntry(tool *aiTranscriptDocumentLoader, contentUnitID string, language string) (*aiQueryDocumentCacheEntry, error) {
+func loadTranscriptDocumentEntry(ctx context.Context, tool *aiTranscriptDocumentLoader, contentUnitID string, language string) (*aiQueryDocumentCacheEntry, error) {
 	kiteiMakorType, ok := mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KITEI_MAKOR]
 	if !ok {
 		return nil, fmt.Errorf("query_transcript_ai: content type '%s' is unavailable", consts.CT_KITEI_MAKOR)
@@ -967,7 +967,7 @@ func loadTranscriptDocumentEntry(tool *aiTranscriptDocumentLoader, contentUnitID
 			return tool.resolveFileUID(contentUnitID, language, kiteiMakorType.ID)
 		},
 		func(fileUID string) (string, error) {
-			content, err := tool.assetsService.Doc2Text(fileUID)
+			content, err := tool.assetsService.Doc2Text(ctx, fileUID)
 			if err != nil {
 				return "", fmt.Errorf("transcript text could not be retrieved: %w", err)
 			}

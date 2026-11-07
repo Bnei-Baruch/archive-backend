@@ -363,7 +363,7 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 			if byLang, ok := indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
-					unit.Content, err = index.assetsService.Doc2Text(val[0])
+					unit.Content, err = index.assetsService.Doc2Text(context.Background(), val[0])
 					if unit.Content == "" {
 						log.Warnf("Content Units Index - Transcript empty: %s", val[0])
 					}

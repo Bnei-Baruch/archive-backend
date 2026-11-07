@@ -324,7 +324,7 @@ func (index *SourcesIndex) fetchDocx(cuUid string, lang string) (string, error) 
 		}
 		return "", err
 	}
-	return index.assetsService.Doc2Text(fileUID)
+	return index.assetsService.Doc2Text(context.Background(), fileUID)
 }
 
 func (index *SourcesIndex) indexSource(mdbSource *mdbmodels.Source, parents []string, parentIds []int64, authorsByLanguage map[string][]string) *IndexErrors {

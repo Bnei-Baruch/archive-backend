@@ -567,7 +567,7 @@ func TestQuerySourceAIToolDefinitionIncludesQueryArguments(t *testing.T) {
 
 type fakeAssetsService struct{}
 
-func (s *fakeAssetsService) Doc2Text(uid string) (string, error) {
+func (s *fakeAssetsService) Doc2Text(ctx context.Context, uid string) (string, error) {
 	return uid, nil
 }
 
