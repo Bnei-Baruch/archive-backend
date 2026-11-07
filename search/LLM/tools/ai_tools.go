@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -839,6 +841,12 @@ func selectAIQueryBatchesWithReader(ctx context.Context, service llm.Service, co
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					log.Printf("AI query reader panic batch=%d: %v\n%s", i+1, recovered, debug.Stack())
+					setErr(fmt.Errorf("AI query reader batch %d failed: panic: %v", i+1, recovered))
+				}
+			}()
 			select {
 			case sem <- struct{}{}:
 				defer func() { <-sem }()

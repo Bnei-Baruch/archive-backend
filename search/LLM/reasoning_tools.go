@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -266,7 +267,15 @@ func ExecuteReasoningToolExecutions(ctx context.Context, calls []ReasoningToolEx
 	return results, nil
 }
 
-func executeReasoningToolExecution(ctx context.Context, call ReasoningToolExecution, currentHandlers map[string]ToolHandler, plannedHandlers map[string]ToolHandler) (string, error) {
+func executeReasoningToolExecution(ctx context.Context, call ReasoningToolExecution, currentHandlers map[string]ToolHandler, plannedHandlers map[string]ToolHandler) (output string, err error) {
+	// Recovery must run in the goroutine executing the tool, including parallel workers.
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Printf("LLM tool panic tool=%q: %v\n%s", call.Name, recovered, debug.Stack())
+			output = ""
+			err = fmt.Errorf("tool '%s' execution failed: panic: %v", call.Name, recovered)
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

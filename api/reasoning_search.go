@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -943,6 +944,12 @@ func maybeStartReasoningSearchDraft(runtime *llm.Runtime, db *sql.DB, uiLanguage
 	}
 
 	go func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				log.Errorf("Reasoning Search draft panic session=%s revision=%d: %v\n%s", sessionID, revision, recovered, debug.Stack())
+				runtime.Workflow.FailDraft(sessionID)
+			}
+		}()
 		if err := buildAndStoreReasoningSearchDraft(context.Background(), runtime, db, service, runtime.DraftConfig, uiLanguage, sessionID, query, revision, results, deb); err != nil {
 			runtime.Workflow.FailDraft(sessionID)
 			if !errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
@@ -2228,7 +2235,7 @@ func executeReasoningSearchInBackground(ctx context.Context, runtime *llm.Runtim
 			runtime.Cancellations.Delete(responseSessionID)
 		}
 		if recovered := recover(); recovered != nil {
-			log.Errorf("Reasoning Search background panic session=%s: %v", responseSessionID, recovered)
+			log.Errorf("Reasoning Search background panic session=%s: %v\n%s", responseSessionID, recovered, debug.Stack())
 			if runtime != nil && runtime.Workflow != nil {
 				if finalized, err := runtime.Workflow.IsFinalizedFromDraft(responseSessionID); err == nil && finalized {
 					log.Infof("Reasoning Search panic ignored because draft was already returned session=%s", responseSessionID)
@@ -2528,8 +2535,15 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 			}
 			bootstrapDone = make(chan error, 1)
 			go func() {
-				_, bootstrapErr := handler(gatherCtx, bootstrapArgs)
-				bootstrapDone <- bootstrapErr
+				var bootstrapErr error
+				defer func() {
+					if recovered := recover(); recovered != nil {
+						log.Errorf("Rapid Reasoning Search bootstrap tool panic session=%s: %v\n%s", responseSessionID, recovered, debug.Stack())
+						bootstrapErr = fmt.Errorf("tool 'elasticsearch_search' execution failed: panic: %v", recovered)
+					}
+					bootstrapDone <- bootstrapErr
+				}()
+				_, bootstrapErr = handler(gatherCtx, bootstrapArgs)
 			}()
 		}
 	}

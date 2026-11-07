@@ -1,10 +1,34 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 )
+
+type panickingReaderService struct {
+	llm.Service
+}
+
+func (s *panickingReaderService) GetStructuredOutputWithDebugInfo(context.Context, string, string, *int, []llm.LLMBotMessage, *string, *string, bool, interface{}) (*llm.ReasoningSearchDebugInfo, error) {
+	panic("broken reader")
+}
+
+func TestSelectAIQueryBatchesWithReaderReturnsErrorAfterWorkerPanic(t *testing.T) {
+	results, err := selectAIQueryBatchesWithReader(context.Background(), &panickingReaderService{}, &llm.AIToolsConfig{}, "query", [][]aiQueryChunk{
+		{{Number: 1, Content: "first"}},
+		{{Number: 2, Content: "second"}},
+	}, 1)
+	if err == nil || !strings.Contains(err.Error(), "AI query reader batch") || !strings.Contains(err.Error(), "panic: broken reader") {
+		t.Fatalf("expected reader execution error, got %v", err)
+	}
+	if results != nil {
+		t.Fatalf("expected no results after reader failure, got %#v", results)
+	}
+}
 
 func TestSelectAIQueryBatchesPrefersKeywordMatches(t *testing.T) {
 	batches := [][]aiQueryChunk{

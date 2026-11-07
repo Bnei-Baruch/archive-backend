@@ -3,8 +3,10 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -175,5 +177,29 @@ func TestExecuteReasoningToolExecutionsLimitOneUsesSingleCallPath(t *testing.T) 
 	}
 	if len(results) != 2 || results[0].Output != `"first"` || results[0].Skipped || !results[1].Skipped {
 		t.Fatalf("unexpected results: %#v", results)
+	}
+}
+
+func TestExecuteReasoningToolExecutionsReturnsErrorAfterPanic(t *testing.T) {
+	for _, count := range []int{1, 4} {
+		t.Run(fmt.Sprintf("calls=%d", count), func(t *testing.T) {
+			calls := make([]ReasoningToolExecution, count)
+			for i := range calls {
+				calls[i] = ReasoningToolExecution{Name: "panicking_tool"}
+			}
+			var finished int32
+			results, err := ExecuteReasoningToolExecutions(context.Background(), calls, map[string]ToolHandler{
+				"panicking_tool": func(context.Context, json.RawMessage) (string, error) {
+					defer atomic.AddInt32(&finished, 1)
+					panic("broken tool")
+				},
+			}, nil)
+			if err == nil || !strings.Contains(err.Error(), "tool 'panicking_tool' execution failed: panic: broken tool") {
+				t.Fatalf("expected tool execution error, got %v", err)
+			}
+			if results != nil || atomic.LoadInt32(&finished) != int32(count) {
+				t.Fatalf("expected all workers to finish before returning error: results=%v finished=%d", results, finished)
+			}
+		})
 	}
 }
