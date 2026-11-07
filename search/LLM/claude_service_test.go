@@ -109,3 +109,70 @@ func TestClaudeStructuredOutputCachesSystemPrefix(t *testing.T) {
 		t.Fatalf("unexpected structured output: answer=%q err=%v", output.Answer, err)
 	}
 }
+
+func TestClaudeReasoningSessionFailureProgress(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		content       string
+		expireSession bool
+		wantError     bool
+	}{
+		{name: "invalid JSON", content: `not JSON`, wantError: true},
+		{name: "missing required field", content: `{}`, wantError: true},
+		{name: "decoding error", content: `{"answer":123}`, wantError: true},
+		{name: "session update error", content: `{"answer":"done"}`, expireSession: true, wantError: true},
+		{name: "success", content: `{"answer":"done"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sessions := NewChatReasoningSessionStore(time.Minute)
+			defer sessions.Close()
+			progress := NewReasoningProgressStore(time.Minute)
+			defer progress.Close()
+			progressID := "workflow-session"
+			progress.Reserve(progressID)
+			sessionID, err := sessions.CreateReserved("claude-test-model", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			service := NewClaudeServiceWithOptions("test-token", nil, sessions, "https://claude.test")
+			service.progress = progress
+			requests := 0
+			service.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				requests++
+				content := []ClaudeContentBlock{{Type: "text", Text: tc.content}}
+				if requests == 1 {
+					content = []ClaudeContentBlock{{Type: "tool_use", ID: "call-lookup", Name: "lookup", Input: json.RawMessage(`{}`)}}
+				} else if tc.expireSession {
+					sessions.mu.Lock()
+					sessions.sessions[sessionID].ExpiresAt = time.Now().Add(-time.Second)
+					sessions.mu.Unlock()
+				}
+				body := mustJSON(t, ClaudeMessageResponse{Content: content})
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body))}, nil
+			})}
+			output := struct {
+				Answer string `json:"answer"`
+			}{}
+			_, err = service.GetReasoningStructuredOutputWithToolsForSession(context.Background(), &sessionID, &progressID,
+				`{"type":"object","required":["answer"]}`, "claude-test-model", nil,
+				[]LLMBotMessage{{Role: "system", Content: "Use archive tools"}, {Role: "user", Content: "Search the archive"}},
+				[]ToolCall{{Type: "function", Function: map[string]interface{}{"name": "lookup"}}},
+				map[string]ToolHandler{"lookup": func(context.Context, json.RawMessage) (string, error) { return `{}`, nil }},
+				nil, nil, nil, nil, false, 2, &output)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			status, err := progress.Get(progressID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantError {
+				if status.State != ReasoningProgressStateFailed || !status.Done || status.Error != ReasoningProgressFailureMessage {
+					t.Fatalf("expected generic terminal failure, got %#v", status)
+				}
+			} else if status.State == ReasoningProgressStateFailed || status.Done || output.Answer != "done" {
+				t.Fatalf("successful provider call must not mark progress failed or complete: %#v", status)
+			}
+		})
+	}
+}

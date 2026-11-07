@@ -191,10 +191,16 @@ func (s *ClaudeService) GetReasoningStructuredOutputWithToolsForSession(ctx cont
 		return "", err
 	}
 	if err := validateJSONRequiredTopLevelFields(msg.Content, jsonSchema); err != nil {
+		if s.progress != nil && effectiveProgressSessionID != "" {
+			s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
+		}
 		return "", err
 	}
 	if err := unmarshalLLMJSONContent(msg.Content, output); err != nil {
 		log.Printf("Deserialization failed for schema '%s': %v\nContent: %s", jsonSchema, err, msg.Content)
+		if s.progress != nil && effectiveProgressSessionID != "" {
+			s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
+		}
 		return "", err
 	}
 	if deb && len(reasoningSteps) > 0 {
@@ -224,6 +230,9 @@ func (s *ClaudeService) GetReasoningStructuredOutputWithToolsForSession(ctx cont
 
 	_, currentConversation, err := splitInstructionsAndConversation(messages)
 	if err != nil {
+		if s.progress != nil && effectiveProgressSessionID != "" {
+			s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
+		}
 		return "", err
 	}
 	newHistory := append(priorHistory, sessionConversationMessages(currentConversation)...)
@@ -235,9 +244,15 @@ func (s *ClaudeService) GetReasoningStructuredOutputWithToolsForSession(ctx cont
 		}
 		effectiveSessionID, err = s.sessions.Create(newHistory, effectiveModel, storedReasoningEffort)
 		if err != nil {
+			if s.progress != nil && effectiveProgressSessionID != "" {
+				s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
+			}
 			return "", err
 		}
 	} else if err := s.sessions.Update(effectiveSessionID, newHistory); err != nil {
+		if s.progress != nil && effectiveProgressSessionID != "" {
+			s.progress.Fail(effectiveProgressSessionID, reasoningIterations)
+		}
 		return "", err
 	}
 	return effectiveSessionID, nil
