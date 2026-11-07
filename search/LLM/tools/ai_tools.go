@@ -1211,14 +1211,19 @@ func splitLongAIQueryDocumentPart(part string) []string {
 	chunks := make([]string, 0)
 	remaining := part
 	for len(remaining) > sourceLookupMaxChunkSize {
-		splitAt := sourceLookupMaxChunkSize
-		for i := sourceLookupTargetChunkSize; i < len(remaining) && i < sourceLookupMaxChunkSize; i++ {
-			if remaining[i] == ' ' || remaining[i] == '\n' || remaining[i] == '\t' {
+		splitAt := 0
+		lastRuneBoundary := 0
+		for i, r := range remaining {
+			if i > sourceLookupMaxChunkSize {
+				break
+			}
+			lastRuneBoundary = i
+			if i >= sourceLookupTargetChunkSize && i < sourceLookupMaxChunkSize && (r == ' ' || r == '\n' || r == '\t') {
 				splitAt = i
 			}
 		}
-		if splitAt <= 0 || splitAt > len(remaining) {
-			splitAt = sourceLookupMaxChunkSize
+		if splitAt == 0 {
+			splitAt = lastRuneBoundary
 		}
 		chunks = append(chunks, strings.TrimSpace(remaining[:splitAt]))
 		remaining = strings.TrimSpace(remaining[splitAt:])
@@ -1493,21 +1498,21 @@ func extractAIQueryExcerpt(content string, query string, reason string, supporti
 		return content
 	}
 
-	if anchorByte, anchorLen := findAIQueryExcerptAnchor(content, query, reason, supportingSnippet); anchorByte >= 0 {
-		startRune := utf8.RuneCountInString(content[:anchorByte])
-		anchorRunes := utf8.RuneCountInString(content[anchorByte : anchorByte+anchorLen])
+	if startRune, anchorRunes := findAIQueryExcerptAnchor(content, query, reason, supportingSnippet); startRune >= 0 {
 		return sliceAIQueryExcerpt(content, startRune, anchorRunes, maxRunes)
 	}
 	return truncateAIQueryContent(content, maxRunes)
 }
 
+// Return the anchor offset and length in runes, preserving positions across case changes.
 func findAIQueryExcerptAnchor(content string, query string, reason string, supportingSnippet string) (int, int) {
+	// Simple lowercasing preserves rune positions, even when UTF-8 byte lengths change.
 	lowerContent := strings.ToLower(content)
 	candidates := buildAIQueryExcerptCandidates(supportingSnippet, query, reason)
 	for _, candidate := range candidates {
 		lowerCandidate := strings.ToLower(candidate.Text)
 		if idx := strings.Index(lowerContent, lowerCandidate); idx >= 0 {
-			return idx, len(candidate.Text)
+			return utf8.RuneCountInString(lowerContent[:idx]), utf8.RuneCountInString(lowerCandidate)
 		}
 	}
 	return -1, 0

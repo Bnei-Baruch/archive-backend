@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 )
@@ -170,5 +171,49 @@ func TestExtractAIQueryExcerptPrefersSupportingSnippetWhenPresent(t *testing.T) 
 	excerpt := extractAIQueryExcerpt(content, "שולחן", "", "הציטוט המדויק על להעלות על השולחן", 120)
 	if !strings.Contains(excerpt, "הציטוט המדויק") || !strings.Contains(excerpt, "השולחן") {
 		t.Fatalf("expected excerpt around supporting snippet, got %q", excerpt)
+	}
+}
+
+func TestExtractAIQueryExcerptHandlesChangingUTF8ByteLengths(t *testing.T) {
+	for _, prefix := range []string{
+		strings.Repeat("\xff", 100),
+		strings.Repeat("Ⱥ", 100),
+		strings.Repeat("İ", 100),
+	} {
+		content := prefix + " NeEdLe"
+		excerpt := extractAIQueryExcerpt(content, "needle", "", "", 32)
+		if !strings.Contains(excerpt, "NeEdLe") || !utf8.ValidString(excerpt) {
+			t.Fatalf("expected valid excerpt containing the original anchor, got %q", excerpt)
+		}
+	}
+}
+
+func TestFindAIQueryExcerptAnchorReturnsRuneOffsetAndLength(t *testing.T) {
+	start, length := findAIQueryExcerptAnchor("אבⱥBCסוף", "", "", "Ⱥbc")
+	if start != 2 || length != 3 {
+		t.Fatalf("expected rune offset 2 and length 3, got offset=%d length=%d", start, length)
+	}
+}
+
+func TestSplitLongAIQueryDocumentPartPreservesUTF8Boundaries(t *testing.T) {
+	for _, character := range []string{"א", "界", "😀"} {
+		content := "a" + strings.Repeat(character, sourceLookupMaxChunkSize)
+		chunks := splitLongAIQueryDocumentPart(content)
+		if len(chunks) < 2 || strings.Join(chunks, "") != content {
+			t.Fatal("expected chunking to preserve the original content")
+		}
+		for _, chunk := range chunks {
+			if !utf8.ValidString(chunk) || len(chunk) > sourceLookupMaxChunkSize {
+				t.Fatalf("expected valid UTF-8 within byte limit, got bytes=%d valid=%t", len(chunk), utf8.ValidString(chunk))
+			}
+		}
+	}
+}
+
+func TestSplitLongAIQueryDocumentPartHandlesInvalidUTF8(t *testing.T) {
+	content := strings.Repeat("\xff", 2*sourceLookupMaxChunkSize+1)
+	chunks := splitLongAIQueryDocumentPart(content)
+	if len(chunks) != 3 || strings.Join(chunks, "") != content {
+		t.Fatal("expected chunking to make progress and preserve invalid input bytes")
 	}
 }
