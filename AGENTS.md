@@ -57,7 +57,7 @@ Instructions for coding agents working in this repository.
 - API endpoints: `POST /search/reasoning`, `POST /search/reasoning/start`, `POST /search/reasoning/cache`, `POST /search/reasoning/cancel`, `POST /search/reasoning/finish-now`, `GET /search/reasoning/status`, `GET /search/reasoning/result`.
 - Request supports `q`, optional `deb`, optional `session_id`, optional `cancel_session_id`, optional `ui_language`.
 - The API `session_id` is a workflow session id owned by the backend, not a provider-native LLM session id.
-- `POST /search/reasoning` runs the full reasoning search synchronously and returns the final response directly.
+- `POST /search/reasoning` runs synchronously only when `server.mode="debug"`; other modes return HTTP 403 before starting work. The request's `deb` flag does not enable this endpoint. Production clients use the background flow.
 - `POST /search/reasoning/start` starts the reasoning run in background and returns the workflow `session_id`.
 - `POST /search/reasoning/cache` checks the shared query cache for regular or rapid search based on `is_rapid`; on hit it creates a fresh workflow session, stores a response snapshot, and returns the new `session_id`.
 - `POST /search/reasoning/start` may receive `cancel_session_id` to cancel a previous background run before starting the new one.

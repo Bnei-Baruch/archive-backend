@@ -372,10 +372,13 @@ func ReasoningSearchStatusHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// Synchronous flow entrypoint: run the full reasoning search now and return the
-// final response directly. This is mainly useful for simple clients and manual
-// testing, while the async flow uses /search/reasoning/start + status + result.
+// Debug-only synchronous entrypoint. Production clients use
+// /search/reasoning/start + status + result.
 func ReasoningSearchHandler(c *gin.Context) {
+	if viper.GetString("server.mode") != gin.DebugMode {
+		NewHttpError(http.StatusForbidden, errors.New("synchronous reasoning search is only available in debug mode"), gin.ErrorTypePublic).Abort(c)
+		return
+	}
 	r := ReasoningSearchRequest{}
 	if c.Bind(&r) != nil {
 		return
