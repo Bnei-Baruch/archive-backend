@@ -2,6 +2,7 @@ package llm
 
 import (
 	"errors"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,8 @@ const (
 	ReasoningProgressPhaseDone        = "done"
 	ReasoningProgressPhaseError       = "error"
 	ReasoningProgressPhaseCanceled    = "canceled"
+
+	ReasoningProgressFailureMessage = "Reasoning search failed. Please try again."
 )
 
 var ErrReasoningProgressNotFoundOrExpired = errors.New("reasoning progress not found or expired")
@@ -49,7 +52,8 @@ type ReasoningProgressStatus struct {
 	ExpiresAt                 time.Time `json:"-"`
 	IterationOffset           int       `json:"-"`
 	// Follow-ups reuse SessionID, so this identifies the current run within it.
-	RunRevision int64 `json:"-"`
+	RunRevision  int64 `json:"-"`
+	debugEnabled bool
 }
 
 type ReasoningProgressStore struct {
@@ -77,8 +81,9 @@ func NewReasoningProgressStore(ttl time.Duration) *ReasoningProgressStore {
 	return store
 }
 
-func (s *ReasoningProgressStore) Reserve(sessionID string) {
+func (s *ReasoningProgressStore) Reserve(sessionID string, deb ...bool) {
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
+		status.debugEnabled = len(deb) > 0 && deb[0]
 		// Invalidate completion attempts from the previous run of this session.
 		status.RunRevision++
 		status.State = ReasoningProgressStatePending
@@ -205,21 +210,25 @@ func (s *ReasoningProgressStore) Complete(sessionID string, iteration int) {
 }
 
 func (s *ReasoningProgressStore) Fail(sessionID string, iteration int, failures ...error) {
+	var errorMessages []string
+	for _, err := range failures {
+		if err != nil {
+			errorMessages = append(errorMessages, err.Error())
+		}
+	}
+	details := strings.Join(errorMessages, "; ")
+	if details != "" {
+		log.Printf("Reasoning Search failed session=%s iteration=%d: %s", sessionID, iteration, details)
+	}
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
 		status.State = ReasoningProgressStateFailed
 		status.Phase = ReasoningProgressPhaseError
 		status.Iteration = status.IterationOffset + iteration
 		status.ToolName = ""
 		status.Message = "Failed."
-		status.Error = ""
-		if len(failures) > 0 {
-			var errorMessages []string
-			for _, err := range failures {
-				if err != nil {
-					errorMessages = append(errorMessages, err.Error())
-				}
-			}
-			status.Error = strings.Join(errorMessages, "; ")
+		status.Error = ReasoningProgressFailureMessage
+		if status.debugEnabled && details != "" {
+			status.Error = details
 		}
 		status.Done = true
 	})

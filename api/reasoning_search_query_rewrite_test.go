@@ -869,6 +869,7 @@ func TestPrepareReasoningSearchSessionKeepsProviderSessionForNonRapidFollowup(t 
 		SessionID:  &requestSessionID,
 		UILanguage: "he",
 		IsRapid:    false,
+		Deb:        true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected follow-up error: %v", err)
@@ -893,5 +894,10 @@ func TestPrepareReasoningSearchSessionKeepsProviderSessionForNonRapidFollowup(t 
 	reasoningStage := session.Stages[llm.ReasoningWorkflowStageReasoning]
 	if reasoningStage.ProviderSessionID != "existing-provider-session" {
 		t.Fatalf("expected existing provider session to continue, got %q", reasoningStage.ProviderSessionID)
+	}
+	progress.Fail(sessionID, 1, errors.New("private provider error"))
+	status, err := progress.Get(sessionID)
+	if err != nil || status.Error != "private provider error" {
+		t.Fatalf("expected debug follow-up details, got status=%#v err=%v", status, err)
 	}
 }

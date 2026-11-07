@@ -696,7 +696,7 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 						return "", err
 					}
 				}
-				progressStore.Reserve(sessionID)
+				progressStore.Reserve(sessionID, r.Deb)
 				progressStore.SetIterationOffset(sessionID, 0)
 				return sessionID, nil
 			}
@@ -743,7 +743,7 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 						return "", err
 					}
 				}
-				progressStore.Reserve(sessionID)
+				progressStore.Reserve(sessionID, r.Deb)
 				progressStore.SetIterationOffset(sessionID, 0)
 				return sessionID, nil
 			}
@@ -760,7 +760,7 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 				if err := workflowStore.StartDraftFollowup(sessionID, r.Query, nextFollowupCount, reasoningStage); err != nil {
 					return "", err
 				}
-				progressStore.Reserve(sessionID)
+				progressStore.Reserve(sessionID, r.Deb)
 				progressStore.SetIterationOffset(sessionID, 0)
 				return sessionID, nil
 			}
@@ -773,7 +773,7 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 				}
 				return "", err
 			}
-			progressStore.Reserve(sessionID)
+			progressStore.Reserve(sessionID, r.Deb)
 			progressStore.SetIterationOffset(sessionID, 0)
 			return sessionID, nil
 		}
@@ -783,7 +783,7 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 		if err := workflowStore.SetQuery(sessionID, r.Query, effectiveUILanguage); err != nil {
 			return "", err
 		}
-		progressStore.Reserve(sessionID)
+		progressStore.Reserve(sessionID, r.Deb)
 		progressStore.SetIterationOffset(sessionID, 0)
 		return sessionID, nil
 	}
@@ -878,7 +878,7 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 	if err := workflowStore.SetResponseSnapshot(sessionID, nil); err != nil {
 		return "", err
 	}
-	progressStore.Reserve(sessionID)
+	progressStore.Reserve(sessionID, r.Deb)
 	progressStore.SetIterationOffset(sessionID, 0)
 	return sessionID, nil
 }

@@ -153,15 +153,34 @@ func TestReasoningProgressStoreFailureReason(t *testing.T) {
 	store := llm.NewReasoningProgressStore(5 * time.Minute)
 	defer store.Close()
 
-	store.Reserve("session-1")
-	store.Fail("session-1", 2, errors.New("provider returned HTTP 503"))
-
-	status, err := store.Get("session-1")
-	if err != nil {
-		t.Fatalf("unexpected get error: %v", err)
+	for _, failure := range []string{
+		`provider returned HTTP 503: {"internal":"provider details"}`,
+		"database error: private connection details",
+		"panic: private panic details",
+	} {
+		for _, deb := range []bool{false, true} {
+			store.Reserve("session-1", deb)
+			store.Fail("session-1", 2, errors.New(failure))
+			status, err := store.Get("session-1")
+			if err != nil {
+				t.Fatalf("unexpected get error: %v", err)
+			}
+			expected := llm.ReasoningProgressFailureMessage
+			if deb {
+				expected = failure
+			}
+			if status.State != llm.ReasoningProgressStateFailed || status.Error != expected || !status.Done {
+				t.Fatalf("unexpected failure status with deb=%t: %#v", deb, status)
+			}
+		}
 	}
-	if status.State != llm.ReasoningProgressStateFailed || status.Error != "provider returned HTTP 503" {
-		t.Fatalf("unexpected failure status: state=%q error=%q", status.State, status.Error)
+
+	// A new run must not inherit debug error visibility from the previous run.
+	store.Reserve("session-1")
+	store.Fail("session-1", 1, errors.New("private follow-up error"))
+	status, err := store.Get("session-1")
+	if err != nil || status.Error != llm.ReasoningProgressFailureMessage {
+		t.Fatalf("expected generic follow-up error, got status=%#v err=%v", status, err)
 	}
 }
 
