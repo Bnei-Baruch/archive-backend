@@ -441,7 +441,7 @@ output_per_1m_tokens_usd=5.00
 
 [ollama]
 token="" # optional bearer token for Ollama-compatible servers
-api-endpoint="https://ollama.kab.sh" # base URL; also accepts a full /api/generate or /api/chat URL
+api-endpoint="" # required when using Ollama; e.g. http://localhost:11434; also accepts /api/generate or /api/chat URLs
 reasoning-search-model="gemma4:31b" # "gemma4:31b", "gpt-oss:20b", "gpt-oss:120b"
 reasoning-search-effort="high" # "minimal", "low", "medium", "high"
 reasoning-search-max-output-tokens=8000

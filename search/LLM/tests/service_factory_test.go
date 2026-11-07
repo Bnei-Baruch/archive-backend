@@ -87,6 +87,24 @@ func TestNewServiceFromConfigSupportsOpenRouter(t *testing.T) {
 	}
 }
 
+func TestNewServiceFromConfigRequiresOllamaEndpoint(t *testing.T) {
+	oldProvider := viper.Get("llm.provider")
+	oldEndpoint := viper.Get("ollama.api-endpoint")
+	oldToken := viper.Get("ollama.token")
+	defer viper.Set("llm.provider", oldProvider)
+	defer viper.Set("ollama.api-endpoint", oldEndpoint)
+	defer viper.Set("ollama.token", oldToken)
+	viper.Set("llm.provider", "ollama")
+	viper.Set("ollama.token", "test-token")
+	for _, endpoint := range []string{"", " \t\n"} {
+		viper.Set("ollama.api-endpoint", endpoint)
+		service, err := llm.NewServiceFromConfig()
+		if err == nil || err.Error() != "ollama.api-endpoint is empty" || service != nil {
+			t.Fatalf("expected missing endpoint to reject service creation, got service=%T err=%v", service, err)
+		}
+	}
+}
+
 func TestNewServiceFromConfigSupportsOllama(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldEndpoint := viper.GetString("ollama.api-endpoint")
@@ -94,7 +112,7 @@ func TestNewServiceFromConfigSupportsOllama(t *testing.T) {
 	defer viper.Set("ollama.api-endpoint", oldEndpoint)
 
 	viper.Set("llm.provider", "ollama")
-	viper.Set("ollama.api-endpoint", "https://ollama.kab.sh")
+	viper.Set("ollama.api-endpoint", "https://ollama.test")
 
 	service, err := llm.NewServiceFromConfig()
 	if err != nil {

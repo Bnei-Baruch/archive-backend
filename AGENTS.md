@@ -31,7 +31,7 @@ Instructions for coding agents working in this repository.
 - Native OpenAI GPT-5.6+ requests support explicit prompt caching for stable instruction prefixes. When enabled, query-specific planned turns intentionally have no cache breakpoint, avoiding billable one-off cache writes.
 - xAI also uses `v1/responses` with iteration via `previous_response_id`, but resumed requests must omit `instructions`.
 - OpenRouter also uses `v1/responses`, but continues sessions by replaying full message history instead of `previous_response_id`.
-- Ollama uses `/api/chat` with message-history replay; it does not use `tool_choice`.
+- Ollama uses `/api/chat` with message-history replay; it does not use `tool_choice`. `ollama.api-endpoint` is required; there is no default host.
 - Arcee, Inception, and Cohere use the shared replay chat-completions service (`search/LLM/replay_chat_completions_service.go`) with message-history replay.
 - DeepSeek uses the official `/chat/completions` API with message-history replay and preserves `reasoning_content` on tool-call turns.
 - Claude uses Anthropic Messages API `/v1/messages` with message-history replay.

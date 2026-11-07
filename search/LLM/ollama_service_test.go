@@ -11,11 +11,29 @@ import (
 	"time"
 )
 
+func TestNormalizeOllamaAPIBaseURLHasNoDefaultHost(t *testing.T) {
+	for input, expected := range map[string]string{
+		"":                                  "",
+		" \t\n":                             "",
+		" https://ollama.test/ ":            "https://ollama.test",
+		"https://ollama.test/api":           "https://ollama.test",
+		"https://ollama.test/api/chat":      "https://ollama.test",
+		"https://ollama.test/api/generate/": "https://ollama.test",
+	} {
+		if got := normalizeOllamaAPIBaseURL(input); got != expected {
+			t.Fatalf("normalizeOllamaAPIBaseURL(%q) = %q, want %q", input, got, expected)
+		}
+	}
+}
+
 func TestOllamaReasoningWithToolsUsesChatAPI(t *testing.T) {
 	requests := []map[string]interface{}{}
-	service := NewOllamaServiceWithOptions("", nil, nil, "https://ollama.kab.sh/api/generate", 32768, "", nil, false)
+	service := NewOllamaServiceWithOptions("", nil, nil, "https://ollama.test/api/generate", 32768, "", nil, false)
 	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Host != "ollama.test" {
+				t.Fatalf("expected configured Ollama host, got %q", req.URL.Host)
+			}
 			if req.URL.Path != "/api/chat" {
 				t.Fatalf("unexpected path: %s", req.URL.Path)
 			}
@@ -178,7 +196,7 @@ func TestOllamaReasoningWithToolsUsesChatAPI(t *testing.T) {
 func TestOllamaReasoningWithToolsSupportsStructuredOutputPromptSchemaAndTemperature(t *testing.T) {
 	requests := []map[string]interface{}{}
 	temperature := 0.0
-	service := NewOllamaServiceWithOptions("", nil, nil, "https://ollama.kab.sh", 32768, "", &temperature, true)
+	service := NewOllamaServiceWithOptions("", nil, nil, "https://ollama.test", 32768, "", &temperature, true)
 	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			var payload map[string]interface{}
@@ -279,7 +297,7 @@ func TestOllamaReasoningWithToolsSupportsStructuredOutputPromptSchemaAndTemperat
 
 func TestOllamaReasoningSessionReplaysHistory(t *testing.T) {
 	requests := []map[string]interface{}{}
-	service := NewOllamaServiceWithOptions("", nil, NewChatReasoningSessionStore(time.Minute), "https://ollama.kab.sh", 32768, "", nil, false)
+	service := NewOllamaServiceWithOptions("", nil, NewChatReasoningSessionStore(time.Minute), "https://ollama.test", 32768, "", nil, false)
 	defer service.sessions.Close()
 	service.client = &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

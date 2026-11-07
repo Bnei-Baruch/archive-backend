@@ -176,7 +176,10 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		return service, nil
 	case ProviderOllama:
 		token := viper.GetString("ollama.token")
-		apiEndpoint := viper.GetString("ollama.api-endpoint")
+		apiEndpoint := strings.TrimSpace(viper.GetString("ollama.api-endpoint"))
+		if apiEndpoint == "" {
+			return nil, fmt.Errorf("ollama.api-endpoint is empty")
+		}
 		pricing := []ModelPricing{}
 		if err := viper.UnmarshalKey("ollama.pricing", &pricing); err != nil {
 			return nil, fmt.Errorf("failed to read ollama.pricing: %w", err)

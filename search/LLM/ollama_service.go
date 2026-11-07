@@ -10,10 +10,7 @@ import (
 	"time"
 )
 
-const (
-	defaultOllamaAPIBaseURL = "https://ollama.kab.sh"
-	defaultOllamaNumCtx     = 32768
-)
+const defaultOllamaNumCtx = 32768
 
 type OllamaService struct {
 	*BaseLLMService
@@ -77,8 +74,8 @@ type OllamaChatResponse struct {
 
 var _ Service = (*OllamaService)(nil)
 
-func NewOllamaService(token string) *OllamaService {
-	return NewOllamaServiceWithOptions(token, nil, nil, "", defaultOllamaNumCtx, "", nil, false)
+func NewOllamaService(token string, apiBaseURL string) *OllamaService {
+	return NewOllamaServiceWithOptions(token, nil, nil, apiBaseURL, defaultOllamaNumCtx, "", nil, false)
 }
 
 func NewOllamaServiceWithOptions(token string, pricing []ModelPricing, sessions *ChatReasoningSessionStore, apiBaseURL string, numCtx int, keepAlive string, temperature *float64, structuredOutputPromptSchema bool) *OllamaService {
@@ -755,10 +752,6 @@ func ollamaThinkValue(reasoningEffort *string, deb bool) (interface{}, error) {
 
 func normalizeOllamaAPIBaseURL(apiBaseURL string) string {
 	apiBaseURL = strings.TrimSpace(apiBaseURL)
-	if apiBaseURL == "" {
-		return defaultOllamaAPIBaseURL
-	}
-
 	apiBaseURL = strings.TrimRight(apiBaseURL, "/")
 	for _, suffix := range []string{"/api/chat", "/api/generate", "/api"} {
 		if strings.HasSuffix(apiBaseURL, suffix) {
