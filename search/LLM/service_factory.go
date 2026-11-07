@@ -1127,6 +1127,8 @@ func reasoningSearchRapidStageConfigFromProvider(provider string, stage string, 
 	effort := strings.TrimSpace(viper.GetString(provider + ".reasoning-search-rapid-" + stage + "-effort"))
 	if effort == "" {
 		switch {
+		case provider == ProviderOpenRouter || provider == ProviderOllama || provider == ProviderInception || provider == ProviderZAI:
+			effort = defaultAIToolsEffort
 		case stage == "classifier" || stage == "finalizer":
 			effort = ""
 		case provider == ProviderXAI || provider == ProviderClaude || provider == ProviderArcee || provider == ProviderCohere:

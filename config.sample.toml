@@ -69,6 +69,7 @@ reasoning-search-max-followups=2
 reasoning-search-max-query-characters=1600 # Unicode characters after surrounding whitespace is trimmed
 reasoning-search-max-tools-per-iteration=30 # excess calls receive a limit result and are not executed
 reasoning-search-rapid-gather-provider="openai" # optional; defaults to llm.provider
+# Unset rapid classifier/finalizer effort defaults to low for OpenRouter, Ollama, Inception, and Z.AI; omitted for other providers.
 reasoning-search-rapid-classifier-provider="openai" # optional; defaults to llm.provider
 reasoning-search-rapid-finalizer-enabled=false # optional; when true, run a final no-tools formatting/ranking step after rapid classification
 reasoning-search-rapid-finalizer-provider="openai" # optional; defaults to llm.provider

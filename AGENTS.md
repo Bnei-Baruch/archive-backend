@@ -140,6 +140,7 @@ Instructions for coding agents working in this repository.
   - `<provider>.reasoning-search-rapid-gather-*`
   - `<provider>.reasoning-search-rapid-classifier-*`
   - `<provider>.reasoning-search-rapid-finalizer-*`
+- Unset rapid classifier/finalizer effort defaults to `low` for OpenRouter, Ollama, Inception, and Z.AI; other providers omit effort and use their provider defaults.
 - OpenRouter supports configurable provider routing and `openrouter.enforced-tool-use-iterations`; `0` disables forced tool use.
 - OpenRouter provider routing keys can be overridden per stage with `reasoning-search-*`, `reasoning-search-planning-*`, `reasoning-search-verification-*`, and `ai-tools-*` provider-routing keys under `[openrouter]`.
 - xAI Grok 4 fast reasoning models do not support `reasoning_effort`; keep xAI reasoning and planning effort config empty.

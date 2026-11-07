@@ -1263,6 +1263,54 @@ func TestReasoningSearchDraftConfigFromConfigCanBeDisabled(t *testing.T) {
 	}
 }
 
+func TestReasoningSearchRapidConfigFromConfigWithOnlyProviderModel(t *testing.T) {
+	for _, provider := range []string{
+		llm.ProviderOpenAI, llm.ProviderOpenRouter, llm.ProviderOllama,
+		llm.ProviderXAI, llm.ProviderZAI, llm.ProviderArcee,
+		llm.ProviderDeepSeek, llm.ProviderClaude, llm.ProviderInception,
+		llm.ProviderCohere, llm.ProviderStub,
+	} {
+		t.Run(provider, func(t *testing.T) {
+			oldLLM := viper.Get("llm")
+			oldProvider := viper.Get(provider)
+			defer viper.Set("llm", oldLLM)
+			defer viper.Set(provider, oldProvider)
+			model := provider + "-test-model"
+			viper.Set(provider, map[string]interface{}{"model": model})
+			for _, finalizerEnabled := range []bool{false, true} {
+				viper.Set("llm", map[string]interface{}{
+					"provider": provider,
+					"reasoning-search-rapid-finalizer-enabled": finalizerEnabled,
+				})
+				cfg, err := llm.ReasoningSearchRapidConfigFromConfig()
+				if err != nil {
+					t.Fatalf("model-only config failed (finalizer=%t): %v", finalizerEnabled, err)
+				}
+				if cfg.FinalizerEnabled != finalizerEnabled {
+					t.Fatalf("unexpected finalizer enabled value: %t", cfg.FinalizerEnabled)
+				}
+				stages := []llm.ReasoningSearchRapidStageConfig{cfg.Gather, cfg.Classifier}
+				if finalizerEnabled {
+					stages = append(stages, cfg.Finalizer)
+				}
+				for _, stage := range stages {
+					if stage.Provider != provider || stage.Model != model || stage.MaxTokens <= 0 {
+						t.Fatalf("unexpected stage defaults: %#v", stage)
+					}
+				}
+				expectedEffort := ""
+				switch provider {
+				case llm.ProviderOpenRouter, llm.ProviderOllama, llm.ProviderInception, llm.ProviderZAI:
+					expectedEffort = "low"
+				}
+				if cfg.Classifier.Effort != expectedEffort || (finalizerEnabled && cfg.Finalizer.Effort != expectedEffort) {
+					t.Fatalf("expected classifier/finalizer effort %q, got classifier=%q finalizer=%q", expectedEffort, cfg.Classifier.Effort, cfg.Finalizer.Effort)
+				}
+			}
+		})
+	}
+}
+
 func TestReasoningSearchRapidConfigFromConfigUsesExplicitStages(t *testing.T) {
 	oldProvider := viper.GetString("llm.provider")
 	oldGatherProvider := viper.GetString("llm.reasoning-search-rapid-gather-provider")
