@@ -163,6 +163,7 @@ Instructions for coding agents working in this repository.
   Path: `search/LLM/tools/ai_tools.go`
   Input: `content_unit_id` (required), `query` (required), optional `language`, optional `max_chunks`
   Behavior: resolve a public transcript doc/docx file UID, fetch text via `Doc2Text`, cache it in memory, then use the configured cheaper AI reader model to return semantically relevant chunk ranges and excerpts.
+  All transcript lookups, including language fallbacks and numeric IDs, must require a public, published content unit and a public, published file with `removed_at IS NULL`.
 
 - PostgreSQL list tools
   Path: `search/LLM/tools/postgresql_tools.go`

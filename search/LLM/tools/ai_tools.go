@@ -126,8 +126,11 @@ LIMIT 1`
 SELECT f.uid
 FROM files AS f
 INNER JOIN content_units AS cu ON f.content_unit_id = cu.id
-WHERE f.secure = 0
+WHERE cu.secure = 0
+  AND cu.published IS TRUE
+  AND f.secure = 0
   AND f.published = TRUE
+  AND f.removed_at IS NULL
   AND f.name ~ '.docx?'
   AND f.name NOT LIKE '%tzitutim.do%'
   AND f.name NOT LIKE '%quotation.do%'
@@ -142,8 +145,11 @@ LIMIT 1`
 SELECT f.uid
 FROM files AS f
 INNER JOIN content_units AS cu ON f.content_unit_id = cu.id
-WHERE f.secure = 0
+WHERE cu.secure = 0
+  AND cu.published IS TRUE
+  AND f.secure = 0
   AND f.published = TRUE
+  AND f.removed_at IS NULL
   AND f.name ~ '.docx?'
   AND f.name NOT LIKE '%tzitutim.do%'
   AND f.name NOT LIKE '%quotation.do%'
@@ -165,8 +171,11 @@ LIMIT 1`
 SELECT f.uid
 FROM files AS f
 INNER JOIN content_units AS cu ON f.content_unit_id = cu.id
-WHERE f.secure = 0
+WHERE cu.secure = 0
+  AND cu.published IS TRUE
+  AND f.secure = 0
   AND f.published = TRUE
+  AND f.removed_at IS NULL
   AND f.name ~ '.docx?'
   AND f.name NOT LIKE '%tzitutim.do%'
   AND f.name NOT LIKE '%quotation.do%'
@@ -181,8 +190,11 @@ LIMIT 1`
 SELECT f.uid
 FROM files AS f
 INNER JOIN content_units AS cu ON f.content_unit_id = cu.id
-WHERE f.secure = 0
+WHERE cu.secure = 0
+  AND cu.published IS TRUE
+  AND f.secure = 0
   AND f.published = TRUE
+  AND f.removed_at IS NULL
   AND f.name ~ '.docx?'
   AND f.name NOT LIKE '%tzitutim.do%'
   AND f.name NOT LIKE '%quotation.do%'
