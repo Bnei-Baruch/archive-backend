@@ -55,8 +55,8 @@ func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
 }
 
 func defaultContentUnitSql() string {
-	// Note that CT_LIKUTIM is not filtered out and will be indexed,
-	// but it is not supported by the search (only optional in the elasticsearch_search agent tool).
+	// LIKUTIM units are indexed for reasoning search but excluded from regular search.
+	// To enable them in regular search, set query.IncludeLikutim = true in api.SearchHandler
 	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d)",
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,

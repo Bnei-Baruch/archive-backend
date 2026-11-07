@@ -39,13 +39,14 @@ const (
 )
 
 type Query struct {
-	Term          string              `json:"term,omitempty"`
-	ExactTerms    []string            `json:"exact_terms,omitempty"`
-	Original      string              `json:"original,omitempty"`
-	Filters       map[string][]string `json:"filters,omitempty"`
-	LanguageOrder []string            `json:"language_order,omitempty"`
-	Deb           bool                `json:"deb,omitempty"`
-	Intents       []Intent            `json:"intents,omitempty"`
+	Term           string              `json:"term,omitempty"`
+	ExactTerms     []string            `json:"exact_terms,omitempty"`
+	Original       string              `json:"original,omitempty"`
+	Filters        map[string][]string `json:"filters,omitempty"`
+	LanguageOrder  []string            `json:"language_order,omitempty"`
+	Deb            bool                `json:"deb,omitempty"`
+	Intents        []Intent            `json:"intents,omitempty"`
+	IncludeLikutim bool                `json:"-"` // Only reasoning search opts in.
 }
 
 func isTokenStart(i int, runes []rune, lastQuote rune) bool {
@@ -242,6 +243,9 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(resultTypes)...),
 		).Boost(0.0),
 	)
+	if !q.IncludeLikutim {
+		boolQuery.MustNot(elastic.NewTermQuery("filter_values", es.KeyValue(consts.FILTER_CONTENT_TYPE, consts.CT_LIKUTIM)))
+	}
 	if docIds != nil && len(docIds) > 0 {
 		idsQuery := elastic.NewIdsQuery().Ids(docIds...)
 		boolQuery.Filter(idsQuery)

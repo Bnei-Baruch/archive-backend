@@ -267,6 +267,7 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 	}
 
 	query := buildElasticsearchSearchQuery(queryText, args.ExactPhrase)
+	query.IncludeLikutim = true
 	if args.ExactPhrase && len(query.ExactTerms) == 1 && query.ExactTerms[0] == "" {
 		return "", llm.NewRecoverableToolError("elasticsearch_search", "exact_phrase requires a non-empty query", "Either provide a non-empty query or set exact_phrase to false.")
 	}

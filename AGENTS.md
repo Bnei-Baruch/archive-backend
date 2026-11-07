@@ -54,6 +54,7 @@ Instructions for coding agents working in this repository.
 - `common.Init()` builds the shared tool manager inside `common.LLM_RUNTIME`.
 
 ## Reasoning Search
+- Regular ES search excludes LIKUTIM units. The reasoning `elasticsearch_search` tool opts in with `Query.IncludeLikutim`; preserve this flag when rebuilding highlight queries.
 - API endpoints: `POST /search/reasoning`, `POST /search/reasoning/start`, `POST /search/reasoning/cache`, `POST /search/reasoning/cancel`, `POST /search/reasoning/finish-now`, `GET /search/reasoning/status`, `GET /search/reasoning/result`.
 - Request supports `q`, optional `deb`, optional `session_id`, optional `cancel_session_id`, optional `ui_language`.
 - The API `session_id` is a workflow session id owned by the backend, not a provider-native LLM session id.

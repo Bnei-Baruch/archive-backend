@@ -94,6 +94,9 @@ func TestElasticsearchSearchToolExecuteExactPhrase(t *testing.T) {
 	if !reflect.DeepEqual(engine.query.Filters[consts.FILTER_CONTENT_TYPE], []string{"lesson"}) {
 		t.Fatalf("unexpected content_type filter: %#v", engine.query.Filters[consts.FILTER_CONTENT_TYPE])
 	}
+	if !engine.query.IncludeLikutim {
+		t.Fatal("reasoning search must include LIKUTIM units")
+	}
 	if !reflect.DeepEqual(engine.query.Filters[consts.FILTER_MEDIA_LANGUAGE], []string{"he"}) {
 		t.Fatalf("unexpected media_language filter: %#v", engine.query.Filters[consts.FILTER_MEDIA_LANGUAGE])
 	}
