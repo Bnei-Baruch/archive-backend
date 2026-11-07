@@ -320,7 +320,11 @@ func (s *ReasoningSearchCacheStore) deleteExpired() {
 	}
 }
 
-func ReasoningSearchCacheKeyForQuery(query string, isRapid bool) (string, bool) {
+func ReasoningSearchCacheKeyForQuery(query string, isRapid bool, outputLanguage string) (string, bool) {
+	outputLanguage = strings.ToLower(strings.TrimSpace(outputLanguage))
+	if outputLanguage == "" {
+		return "", false
+	}
 	key := normalizeReasoningSearchCacheKeyQuery(query)
 	if key == "" {
 		return "", false
@@ -345,6 +349,7 @@ func ReasoningSearchCacheKeyForQuery(query string, isRapid bool) (string, bool) 
 		return "", false
 	}
 
+	key = "lang:" + outputLanguage + ":" + key
 	if isRapid {
 		return "rapid:" + key, true
 	}

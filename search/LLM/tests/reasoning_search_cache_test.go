@@ -9,31 +9,60 @@ import (
 )
 
 func TestReasoningSearchCacheKeyForQueryNormalizesPlusSeparatedQuery(t *testing.T) {
-	key, ok := llm.ReasoningSearchCacheKeyForQuery("חיים חדשים+ברית הנישואין", false)
+	key, ok := llm.ReasoningSearchCacheKeyForQuery("חיים חדשים+ברית הנישואין", false, "Hebrew")
 	if !ok {
 		t.Fatalf("expected query to be cacheable")
 	}
-	if key != "חיים חדשים ברית הנישואין" {
+	if key != "lang:hebrew:חיים חדשים ברית הנישואין" {
 		t.Fatalf("unexpected cache key: %q", key)
 	}
 }
 
 func TestReasoningSearchCacheKeyForQueryNamespacesRapidSearch(t *testing.T) {
-	key, ok := llm.ReasoningSearchCacheKeyForQuery("חיים חדשים+ברית הנישואין", true)
+	key, ok := llm.ReasoningSearchCacheKeyForQuery("חיים חדשים+ברית הנישואין", true, "Hebrew")
 	if !ok {
 		t.Fatalf("expected query to be cacheable")
 	}
-	if key != "rapid:חיים חדשים ברית הנישואין" {
+	if key != "rapid:lang:hebrew:חיים חדשים ברית הנישואין" {
 		t.Fatalf("unexpected rapid cache key: %q", key)
 	}
 }
 
+func TestReasoningSearchCacheKeyForQuerySeparatesOutputLanguages(t *testing.T) {
+	store := llm.NewReasoningSearchCacheStore(time.Minute)
+	defer store.Close()
+	for _, rapid := range []bool{false, true} {
+		hebrewKey, ok := llm.ReasoningSearchCacheKeyForQuery("חיים חדשים", rapid, "Hebrew")
+		if !ok {
+			t.Fatal("expected cacheable Hebrew query")
+		}
+		englishKey, ok := llm.ReasoningSearchCacheKeyForQuery("חיים חדשים", rapid, "English")
+		if !ok || hebrewKey == englishKey {
+			t.Fatal("expected separate keys for different output languages")
+		}
+		store.Set(hebrewKey, &llm.ReasoningSearchCacheEntry{Query: "חיים חדשים"})
+		if _, hit := store.Get(englishKey); hit {
+			t.Fatal("English request must not hit Hebrew output")
+		}
+		normalizedKey, ok := llm.ReasoningSearchCacheKeyForQuery("חיים+חדשים", rapid, " HEBREW ")
+		if !ok || normalizedKey != hebrewKey {
+			t.Fatalf("expected normalized query and output language to share a key, got %q", normalizedKey)
+		}
+		if _, hit := store.Get(normalizedKey); !hit {
+			t.Fatal("same output language should hit the cache")
+		}
+	}
+	if _, ok := llm.ReasoningSearchCacheKeyForQuery("חיים חדשים", false, ""); ok {
+		t.Fatal("cache keys require a resolved output language")
+	}
+}
+
 func TestReasoningSearchCacheKeyForQueryAllowsTasteOfLifeRapidSearch(t *testing.T) {
-	key, ok := llm.ReasoningSearchCacheKeyForQuery("טעם החיים", true)
+	key, ok := llm.ReasoningSearchCacheKeyForQuery("טעם החיים", true, "Hebrew")
 	if !ok {
 		t.Fatalf("expected query to be cacheable")
 	}
-	if key != "rapid:טעם החיים" {
+	if key != "rapid:lang:hebrew:טעם החיים" {
 		t.Fatalf("unexpected rapid cache key: %q", key)
 	}
 }
@@ -58,14 +87,14 @@ func TestReasoningSearchCacheKeyForQueryRejectsTemporalQueries(t *testing.T) {
 	}
 
 	for _, query := range testCases {
-		if key, ok := llm.ReasoningSearchCacheKeyForQuery(query, false); ok {
+		if key, ok := llm.ReasoningSearchCacheKeyForQuery(query, false, "Hebrew"); ok {
 			t.Fatalf("expected temporal query %q to bypass cache, got key %q", query, key)
 		}
 	}
 }
 
 func TestReasoningSearchCacheKeyForQueryRejectsQueriesWithTooManyWords(t *testing.T) {
-	if key, ok := llm.ReasoningSearchCacheKeyForQuery("one two three four five six seven eight nine ten", false); ok {
+	if key, ok := llm.ReasoningSearchCacheKeyForQuery("one two three four five six seven eight nine ten", false, "Hebrew"); ok {
 		t.Fatalf("expected query to bypass cache, got key %q", key)
 	}
 }

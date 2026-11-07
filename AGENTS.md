@@ -75,6 +75,7 @@ Instructions for coding agents working in this repository.
   - `ReasoningCache`: shared query-based cache for reusable initial results.
   - response snapshot: exact per-session final API response stored on the workflow session for later fetch by `session_id`.
 - Rapid cache entries are separated from regular cache entries and preserve rapid fields such as `summary=null`, `no_results`, and result `relevance`.
+- Reasoning search cache keys include the resolved output language used for generation (`ui_language`, or query-language detection/default fallback when omitted), so summaries and result reasons cannot be reused across output languages.
 - During background reasoning, tool results are accumulated on the workflow session as `PartialResults`. ES search results and concrete PostgreSQL lookup results feed this shared candidate pool. PartialResults from `get_available_books` is limited to core author roots (`bs`, `rh`, `ar`).
 - In the non-rapid reasoning search flow, `PartialResults` are used by draft generation: a configured draft model periodically converts the collected candidates into a stored draft response for `finish-now`.
 - In the rapid reasoning flow, `PartialResults` are used by the classifier: the gather model collects candidates, the classifier assigns relevance/reason in batches, and status can expose classified rapid results before the run finishes.

@@ -48,6 +48,47 @@ func TestRewriteReasoningSearchQueryKeepsExistingGereshAndWords(t *testing.T) {
 	}
 }
 
+func TestReasoningSearchCacheHandlerDoesNotReturnAnotherOutputLanguage(t *testing.T) {
+	cache := llm.NewReasoningSearchCacheStore(time.Minute)
+	defer cache.Close()
+	workflow := llm.NewReasoningWorkflowSessionStore(time.Minute)
+	defer workflow.Close()
+	progress := llm.NewReasoningProgressStore(time.Minute)
+	defer progress.Close()
+	query := "חיים חדשים"
+	hebrew := reasoningSearchOutputLanguageName("he", query)
+	if detected := reasoningSearchOutputLanguageName("", query); detected != hebrew {
+		t.Fatalf("expected omitted UI language to detect Hebrew, got %q", detected)
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("LLM_RUNTIME", &llm.Runtime{ReasoningCache: cache, Workflow: workflow, Progress: progress})
+		c.Next()
+	})
+	router.POST("/search/reasoning/cache", ReasoningSearchCacheHandler)
+	for _, rapid := range []bool{false, true} {
+		key, eligible := llm.ReasoningSearchCacheKeyForQuery(query, rapid, hebrew)
+		if !eligible {
+			t.Fatal("expected cacheable query")
+		}
+		cache.Set(key, &llm.ReasoningSearchCacheEntry{Query: query, NoResults: true})
+		body := fmt.Sprintf(`{"q":"%s","ui_language":"en","is_rapid":%t}`, query, rapid)
+		request := httptest.NewRequest(http.MethodPost, "/search/reasoning/cache", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		response := struct {
+			CacheHit bool `json:"cache_hit"`
+		}{}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+			t.Fatalf("invalid cache response: %v", err)
+		}
+		if recorder.Code != http.StatusOK || response.CacheHit {
+			t.Fatalf("expected language-specific cache miss (rapid=%t), got status=%d body=%s", rapid, recorder.Code, recorder.Body.String())
+		}
+	}
+}
+
 func TestNormalizeReasoningSearchRequestLimitsQueryCharacters(t *testing.T) {
 	oldLimit := viper.Get("llm.reasoning-search-max-query-characters")
 	defer viper.Set("llm.reasoning-search-max-query-characters", oldLimit)

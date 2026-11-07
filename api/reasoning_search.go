@@ -288,7 +288,7 @@ func ReasoningSearchCacheHandler(c *gin.Context) {
 		return
 	}
 
-	cacheKey, cacheEligible := llm.ReasoningSearchCacheKeyForQuery(r.Query, r.IsRapid)
+	cacheKey, cacheEligible := llm.ReasoningSearchCacheKeyForQuery(r.Query, r.IsRapid, reasoningSearchOutputLanguageName(r.UILanguage, r.Query))
 	if !cacheEligible {
 		c.JSON(http.StatusOK, gin.H{"cache_hit": false})
 		return
@@ -2482,10 +2482,11 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	}
 	gatherStage := session.Stages[llm.ReasoningWorkflowStageReasoning]
 	initialRequestCompleted := session.InitialRequestCompleted
+	outputLanguageName := reasoningSearchOutputLanguageName(r.UILanguage, r.Query)
 	cacheKey := ""
 	cacheEligible := false
 	if runtime.ReasoningCache != nil && !r.Deb {
-		cacheKey, cacheEligible = llm.ReasoningSearchCacheKeyForQuery(r.Query, true)
+		cacheKey, cacheEligible = llm.ReasoningSearchCacheKeyForQuery(r.Query, true, outputLanguageName)
 	}
 	if cacheEligible && !initialRequestCompleted {
 		if cachedEntry, ok := runtime.ReasoningCache.Get(cacheKey); ok {
@@ -2501,7 +2502,6 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	if gatherService == nil {
 		return errors.New("rapid reasoning llm service is not initialized")
 	}
-	outputLanguageName := reasoningSearchOutputLanguageName(r.UILanguage, r.Query)
 	systemMessage := llm.GenerateSystemMessageForRapidReasoningSearch(runtime.Tools.Tools(), gatherStage.MaxIterations, gatherStage.MaxFollowups-session.FollowupCount)
 	systemMessage = llm.AppendReasoningSearchOutputLanguage(systemMessage, outputLanguageName)
 	systemMessage += "\n\n" + reasoningSearchRapidGatherInstruction
@@ -2840,10 +2840,11 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		followupsRemaining = 0
 	}
 
+	outputLanguageName := reasoningSearchOutputLanguageName(r.UILanguage, r.Query)
 	cacheKey := ""
 	cacheEligible := false
 	if runtime.ReasoningCache != nil && !r.Deb {
-		cacheKey, cacheEligible = llm.ReasoningSearchCacheKeyForQuery(r.Query, false)
+		cacheKey, cacheEligible = llm.ReasoningSearchCacheKeyForQuery(r.Query, false, outputLanguageName)
 	}
 	if cacheEligible && !initialRequestCompleted {
 		if cachedEntry, ok := runtime.ReasoningCache.Get(cacheKey); ok {
@@ -2860,7 +2861,6 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		return errors.New("reasoning llm service is not initialized")
 	}
 
-	outputLanguageName := reasoningSearchOutputLanguageName(r.UILanguage, r.Query)
 	systemMessage := llm.GenerateSystemMessageForReasoningSearch(manager.Tools(), reasoningStage.MaxIterations, followupsRemaining)
 	var planningDebug *llm.ReasoningSearchDebugInfo
 	var firstIterationTools []llm.ToolCall
