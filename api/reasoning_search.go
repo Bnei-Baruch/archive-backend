@@ -155,8 +155,8 @@ func ReasoningSearchStartHandler(c *gin.Context) {
 	// Async work is intentionally detached from the request context; that context
 	// is canceled when this handler returns after sending 202 Accepted.
 	bgCtx, cancel := context.WithCancel(context.Background())
-	runtime.Cancellations.Set(sessionID, cancel)
-	go executeReasoningSearchInBackground(bgCtx, runtime, db, requestCopy, sessionID)
+	cancellationToken := runtime.Cancellations.Set(sessionID, cancel)
+	go executeReasoningSearchInBackground(bgCtx, runtime, db, requestCopy, sessionID, cancellationToken)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"session_id":   sessionID,
@@ -2229,10 +2229,10 @@ func buildReasoningSearchDraftFollowupSeedAssistantContent(response *llm.Reasoni
 	return "Previous visible response was an early draft based on partial Elasticsearch results. Use it as conversation context for the user's follow-up, but verify and improve it with tools when needed:\n" + string(raw)
 }
 
-func executeReasoningSearchInBackground(ctx context.Context, runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string) {
+func executeReasoningSearchInBackground(ctx context.Context, runtime *llm.Runtime, db *sql.DB, r ReasoningSearchRequest, responseSessionID string, cancellationToken uint64) {
 	defer func() {
 		if runtime != nil && runtime.Cancellations != nil {
-			runtime.Cancellations.Delete(responseSessionID)
+			runtime.Cancellations.Delete(responseSessionID, cancellationToken)
 		}
 		if recovered := recover(); recovered != nil {
 			log.Errorf("Reasoning Search background panic session=%s: %v\n%s", responseSessionID, recovered, debug.Stack())

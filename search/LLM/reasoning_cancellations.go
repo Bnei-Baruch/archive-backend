@@ -8,23 +8,31 @@ import (
 // ReasoningCancellationStore keeps cancel functions for background reasoning runs.
 // It is process-local, like the workflow/progress stores.
 type ReasoningCancellationStore struct {
-	mu      sync.Mutex
-	cancels map[string]context.CancelFunc
+	mu        sync.Mutex
+	cancels   map[string]reasoningCancellation
+	nextToken uint64
+}
+
+type reasoningCancellation struct {
+	cancel context.CancelFunc
+	token  uint64
 }
 
 func NewReasoningCancellationStore() *ReasoningCancellationStore {
 	return &ReasoningCancellationStore{
-		cancels: map[string]context.CancelFunc{},
+		cancels: map[string]reasoningCancellation{},
 	}
 }
 
-func (s *ReasoningCancellationStore) Set(sessionID string, cancel context.CancelFunc) {
+func (s *ReasoningCancellationStore) Set(sessionID string, cancel context.CancelFunc) uint64 {
 	if s == nil || sessionID == "" || cancel == nil {
-		return
+		return 0
 	}
 	s.mu.Lock()
-	s.cancels[sessionID] = cancel
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	s.nextToken++
+	s.cancels[sessionID] = reasoningCancellation{cancel: cancel, token: s.nextToken}
+	return s.nextToken
 }
 
 func (s *ReasoningCancellationStore) Cancel(sessionID string) bool {
@@ -32,22 +40,25 @@ func (s *ReasoningCancellationStore) Cancel(sessionID string) bool {
 		return false
 	}
 	s.mu.Lock()
-	cancel, ok := s.cancels[sessionID]
+	entry, ok := s.cancels[sessionID]
 	if ok {
 		delete(s.cancels, sessionID)
 	}
 	s.mu.Unlock()
 	if ok {
-		cancel()
+		entry.cancel()
 	}
 	return ok
 }
 
-func (s *ReasoningCancellationStore) Delete(sessionID string) {
+// Delete removes only the caller's registration; follow-ups reuse the session ID.
+func (s *ReasoningCancellationStore) Delete(sessionID string, token uint64) {
 	if s == nil || sessionID == "" {
 		return
 	}
 	s.mu.Lock()
-	delete(s.cancels, sessionID)
+	if entry, ok := s.cancels[sessionID]; ok && entry.token == token {
+		delete(s.cancels, sessionID)
+	}
 	s.mu.Unlock()
 }

@@ -60,6 +60,7 @@ Instructions for coding agents working in this repository.
 - `POST /search/reasoning/cache` checks the shared query cache for regular or rapid search based on `is_rapid`; on hit it creates a fresh workflow session, stores a response snapshot, and returns the new `session_id`.
 - `POST /search/reasoning/start` may receive `cancel_session_id` to cancel a previous background run before starting the new one.
 - `POST /search/reasoning/cancel` cancels a running background search by workflow `session_id`.
+- Cancellation registrations have a per-run token; background cleanup must supply its own token so an older run cannot delete a follow-up's cancellation handle.
 - `POST /search/reasoning/finish-now` finalizes the latest prepared draft response for a workflow `session_id`; it does not generate results inline. If no draft is ready, it returns a conflict error.
 - `finish-now` is only for the non-rapid reasoning search flow. Rapid reasoning search does not support it.
 - `GET /search/reasoning/status` reports background progress for that workflow session.

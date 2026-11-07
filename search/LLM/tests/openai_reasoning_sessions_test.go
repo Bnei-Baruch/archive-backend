@@ -548,6 +548,43 @@ func TestReasoningCancellationStoreCancel(t *testing.T) {
 	}
 }
 
+func TestReasoningCancellationStoreStaleDeletePreservesFollowup(t *testing.T) {
+	for _, cancelFirst := range []bool{false, true} {
+		store := llm.NewReasoningCancellationStore()
+		_, cancelOld := context.WithCancel(context.Background())
+		defer cancelOld()
+		oldToken := store.Set("session-1", cancelOld)
+		if cancelFirst && !store.Cancel("session-1") {
+			t.Fatal("expected original run to be cancellable")
+		}
+
+		ctx, cancelNew := context.WithCancel(context.Background())
+		defer cancelNew()
+		newToken := store.Set("session-1", cancelNew)
+		if oldToken == 0 || newToken == oldToken {
+			t.Fatalf("expected unique registration tokens, got old=%d new=%d", oldToken, newToken)
+		}
+		store.Delete("session-1", oldToken)
+		if !store.Cancel("session-1") || !errors.Is(ctx.Err(), context.Canceled) {
+			t.Fatalf("stale cleanup removed the follow-up handle (cancelFirst=%t)", cancelFirst)
+		}
+	}
+}
+
+func TestReasoningCancellationStoreDeleteCurrentRegistration(t *testing.T) {
+	store := llm.NewReasoningCancellationStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	token := store.Set("session-1", cancel)
+	store.Delete("session-1", token)
+	if store.Cancel("session-1") {
+		t.Fatal("completed run's cancellation handle was not deleted")
+	}
+	if ctx.Err() != nil {
+		t.Fatal("deleting a registration should not cancel its context")
+	}
+}
+
 func TestReasoningProgressStoreIterationOffset(t *testing.T) {
 	store := llm.NewReasoningProgressStore(5 * time.Minute)
 	defer store.Close()
