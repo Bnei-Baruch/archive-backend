@@ -381,6 +381,7 @@ cached_input_per_1m_tokens_usd=0.003625
 output_per_1m_tokens_usd=0.87
 
 [claude]
+# Stable tool definitions and system instructions use ephemeral prompt caching (default 5-minute TTL).
 token="sk-ant-..."
 api-endpoint="" # optional; defaults to https://api.anthropic.com/v1 and also accepts a full /v1/messages URL
 reasoning-search-model="claude-sonnet-4-6" # "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-opus-4-1-20250805", "claude-opus-4-20250514"

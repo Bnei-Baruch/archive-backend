@@ -23,12 +23,16 @@ type ClaudeService struct {
 }
 
 type ClaudeMessageRequest struct {
-	Model     string          `json:"model"`
-	System    string          `json:"system,omitempty"`
-	Messages  []ClaudeMessage `json:"messages"`
-	MaxTokens *int            `json:"max_tokens,omitempty"`
-	Tools     []ClaudeTool    `json:"tools,omitempty"`
-	Stream    bool            `json:"stream"`
+	Model     string               `json:"model"`
+	System    []ClaudeContentBlock `json:"system,omitempty"`
+	Messages  []ClaudeMessage      `json:"messages"`
+	MaxTokens *int                 `json:"max_tokens,omitempty"`
+	Tools     []ClaudeTool         `json:"tools,omitempty"`
+	Stream    bool                 `json:"stream"`
+}
+
+type ClaudeCacheControl struct {
+	Type string `json:"type"`
 }
 
 type ClaudeMessage struct {
@@ -37,20 +41,22 @@ type ClaudeMessage struct {
 }
 
 type ClaudeContentBlock struct {
-	Type      string          `json:"type"`
-	Text      string          `json:"text,omitempty"`
-	ID        string          `json:"id,omitempty"`
-	Name      string          `json:"name,omitempty"`
-	Input     json.RawMessage `json:"input,omitempty"`
-	ToolUseID string          `json:"tool_use_id,omitempty"`
-	Content   string          `json:"content,omitempty"`
-	IsError   bool            `json:"is_error,omitempty"`
+	Type         string              `json:"type"`
+	Text         string              `json:"text,omitempty"`
+	ID           string              `json:"id,omitempty"`
+	Name         string              `json:"name,omitempty"`
+	Input        json.RawMessage     `json:"input,omitempty"`
+	ToolUseID    string              `json:"tool_use_id,omitempty"`
+	Content      string              `json:"content,omitempty"`
+	IsError      bool                `json:"is_error,omitempty"`
+	CacheControl *ClaudeCacheControl `json:"cache_control,omitempty"`
 }
 
 type ClaudeTool struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description,omitempty"`
-	InputSchema interface{} `json:"input_schema"`
+	Name         string              `json:"name"`
+	Description  string              `json:"description,omitempty"`
+	InputSchema  interface{}         `json:"input_schema"`
+	CacheControl *ClaudeCacheControl `json:"cache_control,omitempty"`
 }
 
 type ClaudeMessageResponse struct {
@@ -278,7 +284,10 @@ func (s *ClaudeService) getChatResponseWithUsage(ctx context.Context, model stri
 	if jsonSchema != nil {
 		system = appendStructuredOutputInstruction(system, jsonSchema)
 	}
-	req := ClaudeMessageRequest{Model: model, System: system, Messages: anthropicMessages, MaxTokens: maxTokens, Stream: false}
+	req := ClaudeMessageRequest{Model: model, Messages: anthropicMessages, MaxTokens: maxTokens, Stream: false}
+	if system != "" {
+		req.System = []ClaudeContentBlock{{Type: "text", Text: system, CacheControl: &ClaudeCacheControl{Type: "ephemeral"}}}
+	}
 	var resp ClaudeMessageResponse
 	if err := callClaudeAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/messages", &resp, logRawBody); err != nil {
 		return nil, usageTotals, err
@@ -359,7 +368,10 @@ func (s *ClaudeService) getReasoningResponseWithTools(ctx context.Context, metho
 			currentMessages = append(currentMessages, ClaudeMessage{Role: "user", Content: []ClaudeContentBlock{{Type: "text", Text: finalReasoningIterationInstruction}}})
 		}
 
-		req := ClaudeMessageRequest{Model: model, System: currentSystem, Messages: currentMessages, MaxTokens: maxTokens, Tools: claudeTools(currentTools), Stream: false}
+		req := ClaudeMessageRequest{Model: model, Messages: currentMessages, MaxTokens: maxTokens, Tools: claudeTools(currentTools), Stream: false}
+		if currentSystem != "" {
+			req.System = []ClaudeContentBlock{{Type: "text", Text: currentSystem, CacheControl: &ClaudeCacheControl{Type: "ephemeral"}}}
+		}
 		var resp ClaudeMessageResponse
 		if err := callClaudeAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/messages", &resp, deb); err != nil {
 			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
@@ -519,6 +531,10 @@ func claudeTools(tools []ToolCall) []ClaudeTool {
 		}
 		ret = append(ret, ClaudeTool{Name: name, Description: description, InputSchema: inputSchema})
 	}
+	if len(ret) > 0 {
+		// Tool definitions precede system content in Anthropic's cached prefix.
+		ret[len(ret)-1].CacheControl = &ClaudeCacheControl{Type: "ephemeral"}
+	}
 	return ret
 }
 
@@ -527,7 +543,7 @@ func claudeUsageTotals(usage *ClaudeUsage) LLMUsageTotals {
 		return LLMUsageTotals{}
 	}
 	inputTokens := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
-	return LLMUsageTotals{InputTokens: inputTokens, CachedInputTokens: usage.CacheReadInputTokens, OutputTokens: usage.OutputTokens, TotalTokens: inputTokens + usage.OutputTokens}
+	return LLMUsageTotals{InputTokens: inputTokens, CachedInputTokens: usage.CacheReadInputTokens, CacheWriteTokens: usage.CacheCreationInputTokens, OutputTokens: usage.OutputTokens, TotalTokens: inputTokens + usage.OutputTokens}
 }
 
 func callClaudeAPI(ctx context.Context, client *http.Client, token string, data interface{}, endpoint string, result interface{}, logRawBody bool) error {

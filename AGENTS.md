@@ -35,6 +35,7 @@ Instructions for coding agents working in this repository.
 - Arcee, Inception, and Cohere use the shared replay chat-completions service (`search/LLM/replay_chat_completions_service.go`) with message-history replay.
 - DeepSeek uses the official `/chat/completions` API with message-history replay and preserves `reasoning_content` on tool-call turns.
 - Claude uses Anthropic Messages API `/v1/messages` with message-history replay.
+- Claude requests cache stable tool/system prefixes using ephemeral breakpoints on the last tool definition and system text block; user messages and tool results have no breakpoints. Cache writes and reads are included in debug usage/cost totals.
 - Transient HTTP retry is opt-in and currently enabled only for Inception. Do not add retries globally to `callLLMAPI`; other providers should keep the direct call path unless explicitly requested.
 - Stub provider returns configured constant responses by `model` and query, and is intended for stage-isolation tests.
 - `common.Init()` builds one app-scoped `common.LLM_RUNTIME`; do not construct new LLM services per request.
