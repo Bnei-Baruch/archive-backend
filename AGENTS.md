@@ -91,6 +91,8 @@ Instructions for coding agents working in this repository.
 - Old background reasoning runs may finish after a draft was returned or after a draft follow-up started. They must not overwrite or clear the newer workflow state.
 - Rapid reasoning search is a separate flow: gather results with the main reasoning model, classify them with a separate classifier model in batches, optionally run a finalizer, and expose visible rapid results through status.
 - Rapid classification runs on batches of results, not per result. The current batch size is defined in `api/reasoning_search.go`.
+- Each rapid run owns one classifier worker, notified when gathering adds candidates or lookup evidence. Completed batches are stored immediately for previews. Stop the worker before the final classification pass; status polling only reads stored classifications and never calls the classifier.
+- Rapid run cleanup and classifier writes must use the captured workflow run revision; terminal progress updates must use the captured progress run revision. Check revisions under the corresponding store locks so a canceled or failed run cannot overwrite a retry.
 - Rapid classification is incremental: results are re-classified only when new lookup evidence was attached to that result.
 - Rapid finalizer is optional. When disabled, the stored rapid response keeps `summary=null` and returns the classifier-sorted results directly.
 - Rapid results are sorted first by classifier relevance, then by backend tie-breakers such as content type, lookup evidence, language match, freshness, and a few source/collection-specific boosts.

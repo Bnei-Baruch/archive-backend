@@ -210,6 +210,14 @@ func (s *ReasoningProgressStore) Complete(sessionID string, iteration int) {
 }
 
 func (s *ReasoningProgressStore) Fail(sessionID string, iteration int, failures ...error) {
+	s.fail(sessionID, iteration, failures)
+}
+
+func (s *ReasoningProgressStore) FailRun(sessionID string, runRevision int64, iteration int, failures ...error) {
+	s.fail(sessionID, iteration, failures, runRevision)
+}
+
+func (s *ReasoningProgressStore) fail(sessionID string, iteration int, failures []error, runRevision ...int64) {
 	var errorMessages []string
 	for _, err := range failures {
 		if err != nil {
@@ -231,10 +239,10 @@ func (s *ReasoningProgressStore) Fail(sessionID string, iteration int, failures 
 			status.Error = details
 		}
 		status.Done = true
-	})
+	}, runRevision...)
 }
 
-func (s *ReasoningProgressStore) Cancel(sessionID string, iteration int) {
+func (s *ReasoningProgressStore) Cancel(sessionID string, iteration int, runRevision ...int64) {
 	s.update(sessionID, func(status *ReasoningProgressStatus) {
 		status.State = ReasoningProgressStateCanceled
 		status.Phase = ReasoningProgressPhaseCanceled
@@ -247,7 +255,7 @@ func (s *ReasoningProgressStore) Cancel(sessionID string, iteration int) {
 		status.Message = "Canceled."
 		status.Error = ""
 		status.Done = true
-	})
+	}, runRevision...)
 }
 
 func (s *ReasoningProgressStore) SetIterationOffset(sessionID string, offset int) {
@@ -289,16 +297,14 @@ func (s *ReasoningProgressStore) IsNearFinish(sessionID string, currentIteration
 func (s *ReasoningProgressStore) Get(sessionID string) (*ReasoningProgressStatus, error) {
 	now := time.Now()
 
-	s.mu.RLock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	status, ok := s.statuses[sessionID]
-	s.mu.RUnlock()
 	if !ok {
 		return nil, ErrReasoningProgressNotFoundOrExpired
 	}
 	if now.After(status.ExpiresAt) {
-		s.mu.Lock()
 		delete(s.statuses, sessionID)
-		s.mu.Unlock()
 		return nil, ErrReasoningProgressNotFoundOrExpired
 	}
 
@@ -362,7 +368,7 @@ func (s *ReasoningProgressStore) deleteExpired() {
 	}
 }
 
-func (s *ReasoningProgressStore) update(sessionID string, mutate func(*ReasoningProgressStatus)) {
+func (s *ReasoningProgressStore) update(sessionID string, mutate func(*ReasoningProgressStatus), runRevision ...int64) {
 	if s == nil || sessionID == "" {
 		return
 	}
@@ -373,6 +379,9 @@ func (s *ReasoningProgressStore) update(sessionID string, mutate func(*Reasoning
 	defer s.mu.Unlock()
 
 	status, ok := s.statuses[sessionID]
+	if len(runRevision) > 0 && (!ok || status.RunRevision != runRevision[0]) {
+		return
+	}
 	if !ok {
 		status = &ReasoningProgressStatus{SessionID: sessionID}
 		s.statuses[sessionID] = status

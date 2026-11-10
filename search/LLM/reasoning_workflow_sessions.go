@@ -41,6 +41,7 @@ type ReasoningWorkflowStageSession struct {
 
 type ReasoningWorkflowSession struct {
 	ID                      string
+	RunRevision             int64 // Advances whenever run-specific state is reset.
 	Query                   string
 	UILanguage              string
 	Stages                  map[string]ReasoningWorkflowStageSession
@@ -302,7 +303,8 @@ func (s *ReasoningWorkflowSessionStore) SetCachedInitialResponse(sessionID strin
 	return nil
 }
 
-func (s *ReasoningWorkflowSessionStore) SetResponseSnapshot(sessionID string, response *ReasoningSearchResponse) error {
+// When supplied, runRevision makes the write conditional on the current run.
+func (s *ReasoningWorkflowSessionStore) SetResponseSnapshot(sessionID string, response *ReasoningSearchResponse, runRevision ...int64) error {
 	var responseJSON []byte
 	if response != nil {
 		raw, err := marshalJSON(response)
@@ -326,6 +328,9 @@ func (s *ReasoningWorkflowSessionStore) SetResponseSnapshot(sessionID string, re
 		return ErrReasoningSessionNotFoundOrExpired
 	}
 
+	if len(runRevision) > 0 && session.RunRevision != runRevision[0] {
+		return nil
+	}
 	session.ResponseSnapshotJSON = append([]byte(nil), responseJSON...)
 	session.DraftFollowupSeed = nil
 	session.RapidFollowupSeed = nil
@@ -558,7 +563,8 @@ func (s *ReasoningWorkflowSessionStore) DraftModelUsage(sessionID string) ([]Rea
 	return runs, aggregateReasoningSearchUsageBreakdowns(runs), nil
 }
 
-func (s *ReasoningWorkflowSessionStore) SetRapidClassifications(sessionID string, classifications []ReasoningSearchRapidClassification, runs []ReasoningSearchUsageBreakdown) error {
+// When supplied, runRevision rejects batches from a previous run of the session.
+func (s *ReasoningWorkflowSessionStore) SetRapidClassifications(sessionID string, classifications []ReasoningSearchRapidClassification, runs []ReasoningSearchUsageBreakdown, runRevision ...int64) error {
 	now := time.Now()
 
 	s.mu.Lock()
@@ -571,6 +577,9 @@ func (s *ReasoningWorkflowSessionStore) SetRapidClassifications(sessionID string
 	if now.After(session.ExpiresAt) {
 		delete(s.sessions, sessionID)
 		return ErrReasoningSessionNotFoundOrExpired
+	}
+	if len(runRevision) > 0 && session.RunRevision != runRevision[0] {
+		return nil
 	}
 	if session.RapidClassifications == nil {
 		session.RapidClassifications = map[string]ReasoningSearchRapidClassification{}
@@ -884,6 +893,7 @@ func (s *ReasoningWorkflowSessionStore) StartRapidFollowupFromSnapshot(sessionID
 }
 
 func clearReasoningWorkflowRunState(session *ReasoningWorkflowSession) {
+	session.RunRevision++
 	session.PartialResults = nil
 	session.PartialResultsRevision = 0
 	session.PartialLookupEvidence = nil

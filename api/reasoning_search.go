@@ -11,6 +11,7 @@ import (
 	"runtime/debug"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -358,14 +359,9 @@ func ReasoningSearchStatusHandler(c *gin.Context) {
 	workflowSession, sessionErr := runtime.Workflow.Get(sessionID)
 	if sessionErr == nil && workflowSession.Rapid {
 		db, _ := c.MustGet("MDB_DB").(*sql.DB)
-		if err := ensureRapidClassifications(c.Request.Context(), runtime, sessionID, workflowSession.Query, workflowSession.UILanguage, false); err != nil {
-			log.Warnf("Rapid Reasoning Search status classification failed session=%s: %v", sessionID, err)
-		}
-		if currentSession, err := runtime.Workflow.Get(sessionID); err == nil {
-			if results, err := buildRapidVisibleResults(db, currentSession.UILanguage, currentSession); err == nil && len(results) > 0 {
-				response.RapidResultsAvailable = true
-				response.RapidResults = results
-			}
+		if results, err := buildRapidVisibleResults(db, workflowSession.UILanguage, workflowSession); err == nil && len(results) > 0 {
+			response.RapidResultsAvailable = true
+			response.RapidResults = results
 		}
 	}
 
@@ -1734,6 +1730,44 @@ func buildReasoningSearchPreviousResponseContext(response *llm.ReasoningSearchRe
 	return context
 }
 
+func startRapidClassificationWorker(ctx context.Context, runtime *llm.Runtime, sessionID string, query string, uiLanguage string, deb bool) (func(string), func()) {
+	updates := make(chan struct{}, 1)
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				log.Errorf("Rapid Reasoning Search classifier panic session=%s: %v\n%s", sessionID, recovered, debug.Stack())
+			}
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-stop:
+				return
+			case <-updates:
+				if err := ensureRapidClassifications(ctx, runtime, sessionID, query, uiLanguage, deb); err != nil && ctx.Err() == nil {
+					log.Warnf("Rapid Reasoning Search preview classification failed session=%s: %v", sessionID, err)
+				}
+			}
+		}
+	}()
+	// Coalesce tool notifications without blocking gathering or status polling.
+	schedule := func(string) {
+		select {
+		case updates <- struct{}{}:
+		default:
+		}
+	}
+	var once sync.Once
+	return schedule, func() {
+		once.Do(func() { close(stop) })
+		<-done
+	}
+}
+
 func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessionID string, query string, uiLanguage string, deb bool) error {
 	if runtime == nil || runtime.Workflow == nil || runtime.RapidConfig == nil {
 		return errors.New("rapid classifier workflow is not initialized")
@@ -1768,9 +1802,9 @@ func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessi
 		fmt.Sprintf(llm.ReasoningSearchRapidClassificationInstructionMask, llm.GeneralReasoningSearchBaseInstruction),
 		outputLanguageName,
 	)
-	allClassifications := []llm.ReasoningSearchRapidClassification{}
-	runs := []llm.ReasoningSearchUsageBreakdown{}
 	for start := 0; start < len(pending); start += reasoningSearchRapidClassificationBatchSize {
+		classifications := []llm.ReasoningSearchRapidClassification{}
+		runs := []llm.ReasoningSearchUsageBreakdown{}
 		end := start + reasoningSearchRapidClassificationBatchSize
 		if end > len(pending) {
 			end = len(pending)
@@ -1841,7 +1875,7 @@ func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessi
 			if deb {
 				logRapidClassificationDecision(sessionID, candidatesByUID[item.MDBUID], item, true)
 			}
-			allClassifications = append(allClassifications, item)
+			classifications = append(classifications, item)
 		}
 		for _, candidate := range batch {
 			uid := strings.TrimSpace(candidate.MDBUID)
@@ -1856,16 +1890,19 @@ func ensureRapidClassifications(ctx context.Context, runtime *llm.Runtime, sessi
 			if deb {
 				logRapidClassificationDecision(sessionID, candidate, item, false)
 			}
-			allClassifications = append(allClassifications, item)
+			classifications = append(classifications, item)
 		}
 		if usage := rapidMainModelUsage(debug); usage != nil {
 			runs = append(runs, *usage)
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := runtime.Workflow.SetRapidClassifications(sessionID, classifications, runs, session.RunRevision); err != nil {
+			return err
+		}
 	}
-	if len(allClassifications) == 0 {
-		return nil
-	}
-	return runtime.Workflow.SetRapidClassifications(sessionID, allClassifications, runs)
+	return nil
 }
 
 func rapidClassificationPendingCandidates(session *llm.ReasoningWorkflowSession) []llm.ReasoningSearchResult {
@@ -2453,6 +2490,14 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	if err != nil {
 		return err
 	}
+	session, err := workflowStore.Get(responseSessionID)
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	workflowRunRevision := session.RunRevision
 	// Keep this run's revision so a later follow-up cannot be completed by it.
 	progressRunRevision := progressStatus.RunRevision
 	progressIteration := 0
@@ -2461,7 +2506,7 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 			return
 		}
 		if workflowStore != nil {
-			if clearErr := workflowStore.SetResponseSnapshot(responseSessionID, nil); clearErr != nil && !errors.Is(clearErr, llm.ErrReasoningSessionNotFoundOrExpired) {
+			if clearErr := workflowStore.SetResponseSnapshot(responseSessionID, nil, workflowRunRevision); clearErr != nil && !errors.Is(clearErr, llm.ErrReasoningSessionNotFoundOrExpired) {
 				log.Warnf("Rapid Reasoning Search failed clearing response snapshot: %v", clearErr)
 			}
 		}
@@ -2472,17 +2517,13 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 				progressIteration = status.Iteration
 			}
 			if isReasoningSearchCancellation(err) {
-				progressStore.Cancel(responseSessionID, progressIteration)
+				progressStore.Cancel(responseSessionID, progressIteration, progressRunRevision)
 				return
 			}
-			progressStore.Fail(responseSessionID, progressIteration, err)
+			progressStore.FailRun(responseSessionID, progressRunRevision, progressIteration, err)
 		}
 	}()
 
-	session, err := workflowStore.Get(responseSessionID)
-	if err != nil {
-		return err
-	}
 	gatherStage := session.Stages[llm.ReasoningWorkflowStageReasoning]
 	initialRequestCompleted := session.InitialRequestCompleted
 	outputLanguageName := reasoningSearchOutputLanguageName(r.UILanguage, r.Query)
@@ -2520,7 +2561,13 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 	providerID := strings.TrimSpace(gatherStage.ProviderSessionID)
 	providerSessionID := &providerID
 	gather := rapidGatherResponse{}
-	gatherCtx := llm.ContextWithReasoningDraftState(ctx, workflowStore, responseSessionID, nil)
+	classifierCtx, cancelClassifier := context.WithCancel(ctx)
+	scheduleClassification, stopClassifier := startRapidClassificationWorker(classifierCtx, runtime, responseSessionID, r.Query, r.UILanguage, r.Deb)
+	defer func() {
+		cancelClassifier()
+		stopClassifier()
+	}()
+	gatherCtx := llm.ContextWithReasoningDraftState(ctx, workflowStore, responseSessionID, scheduleClassification)
 	var bootstrapDone chan error
 	if handler, ok := runtime.Tools.ToolHandlers()["elasticsearch_search"]; ok {
 		// Seed rapid search with one plain ES query immediately, before the gather
@@ -2595,6 +2642,8 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 			log.Warnf("Rapid Reasoning Search bootstrap Elasticsearch failed session=%s: %v", responseSessionID, bootstrapErr)
 		}
 	}
+	// Finish any active preview call before the final classification pass.
+	stopClassifier()
 
 	session, err = workflowStore.Get(responseSessionID)
 	if err != nil {

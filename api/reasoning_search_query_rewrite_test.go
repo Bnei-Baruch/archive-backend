@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +19,72 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/gin-gonic/gin.v1"
 )
+
+func TestRapidReasoningSearchStatusOnlyReadsClassifications(t *testing.T) {
+	workflow := llm.NewReasoningWorkflowSessionStore(time.Minute)
+	defer workflow.Close()
+	progress := llm.NewReasoningProgressStore(time.Minute)
+	defer progress.Close()
+	sessionID, err := workflow.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workflow.SetRapid(sessionID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := workflow.AddPartialResults(sessionID, []llm.ReasoningSearchResult{{MDBUID: "uid-1", Title: "Candidate"}}); err != nil {
+		t.Fatal(err)
+	}
+	progress.Reserve(sessionID)
+	runtime := &llm.Runtime{
+		Workflow: workflow,
+		Progress: progress,
+		RapidConfig: &llm.ReasoningSearchRapidConfig{
+			Classifier: llm.ReasoningSearchRapidStageConfig{Provider: "stub", Model: "classifier"},
+		},
+		Services: map[string]llm.Service{"stub": llm.NewStubLLMService([]llm.StubLLMResponseConfig{{
+			Model: "classifier", Query: "*", Response: `{"results":[{"mdb_uid":"uid-1","relevance":"highly_relevant","reason":"Stored reason"}]}`,
+		}})},
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("LLM_RUNTIME", runtime)
+		c.Set("MDB_DB", (*sql.DB)(nil))
+	})
+	router.GET("/search/reasoning/status", ReasoningSearchStatusHandler)
+	for _, classified := range []bool{false, true} {
+		if classified {
+			if err := ensureRapidClassifications(context.Background(), runtime, sessionID, "query", "en", false); err != nil {
+				t.Fatal(err)
+			}
+		}
+		before, err := workflow.Get(sessionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < 3; i++ {
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/search/reasoning/status?session_id="+sessionID, nil))
+			response := reasoningSearchStatusResponse{}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if recorder.Code != http.StatusOK || response.RapidResultsAvailable != classified {
+				t.Fatalf("unexpected status response (classified=%t): %d %s", classified, recorder.Code, recorder.Body.String())
+			}
+			if classified && (len(response.RapidResults) != 1 || response.RapidResults[0].Reason != "Stored reason") {
+				t.Fatalf("expected stored classification, got %#v", response.RapidResults)
+			}
+		}
+		after, err := workflow.Get(sessionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(before.RapidClassifications, after.RapidClassifications) || !reflect.DeepEqual(before.RapidClassifierModelRuns, after.RapidClassifierModelRuns) {
+			t.Fatal("status polling changed classifications or classifier usage")
+		}
+	}
+}
 
 func TestRewriteReasoningSearchQueryAddsApostropheToStandaloneHebrewLetters(t *testing.T) {
 	cases := map[string]string{
