@@ -922,7 +922,10 @@ func storeReasoningSearchCachedResponse(runtime *llm.Runtime, db *sql.DB, r Reas
 	return nil
 }
 
-func maybeStartReasoningSearchDraft(runtime *llm.Runtime, db *sql.DB, uiLanguage string, sessionID string, deb bool) {
+func maybeStartReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime, db *sql.DB, uiLanguage string, sessionID string, deb bool) {
+	if ctx.Err() != nil {
+		return
+	}
 	if runtime == nil || runtime.Workflow == nil || runtime.Progress == nil || runtime.DraftConfig == nil || runtime.Services == nil {
 		return
 	}
@@ -949,7 +952,7 @@ func maybeStartReasoningSearchDraft(runtime *llm.Runtime, db *sql.DB, uiLanguage
 				runtime.Workflow.FailDraft(sessionID)
 			}
 		}()
-		if err := buildAndStoreReasoningSearchDraft(context.Background(), runtime, db, service, runtime.DraftConfig, uiLanguage, sessionID, query, revision, results, deb); err != nil {
+		if err := buildAndStoreReasoningSearchDraft(ctx, runtime, db, service, runtime.DraftConfig, uiLanguage, sessionID, query, revision, results, deb); err != nil {
 			runtime.Workflow.FailDraft(sessionID)
 			if !errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 				log.Warnf("Reasoning Search draft failed session=%s revision=%d: %v", sessionID, revision, err)
@@ -959,6 +962,9 @@ func maybeStartReasoningSearchDraft(runtime *llm.Runtime, db *sql.DB, uiLanguage
 }
 
 func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime, db *sql.DB, service llm.Service, config *llm.ReasoningSearchDraftConfig, uiLanguage string, sessionID string, query string, revision int, candidates []llm.ReasoningSearchResult, deb bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if len(candidates) == 0 {
 		runtime.Workflow.FailDraft(sessionID)
 		return nil
@@ -1041,6 +1047,9 @@ func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime
 	if err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	response.Query = query
 	response.SetSessionID(sessionID)
@@ -1067,6 +1076,9 @@ func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime
 	}
 	response.SetFollowupBudget(reasoningStage.MaxFollowups, followupsUsed, followupsRemaining)
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := runtime.Workflow.FinishDraft(sessionID, revision, &response); err != nil {
 		return err
 	}
@@ -3049,7 +3061,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	var draftScheduler func(string)
 	if enableDraft {
 		draftScheduler = func(sessionID string) {
-			maybeStartReasoningSearchDraft(runtime, db, r.UILanguage, sessionID, r.Deb)
+			maybeStartReasoningSearchDraft(ctx, runtime, db, r.UILanguage, sessionID, r.Deb)
 		}
 	}
 	serviceCtx := llm.ContextWithReasoningDraftState(ctx, workflowStore, responseSessionID, draftScheduler)
