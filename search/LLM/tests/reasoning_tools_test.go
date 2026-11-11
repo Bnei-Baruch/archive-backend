@@ -10,6 +10,7 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/integration"
 	llm "github.com/Bnei-Baruch/archive-backend/search/LLM"
 	llmtools "github.com/Bnei-Baruch/archive-backend/search/LLM/tools"
+	"github.com/stretchr/testify/require"
 )
 
 type fakeReasoningTool struct {
@@ -144,6 +145,88 @@ func TestReasoningToolManagerHidesElasticsearchInternalHitIDs(t *testing.T) {
 	}
 	if !strings.Contains(result, "_score") {
 		t.Fatalf("expected _score to remain, got %s", result)
+	}
+}
+
+func TestReasoningToolManagerFiltersESMetadataButPreservesResultData(t *testing.T) {
+	raw := `{
+		"query":{"term":"test"},"size":50,
+		"result":{
+			"language":"he","execution_time_log":[{"operation":"search","time":10}],
+			"search_result":{
+				"took":10,"_scroll_id":"scroll","profile":{},"timed_out":true,
+				"_shards":{"total":2,"successful":2,"failed":0},
+				"aggregations":{"profile":{"value":1}},"suggest":{"took":["keep"]},
+				"hits":{"total":100,"max_score":12.3,"hits":[{
+					"_id":"hit-id","_index":"units","_type":"result","_uid":"internal-uid",
+					"_routing":"route","_parent":"parent","_version":1,"_nested":{},
+					"_explanation":{},"sort":[1],"_score":12.3,
+					"_source":{"mdb_uid":"public-uid","typed_uids":["collection:related-uid"],
+						"title":"Title","description":"Description","content":"Evidence",
+						"filter_values":["content_type:ARTICLE"],"effective_date":"2026-01-01",
+						"_id":"source-owned-id","profile":{"took":"source-owned data"}},
+					"highlight":{"content":["<em>Evidence</em>"]},"fields":{"extra":"value","profile":"keep","took":10},
+					"inner_hits":{"related":{"hits":{"hits":[{
+						"_id":"nested-id","_score":6,"_source":{"mdb_uid":"nested-public-uid"}
+					}]}}}
+				}]}
+			}
+		}
+	}`
+	manager, err := llm.NewReasoningToolManager(&fakeReasoningTool{
+		definition: llm.ReasoningToolDefinition{Name: "elasticsearch_search"}, response: raw,
+	})
+	require.NoError(t, err)
+	output, err := manager.ToolHandlers()["elasticsearch_search"](context.Background(), json.RawMessage(`{}`))
+	require.NoError(t, err)
+	var original, filtered map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(raw), &original))
+	require.NoError(t, json.Unmarshal([]byte(output), &filtered))
+	result := filtered["result"].(map[string]interface{})
+	require.NotContains(t, result, "execution_time_log")
+	searchResult := result["search_result"].(map[string]interface{})
+	for _, key := range []string{"took", "_scroll_id", "profile", "_shards"} {
+		require.NotContains(t, searchResult, key)
+	}
+	originalSearch := original["result"].(map[string]interface{})["search_result"].(map[string]interface{})
+	for _, key := range []string{"aggregations", "suggest"} {
+		require.Equal(t, originalSearch[key], searchResult[key])
+	}
+	require.Equal(t, true, searchResult["timed_out"])
+	hits := searchResult["hits"].(map[string]interface{})
+	require.Equal(t, float64(100), hits["total"])
+	require.Equal(t, 12.3, hits["max_score"])
+	hit := hits["hits"].([]interface{})[0].(map[string]interface{})
+	for _, key := range []string{"_id", "_index", "_type", "_uid", "_routing", "_parent", "_version", "_nested", "_explanation", "sort"} {
+		require.NotContains(t, hit, key)
+	}
+	originalHit := original["result"].(map[string]interface{})["search_result"].(map[string]interface{})["hits"].(map[string]interface{})["hits"].([]interface{})[0].(map[string]interface{})
+	for _, key := range []string{"_source", "_score", "highlight", "fields"} {
+		require.Equal(t, originalHit[key], hit[key])
+	}
+	nested := hit["inner_hits"].(map[string]interface{})["related"].(map[string]interface{})["hits"].(map[string]interface{})["hits"].([]interface{})[0].(map[string]interface{})
+	require.NotContains(t, nested, "_id")
+	require.Equal(t, float64(6), nested["_score"])
+	require.Equal(t, "nested-public-uid", nested["_source"].(map[string]interface{})["mdb_uid"])
+	require.Equal(t, original["query"], filtered["query"])
+	require.Equal(t, original["size"], filtered["size"])
+}
+
+func TestReasoningToolManagerPreservesESFailureWarningsAndOtherTools(t *testing.T) {
+	for _, toolName := range []string{"elasticsearch_search", "fake_lookup"} {
+		t.Run(toolName, func(t *testing.T) {
+			raw := `{"_shards":{"total":2,"successful":1,"failed":1},"timed_out":true,"error":{"reason":"partial failure"}}`
+			if toolName == "fake_lookup" {
+				raw = `{"_id":"other-tool-id","took":10,"profile":{"value":"keep"}}`
+			}
+			manager, err := llm.NewReasoningToolManager(&fakeReasoningTool{
+				definition: llm.ReasoningToolDefinition{Name: toolName}, response: raw,
+			})
+			require.NoError(t, err)
+			output, err := manager.ToolHandlers()[toolName](context.Background(), json.RawMessage(`{}`))
+			require.NoError(t, err)
+			require.JSONEq(t, raw, output)
+		})
 	}
 }
 

@@ -325,11 +325,26 @@ func sanitizeReasoningToolResult(name string, result string) string {
 func removeElasticsearchInternalKeys(value interface{}) {
 	switch typed := value.(type) {
 	case map[string]interface{}:
-		delete(typed, "_id")
-		delete(typed, "_index")
-		delete(typed, "_type")
-		for _, child := range typed {
-			removeElasticsearchInternalKeys(child)
+		for _, key := range []string{
+			"_id", "_index", "_type", "_uid", "_routing", "_parent", "_version",
+			"_scroll_id", "_explanation", "_nested", "sort", "took", "profile", "execution_time_log",
+		} {
+			delete(typed, key)
+		}
+		// Shard failures warn that results may be incomplete; keep those warnings.
+		shards, _ := typed["_shards"].(map[string]interface{})
+		failed, _ := shards["failed"].(float64)
+		if failed <= 0 {
+			delete(typed, "_shards")
+		}
+		for key, child := range typed {
+			switch key {
+			case "_source", "fields", "highlight", "aggregations", "suggest":
+				// Data fields may share names with ES metadata; leave their contents untouched.
+				continue
+			default:
+				removeElasticsearchInternalKeys(child)
+			}
 		}
 	case []interface{}:
 		for _, child := range typed {
