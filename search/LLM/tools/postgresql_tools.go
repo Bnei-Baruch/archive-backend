@@ -19,6 +19,7 @@ const (
 	defaultPostgreSQLToolLimit    = 25
 	maxPostgreSQLToolLimit        = 100
 	defaultPostgreSQLToolCacheTTL = 3 * time.Hour
+	maxPostgreSQLToolCacheBytes   = 8 * 1024 * 1024
 )
 
 const authorMetadataByMDBIDQuery = `
@@ -424,14 +425,17 @@ type GetContentUnitsByCollectionTool struct {
 }
 
 type postgreSQLToolCache struct {
-	mu    sync.RWMutex
-	ttl   time.Duration
-	items map[string]postgreSQLToolCacheItem
+	mu       sync.Mutex
+	ttl      time.Duration
+	items    map[string]postgreSQLToolCacheItem
+	bytes    int
+	maxBytes int
 }
 
 type postgreSQLToolCacheItem struct {
 	value     string
 	expiresAt time.Time
+	sizeBytes int
 }
 
 type postgreSQLToolRecoverableResult struct {
@@ -1369,8 +1373,9 @@ func newPostgreSQLToolCache(ttl time.Duration) *postgreSQLToolCache {
 	}
 
 	return &postgreSQLToolCache{
-		ttl:   ttl,
-		items: map[string]postgreSQLToolCacheItem{},
+		ttl:      ttl,
+		items:    map[string]postgreSQLToolCacheItem{},
+		maxBytes: maxPostgreSQLToolCacheBytes,
 	}
 }
 
@@ -1379,18 +1384,15 @@ func (c *postgreSQLToolCache) get(key string) (string, bool) {
 		return "", false
 	}
 
-	now := time.Now()
-
-	c.mu.RLock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	item, ok := c.items[key]
-	c.mu.RUnlock()
 	if !ok {
 		return "", false
 	}
-	if now.After(item.expiresAt) {
-		c.mu.Lock()
+	if !time.Now().Before(item.expiresAt) {
 		delete(c.items, key)
-		c.mu.Unlock()
+		c.bytes -= item.sizeBytes
 		return "", false
 	}
 	return item.value, true
@@ -1402,11 +1404,29 @@ func (c *postgreSQLToolCache) set(key string, value string) {
 	}
 
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Include an overhead allowance so even empty results consume the budget.
+	sizeBytes := 128 + len(key) + len(value)
+	if previous, ok := c.items[key]; ok {
+		c.bytes -= previous.sizeBytes
+		delete(c.items, key)
+	}
+	if sizeBytes > c.maxBytes {
+		return
+	}
+	for cachedKey, item := range c.items {
+		if c.bytes+sizeBytes <= c.maxBytes {
+			break
+		}
+		delete(c.items, cachedKey)
+		c.bytes -= item.sizeBytes
+	}
 	c.items[key] = postgreSQLToolCacheItem{
 		value:     value,
 		expiresAt: time.Now().Add(c.ttl),
+		sizeBytes: sizeBytes,
 	}
-	c.mu.Unlock()
+	c.bytes += sizeBytes
 }
 
 func loadSourceNodeToolResult(db *sql.DB, sourceID string, language string) (*sourceNodeToolResult, error) {

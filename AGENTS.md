@@ -43,6 +43,7 @@ Instructions for coding agents working in this repository.
 - Tool implementations live under `search/LLM/tools/`.
 - AI source/transcript lookup tools pass the search context through `AssetsService.Doc2Text` to the HTTP request so cancel and finish-now interrupt in-flight document fetches.
 - AI document caches use a 32 MiB byte budget per loader (including text, chunks, and an overhead allowance), with a 1-hour text TTL and a 5-minute negative TTL. Negative hits skip SQL; positive hits must re-resolve a public file and match its UID before cached text is reused. Expired entries are cache misses; insertion evicts arbitrary entries when full, and oversized documents are not cached.
+- PostgreSQL tool-result caches keep their configured TTL (3 hours by default) and an 8 MiB byte budget per tool, including keys, values, and an overhead allowance. Inserts evict arbitrary entries when full and skip oversized results. Expiry checks and deletion share the cache lock so a stale read cannot delete a newer value.
 - LLM package tests live under `search/LLM/tests/`.
 
 ## Tooling Infrastructure
