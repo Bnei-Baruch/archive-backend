@@ -39,6 +39,10 @@ const (
 	// Keep reader-model fan-out modest because tool calls themselves may already run in parallel.
 	defaultAIQueryToolBatchConcurrency = 2
 
+	aiQueryDocumentCacheTTL         = time.Hour
+	aiQueryDocumentNotFoundCacheTTL = 5 * time.Minute
+	aiQueryDocumentCacheMaxBytes    = 32 * 1024 * 1024
+
 	// Build larger semantic windows on top of raw lookup chunks so the reader model
 	// sees more surrounding context before choosing a match.
 	aiQueryToolWindowTargetChars = 9000
@@ -374,14 +378,18 @@ type aiTranscriptDocumentLoader struct {
 }
 
 type aiQueryDocumentCache struct {
-	mu      sync.RWMutex
-	entries map[string]*aiQueryDocumentCacheEntry
+	mu       sync.RWMutex
+	entries  map[string]*aiQueryDocumentCacheEntry
+	bytes    int
+	maxBytes int
 }
 
 type aiQueryDocumentCacheEntry struct {
-	FileUID string
-	Content string
-	Chunks  []string
+	FileUID   string
+	Content   string
+	Chunks    []string
+	expiresAt time.Time
+	sizeBytes int
 }
 
 type querySourceAIToolArgs struct {
@@ -1049,20 +1057,48 @@ func (t *aiTranscriptDocumentLoader) resolveByMDBID(contentUnitID int64, languag
 }
 
 func newAIQueryDocumentCache() aiQueryDocumentCache {
-	return aiQueryDocumentCache{entries: map[string]*aiQueryDocumentCacheEntry{}}
+	return aiQueryDocumentCache{entries: map[string]*aiQueryDocumentCacheEntry{}, maxBytes: aiQueryDocumentCacheMaxBytes}
 }
 
 func (c *aiQueryDocumentCache) get(cacheKey string) (*aiQueryDocumentCacheEntry, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	value, ok := c.entries[cacheKey]
+	if ok && !time.Now().Before(value.expiresAt) {
+		return nil, false
+	}
 	return value, ok
 }
 
 func (c *aiQueryDocumentCache) set(cacheKey string, value *aiQueryDocumentCacheEntry) {
+	entry := *value
+	entry.expiresAt = time.Now().Add(aiQueryDocumentCacheTTL)
+	if entry.FileUID == "" {
+		entry.expiresAt = time.Now().Add(aiQueryDocumentNotFoundCacheTTL)
+	}
+	// Budget text, chunks, keys, and an overhead allowance even for empty entries.
+	entry.sizeBytes = 128 + len(cacheKey) + len(entry.FileUID) + len(entry.Content)
+	for _, chunk := range entry.Chunks {
+		entry.sizeBytes += 16 + len(chunk)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.entries[cacheKey] = value
+	if previous, ok := c.entries[cacheKey]; ok {
+		c.bytes -= previous.sizeBytes
+		delete(c.entries, cacheKey)
+	}
+	if entry.sizeBytes > c.maxBytes {
+		return
+	}
+	for key, cached := range c.entries {
+		if c.bytes+entry.sizeBytes <= c.maxBytes {
+			break
+		}
+		delete(c.entries, key)
+		c.bytes -= cached.sizeBytes
+	}
+	c.entries[cacheKey] = &entry
+	c.bytes += entry.sizeBytes
 }
 
 func queryAIQueryFileUID(db *sql.DB, toolName string, query string, args ...interface{}) (string, error) {
@@ -1103,8 +1139,9 @@ func resolveAIQueryIdentifier(identifier string, resolveByMDBID func(int64) (str
 }
 
 func loadAIQueryDocumentEntry(cache *aiQueryDocumentCache, cacheKey string, resolveFileUID func() (string, error), fetchContent func(string) (string, error)) (*aiQueryDocumentCacheEntry, error) {
-	if entry, ok := cache.get(cacheKey); ok {
-		return entry, nil
+	cached, ok := cache.get(cacheKey)
+	if ok && cached.FileUID == "" {
+		return cached, nil
 	}
 
 	fileUID, err := resolveFileUID()
@@ -1115,6 +1152,9 @@ func loadAIQueryDocumentEntry(cache *aiQueryDocumentCache, cacheKey string, reso
 		empty := &aiQueryDocumentCacheEntry{}
 		cache.set(cacheKey, empty)
 		return empty, nil
+	}
+	if ok && cached.FileUID == fileUID {
+		return cached, nil
 	}
 
 	content, err := fetchContent(fileUID)
@@ -1129,6 +1169,10 @@ func loadAIQueryDocumentEntry(cache *aiQueryDocumentCache, cacheKey string, reso
 func buildAIQueryDocumentCacheEntry(content string, fileUID string) *aiQueryDocumentCacheEntry {
 	content = strings.TrimSpace(strings.ReplaceAll(content, "\r\n", "\n"))
 	content = strings.ReplaceAll(content, "\r", "\n")
+	if len(content) <= aiQueryDocumentCacheMaxBytes {
+		// Do not retain a larger input buffer after trimming cached text.
+		content = string([]byte(content))
+	}
 	if len(content) <= sourceLookupSmallSourceThreshold {
 		return &aiQueryDocumentCacheEntry{
 			FileUID: fileUID,
