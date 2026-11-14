@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
+	"regexp"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -912,6 +914,12 @@ func storeReasoningSearchCachedResponse(runtime *llm.Runtime, db *sql.DB, r Reas
 	if err != nil {
 		return err
 	}
+	for i := range response.Results {
+		for j := range response.Results[i].Highlights {
+			highlight := &response.Results[i].Highlights[j]
+			highlight.Text = sanitizeReasoningSearchHighlightHTML(highlight.Text)
+		}
+	}
 	cachedEntry.Results = response.Results
 	if err := runtime.Workflow.SetCachedInitialResponse(sessionID, cachedEntry); err != nil {
 		return err
@@ -1180,7 +1188,7 @@ func buildReasoningSearchHighlightsFromEvidence(result llm.ReasoningSearchResult
 		if strings.TrimSpace(text) == "" {
 			text = evidence.Content
 		}
-		add("content", text, true) // 'content' is the field name for evidence highlights
+		add("content", html.EscapeString(text), true) // 'content' is the field name for evidence highlights
 	}
 	return rankReasoningSearchHighlights(candidates, query, reason)
 }
@@ -1274,6 +1282,7 @@ func compactReasoningSearchHighlightsForDisplay(highlights []llm.ReasoningSearch
 	items := make([]llm.ReasoningSearchHighlight, 0, reasoningSearchDisplayHighlightMaxItems)
 	for _, highlight := range highlights {
 		highlight.Text = truncateHighlightForDisplay(highlight.Text, reasoningSearchDisplayHighlightMaxRunes, query, reason)
+		highlight.Text = sanitizeReasoningSearchHighlightHTML(highlight.Text)
 		if strings.TrimSpace(visibleHighlightText(highlight.Text)) == "" {
 			continue
 		}
@@ -1283,6 +1292,21 @@ func compactReasoningSearchHighlightsForDisplay(highlights []llm.ReasoningSearch
 		}
 	}
 	return items
+}
+
+var reasoningSearchHighlightEmTags = regexp.MustCompile(`</?em>`)
+
+func sanitizeReasoningSearchHighlightHTML(value string) string {
+	var b strings.Builder
+	start := 0
+	for _, match := range reasoningSearchHighlightEmTags.FindAllStringIndex(value, -1) {
+		// Normalize entities before escaping so cached highlights are not double-escaped.
+		b.WriteString(html.EscapeString(html.UnescapeString(value[start:match[0]])))
+		b.WriteString(value[match[0]:match[1]])
+		start = match[1]
+	}
+	b.WriteString(html.EscapeString(html.UnescapeString(value[start:])))
+	return b.String()
 }
 
 func addDistinctReasoningSearchDisplayHighlight(items []llm.ReasoningSearchHighlight, candidate llm.ReasoningSearchHighlight) []llm.ReasoningSearchHighlight {

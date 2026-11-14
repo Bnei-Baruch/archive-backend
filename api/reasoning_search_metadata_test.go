@@ -99,6 +99,26 @@ INSERT INTO collection_i18n VALUES (1, 'en', 'Public collection');`)
 	require.Equal(t, "public-c", response.Results[1].MDBUID)
 	require.Empty(t, session.PartialResults)
 
+	t.Run("cached-highlights-are-escaped-on-every-hit", func(t *testing.T) {
+		entry := &llm.ReasoningSearchCacheEntry{Results: []llm.ReasoningSearchResult{{
+			MDBUID: "public-u", Highlights: []llm.ReasoningSearchHighlight{{
+				Field: "content", Text: `<em>cached</em> <img src=x onerror=alert(1)> &amp; text`,
+			}},
+		}}}
+		for i := 0; i < 2; i++ {
+			cachedID, err := workflow.Create(llm.ReasoningWorkflowStageReasoning, llm.ReasoningWorkflowStageSession{})
+			require.NoError(t, err)
+			progress.Reserve(cachedID)
+			require.NoError(t, storeReasoningSearchCachedResponse(runtime, db, ReasoningSearchRequest{Query: "query", UILanguage: "en"}, cachedID, entry, 2))
+			cachedSession, err := workflow.Get(cachedID)
+			require.NoError(t, err)
+			var cachedResponse llm.ReasoningSearchResponse
+			require.NoError(t, json.Unmarshal(cachedSession.ResponseSnapshotJSON, &cachedResponse))
+			require.Len(t, cachedResponse.Results, 1)
+			require.Equal(t, `<em>cached</em> &lt;img src=x onerror=alert(1)&gt; &amp; text`, cachedResponse.Results[0].Highlights[0].Text)
+		}
+	})
+
 	for _, goodUID := range []string{"", "public-c"} {
 		t.Run("rapid-fallback/good="+goodUID, func(t *testing.T) {
 			rapidSession := &llm.ReasoningWorkflowSession{RapidClassifications: map[string]llm.ReasoningSearchRapidClassification{}}
