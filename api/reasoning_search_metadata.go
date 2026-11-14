@@ -27,12 +27,12 @@ type reasoningSearchResultMetadata struct {
 	ConnectingSource bool
 }
 
-func enrichReasoningSearchResults(db *sql.DB, uiLanguage string, results []llm.ReasoningSearchResult) error {
+func enrichReasoningSearchResults(db *sql.DB, uiLanguage string, results []llm.ReasoningSearchResult) ([]llm.ReasoningSearchResult, error) {
 	if len(results) == 0 {
-		return nil
+		return results, nil
 	}
 	if db == nil {
-		return fmt.Errorf("MDB_DB is not initialized")
+		return nil, fmt.Errorf("MDB_DB is not initialized")
 	}
 
 	uiLanguage = strings.ToLower(strings.TrimSpace(uiLanguage))
@@ -41,7 +41,7 @@ func enrichReasoningSearchResults(db *sql.DB, uiLanguage string, results []llm.R
 	}
 	baseRequest := BaseRequest{UILanguage: uiLanguage}
 	if err := inferReasoningSearchResultTypes(db, results); err != nil {
-		return err
+		return nil, err
 	}
 
 	resultsByType := make(map[string][]*llm.ReasoningSearchResult)
@@ -64,6 +64,7 @@ func enrichReasoningSearchResults(db *sql.DB, uiLanguage string, results []llm.R
 		{consts.ES_RESULT_TYPE_TWEETS, loadReasoningSearchTweetMetadata},
 	}
 
+	accessible := make(map[string]bool)
 	for _, loader := range loaders {
 		current := resultsByType[loader.resultType]
 		if len(current) == 0 {
@@ -71,10 +72,11 @@ func enrichReasoningSearchResults(db *sql.DB, uiLanguage string, results []llm.R
 		}
 		metadata, err := loader.load(db, baseRequest, reasoningSearchResultUIDs(current))
 		if err != nil {
-			return fmt.Errorf("failed enriching reasoning search %s metadata: %w", loader.resultType, err)
+			return nil, fmt.Errorf("failed enriching reasoning search %s metadata: %w", loader.resultType, err)
 		}
 		for _, result := range current {
 			if meta, ok := metadata[result.MDBUID]; ok {
+				accessible[result.MDBUID] = true
 				result.Title = meta.Title
 				result.ContentType = meta.ContentType
 				result.ProgramName = meta.ProgramName
@@ -95,7 +97,14 @@ func enrichReasoningSearchResults(db *sql.DB, uiLanguage string, results []llm.R
 		}
 	}
 
-	return nil
+	// Missing or inaccessible rows must not retain model- or cache-supplied metadata.
+	filtered := make([]llm.ReasoningSearchResult, 0, len(results))
+	for _, result := range results {
+		if accessible[result.MDBUID] {
+			filtered = append(filtered, result)
+		}
+	}
+	return filtered, nil
 }
 
 func inferReasoningSearchResultTypes(db *sql.DB, results []llm.ReasoningSearchResult) error {
@@ -160,7 +169,7 @@ func loadReasoningSearchResultTypes(db *sql.DB, uids []string) (map[string]strin
 }
 
 func setReasoningSearchResultTypesFromContentUnits(db *sql.DB, uids []string, result map[string]string) error {
-	items, err := mdbmodels.ContentUnits(qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...)).All(db)
+	items, err := mdbmodels.ContentUnits(SECURE_PUBLISHED_MOD, qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...)).All(db)
 	if err != nil {
 		return err
 	}
@@ -173,7 +182,7 @@ func setReasoningSearchResultTypesFromContentUnits(db *sql.DB, uids []string, re
 }
 
 func setReasoningSearchResultTypesFromCollections(db *sql.DB, uids []string, result map[string]string) error {
-	items, err := mdbmodels.Collections(qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...)).All(db)
+	items, err := mdbmodels.Collections(SECURE_PUBLISHED_MOD, qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...)).All(db)
 	if err != nil {
 		return err
 	}
@@ -231,6 +240,7 @@ func loadReasoningSearchContentUnitMetadata(db *sql.DB, r BaseRequest, uids []st
 	}
 
 	items, err := mdbmodels.ContentUnits(
+		SECURE_PUBLISHED_MOD,
 		qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...),
 		qm.Load("CollectionsContentUnits"),
 		qm.Load("CollectionsContentUnits.Collection"),
@@ -325,6 +335,7 @@ func loadReasoningSearchCollectionMetadata(db *sql.DB, r BaseRequest, uids []str
 	}
 
 	items, err := mdbmodels.Collections(
+		SECURE_PUBLISHED_MOD,
 		qm.WhereIn("uid in ?", utils.ConvertArgsString(uids)...),
 		qm.Load("CollectionsContentUnits"),
 		qm.Load("CollectionsContentUnits.ContentUnit"),

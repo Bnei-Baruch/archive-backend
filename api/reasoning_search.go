@@ -895,9 +895,6 @@ func storeReasoningSearchCachedResponse(runtime *llm.Runtime, db *sql.DB, r Reas
 	}
 
 	cachedEntry.Query = r.Query
-	if err := runtime.Workflow.SetCachedInitialResponse(sessionID, cachedEntry); err != nil {
-		return err
-	}
 	if err := runtime.Workflow.SetFollowupState(sessionID, true, 0); err != nil {
 		return err
 	}
@@ -911,7 +908,12 @@ func storeReasoningSearchCachedResponse(runtime *llm.Runtime, db *sql.DB, r Reas
 	}
 	response.SetUsedTools([]string{})
 	response.SetSessionID(sessionID)
-	if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
+	response.Results, err = enrichReasoningSearchResults(db, r.UILanguage, response.Results)
+	if err != nil {
+		return err
+	}
+	cachedEntry.Results = response.Results
+	if err := runtime.Workflow.SetCachedInitialResponse(sessionID, cachedEntry); err != nil {
 		return err
 	}
 	response.SetFollowupBudget(maxFollowups, 0, maxFollowups)
@@ -1071,8 +1073,13 @@ func buildAndStoreReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime
 		runtime.Workflow.FailDraft(sessionID)
 		return nil
 	}
-	if err := enrichReasoningSearchResults(db, uiLanguage, response.Results); err != nil {
+	response.Results, err = enrichReasoningSearchResults(db, uiLanguage, response.Results)
+	if err != nil {
 		return err
+	}
+	if len(response.Results) == 0 {
+		runtime.Workflow.FailDraft(sessionID)
+		return nil
 	}
 	response.SetFollowupBudget(reasoningStage.MaxFollowups, followupsUsed, followupsRemaining)
 
@@ -1984,19 +1991,16 @@ func buildRapidVisibleResults(db *sql.DB, uiLanguage string, session *llm.Reason
 		candidate.Origin = llm.ReasoningSearchResultOriginOriginal
 		results = append(results, candidate)
 	}
+	if db != nil && len(results) > 0 {
+		var err error
+		results, err = enrichReasoningSearchResults(db, uiLanguage, results)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Only accessible results count toward the good-result threshold.
 	results = filterRapidVisibleResults(results, session.RapidClassifications)
-	if db != nil && len(results) > 0 {
-		if err := inferReasoningSearchResultTypes(db, results); err != nil {
-			return nil, err
-		}
-	}
 	sortRapidVisibleResults(results, session.RapidClassifications, uiLanguage)
-	if db != nil && len(results) > 0 {
-		if err := enrichReasoningSearchResults(db, uiLanguage, results); err != nil {
-			return nil, err
-		}
-		sortRapidVisibleResults(results, session.RapidClassifications, uiLanguage)
-	}
 	response := &llm.ReasoningSearchResponse{Results: results}
 	populateReasoningSearchHighlightsFromEvidence(response, results, session.PartialLookupEvidence)
 	return response.Results, nil
@@ -3128,14 +3132,15 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 		}
 	}
 	response.SetSessionID(responseSessionID)
-	if err := enrichReasoningSearchResults(db, r.UILanguage, response.Results); err != nil {
+	currentSession, err := workflowStore.Get(responseSessionID)
+	if err != nil {
 		return err
 	}
-	if currentSession, err := workflowStore.Get(responseSessionID); err != nil {
+	response.Results, err = enrichReasoningSearchResults(db, r.UILanguage, response.Results)
+	if err != nil {
 		return err
-	} else {
-		populateReasoningSearchHighlightsFromEvidence(&response, currentSession.PartialResults, currentSession.PartialLookupEvidence)
 	}
+	populateReasoningSearchHighlightsFromEvidence(&response, currentSession.PartialResults, currentSession.PartialLookupEvidence)
 	for i := range response.Results {
 		response.Results[i].Origin = llm.ReasoningSearchResultOriginOriginal
 	}
@@ -3357,13 +3362,16 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 								} else {
 									runProviderSessionID = reasoningStage.ProviderSessionID
 									rerunResponse.SetSessionID(responseSessionID)
-									if err := enrichReasoningSearchResults(db, r.UILanguage, rerunResponse.Results); err != nil {
+									currentSession, currentErr := workflowStore.Get(responseSessionID)
+									if currentErr != nil {
+										return currentErr
+									}
+									rerunResponse.Results, err = enrichReasoningSearchResults(db, r.UILanguage, rerunResponse.Results)
+									if err != nil {
 										log.Warnf("Reasoning Search failed to enrich rerun results: %v", err)
 										response = originalResponse
 									} else {
-										if currentSession, currentErr := workflowStore.Get(responseSessionID); currentErr == nil {
-											populateReasoningSearchHighlightsFromEvidence(&rerunResponse, currentSession.PartialResults, currentSession.PartialLookupEvidence)
-										}
+										populateReasoningSearchHighlightsFromEvidence(&rerunResponse, currentSession.PartialResults, currentSession.PartialLookupEvidence)
 										rerunResponse.QueryMismatchRetry = rerunResponse.QueryMismatchRetry || originalResponse.QueryMismatchRetry
 										for i := range rerunResponse.Results {
 											rerunResponse.Results[i].Origin = llm.ReasoningSearchResultOriginRerun
