@@ -55,7 +55,9 @@ func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
 }
 
 func defaultContentUnitSql() string {
-	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d)",
+	// LIKUTIM units are indexed for reasoning search but excluded from regular search.
+	// To enable them in regular search, set query.IncludeLikutim = true in api.SearchHandler
+	return fmt.Sprintf("cu.secure = 0 AND cu.published IS TRUE AND cu.type_id NOT IN (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d)",
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LELO_MIKUD].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_PUBLICATION].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SONG].ID,
@@ -66,7 +68,6 @@ func defaultContentUnitSql() string {
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_KTAIM_NIVCHARIM].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_UNKNOWN].ID,
 		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_SOURCE].ID,
-		mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_LIKUTIM].ID,
 	)
 }
 
@@ -362,7 +363,7 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 			if byLang, ok := indexData.Transcripts[cu.UID]; ok {
 				if val, ok := byLang[i18n.Language]; ok {
 					var err error
-					unit.Content, err = index.assetsService.Doc2Text(val[0])
+					unit.Content, err = index.assetsService.Doc2Text(context.Background(), val[0])
 					if unit.Content == "" {
 						log.Warnf("Content Units Index - Transcript empty: %s", val[0])
 					}
