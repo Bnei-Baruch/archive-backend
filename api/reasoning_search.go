@@ -131,11 +131,21 @@ func ReasoningSearchStartHandler(c *gin.Context) {
 	}
 	db := c.MustGet("MDB_DB").(*sql.DB)
 
+	run := admitReasoningSearchRun(c, runtime, context.Background())
+	if run == nil {
+		return
+	}
+	launched := false
+	defer func() {
+		if !launched {
+			run.Finish()
+		}
+	}()
 	if r.CancelSessionID != nil {
 		cancelReasoningSearchSession(runtime, *r.CancelSessionID)
 	}
 
-	sessionID, err := prepareReasoningSearchSession(c.Request.Context(), runtime, &r)
+	sessionID, err := prepareReasoningSearchSession(run.Context, runtime, &r)
 	if err != nil {
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
@@ -154,12 +164,16 @@ func ReasoningSearchStartHandler(c *gin.Context) {
 		return
 	}
 
+	run.Commit()
 	requestCopy := r
 	// Async work is intentionally detached from the request context; that context
 	// is canceled when this handler returns after sending 202 Accepted.
-	bgCtx, cancel := context.WithCancel(context.Background())
-	cancellationToken := runtime.Cancellations.Set(sessionID, cancel)
-	go executeReasoningSearchInBackground(bgCtx, runtime, db, requestCopy, sessionID, cancellationToken)
+	cancellationToken := runtime.Cancellations.Set(sessionID, run.Cancel)
+	go func() {
+		defer run.Finish()
+		executeReasoningSearchInBackground(run.Context, runtime, db, requestCopy, sessionID, cancellationToken)
+	}()
+	launched = true
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"session_id":   sessionID,
@@ -302,11 +316,17 @@ func ReasoningSearchCacheHandler(c *gin.Context) {
 		return
 	}
 
-	sessionID, err := prepareReasoningSearchSession(c.Request.Context(), runtime, &r)
+	run := admitReasoningSearchRun(c, runtime, c.Request.Context())
+	if run == nil {
+		return
+	}
+	defer run.Finish()
+	sessionID, err := prepareReasoningSearchSession(run.Context, runtime, &r)
 	if err != nil {
 		NewInternalError(err).Abort(c)
 		return
 	}
+	run.Commit()
 	db := c.MustGet("MDB_DB").(*sql.DB)
 	workflowSession, err := runtime.Workflow.Get(sessionID)
 	if err != nil {
@@ -392,7 +412,12 @@ func ReasoningSearchHandler(c *gin.Context) {
 		return
 	}
 	db := c.MustGet("MDB_DB").(*sql.DB)
-	sessionID, err := prepareReasoningSearchSession(c.Request.Context(), runtime, &r)
+	run := admitReasoningSearchRun(c, runtime, c.Request.Context())
+	if run == nil {
+		return
+	}
+	defer run.Finish()
+	sessionID, err := prepareReasoningSearchSession(run.Context, runtime, &r)
 	if err != nil {
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
@@ -410,7 +435,8 @@ func ReasoningSearchHandler(c *gin.Context) {
 		NewInternalError(err).Abort(c)
 		return
 	}
-	if err := executeReasoningSearchForSessionByMode(c.Request.Context(), runtime, db, r, sessionID, false); err != nil {
+	run.Commit()
+	if err := executeReasoningSearchForSessionByMode(run.Context, runtime, db, r, sessionID, false); err != nil {
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
 			return
@@ -955,7 +981,13 @@ func maybeStartReasoningSearchDraft(ctx context.Context, runtime *llm.Runtime, d
 		return
 	}
 
+	done, ok := llm.TrackReasoningRunWorker(ctx)
+	if !ok {
+		runtime.Workflow.FailDraft(sessionID)
+		return
+	}
 	go func() {
+		defer done()
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				log.Errorf("Reasoning Search draft panic session=%s revision=%d: %v\n%s", sessionID, revision, recovered, debug.Stack())
@@ -2623,8 +2655,13 @@ func executeRapidReasoningSearchForSession(ctx context.Context, runtime *llm.Run
 			if marshalErr != nil {
 				return marshalErr
 			}
+			done, ok := llm.TrackReasoningRunWorker(gatherCtx)
+			if !ok {
+				return gatherCtx.Err()
+			}
 			bootstrapDone = make(chan error, 1)
 			go func() {
+				defer done()
 				var bootstrapErr error
 				defer func() {
 					if recovered := recover(); recovered != nil {

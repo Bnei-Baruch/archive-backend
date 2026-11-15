@@ -751,7 +751,7 @@ func (t *GetAvailableBooksTool) Execute(ctx context.Context, arguments json.RawM
 		return cached, nil
 	}
 
-	rows, err := t.db.Query(availableBooksQuery, consts.SEC_PUBLIC)
+	rows, err := t.db.QueryContext(ctx, availableBooksQuery, consts.SEC_PUBLIC)
 	if err != nil {
 		return "", fmt.Errorf("get_available_books: query failed: %w", err)
 	}
@@ -975,13 +975,13 @@ func (t *GetSourcesByAuthorTool) Execute(ctx context.Context, arguments json.Raw
 		return cached, nil
 	}
 
-	author, err := loadAuthorToolResult(t.db, authorID, language)
+	author, err := loadAuthorToolResult(ctx, t.db, authorID, language)
 	if err != nil {
 		return "", err
 	}
 	llm.LogIfDeb(ctx, "get_sources_by_author: resolved author mdb_id=%d code=%q", author.MDBID, author.Code)
 
-	rows, err := t.db.Query(sourcesByAuthorQuery, language, author.MDBID, consts.SEC_PUBLIC, limit)
+	rows, err := t.db.QueryContext(ctx, sourcesByAuthorQuery, language, author.MDBID, consts.SEC_PUBLIC, limit)
 	if err != nil {
 		return "", fmt.Errorf("get_sources_by_author: query failed: %w", err)
 	}
@@ -1051,13 +1051,13 @@ func (t *GetSourcesBySourceTool) Execute(ctx context.Context, arguments json.Raw
 		return cached, nil
 	}
 
-	source, err := loadSourceNodeToolResult(t.db, sourceID, language)
+	source, err := loadSourceNodeToolResult(ctx, t.db, sourceID, language)
 	if err != nil {
 		return "", err
 	}
 	llm.LogIfDeb(ctx, "get_sources_by_source: resolved source mdb_id=%d uid=%q", source.MDBID, source.UID)
 
-	rows, err := t.db.Query(sourcesBySourceQuery, language, source.MDBID, consts.SEC_PUBLIC, limit)
+	rows, err := t.db.QueryContext(ctx, sourcesBySourceQuery, language, source.MDBID, consts.SEC_PUBLIC, limit)
 	if err != nil {
 		return "", fmt.Errorf("get_sources_by_source: query failed: %w", err)
 	}
@@ -1138,7 +1138,7 @@ func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMess
 	query.WriteString("ORDER BY COALESCE(NULLIF(c.properties->>'film_date', '')::date, c.created_at::date) DESC, c.created_at DESC\n")
 	query.WriteString(fmt.Sprintf("LIMIT %s", appendPostgreSQLToolQueryArg(&queryArgs, limit)))
 
-	rows, err := t.db.Query(query.String(), queryArgs...)
+	rows, err := t.db.QueryContext(ctx, query.String(), queryArgs...)
 	if err != nil {
 		return "", fmt.Errorf("get_collections: query failed: %w", err)
 	}
@@ -1158,7 +1158,7 @@ func (t *GetCollectionsTool) Execute(ctx context.Context, arguments json.RawMess
 
 	if collectionID != "" && len(items) == 0 {
 		llm.LogIfDeb(ctx, "get_collections: collection not found collection_id=%q", collectionID)
-		collectionUIDs, lookupErr := loadCollectionUIDsForContentUnit(t.db, collectionID)
+		collectionUIDs, lookupErr := loadCollectionUIDsForContentUnit(ctx, t.db, collectionID)
 		if lookupErr != nil {
 			llm.LogIfDeb(ctx, "get_collections: failed to check content-unit fallback for collection_id=%q err=%v", collectionID, lookupErr)
 		}
@@ -1215,19 +1215,19 @@ func (t *GetContentUnitTool) Execute(ctx context.Context, arguments json.RawMess
 		return cached, nil
 	}
 
-	contentUnit, err := loadContentUnitToolResult(t.db, contentUnitID, language)
+	contentUnit, err := loadContentUnitToolResult(ctx, t.db, contentUnitID, language)
 	if err != nil {
 		return "", err
 	}
-	collections, err := loadContentUnitCollections(t.db, contentUnit.MDBID, language)
+	collections, err := loadContentUnitCollections(ctx, t.db, contentUnit.MDBID, language)
 	if err != nil {
 		return "", err
 	}
-	sources, err := loadContentUnitSources(t.db, contentUnit.MDBID, language)
+	sources, err := loadContentUnitSources(ctx, t.db, contentUnit.MDBID, language)
 	if err != nil {
 		return "", err
 	}
-	tags, err := loadContentUnitTags(t.db, contentUnit.MDBID, language)
+	tags, err := loadContentUnitTags(ctx, t.db, contentUnit.MDBID, language)
 	if err != nil {
 		return "", err
 	}
@@ -1265,7 +1265,7 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 	if collectionID == "" {
 		contentUnitID := strings.TrimSpace(args.ContentUnitID)
 		if contentUnitID != "" {
-			collectionUIDs, lookupErr := loadCollectionUIDsForContentUnit(t.db, contentUnitID)
+			collectionUIDs, lookupErr := loadCollectionUIDsForContentUnit(ctx, t.db, contentUnitID)
 			if lookupErr != nil {
 				llm.LogIfDeb(ctx, "get_content_units_by_collection: failed to check content-unit fallback for content_unit_id=%q err=%v", contentUnitID, lookupErr)
 			}
@@ -1294,11 +1294,11 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 		return cached, nil
 	}
 
-	collection, err := loadCollectionToolResult(t.db, collectionID, language)
+	collection, err := loadCollectionToolResult(ctx, t.db, collectionID, language)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			llm.LogIfDeb(ctx, "get_content_units_by_collection: collection not found collection_id=%q", collectionID)
-			collectionUIDs, lookupErr := loadCollectionUIDsForContentUnit(t.db, collectionID)
+			collectionUIDs, lookupErr := loadCollectionUIDsForContentUnit(ctx, t.db, collectionID)
 			if lookupErr != nil {
 				llm.LogIfDeb(ctx, "get_content_units_by_collection: failed to check content-unit fallback for collection_id=%q err=%v", collectionID, lookupErr)
 			}
@@ -1319,7 +1319,7 @@ func (t *GetContentUnitsByCollectionTool) Execute(ctx context.Context, arguments
 	}
 	llm.LogIfDeb(ctx, "get_content_units_by_collection: resolved collection mdb_id=%d uid=%q", collection.MDBID, collection.UID)
 
-	rows, err := t.db.Query(contentUnitsByCollectionQuery, language, collection.MDBID, consts.SEC_PUBLIC, limit)
+	rows, err := t.db.QueryContext(ctx, contentUnitsByCollectionQuery, language, collection.MDBID, consts.SEC_PUBLIC, limit)
 	if err != nil {
 		return "", fmt.Errorf("get_content_units_by_collection: query failed: %w", err)
 	}
@@ -1429,7 +1429,7 @@ func (c *postgreSQLToolCache) set(key string, value string) {
 	c.bytes += sizeBytes
 }
 
-func loadSourceNodeToolResult(db *sql.DB, sourceID string, language string) (*sourceNodeToolResult, error) {
+func loadSourceNodeToolResult(ctx context.Context, db *sql.DB, sourceID string, language string) (*sourceNodeToolResult, error) {
 	rowQuery := sourceByUIDQuery
 	queryValue := interface{}(sourceID)
 	if numericID, ok := parsePostgreSQLToolNumericID(sourceID); ok {
@@ -1437,7 +1437,7 @@ func loadSourceNodeToolResult(db *sql.DB, sourceID string, language string) (*so
 		queryValue = numericID
 	}
 
-	row := db.QueryRow(rowQuery, language, queryValue)
+	row := db.QueryRowContext(ctx, rowQuery, language, queryValue)
 	item, err := scanSourceNodeToolResult(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1449,19 +1449,19 @@ func loadSourceNodeToolResult(db *sql.DB, sourceID string, language string) (*so
 	return &item, nil
 }
 
-func loadAuthorToolResult(db *sql.DB, authorID string, language string) (*authorToolResult, error) {
+func loadAuthorToolResult(ctx context.Context, db *sql.DB, authorID string, language string) (*authorToolResult, error) {
 	author := &authorToolResult{}
 	var err error
 
 	if numericID, ok := parsePostgreSQLToolNumericID(authorID); ok {
-		err = db.QueryRow(authorMetadataByMDBIDQuery, language, numericID).Scan(
+		err = db.QueryRowContext(ctx, authorMetadataByMDBIDQuery, language, numericID).Scan(
 			&author.MDBID,
 			&author.Code,
 			&author.Name,
 			&author.FullName,
 		)
 	} else {
-		err = db.QueryRow(authorMetadataByCodeQuery, language, authorID).Scan(
+		err = db.QueryRowContext(ctx, authorMetadataByCodeQuery, language, authorID).Scan(
 			&author.MDBID,
 			&author.Code,
 			&author.Name,
@@ -1479,7 +1479,7 @@ func loadAuthorToolResult(db *sql.DB, authorID string, language string) (*author
 	return author, nil
 }
 
-func loadCollectionToolResult(db *sql.DB, collectionID string, language string) (*collectionToolResult, error) {
+func loadCollectionToolResult(ctx context.Context, db *sql.DB, collectionID string, language string) (*collectionToolResult, error) {
 	rowQuery := collectionByUIDQuery
 	queryValue := interface{}(collectionID)
 	if numericID, ok := parsePostgreSQLToolNumericID(collectionID); ok {
@@ -1487,7 +1487,7 @@ func loadCollectionToolResult(db *sql.DB, collectionID string, language string) 
 		queryValue = numericID
 	}
 
-	row := db.QueryRow(rowQuery, language, consts.SEC_PUBLIC, queryValue)
+	row := db.QueryRowContext(ctx, rowQuery, language, consts.SEC_PUBLIC, queryValue)
 	item, err := scanCollectionToolResult(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1499,7 +1499,7 @@ func loadCollectionToolResult(db *sql.DB, collectionID string, language string) 
 	return &item, nil
 }
 
-func loadContentUnitToolResult(db *sql.DB, contentUnitID string, language string) (*contentUnitToolResult, error) {
+func loadContentUnitToolResult(ctx context.Context, db *sql.DB, contentUnitID string, language string) (*contentUnitToolResult, error) {
 	rowQuery := contentUnitByUIDQuery
 	queryValue := interface{}(contentUnitID)
 	if numericID, ok := parsePostgreSQLToolNumericID(contentUnitID); ok {
@@ -1507,7 +1507,7 @@ func loadContentUnitToolResult(db *sql.DB, contentUnitID string, language string
 		queryValue = numericID
 	}
 
-	row := db.QueryRow(rowQuery, language, consts.SEC_PUBLIC, queryValue)
+	row := db.QueryRowContext(ctx, rowQuery, language, consts.SEC_PUBLIC, queryValue)
 	item, err := scanContentUnitToolResult(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1519,8 +1519,8 @@ func loadContentUnitToolResult(db *sql.DB, contentUnitID string, language string
 	return &item, nil
 }
 
-func loadContentUnitCollections(db *sql.DB, contentUnitMDBID int64, language string) ([]collectionToolResult, error) {
-	rows, err := db.Query(collectionsByContentUnitQuery, language, consts.SEC_PUBLIC, contentUnitMDBID)
+func loadContentUnitCollections(ctx context.Context, db *sql.DB, contentUnitMDBID int64, language string) ([]collectionToolResult, error) {
+	rows, err := db.QueryContext(ctx, collectionsByContentUnitQuery, language, consts.SEC_PUBLIC, contentUnitMDBID)
 	if err != nil {
 		return nil, fmt.Errorf("get_content_unit: collections query failed: %w", err)
 	}
@@ -1540,8 +1540,8 @@ func loadContentUnitCollections(db *sql.DB, contentUnitMDBID int64, language str
 	return items, nil
 }
 
-func loadContentUnitSources(db *sql.DB, contentUnitMDBID int64, language string) ([]sourceNodeToolResult, error) {
-	rows, err := db.Query(sourcesByContentUnitQuery, language, contentUnitMDBID)
+func loadContentUnitSources(ctx context.Context, db *sql.DB, contentUnitMDBID int64, language string) ([]sourceNodeToolResult, error) {
+	rows, err := db.QueryContext(ctx, sourcesByContentUnitQuery, language, contentUnitMDBID)
 	if err != nil {
 		return nil, fmt.Errorf("get_content_unit: sources query failed: %w", err)
 	}
@@ -1561,8 +1561,8 @@ func loadContentUnitSources(db *sql.DB, contentUnitMDBID int64, language string)
 	return items, nil
 }
 
-func loadContentUnitTags(db *sql.DB, contentUnitMDBID int64, language string) ([]tagToolResult, error) {
-	rows, err := db.Query(tagsByContentUnitQuery, language, contentUnitMDBID)
+func loadContentUnitTags(ctx context.Context, db *sql.DB, contentUnitMDBID int64, language string) ([]tagToolResult, error) {
+	rows, err := db.QueryContext(ctx, tagsByContentUnitQuery, language, contentUnitMDBID)
 	if err != nil {
 		return nil, fmt.Errorf("get_content_unit: tags query failed: %w", err)
 	}
@@ -1582,7 +1582,7 @@ func loadContentUnitTags(db *sql.DB, contentUnitMDBID int64, language string) ([
 	return items, nil
 }
 
-func loadCollectionUIDsForContentUnit(db *sql.DB, contentUnitID string) ([]string, error) {
+func loadCollectionUIDsForContentUnit(ctx context.Context, db *sql.DB, contentUnitID string) ([]string, error) {
 	rowQuery := collectionUIDsByContentUnitUIDQuery
 	queryValue := interface{}(contentUnitID)
 	if numericID, ok := parsePostgreSQLToolNumericID(contentUnitID); ok {
@@ -1590,7 +1590,7 @@ func loadCollectionUIDsForContentUnit(db *sql.DB, contentUnitID string) ([]strin
 		queryValue = numericID
 	}
 
-	rows, err := db.Query(rowQuery, consts.SEC_PUBLIC, queryValue)
+	rows, err := db.QueryContext(ctx, rowQuery, consts.SEC_PUBLIC, queryValue)
 	if err != nil {
 		return nil, fmt.Errorf("content unit collection lookup failed: %w", err)
 	}

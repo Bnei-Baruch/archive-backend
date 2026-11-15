@@ -35,6 +35,8 @@ type ESEngine struct {
 	TokensCache       *TokensCache
 	variables         VariablesV2
 	searchResultTypes []string
+	// Enabled only for reasoning tools; regular search keeps its detached work.
+	RespectCancellation bool
 }
 
 type ClassificationIntent struct {
@@ -675,13 +677,31 @@ func (e *ESEngine) timeTrack(start time.Time, operation string) {
 func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, from int, size int, preference string, checkTypo bool, searchTweets bool, searchLessonSeries bool, withHighlights bool, timeoutForHighlight time.Duration) (*QueryResult, error) {
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH)
 
+	var workers sync.WaitGroup
+	resultBuffer := 0
+	if e.RespectCancellation {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		defer func() {
+			cancel()
+			workers.Wait()
+		}()
+		// Workers can publish their final result even after an early return.
+		resultBuffer = 1
+	} else {
+		ctx = context.TODO()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// Initializing all channels.
-	suggestChannel := make(chan null.String)
+	suggestChannel := make(chan null.String, resultBuffer)
 	grammarsSingleHitIntentsChannel := make(chan []Intent, 1)
 	grammarsFilterIntentsChannel := make(chan []Intent, 1)
-	grammarsFilteredResultsByLangChannel := make(chan map[string][]FilteredSearchResult)
-	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult)
-	seriesLangChannel := make(chan map[string]*elastic.SearchResult)
+	grammarsFilteredResultsByLangChannel := make(chan map[string][]FilteredSearchResult, resultBuffer)
+	tweetsByLangChannel := make(chan map[string]*elastic.SearchResult, resultBuffer)
+	seriesLangChannel := make(chan map[string]*elastic.SearchResult, resultBuffer)
 
 	filterIntents := []Intent{}
 	filteredByLang := map[string][]FilteredSearchResult{}
@@ -701,86 +721,105 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	// Search grammars in parallel to native search.
-	go func() {
+	workers.Add(1)
+	go func(query Query) {
+		defer workers.Done()
+		singleHitIntents := []Intent{}
+		grammarFilterIntents := []Intent{}
+		filtered := map[string][]FilteredSearchResult{}
+		intentsPublished := false
 		defer func() {
 			if err := recover(); err != nil {
 				log.Errorf("ESEngine.DoSearch - Panic searching grammars: %+v", err)
-				grammarsSingleHitIntentsChannel <- []Intent{}
-				grammarsFilterIntentsChannel <- []Intent{}
-				grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
+				singleHitIntents, grammarFilterIntents = []Intent{}, []Intent{}
+				filtered = map[string][]FilteredSearchResult{}
 			}
+			if !intentsPublished {
+				grammarsSingleHitIntentsChannel <- singleHitIntents
+				grammarsFilterIntentsChannel <- grammarFilterIntents
+			}
+			grammarsFilteredResultsByLangChannel <- filtered
 		}()
-		if singleHitIntents, filterIntents, err := e.SearchGrammarsV2(&query, from, size, sortBy, resultTypes, preference); err != nil {
+		var err error
+		singleHitIntents, grammarFilterIntents, err = e.SearchGrammarsV2(ctx, &query, from, size, sortBy, resultTypes, preference)
+		if err != nil {
 			log.Errorf("ESEngine.DoSearch - Error searching grammars: %+v", err)
-			grammarsSingleHitIntentsChannel <- []Intent{}
-			grammarsFilterIntentsChannel <- []Intent{}
-			grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
-		} else {
-			grammarsSingleHitIntentsChannel <- singleHitIntents
-			grammarsFilterIntentsChannel <- filterIntents
-			if filtered, err := e.SearchByFilterIntents(filterIntents, query.Filters, query.Term, from, size, sortBy, resultTypes, preference, query.Deb); err != nil {
-				log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
-				grammarsFilteredResultsByLangChannel <- map[string][]FilteredSearchResult{}
-			} else {
-				grammarsFilteredResultsByLangChannel <- filtered
-			}
+			return
 		}
-	}()
+		// Publish intents before the potentially slower filtered search.
+		grammarsSingleHitIntentsChannel <- singleHitIntents
+		grammarsFilterIntentsChannel <- grammarFilterIntents
+		intentsPublished = true
+		filtered, err = e.SearchByFilterIntents(ctx, grammarFilterIntents, query.Filters, query.Term, from, size, sortBy, resultTypes, preference, query.Deb)
+		if err != nil {
+			log.Errorf("ESEngine.DoSearch - Error searching filtered results by grammars: %+v", err)
+			filtered = map[string][]FilteredSearchResult{}
+		}
+	}(query)
 
 	if searchTweets {
 		// Search tweets in parallel to native search.
-		go func() {
+		workers.Add(1)
+		go func(query Query) {
+			defer workers.Done()
 			defer func() {
 				if err := recover(); err != nil {
 					log.Errorf("ESEngine.DoSearch - Panic searching tweets: %+v", err)
 					tweetsByLangChannel <- map[string]*elastic.SearchResult{}
 				}
 			}()
-			if tweetsByLang, err := e.SearchTweets(query, sortBy, from, size, preference); err != nil {
+			if tweetsByLang, err := e.SearchTweets(ctx, query, sortBy, from, size, preference); err != nil {
 				log.Errorf("ESEngine.DoSearch - Error searching tweets: %+v", err)
 				tweetsByLangChannel <- map[string]*elastic.SearchResult{}
 			} else {
 				tweetsByLangChannel <- tweetsByLang
 			}
-		}()
+		}(query)
 	}
 
 	if searchLessonSeries {
 		// Search lesson series
-		go func() {
+		workers.Add(1)
+		go func(query Query) {
+			defer workers.Done()
 			defer func() {
 				if err := recover(); err != nil {
 					log.Errorf("ESEngine.DoSearch - Panic searching lesson series: %+v", err)
 					seriesLangChannel <- map[string]*elastic.SearchResult{}
 				}
 			}()
-			if byLang, err := e.LessonsSeries(query, preference); err != nil {
+			if byLang, err := e.LessonsSeries(ctx, query, preference); err != nil {
 				log.Errorf("ESEngine.DoSearch - Error searching lesson series: %+v", err)
 				seriesLangChannel <- map[string]*elastic.SearchResult{}
 			} else {
 				seriesLangChannel <- byLang
 			}
-		}()
+		}(query)
 	}
 
 	filterIntents = <-grammarsFilterIntentsChannel
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	LogIfDeb(&query, IntentsToStringDebug("GRAMMAR FILTER INTENTS", filterIntents))
 
 	if checkTypo {
-		go func() {
+		workers.Add(1)
+		go func(query Query) {
+			defer workers.Done()
 			defer func() {
 				if err := recover(); err != nil {
 					log.Errorf("ESEngine.GetTypoSuggest - Panic getting typo suggest: %+v", err)
 					suggestChannel <- null.String{"", false}
 				}
 			}()
-			if suggestText, err := e.GetTypoSuggest(query, filterIntents); err != nil {
+			if suggestText, err := e.GetTypoSuggest(ctx, query, filterIntents); err != nil {
 				log.Errorf("ESEngine.GetTypoSuggest - Error getting typo suggest: %+v", err)
 				suggestChannel <- null.String{"", false}
 			} else {
 				suggestChannel <- suggestText
 			}
-		}()
+		}(query)
 	}
 
 	LogIfDeb(&query, fmt.Sprintf("query.Intents: %d", len(query.Intents)))
@@ -799,7 +838,10 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	LogIfDeb(&query, fmt.Sprintf("query.Intents: %d", len(query.Intents)))
 	// Grammar engine is currently support a search for classification intents according to 'by_content_type_and_source' rule only.
 	// If we have classification intents from Grammar, IntentsEngine will search for intents only by tag.
-	intents, err := e.AddIntents(&query, preference, sortBy, true, !hasClassificationIntentFromGrammar, filterIntents)
+	intents, err := e.AddIntents(ctx, &query, preference, sortBy, true, !hasClassificationIntentFromGrammar, filterIntents)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if err != nil {
 		log.Errorf("ESEngine.DoSearch - Error adding intents: %+v", err)
 	}
@@ -838,8 +880,11 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 
 	// Do regular search.
 	beforeDoSearch := time.Now()
-	mr, err := multiSearchService.Do(context.TODO())
+	mr, err := multiSearchService.Do(ctx)
 	e.timeTrack(beforeDoSearch, consts.LAT_DOSEARCH_MULTISEARCHDO)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if err != nil {
 		return nil, errors.Wrap(err, "ESEngine.DoSearch - Error multisearch Do.")
 	}
@@ -984,6 +1029,9 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 	}
 
 	filteredByLang = <-grammarsFilteredResultsByLangChannel
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	LogIfDeb(&query, fmt.Sprintf("---- GRAMMAR SEARCH FILTERED ----"))
 	for k, v := range filteredByLang {
 		LogIfDeb(&query, fmt.Sprintf("\t%+v:", k))
@@ -1272,7 +1320,8 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 				beforeHighlightsDoSearch := time.Now()
 				for i, hr := range highlightRequests {
 					go func(req *elastic.SearchRequest, idx int) {
-						highlightCtx, cancelFn := context.WithTimeout(context.TODO(), timeoutForHighlight)
+						defer wg.Done()
+						highlightCtx, cancelFn := context.WithTimeout(ctx, timeoutForHighlight)
 						defer cancelFn()
 						mssHighlights := e.esc.MultiSearch().Add(req)
 						mr, err := mssHighlights.Do(highlightCtx)
@@ -1282,10 +1331,12 @@ func (e *ESEngine) DoSearch(ctx context.Context, query Query, sortBy string, fro
 							mhErrors[idx] = err
 						}
 						mhResults[idx] = mr
-						wg.Done()
 					}(hr, i)
 				}
 				wg.Wait()
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				e.timeTrack(beforeHighlightsDoSearch, consts.LAT_DOSEARCH_MULTISEARCHHIGHLIGHTSDO)
 				responses := []*elastic.SearchResult{}
 				for i, mhResult := range mhResults {

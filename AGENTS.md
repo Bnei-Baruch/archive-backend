@@ -19,7 +19,7 @@
 - Register tools with `ReasoningToolManager`; pass `ToolCalls()` and `ToolHandlers()` to reasoning calls. Same-response calls execute with bounded parallelism, preserving output order.
 - Argument/usage mistakes return `llm.RecoverableToolError`, converted to JSON for model correction. Infrastructure/runtime failures remain normal errors.
 - Keep schemas strict (`additionalProperties: false` where possible); reuse existing security/published checks and business logic.
-- Propagate the run context through tools and `AssetsService.Doc2Text` so cancellation and finish-now interrupt document fetches.
+- Propagate the run context through reasoning-tool SQL, Elasticsearch, and `AssetsService.Doc2Text`. The reasoning-tool factory enables `ESEngine.RespectCancellation`; regular search keeps detached work. Reasoning ES calls inherit the run context (including highlights and grammar SQL); cancel/join their workers before releasing a run slot. Cancellation is an error, not model retry guidance.
 - Never expose provider bodies, database errors, or panic details to clients when `deb=false`. Log details and use `ReasoningProgressFailureMessage`; raw failure details are debug-only.
 
 ## Provider Differences
@@ -47,6 +47,8 @@ Replay-provider sessions use `chat_reasoning_sessions.go`.
 - Terminal states: `completed`, `failed`, `canceled`. `has_draft_results` enables finish-now; rapid previews use `rapid_results_available`/`rapid_results`. Other status hints are defined in `reasoning_progress.go`.
 - Successful empty results are `no_results=true`, `results=[]`, `summary=null`, not a failure.
 - Query length and per-iteration tool limits use `llm.reasoning-search-max-query-characters` and `llm.reasoning-search-max-tools-per-iteration`. Skipped calls still need protocol-compatible outputs, logging, and `debug.skipped_tool_calls`.
+- `Runtime.RunGuard` admits starts/follow-ups, cache-hit session creation, and debug synchronous searches before session preparation. Code defaults in `reasoning_run_guard.go`: 30 active runs, 60 attempts/IP/minute, 5,000 prepared starts/UTC day, five-minute deadline; reject with 429 and `Retry-After`. Commit the daily reservation after successful preparation; otherwise cleanup refunds it for the same UTC day, retaining the IP attempt. Counts are process-local, reset on restart, and are not dollar budgets. Status/result/cancel remain available.
+- Run slots are released only after tracked tools/drafts/bootstrap workers exit. Forwarded client IPs are trusted only through the loopback/Docker proxy ranges in `api/reasoning_search_limits.go`; those proxies must append/overwrite forwarding headers correctly.
 
 ## Workflow and Sessions
 - API `session_id` identifies a backend workflow, not a provider session. Stores are in-memory with `llm.reasoning-session-ttl`; status/result/follow-up renew live sessions. Missing/expired IDs are errors, never implicit new searches.

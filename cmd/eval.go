@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"encoding/csv"
 	"fmt"
 	"io/ioutil"
@@ -98,8 +99,8 @@ func init() {
 	testTypoSuggestCmd.MarkFlagRequired("typos_path")
 	testTypoSuggestCmd.PersistentFlags().StringVar(&language, "lang", "", "Index language.")
 	testTypoSuggestCmd.MarkFlagRequired("lang")
-  testTypoSuggestCmd.PersistentFlags().StringVar(&elasticUrl, "elastic", "", "URL of Elastic.")
-  testTypoSuggestCmd.MarkFlagRequired("elastic")
+	testTypoSuggestCmd.PersistentFlags().StringVar(&elasticUrl, "elastic", "", "URL of Elastic.")
+	testTypoSuggestCmd.MarkFlagRequired("elastic")
 	RootCmd.AddCommand(testTypoSuggestCmd)
 }
 
@@ -355,7 +356,7 @@ func testTypoSuggestFn(cmd *cobra.Command, args []string) {
 
 	for _, t := range typos {
 		query := search.Query{Term: t, LanguageOrder: consts.SEARCH_LANG_ORDER[language]}
-		res, err := engine.GetTypoSuggest(query, nil)
+		res, err := engine.GetTypoSuggest(context.TODO(), query, nil)
 		utils.Must(err)
 		if res.Valid {
 			log.Infof("Suggest for '%s' is: '%s'.", t, res.String)
@@ -375,7 +376,7 @@ func testTypoSuggestFn(cmd *cobra.Command, args []string) {
 
 		query := search.Query{Term: e.Query, LanguageOrder: consts.SEARCH_LANG_ORDER[language]}
 
-		res, err := engine.GetTypoSuggest(query, nil)
+		res, err := engine.GetTypoSuggest(context.TODO(), query, nil)
 		utils.Must(err)
 		if res.Valid {
 			log.Infof("Suggest for '%s' is: '%s'. Check if this is false positive.", e.Query, res.String)

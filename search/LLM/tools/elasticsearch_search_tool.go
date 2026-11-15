@@ -311,6 +311,9 @@ func (t *ElasticsearchSearchTool) Execute(ctx context.Context, arguments json.Ra
 		true,
 		t.timeoutForHighlight,
 	)
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
 	if err != nil {
 		llm.LogIfDeb(ctx, "elasticsearch_search: runtime search failure query=%q err=%v", queryText, err)
 		return marshalToolResult(elasticsearchSearchToolResult{

@@ -855,7 +855,8 @@ func selectAIQueryBatchesWithReader(ctx context.Context, service llm.Service, co
 
 	for i, batch := range batches {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			setErr(err)
+			break
 		}
 		i, batch := i, batch
 		wg.Add(1)
@@ -951,7 +952,7 @@ func loadSourceDocumentEntry(ctx context.Context, tool *aiSourceDocumentLoader, 
 		&tool.cache,
 		sourceID+"|"+language,
 		func() (string, error) {
-			return tool.resolveFileUID(sourceID, language)
+			return tool.resolveFileUID(ctx, sourceID, language)
 		},
 		func(fileUID string) (string, error) {
 			content, err := tool.assetsService.Doc2Text(ctx, fileUID)
@@ -972,7 +973,7 @@ func loadTranscriptDocumentEntry(ctx context.Context, tool *aiTranscriptDocument
 		&tool.cache,
 		contentUnitID+"|"+language,
 		func() (string, error) {
-			return tool.resolveFileUID(contentUnitID, language, kiteiMakorType.ID)
+			return tool.resolveFileUID(ctx, contentUnitID, language, kiteiMakorType.ID)
 		},
 		func(fileUID string) (string, error) {
 			content, err := tool.assetsService.Doc2Text(ctx, fileUID)
@@ -984,20 +985,20 @@ func loadTranscriptDocumentEntry(ctx context.Context, tool *aiTranscriptDocument
 	)
 }
 
-func (t *aiSourceDocumentLoader) resolveFileUID(sourceID string, language string) (string, error) {
+func (t *aiSourceDocumentLoader) resolveFileUID(ctx context.Context, sourceID string, language string) (string, error) {
 	return resolveAIQueryIdentifier(
 		sourceID,
 		func(numericID int64) (string, error) {
-			return t.resolveByMDBID(numericID, language)
+			return t.resolveByMDBID(ctx, numericID, language)
 		},
 		func(uid string) (string, error) {
-			return t.resolveByUID(uid, language)
+			return t.resolveByUID(ctx, uid, language)
 		},
 	)
 }
 
-func (t *aiSourceDocumentLoader) resolveByUID(sourceUID string, language string) (string, error) {
-	return queryAIQueryFileUIDWithLanguageFallback(
+func (t *aiSourceDocumentLoader) resolveByUID(ctx context.Context, sourceUID string, language string) (string, error) {
+	return queryAIQueryFileUIDWithLanguageFallback(ctx,
 		t.db,
 		"query_source_ai",
 		language,
@@ -1008,8 +1009,8 @@ func (t *aiSourceDocumentLoader) resolveByUID(sourceUID string, language string)
 	)
 }
 
-func (t *aiSourceDocumentLoader) resolveByMDBID(sourceID int64, language string) (string, error) {
-	return queryAIQueryFileUIDWithLanguageFallback(
+func (t *aiSourceDocumentLoader) resolveByMDBID(ctx context.Context, sourceID int64, language string) (string, error) {
+	return queryAIQueryFileUIDWithLanguageFallback(ctx,
 		t.db,
 		"query_source_ai",
 		language,
@@ -1020,20 +1021,20 @@ func (t *aiSourceDocumentLoader) resolveByMDBID(sourceID int64, language string)
 	)
 }
 
-func (t *aiTranscriptDocumentLoader) resolveFileUID(contentUnitID string, language string, excludedTypeID int64) (string, error) {
+func (t *aiTranscriptDocumentLoader) resolveFileUID(ctx context.Context, contentUnitID string, language string, excludedTypeID int64) (string, error) {
 	return resolveAIQueryIdentifier(
 		contentUnitID,
 		func(numericID int64) (string, error) {
-			return t.resolveByMDBID(numericID, language, excludedTypeID)
+			return t.resolveByMDBID(ctx, numericID, language, excludedTypeID)
 		},
 		func(uid string) (string, error) {
-			return t.resolveByUID(uid, language, excludedTypeID)
+			return t.resolveByUID(ctx, uid, language, excludedTypeID)
 		},
 	)
 }
 
-func (t *aiTranscriptDocumentLoader) resolveByUID(contentUnitUID string, language string, excludedTypeID int64) (string, error) {
-	return queryAIQueryFileUIDWithLanguageFallback(
+func (t *aiTranscriptDocumentLoader) resolveByUID(ctx context.Context, contentUnitUID string, language string, excludedTypeID int64) (string, error) {
+	return queryAIQueryFileUIDWithLanguageFallback(ctx,
 		t.db,
 		"query_transcript_ai",
 		language,
@@ -1044,8 +1045,8 @@ func (t *aiTranscriptDocumentLoader) resolveByUID(contentUnitUID string, languag
 	)
 }
 
-func (t *aiTranscriptDocumentLoader) resolveByMDBID(contentUnitID int64, language string, excludedTypeID int64) (string, error) {
-	return queryAIQueryFileUIDWithLanguageFallback(
+func (t *aiTranscriptDocumentLoader) resolveByMDBID(ctx context.Context, contentUnitID int64, language string, excludedTypeID int64) (string, error) {
+	return queryAIQueryFileUIDWithLanguageFallback(ctx,
 		t.db,
 		"query_transcript_ai",
 		language,
@@ -1101,9 +1102,9 @@ func (c *aiQueryDocumentCache) set(cacheKey string, value *aiQueryDocumentCacheE
 	c.bytes += entry.sizeBytes
 }
 
-func queryAIQueryFileUID(db *sql.DB, toolName string, query string, args ...interface{}) (string, error) {
+func queryAIQueryFileUID(ctx context.Context, db *sql.DB, toolName string, query string, args ...interface{}) (string, error) {
 	fileUID := ""
-	if err := db.QueryRow(query, args...).Scan(&fileUID); err != nil {
+	if err := db.QueryRowContext(ctx, query, args...).Scan(&fileUID); err != nil {
 		if err == sql.ErrNoRows {
 			return "", nil
 		}
@@ -1112,9 +1113,9 @@ func queryAIQueryFileUID(db *sql.DB, toolName string, query string, args ...inte
 	return fileUID, nil
 }
 
-func queryAIQueryFileUIDWithLanguageFallback(db *sql.DB, toolName string, language string, withLanguageQuery string, withLanguageArgs []interface{}, fallbackQuery string, fallbackArgs []interface{}) (string, error) {
+func queryAIQueryFileUIDWithLanguageFallback(ctx context.Context, db *sql.DB, toolName string, language string, withLanguageQuery string, withLanguageArgs []interface{}, fallbackQuery string, fallbackArgs []interface{}) (string, error) {
 	if language != "" {
-		fileUID, err := queryAIQueryFileUID(db, toolName, withLanguageQuery, withLanguageArgs...)
+		fileUID, err := queryAIQueryFileUID(ctx, db, toolName, withLanguageQuery, withLanguageArgs...)
 		if err != nil {
 			return "", err
 		}
@@ -1122,7 +1123,7 @@ func queryAIQueryFileUIDWithLanguageFallback(db *sql.DB, toolName string, langua
 			return fileUID, nil
 		}
 	}
-	return queryAIQueryFileUID(db, toolName, fallbackQuery, fallbackArgs...)
+	return queryAIQueryFileUID(ctx, db, toolName, fallbackQuery, fallbackArgs...)
 }
 
 func resolveAIQueryIdentifier(identifier string, resolveByMDBID func(int64) (string, error), resolveByUID func(string) (string, error)) (string, error) {

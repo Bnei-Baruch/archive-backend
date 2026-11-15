@@ -48,7 +48,7 @@ func (e *ESEngine) AddIntentSecondRound(h *elastic.SearchHit, intent Intent, que
 	return nil, nil, nil
 }
 
-func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, searchTags bool, searchSources bool, filterIntents []Intent) ([]Intent, error) {
+func (e *ESEngine) AddIntents(ctx context.Context, query *Query, preference string, sortBy string, searchTags bool, searchSources bool, filterIntents []Intent) ([]Intent, error) {
 
 	intents := make([]Intent, 0)
 
@@ -188,10 +188,10 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 		}
 	}
 	beforeFirstRoundDo := time.Now()
-	mr, err := mssFirstRound.Do(context.TODO())
+	mr, err := mssFirstRound.Do(ctx)
 	e.timeTrack(beforeFirstRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO)
 	if err != nil {
-		return intents, errors.Wrap(err, "ESEngine.AddIntents - Error multisearch Do.")
+		return intents, fmt.Errorf("ESEngine.AddIntents - Error multisearch Do: %w", err)
 	}
 
 	// Build second request to evaluate how close the search is toward the full name.
@@ -235,8 +235,11 @@ func (e *ESEngine) AddIntents(query *Query, preference string, sortBy string, se
 	}
 
 	beforeSecondRoundDo := time.Now()
-	mr, err = mssSecondRound.Do(context.TODO())
+	mr, err = mssSecondRound.Do(ctx)
 	e.timeTrack(beforeSecondRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO)
+	if err != nil {
+		return intents, fmt.Errorf("ESEngine.AddIntents - Error second-round multisearch Do: %w", err)
+	}
 	for i := 0; i < len(finalIntents); i++ {
 		res := mr.Responses[i]
 		if res.Error != nil {

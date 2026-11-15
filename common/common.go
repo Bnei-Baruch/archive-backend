@@ -179,7 +179,9 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 			if err != nil {
 				return nil, err
 			}
-			return search.NewESEngine(esc, DB, CACHE, TOKENS_CACHE, VARIABLES, consts.ES_SEARCH_RESULT_TYPES), nil
+			engine := search.NewESEngine(esc, DB, CACHE, TOKENS_CACHE, VARIABLES, consts.ES_SEARCH_RESULT_TYPES)
+			engine.RespectCancellation = true
+			return engine, nil
 		},
 		TimeoutForHighlight:    viper.GetDuration("elasticsearch.timeout-for-highlight"),
 		PostgreSQLToolCacheTTL: postgreSQLToolCacheTTL,
@@ -191,6 +193,7 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		Progress:       progress,
 		Workflow:       workflow,
 		Cancellations:  cancellations,
+		RunGuard:       llm.NewReasoningRunGuard(),
 		ReasoningCache: reasoningCache,
 		Services:       services,
 		AIToolsConfig:  aiToolsConfig,

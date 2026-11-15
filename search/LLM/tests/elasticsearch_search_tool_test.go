@@ -283,6 +283,16 @@ func TestElasticsearchSearchToolExecuteReturnsRetryPayloadOnSearchRuntimeError(t
 	}
 }
 
+func TestElasticsearchSearchToolCancellationDoesNotSuggestRetry(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	tool := llmtools.NewElasticsearchSearchTool(&fakeElasticsearchSearchEngine{err: context.Canceled}, 0)
+	result, err := tool.Execute(ctx, json.RawMessage(`{"query":"test"}`))
+	if !errors.Is(err, context.Canceled) || result != "" {
+		t.Fatalf("expected cancellation error without retry payload, got result=%q err=%v", result, err)
+	}
+}
+
 func containsString(values []string, expected string) bool {
 	for _, value := range values {
 		if value == expected {

@@ -33,6 +33,7 @@ type Runtime struct {
 	Progress       *ReasoningProgressStore
 	Workflow       *ReasoningWorkflowSessionStore
 	Cancellations  *ReasoningCancellationStore
+	RunGuard       *ReasoningRunGuard
 	ReasoningCache *ReasoningSearchCacheStore
 	Services       map[string]Service
 	AIToolsConfig  *AIToolsConfig

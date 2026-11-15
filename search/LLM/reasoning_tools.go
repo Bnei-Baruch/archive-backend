@@ -239,7 +239,8 @@ func ExecuteReasoningToolExecutions(ctx context.Context, calls []ReasoningToolEx
 
 	for i := range calls {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			setErr(err)
+			break
 		}
 		i := i
 		wg.Add(1)
@@ -279,6 +280,11 @@ func executeReasoningToolExecution(ctx context.Context, call ReasoningToolExecut
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	done, ok := TrackReasoningRunWorker(ctx)
+	if !ok {
+		return "", ctx.Err()
+	}
+	defer done()
 	handler, ok := ResolveReasoningToolHandler(call.Name, currentHandlers, plannedHandlers)
 	if !ok {
 		payload := map[string]interface{}{
