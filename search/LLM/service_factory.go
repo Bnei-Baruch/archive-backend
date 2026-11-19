@@ -17,7 +17,6 @@ const (
 	ProviderArcee      = "arcee"
 	ProviderDeepSeek   = "deepseek"
 	ProviderClaude     = "claude"
-	ProviderInception  = "inception"
 	ProviderCohere     = "cohere"
 	ProviderStub       = "stub"
 )
@@ -308,21 +307,6 @@ func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgr
 		service := NewClaudeServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint)
 		service.progress = progress
 		service.client.Timeout = requestTimeoutFromConfig("claude.request-timeout")
-		return service, nil
-	case ProviderInception:
-		token := viper.GetString("inception.token")
-		if strings.TrimSpace(token) == "" {
-			return nil, fmt.Errorf("inception.token is empty")
-		}
-		apiEndpoint := strings.TrimSpace(viper.GetString("inception.api-endpoint"))
-		pricing := []ModelPricing{}
-		if err := viper.UnmarshalKey("inception.pricing", &pricing); err != nil {
-			return nil, fmt.Errorf("failed to read inception.pricing: %w", err)
-		}
-		sessionTTL := ReasoningSessionTTLFromConfig()
-		service := NewInceptionServiceWithOptions(token, pricing, NewChatReasoningSessionStore(sessionTTL), apiEndpoint)
-		service.progress = progress
-		service.client.Timeout = requestTimeoutFromConfig("inception.request-timeout")
 		return service, nil
 	case ProviderCohere:
 		token := viper.GetString("cohere.token")
@@ -881,64 +865,6 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 			Planning:           planning,
 			Verification:       verification,
 		}, nil
-	case ProviderInception:
-		model := strings.TrimSpace(viper.GetString("inception.reasoning-search-model"))
-		if model == "" {
-			model = "mercury-2"
-		}
-
-		effort := strings.TrimSpace(viper.GetString("inception.reasoning-search-effort"))
-		if effort == "" {
-			effort = "medium"
-		}
-		switch effort {
-		case "instant", "low", "medium", "high":
-		default:
-			return nil, fmt.Errorf("reasoning effort %q is not supported for Inception models; supported values are instant, low, medium, high", effort)
-		}
-
-		maxTokens := viper.GetInt("inception.reasoning-search-max-output-tokens")
-		if maxTokens <= 0 {
-			maxTokens = defaultReasoningSearchMaxTokens
-		}
-
-		maxIterations := viper.GetInt("inception.reasoning-search-max-iterations")
-		if maxIterations <= 0 {
-			maxIterations = defaultReasoningSearchMaxIterations
-		}
-		rerunMaxIterations := viper.GetInt("inception.reasoning-search-rerun-max-iterations")
-		if rerunMaxIterations <= 0 {
-			rerunMaxIterations = defaultReasoningSearchRerunMaxIters
-		}
-
-		var planning *ReasoningSearchPlanningConfig
-		if planningEnabled {
-			var err error
-			planning, err = reasoningSearchPlanningConfigFromProvider(planningProvider, effort)
-			if err != nil {
-				return nil, err
-			}
-		}
-		var verification *ReasoningSearchVerificationConfig
-		if verificationEnabled {
-			var err error
-			verification, err = reasoningSearchVerificationConfigFromProvider(verificationProvider, effort)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		return &ReasoningSearchConfig{
-			Provider:           provider,
-			Model:              model,
-			Effort:             effort,
-			MaxTokens:          maxTokens,
-			MaxIterations:      maxIterations,
-			RerunMaxIterations: rerunMaxIterations,
-			MaxFollowups:       maxFollowups,
-			Planning:           planning,
-			Verification:       verification,
-		}, nil
 	case ProviderCohere:
 		model := strings.TrimSpace(viper.GetString("cohere.reasoning-search-model"))
 		if model == "" {
@@ -1130,7 +1056,7 @@ func reasoningSearchRapidStageConfigFromProvider(provider string, stage string, 
 	effort := strings.TrimSpace(viper.GetString(provider + ".reasoning-search-rapid-" + stage + "-effort"))
 	if effort == "" {
 		switch {
-		case provider == ProviderOpenRouter || provider == ProviderOllama || provider == ProviderInception || provider == ProviderZAI:
+		case provider == ProviderOpenRouter || provider == ProviderOllama || provider == ProviderZAI:
 			effort = defaultAIToolsEffort
 		case stage == "classifier" || stage == "finalizer":
 			effort = ""
@@ -1328,31 +1254,6 @@ func reasoningSearchPlanningConfigFromProvider(provider string, fallbackEffort s
 			maxTokens = defaultReasoningSearchPlanningMaxTokens
 		}
 		return &ReasoningSearchPlanningConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
-	case ProviderInception:
-		model := strings.TrimSpace(viper.GetString("inception.reasoning-search-planning-model"))
-		if model == "" {
-			model = strings.TrimSpace(viper.GetString("inception.reasoning-search-model"))
-		}
-		if model == "" {
-			model = "mercury-2"
-		}
-		effort := strings.TrimSpace(viper.GetString("inception.reasoning-search-planning-effort"))
-		if effort == "" {
-			effort = strings.TrimSpace(fallbackEffort)
-		}
-		if effort == "" {
-			effort = "medium"
-		}
-		switch effort {
-		case "instant", "low", "medium", "high":
-		default:
-			return nil, fmt.Errorf("reasoning effort %q is not supported for Inception models; supported values are instant, low, medium, high", effort)
-		}
-		maxTokens := viper.GetInt("inception.reasoning-search-planning-max-output-tokens")
-		if maxTokens <= 0 {
-			maxTokens = defaultReasoningSearchPlanningMaxTokens
-		}
-		return &ReasoningSearchPlanningConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
 	case ProviderCohere:
 		model := strings.TrimSpace(viper.GetString("cohere.reasoning-search-planning-model"))
 		if model == "" {
@@ -1464,13 +1365,6 @@ func validateReasoningSearchDraftEffort(provider string, model string, effort st
 			return nil
 		default:
 			return fmt.Errorf("reasoning effort %q is not supported for %s draft models; supported values are minimal, low, medium, high", effort, provider)
-		}
-	case ProviderInception:
-		switch effort {
-		case "instant", "low", "medium", "high":
-			return nil
-		default:
-			return fmt.Errorf("reasoning effort %q is not supported for Inception draft models; supported values are instant, low, medium, high", effort)
 		}
 	case ProviderCohere:
 		if err := validateCohereReasoningEffort(effort); err != nil {
@@ -1715,31 +1609,6 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 			MaxTokens:      maxTokens,
 			MaxInputTokens: maxInputTokens,
 		}, nil
-	case ProviderInception:
-		model := strings.TrimSpace(viper.GetString("inception.reasoning-search-verification-model"))
-		if model == "" {
-			return nil, fmt.Errorf("inception.reasoning-search-verification-model is empty")
-		}
-		effort := strings.TrimSpace(viper.GetString("inception.reasoning-search-verification-effort"))
-		if effort == "" {
-			effort = defaultEffort
-		}
-		switch effort {
-		case "instant", "low", "medium", "high":
-		default:
-			return nil, fmt.Errorf("reasoning effort %q is not supported for Inception models; supported values are instant, low, medium, high", effort)
-		}
-		maxTokens := viper.GetInt("inception.reasoning-search-verification-max-output-tokens")
-		if maxTokens <= 0 {
-			maxTokens = defaultReasoningSearchMaxTokens
-		}
-		return &ReasoningSearchVerificationConfig{
-			Provider:       provider,
-			Model:          model,
-			Effort:         effort,
-			MaxTokens:      maxTokens,
-			MaxInputTokens: maxInputTokens,
-		}, nil
 	case ProviderCohere:
 		model := strings.TrimSpace(viper.GetString("cohere.reasoning-search-verification-model"))
 		if model == "" {
@@ -1954,28 +1823,6 @@ func aiToolsConfigFromProvider(provider string) (*AIToolsConfig, error) {
 		}
 		effort := strings.TrimSpace(viper.GetString("claude.ai-tools-effort"))
 		maxTokens := viper.GetInt("claude.ai-tools-max-output-tokens")
-		if maxTokens <= 0 {
-			maxTokens = defaultAIToolsMaxTokens
-		}
-		return &AIToolsConfig{Provider: provider, Model: model, Effort: effort, MaxTokens: maxTokens}, nil
-	case ProviderInception:
-		model := strings.TrimSpace(viper.GetString("inception.ai-tools-model"))
-		if model == "" {
-			model = strings.TrimSpace(viper.GetString("inception.reasoning-search-model"))
-		}
-		if model == "" {
-			model = "mercury-2"
-		}
-		effort := strings.TrimSpace(viper.GetString("inception.ai-tools-effort"))
-		if effort == "" {
-			effort = "medium"
-		}
-		switch effort {
-		case "instant", "low", "medium", "high":
-		default:
-			return nil, fmt.Errorf("reasoning effort %q is not supported for Inception models; supported values are instant, low, medium, high", effort)
-		}
-		maxTokens := viper.GetInt("inception.ai-tools-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultAIToolsMaxTokens
 		}

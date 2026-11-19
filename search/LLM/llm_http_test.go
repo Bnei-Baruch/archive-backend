@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"testing"
-	"time"
 )
 
 func TestCallLLMAPIHonorsCancellation(t *testing.T) {
@@ -21,26 +20,20 @@ func TestCallLLMAPIHonorsCancellation(t *testing.T) {
 	}
 }
 
-func TestCallLLMAPIWithTransientRetryRetries503(t *testing.T) {
+func TestCallLLMAPIDoesNotRetryHTTPError(t *testing.T) {
 	attempts := 0
 	client := &http.Client{Transport: llmHTTPRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 		attempts++
-		if attempts == 1 {
-			return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(bytes.NewBufferString(`{"error":"temporary"}`))}, nil
-		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(`{"ok":true}`))}, nil
+		return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(bytes.NewBufferString(`{"error":"temporary"}`))}, nil
 	})}
 
 	var response map[string]interface{}
-	err := callLLMAPIWithTransientRetryDelays(context.Background(), client, "", map[string]string{"q": "test"}, "http://example.test", &response, false, []time.Duration{time.Millisecond})
-	if err != nil {
-		t.Fatalf("expected retry to succeed, got %v", err)
+	err := callLLMAPI(context.Background(), client, "", map[string]string{"q": "test"}, "http://example.test", &response, false)
+	if err == nil || err.Error() != `HTTP error 503: {"error":"temporary"}` {
+		t.Fatalf("expected HTTP error, got %v", err)
 	}
-	if attempts != 2 {
-		t.Fatalf("expected 2 attempts, got %d", attempts)
-	}
-	if response["ok"] != true {
-		t.Fatalf("unexpected response: %#v", response)
+	if attempts != 1 {
+		t.Fatalf("expected 1 attempt, got %d", attempts)
 	}
 }
 

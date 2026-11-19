@@ -31,7 +31,7 @@ Preserve protocol-specific behavior instead of forcing every provider through id
 | xAI | Responses continuation, but omit `instructions` on resumed requests. |
 | OpenRouter | Responses API with full history replay, not `previous_response_id`. Preserve configured provider routing. |
 | Ollama | `/api/chat` with history replay; no `tool_choice`. Require `ollama.api-endpoint`; no default host. |
-| Arcee, Inception, Cohere | Shared replay chat-completions service. Transient HTTP retries are opt-in and enabled only for Inception; do not add global retries to `callLLMAPI`. |
+| Arcee, Cohere | Shared replay chat-completions service; do not add global retries to `callLLMAPI`. |
 | DeepSeek | Official `/chat/completions` with history replay; retain `reasoning_content` on tool-call turns. |
 | Claude | Anthropic `/v1/messages` with replay. Ephemeral cache breakpoints on system text and the last tool definition, never user messages/tool results; account for cache reads/writes. |
 | Stub | Local constant responses, no API calls. `[[stub.responses]]` selects by model/query; `query="*"` is a model fallback. |
@@ -73,10 +73,10 @@ Replay-provider sessions use `chat_reasoning_sessions.go`.
 - `[llm].provider` defaults to `openai`. Exact keys, defaults, fallback rules, and validation live in `search/LLM/service_factory.go` and `config.sample.toml`.
 - Stage provider selection uses `llm.reasoning-search-<stage>-provider`: planning, verification, draft, rapid-gather, rapid-classifier, rapid-finalizer. Enable flags are under `[llm]`; draft provider falls back to `llm.ai-tools-provider`.
 - Provider-stage settings follow `<provider>.reasoning-search-<stage>-{model,effort,max-output-tokens}`; main reasoning uses `<provider>.reasoning-search-*`. Unset draft model/effort/token settings fall back to AI-tools settings.
-- Unset rapid classifier/finalizer effort is `low` for OpenRouter, Ollama, Inception, Z.AI; other providers omit it. Preserve provider/model-specific effort validation.
+- Unset rapid classifier/finalizer effort is `low` for OpenRouter, Ollama, Z.AI; other providers omit it. Preserve provider/model-specific effort validation.
 - xAI Grok 4 fast: no effort; keep reasoning/planning effort empty.
 - Arcee: optional `minimal/low/medium/high`; do not send effort to `trinity-large-thinking`.
-- Inception Mercury: `instant/low/medium/high`. Cohere: optional `none/high`.
+- Cohere: optional `none/high`.
 - DeepSeek: `minimal` disables thinking; `low/medium/high` map to `high`, `xhigh/max` to `max`.
 - OpenRouter supports per-stage routing overrides and `openrouter.enforced-tool-use-iterations` (`0` disables forced tools). Ollama supports `num-ctx`, optional `temperature` and `structured-output-prompt-schema`; see sample config.
 - OpenAI GPT-5.6+ explicit caching applies to stable instruction prefixes, not query-specific planned turns. Rapid gather/classifier/finalizer overrides inherit the global flag when unset. Tested defaults: automatic globally/gather, explicit classifier, automatic finalizer until tested.

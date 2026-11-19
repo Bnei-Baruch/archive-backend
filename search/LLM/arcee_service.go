@@ -69,18 +69,3 @@ func normalizeArceeAPIBaseURL(apiBaseURL string) string {
 	}
 	return apiBaseURL
 }
-
-func inceptionReasoningEffortValue(_ string, reasoningEffort *string) (*string, error) {
-	if reasoningEffort == nil {
-		return nil, nil
-	}
-	effort := strings.TrimSpace(*reasoningEffort)
-	switch effort {
-	case "":
-		return nil, nil
-	case "instant", "low", "medium", "high":
-		return &effort, nil
-	default:
-		return nil, fmt.Errorf("reasoning effort %q is not supported for Inception models; supported values are instant, low, medium, high", *reasoningEffort)
-	}
-}

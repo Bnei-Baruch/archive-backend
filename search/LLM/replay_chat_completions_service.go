@@ -15,8 +15,6 @@ type ReplayChatCompletionsService struct {
 	sessions             *ChatReasoningSessionStore
 	serviceName          string
 	reasoningEffortValue func(model string, reasoningEffort *string) (*string, error)
-	// Opt-in only for providers with observed transient 5xx instability.
-	retryTransientErrors bool
 }
 
 var _ Service = (*ReplayChatCompletionsService)(nil)
@@ -434,7 +432,7 @@ func (s *ReplayChatCompletionsService) getChatResponseWithUsage(ctx context.Cont
 
 	req := ChatCompletionsRequest{Model: model, Messages: normalizedMessages, MaxTokens: maxTokens, ResponseFormat: responseFormat, ReasoningEffort: reasoningEffort, Stream: false}
 	var chatResp ChatCompletionsResponse
-	if err := s.callAPI(ctx, req, s.apiBaseURL+"/chat/completions", &chatResp, logRawBody); err != nil {
+	if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, logRawBody); err != nil {
 		return nil, usageTotals, err
 	}
 	usageTotals.Add(chatResp.Usage)
@@ -545,7 +543,7 @@ func (s *ReplayChatCompletionsService) getReasoningResponseWithTools(ctx context
 
 		req := ChatCompletionsRequest{Model: model, Messages: currentMessages, MaxTokens: maxTokens, ResponseFormat: nil, ReasoningEffort: reasoningEffort, Tools: currentTools, ToolChoice: currentToolChoice, Stream: false}
 		var chatResp ChatCompletionsResponse
-		if err := s.callAPI(ctx, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
+		if err := callLLMAPI(ctx, s.client, s.token, req, s.apiBaseURL+"/chat/completions", &chatResp, deb); err != nil {
 			return nil, nil, LLMUsageTotals{}, 0, nil, nil, err
 		}
 		iterations = i + 1
@@ -667,13 +665,6 @@ func (s *ReplayChatCompletionsService) label() string {
 		return "ChatCompletions"
 	}
 	return s.serviceName
-}
-
-func (s *ReplayChatCompletionsService) callAPI(ctx context.Context, data interface{}, endpoint string, result interface{}, logRawBody bool) error {
-	if s.retryTransientErrors {
-		return callLLMAPIWithTransientRetry(ctx, s.client, s.token, data, endpoint, result, logRawBody)
-	}
-	return callLLMAPI(ctx, s.client, s.token, data, endpoint, result, logRawBody)
 }
 
 func (s *ReplayChatCompletionsService) normalizeReasoningEffort(model string, reasoningEffort *string) (*string, error) {
