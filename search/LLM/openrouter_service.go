@@ -495,6 +495,10 @@ func (s *OpenRouterService) getReasoningResponseWithTools(
 	}
 
 	resultsReadyCalled := false
+	// TODO: Extract shared loop/session orchestration behind provider adapters,
+	// alongside table-driven config in service_factory.go. Until then, keep retries,
+	// JSON recovery, and progress changes consistent across all provider loops,
+	// preserving intentional protocol differences.
 	for i := 0; i < maxIterations; i++ {
 		stepStarted := time.Now()
 		isFinalIteration := i == maxIterations-1

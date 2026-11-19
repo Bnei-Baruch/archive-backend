@@ -106,6 +106,11 @@ func NewServiceFromConfigWithProgress(progress *ReasoningProgressStore) (Service
 	return NewServiceForProviderWithProgress(ProviderFromConfig(), progress)
 }
 
+// TODO: Make provider construction/configuration table-driven like
+// reasoningSearchRapidStageConfigFromProvider, and extract shared loop/session
+// orchestration behind small provider adapters. Until then, apply shared retry,
+// JSON recovery, and progress changes across all providers together, preserving
+// intentional protocol differences.
 func NewServiceForProviderWithProgress(provider string, progress *ReasoningProgressStore) (Service, error) {
 	switch provider {
 	case ProviderOpenAI:
