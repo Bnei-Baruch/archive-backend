@@ -37,7 +37,9 @@ func SetupRoutes(router *gin.Engine) {
 		router.POST("/search/reasoning/cancel", ReasoningSearchCancelHandler)
 		router.POST("/search/reasoning/finish-now", ReasoningSearchFinishNowHandler)
 		router.POST("/search/reasoning/cache", ReasoningSearchCacheHandler)
-		router.POST("/search/reasoning", ReasoningSearchHandler)
+		if viper.GetBool("llm.sync-endpoint-enabled") {
+			router.POST("/search/reasoning", ReasoningSearchHandler)
+		}
 		router.GET("/search/reasoning/status", ReasoningSearchStatusHandler)
 		router.GET("/search/reasoning/result", ReasoningSearchResultHandler)
 	}

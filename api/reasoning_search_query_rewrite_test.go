@@ -179,9 +179,9 @@ func TestNormalizeReasoningSearchRequestLimitsQueryCharacters(t *testing.T) {
 }
 
 func TestReasoningSearchHandlersReturnStructuredQueryTooLongError(t *testing.T) {
-	oldMode := viper.Get("server.mode")
-	defer viper.Set("server.mode", oldMode)
-	viper.Set("server.mode", gin.DebugMode)
+	oldSyncEnabled := viper.Get("llm.sync-endpoint-enabled")
+	defer viper.Set("llm.sync-endpoint-enabled", oldSyncEnabled)
+	viper.Set("llm.sync-endpoint-enabled", true)
 	oldLimit := viper.Get("llm.reasoning-search-max-query-characters")
 	defer viper.Set("llm.reasoning-search-max-query-characters", oldLimit)
 	viper.Set("llm.reasoning-search-max-query-characters", 3)

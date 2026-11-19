@@ -390,11 +390,11 @@ func ReasoningSearchStatusHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// Debug-only synchronous entrypoint. Production clients use
+// Opt-in synchronous entrypoint for manual testing. Production clients use
 // /search/reasoning/start + status + result.
 func ReasoningSearchHandler(c *gin.Context) {
-	if viper.GetString("server.mode") != gin.DebugMode {
-		NewHttpError(http.StatusForbidden, errors.New("synchronous reasoning search is only available in debug mode"), gin.ErrorTypePublic).Abort(c)
+	if !viper.GetBool("llm.sync-endpoint-enabled") {
+		NewHttpError(http.StatusForbidden, errors.New("synchronous reasoning search requires llm.sync-endpoint-enabled=true"), gin.ErrorTypePublic).Abort(c)
 		return
 	}
 	r := ReasoningSearchRequest{}

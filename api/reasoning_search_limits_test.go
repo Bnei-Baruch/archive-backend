@@ -61,7 +61,7 @@ func (s *limitedRunService) GetReasoningStructuredOutputWithToolsForSession(ctx 
 }
 
 func TestReasoningSearchRunAdmissionAndCleanup(t *testing.T) {
-	for key, value := range map[string]interface{}{"llm.provider": "stub", "llm.reasoning-search-planning-enabled": false, "llm.reasoning-search-verification-enabled": false, "server.mode": "debug"} {
+	for key, value := range map[string]interface{}{"llm.provider": "stub", "llm.reasoning-search-planning-enabled": false, "llm.reasoning-search-verification-enabled": false, "llm.sync-endpoint-enabled": true} {
 		previous := viper.Get(key)
 		viper.Set(key, value)
 		key := key
