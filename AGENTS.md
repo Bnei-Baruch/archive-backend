@@ -69,6 +69,7 @@ Replay-provider sessions use `chat_reasoning_sessions.go`.
 - User-facing highlights come from ES and lookup evidence, not model-generated text; backend ranking/truncation controls display.
 - Regular ES search excludes LIKUTIM; reasoning opts in with `Query.IncludeLikutim`. Preserve this flag in rebuilt highlight queries.
 - ES tool outputs omit internal hit IDs/routing, pagination metadata, profiling, and execution timings. Keep `_score`/`max_score`, public IDs/relationships, `_source`, highlights, and nested result data; retain timeout/shard-failure warnings. This filtering is model-facing only.
+- `elasticsearch_search` defaults to and caps `size` at 50 results per call; the model can page with `from`. This tool-specific cap does not change regular-search pagination.
 
 ## Configuration
 - `[llm].provider` defaults to `openai`. Exact keys, defaults, fallback rules, and validation live in `search/LLM/service_factory.go` and `config.sample.toml`.

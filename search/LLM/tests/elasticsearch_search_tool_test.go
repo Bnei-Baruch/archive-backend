@@ -112,7 +112,7 @@ func TestElasticsearchSearchToolExecuteExactPhrase(t *testing.T) {
 	if engine.from != 0 {
 		t.Fatalf("unexpected from: %d", engine.from)
 	}
-	if engine.size != consts.API_MAX_PAGE_SIZE {
+	if engine.size != 50 {
 		t.Fatalf("unexpected size: %d", engine.size)
 	}
 	if engine.preference == "" {
@@ -172,8 +172,69 @@ func TestElasticsearchSearchToolExecuteMergesParsedFilters(t *testing.T) {
 	if engine.sortBy != consts.SORT_BY_RELEVANCE {
 		t.Fatalf("unexpected default sort_by: %s", engine.sortBy)
 	}
-	if engine.from != 0 || engine.size != consts.API_DEFAULT_PAGE_SIZE {
+	if engine.from != 0 || engine.size != 50 {
 		t.Fatalf("unexpected paging: from=%d size=%d", engine.from, engine.size)
+	}
+}
+
+func TestElasticsearchSearchToolPageSizeLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name                 string
+		size, from, wantSize int
+	}{
+		{"omitted", 0, 0, 50},
+		{"zero", 0, 0, 50},
+		{"negative", -1, 0, 50},
+		{"small", 10, 0, 10},
+		{"maximum", 50, 0, 50},
+		{"over-maximum", 51, 0, 50},
+		{"large", 1000, 0, 50},
+		{"next-page", 50, 50, 50},
+		{"next-page-clamped", 1000, 100, 50},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := &fakeElasticsearchSearchEngine{}
+			tool := llmtools.NewElasticsearchSearchTool(engine, 0)
+			args := map[string]interface{}{"query": "test", "from": tc.from}
+			if tc.name != "omitted" {
+				args["size"] = tc.size
+			}
+			arguments, err := json.Marshal(args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := tool.Execute(context.Background(), arguments)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if engine.size != tc.wantSize || engine.from != tc.from {
+				t.Fatalf("unexpected paging: from=%d size=%d", engine.from, engine.size)
+			}
+			var payload struct {
+				From int `json:"from"`
+				Size int `json:"size"`
+			}
+			if err := json.Unmarshal([]byte(result), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Size != tc.wantSize || payload.From != tc.from {
+				t.Fatalf("unexpected paging metadata: %#v", payload)
+			}
+		})
+	}
+}
+
+func TestElasticsearchSearchToolDocumentsPagingLimit(t *testing.T) {
+	tool := llmtools.NewElasticsearchSearchTool(&fakeElasticsearchSearchEngine{}, 0)
+	parameters := tool.Definition().Parameters.(map[string]interface{})
+	properties := parameters["properties"].(map[string]interface{})
+	size := properties["size"].(map[string]interface{})
+	if size["maximum"] != 50 {
+		t.Fatalf("expected schema maximum 50, got %v", size["maximum"])
+	}
+	usage := tool.UsageExplanation()
+	if !strings.Contains(usage, "maximum 50 results per call") || !strings.Contains(usage, "from=50") {
+		t.Fatal("model instructions must explain the page size limit and from pagination")
 	}
 }
 

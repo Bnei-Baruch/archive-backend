@@ -16,7 +16,10 @@ import (
 	"github.com/Bnei-Baruch/archive-backend/utils"
 )
 
-const elasticsearchSearchMaxPartialResults = 12
+const (
+	elasticsearchSearchMaxPartialResults = 12
+	elasticsearchSearchMaxPageSize       = 50
+)
 
 type ElasticsearchSearchEngine interface {
 	DoSearch(
@@ -110,13 +113,14 @@ func (t *ElasticsearchSearchTool) Definition() llm.ReasoningToolDefinition {
 				},
 				"from": map[string]interface{}{
 					"type":        "integer",
-					"description": "Zero-based result offset.",
+					"description": "Zero-based result offset. Request another page using from (e.g. from=50 with size=50).",
 					"minimum":     0,
 				},
 				"size": map[string]interface{}{
 					"type":        "integer",
-					"description": "Maximum number of results to return.",
+					"description": "Results per page, default and maximum 50. Use from to request another page.",
 					"minimum":     1,
+					"maximum":     elasticsearchSearchMaxPageSize,
 				},
 				"exact_phrase": map[string]interface{}{
 					"type":        "boolean",
@@ -201,8 +205,8 @@ Arguments:
 - filters: optional structured filters as described above.
 - language: optional UI language used for language ordering. Example values: en, ru, es, he. If not specified or invalid, defaults to en. Note that the search results may contain content in various languages regardless of this parameter, since it is only used for language ordering based on detected language and language filters.
 - sort_by: optional result sort.
-- from: optional zero-based offset.
-- size: optional page size.
+- from: optional zero-based offset. Request another page using from; with size=50, use from=0, then from=50, then from=100, and so on. Keep the same query, filters, language, and sort when paging.
+- size: optional page size, default 50 and maximum 50 results per call. Larger values are clamped to 50. Use smaller pages when sufficient; use from if you need more results.
 - exact_phrase: optional boolean. When true, the full query is treated as one exact phrase and requires a non-empty query.
 Behavior:
 - Returns JSON with the normalized search query, selected sort, pagination, and Elasticsearch result payload.
@@ -724,11 +728,8 @@ func normalizeElasticsearchSearchFrom(from int) int {
 }
 
 func normalizeElasticsearchSearchSize(size int) int {
-	if size <= 0 {
-		return consts.API_DEFAULT_PAGE_SIZE
-	}
-	if size > consts.API_MAX_PAGE_SIZE {
-		return consts.API_MAX_PAGE_SIZE
+	if size <= 0 || size > elasticsearchSearchMaxPageSize {
+		return elasticsearchSearchMaxPageSize
 	}
 	return size
 }

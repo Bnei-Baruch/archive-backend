@@ -11,8 +11,14 @@ import (
 )
 
 func TestReasoningRoutesRequireLLMEnabled(t *testing.T) {
-	previous := viper.Get("llm")
-	t.Cleanup(func() { viper.Set("llm", previous) })
+	previous := viper.AllSettings()
+	viper.Reset()
+	t.Cleanup(func() {
+		viper.Reset()
+		for key, value := range previous {
+			viper.Set(key, value)
+		}
+	})
 	endpoints := []struct{ method, path string }{
 		{http.MethodPost, "/search/reasoning"},
 		{http.MethodPost, "/search/reasoning/start"},
