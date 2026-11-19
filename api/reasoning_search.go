@@ -32,7 +32,7 @@ type ReasoningSearchRequest struct {
 	SessionID       *string `json:"session_id" form:"session_id"`
 	CancelSessionID *string `json:"cancel_session_id" form:"cancel_session_id"`
 	Query           string  `json:"q" form:"q"`
-	Deb             bool    `json:"deb" form:"deb" binding:"omitempty"`
+	Deb             bool    `json:"deb" form:"deb" binding:"omitempty"` // TODO: deb should later be allowed only for developers/admins (Keycloak role)
 	UILanguage      string  `json:"ui_language" form:"ui_language" binding:"omitempty,len=2"`
 	IsRapid         bool    `json:"is_rapid" form:"is_rapid" binding:"omitempty"`
 }
