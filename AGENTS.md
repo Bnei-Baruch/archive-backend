@@ -13,7 +13,8 @@
 - Use stubs/mocked transports for provider tests; do not make paid provider calls unless explicitly requested.
 
 ## Runtime and Tools
-- Use `llm.Service` (`search/LLM/service.go`). `common.Init()` builds one app-scoped `common.LLM_RUNTIME` containing shared tools, stores, and provider services; never construct services per request.
+- AI is opt-in: `llm.enabled` defaults to `false`. Disabled startup skips LLM config validation, providers, tools, and session stores; no AI credentials are required, and reasoning routes are not registered. Regular search remains available.
+- Use `llm.Service` (`search/LLM/service.go`). When AI is enabled, `common.Init()` builds one app-scoped `common.LLM_RUNTIME` containing shared tools, stores, and provider services; never construct services per request.
 - Shared layers: `base_service.go` for client/pricing/debug helpers; `openai_compatible_service.go` for OpenAI-compatible Responses/chat; `replay_chat_completions_service.go` for replay-based chat providers. These paths are under `search/LLM/`.
 - Tool infrastructure: `search/LLM/reasoning_tools.go`; implementations: `search/LLM/tools/`; app-scoped builder: `search/LLM/tools/manager.go`.
 - Register tools with `ReasoningToolManager`; pass `ToolCalls()` and `ToolHandlers()` to reasoning calls. Same-response calls execute with bounded parallelism, preserving output order.

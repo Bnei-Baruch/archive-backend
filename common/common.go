@@ -106,6 +106,15 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 	}
 
 	ASSETS = integration.NewAssetsService(viper.GetString("assets_service.url"))
+	initLLMRuntime()
+	return clock
+}
+
+func initLLMRuntime() {
+	if !viper.GetBool("llm.enabled") {
+		return
+	}
+	var err error
 	//	Progress tracks transient UI/status updates for the current run
 	progress := llm.NewReasoningProgressStore(llm.ReasoningSessionTTLFromConfig())
 	//	Workflow stores stage/provider/session metadata needed to resume or rerun correctly
@@ -200,8 +209,6 @@ func InitWithDefault(defaultDb *sql.DB, defaultCache *cache.CacheManager) time.T
 		DraftConfig:    draftConfig,
 		RapidConfig:    rapidConfig,
 	}
-
-	return clock
 }
 
 func Shutdown() {
@@ -225,6 +232,7 @@ func Shutdown() {
 		if LLM_RUNTIME.ReasoningCache != nil {
 			utils.Must(LLM_RUNTIME.ReasoningCache.Close())
 		}
+		LLM_RUNTIME = nil
 	}
 	utils.Must(DB.Close())
 	ESC.Stop()
