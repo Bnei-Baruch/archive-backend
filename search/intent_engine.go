@@ -187,6 +187,9 @@ func (e *ESEngine) AddIntents(ctx context.Context, query *Query, preference stri
 			potentialIntents = append(potentialIntents, Intent{consts.INTENT_TYPE_SOURCE, language, grammarIntent})
 		}
 	}
+	if len(potentialIntents) == 0 {
+		return intents, nil
+	}
 	beforeFirstRoundDo := time.Now()
 	mr, err := mssFirstRound.Do(ctx)
 	e.timeTrack(beforeFirstRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_FIRSTROUNDDO)
@@ -234,6 +237,10 @@ func (e *ESEngine) AddIntents(ctx context.Context, query *Query, preference stri
 		}
 	}
 
+	// No eligible matches means there is no second-round search to send.
+	if len(finalIntents) == 0 {
+		return intents, nil
+	}
 	beforeSecondRoundDo := time.Now()
 	mr, err = mssSecondRound.Do(ctx)
 	e.timeTrack(beforeSecondRoundDo, consts.LAT_DOSEARCH_ADDINTENTS_SECONDROUNDDO)
