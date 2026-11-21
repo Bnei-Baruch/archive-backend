@@ -85,16 +85,14 @@ func (s *OpenAIReasoningSessionStore) createWithID(sessionID string, lastRespons
 func (s *OpenAIReasoningSessionStore) Get(sessionID string) (*OpenAIReasoningSession, error) {
 	now := time.Now()
 
-	s.mu.RLock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	session, ok := s.sessions[sessionID]
-	s.mu.RUnlock()
 	if !ok {
 		return nil, ErrReasoningSessionNotFoundOrExpired
 	}
 	if now.After(session.ExpiresAt) {
-		s.mu.Lock()
 		delete(s.sessions, sessionID)
-		s.mu.Unlock()
 		return nil, ErrReasoningSessionNotFoundOrExpired
 	}
 

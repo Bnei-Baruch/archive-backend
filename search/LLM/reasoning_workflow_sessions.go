@@ -912,16 +912,14 @@ func clearReasoningWorkflowRunState(session *ReasoningWorkflowSession) {
 func (s *ReasoningWorkflowSessionStore) IsFinalizedFromDraft(sessionID string) (bool, error) {
 	now := time.Now()
 
-	s.mu.RLock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	session, ok := s.sessions[sessionID]
-	s.mu.RUnlock()
 	if !ok {
 		return false, ErrReasoningSessionNotFoundOrExpired
 	}
 	if now.After(session.ExpiresAt) {
-		s.mu.Lock()
 		delete(s.sessions, sessionID)
-		s.mu.Unlock()
 		return false, ErrReasoningSessionNotFoundOrExpired
 	}
 	return session.FinalizedFromDraft, nil
