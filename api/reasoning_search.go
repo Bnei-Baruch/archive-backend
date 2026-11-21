@@ -3553,6 +3553,10 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 	} else {
 		mergeReasoningSearchDraftUsage(&response, runs, usage, r.Deb)
 	}
+	if response.Debug != nil {
+		// Shared ES diagnostics are rapid-only in the API response.
+		response.Debug.RapidClassifierUnhandledUIDs = nil
+	}
 	if err := workflowStore.SetResponseSnapshot(responseSessionID, &response); err != nil {
 		return err
 	}

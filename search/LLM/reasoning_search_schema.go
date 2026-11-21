@@ -116,7 +116,7 @@ type ReasoningSearchDebugInfo struct {
 	RapidGatherLatencyMS         int64                                 `json:"rapid_gather_latency_ms,omitempty"`
 	RapidFinalizerLatencyMS      int64                                 `json:"rapid_finalizer_latency_ms,omitempty"`
 	RapidGatheredCandidateCount  int                                   `json:"rapid_gathered_candidate_count,omitempty"`
-	RapidClassifierUnhandledUIDs []string                              `json:"rapid_classifier_unhandled_uids"`
+	RapidClassifierUnhandledUIDs []string                              `json:"rapid_classifier_unhandled_uids,omitempty"`
 	RapidClassifierResultCount   int                                   `json:"rapid_classifier_result_count,omitempty"`
 	RapidFinalizerResultCount    int                                   `json:"rapid_finalizer_result_count,omitempty"`
 	AIToolsCalls                 []ReasoningSearchAIToolCallDebug      `json:"ai_tools_calls,omitempty"`
