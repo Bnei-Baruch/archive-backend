@@ -25,8 +25,10 @@ func TestSanitizeReasoningSearchHighlightHTML(t *testing.T) {
 	}{
 		{"emphasis", `<em>important</em> & text`, `<em>important</em> &amp; text`},
 		{"script", `<script>alert(1)</script>`, `&lt;script&gt;alert(1)&lt;/script&gt;`},
-		{"image", `<img src=x onerror="alert(1)">`, `&lt;img src=x onerror=&#34;alert(1)&#34;&gt;`},
-		{"em-attributes", `<em onmouseover='alert(1)'>text</em>`, `&lt;em onmouseover=&#39;alert(1)&#39;&gt;text</em>`},
+		{"image", `<img src=x onerror="alert(1)">`, `&lt;img src=x onerror="alert(1)"&gt;`},
+		{"em-attributes", `<em onmouseover='alert(1)'>text</em>`, `&lt;em onmouseover='alert(1)'&gt;text</em>`},
+		{"quotes", `Rabash's "article" <em>text</em>`, `Rabash's "article" <em>text</em>`},
+		{"encoded-quotes", `Rabash&#39;s &#34;article&#34; &quot;title&quot;`, `Rabash's "article" "title"`},
 		{"uppercase", `<EM>text</EM>`, `&lt;EM&gt;text&lt;/EM&gt;`},
 		{"self-closing", `<em/>text`, `&lt;em/&gt;text`},
 		{"malformed", `<img src=x onerror=alert(1)`, `&lt;img src=x onerror=alert(1)`},

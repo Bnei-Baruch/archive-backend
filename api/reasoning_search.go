@@ -1341,7 +1341,9 @@ func sanitizeReasoningSearchHighlightHTML(value string) string {
 		start = match[1]
 	}
 	b.WriteString(html.EscapeString(html.UnescapeString(value[start:])))
-	return b.String()
+	// Quotes are safe in text nodes; keep punctuation readable for text-rendering clients.
+	text := strings.ReplaceAll(b.String(), "&#34;", `"`)
+	return strings.ReplaceAll(text, "&#39;", "'")
 }
 
 func addDistinctReasoningSearchDisplayHighlight(items []llm.ReasoningSearchHighlight, candidate llm.ReasoningSearchHighlight) []llm.ReasoningSearchHighlight {
