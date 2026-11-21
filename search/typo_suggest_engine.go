@@ -51,7 +51,7 @@ func (c *ConstantTerms) ReplaceTerms(s string) string {
 	return s
 }
 
-func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.String, error) {
+func (e *ESEngine) GetTypoSuggest(ctx context.Context, query Query, filterIntents []Intent) (null.String, error) {
 	srv := e.esc.Search()
 	suggestText := null.String{"", false}
 	constantTerms := ConstantTerms{pattern: consts.TERMS_PATTERN_DIGITS}
@@ -156,7 +156,7 @@ func (e *ESEngine) GetTypoSuggest(query Query, filterIntents []Intent) (null.Str
 
 	srv.Suggester(suggester)
 	beforeDoSearch := time.Now()
-	r, err := srv.Do(context.TODO())
+	r, err := srv.Do(ctx)
 	e.timeTrack(beforeDoSearch, "DoSearch.TypoSuggestDo")
 	if err != nil {
 		return suggestText, errors.Wrap(err, "ESEngine.DoSearch - Error TypoSuggestDo Do.")

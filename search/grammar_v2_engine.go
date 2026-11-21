@@ -150,7 +150,7 @@ func (e *ESEngine) suggestResultsToVariablesByPhrases(query *Query, result *elas
 }
 
 // Return: single hit intents, filtering intents
-func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy string, resultTypes []string, preference string) ([]Intent, []Intent, error) {
+func (e *ESEngine) SearchGrammarsV2(ctx context.Context, query *Query, from int, size int, sortBy string, resultTypes []string, preference string) ([]Intent, []Intent, error) {
 	singleHitIntents := []Intent{}
 	filterIntents := []Intent{}
 	if query.Term != "" && len(query.ExactTerms) > 0 {
@@ -197,11 +197,11 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 						leafPrefixType = &val
 					}
 				}
-				path, err := e.sourcePathFromSql(*sourceUid, language, position, leafPrefixType)
+				path, err := e.sourcePathFromSql(ctx, *sourceUid, language, position, leafPrefixType)
 				if err != nil {
 					return nil, nil, errors.Wrap(err, "sourcePathFromSql")
 				}
-				intents, err := e.getSingleHitIntentsBySource(*sourceUid, query.Filters, language, path, 3000.0, elastic.SearchExplanation{})
+				intents, err := e.getSingleHitIntentsBySource(ctx, *sourceUid, query.Filters, language, path, 3000.0, elastic.SearchExplanation{})
 				if err != nil {
 					return nil, nil, errors.Wrap(err, "getSingleHitIntentsBySource")
 				}
@@ -222,10 +222,10 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		}
 	}
 	beforeGrammarSearch := time.Now()
-	mr, err := multiSearchService.Do(context.TODO())
+	mr, err := multiSearchService.Do(ctx)
 	e.timeTrack(beforeGrammarSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "Error looking for grammar search.")
+		return nil, nil, fmt.Errorf("Error looking for grammar search: %w", err)
 	}
 
 	if len(mr.Responses) != len(query.LanguageOrder)*queriesNumForLang {
@@ -242,7 +242,7 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 		}
 		language := query.LanguageOrder[i/queriesNumForLang]
 		if haveHits(currentResults) {
-			if languageSingleHitIntents, languageFilterIntents, err := e.searchResultsToIntents(query, language, currentResults); err != nil {
+			if languageSingleHitIntents, languageFilterIntents, err := e.searchResultsToIntents(ctx, query, language, currentResults); err != nil {
 				return nil, nil, err
 			} else {
 				singleHitIntents = append(singleHitIntents, languageSingleHitIntents...)
@@ -270,10 +270,16 @@ func (e *ESEngine) SearchGrammarsV2(query *Query, from int, size int, sortBy str
 }
 
 // Search according to grammar based filter.
-func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[string][]string, originalSearchTerm string, from int, size int, sortBy string, resultTypes []string, preference string, deb bool) (map[string][]FilteredSearchResult, error) {
+func (e *ESEngine) SearchByFilterIntents(ctx context.Context, filterIntents []Intent, filters map[string][]string, originalSearchTerm string, from int, size int, sortBy string, resultTypes []string, preference string, deb bool) (map[string][]FilteredSearchResult, error) {
 	resultsByLang := map[string][]FilteredSearchResult{}
 	var wg sync.WaitGroup
+	defer wg.Wait()
+	var resultsMu sync.Mutex
 	for _, intent := range filterIntents {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		intent := intent
 		if intentValue, ok := intent.Value.(GrammarIntent); ok {
 			var contentType string
 			var text string
@@ -324,7 +330,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 						} else {
 							scoreMultiplication = &intentValue.Score
 						}
-						results, hitIdsMap, maxScore, err := e.filterSearch(requests, scoreIncrement, scoreMultiplication)
+						results, hitIdsMap, maxScore, err := e.filterSearch(ctx, requests, scoreIncrement, scoreMultiplication)
 						if err != nil {
 							log.Errorf("FilterSearch error: %+v", err)
 							return
@@ -340,7 +346,9 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 							if programCollection != "" {
 								resultByLang.ProgramCollection = &programCollection
 							}
+							resultsMu.Lock()
 							resultsByLang[intent.Language] = append(resultsByLang[intent.Language], resultByLang)
+							resultsMu.Unlock()
 						}
 					}()
 				}
@@ -350,7 +358,7 @@ func (e *ESEngine) SearchByFilterIntents(filterIntents []Intent, filters map[str
 		}
 	}
 	wg.Wait()
-	return resultsByLang, nil
+	return resultsByLang, ctx.Err()
 }
 
 func (e *ESEngine) VariableMapToFilterValues(vMap map[string][]string, language string) []FilterValue {
@@ -411,7 +419,7 @@ func updateIntentCount(intentsCount map[string][]Intent, intent Intent) float64 
 }
 
 // Return values: singleHitIntents, filterIntents, error
-func (e *ESEngine) searchResultsToIntents(query *Query, language string, result *elastic.SearchResult) ([]Intent, []Intent, error) {
+func (e *ESEngine) searchResultsToIntents(ctx context.Context, query *Query, language string, result *elastic.SearchResult) ([]Intent, []Intent, error) {
 	// log.Infof("Total Hits: %d, Max Score: %.2f", result.Hits.TotalHits, *result.Hits.MaxScore)
 	defer e.timeTrack(time.Now(), consts.LAT_DOSEARCH_GRAMMARS_RESULTSTOINTENTS)
 	filterIntents := []Intent(nil)
@@ -530,7 +538,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				if programUid == nil {
 					return nil, nil, errors.New(fmt.Sprintf("Relevant program content unit is not found by collection '%v' and position '%v'.", programCollection, position))
 				}
-				singleHit, err := e.contentUnitHitFromSql(*programUid, language)
+				singleHit, err := e.contentUnitHitFromSql(ctx, *programUid, language)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -601,7 +609,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				if val, ok := consts.ES_SRC_PARENTS_FOR_CHAPTER_POSITION_INDEX[source]; ok {
 					leafPrefixType = &val
 				}
-				path, err := e.sourcePathFromSql(*relevantSource, language, &position, leafPrefixType)
+				path, err := e.sourcePathFromSql(ctx, *relevantSource, language, &position, leafPrefixType)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -609,7 +617,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 				if hit.Explanation != nil {
 					expl = *hit.Explanation
 				}
-				intents, err := e.getSingleHitIntentsBySource(*relevantSource, query.Filters, language, path, *hit.Score, expl)
+				intents, err := e.getSingleHitIntentsBySource(ctx, *relevantSource, query.Filters, language, path, *hit.Score, expl)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -646,7 +654,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
 						log.Infof("Converting LandingPage of %s %s to a single collection.", location, year)
 						var err error
-						collectionHit, mdbUid, err := e.conventionsLandingPageToCollectionHit(year, location)
+						collectionHit, mdbUid, err := e.conventionsLandingPageToCollectionHit(ctx, year, location)
 						if err != nil {
 							log.Warnf("%+v", err)
 							return nil, nil, errors.New(fmt.Sprintf("ConventionsLandingPageToCollectionHit Failed: %+v", err))
@@ -673,7 +681,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 						// Since the LandingPage has only one collection item, convert the LandingPage result to the single collection hit
 						log.Infof("Converting LandingPage of %s %s to a single collection.", holiday, year)
 						var err error
-						collectionHit, mdbUid, err := e.holidaysLandingPageToCollectionHit(year, holiday)
+						collectionHit, mdbUid, err := e.holidaysLandingPageToCollectionHit(ctx, year, holiday)
 						if err != nil {
 							log.Warnf("%+v", err)
 							return nil, nil, errors.New(fmt.Sprintf("HolidaysLandingPageToCollectionHit Failed: %+v", err))
@@ -717,7 +725,7 @@ func (e *ESEngine) searchResultsToIntents(query *Query, language string, result 
 	return normalizedSingleHitIntents, filterIntents, nil
 }
 
-func (e *ESEngine) conventionsLandingPageToCollectionHit(year string, location string) (*elastic.SearchHit, *string, error) {
+func (e *ESEngine) conventionsLandingPageToCollectionHit(ctx context.Context, year string, location string) (*elastic.SearchHit, *string, error) {
 	queryMask := `select c.uid, c.properties from collections c 
 	where c.type_id=%d
 	%s`
@@ -753,10 +761,10 @@ func (e *ESEngine) conventionsLandingPageToCollectionHit(year string, location s
 	}
 	query := fmt.Sprintf(queryMask, mdb.CONTENT_TYPE_REGISTRY.ByName[consts.CT_CONGRESS].ID, whereQuery)
 	//log.Infof("ConventionsLandingPageToCollectionHit Query: %s", query)
-	return e.collectionHitFromSql(query)
+	return e.collectionHitFromSql(ctx, query)
 }
 
-func (e *ESEngine) holidaysLandingPageToCollectionHit(year string, holiday string) (*elastic.SearchHit, *string, error) {
+func (e *ESEngine) holidaysLandingPageToCollectionHit(ctx context.Context, year string, holiday string) (*elastic.SearchHit, *string, error) {
 	queryMask := `select c.uid, c.properties from collections c
 	join tags t on c.properties ->> 'holiday_tag' = t.uid
 	%s`
@@ -774,15 +782,15 @@ func (e *ESEngine) holidaysLandingPageToCollectionHit(year string, holiday strin
 
 	query := fmt.Sprintf(queryMask, whereQuery)
 	//log.Infof("QUERY: %s", query)
-	return e.collectionHitFromSql(query)
+	return e.collectionHitFromSql(ctx, query)
 }
 
-func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *string, error) {
+func (e *ESEngine) collectionHitFromSql(ctx context.Context, query string) (*elastic.SearchHit, *string, error) {
 	var properties json.RawMessage
 	var mdbUID string
 	var effectiveDate es.EffectiveDate
 
-	err := e.mdb.QueryRow(query).Scan(&mdbUID, &properties)
+	err := e.mdb.QueryRowContext(ctx, query).Scan(&mdbUID, &properties)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -811,7 +819,7 @@ func (e *ESEngine) collectionHitFromSql(query string) (*elastic.SearchHit, *stri
 	return hit, &mdbUID, nil
 }
 
-func (e *ESEngine) contentUnitHitFromSql(uid string, language string) (*elastic.SearchHit, error) {
+func (e *ESEngine) contentUnitHitFromSql(ctx context.Context, uid string, language string) (*elastic.SearchHit, error) {
 	var title string
 	var properties json.RawMessage
 	var effectiveDate es.EffectiveDate
@@ -820,7 +828,7 @@ func (e *ESEngine) contentUnitHitFromSql(uid string, language string) (*elastic.
 		from content_units cu join content_unit_i18n cun on cu.id = cun.content_unit_id
 		where cu.uid = '%s' and cun.language = '%s'`
 	query := fmt.Sprintf(queryMask, uid, language)
-	err := e.mdb.QueryRow(query).Scan(&properties, &title)
+	err := e.mdb.QueryRowContext(ctx, query).Scan(&properties, &title)
 	if err != nil {
 		return nil, err
 	}
@@ -851,7 +859,7 @@ func (e *ESEngine) contentUnitHitFromSql(uid string, language string) (*elastic.
 }
 
 // return: hit result, hit mdb uid, error
-func (e *ESEngine) contentUnitHitBySourceFromSql(sourceUid string, contentType string, language string) (*elastic.SearchHit, string, error) {
+func (e *ESEngine) contentUnitHitBySourceFromSql(ctx context.Context, sourceUid string, contentType string, language string) (*elastic.SearchHit, string, error) {
 	var title string
 	var uid string
 	var properties json.RawMessage
@@ -867,7 +875,7 @@ func (e *ESEngine) contentUnitHitBySourceFromSql(sourceUid string, contentType s
 		and s.uid = '%s' and cu.type_id = %d and cun.language = '%s'
 		limit 1`
 	query := fmt.Sprintf(queryMask, consts.SEC_PUBLIC, sourceUid, contentTypeId, language)
-	err := e.mdb.QueryRow(query).Scan(&uid, &properties, &title)
+	err := e.mdb.QueryRowContext(ctx, query).Scan(&uid, &properties, &title)
 	if err != nil {
 		return nil, "", err
 	}
@@ -897,7 +905,7 @@ func (e *ESEngine) contentUnitHitBySourceFromSql(sourceUid string, contentType s
 	return hit, uid, nil
 }
 
-func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position *string, leafPrefixType *consts.PositionIndexType) (string, error) {
+func (e *ESEngine) sourcePathFromSql(ctx context.Context, sourceUid string, language string, position *string, leafPrefixType *consts.PositionIndexType) (string, error) {
 	queryMask := `with recursive sourcesPath as (
 		select s.id, s.uid, s.parent_id, sn.name from source_i18n sn
 		  join  sources s on sn.source_id = s.id
@@ -919,7 +927,7 @@ func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position
 	  join sourcesPath sp on sp.id = aus.source_id
 	  where aun.language='%s'`
 	query := fmt.Sprintf(queryMask, sourceUid, language, language, language)
-	rows, err := e.mdb.Query(query)
+	rows, err := e.mdb.QueryContext(ctx, query)
 	if err != nil {
 		return "", err
 	}
@@ -939,7 +947,7 @@ func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position
 	}
 	if len(names) == 0 && language != consts.LANG_HEBREW {
 		// Try with default language
-		return e.sourcePathFromSql(sourceUid, consts.LANG_HEBREW, position, leafPrefixType)
+		return e.sourcePathFromSql(ctx, sourceUid, consts.LANG_HEBREW, position, leafPrefixType)
 	}
 	if leafPrefixType != nil && position != nil && len(names) > 0 {
 		if language == consts.LANG_HEBREW && *leafPrefixType == consts.LETTER_IF_HEBREW {
@@ -956,7 +964,7 @@ func (e *ESEngine) sourcePathFromSql(sourceUid string, language string, position
 	return ret, nil
 }
 
-func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string][]string, language string, title string, score float64, explanation elastic.SearchExplanation) ([]Intent, error) {
+func (e *ESEngine) getSingleHitIntentsBySource(ctx context.Context, source string, filters map[string][]string, language string, title string, score float64, explanation elastic.SearchExplanation) ([]Intent, error) {
 	var getLessonCI bool
 	var getProgramCI bool
 	var getSourceGI bool
@@ -987,7 +995,7 @@ func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string
 		isOneUnit := e.cache.SearchStats().IsSourceHasSingleUnit(source, consts.CT_LESSON_PART)
 		if isEnoughUnits {
 			if isOneUnit {
-				singleHit, mdbUid, err := e.contentUnitHitBySourceFromSql(source, consts.CT_LESSON_PART, language)
+				singleHit, mdbUid, err := e.contentUnitHitBySourceFromSql(ctx, source, consts.CT_LESSON_PART, language)
 				if err != nil {
 					return nil, err
 				}
@@ -1018,7 +1026,7 @@ func (e *ESEngine) getSingleHitIntentsBySource(source string, filters map[string
 		isOneUnit := e.cache.SearchStats().IsSourceHasSingleUnit(source, consts.CT_VIDEO_PROGRAM_CHAPTER)
 		if isEnoughUnits {
 			if isOneUnit {
-				singleHit, mdbUid, err := e.contentUnitHitBySourceFromSql(source, consts.CT_VIDEO_PROGRAM_CHAPTER, language)
+				singleHit, mdbUid, err := e.contentUnitHitBySourceFromSql(ctx, source, consts.CT_VIDEO_PROGRAM_CHAPTER, language)
 				if err != nil {
 					return nil, err
 				}
@@ -1100,7 +1108,7 @@ func retrieveTextVarValues(str string) []string {
 
 // Results search according to grammar based filter.
 // Return: Results, Unique list of hit id's as a map, Max score
-func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncrement *float64, scoreMultiplication *float64) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
+func (e *ESEngine) filterSearch(ctx context.Context, requests []*elastic.SearchRequest, scoreIncrement *float64, scoreMultiplication *float64) ([]*elastic.SearchResult, map[string]bool, *float64, error) {
 	results := []*elastic.SearchResult{}
 	hitIdsMap := map[string]bool{}
 	var maxScore *float64
@@ -1108,11 +1116,11 @@ func (e *ESEngine) filterSearch(requests []*elastic.SearchRequest, scoreIncremen
 	multiSearchFilteredService := e.esc.MultiSearch()
 	multiSearchFilteredService.Add(requests...)
 	beforeFilterSearch := time.Now()
-	mr, err := multiSearchFilteredService.Do(context.TODO())
+	mr, err := multiSearchFilteredService.Do(ctx)
 	e.timeTrack(beforeFilterSearch, consts.LAT_DOSEARCH_GRAMMARS_MULTISEARCHGRAMMARSDO) // TBC differentiate calls to filterSearch under single request
 
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "Error looking for grammar based filter search.")
+		return nil, nil, nil, fmt.Errorf("Error looking for grammar based filter search: %w", err)
 	}
 
 	for _, currentResults := range mr.Responses {

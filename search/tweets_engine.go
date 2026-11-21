@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, preference string) (map[string]*elastic.SearchResult, error) {
+func (e *ESEngine) SearchTweets(ctx context.Context, query Query, sortBy string, from int, size int, preference string) (map[string]*elastic.SearchResult, error) {
 	tweetsByLang := make(map[string]*elastic.SearchResult)
 	mssTweets := e.esc.MultiSearch()
 	requests, err := NewResultsSearchRequests(
@@ -34,7 +34,7 @@ func (e *ESEngine) SearchTweets(query Query, sortBy string, from int, size int, 
 	mssTweets.Add(requests...)
 
 	beforeTweetsSearch := time.Now()
-	mr, err := mssTweets.Do(context.TODO())
+	mr, err := mssTweets.Do(ctx)
 	e.timeTrack(beforeTweetsSearch, consts.LAT_DOSEARCH_MULTISEARCHTWEETSDO)
 	if err != nil {
 		return nil, err

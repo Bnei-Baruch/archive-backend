@@ -14,7 +14,7 @@ import (
 	"gopkg.in/olivere/elastic.v6"
 )
 
-func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*elastic.SearchResult, error) {
+func (e *ESEngine) LessonsSeries(ctx context.Context, query Query, preference string) (map[string]*elastic.SearchResult, error) {
 	byLang := make(map[string]*elastic.SearchResult)
 	mss := e.esc.MultiSearch()
 	_, queryTermHasDigit := utils.HasNumeric(query.Term)
@@ -38,7 +38,7 @@ func (e *ESEngine) LessonsSeries(query Query, preference string) (map[string]*el
 		mss.Add(req)
 	}
 	before := time.Now()
-	mr, err := mss.Do(context.TODO())
+	mr, err := mss.Do(ctx)
 
 	e.timeTrack(before, consts.LAT_DOSEARCH_MULTISEARCHTWEETSDO)
 	if err != nil {
