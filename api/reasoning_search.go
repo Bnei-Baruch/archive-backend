@@ -437,6 +437,9 @@ func ReasoningSearchHandler(c *gin.Context) {
 	}
 	run.Commit()
 	if err := executeReasoningSearchForSessionByMode(run.Context, runtime, db, r, sessionID, false); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Warnf("Reasoning Search synchronous execution timed out session=%s: %v", sessionID, err)
+		}
 		if errors.Is(err, llm.ErrReasoningSessionNotFoundOrExpired) {
 			NewHttpError(http.StatusNotFound, err, gin.ErrorTypePublic).Abort(c)
 			return
@@ -2363,6 +2366,10 @@ func executeReasoningSearchInBackground(ctx context.Context, runtime *llm.Runtim
 		}
 	}()
 	if err := executeReasoningSearchForSessionByMode(ctx, runtime, db, r, responseSessionID, true); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Warnf("Reasoning Search background timed out session=%s: %v", responseSessionID, err)
+			return
+		}
 		if isReasoningSearchCancellation(err) {
 			log.Infof("Reasoning Search background canceled session=%s", responseSessionID)
 			return

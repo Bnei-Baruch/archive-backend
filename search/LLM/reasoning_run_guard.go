@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 // Process-local safeguards; no external configuration is required.
@@ -51,12 +53,15 @@ func (g *ReasoningRunGuard) TryStart(parent context.Context, ip string) (*Reason
 		g.startsByIP = make(map[string]int)
 	}
 	if g.daily >= g.maxDaily {
+		log.Warnf("Reasoning run rejected: limit=daily ip=%s active=%d daily=%d max=%d", ip, g.active, g.daily, g.maxDaily)
 		return nil, int(day.Add(24*time.Hour).Sub(now)/time.Second) + 1
 	}
 	if g.startsByIP[ip] >= g.maxIP {
+		log.Warnf("Reasoning run rejected: limit=ip ip=%s active=%d daily=%d ip_starts=%d max=%d", ip, g.active, g.daily, g.startsByIP[ip], g.maxIP)
 		return nil, int(minute.Add(time.Minute).Sub(now)/time.Second) + 1
 	}
 	if g.active >= g.maxConcurrent {
+		log.Warnf("Reasoning run rejected: limit=concurrent ip=%s active=%d daily=%d max=%d", ip, g.active, g.daily, g.maxConcurrent)
 		return nil, 5
 	}
 	g.active++
