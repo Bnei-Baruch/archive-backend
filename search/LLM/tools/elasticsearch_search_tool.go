@@ -612,7 +612,7 @@ func normalizeElasticsearchSearchFilters(raw json.RawMessage) (map[string][]stri
 
 	values := map[string]interface{}{}
 	if err := json.Unmarshal(raw, &values); err != nil {
-		return nil, fmt.Errorf("elasticsearch_search: failed to parse filters: %w", err)
+		return nil, llm.NewRecoverableToolError("elasticsearch_search", fmt.Sprintf("filters must be a JSON object: %v", err), `Provide filters as an object, for example {"content_type":["LESSON_PART"]}, or omit filters.`)
 	}
 
 	ret := map[string][]string{}
@@ -717,7 +717,7 @@ func normalizeElasticsearchSearchSortBy(sortBy string, hasTextQuery bool) (strin
 	if sortBy == consts.SORT_BY_SOURCE_FIRST || consts.SORT_BY_VALUES[sortBy] {
 		return sortBy, nil
 	}
-	return "", fmt.Errorf("elasticsearch_search: unsupported sort_by '%s'", sortBy)
+	return "", llm.NewRecoverableToolError("elasticsearch_search", fmt.Sprintf("unsupported sort_by '%s'", sortBy), "Use relevance, newertoolder (newest first), oldertonewer (oldest first), or sourcefirst.")
 }
 
 func normalizeElasticsearchSearchFrom(from int) int {
