@@ -99,6 +99,26 @@ INSERT INTO collection_i18n VALUES (1, 'en', 'Public collection');`)
 	require.Equal(t, "public-c", response.Results[1].MDBUID)
 	require.Empty(t, session.PartialResults)
 
+	t.Run("blog-posts-exclude-filtered-rows", func(t *testing.T) {
+		_, err := db.ExecContext(ctx, `
+CREATE TEMP TABLE blog_posts (id bigint, blog_id bigint, wp_id bigint, title text, posted_at timestamp, filtered boolean);
+INSERT INTO blog_posts VALUES
+    (1, 1, 100, 'Public post', '2026-01-01', FALSE),
+    (2, 1, 101, 'Hidden post', '2026-01-02', TRUE),
+    (3, 2, 102, 'Other hidden post', '2026-01-03', TRUE);`)
+		require.NoError(t, err)
+		posts, err := loadReasoningSearchBlogPostMetadata(db, BaseRequest{}, []string{"1-100", "1-101", "2-102"})
+		require.NoError(t, err)
+		require.Len(t, posts, 1)
+		require.Equal(t, "Public post", posts["1-100"].Title)
+		results, err := enrichReasoningSearchResults(db, "en", []llm.ReasoningSearchResult{
+			{MDBUID: "1-100"}, {MDBUID: "1-101", Title: "Hidden post"}, {MDBUID: "2-102", Title: "Other hidden post"},
+		})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		require.Equal(t, "1-100", results[0].MDBUID)
+	})
+
 	t.Run("cached-highlights-are-escaped-on-every-hit", func(t *testing.T) {
 		entry := &llm.ReasoningSearchCacheEntry{Results: []llm.ReasoningSearchResult{{
 			MDBUID: "public-u", Highlights: []llm.ReasoningSearchHighlight{{

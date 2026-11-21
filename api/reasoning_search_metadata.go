@@ -546,7 +546,7 @@ func loadReasoningSearchBlogPostMetadata(db *sql.DB, _ BaseRequest, uids []strin
 		}
 		clauses = append(clauses, fmt.Sprintf("(blog_id = %d and wp_id in (%s))", blogID, strings.Join(wpIDStrings, ",")))
 	}
-	posts, err := mdbmodels.BlogPosts(qm.Where(strings.Join(clauses, " or "))).All(db)
+	posts, err := mdbmodels.BlogPosts(qm.Where(strings.Join(clauses, " or ")), qm.Where("filtered is false")).All(db)
 	if err != nil {
 		return nil, err
 	}
