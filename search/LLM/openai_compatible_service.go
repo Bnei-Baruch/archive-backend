@@ -184,6 +184,9 @@ type LLMBotMessage struct {
 	Refusal    *string           `json:"refusal,omitempty"`
 	ToolCalls  []MessageToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string            `json:"tool_call_id,omitempty"`
+	// Preserve Claude's original content, including signed thinking, when resending history
+	// in later tool iterations or follow-ups. Do not rerun tools or send these blocks to other providers.
+	claudeContent []ClaudeContentBlock
 }
 
 func (s *OpenAICompatibleAPIService) GetStructuredOutput(ctx context.Context, jsonSchema string, model string, maxTokens *int, messages []LLMBotMessage, promptCacheKey *string, reasoningEffort *string, output interface{}) error {

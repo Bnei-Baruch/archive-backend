@@ -3,11 +3,13 @@ package llm
 import "strings"
 
 type ModelPricing struct {
-	Model                     string  `mapstructure:"model"`
-	Effort                    string  `mapstructure:"effort"`
-	InputPer1MTokensUSD       float64 `mapstructure:"input_per_1m_tokens_usd"`
-	CachedInputPer1MTokensUSD float64 `mapstructure:"cached_input_per_1m_tokens_usd"`
-	OutputPer1MTokensUSD      float64 `mapstructure:"output_per_1m_tokens_usd"`
+	Model                     string        `mapstructure:"model"`
+	Effort                    string        `mapstructure:"effort"`
+	InputPer1MTokensUSD       float64       `mapstructure:"input_per_1m_tokens_usd"`
+	CachedInputPer1MTokensUSD float64       `mapstructure:"cached_input_per_1m_tokens_usd"`
+	OutputPer1MTokensUSD      float64       `mapstructure:"output_per_1m_tokens_usd"`
+	LongContextThreshold      int           `mapstructure:"long_context_threshold"`
+	LongContext               *ModelPricing `mapstructure:"long_context"`
 }
 
 type LLMUsageTotals struct {
@@ -17,6 +19,7 @@ type LLMUsageTotals struct {
 	OutputTokens      int
 	ReasoningTokens   int
 	TotalTokens       int
+	requests          []LLMUsageTotals
 }
 
 type LLMCostBreakdown struct {
@@ -51,6 +54,7 @@ func (u *LLMUsageTotals) Add(usage *OpenAIUsage) {
 }
 
 func (u *LLMUsageTotals) AddTotals(other LLMUsageTotals) {
+	u.requests = append(u.requests, other.requests...)
 	u.InputTokens += other.InputTokens
 	u.CachedInputTokens += other.CachedInputTokens
 	u.CacheWriteTokens += other.CacheWriteTokens
@@ -71,6 +75,34 @@ func (s *BaseLLMService) estimateCost(model string, effort string, usage LLMUsag
 	pricing, ok := s.findPricing(model, effort)
 	if !ok {
 		return LLMCostBreakdown{}
+	}
+	if pricing.LongContext != nil && pricing.LongContextThreshold > 0 {
+		if len(usage.requests) > 0 {
+			var total LLMCostBreakdown
+			for i, request := range usage.requests {
+				cost := s.estimateCost(model, effort, request)
+				if i == 0 {
+					total = cost
+					continue
+				}
+				if total.InputPer1MTokensUSD != cost.InputPer1MTokensUSD || total.CachedInputPer1MTokensUSD != cost.CachedInputPer1MTokensUSD || total.OutputPer1MTokensUSD != cost.OutputPer1MTokensUSD {
+					// Mixed tiers have no single per-token rate; keep their exact summed costs.
+					total.InputPer1MTokensUSD, total.CachedInputPer1MTokensUSD = 0, 0
+					total.CacheWritePer1MTokensUSD, total.OutputPer1MTokensUSD = 0, 0
+				} else if cost.CacheWritePer1MTokensUSD > 0 {
+					total.CacheWritePer1MTokensUSD = cost.CacheWritePer1MTokensUSD
+				}
+				total.EstimatedInputCostUSD += cost.EstimatedInputCostUSD
+				total.EstimatedCachedInputCostUSD += cost.EstimatedCachedInputCostUSD
+				total.EstimatedCacheWriteCostUSD += cost.EstimatedCacheWriteCostUSD
+				total.EstimatedOutputCostUSD += cost.EstimatedOutputCostUSD
+				total.EstimatedCostUSD += cost.EstimatedCostUSD
+			}
+			return total
+		}
+		if usage.InputTokens > pricing.LongContextThreshold {
+			pricing = pricing.LongContext
+		}
 	}
 
 	cachedInputRate := pricing.CachedInputPer1MTokensUSD

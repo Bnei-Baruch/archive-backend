@@ -828,6 +828,9 @@ func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 		}
 
 		effort := strings.TrimSpace(viper.GetString("claude.reasoning-search-effort"))
+		if _, err := claudeOutputConfig(model, &effort); err != nil {
+			return nil, err
+		}
 		maxTokens := viper.GetInt("claude.reasoning-search-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultReasoningSearchMaxTokens
@@ -1254,6 +1257,9 @@ func reasoningSearchPlanningConfigFromProvider(provider string, fallbackEffort s
 		if effort == "" {
 			effort = strings.TrimSpace(fallbackEffort)
 		}
+		if _, err := claudeOutputConfig(model, &effort); err != nil {
+			return nil, err
+		}
 		maxTokens := viper.GetInt("claude.reasoning-search-planning-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultReasoningSearchPlanningMaxTokens
@@ -1375,6 +1381,9 @@ func validateReasoningSearchDraftEffort(provider string, model string, effort st
 		if err := validateCohereReasoningEffort(effort); err != nil {
 			return fmt.Errorf("cohere.reasoning-search-draft-effort: %w", err)
 		}
+	case ProviderClaude:
+		_, err := claudeOutputConfig(model, &effort)
+		return err
 	case ProviderZAI:
 		switch effort {
 		case "minimal", "low", "medium", "high", "xhigh":
@@ -1603,6 +1612,9 @@ func reasoningSearchVerificationConfigFromProvider(provider string, defaultEffor
 		if effort == "" {
 			effort = defaultEffort
 		}
+		if _, err := claudeOutputConfig(model, &effort); err != nil {
+			return nil, err
+		}
 		maxTokens := viper.GetInt("claude.reasoning-search-verification-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultReasoningSearchMaxTokens
@@ -1827,6 +1839,9 @@ func aiToolsConfigFromProvider(provider string) (*AIToolsConfig, error) {
 			model = "claude-sonnet-4-6"
 		}
 		effort := strings.TrimSpace(viper.GetString("claude.ai-tools-effort"))
+		if _, err := claudeOutputConfig(model, &effort); err != nil {
+			return nil, err
+		}
 		maxTokens := viper.GetInt("claude.ai-tools-max-output-tokens")
 		if maxTokens <= 0 {
 			maxTokens = defaultAIToolsMaxTokens

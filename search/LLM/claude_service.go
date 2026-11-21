@@ -23,12 +23,18 @@ type ClaudeService struct {
 }
 
 type ClaudeMessageRequest struct {
-	Model     string               `json:"model"`
-	System    []ClaudeContentBlock `json:"system,omitempty"`
-	Messages  []ClaudeMessage      `json:"messages"`
-	MaxTokens *int                 `json:"max_tokens,omitempty"`
-	Tools     []ClaudeTool         `json:"tools,omitempty"`
-	Stream    bool                 `json:"stream"`
+	Model        string               `json:"model"`
+	System       []ClaudeContentBlock `json:"system,omitempty"`
+	Messages     []ClaudeMessage      `json:"messages"`
+	MaxTokens    *int                 `json:"max_tokens,omitempty"`
+	Tools        []ClaudeTool         `json:"tools,omitempty"`
+	Stream       bool                 `json:"stream"`
+	OutputConfig *ClaudeOutputConfig  `json:"output_config,omitempty"`
+	CacheControl *ClaudeCacheControl  `json:"cache_control,omitempty"`
+}
+
+type ClaudeOutputConfig struct {
+	Effort string `json:"effort"`
 }
 
 type ClaudeCacheControl struct {
@@ -50,6 +56,9 @@ type ClaudeContentBlock struct {
 	Content      string              `json:"content,omitempty"`
 	IsError      bool                `json:"is_error,omitempty"`
 	CacheControl *ClaudeCacheControl `json:"cache_control,omitempty"`
+	Thinking     *string             `json:"thinking,omitempty"`
+	Signature    string              `json:"signature,omitempty"`
+	Data         string              `json:"data,omitempty"`
 }
 
 type ClaudeTool struct {
@@ -292,6 +301,14 @@ func (s *ClaudeService) Close() error {
 
 func (s *ClaudeService) getChatResponseWithUsage(ctx context.Context, model string, maxTokens *int, messages []LLMBotMessage, jsonSchema *string, reasoningEffort *string, logRawBody bool) (*LLMBotMessage, LLMUsageTotals, error) {
 	usageTotals := LLMUsageTotals{}
+	outputConfig, err := claudeOutputConfig(model, reasoningEffort)
+	if err != nil {
+		return nil, usageTotals, err
+	}
+	if maxTokens == nil || *maxTokens <= 0 {
+		limit := defaultReasoningSearchMaxTokens
+		maxTokens = &limit
+	}
 	system, anthropicMessages, err := normalizeClaudeMessages(messages)
 	if err != nil {
 		return nil, usageTotals, err
@@ -299,7 +316,7 @@ func (s *ClaudeService) getChatResponseWithUsage(ctx context.Context, model stri
 	if jsonSchema != nil {
 		system = appendStructuredOutputInstruction(system, jsonSchema)
 	}
-	req := ClaudeMessageRequest{Model: model, Messages: anthropicMessages, MaxTokens: maxTokens, Stream: false}
+	req := ClaudeMessageRequest{Model: model, Messages: anthropicMessages, MaxTokens: maxTokens, OutputConfig: outputConfig, Stream: false}
 	if system != "" {
 		req.System = []ClaudeContentBlock{{Type: "text", Text: system, CacheControl: &ClaudeCacheControl{Type: "ephemeral"}}}
 	}
@@ -308,6 +325,9 @@ func (s *ClaudeService) getChatResponseWithUsage(ctx context.Context, model stri
 		return nil, usageTotals, err
 	}
 	usageTotals.AddTotals(claudeUsageTotals(resp.Usage))
+	if resp.StopReason == "max_tokens" {
+		return nil, usageTotals, errors.New("Claude reached max_tokens (including thinking); increase max-output-tokens or lower effort")
+	}
 	msg := claudeResponseToLLMMessage(&resp)
 	if strings.TrimSpace(msg.Content) == "" {
 		return nil, usageTotals, errors.New("claude returned empty assistant output")
@@ -320,6 +340,14 @@ func (s *ClaudeService) getReasoningResponseWithTools(ctx context.Context, metho
 		ctx = context.Background()
 	}
 	usageTotals := LLMUsageTotals{}
+	outputConfig, err := claudeOutputConfig(model, reasoningEffort)
+	if err != nil {
+		return nil, nil, usageTotals, 0, nil, nil, err
+	}
+	if maxTokens == nil || *maxTokens <= 0 {
+		limit := defaultReasoningSearchMaxTokens
+		maxTokens = &limit
+	}
 	iterations := 0
 	usedTools := []string{}
 	usedToolsSet := map[string]bool{}
@@ -387,7 +415,8 @@ func (s *ClaudeService) getReasoningResponseWithTools(ctx context.Context, metho
 			currentMessages = append(currentMessages, ClaudeMessage{Role: "user", Content: []ClaudeContentBlock{{Type: "text", Text: finalReasoningIterationInstruction}}})
 		}
 
-		req := ClaudeMessageRequest{Model: model, Messages: currentMessages, MaxTokens: maxTokens, Tools: claudeTools(currentTools), Stream: false}
+		// Automatic caching moves the breakpoint forward through tool results and follow-ups.
+		req := ClaudeMessageRequest{Model: model, Messages: currentMessages, MaxTokens: maxTokens, Tools: claudeTools(currentTools), OutputConfig: outputConfig, CacheControl: &ClaudeCacheControl{Type: "ephemeral"}, Stream: false}
 		if currentSystem != "" {
 			req.System = []ClaudeContentBlock{{Type: "text", Text: currentSystem, CacheControl: &ClaudeCacheControl{Type: "ephemeral"}}}
 		}
@@ -398,6 +427,9 @@ func (s *ClaudeService) getReasoningResponseWithTools(ctx context.Context, metho
 		iterations = i + 1
 		stepUsage := claudeUsageTotals(resp.Usage)
 		usageTotals.AddTotals(stepUsage)
+		if resp.StopReason == "max_tokens" {
+			return nil, reasoningSteps, usageTotals, iterations, usedTools, ToolDebugInfoFromContext(reasoningCtx), errors.New("Claude reached max_tokens (including thinking); increase max-output-tokens or lower effort")
+		}
 		msg := claudeResponseToLLMMessage(&resp)
 		stepThoughts := ""
 
@@ -486,6 +518,9 @@ func normalizeClaudeMessages(messages []LLMBotMessage) (string, []ClaudeMessage,
 }
 
 func claudeAssistantMessage(message *LLMBotMessage) ClaudeMessage {
+	if len(message.claudeContent) > 0 {
+		return ClaudeMessage{Role: "assistant", Content: message.claudeContent}
+	}
 	blocks := []ClaudeContentBlock{}
 	if strings.TrimSpace(message.Content) != "" {
 		blocks = append(blocks, ClaudeContentBlock{Type: "text", Text: message.Content})
@@ -529,7 +564,34 @@ func claudeResponseToLLMMessage(resp *ClaudeMessageResponse) *LLMBotMessage {
 			toolCalls = append(toolCalls, MessageToolCall{ID: block.ID, Type: "function", Function: ToolCallFunction{Name: block.Name, Arguments: args}})
 		}
 	}
-	return &LLMBotMessage{Role: "assistant", Content: strings.Join(texts, "\n"), ToolCalls: toolCalls}
+	return &LLMBotMessage{Role: "assistant", Content: strings.Join(texts, "\n"), ToolCalls: toolCalls, claudeContent: resp.Content}
+}
+
+func claudeOutputConfig(model string, reasoningEffort *string) (*ClaudeOutputConfig, error) {
+	if reasoningEffort == nil || strings.TrimSpace(*reasoningEffort) == "" {
+		return nil, nil // Leave the provider's default effort unchanged.
+	}
+	effort := strings.TrimSpace(*reasoningEffort)
+	model = strings.ToLower(strings.TrimSpace(model))
+	modern := strings.HasPrefix(model, "claude-opus-5") || strings.HasPrefix(model, "claude-sonnet-5") || strings.HasPrefix(model, "claude-haiku-5") || strings.HasPrefix(model, "claude-fable-5") || strings.HasPrefix(model, "claude-mythos-5") || strings.HasPrefix(model, "claude-opus-4-7") || strings.HasPrefix(model, "claude-opus-4-8")
+	legacy := strings.HasPrefix(model, "claude-opus-4-6") || strings.HasPrefix(model, "claude-sonnet-4-6") || strings.HasPrefix(model, "claude-opus-4-5")
+	if !modern && !legacy {
+		return nil, fmt.Errorf("reasoning effort is not supported for Claude model %q", model)
+	}
+	switch effort {
+	case "low", "medium", "high":
+	case "xhigh":
+		if !modern {
+			return nil, fmt.Errorf("reasoning effort xhigh is not supported for Claude model %q", model)
+		}
+	case "max":
+		if strings.HasPrefix(model, "claude-opus-4-5") {
+			return nil, fmt.Errorf("reasoning effort max is not supported for Claude model %q", model)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported Claude reasoning effort %q; use low, medium, high, xhigh, or max where supported", effort)
+	}
+	return &ClaudeOutputConfig{Effort: effort}, nil
 }
 
 func claudeTools(tools []ToolCall) []ClaudeTool {
@@ -562,7 +624,10 @@ func claudeUsageTotals(usage *ClaudeUsage) LLMUsageTotals {
 		return LLMUsageTotals{}
 	}
 	inputTokens := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
-	return LLMUsageTotals{InputTokens: inputTokens, CachedInputTokens: usage.CacheReadInputTokens, CacheWriteTokens: usage.CacheCreationInputTokens, OutputTokens: usage.OutputTokens, TotalTokens: inputTokens + usage.OutputTokens}
+	totals := LLMUsageTotals{InputTokens: inputTokens, CachedInputTokens: usage.CacheReadInputTokens, CacheWriteTokens: usage.CacheCreationInputTokens, OutputTokens: usage.OutputTokens, TotalTokens: inputTokens + usage.OutputTokens}
+	// Context-tier prices apply to each request, not the sum of a tool loop.
+	totals.requests = []LLMUsageTotals{totals}
+	return totals
 }
 
 func callClaudeAPI(ctx context.Context, client *http.Client, token string, data interface{}, endpoint string, result interface{}, logRawBody bool) error {

@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func TestClaudeReasoningCachesSystemAndToolsAcrossIterations(t *testing.T) {
+func TestClaudeReasoningCachesSystemToolsAndHistoryAcrossIterations(t *testing.T) {
 	sessions := NewChatReasoningSessionStore(time.Minute)
 	defer sessions.Close()
 	service := NewClaudeServiceWithOptions("test-token", nil, sessions, "https://claude.test")
@@ -23,6 +23,9 @@ func TestClaudeReasoningCachesSystemAndToolsAcrossIterations(t *testing.T) {
 			t.Fatalf("decode request: %v", err)
 		}
 		requests = append(requests, request)
+		if request.CacheControl == nil || request.CacheControl.Type != "ephemeral" {
+			t.Fatalf("expected automatic conversation caching on every iteration: %#v", request.CacheControl)
+		}
 		if len(request.System) != 1 || request.System[0].Type != "text" || request.System[0].CacheControl == nil || request.System[0].CacheControl.Type != "ephemeral" {
 			t.Fatalf("expected cacheable system text block, got %#v", request.System)
 		}
@@ -32,7 +35,7 @@ func TestClaudeReasoningCachesSystemAndToolsAcrossIterations(t *testing.T) {
 		for _, message := range request.Messages {
 			for _, block := range message.Content {
 				if block.CacheControl != nil {
-					t.Fatalf("conversation must not contain cache breakpoints: %#v", block)
+					t.Fatalf("automatic caching must not mutate conversation blocks: %#v", block)
 				}
 			}
 		}
@@ -93,6 +96,9 @@ func TestClaudeStructuredOutputCachesSystemPrefix(t *testing.T) {
 		}
 		if len(request.System) != 1 || request.System[0].CacheControl == nil || request.System[0].CacheControl.Type != "ephemeral" {
 			t.Fatalf("expected system cache breakpoint: %#v", request.System)
+		}
+		if request.CacheControl != nil {
+			t.Fatal("one-shot calls must retain prefix-only caching")
 		}
 		if len(request.Tools) != 0 || len(request.Messages) != 1 || request.Messages[0].Content[0].Text != "Variable query" || request.Messages[0].Content[0].CacheControl != nil {
 			t.Fatalf("expected uncached user query following system prefix: %#v", request)

@@ -34,7 +34,7 @@ Preserve protocol-specific behavior instead of forcing every provider through id
 | Ollama | `/api/chat` with history replay; no `tool_choice`. Require `ollama.api-endpoint`; no default host. |
 | Arcee, Cohere | Shared replay chat-completions service; do not add global retries to `callLLMAPI`. |
 | DeepSeek | Official `/chat/completions` with history replay; retain `reasoning_content` on tool-call turns. |
-| Claude | Anthropic `/v1/messages` with replay. Ephemeral cache breakpoints on system text and the last tool definition, never user messages/tool results; account for cache reads/writes. |
+| Claude | Anthropic `/v1/messages` with replay. Preserve native signed thinking/redacted-thinking blocks in assistant history. Send configured effort through `output_config.effort` only for supporting models; blank uses the provider default. New 5.x models think by default; output limits include thinking. Ephemeral breakpoints on system text and the last tool definition; reasoning requests also use top-level automatic caching for growing conversation/tool history (default 5-minute TTL), without mutating message blocks. One-shot structured/chat calls retain system-prefix caching only. |
 | Stub | Local constant responses, no API calls. `[[stub.responses]]` selects by model/query; `query="*"` is a model fallback. |
 
 Replay-provider sessions use `chat_reasoning_sessions.go`.
@@ -83,6 +83,7 @@ Replay-provider sessions use `chat_reasoning_sessions.go`.
 - OpenRouter supports per-stage routing overrides and `openrouter.enforced-tool-use-iterations` (`0` disables forced tools). Ollama supports `num-ctx`, optional `temperature` and `structured-output-prompt-schema`; see sample config.
 - OpenAI GPT-5.6+ explicit caching applies to stable instruction prefixes, not query-specific planned turns. Rapid gather/classifier/finalizer overrides inherit the global flag when unset. Tested defaults: automatic globally/gather, explicit classifier, automatic finalizer until tested.
 - Pricing: `[[<provider>.pricing]]`; shared accounting: `search/LLM/llm_pricing.go`.
+- Claude Haiku 5.5 has higher rates above 100,000 total input tokens per request (including cached input). Optional `long_context_threshold` and `[claude.pricing.long_context]` configure this tier. Preserve per-request usage for pricing tool loops; do not apply the tier to the summed run input. Mixed tiers report summed costs without a single unit rate.
 
 ## Tool Lookup and Caches
 - Definitions, schemas, and usage descriptions are the source of truth: `ai_tools.go` (source/transcript reader), `postgresql_tools.go` (book/source/collection/unit lookups), `elasticsearch_search_tool.go` (normalizes filters and runs `search.ESEngine.DoSearch`), under `search/LLM/tools/`.
