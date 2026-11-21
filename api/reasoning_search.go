@@ -3379,7 +3379,7 @@ func executeReasoningSearchForSession(ctx context.Context, runtime *llm.Runtime,
 									break
 								}
 								if validateResponseQuery {
-									if err := validateReasoningSearchResponseQuery(expectedQuery, &rerunResponse); err != nil {
+									if err = validateReasoningSearchResponseQuery(expectedQuery, &rerunResponse); err != nil {
 										if !errors.Is(err, errReasoningSearchQueryMismatch) {
 											break
 										}
