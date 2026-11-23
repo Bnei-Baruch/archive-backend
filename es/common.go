@@ -26,6 +26,7 @@ var (
 	dataFolder             string
 	sourcesFolder          string
 	unzipUrl               string
+	archiveSttUrl          string
 	prepareDocsBatchSize   int
 	prepareDocsParallelism int
 )
@@ -59,6 +60,8 @@ func InitEnv() {
 	if unzipUrl == "" {
 		panic("unzip url should be set in config.")
 	}
+
+	archiveSttUrl = strings.TrimRight(viper.GetString("elasticsearch.archive-stt-url"), "/")
 
 	prepareDocsBatchSize = utils.MinInt(viper.GetInt("elasticsearch.prepare-docs-batch-size"), 50)
 	prepareDocsParallelism = utils.MaxInt(1, viper.GetInt("elasticsearch.prepare-docs-parallelism"))
