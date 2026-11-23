@@ -29,13 +29,35 @@ func MakeContentUnitsIndex(namespace string, indexDate string, db *sql.DB, esc *
 	cui.db = db
 	cui.esc = esc
 	cui.assetsService = integration.NewAssetsService(unzipUrl)
+	if archiveSttUrl != "" {
+		cui.archiveSttService = integration.NewArchiveSttService(archiveSttUrl)
+	}
 	return cui
 }
 
 type ContentUnitsIndex struct {
 	BaseIndex
-	Progress      uint64
-	assetsService integration.AssetsService
+	Progress          uint64
+	assetsService     integration.AssetsService
+	archiveSttService integration.ArchiveSttService // nil: not configured
+}
+
+// SttUnits are the content units whose archive-stt markup has no transcript: uid -> language -> true.
+type SttUnits map[string]map[string]bool
+
+// sttUnits asks archive-stt once per indexing which content units it has heard words for (no transcript there).
+// archive-stt is optional: not configured or not answering -> nil, units are indexed without it.
+func (index *ContentUnitsIndex) sttUnits() SttUnits {
+	if index.archiveSttService == nil {
+		return nil
+	}
+	units, err := index.archiveSttService.ContentUnits()
+	if err != nil {
+		log.Warnf("Content Units Index - archive-stt content units, indexing without them: %+v", err)
+		return nil
+	}
+	log.Infof("Content Units Index - archive-stt: %d content units with no transcript.", len(units))
+	return units
 }
 
 func defaultContentUnit(cu *mdbmodels.ContentUnit) bool {
@@ -167,7 +189,7 @@ func (index *ContentUnitsIndex) removeFromIndex(scope Scope) (map[string][]strin
 	}
 }
 
-func (index *ContentUnitsIndex) bulkIndexUnits(bulk OffsetLimitJob, sqlScope string) *IndexErrors {
+func (index *ContentUnitsIndex) bulkIndexUnits(bulk OffsetLimitJob, sqlScope string, sttUnits SttUnits) *IndexErrors {
 	indexErrors := MakeIndexErrors()
 	var units []*mdbmodels.ContentUnit
 	if err := mdbmodels.NewQuery(
@@ -190,7 +212,7 @@ func (index *ContentUnitsIndex) bulkIndexUnits(bulk OffsetLimitJob, sqlScope str
 	}
 	i18nMap := make(map[string][]Result)
 	for _, unit := range units {
-		i18nUnit, unitIndexErrors := index.prepareIndexUnit(unit, indexData)
+		i18nUnit, unitIndexErrors := index.prepareIndexUnit(unit, indexData, sttUnits)
 		for lang, result := range i18nUnit {
 			i18nMap[lang] = append(i18nMap[lang], result)
 		}
@@ -241,6 +263,10 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	}
 
 	log.Debugf("Content Units Index - Adding %d units. Scope: %s", count, sqlScope)
+	if count == 0 {
+		return indexErrors
+	}
+	sttUnits := index.sttUnits()
 
 	tasks := make(chan OffsetLimitJob, 300)
 	errChan := make(chan *IndexErrors, 300)
@@ -262,7 +288,7 @@ func (index *ContentUnitsIndex) addToIndexSql(sqlScope string) *IndexErrors {
 	for w := 1; w <= 10; w++ {
 		go func(tasks <-chan OffsetLimitJob, errs chan<- *IndexErrors) {
 			for task := range tasks {
-				errs <- index.bulkIndexUnits(task, sqlScope)
+				errs <- index.bulkIndexUnits(task, sqlScope, sttUnits)
 			}
 		}(tasks, errChan)
 	}
@@ -291,7 +317,7 @@ func collectionsTypedUids(collectionsContentUnits mdbmodels.CollectionsContentUn
 	return ret
 }
 
-func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, indexData *IndexData) (map[string]Result, *IndexErrors) {
+func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, indexData *IndexData, sttUnits SttUnits) (map[string]Result, *IndexErrors) {
 	indexErrors := MakeIndexErrors()
 	// Create documents in each language with available translation
 	i18nMap := make(map[string]Result)
@@ -360,17 +386,24 @@ func (index *ContentUnitsIndex) prepareIndexUnit(cu *mdbmodels.ContentUnit, inde
 			if val, ok := indexData.MediaLanguages[cu.UID]; ok {
 				unit.FilterValues = append(unit.FilterValues, KeyValues(consts.FILTER_MEDIA_LANGUAGE, val)...)
 			}
-			if byLang, ok := indexData.Transcripts[cu.UID]; ok {
-				if val, ok := byLang[i18n.Language]; ok {
-					var err error
-					unit.Content, err = index.assetsService.Doc2Text(context.Background(), val[0])
-					if unit.Content == "" {
-						log.Warnf("Content Units Index - Transcript empty: %s", val[0])
-					}
-					indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("Content Units Index - Error parsing docx: %s", val[0]))
-					if err == nil {
-						unit.TypedUids = append(unit.TypedUids, KeyValue(consts.ES_UID_TYPE_FILE, val[0]))
-					}
+			if val, ok := indexData.Transcripts[cu.UID][i18n.Language]; ok {
+				var err error
+				unit.Content, err = index.assetsService.Doc2Text(context.Background(), val[0])
+				if unit.Content == "" {
+					log.Warnf("Content Units Index - Transcript empty: %s", val[0])
+				}
+				indexErrors.DocumentError(i18n.Language, err, fmt.Sprintf("Content Units Index - Error parsing docx: %s", val[0]))
+				if err == nil {
+					unit.TypedUids = append(unit.TypedUids, KeyValue(consts.ES_UID_TYPE_FILE, val[0]))
+				}
+			} else if sttUnits[cu.UID][i18n.Language] {
+				// No transcript: the heard words from archive-stt. No file typed uid -- that is how a client tells
+				// them from a transcript (no text tab; the time of a highlight: archive-stt /locate).
+				content, err := index.archiveSttService.Content(cu.UID, i18n.Language)
+				if err != nil {
+					log.Warnf("Content Units Index - archive-stt content %s %s: %+v", cu.UID, i18n.Language, err)
+				} else {
+					unit.Content = content
 				}
 			}
 

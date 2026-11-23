@@ -25,6 +25,7 @@ url="http://127.0.0.1:9200"
 data-folder="data"  # At repo, see: ./data
 sources-folder="/tmp/sources-folder"
 unzip-url=""
+archive-stt-url=""
 prepare-docs-batch-size=20
 prepare-docs-parallelism=2
 #index-date = "2018-11-28t13:08:31-05:00" # optional, NOT FOR PRODUCTION, comment out to use alias.
