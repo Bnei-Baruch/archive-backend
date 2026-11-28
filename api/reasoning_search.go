@@ -123,6 +123,9 @@ func ReasoningSearchStartHandler(c *gin.Context) {
 		abortReasoningSearchValidationError(c, err)
 		return
 	}
+	if !allowReasoningSearchMode(c, r.IsRapid) {
+		return
+	}
 
 	runtime, _ := c.MustGet("LLM_RUNTIME").(*llm.Runtime)
 	if runtime == nil || runtime.Tools == nil || runtime.Progress == nil || runtime.Workflow == nil || runtime.Cancellations == nil {
@@ -209,6 +212,9 @@ func ReasoningSearchCancelHandler(c *gin.Context) {
 }
 
 func ReasoningSearchFinishNowHandler(c *gin.Context) {
+	if !allowReasoningSearchMode(c, false) {
+		return
+	}
 	sessionID := strings.TrimSpace(c.Query("session_id"))
 	if sessionID == "" {
 		r := ReasoningSearchCancelRequest{}
@@ -294,6 +300,9 @@ func ReasoningSearchCacheHandler(c *gin.Context) {
 	}
 	if err := normalizeReasoningSearchRequest(&r); err != nil {
 		abortReasoningSearchValidationError(c, err)
+		return
+	}
+	if !allowReasoningSearchMode(c, r.IsRapid) {
 		return
 	}
 	r.SessionID = nil
@@ -403,6 +412,9 @@ func ReasoningSearchHandler(c *gin.Context) {
 	}
 	if err := normalizeReasoningSearchRequest(&r); err != nil {
 		abortReasoningSearchValidationError(c, err)
+		return
+	}
+	if !allowReasoningSearchMode(c, r.IsRapid) {
 		return
 	}
 
@@ -818,22 +830,26 @@ func prepareReasoningSearchSession(ctx context.Context, runtime *llm.Runtime, r 
 		return sessionID, nil
 	}
 
-	reasoningConfig, err := llm.ReasoningSearchConfigFromConfig()
-	if err != nil {
-		return "", err
-	}
+	var reasoningConfig *llm.ReasoningSearchConfig
+	var err error
 	if r.IsRapid {
 		if runtime.RapidConfig == nil {
 			return "", errors.New("rapid reasoning search is not initialized")
 		}
-		reasoningConfig.Provider = runtime.RapidConfig.Gather.Provider
-		reasoningConfig.Model = runtime.RapidConfig.Gather.Model
-		reasoningConfig.Effort = runtime.RapidConfig.Gather.Effort
-		reasoningConfig.MaxTokens = runtime.RapidConfig.Gather.MaxTokens
-		reasoningConfig.MaxIterations = runtime.RapidConfig.Gather.MaxIterations
-		reasoningConfig.RerunMaxIterations = 0
-		reasoningConfig.Planning = nil
-		reasoningConfig.Verification = nil
+		maxFollowups, err := llm.ReasoningSearchMaxFollowupsFromConfig()
+		if err != nil {
+			return "", err
+		}
+		gather := runtime.RapidConfig.Gather
+		reasoningConfig = &llm.ReasoningSearchConfig{
+			Provider: gather.Provider, Model: gather.Model, Effort: gather.Effort,
+			MaxTokens: gather.MaxTokens, MaxIterations: gather.MaxIterations, MaxFollowups: maxFollowups,
+		}
+	} else {
+		reasoningConfig, err = llm.ReasoningSearchConfigFromConfig()
+		if err != nil {
+			return "", err
+		}
 	}
 	service := runtime.Services[reasoningConfig.Provider]
 	if service == nil {

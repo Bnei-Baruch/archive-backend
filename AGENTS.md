@@ -14,6 +14,7 @@
 
 ## Runtime and Tools
 - AI is opt-in: `llm.enabled` defaults to `false`. Disabled startup skips LLM config validation, providers, tools, and session stores; no AI credentials are required, and reasoning routes are not registered. Regular search remains available.
+- `llm.reasoning-search-mode` selects `both` (unset/empty default), `rapid`, or `non-rapid`; invalid values fail AI-enabled startup. Initialize only enabled-mode stages/providers, plus the shared AI reader tools. Rapid-only session preparation must not validate unused non-rapid configuration.
 - Use `llm.Service` (`search/LLM/service.go`). When AI is enabled, `common.Init()` builds one app-scoped `common.LLM_RUNTIME` containing shared tools, stores, and provider services; never construct services per request.
 - Shared layers: `base_service.go` for client/pricing/debug helpers; `openai_compatible_service.go` for OpenAI-compatible Responses/chat; `replay_chat_completions_service.go` for replay-based chat providers. These paths are under `search/LLM/`.
 - Tool infrastructure: `search/LLM/reasoning_tools.go`; implementations: `search/LLM/tools/`; app-scoped builder: `search/LLM/tools/manager.go`.
@@ -42,6 +43,7 @@ Replay-provider sessions use `chat_reasoning_sessions.go`.
 ## Reasoning API
 - Implementation and request/response definitions: `api/reasoning_search.go` (including `ReasoningSearchRequest` and `is_rapid`); routes: `api/routes.go`. Read these instead of maintaining duplicate field lists.
 - Under `/search/reasoning`: `POST /start` runs in background; `GET /status` reports progress/previews; `GET /result` returns the stored final snapshot; `POST /cancel` cancels. Start may include `cancel_session_id`.
+- Start, cache, sync, and follow-up requests for a disabled mode return HTTP 403 with `code="reasoning_search_mode_disabled"` before admission, cancellation, or session changes. Never silently change `is_rapid`. Finish-now is rejected in rapid-only deployments; status/result/cancel remain available.
 - Synchronous `POST /search/reasoning` additionally requires `llm.sync-endpoint-enabled=true` (default `false`), independent of `server.mode`. Otherwise do not register the route (404); its handler also rejects direct calls with 403 before work starts. Request `deb` does not bypass this.
 - `POST /cache` checks the mode-specific query cache; a hit creates a fresh workflow session and response snapshot.
 - Non-rapid only: `POST /finish-now` copies a prepared draft to the final snapshot, marks completion, and returns readiness metadata. No draft means conflict; fetch actual results through `GET /result`.

@@ -355,18 +355,38 @@ func ReasoningSearchCacheTTLFromConfig() time.Duration {
 	return ttl
 }
 
+func ReasoningSearchModeFromConfig() (string, error) {
+	mode := strings.ToLower(strings.TrimSpace(viper.GetString("llm.reasoning-search-mode")))
+	switch mode {
+	case "", "both":
+		return "both", nil
+	case "rapid", "non-rapid":
+		return mode, nil
+	default:
+		return "", fmt.Errorf("llm.reasoning-search-mode must be both, rapid, or non-rapid; got %q", mode)
+	}
+}
+
+func ReasoningSearchMaxFollowupsFromConfig() (int, error) {
+	maxFollowups := defaultReasoningSearchMaxFollowups
+	if viper.IsSet("llm.reasoning-search-max-followups") {
+		maxFollowups = viper.GetInt("llm.reasoning-search-max-followups")
+		if maxFollowups < 0 {
+			return 0, fmt.Errorf("llm.reasoning-search-max-followups must be >= 0")
+		}
+	}
+	return maxFollowups, nil
+}
+
 func ReasoningSearchConfigFromConfig() (*ReasoningSearchConfig, error) {
 	provider := ProviderFromConfig()
 	planningEnabled := viper.GetBool("llm.reasoning-search-planning-enabled")
 	planningProvider := ReasoningSearchPlanningProviderFromConfig()
 	verificationEnabled := viper.GetBool("llm.reasoning-search-verification-enabled")
 	verificationProvider := ReasoningSearchVerificationProviderFromConfig()
-	maxFollowups := defaultReasoningSearchMaxFollowups
-	if viper.IsSet("llm.reasoning-search-max-followups") {
-		maxFollowups = viper.GetInt("llm.reasoning-search-max-followups")
-		if maxFollowups < 0 {
-			return nil, fmt.Errorf("llm.reasoning-search-max-followups must be >= 0")
-		}
+	maxFollowups, err := ReasoningSearchMaxFollowupsFromConfig()
+	if err != nil {
+		return nil, err
 	}
 
 	switch provider {

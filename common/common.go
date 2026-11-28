@@ -114,7 +114,8 @@ func initLLMRuntime() {
 	if !viper.GetBool("llm.enabled") {
 		return
 	}
-	var err error
+	mode, err := llm.ReasoningSearchModeFromConfig()
+	utils.Must(err)
 	//	Progress tracks transient UI/status updates for the current run
 	progress := llm.NewReasoningProgressStore(llm.ReasoningSessionTTLFromConfig())
 	//	Workflow stores stage/provider/session metadata needed to resume or rerun correctly
@@ -129,35 +130,45 @@ func initLLMRuntime() {
 	verificationProvider := llm.ReasoningSearchVerificationProviderFromConfig()
 	aiToolsConfig, err := llm.AIToolsConfigFromConfig()
 	utils.Must(err)
-	draftConfig, err := llm.ReasoningSearchDraftConfigFromConfig()
-	utils.Must(err)
-	rapidConfig, err := llm.ReasoningSearchRapidConfigFromConfig()
-	utils.Must(err)
+	var draftConfig *llm.ReasoningSearchDraftConfig
+	if mode != "rapid" {
+		draftConfig, err = llm.ReasoningSearchDraftConfigFromConfig()
+		utils.Must(err)
+	}
+	var rapidConfig *llm.ReasoningSearchRapidConfig
+	if mode != "non-rapid" {
+		rapidConfig, err = llm.ReasoningSearchRapidConfigFromConfig()
+		utils.Must(err)
+	}
 	services := map[string]llm.Service{}
 
-	services[defaultProvider], err = llm.NewServiceForProviderWithProgress(defaultProvider, progress)
-	utils.Must(err)
-	if _, ok := services[rapidConfig.Gather.Provider]; !ok {
-		services[rapidConfig.Gather.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Gather.Provider, progress)
+	if mode != "rapid" {
+		services[defaultProvider], err = llm.NewServiceForProviderWithProgress(defaultProvider, progress)
 		utils.Must(err)
 	}
-	if _, ok := services[rapidConfig.Classifier.Provider]; !ok {
-		services[rapidConfig.Classifier.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Classifier.Provider, nil)
-		utils.Must(err)
-	}
-	if rapidConfig.FinalizerEnabled {
-		if _, ok := services[rapidConfig.Finalizer.Provider]; !ok {
-			services[rapidConfig.Finalizer.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Finalizer.Provider, nil)
+	if rapidConfig != nil {
+		if _, ok := services[rapidConfig.Gather.Provider]; !ok {
+			services[rapidConfig.Gather.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Gather.Provider, progress)
 			utils.Must(err)
 		}
+		if _, ok := services[rapidConfig.Classifier.Provider]; !ok {
+			services[rapidConfig.Classifier.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Classifier.Provider, nil)
+			utils.Must(err)
+		}
+		if rapidConfig.FinalizerEnabled {
+			if _, ok := services[rapidConfig.Finalizer.Provider]; !ok {
+				services[rapidConfig.Finalizer.Provider], err = llm.NewServiceForProviderWithProgress(rapidConfig.Finalizer.Provider, nil)
+				utils.Must(err)
+			}
+		}
 	}
-	if viper.GetBool("llm.reasoning-search-verification-enabled") {
+	if mode != "rapid" && viper.GetBool("llm.reasoning-search-verification-enabled") {
 		if _, ok := services[verificationProvider]; !ok {
 			services[verificationProvider], err = llm.NewServiceForProviderWithProgress(verificationProvider, nil)
 			utils.Must(err)
 		}
 	}
-	if viper.GetBool("llm.reasoning-search-planning-enabled") {
+	if mode != "rapid" && viper.GetBool("llm.reasoning-search-planning-enabled") {
 		if _, ok := services[planningProvider]; !ok {
 			services[planningProvider], err = llm.NewServiceForProviderWithProgress(planningProvider, nil)
 			utils.Must(err)

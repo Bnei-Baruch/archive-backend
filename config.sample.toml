@@ -57,6 +57,8 @@ refresh-search-stats="5m"
 
 [llm]
 enabled=false # opt in to AI initialization and /search/reasoning routes; disabled by default, no AI credentials required
+reasoning-search-mode="both" # "both" (default when unset/empty), "rapid", or "non-rapid"; disabled request modes return HTTP 403
+# Only enabled-mode stages are initialized. Shared AI reader tools still require ai-tools-provider and its model/credentials.
 sync-endpoint-enabled=false # manual testing only; registers POST /search/reasoning when llm.enabled=true
 provider="openai" # "openai", "openrouter", "ollama", "xai", "zai", "arcee", "deepseek", "claude", "cohere", "stub"
 postgresql-tool-cache-ttl="3h" # default is 3h when unset; set to "0s" to disable PostgreSQL tool cache

@@ -13,6 +13,27 @@ import (
 )
 
 const reasoningSearchLimitMessage = "Reasoning search limit reached. Please try again later."
+const reasoningSearchModeDisabledMessage = "The requested reasoning search mode is disabled."
+
+func allowReasoningSearchMode(c *gin.Context, rapid bool) bool {
+	mode, err := llm.ReasoningSearchModeFromConfig()
+	if err != nil {
+		NewInternalError(err).Abort(c)
+		return false
+	}
+	if mode == "both" || (mode == "rapid" && rapid) || (mode == "non-rapid" && !rapid) {
+		return true
+	}
+	requestedMode := "non-rapid"
+	if rapid {
+		requestedMode = "rapid"
+	}
+	c.Abort()
+	c.JSON(http.StatusForbidden, gin.H{
+		"error": reasoningSearchModeDisabledMessage, "code": "reasoning_search_mode_disabled", "mode": requestedMode,
+	})
+	return false
+}
 
 // Trust only local/Docker proxies, not forwarded headers sent by public peers.
 // If a CDN/load balancer is added, review the forwarding chain and trust only its
