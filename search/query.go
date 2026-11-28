@@ -39,13 +39,14 @@ const (
 )
 
 type Query struct {
-	Term          string              `json:"term,omitempty"`
-	ExactTerms    []string            `json:"exact_terms,omitempty"`
-	Original      string              `json:"original,omitempty"`
-	Filters       map[string][]string `json:"filters,omitempty"`
-	LanguageOrder []string            `json:"language_order,omitempty"`
-	Deb           bool                `json:"deb,omitempty"`
-	Intents       []Intent            `json:"intents,omitempty"`
+	Term           string              `json:"term,omitempty"`
+	ExactTerms     []string            `json:"exact_terms,omitempty"`
+	Original       string              `json:"original,omitempty"`
+	Filters        map[string][]string `json:"filters,omitempty"`
+	LanguageOrder  []string            `json:"language_order,omitempty"`
+	Deb            bool                `json:"deb,omitempty"`
+	Intents        []Intent            `json:"intents,omitempty"`
+	IncludeLikutim bool                `json:"-"` // Only reasoning search opts in.
 }
 
 func isTokenStart(i int, runes []rune, lastQuote rune) bool {
@@ -165,8 +166,10 @@ func ParseQuery(q string) Query {
 	return Query{Term: strings.Join(terms, " "), ExactTerms: exactTerms, Original: q, Filters: filters}
 }
 
-// Here we build the span_near query with span_multi sub queries to allow effective fuzzy search
-//  with slop and special cases like avoiding numeric values from applying fuzziness and handling of single hebrew letter in the query.
+// Here we build the span_near query with span_multi sub queries to allow effective fuzzy search with slop and special cases
+//
+//	like avoiding numeric values from applying fuzziness and handling of single hebrew letter in the query.
+//
 // The query is not supported in the elastic SDK so we build it manually.
 // Arguments:
 // field - the field where we search (title, full_title, description, content).
@@ -230,7 +233,9 @@ func addMustNotSeries(q Query) *elastic.BoolQuery {
 // resultTypes - list of search result types: sources, topics, CU's, etc..
 // docIds - optional list of _uid's for filtering the search. If the parameter value is nil, no filtering is applied. Used for highlight search.
 // filterOutCUSources - optional list of sources for which we want to filter out the CU's that connected to those sources
+//
 //	(in order to avoid duplication between carousel and regular results).
+//
 // titlesOnly - limit our search only to title fields: title, full_title and description in case we search for intent sources. Used for intent search.
 func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOutCUSources []string, titlesOnly bool) (elastic.Query, error) {
 	boolQuery := elastic.NewBoolQuery().Must(
@@ -238,6 +243,9 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 			elastic.NewTermsQuery("result_type", utils.ConvertArgsString(resultTypes)...),
 		).Boost(0.0),
 	)
+	if !q.IncludeLikutim {
+		boolQuery.MustNot(elastic.NewTermQuery("filter_values", es.KeyValue(consts.FILTER_CONTENT_TYPE, consts.CT_LIKUTIM)))
+	}
 	if docIds != nil && len(docIds) > 0 {
 		idsQuery := elastic.NewIdsQuery().Ids(docIds...)
 		boolQuery.Filter(idsQuery)
@@ -513,6 +521,12 @@ func createResultsQuery(resultTypes []string, q Query, docIds []string, filterOu
 			boolQuery.Filter(contentTypeQuery)
 		case consts.FILTER_COLLECTION:
 			boolQuery.Filter(elastic.NewTermsQuery("typed_uids", fmt.Sprintf("%s:%s", consts.ES_UID_TYPE_COLLECTION, values[0])))
+		case consts.FILTER_MDB_UID: // Can be used by AI models
+			uidValues := make([]interface{}, len(s))
+			for i, uid := range s {
+				uidValues[i] = uid
+			}
+			boolQuery.Filter(elastic.NewTermsQuery("mdb_uid", uidValues...))
 		default:
 			boolQuery.Filter(elastic.NewTermsQuery("filter_values", es.KeyIValues(filter, s)...))
 		}

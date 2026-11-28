@@ -1,9 +1,12 @@
 package search
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/Bnei-Baruch/archive-backend/consts"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -13,6 +16,38 @@ type QuerySuite struct {
 
 func TestQuery(t *testing.T) {
 	suite.Run(t, new(QuerySuite))
+}
+
+func TestResultsQueryLikutimExclusion(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		includeLikutim bool
+		explicitFilter bool
+	}{
+		{name: "regular"},
+		{name: "regular with explicit filter", explicitFilter: true},
+		{name: "reasoning", includeLikutim: true},
+		{name: "reasoning with explicit filter", includeLikutim: true, explicitFilter: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			query := Query{Term: "test", IncludeLikutim: tc.includeLikutim}
+			if tc.explicitFilter {
+				query.Filters = map[string][]string{consts.FILTER_CONTENT_TYPE: {consts.CT_LIKUTIM}}
+			}
+			result, err := createResultsQuery([]string{consts.ES_RESULT_TYPE_UNITS}, query, nil, nil, false)
+			require.NoError(t, err)
+			source, err := result.Source()
+			require.NoError(t, err)
+			payload, err := json.Marshal(source)
+			require.NoError(t, err)
+			exclusion := `{"term":{"filter_values":"content_type:LIKUTIM"}}`
+			if tc.includeLikutim {
+				assert.NotContains(t, string(payload), exclusion)
+			} else {
+				assert.Contains(t, string(payload), exclusion)
+			}
+		})
+	}
 }
 
 func (suite *QuerySuite) TestTokenize() {
